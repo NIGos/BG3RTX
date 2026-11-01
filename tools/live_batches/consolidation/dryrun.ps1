@@ -14,6 +14,7 @@ $scripts = Join-Path $repo 'scripts'
 . (Join-Path $scripts 'camera-plan.ps1')
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
+. (Join-Path $scripts 'longrun.ps1')
 $fail = 0
 function Check([string]$what, [bool]$ok) { Write-Host ("{0} {1}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $what); if (-not $ok) { $script:fail++ } }
 
@@ -70,7 +71,9 @@ function New-Root([string]$dir, [switch]$Strip) {
 }
 function Invoke-Queue([string]$dir) {
   $env:BG3RTX_FAKE_LOAD_SEC = '3'
+  Start-LongrunStep "fake queue $(Split-Path $dir -Leaf)"
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $scripts 'test-queue.ps1') -DryRun -Root $dir -PermissionSession synthetic-dryrun | Out-Null
+  Stop-LongrunStep "fake queue $(Split-Path $dir -Leaf)"
   @(Get-Content (Join-Path $dir 'captures\queue\results.jsonl') -ErrorAction SilentlyContinue | ConvertFrom-Json)
 }
 

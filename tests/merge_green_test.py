@@ -81,9 +81,8 @@ for mode in ('adds-files', 'adds-files-test-fail'):
         git(root, 'config', 'user.name', 'Merge gate fixture')
         git(root, 'config', 'user.email', 'fixture@example.invalid')
         write(root, '.gitignore', '/build/\n')
-        write(root, 'scripts/build.ps1', (gate.parent / 'build.ps1').read_text())
-        # build.ps1 dot-sources its priority helper from beside itself.
-        write(root, 'scripts/low-priority.ps1', (gate.parent / 'low-priority.ps1').read_text())
+        for helper in ('build.ps1', 'low-priority.ps1', 'longrun.ps1'):   # build.ps1 dot-sources the other two
+            write(root, 'scripts/' + helper, (gate.parent / helper).read_text())
         write(root, 'CMakeLists.txt', CMAKE_FIXTURE)
         write(root, 'check.cmake', CHECK)
         write(root, 'src/a.cpp', 'int a;\n')

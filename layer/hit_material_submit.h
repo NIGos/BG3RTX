@@ -13,4 +13,6 @@ PreparedSubmission before_submit(VkQueue,std::span<const VkCommandBuffer>);
 // Only actual successful submits stamp completion-fence frame ownership.
 // Failure unpins and leaves the original recording pending/retryable.
 void after_submit(const PreparedSubmission&,VkQueue,bool success);
+// cpu_timing=1: the "[cpu] hit material" CPU split every 300 frames (called once per present).
+void cpu_report(uint64_t frames);
 }

@@ -158,7 +158,9 @@ int g_scene_cur = -1;
 // old, which detaches shadows while the camera moves.
 std::condition_variable g_scene_cv;
 // cpu_timing=1: CPU split of the scene build recording (P3 base frame rate).
-struct BuildCpu { double total = 0, bvh = 0, alpha = 0; uint64_t n = 0; };
+// lock: waiting for g_mu at the capture end; prepare: native_hit::scene_prepare; commit: capture end
+// (before the lock) to the scene slot commit, the part of the G-buffer thread the RT passes wait for.
+struct BuildCpu { double total = 0, bvh = 0, alpha = 0, lock = 0, prepare = 0, commit = 0; uint64_t n = 0; };
 BuildCpu g_bcpu;
 double qpc_ms() { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f); return double(t.QuadPart) * 1000.0 / double(f.QuadPart); }
 struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; };
@@ -990,7 +992,10 @@ bool rt_camera_moving() { return g_moving.load(); }
 
 void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
+  const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
+  const double t_entry = cpu_t ? qpc_ms() : 0;
   std::lock_guard<std::mutex> lock(g_mu);
+  const double t_locked = cpu_t ? qpc_ms() : 0;
   if (order_trace_active())
     log("[order] capture end cmd %p frame %llu tid %lu%s", (void*)cmd, (unsigned long long)frame_index(),
         GetCurrentThreadId(), g_last_frame == frame_index() ? " (second capture this frame: no build)" : "");
@@ -1020,7 +1025,9 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     scene.used=true;scene.last_use=frame_index();scene.tlas=VK_NULL_HANDLE;scene.set=VK_NULL_HANDLE;
     scene.material_record=bvh_rec_register(cmd);
   }
+  const double t_prep0 = cpu_t ? qpc_ms() : 0;
   native_hit::scene_prepare(cmd,uint32_t(scene_slot),cap);
+  const double t_prep1 = cpu_t ? qpc_ms() : 0;
   float source_camera[56]{};
   const bool source_camera_valid = read_mapped(cap.ubo, cap.ubo_offset, source_camera, sizeof source_camera);
   scene.pose_valid = false;
@@ -1073,7 +1080,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     timestamp(cmd, slot, 0);
     g_stamp_slot = slot;
     BvhResult res{};
-    const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
     const double t_bvh0 = cpu_t ? qpc_ms() : 0;
     const bool bvh_ok = bvh_build(cmd, capx, &stamp_cb, uint32_t(scene_slot), &res);
     const double t_bvh1 = cpu_t ? qpc_ms() : 0;
@@ -1095,9 +1101,14 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
       const double t2 = qpc_ms();
       g_bcpu.bvh += t_bvh1 - t_bvh0;
       g_bcpu.alpha += t2 - t_bvh1;
+      g_bcpu.lock += t_locked - t_entry;
+      g_bcpu.prepare += t_prep1 - t_prep0;
+      g_bcpu.commit += t2 - t_entry;
       if (++g_bcpu.n >= 300) {
-        log("[cpu] scene build recording, ms/build over %llu: bvh_build %.3f, alpha_commit (records, set) %.3f",
-            (unsigned long long)g_bcpu.n, g_bcpu.bvh / g_bcpu.n, g_bcpu.alpha / g_bcpu.n);
+        log("[cpu] scene build recording, ms/build over %llu: bvh_build %.3f, alpha_commit (records, set) %.3f; "
+            "capture end to commit %.3f, of which scene lock wait %.3f, hit material scene_prepare %.3f",
+            (unsigned long long)g_bcpu.n, g_bcpu.bvh / g_bcpu.n, g_bcpu.alpha / g_bcpu.n, g_bcpu.commit / g_bcpu.n,
+            g_bcpu.lock / g_bcpu.n, g_bcpu.prepare / g_bcpu.n);
         g_bcpu = BuildCpu{};
       }
     }
@@ -1322,7 +1333,8 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       if (ok) { ++g_wait.got; g_wait_misses = 0; } else { ++g_wait.timeouts; ++g_wait_misses; }
     }
   }
-  if (g_wait.calls >= 600) {
+  // rt_scene_wait_log_frames: lean jobs use 120 (complete lines in every cost window for the gate).
+  if (g_wait.calls >= uint64_t((std::clamp)(cfg_int("rt_scene_wait_log_frames", 600), 60, 6000))) {
     log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
         "wait mean %.3f ms, max %.3f ms",
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
@@ -1381,6 +1393,24 @@ bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected
       (void*)selected,(void*)alpha,(unsigned long long)identity,unsigned(native_hit::enabled()),unsigned(cfg_int("rt_hit_material",0)!=0),unsigned(bound),(void*)camera.buffer,(unsigned long long)camera.offset);
   }
   if(!query_alpha || !g_rt || !native_hit::enabled() || !cfg_int("rt_hit_material",0) || !cmd || !selected || !alpha || !identity)return false;
+  if(cfg_hot(CfgHot::rt_hit_material_recycle)){
+    // The query (register_use: rows, copies, set clone, join/remap/gather recording) runs without
+    // g_mu, which the next frame's capture end needs to commit its scene slot. The slot is found
+    // and kept live (last_use = now: slot_retired is false until the GPU is 2 frames past it, so
+    // no build can take it) under g_mu; register_use checks the slot's frame and generation as
+    // before, so rows of another frame are still rejected.
+    uint32_t found=UINT32_MAX;
+    {std::lock_guard lock(g_mu);
+     for(uint32_t i=0;i<kSceneSlots;++i){auto& s=g_scene[i];
+       if(!s.used || s.rec!=identity || s.set!=alpha || (s.tlas!=selected && s.omm_reference!=selected) ||
+          slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2)continue;
+       s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);found=i;break;}}
+    if(found==UINT32_MAX || !native_hit::register_use(cmd,found,query_alpha))return false;
+    // The views the query retained live with the slot too (as the locked path does after it).
+    std::lock_guard lock(g_mu);auto& s=g_scene[found];
+    if(s.rec==identity && s.set==alpha){s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(found,s.last_use);}
+    return true;
+  }
   std::lock_guard lock(g_mu);
   for(uint32_t i=0;i<kSceneSlots;++i){auto& s=g_scene[i];
     if(!s.used || s.rec!=identity || s.set!=alpha || (s.tlas!=selected && s.omm_reference!=selected) ||

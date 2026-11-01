@@ -527,6 +527,24 @@ void write_pfm(const fs::path& p, const ImageResult& r) {
 struct ReplayHooks {
   std::function<void(uint32_t run, std::vector<uint8_t>& push)> patch;
   std::function<void(uint32_t run, const RunResult&)> each;
+  std::function<std::string(uint32_t runs_done)> note;   // progress detail (the PT: iterations done)
+};
+
+// Progress of a many-dispatch replay (--repeat, the PT reference, the native ambient): at most every
+// 30 s, "[replay] progress: <done>/<total> dispatches (pct), <rate>/s, elapsed, ETA", flushed so a
+// captured console (post_replay.ps1, CTest) shows it while the run lasts. Silent below 30 s.
+struct ReplayProgress {
+  uint64_t t0 = GetTickCount64(), last = t0;
+  bool printed = false;
+  void tick(uint32_t done, uint32_t total, const std::string& note) {
+    const uint64_t now = GetTickCount64();
+    if (now - last < 30000 && !(printed && done == total)) return;
+    last = now; printed = true;
+    const double el = (now - t0) / 1000.0, rate = el > 0 ? done / el : 0;
+    std::printf("[replay] progress: %u/%u dispatches (%.0f%%)%s%s, %.2f/s, elapsed %.0f s, ETA %.0f s\n", done, total, 100.0 * done / std::max(total, 1u),
+                note.empty() ? "" : ", ", note.c_str(), rate, el, rate > 0 ? (total - done) / rate : 0.0);
+    std::fflush(stdout);
+  }
 };
 
 // --sun-trust <file> (offline gi_hit_sun / gi_far, tools/frame_replay.md): the D-LS sun set's b8, the trust
@@ -892,7 +910,9 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     std::printf("[replay] loaded %zu images (largest %.1f MB), device-local %.1f MB of a %.1f MB heap, staging pieces of %.0f MB\n", by_file.size(),
                 largest / 1048576.0, g.device_bytes / 1048576.0, heap / 1048576.0, kStageBytes / 1048576.0);
   }
+  ReplayProgress progress;
   for (uint32_t run = 0; run < repeat; ++run) {
+    if (run) progress.tick(run, repeat, hooks && hooks->note ? hooks->note(run) : std::string());
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
@@ -934,6 +954,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     if (hooks && run + 1 < repeat) continue;   // many runs: keep only the last (outputs below)
     result.runs.push_back(std::move(rr));
   }
+  if (progress.printed) progress.tick(repeat, repeat, hooks && hooks->note ? hooks->note(repeat) : std::string());
   // Outputs (the last run), and the live reference comparison when the pack has one.
   for (size_t i = 0; i < outputs.size() && !hooks; ++i) {
     const auto& r = result.runs.back().outputs[i];
@@ -1407,6 +1428,7 @@ PtAccum pt_run(const fs::path& pack, std::vector<std::string> defines, uint32_t 
     std::memcpy(push.data() + offsetof(Push, debug), &mode, 4);
     std::memcpy(push.data() + offsetof(Push, rt_stats), &zero, 4);
   };
+  hooks.note = [&](uint32_t done) { return std::to_string(done / modes) + "/" + std::to_string(iters) + " " + shader + " iterations"; };
   hooks.each = [&](uint32_t run, const RunResult& rr) {
     const uint32_t mode = run % modes;
     acc.gpu_ms.push_back(rr.gpu_ms);

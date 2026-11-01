@@ -120,6 +120,8 @@ def count(game: str = DEFAULT_GAME, log=print) -> dict:
 
     out, levels, sub = {}, {}, {}
     stats = Counter()
+    from tools.longrun import Progress
+    prog = Progress("world", len(worlds), unit="worlds")
     for w in worlds:
         per = defaultdict(lambda: [0, 0])
         levels[w.name] = sorted({i.level for i in w.instances})
@@ -155,16 +157,47 @@ def count(game: str = DEFAULT_GAME, log=print) -> dict:
                 per[k][0] += c
                 per[k][1] += b
         out[w.name] = {k: [c, round(b)] for k, (c, b) in per.items()}
+        prog.tick(note=f"last {w.name}")
+    prog.finish()
     log(f"world: {len(worlds)} worlds, {stats['objects']} objects, {stats['resolved']} with a material, "
         f"{len(gr2_cache)} GR2 headers ({time.time() - t0:.0f}s)")
     return {"worlds": out, "levels": levels, "stats": dict(stats),
             "sublevels": {k: {m: [c, round(b)] for m, (c, b) in v.items()} for k, v in sub.items()}}
 
 
+def _input_sig(game: str) -> list:
+    """Signature of what count() reads: every .pak of the Data folder and the reader sources."""
+    from tools.longrun import file_sig
+    data = find_data_dir(game)
+    paks = [[fn, file_sig(os.path.join(data, fn))] for fn in sorted(os.listdir(data)) if fn.lower().endswith(".pak")]
+    here = os.path.dirname(os.path.abspath(__file__))
+    assets = os.path.join(os.path.dirname(here), "assets")
+    code = [file_sig(f) for f in (__file__, os.path.join(assets, "lsf.py"), os.path.join(assets, "lspk.py"),
+                                  os.path.join(assets, "extract", "world.py"))]
+    return [paks, code]
+
+
 def load_or_count(cache: str | None, game: str, log=print) -> dict:
     if cache and os.path.exists(cache):
         return json.loads(open(cache, encoding="utf-8").read())
+    auto = None
+    if not cache:
+        # No --world-cache: reuse the last count while the game packages and the readers are unchanged
+        # (captures/.cache/material_families_world.json; the count takes about 60 s).
+        from tools.longrun import FileCache
+        try:
+            sig = _input_sig(game)
+        except (OSError, SystemExit):
+            sig = None
+        auto = FileCache("material_families_world")
+        d = auto.get(game, sig)
+        if d is not None:
+            log("world: reused the cached count (game packages unchanged)")
+            return d
     d = count(game, log)
+    if auto is not None:
+        auto.put(game, sig, d)
+        auto.save()
     if cache:
         os.makedirs(os.path.dirname(os.path.abspath(cache)), exist_ok=True)
         open(cache, "w", encoding="utf-8").write(json.dumps(d))

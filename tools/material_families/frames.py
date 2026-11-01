@@ -16,6 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from scripts.qa import coverage as cov
+from tools.longrun import FileCache, Progress, file_sig
 
 MAIN = cov.MAIN
 HOME_WT = Path(os.path.expanduser("~")) / ".codex" / "worktrees"
@@ -47,6 +48,17 @@ def captures() -> list[Path]:
             seen.add(k)
             out.append(c)
     return out
+
+
+def _save(cap: Path):
+    """run.json's save ("" when it has none), None when run.json is missing or unreadable (scene "?")."""
+    rj = cap / "run.json"
+    if rj.exists():
+        try:
+            return json.loads(rj.read_text(encoding="utf-8-sig")).get("save", "") or ""
+        except Exception:
+            pass
+    return None
 
 
 def _scene(cap: Path, sids: dict) -> str:
@@ -91,16 +103,32 @@ def trace_evidence(caps=None, log=print) -> dict:
     pairs = defaultdict(lambda: {"draws": 0, "gbuffer_draws": 0, "passes": set(), "scenes": set(), "captures": 0})
     per_capture = []    # (scene, {pair: gbuffer draws})
     n = 0
+    # Per capture: the save of run.json and the (kind, draws) of each pass, keyed by the frame and run.json
+    # signatures plus this code's (captures/.cache/material_families_frames.json): a rerun reads only new traces.
+    cache = FileCache("material_families_frames")
+    code = [file_sig(Path(cov.__file__)), file_sig(Path(__file__))]
+    prog = Progress("frames", len(caps), unit="traces")
     for cap in caps:
-        fr = cov.load_frame(cap)
-        if not fr:
+        prog.tick()
+        sig = [file_sig(cap / "frame.json"), file_sig(cap / "frame_on0.json"), file_sig(cap / "run.json"), code]
+        hit = cache.get(str(cap), sig)
+        if hit is None:
+            fr = cov.load_frame(cap)
+            hit = {"skip": True} if not fr else {"save": _save(cap), "passes": [[k, p["draws"]] for k, p in pass_kinds(fr)]}
+            cache.put(str(cap), sig, hit)
+        if hit.get("skip"):
             continue
         n += 1
-        sc = _scene(cap, sids)
+        sc = "?"
+        if hit["save"] is not None:
+            try:
+                sc = scene_of_save(hit["save"], sids)
+            except Exception:
+                sc = "?"
         mine = defaultdict(int)
         seen = set()
-        for k, p in pass_kinds(fr):
-            for fs, vs, cnt in p["draws"]:
+        for k, draws in hit["passes"]:
+            for fs, vs, cnt in draws:
                 key = (vs, fs)
                 e = pairs[key]
                 e["draws"] += cnt
@@ -113,6 +141,8 @@ def trace_evidence(caps=None, log=print) -> dict:
                     seen.add(key)
                     e["captures"] += 1
         per_capture.append((sc, dict(mine)))
+    cache.save()
+    prog.finish(f"{cache.hits} cached")
     log(f"frames: {n} traces, {len(pairs)} VS/FS pairs")
     return {"pairs": pairs, "per_capture": per_capture, "traces": n}
 

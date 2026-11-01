@@ -17,6 +17,8 @@ frame_replay --load-test                (manual: the 2 GB S8 hit cache shape thr
 frame_replay --pack <dir> --native-ambient [--pt-iters N] [--out <dir>]   (default out <pack>/native-ambient)
 ```
 - Windowless, own Vulkan device, implicit layers disabled (never the game layer), below-normal priority.
+- Runs of many dispatches (`--repeat`, `--pt-reference`, `--native-ambient`) print `[replay] progress: done/total
+  dispatches, iterations, rate, elapsed, ETA` every 30 s (flushed; silent below 30 s).
 - On every run it compiles the pass shader from this checkout's `shaders/` with the layer's DXC flags
   (layer/shaders.cpp: vulkan1.3, HLSL 2021, cs_6_6, `BG3RTX=1`, SHaRC headers, `-O3`, the file's
   `// dxc:` line, the pack's `defines`). Edit the shader, rerun: about 3 s, of which DXC is most.

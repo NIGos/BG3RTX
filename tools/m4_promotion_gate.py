@@ -58,6 +58,12 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    from tools.longrun import FileCache, Progress
+except ImportError:   # run as a script from tools/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from tools.longrun import FileCache, Progress
+
 REPO = Path(__file__).resolve().parents[1]
 SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents and post (RR's input)
 ALPHA_FW = 0.05         # scripts/qa/thresholds.py: 5% family-wise false alarm, Bonferroni per family
@@ -163,12 +169,47 @@ def find_job(name: str):
     return None, None
 
 
-def _git(*args):
+def _git_run(*args):
     try:
         r = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
         return r.stdout if r.returncode == 0 else ""
     except OSError:
         return ""
+
+
+_GIT_MEMO = {}
+_GIT_DISK = None
+
+
+def _git(*args):
+    """git output, memoised in the process; `show <sha>:<path>` (immutable) and `log -- <path>` (keyed by
+    HEAD) also across runs in captures/.cache/m4_git.json (tools/longrun.py). 144 git calls were 38 of
+    the gate's 42 s (2026-11-01)."""
+    global _GIT_DISK
+    if args in _GIT_MEMO:
+        return _GIT_MEMO[args]
+    disk_sig = None
+    if args[0] == "show" and re.fullmatch(r"[0-9a-f]{40}:.+", args[1]):
+        disk_sig = ["immutable"]
+    elif args[0] == "log" and args[1] == "--format=%H":
+        head = _GIT_MEMO.get(("rev-parse", "HEAD"))
+        if head is None:
+            head = _GIT_MEMO[("rev-parse", "HEAD")] = _git_run("rev-parse", "HEAD").strip()
+        disk_sig = [head] if head else None
+    if disk_sig is not None:
+        if _GIT_DISK is None:
+            _GIT_DISK = FileCache("m4_git")
+        key = " | ".join(args)
+        out = _GIT_DISK.get(key, disk_sig)
+        if out is None:
+            out = _git_run(*args)
+            if out:
+                _GIT_DISK.put(key, disk_sig, out)
+                _GIT_DISK.save()
+    else:
+        out = _git_run(*args)
+    _GIT_MEMO[args] = out
+    return out
 
 
 def plan_matches(plan, sets):
@@ -445,17 +486,21 @@ def pooled_noise(save, queue_logs: Path | None, own_log: str = "", own_pairs=(),
                         names.append(f.stem)
                 except ValueError:
                     continue
-            for name in names:
-                for log in sorted(queue_logs.glob(f"{name}.*.log")):
-                    try:
-                        with contextlib.redirect_stdout(io.StringIO()):
-                            r = Run(log, captures_root)
-                    except (SystemExit, OSError, ValueError, KeyError):
-                        continue
-                    if not r.failed_drift():
-                        p = off_pairs(r)
-                        if p:
-                            pairs[str(log.resolve())] = p
+            logs = [log for name in names for log in sorted(queue_logs.glob(f"{name}.*.log"))]
+            prog = Progress(f"noise pool ({save})", len(logs), unit="logs")
+            for log in logs:
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        r = Run(log, captures_root)
+                except (SystemExit, OSError, ValueError, KeyError):
+                    prog.tick(failed=True)
+                    continue
+                prog.tick()
+                if not r.failed_drift():
+                    p = off_pairs(r)
+                    if p:
+                        pairs[str(log.resolve())] = p
+            prog.finish()
         _POOL[key] = pairs
     pairs = dict(_POOL[key])
     if own_log and own_pairs:
