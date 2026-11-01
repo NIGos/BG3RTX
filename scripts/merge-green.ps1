@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "low-priority.ps1")
 $root = if ($MainRoot) { (Resolve-Path -LiteralPath $MainRoot).Path } else { Split-Path $PSScriptRoot -Parent }
 Set-Location -LiteralPath $root
 $script:mergeStarted = $false
