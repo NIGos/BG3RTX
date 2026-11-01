@@ -24,9 +24,12 @@
 // game's layout, render pass and state), and around each audited water draw the variant is bound
 // while the key is on; the game's pipeline is rebound right after the draw. Its colour output is
 // the game's. The core (core/water.cpp) composes at the end of the pass.
+// M5.4 (rt_water_shadows): patches and swaps like rt_water_compose; on when the record buffer is
+// created, the records get the FS's sun term too (40 B instead of 32: kRecordBytesSun).
 // Key off: no pass is hooked for water and nothing is allocated (resources are created at the
-// first enabled pass, so the key is live). rt_water_compose=0 when the water pipelines are created
-// (game start or level load): no module is patched, no buffer allocated, no variant exists.
+// first enabled pass, so the key is live). rt_water_compose=0 and rt_water_shadows=0 when the water
+// pipelines are created (game start or level load): no module is patched, no buffer allocated, no
+// variant exists.
 #include "host.h"
 
 #include <algorithm>
@@ -446,6 +449,7 @@ bool build(Slot& s, uint32_t i, const std::vector<const PDraw*>& draws) {
 struct Compose {
   Buf buf;
   uint32_t cap = 0;
+  uint32_t record_bytes = water::kRecordBytes;   // kRecordBytesSun: rt_water_shadows was on at the buffer's creation
   uint64_t addr = 0;
   bool tried = false, ok = false;
   std::unordered_map<VkShaderModule, std::shared_ptr<const std::vector<uint32_t>>> mods;   // patched words
@@ -467,12 +471,14 @@ bool compose_buffer() {
   if (!dd || !rt_enabled() || !dd->vk.GetBufferDeviceAddress) return false;
   const auto* info = static_cast<const Bg3DeviceInfo*>(persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
   if (!info || !(info->features & BG3_DEV_INT64)) {   // the patch's 64-bit address constant
-    log("[water] compose UNAVAILABLE (rt_water_compose=1): shaderInt64 is not enabled on the device "
+    log("[water] compose UNAVAILABLE (rt_water_compose / rt_water_shadows = 1): shaderInt64 is not enabled on the device "
         "(sharc_device=1 enables it where supported); no water FS is patched");
     return false;
   }
-  g_cmp.cap = water::capacity_of_mb(cfg_int("rt_water_compose_mb", 160));
-  const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap);
+  // M5.4: the sun words (two more per record) when rt_water_shadows is on now; fixed for the device.
+  g_cmp.record_bytes = cfg_int("rt_water_shadows", 0) != 0 ? water::kRecordBytesSun : water::kRecordBytes;
+  g_cmp.cap = water::capacity_of_mb(cfg_int("rt_water_compose_mb", 160), g_cmp.record_bytes);
+  const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.record_bytes);
   if (!make_buf(g_cmp.buf, bytes,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 false)) {
@@ -488,10 +494,10 @@ bool compose_buffer() {
     return false;
   }
   water::publish_buffer(static_cast<water::ComposeBuffer*>(persist(water::kComposeKey, sizeof(water::ComposeBuffer))),
-                        uint64_t(g_cmp.buf.b), bytes, g_cmp.cap);
+                        uint64_t(g_cmp.buf.b), bytes, g_cmp.cap, g_cmp.record_bytes);
   g_cmp.ok = true;
   log("[water] compose record buffer %llu MB (%u records of %u B: up to %.1f Mpx); patching the audited water FS",
-      (unsigned long long)(bytes >> 20), g_cmp.cap, water::kRecordBytes, double(g_cmp.cap) / 1e6);
+      (unsigned long long)(bytes >> 20), g_cmp.cap, g_cmp.record_bytes, double(g_cmp.cap) / 1e6);
   return true;
 }
 
@@ -504,9 +510,12 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   if (!ids && !g_any_variant.load(std::memory_order_relaxed)) return;   // the common case: no lock
   std::lock_guard<std::mutex> lock(g_cmp_mu);
   g_cmp.mods.erase(m);   // a reused handle
-  if (!ids || !g_dd || cfg_int("rt_water_compose", 0) == 0 || bytes % 4 || !compose_buffer()) return;
+  if (!ids || !g_dd || (cfg_int("rt_water_compose", 0) == 0 && cfg_int("rt_water_shadows", 0) == 0) || bytes % 4 ||
+      !compose_buffer())
+    return;
   auto words = std::make_shared<std::vector<uint32_t>>();
-  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words);
+  const bool sun = g_cmp.record_bytes == water::kRecordBytesSun;   // M5.4: the record with the sun words
+  const water::PatchStatus st = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *words, sun);
   if (st != water::PatchStatus::kApplied) {
     ++g_cmp.mods_refused;
     g_cmp.last_refusal = st;
@@ -515,7 +524,8 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
     return;
   }
   ++g_cmp.mods_patched;
-  log("[water] compose: FS %016llx patched (%zu -> %zu words)", (unsigned long long)hash, bytes / 4, words->size());
+  log("[water] compose: FS %016llx patched (%zu -> %zu words%s)", (unsigned long long)hash, bytes / 4, words->size(),
+      sun ? ", with the sun term" : "");
   g_cmp.mods[m] = std::move(words);
   g_any_variant.store(true, std::memory_order_relaxed);   // from here on modules and pipelines are looked at
 }
@@ -677,7 +687,7 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
   }
   // M5.3: the composition variant in place of the game's pipeline for this draw (geocapture
   // geo_post_draw rebinds the game's). Same layout: the game's bound sets stay valid.
-  if (cfg_hot(CfgHot::rt_water_compose)) {
+  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows)) {   // M5.3 / M5.4
     VkPipeline v = VK_NULL_HANDLE;
     if (g_any_variant.load(std::memory_order_relaxed)) {
       std::lock_guard<std::mutex> cl(g_cmp_mu);
@@ -955,7 +965,7 @@ void water_on_present() {
       log("[water] families: captured %s; counted %s", fam.empty() ? "none" : fam.c_str(), other.empty() ? "none" : other.c_str());
   }
   const uint64_t swaps = g_swaps.exchange(0), novar = g_no_variant.exchange(0);
-  if (cfg_hot(CfgHot::rt_water_compose) || swaps) {
+  if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || swaps) {
     std::lock_guard<std::mutex> cl(g_cmp_mu);
     log("[water] compose variants (%llu frames): FS patched %llu, refused %llu (%s), variant pipelines %llu (refused: "
         "blend %llu, library %llu; failed %llu), water draws on a variant %llu, without %llu%s",
@@ -963,7 +973,7 @@ void water_on_present() {
         g_cmp.mods_refused ? water::patch_status_name(g_cmp.last_refusal) : "-", (unsigned long long)g_cmp.pipes,
         (unsigned long long)g_cmp.refused_blend, (unsigned long long)g_cmp.refused_library,
         (unsigned long long)g_cmp.failed, (unsigned long long)swaps, (unsigned long long)novar,
-        g_cmp.tried ? "" : " (no water FS was patched: rt_water_compose must be on when the water pipelines are created; restart with it on)");
+        g_cmp.tried ? "" : " (no water FS was patched: rt_water_compose or rt_water_shadows must be on when the water pipelines are created; restart with it on)");
   }
   g_win = Window{};
 }

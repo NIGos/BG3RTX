@@ -43,6 +43,11 @@ struct FsIds {
   uint32_t C;           // vec3: the colour _4335 before max(0)
   uint32_t rough;       // float: roughness _1480 (with the FS's specular AA)
   uint32_t pos;         // Input variable vec3: camera-relative world position _5
+  // M5.4 (record words 8-9 with `sun`): the FS's sun term in Lw = (sun_d + sun_s) * sun_m, the
+  // operands of its OpFAdd chain before the probe term (spirv-dis --raw-id of the dumps):
+  uint32_t sun_d;       // vec3: sun diffuse * N.L, added to the local lights' diffuse sum
+  uint32_t sun_s;       // vec3: sun specular * N.L, added to the local lights' specular sum
+  uint32_t sun_m;       // float: the factor of (diffuse + specular) sums, mix(1, 1, b26 _m1) = 1
 };
 
 // The audited table. 7b44a567 FLUID_Water_Plane_flowmap_huge_PixelLighting (S1 docks), from
@@ -59,10 +64,17 @@ struct FsIds {
 //     N _665, roughness _899.
 // The other audited water FS are not in the table yet: their draws keep the game's pipeline
 // (counted by the layer as "no variant").
+// M5.4 sun ids (2026-11-01, spirv-dis --raw-id of the three dumps): in each FS Lw =
+// ((Ld + Sd) + (Ls + Ss)) * m + (Kd + Ks) k with Sd = (Lsun * diffuse BRDF) * N.L and Ss = (Lsun *
+// specular BRDF) * N.L, Lsun = sun colour (atmosphere) * cloud shadow * exposure: the sun has no
+// cascade or other geometric visibility on the water (no shadow-map sample in the FS; its only
+// textureGather is the local lights' atlas b28). 7b44a567: %3889 %3892 * %3898 (Lsun %3803 =
+// %2064 * (%2236 clouds * b0)), 99c1fcef: %4087 %4090 * %4096, c4e92ccd: %3310 %3313 * %3319
+// (Lsun %3224 = %1485 * (%1657 clouds * b0)).
 inline constexpr FsIds kFsIds[] = {
-    {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5},
-    {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5},
-    {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5},
+    {0x7b44a567771ecbecull, 784, 4096, 3799, 2063, 3379, 3303, 3352, 1207, 4335, 1480, 5, 3889, 3892, 3898},
+    {0x99c1fcef82b253c1ull, 809, 4294, 3997, 2261, 3577, 3501, 3550, 1294, 4533, 1678, 5, 4087, 4090, 4096},
+    {0xc4e92ccdb08dd777ull, 425, 3510, 3220, 1484, 2800, 2724, 2773, 665, 3671, 899, 5, 3310, 3313, 3319},
 };
 inline constexpr uint32_t kFsIdsCount = uint32_t(sizeof kFsIds / sizeof kFsIds[0]);
 
@@ -89,7 +101,7 @@ enum : uint32_t {
   OpTypeVector = 23, OpTypeRuntimeArray = 29, OpTypeStruct = 30, OpTypePointer = 32, OpConstant = 43,
   OpConstantNull = 46, OpFunction = 54, OpFunctionEnd = 56, OpVariable = 59, OpLoad = 61, OpStore = 62,
   OpAccessChain = 65, OpDecorate = 71, OpMemberDecorate = 72, OpCompositeConstruct = 80,
-  OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128,
+  OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128, OpFAdd = 129,
   OpIMul = 132, OpFMul = 133, OpVectorTimesScalar = 142, OpLogicalAnd = 167, OpSelect = 169,
   OpULessThan = 176, OpPhi = 245, OpLabel = 248, OpKill = 252, OpReturn = 253, OpTerminateInvocation = 4416,
   OpDemoteToHelperInvocation = 5380,
@@ -114,9 +126,10 @@ inline void emit_string(std::vector<uint32_t>& v, uint32_t op, const char* s) {
 // Patches `code` (words) into `out`. addr: the device address of the record buffer, capacity
 // its records (common/water_compose.h buffer_bytes): both baked in, so every store stays inside
 // the buffer whatever the header holds (pitch is read from it: uninitialised memory can only
-// misplace records, which the ownership check rejects).
+// misplace records, which the ownership check rejects). sun (M5.4): the record of
+// kRecordWordsSun words with the sun term; false emits exactly the M5.3 module.
 inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids, uint64_t addr, uint32_t capacity,
-                            std::vector<uint32_t>& out) {
+                            std::vector<uint32_t>& out, bool sun = false) {
   using namespace fsp;
   out.clear();
   if (!code || words < 5 || code[0] != 0x07230203u) return PatchStatus::kNotSpirv;
@@ -217,6 +230,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   if (!is(ids.a, t_float) || !is(ids.fog, t_v4) || !is(ids.k, t_float) || !is(ids.X, t_v3) || !is(ids.Ks, t_v3) ||
       !is(ids.f0, t_v3) || !is(ids.dfg, t_v4) || !is(ids.N, t_v3) || !is(ids.C, t_v3) || !is(ids.rough, t_float))
     return PatchStatus::kIdMismatch;
+  if (sun && (!is(ids.sun_d, t_v3) || !is(ids.sun_s, t_v3) || !is(ids.sun_m, t_float))) return PatchStatus::kIdMismatch;
   auto input_of = [&](uint32_t var, uint32_t pointee) {
     auto v = var_ptr.find(var);
     if (v == var_ptr.end()) return false;
@@ -243,6 +257,14 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   emit(types, OpConstant, {t_uint, c_cap, capacity});
   emit(types, OpConstant, {t_float, c_one, 0x3f800000u});
   emit(types, OpConstantNull, {t_v3, c_zero3});
+  // M5.4: the record stride and word offsets 8, 9 (after every M5.3 declaration: sun = false is unchanged).
+  uint32_t c_stride = c_u[kRecordWords], c_w8 = 0, c_w9 = 0;
+  if (sun) {
+    c_w9 = id(), c_stride = id();
+    emit(types, OpConstant, {t_uint, c_w9, 9});
+    emit(types, OpConstant, {t_uint, c_stride, kRecordWordsSun});
+    c_w8 = c_u[kRecordWords];   // 8
+  }
   std::vector<uint32_t> decos;
   emit(decos, OpDecorate, {t_arr, DecArrayStride, 4});
   emit(decos, OpDecorate, {t_blk, DecBlock});
@@ -274,7 +296,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   const uint32_t idx = op2(OpIAdd, t_uint, {op2(OpIMul, t_uint, {uy, pitch}), ux});
   const uint32_t ok = op2(OpLogicalAnd, t_bool, {op2(OpULessThan, t_bool, {ux, pitch}), op2(OpULessThan, t_bool, {idx, c_cap})});
   const uint32_t slot = op2(OpSelect, t_uint, {ok, idx, c_cap});
-  const uint32_t w0 = op2(OpIAdd, t_uint, {op2(OpIMul, t_uint, {slot, c_u[kRecordWords]}), c_hdr});
+  const uint32_t w0 = op2(OpIAdd, t_uint, {op2(OpIMul, t_uint, {slot, c_stride}), c_hdr});
   // G = X * (a * T), E = F0.x * DFG.x + DFG.y, A = G * E, B = G * k * Ks (common/water_compose.h:
   // the traced radiance is in the lighting's units, already the probe's times k).
   const uint32_t T = op2(OpCompositeExtract, t_float, {ids.fog, 3});
@@ -304,6 +326,15 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     const uint32_t at = op2(OpIAdd, t_uint, {w0, c_u[k]});
     const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], at});
     emit(body, OpStore, {p, v[k], MemAligned, 4});
+  }
+  if (sun) {   // D = G * (sun_d + sun_s) * sun_m: w8 half2(D.r, D.g), w9 half2(D.b, 1)
+    const uint32_t S = op2(OpVectorTimesScalar, t_v3, {op2(OpFAdd, t_v3, {ids.sun_d, ids.sun_s}), ids.sun_m});
+    const uint32_t D = op2(OpFMul, t_v3, {G, S});
+    const uint32_t s8 = half2(c(D, 0), c(D, 1)), s9 = half2(c(D, 2), c_one);
+    const uint32_t p8 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w8})});
+    emit(body, OpStore, {p8, s8, MemAligned, 4});
+    const uint32_t p9 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w9})});
+    emit(body, OpStore, {p9, s9, MemAligned, 4});
   }
 
   // ---- assemble ----

@@ -48,6 +48,12 @@ int main(int argc, char** argv) {
   CHECK(cap >= 2560u * 1440u && cap >= 3440u * 1440u);   // the renders this default covers
   CHECK(capacity_of_mb(0) == capacity_of_mb(1));
   CHECK(kRecordBytes == 32 && kHeaderBytes % 16 == 0);
+  // M5.4: the sun record, the same arithmetic at 40 B; the default still covers 2560 x 1440.
+  CHECK(kRecordBytesSun == 40 && kRecordWordsSun == kRecordWords + 2);
+  CHECK(buffer_bytes(10, kRecordBytesSun) == kHeaderBytes + 11 * kRecordBytesSun);
+  const uint32_t cap_sun = capacity_of_mb(160, kRecordBytesSun);
+  CHECK(buffer_bytes(cap_sun, kRecordBytesSun) <= (160ull << 20) && buffer_bytes(cap_sun + 1, kRecordBytesSun) > (160ull << 20));
+  CHECK(cap_sun >= 2560u * 1440u);
 
   // 2. Publication: invisible until complete, then exact.
   ComposeBuffer pub{}, got{};
@@ -58,6 +64,16 @@ int main(int argc, char** argv) {
   ComposeBuffer small = pub;
   small.bytes = buffer_bytes(99) - 1;
   CHECK(!read_buffer(&small, got));
+  CHECK(record_bytes_of(got) == kRecordBytes);   // an M5.3 publication (and an older layer's 0)
+  ComposeBuffer old = pub;
+  old.record_bytes = 0;
+  CHECK(record_bytes_of(old) == kRecordBytes);
+  ComposeBuffer pub_sun{};
+  publish_buffer(&pub_sun, 0x5678, buffer_bytes(99, kRecordBytesSun), 99, kRecordBytesSun);
+  CHECK(read_buffer(&pub_sun, got) && record_bytes_of(got) == kRecordBytesSun);
+  ComposeBuffer short_sun = pub_sun;   // a 32-B sized buffer cannot hold 40-B records
+  short_sun.bytes = buffer_bytes(99);
+  CHECK(!read_buffer(&short_sun, got));
 
   // 3. Ownership check: every encodable value passes against its own encoding (both rounding
   //    modes, all three channels, across the range), and a value one ulp-pair away fails.
@@ -129,6 +145,42 @@ int main(int argc, char** argv) {
     CHECK(ratio_bin(0.00452f, 0.01383f) == kCsRatioLow);
     CHECK(ratio_bin(1.0f, 1.0f) == kCsRatioMid && ratio_bin(0.5f, 1.0f) == kCsRatioMid && ratio_bin(2.0f, 1.0f) == kCsRatioMid);
     CHECK(ratio_bin(2.01f, 1.0f) == kCsRatioHigh && ratio_bin(1.0f, 0.0f) == 0u);
+  }
+
+  // 4e. M5.4 sun visibility: D = a T X Dsun is the FS's dC/dDsun times its unshadowed sun term, so
+  //     shadow(C, D, V) is the FS with its sun visibility 1 replaced by V, for any V in [0, 1]; V = 1
+  //     (lit, unknown) is the identity; only the visibility changes (same unshadowed radiance). With
+  //     M5.3 on as well, the two terms are independent: compose then shadow = the FS with both swapped.
+  {
+    const FsTerms base{0.25f, 0.04f, 0.3f, 2.2f, 0.09f, 0.0101725f, 0.93f, 0.002f, 0.97f, 0.003f, 0.8f, 0.6f};
+    for (float a : {0.0f, 0.35f, 1.0f})
+      for (float sun : {0.0f, 0.02f, 0.6f, 40.0f})   // 40: a sun glint
+        for (float v : {0.0f, 0.25f, 1.0f}) {
+          FsTerms f = base;
+          f.a = a, f.sun = sun;
+          const float c = fs_colour(f), D = record_d(f);
+          FsTerms g = f;
+          g.sun = sun * v;
+          const float want = fs_colour(g);
+          const float tol = 4e-6f * (1.0f + std::fabs(c) + D);
+          CHECK(std::fabs(shadow(c, D, v) - (want > 0.0f ? want : 0.0f)) <= tol);
+          if (v == 1.0f) CHECK(shadow(c, D, v) == c);   // lit / unknown: bit-identical
+          CHECK(D >= 0.0f && D <= c - f.refr * (1.0f - f.a) + tol);   // D is part of C, never more
+          // dC/dDsun numerically (C is linear in the sun term): D / Dsun.
+          FsTerms h = f;
+          h.sun = sun + 1.0f;
+          CHECK(std::fabs((fs_colour(h) - c) - record_d(h) + D) <= tol);
+          // Both swaps at once (rt_water_compose and rt_water_shadows): C + A L - B - (1 - V) D.
+          const float A = record_a(f), B = record_b(f), L = 0.4f * f.k * f.sp;
+          FsTerms both = g;
+          both.sp = L / f.k;
+          const float wb = fs_colour(both);
+          CHECK(std::fabs(shadow(c + A * L - B, D, v) - (wb > 0.0f ? wb : 0.0f)) <= tol + 4e-6f * B);
+        }
+    CHECK(shadow(0.1f, 0.3f, 0.0f) == 0.0f);   // half-precision D above C clamps, never negative
+    CHECK(kCsSunRec == 32u && kCsSunClamped < kCsSunSumD && kCsSunSumRemoved + 2 == kCsSunWords);
+    CHECK(kCsSunSumD % 2 == 0 && kCsSunSumRemoved % 2 == 0 && kCsSunWords * 4 <= 256);   // 64-bit pairs, one slot
+    CHECK(kCsRatioHigh < kCsSunRec && (kFlagRf & kFlagSun) == 0);
   }
 
   // 4c. The statistics words (shaders/rt/water_compose.hlsl mirrors them): six tiers after the ray
@@ -213,6 +265,24 @@ int main(int argc, char** argv) {
                 patch_status_name(st), words.size(), out.size(), words[3], out.empty() ? 0u : out[3]);
     CHECK(st == PatchStatus::kApplied);
     CHECK(out.size() > words.size() && out[3] > words[3]);
+    // M5.4 off: the M5.3 module word for word (FNV-1a of the patch made by main 92c71e0, same addr / cap).
+    const uint64_t m53 = fi.fs == 0x7b44a567771ecbecull ? 0x7118fb90f4599508ull
+                       : fi.fs == 0x99c1fcef82b253c1ull ? 0xb0d6c3fdb58567e3ull
+                       : fi.fs == 0xc4e92ccdb08dd777ull ? 0x59718e7c5505cc1dull : 0;
+    CHECK(fnv(out.data(), out.size() * 4) == m53);
+    // M5.4 on: the sun words (two more stores and their values) on top of the same module.
+    std::vector<uint32_t> out_sun;
+    const PatchStatus st_sun = patch_fs(words.data(), words.size(), fi, addr, cap_sun, out_sun, true);
+    std::printf("patch %016llx with the sun term %s: %zu -> %zu words\n", (unsigned long long)fi.fs,
+                patch_status_name(st_sun), words.size(), out_sun.size());
+    CHECK(st_sun == PatchStatus::kApplied && out_sun.size() > out.size() && out_sun[3] > out[3]);
+    {
+      FsIds nosun = fi;   // a sun id of the wrong type is refused only when the sun words are asked for
+      nosun.sun_m = fi.sun_d;
+      std::vector<uint32_t> tmp;
+      CHECK(patch_fs(words.data(), words.size(), nosun, addr, cap_sun, tmp, true) == PatchStatus::kIdMismatch);
+      CHECK(patch_fs(words.data(), words.size(), nosun, addr, cap, tmp) == PatchStatus::kApplied);
+    }
     // Every original instruction is still there, in order (the patch only inserts).
     size_t q = 5;
     for (size_t p = 5; p < words.size();) {
@@ -246,6 +316,9 @@ int main(int argc, char** argv) {
       std::snprintf(name, sizeof name, "/water_fs_%08x_patched.spv", unsigned(fi.fs >> 32));
       std::ofstream o(std::string(argv[2]) + name, std::ios::binary);
       o.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size() * 4));
+      std::snprintf(name, sizeof name, "/water_fs_%08x_patched_sun.spv", unsigned(fi.fs >> 32));
+      std::ofstream os(std::string(argv[2]) + name, std::ios::binary);
+      os.write(reinterpret_cast<const char*>(out_sun.data()), std::streamsize(out_sun.size() * 4));
     }
     ++patched;
   }
