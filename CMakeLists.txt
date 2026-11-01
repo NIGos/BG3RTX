@@ -291,10 +291,10 @@ add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
 # Offline Python tooling checks (no build products): host-visible atomics lint, every-window
-# queue gates, progress fragments, the coverage HANDLING table.
+# queue gates, progress fragments, the coverage HANDLING table, the promotion gate tables.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling m4_promotion_gate m5_promotion_gate)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
