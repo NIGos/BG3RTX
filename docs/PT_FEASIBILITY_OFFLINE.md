@@ -74,6 +74,14 @@ path, each off by default and gated against this reference in one run:
 4. Full ReSTIR PT only if 1-2 leave a measured gap worth +2 to +7 ms, and after world closure,
    sky/ambient replacement and roofs have inputs (sections below).
 
+**Roof correction (2026-11-01, audit).** The pack has `rt_cascade_casters=0`, so the roofs the camera cut away are
+not in its TLAS, and S8 is mostly under them. `--define PT_ROOFS=1` (roof volumes from `tools/pt_roofs.py`;
+sun rays through a padded volume occluded, path rays end at the roof plane): PT total 0.152 -> 0.0111, sun
+98.9 -> 84.4%, on-screen first hits beyond 1 m 56.2 -> 32.7% (off screen 29.5 -> 59.8%, not split by distance),
+first-ray miss 64.2 -> 28.2% (+ 37.5% roof), k 0.49 -> 10.3. The numbers above are upper bounds of the far
+field; step 1 (`gi_far`, docs/TRACK_C_GI.md) is built energy-safe and waits for a casters-on, VT-cache,
+native-ambient pack before promotion.
+
 Next measurements: rerun on the VT-cache pack (per-region error with real materials), one interior
 pack, and capture the native ambient term (or the sky cube) so the far-field comparison closes.
 

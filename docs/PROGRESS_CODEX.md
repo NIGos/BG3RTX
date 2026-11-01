@@ -12,6 +12,19 @@
   OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
   Merge the branch only if the energy and capacity gates pass.
 
+## gi_far: far-field sun bounce (branch, offline, READY_FOR_LIVE; promotion waits for a corrected reference, 2026-11-01)
+
+- Key `gi_far=0` / `gi_far_m=6` (GUI Experimental, off / 4 / 6 / 8 m, needs gi_hit_sun). RT_GI_FAR on the gi_hit_sun
+  files only; off is byte-identical SPIR-V (368 requests). Rays reach gi_far_m; screen hits and qualified sun-lit
+  hits replace the native ambient (qualified keep rho x w); every other hit keeps the old 1 m rule; roof rule for
+  the GI ray. Design: TRACK_C_GI "Far-field sun bounce". Fixture case 10 passes.
+- S8 replay (screen tier only, no VT cache): bounce 0.0069 -> 0.0105 / 0.0118 / 0.0129 at 4 / 6 / 8 m, 32 / 44 / 54%
+  of the PT's visible-far tier; giRaw.a 0.916 -> 0.886 / 0.875 / 0.867. Pass 0.58 -> 1.63 / 2.15 / 2.69 ms at
+  2.73 Mpx: +0.8 / +1.2 / +1.6 ms at 4K Performance before hit shading.
+- PT with the cut-away roofs (`PT_ROOFS=1`, tools/pt_roofs.py): far field on screen 56 -> 33%, sun 99 -> 84%, PT
+  total 14x lower. Go/no-go needs > ~30% far field from a casters-on, VT-cache, native-ambient pack. Live batch
+  `tools/live_batches/gi_far` (camp + S8, ~8 min, 0.4 GB; dry run passes) prepared, not queued.
+
 ## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
 
 - `frame_replay --pack <dir> --pt-reference` (tools/pt_reference.hlsl; tools/frame_replay.md): N-vertex

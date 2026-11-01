@@ -35,6 +35,11 @@ int main(int argc, char** argv) {
         "gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_TILESET=1;RT_HIT_INSTANCED=1;RT_CASCADE_MASKS=1");
   CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl");
   CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl");
+  // gi_far: the gi_hit_sun files only, last; never the direct-only or ordinary files.
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kGiFar | kCascade) == "gi/gi_trace_rt_hit_sun.hlsl?RT_CASCADE_MASKS=1;RT_GI_FAR=1");
+  CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_GI_FAR=1");
+  CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl");
+  CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl");
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -43,7 +48,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 256; ++m)
+    for (unsigned m = 0; m < 512; ++m)
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);

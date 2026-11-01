@@ -67,6 +67,12 @@ Each dispatch has one froxel listing that dispatch's lights.
    above, below and oblique onto the open floor, authored N up or down, ng either sign. `RtHit.dir` must be
    the traced direction bit for bit (9b) and the consumer's N-column sign `nv_two_sided_sign(ng, N, dir)` on
    the GPU must equal the C++ function (9a; front and back both present).
+10. gi_far per-ray rule (`shaders/gi/gi_far.hlsli`, gi_trace_rt.hlsl RT_GI_FAR): rays down onto the sunlit open
+   floor at t = 0.4 / 0.9 / 1.5 / 3 / 5.5 / 7 m with R0 = 1 m (gi_rt_radius) and R = 6 m (Push::radius), each
+   qualified, unqualified and with the sun unsupported. The sun at the hit (outgoing -ray) equals the closed
+   form (10a); occlusion w (1 - rho), bounce sun x w with w = 1 - (t/R)^2 for qualified hits, the old w0 =
+   max(0, 1 - (t/R0)^2) and no bounce otherwise (the sun-unsupported hit keeps its local term within R0),
+   a miss beyond R (10b).
 
 ## Tolerance
 
