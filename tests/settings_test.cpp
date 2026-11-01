@@ -392,6 +392,22 @@ static void test_rendering_experiments() {
   rf_sources["rt_hit_material"]="1";CHECK(unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());
   rf_sources["rt_reflections"]="0";CHECK(!unmet_key_need(*find_knob("exp_rf_hit_shade"),1,rf_sources).empty());
   CHECK(unmet_key_need(*find_knob("exp_rf_hit_shade"),0,rf_sources).empty());
+  // rt_hit_emission (M4.4): three choices, off in every preset, live, needs the D-EM capture at startup.
+  {
+    const auto* em=find_knob("exp_hit_emission");CHECK(em!=nullptr);
+    if(em){
+      CHECK(em->experimental);CHECK(choice_count(*em)==3);CHECK_EQ(code_default("rt_hit_emission"),"0");
+      for(int p=0;p<kPresetCount;++p){Map m;for(auto& kv:expand_preset(p))m[kv.first]=kv.second;CHECK_EQ(get(m,"rt_hit_emission"),"0");CHECK(em->preset[p]==0);}
+      for(int c=1;c<=2;++c){KVList pairs;knob_kvs(*em,c,pairs);Map on;for(auto& kv:pairs)on[kv.first]=kv.second;
+        CHECK_EQ(get(on,"rt_hit_emission"),c==1?"1":"2");CHECK(knob_value(*em,on)==c);}
+      CHECK(!key_change_needs_restart("rt_hit_emission","0","2"));
+      auto em_sources=code_defaults();em_sources["rt_hit_material"]="1";
+      CHECK(!unmet_key_need(*em,1,em_sources).empty());   // rt_emissive=0 by default
+      em_sources["rt_emissive"]="1";CHECK(unmet_key_need(*em,1,em_sources).empty());CHECK(unmet_key_need(*em,2,em_sources).empty());
+      em_sources["rt_hit_material"]="0";CHECK(!unmet_key_need(*em,2,em_sources).empty());
+      CHECK(unmet_key_need(*em,0,em_sources).empty());
+    }
+  }
   CHECK(!key_change_needs_restart("rt_native_scalp","0","1"));
   CHECK(find_knob("exp_native_scalp")->apply==Apply::Hitch);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};

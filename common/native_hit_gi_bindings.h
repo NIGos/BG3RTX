@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <array>
 #include <span>
+#include "hit_emission_bindings.h"
 namespace bg3::native_hit_gi {
 struct Binding {uint32_t binding;VkDescriptorType type;uint32_t count;};
 // Exact union of production GI/native-direct inputs, including rebase/SHaRC
@@ -39,6 +40,9 @@ inline constexpr std::array<Binding,18> reference_bindings={{
 // (roof volumes, rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF); b7 (lsSlots) is in the set but the
 // GI reads the per-light data at push b46. Set 2 is empty; SHaRC stays set 4.
 inline constexpr uint32_t kSetSun=3;
+// rt_hit_emission (gi/gi_trace_rt*_hit_*_em.hlsl): the host's D-EM emissive scene set (hit_emission_bindings.h)
+// in the empty set 2 (core/gi.cpp ensure_hit_gi_em_layout).
+inline constexpr uint32_t kSetEmissive=2;
 inline constexpr std::array<Binding,8> sun={{
  {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{1,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
  {3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{4,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{5,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
