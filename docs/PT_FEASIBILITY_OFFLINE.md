@@ -1,6 +1,81 @@
 # Path tracing feasibility and rendering ceiling
 
 Offline study, 2026-10-30. Proposal only. No runtime feature is implemented here.
+2026-11-01: a measured offline PT reference on a replay pack and the real-time decision (next section).
+
+## Measured reference and real-time decision (2026-11-01, M6 offline)
+
+**Tool.** `frame_replay --pack <dir> --pt-reference` runs `tools/pt_reference.hlsl` (tools/frame_replay.md
+"PT reference"): raster G-buffer primary, cosine paths, up to 8 vertices with Russian roulette, NEE at
+every vertex (froxel point/spot lights through `native_hit_direct` + the sun, RT shadows), the declared
+FresnelBlend BSDF (diffuse + GGX), native hit materials where they qualify, else a declared fallback
+(albedo 0.5, roughness 0.5). It estimates giRaw.rgb's quantity (mean incident radiance from surfaces),
+split over the same paths by first hit, distance and light. CTest `pt_reference_test`: furnace exact
+(1, 1.75), Russian roulette unbiased (5.00 within 4 SE), FresnelBlend energy bounded, dark control 0.
+
+**Pack.** S8 Water Queen's House, frame 4268, 2560x1067, GI full res, 2 rays of 1 m (`gi_rt_radius`),
+`gi_hit_direct` on. The 2 GB VT hit cache is not in it: 0% of PT hits qualify, every hit uses the
+fallback (the live run had them: about 17% at S8). 256 paths per pixel and mode, 11.6 s GPU.
+Not in the pack, so 0 in the PT: sky/environment (64.2% of first rays miss), emission, projector
+lights, clouds (off this frame), the transmittance LUT (estimated: Kasten-Young air mass, T = 0.73 /
+0.63 / 0.45). Calibration k = game radiance / PT radiance on the visible first hits of the same paths:
+0.49 (albedo 0.5), 0.87 (albedo 0.3). Shares below are scale-free; they move by at most 1 point between
+the two albedos, except multi-bounce.
+
+| Of the PT's traced bounce energy (excludes sky) | albedo 0.5 | albedo 0.3 |
+|---|---:|---|
+| Sun / local point+spot lights | 98.9 / 1.2% | 98.9 / 1.1% |
+| Multi-bounce (vertex >= 2) | 20.9% | 13.9% |
+| First hit visible on screen (near 1 m / beyond) | 22.2% (7.5 / 14.7) | 21.2% |
+| First hit on screen but hidden (near / beyond) | 48.3% (6.7 / 41.5) | 48.7% |
+| First hit off screen | 29.5% | 30.1% |
+| Live domain: first hit within 1 m, with its fade | 11.6% | 11.2% |
+| Of the live domain: hidden or off screen (fallback0 adds 0) | 44.5% | 45.4% |
+
+**What the real-time path gets right and misses.**
+- In its own domain the live GI matches the calibrated reference: live / (k x PT within 1 m) = 0.97
+  (0.96 at albedo 0.3). The screen tier is 0.0070, and the in-game `gi_hit_direct` adds 0.0014
+  (17% of live), which is what the 44.5% hidden share needs.
+- The rest is outside the 1 m ray: 56-86% of the traced bounce energy comes from first hits beyond
+  1 m (56% from on-screen hits beyond 1 m, plus up to the 29.5% off screen; the off-screen part is
+  not split by distance). Live giRaw is 11% of k x PT total. In game that part is the native
+  probe/SH ambient x visibility (live a = 0.89), not in the pack, so this run cannot say whether
+  the native term is too bright or too dark. That is the next missing observable.
+- Per region (16 x 9 tiles, PT x k): live / PT median 1.17, p10 0.22, p90 13.5, mean |error| 84%.
+  The one global k cannot fit per-material albedo: region numbers need the pack with the VT cache.
+
+**Cost, measured on the RTX 5090 on this pack** (`pt cost` lines, 1 spp, sun + local NEE at each
+vertex, median of 9 dispatches; a first run under other agents' GPU tests gave 4.2 / 15.4 ms for
+the 300 m rows, so treat these as +-2x):
+
+| Kernel | ms per Mpx | 4K DLSS Performance (2.07 Mpx) | Quality (3.69 Mpx) |
+|---|---:|---:|---:|
+| 1 vertex, rays 300 m | 1.36 | 2.8 | 5.0 |
+| 2 vertices, rays 300 m | 2.29 | 4.8 | 8.5 |
+| 1 vertex, rays 8 m | 0.88 | 1.8 | 3.2 |
+| 2 vertices, rays 8 m | 0.97 | 2.0 | 3.6 |
+
+Today: gi 1.7-2.6 ms (2 rays of 1 m, full res for RR), rt passes 1-3 ms each; SHaRC queries at 4 m
+cost +0.33 ms at Campsite. A ReSTIR PT / 1-2 bounce path tracer at 1 spp = the 2-vertex row plus
+reuse (temporal + 1-2 spatial reconnections, about one extra visibility ray each: +60-100% of the
+1-vertex row) plus history/denoise in RR: about 6.5-9 ms at 4K Performance, 11-15 ms at Quality with
+300 m rays; 3.5-5 ms (Performance) with 8 m rays and a cache tail. That is +2 to +7 ms over today's GI.
+
+**Decision.** No real-time PT now. Close the largest measured gap with increments on the hybrid
+path, each off by default and gated against this reference in one run:
+1. Far-field sun bounce (largest: 56-86% of traced bounce energy, 99% of it sun in this scene):
+   lengthen GI rays to 4-8 m and give hidden/off-screen hits the sun (`gi_hit_sun`, merged, off;
+   roof rule kept), removing the native ambient only for rays that hit. Cost about 1 vertex at 8 m:
+   ~1.8 ms at 4K Performance, minus today's 1 m pass. Prerequisite: a hit material at those hits
+   (live qualified ~17% at S8): either more recipes (M3a) or a declared fallback material, checked
+   with this tool's k on the VT-cache pack.
+2. Multi-bounce (14-21%): traced SHaRC updates (v2) from those hits, not longer paths per pixel.
+3. Local lights (1% here): decide on an interior or night pack (S3/S6) before investing.
+4. Full ReSTIR PT only if 1-2 leave a measured gap worth +2 to +7 ms, and after world closure,
+   sky/ambient replacement and roofs have inputs (sections below).
+
+Next measurements: rerun on the VT-cache pack (per-region error with real materials), one interior
+pack, and capture the native ambient term (or the sky cube) so the far-field comparison closes.
 
 ## Decision
 
