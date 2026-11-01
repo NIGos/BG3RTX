@@ -51,14 +51,13 @@ precision of pow, exp2 and rsqrt), far below that bound. The worst observed erro
 An expected zero must be exactly 0. Monte Carlo cases use 5 standard deviations of the
 estimator, taken from its analytic variance.
 
-## Finding (not a failure)
+## Sun-disc frame near the zenith (fixed 2026-11-01)
 
-`3g`: the disc sample's tangent frame (`shaders/rt/native_hit_sun.hlsli:53`) falls back to
-t = (1,0,0) when |L.y| >= 0.99, and that t is not orthogonal to L. Y is up in lighting space,
-so this happens with the sun within 8 degrees of the zenith. The disc then shrinks: the largest
-sampled angle is 0.995 of `sun_radius` at L.y 0.993. The same frame is used in
-`gi/rt_shadow.hlsl:111`, `gi/rt_local_shadows.hlsl:151` and `gi/ls_ref/ls_ref_body.hlsli:698`.
-The `RT_SUN_CURRENT` path (`rt_shadow.hlsl:104`) already uses the orthogonal
-`normalize(cross((0,0,1), L))`. The run prints it as FINDING. It turns into PASS once fixed.
+`3g` checks the disc sample's tangent frame with the sun within 8 degrees of the zenith
+(|L.y| >= 0.99, Y up in lighting space). It used to fall back to t = (1,0,0), which is not
+orthogonal to L: the disc shrank to 0.995 of `sun_radius` at L.y 0.993 (printed as FINDING).
+`native_hit_sun.hlsli`, `gi/rt_shadow.hlsl`, `gi/rt_local_shadows.hlsl` and the frozen
+`gi/ls_ref/ls_ref_body.hlsli` (a marked hand edit, so `ls_check` stays bit-exact) now use
+`normalize(cross((0,0,1), L))`, as the `RT_SUN_CURRENT` path. `3g` is now a PASS line.
 
 Runtime on an RTX 5090: about 2 s wall in total. The dispatches and readbacks take 0.03 s.

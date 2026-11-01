@@ -726,8 +726,8 @@ int main(int argc, char** argv) {
       }
       // The disc sample's own cone (native_hit_sun_dir): every direction within sun_radius of L, and the
       // largest angle of 2^16 samples reaches it (sqrt(u1) <= 1: max ratio 1 - O(1e-5)). With |L.y| >= 0.99
-      // its tangent t = (1,0,0) is not orthogonal to L, which shrinks the disc by |t x L| = sqrt(1 - L.x^2).
-      // Reported as a finding, not a failure (the renderer is not changed here): FINDING lines.
+      // its tangent used to be t = (1,0,0), not orthogonal to L, which shrank the disc by |t x L| = sqrt(1 - L.x^2)
+      // (printed as FINDING until the frame became normalize(cross((0,0,1), L)), 2026-11-01): now a gate.
       for (int zenith = 0; zenith < 2; ++zenith) {
         Dispatch g; g.push = default_push(); g.push.sun_radius = 0.02f;
         const D3 Lz = zenith ? unit(D3{0.12, 0.99, 0.0}) : D3{0, 0, 1};
@@ -744,8 +744,7 @@ int main(int argc, char** argv) {
         // sqrt(u1) samples is 1 - 1/(2 x 2^16) on average; 1e-3 is far beyond both.
         const bool ok = inside && maxRatio >= 1 - 1e-3;
         const std::string detail = fmt("L.y %.3f: max angle / sun_radius %.5f (want 1)", Lz.y, maxRatio);
-        if (zenith && !ok) std::printf("%-44s FINDING  %s\n", "3g sun disc frame near zenith (|L.y|>=0.99)", detail.c_str());
-        else report.line(zenith ? "3g sun disc frame near zenith (|L.y|>=0.99)" : "3f sun disc sample cone (L +z)", ok, detail);
+        report.line(zenith ? "3g sun disc frame near zenith (|L.y|>=0.99)" : "3f sun disc sample cone (L +z)", ok, detail);
       }
     }
     // ---- 4. box (projector) light: inside/outside, ramps, direction _m9, its ray only with a shadow map ----

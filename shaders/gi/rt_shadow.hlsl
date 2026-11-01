@@ -108,7 +108,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
       uint s = pixel_seed(fp, 1u);
       float u1 = rand01(s), u2 = rand01(s);
 #ifndef RT_SUN_CURRENT
-      float3 t = abs(L.y) < 0.99 ? normalize(cross(float3(0, 1, 0), L)) : float3(1, 0, 0);
+      float3 t = abs(L.y) < 0.99 ? normalize(cross(float3(0, 1, 0), L)) : normalize(cross(float3(0, 0, 1), L));
       float3 b = cross(L, t);
 #endif
       float r = sqrt(u1) * tan(pc.sun_radius), phi = 6.2831853 * u2;
