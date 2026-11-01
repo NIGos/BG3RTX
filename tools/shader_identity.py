@@ -29,6 +29,9 @@ CLI:
     py -3 tools/shader_identity.py [--filter REGEX] [--validate]          compile every request
     py -3 tools/shader_identity.py --baseline <rev> [--filter REGEX]      byte identity vs <rev>
     py -3 tools/shader_identity.py --stats                                cache size
+    py -3 tools/shader_identity.py --prune [--prune-days 14 --prune-baselines 3 --prune-cap-gb 2]
+        keeps entries used in the last N days plus the working tree's and the last K baselines'
+        entries, evicts the oldest others above the cap, deletes unreferenced blobs
 """
 import argparse
 import concurrent.futures
@@ -331,6 +334,7 @@ class Cache:
         self.db.execute("CREATE TABLE IF NOT EXISTS compiled (key TEXT PRIMARY KEY, sha TEXT, size INTEGER, "
                         "request TEXT, entry TEXT, at REAL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS validated (sha TEXT, val TEXT, PRIMARY KEY (sha, val))")
+        self.db.execute("CREATE TABLE IF NOT EXISTS baselines (rev TEXT PRIMARY KEY, at REAL)")
         self.db.commit()
         self._verified = set()
 
@@ -343,6 +347,8 @@ class Cache:
         if not row:
             return None
         sha, size = row
+        # 'at' = last use: pruning keeps what was used recently.
+        self.db.execute("UPDATE compiled SET at=? WHERE key=?", (time.time(), key))
         if sha in self._verified:
             return sha
         p = self.blob_path(sha)
@@ -385,6 +391,13 @@ class Cache:
     def commit(self):
         self.db.commit()
 
+    def note_baseline(self, rev):
+        self.db.execute("INSERT OR REPLACE INTO baselines VALUES (?,?)", (rev, time.time()))
+        self.db.commit()
+
+    def recent_baselines(self, k):
+        return [r for (r,) in self.db.execute("SELECT rev FROM baselines ORDER BY at DESC LIMIT ?", (k,))]
+
     def stats(self):
         n = self.db.execute("SELECT COUNT(*) FROM compiled").fetchone()[0]
         v = self.db.execute("SELECT COUNT(*) FROM validated").fetchone()[0]
@@ -399,6 +412,73 @@ class MemoryCache(Cache):
     def __init__(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="b3c-", ignore_cleanup_errors=True)
         super().__init__(self._tmp.name)
+
+
+PRUNE_DAYS, PRUNE_BASELINES, PRUNE_CAP = 14, 3, 2 << 30
+
+
+def protected_keys(cache, tool, k=PRUNE_BASELINES, repo=ROOT):
+    """Every entry key of the working tree and of the last k baselines (current DXC)."""
+    keys = set()
+    trees = [SourceTree.worktree(repo)]
+    for rev in cache.recent_baselines(k):
+        try:
+            trees.append(SourceTree.commit(rev, repo))
+        except subprocess.CalledProcessError:
+            continue                                  # the commit is gone
+    for tree in trees:
+        _prep(tree, tool)
+        for r in tree.requests():
+            keys.update(key for _, key in request_keys(tree, r, tool.id) or [])
+    return keys
+
+
+def prune(cache, days=PRUNE_DAYS, cap=PRUNE_CAP, protect=None, tool=None, baselines=PRUNE_BASELINES, now=None):
+    """Drop entries unused for `days` that are not in `protect` (default: the working tree's and
+    the last `baselines` baselines' keys), then the oldest unprotected ones while the referenced
+    SPIR-V exceeds `cap` bytes; delete unreferenced blobs. Prints and returns what it freed."""
+    if protect is None:
+        protect = protected_keys(cache, tool or Toolchain(), baselines)
+    now = time.time() if now is None else now
+    rows = sorted(cache.db.execute("SELECT key, sha, size, at FROM compiled"), key=lambda r: r[3])
+    drop = {k for k, _, _, at in rows if at < now - days * 86400 and k not in protect}
+    refs, size_of = {}, {}
+    for k, sha, size, _ in rows:
+        size_of[sha] = size
+        if k not in drop:
+            refs[sha] = refs.get(sha, 0) + 1
+    total = sum(size_of[x] for x in refs)
+    for k, sha, size, _ in rows:                     # oldest first
+        if total <= cap:
+            break
+        if k in drop or k in protect:
+            continue
+        drop.add(k)
+        refs[sha] -= 1
+        if not refs[sha]:
+            del refs[sha]
+            total -= size_of[sha]
+    cache.db.executemany("DELETE FROM compiled WHERE key=?", [(k,) for k in drop])
+    keep = {x for (x,) in cache.db.execute("SELECT DISTINCT sha FROM compiled")}
+    stale = [x for (x,) in cache.db.execute("SELECT DISTINCT sha FROM validated") if x not in keep]
+    cache.db.executemany("DELETE FROM validated WHERE sha=?", [(x,) for x in stale])
+    cache.commit()
+    blobs = freed = 0
+    for p in (cache.dir / "spv").glob("*/*"):
+        try:
+            st = p.stat()
+            if (p.suffix == ".spv" and p.stem not in keep) or (p.suffix == ".tmp" and st.st_mtime < now - 3600):
+                p.unlink()
+                freed += st.st_size
+                blobs += 1
+                cache._verified.discard(p.stem)
+        except OSError:
+            pass
+    kept = sum(size_of.get(x, 0) for x in keep)
+    print(f"shader cache prune: {len(drop)} entries and {blobs} blobs removed, {freed / 2**20:.0f} MB freed; "
+          f"{len(keep)} blobs, {kept / 2**20:.0f} MB kept (cap {cap / 2**30:.1f} GB, {days:g} days, "
+          f"{len(protect)} protected keys)", flush=True)
+    return {"entries": len(drop), "blobs": blobs, "freed": freed, "kept": kept}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -622,6 +702,8 @@ def identity(base, new, requests, tool=None, cache=None, jobs=None, label="ident
     out, need = [], []
     _prep(base, tool)
     _prep(new, tool)
+    if getattr(base, "rev", None):
+        cache.note_baseline(base.rev)
     for r in requests:
         b = baseline_requests.get(r, r)
         kb, kn = request_keys(base, b, tool.id), request_keys(new, r, tool.id)
@@ -738,11 +820,19 @@ def main(argv=None):
     ap.add_argument("--no-cache", action="store_true")
     ap.add_argument("--stats", action="store_true", help="print the cache size and exit")
     ap.add_argument("--json", help="write {request: digest or state} here")
+    ap.add_argument("--prune", action="store_true", help="prune the cache and exit (compile_shaders.py runs it too)")
+    ap.add_argument("--prune-days", type=float, default=PRUNE_DAYS, help="keep entries used in the last N days")
+    ap.add_argument("--prune-baselines", type=int, default=PRUNE_BASELINES, help="keep the entries of the last K baselines")
+    ap.add_argument("--prune-cap-gb", type=float, default=PRUNE_CAP / 2**30, help="size cap of the kept SPIR-V")
     args = ap.parse_args(argv)
     lower_priority()
     cache = MemoryCache() if args.no_cache else Cache()
     if args.stats:
         print(json.dumps(cache.stats(), indent=2))
+        return 0
+    if args.prune:
+        prune(cache, args.prune_days, int(args.prune_cap_gb * 2**30), tool=Toolchain(args.dxc),
+              baselines=args.prune_baselines)
         return 0
     tool = Toolchain(args.dxc)
     new = SourceTree.worktree(ROOT).with_sharc(tool.sharc)

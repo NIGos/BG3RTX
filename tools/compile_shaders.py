@@ -8,7 +8,8 @@ A request "<file>?NAME=VALUE;NAME=VALUE" adds each pair as -D (common/shader_var
 Without arguments: every shaders/**/*.hlsl plus every GI variant request in shaders/variants.txt.
 Compiles through tools/shader_identity.py: a request whose DXC, flags, source and every
 transitively included file are unchanged reuses its cached (re-hashed) SPIR-V; any input change
-recompiles it. --no-cache compiles everything. Progress at least every 15 s.
+recompiles it. --no-cache compiles everything. Progress at least every 15 s. Prunes the
+cache at the end (tools/shader_identity.py --prune defaults: 14 days, 3 baselines, 2 GB).
 Exit code 1 if any fails.
 """
 import shutil
@@ -18,7 +19,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from tools.shader_identity import Cache, MemoryCache, SourceTree, Toolchain, compile_requests, lower_priority  # noqa: E402
+from tools.shader_identity import Cache, MemoryCache, SourceTree, Toolchain, compile_requests, lower_priority, prune  # noqa: E402
 
 lower_priority()
 root = Path(__file__).resolve().parent.parent
@@ -114,6 +115,11 @@ bad = [r for r in res if r[1]]
 for f, rc, msg in bad:
     print(f"FAIL {f}")
     print(msg[:4000])
+if not isinstance(cache, MemoryCache):
+    try:
+        prune(cache, tool=tool)
+    except Exception as e:  # noqa: BLE001  pruning never fails the gate
+        print(f"shader cache prune skipped: {e!r}")
 cached = sum(1 for f in files if compiled[f].cached)
 print(f"{len(res) - len(bad)}/{len(res)} compiled ({cached} from the cache)" +
       ("" if tool.sharc else " (no SHaRC SDK found)"))

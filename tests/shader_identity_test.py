@@ -155,6 +155,30 @@ check(res == {"a.hlsl": si.SAME, "b.hlsl": si.IDENTICAL_INPUTS, "c.hlsl": si.SAM
               "d.hlsl?FOO=1": "DIFFERENT", "e.hlsl": "missing"}, f"identity states {res}")
 check(not any(c[1] == "b.hlsl" for c in calls), "identical inputs are not compiled")
 
+# Pruning: age, protection, size cap (oldest first), shared blobs, unreferenced blobs deleted.
+pc = si.MemoryCache()
+now = 1_000_000_000.0
+day = 86400
+for key, data, age in (("old", b"A" * 100, 30), ("old-protected", b"B" * 100, 30), ("old-shared", b"C" * 100, 30),
+                       ("new-shared", b"C" * 100, 1), ("mid", b"D" * 300, 5), ("new", b"E" * 200, 1)):
+    pc.put(key, data, key, "main")
+    pc.db.execute("UPDATE compiled SET at=? WHERE key=?", (now - age * day, key))
+pc.commit()
+sha = {k: pc.db.execute("SELECT sha FROM compiled WHERE key=?", (k,)).fetchone()[0]
+       for k in ("old", "old-protected", "old-shared", "mid", "new")}
+with quiet:
+    r = si.prune(pc, days=14, cap=10_000, protect={"old-protected"}, now=now)
+left = {k for (k,) in pc.db.execute("SELECT key FROM compiled")}
+check(left == {"old-protected", "new-shared", "mid", "new"} and r["entries"] == 2 and r["blobs"] == 1,
+      f"age prune drops old unprotected entries only ({left}, {r})")
+check(not pc.blob_path(sha["old"]).exists() and pc.blob_path(sha["old-shared"]).exists(),
+      "the blob of a dropped entry goes; a blob still referenced stays")
+with quiet:
+    r = si.prune(pc, days=14, cap=350, protect={"old-protected"}, now=now)
+left = {k for (k,) in pc.db.execute("SELECT key FROM compiled")}
+check(left == {"old-protected", "new"} and r["kept"] == 300 and not pc.blob_path(sha["mid"]).exists(),
+      f"cap evicts the oldest unprotected entries until under the cap ({left}, {r})")
+
 # Progress prints while running.
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
