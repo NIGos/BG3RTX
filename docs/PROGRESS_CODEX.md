@@ -11,8 +11,9 @@
   (visibility only, can only darken); shadow-mapped ones only to the near plane. New in-play accuracy
   check `ls box bound` (recompute vs the stored B10G11R11 value's upper neighbour) and `ls box trace`,
   device-local counters reduced per group. `box_light_test` checks the math against f469db78.
-- Only LS_BOX shader variants change; every other module is byte-identical. Expected +0.15 to +0.3 ms.
-  Live: `tools/live_batches/box_lights` (S6 + S7, ~10 min, 0.65 GB; dry run passes). Not run.
+- Key-off SPIR-V: 992 of 1244 byte-identical vs 904c41e; the rest are the LS_BOX variants and the
+  rf_hit_shade ones (same box math, now shared; GPU fixture 4a-4c pass). 77 CTests pass. Expected +0.15
+  to +0.3 ms. Live: `tools/live_batches/box_lights` (S6 + S7, ~10 min, 0.65 GB; dry run passes). Not run.
 
 ## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
 

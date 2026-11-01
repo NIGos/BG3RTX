@@ -698,8 +698,11 @@ past the game's shadow view (casters nearer the light than its near plane cannot
   `ls_native_direct_validate` (S6 +0.60%, P3 290/291), the in-play one `ls box bound`.
 - Device-local counters (set 4 of the box layout, reduced per 8x8 group, copied into rtStats
   372-403 after the timed region): `ls box trace` (per kind: traced, occluded, atlas-lit
-  occluded, cut segments, removed) and `ls box bound`. Only the LS_BOX variants changed; every
-  other shader is byte-identical.
+  occluded, cut segments, removed) and `ls box bound`.
+- Key-off SPIR-V (`tests/ls_exact_k_shader_test.py` against 904c41e): 992 of 1244 requests
+  byte-identical; the 252 others are the 60 LS_BOX variants (ls_box >= 1 only) and the 192
+  rf_hit_shade variants (`NATIVE_HIT_BOXES`: the same box expressions now from box_light.h;
+  GPU fixture 4a-4c pass). Default GI, D-RF and every ordinary D-LS variant are identical.
 - Expected cost: +0.15 to +0.3 ms on the D-LS pass (S6 +1.13 rays/px over 2.21; S7 measured
   0.95 -> 1.20 ms with all boxes traced, sup-box-s7). Live job: `tools/live_batches/box_lights`.
 - User check: S6 forge and S7 inn with "All box lights": light no longer leaks into the next
