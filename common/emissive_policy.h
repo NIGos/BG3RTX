@@ -313,6 +313,11 @@ inline bool calib_window(Calib& cal, double ratio, uint32_t flags, double px) {
   ++cal.updates;
   return true;
 }
+// rt_em_check_slices (core/emissive.cpp): a run of the projected check covers 1/slices of the
+// pixels, so the host counts runs and bright hits per run; `slices` runs are one full-screen
+// check, the unit of the gates above (kCalibFirstFrames checks, kCalibBrightPx per check).
+inline uint64_t calib_checks(uint64_t runs, uint32_t slices) { return runs / (slices ? slices : 1u); }
+inline double calib_px_per_check(double px_per_run, uint32_t slices) { return px_per_run * double(slices ? slices : 1u); }
 // At the build: an approximate record of a calibrated family is scaled.
 inline void calib_apply(EmRec& r, const Calib* cal) {
   if (!(r.flags & kFlagApprox) || !cal || !cal->updates) return;

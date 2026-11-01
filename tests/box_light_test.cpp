@@ -148,6 +148,29 @@ int main() {
   check(n_overlap > 1000, "overlapping ramps sampled");
   check(bl_inside({0.5f, 0.5f, 0.5f}) && !bl_inside({0.5f, 0.5f, 1.0f}) && !bl_inside({0.0f, 0.5f, 0.5f}), "inside is strict");
 
+  // 2b. bl_reaches (D-LS and the rf_hit_shade early-out): the game's channel test (_m4 bits 0-23 hold
+  //     the surface's channel, (round(w * 255) & 112) >> 4 in 0-7) and the strict inside test on
+  //     uvw = rows . (P, 1); the bits 24-31 (curve) never count as a channel.
+  for (int i = 0; i < 20000; ++i) {
+    const float4 r0{u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(0, 1)}, r1{u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(0, 1)},
+        r2{u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(-0.3f, 0.3f), u(0, 1)};
+    const float3 P{u(-3, 3), u(-3, 3), u(-3, 3)};
+    const uint ch = uint(u(0, 7.999f)), mask = uint(u(0, 255.99f)) | (uint(u(0, 3.99f)) << 24);
+    float3 w;
+    const bool r = bl_reaches(mask, r0, r1, r2, ch, P, w);
+    const float3 q{r0.x * P.x + r0.y * P.y + r0.z * P.z + r0.w, r1.x * P.x + r1.y * P.y + r1.z * P.z + r1.w,
+                   r2.x * P.x + r2.y * P.y + r2.z * P.z + r2.w};
+    const bool on = ((mask & 16777215u) >> ch) & 1u;
+    const bool in = std::abs(q.x - 0.5f) < 0.5f && std::abs(q.y - 0.5f) < 0.5f && std::abs(q.z - 0.5f) < 0.5f;
+    check(r == (on && in), "reaches = channel and inside");
+    if (on) check(w.x == q.x && w.y == q.y && w.z == q.z, "reaches uvw");
+  }
+  {
+    float3 w;
+    check(!bl_reaches(1u << 24, {0, 0, 0, 0.5f}, {0, 0, 0, 0.5f}, {0, 0, 0, 0.5f}, 0, {0, 0, 0}, w), "curve bits are no channel");
+    check(bl_reaches(1u, {0, 0, 0, 0.5f}, {0, 0, 0, 0.5f}, {0, 0, 0, 0.5f}, 0, {0, 0, 0}, w), "channel 0 inside");
+  }
+
   // 3. The standard-class terms: random surfaces, directions (the record's _m9 un-normalised, as the
   //    game reads it), roughness from the game's floor 0.09 to 1, F0 0.02-1, both lobes per channel.
   float worst = 0.0f, worst_s = 0.0f;   // diffuse: relative; specular: as a fraction of its bound

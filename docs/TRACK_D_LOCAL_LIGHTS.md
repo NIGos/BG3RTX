@@ -699,7 +699,7 @@ past the game's shadow view (casters nearer the light than its near plane cannot
   not zeroed by the prep pass, plus its transmittance T. Not fixed in debug 4; the two-sided check is
   `ls_native_direct_validate` (S6 +0.60%, P3 290/291), the in-play one `ls box bound`.
 - Device-local counters (set 4 of the box layout, reduced per 8x8 group, copied into rtStats
-  372-403 after the timed region): `ls box trace` (per kind: traced, occluded, atlas-lit
+  385-416 after the timed region): `ls box trace` (per kind: traced, occluded, atlas-lit
   occluded, cut segments, removed) and `ls box bound`.
 - Key-off SPIR-V (`tests/ls_exact_k_shader_test.py` against 904c41e): 992 of 1244 requests
   byte-identical; the 252 others are the 60 LS_BOX variants (ls_box >= 1 only) and the 192

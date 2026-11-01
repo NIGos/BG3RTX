@@ -1104,12 +1104,17 @@ static_assert(kHitClipFirst == 356, "native_hit_material.hlsli hit_material_coun
 // Logged as "GI far".
 constexpr uint32_t kGiFarFirst = kHitClipFirst + kHitClipCount, kGiFarCount = 11;
 static_assert(kGiFarFirst == 372, "gi_trace_rt.hlsl kGiFarStatFirst 372");
-constexpr uint32_t kGiFarEnd = kGiFarFirst + kGiFarCount;   // 383
-// [BOXFIRST..] D-LS box lights (ls_box, ls_stats=1; rt_local_shadows.hlsl LS_BOX && LS_FULL, kBx*): counted in a
+// [383..384] rf_hit_shade bias breakdown (rt_reflections.hlsl NATIVE_HIT_BOX_TERM): L_b's projector (box) part
+// x 8192 at checked tier (a) hits / at shaded tier (b) hits (logged with the rf hit shade window).
+constexpr uint32_t kRfBoxFirst = kGiFarFirst + kGiFarCount, kRfBoxCount = 2;
+static_assert(kRfBoxFirst == 383, "rt_reflections.hlsl stat_addv(383/384) rf hit shade box part");
+// [385..416] D-LS box lights (ls_box, ls_stats=1; rt_local_shadows.hlsl LS_BOX && LS_FULL, kBx*): counted in a
 // device-local buffer (set 4 b0 of the box layout), reduced per 8x8 group, copied into this range of the
 // host slot after the pass's end timestamp. Logged as "ls box trace" and "ls box bound".
-constexpr uint32_t kLsBoxXFirst = kGiFarEnd;
-constexpr uint32_t kStatsCounters = kLsBoxXFirst + kLsBoxXCount; //ls box (device-local);372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+constexpr uint32_t kLsBoxXFirst = kRfBoxFirst + kRfBoxCount;
+static_assert(kLsBoxXFirst == 385, "rt_local_shadows.hlsl box counters copied to rtStats 385..416");
+constexpr uint32_t kStatsCounters = kLsBoxXFirst + kLsBoxXCount; //385..416 ls box (device-local);383..384 rf box part;372..382 gi_far;356..371 instanced clip;350..355 ls exact-k;331..349 hit emission;253..268 material;269..281 reference;282..286 GI;287..288 tileset;289..311 rf hit shade;312..319 hit policy;320..328 GI hit sun
+static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
 constexpr uint32_t kUnknownFirst = 128, kUnknownPasses = 6;
 const char* const kUnknownName[kUnknownPasses] = {"other", "sun", "D-LS", "D-RF", "AO", "GI"};
@@ -1132,6 +1137,7 @@ CameraMotionWindow g_epoch_motion;
 // check for a frame-to-frame standard error (the live gate: mean within z x that error).
 struct RfHitWindow {
   uint64_t sum[kRfHitCount] = {};
+  uint64_t box[kRfBoxCount] = {};
   double d_sum = 0, d_sq = 0;
   uint32_t d_frames = 0, frames = 0;
 } g_rfh;
@@ -1141,6 +1147,8 @@ void rf_hit_fold(const uint32_t* c) {
   for (uint32_t i = 0; i < kRfHitCount; ++i)
     for (int b = 0; b < 64; ++b) f[i] += c[(kRfHitFirst + i) * 64 + b];
   for (uint32_t i = 0; i < kRfHitCount; ++i) g_rfh.sum[i] += f[i];
+  for (uint32_t i = 0; i < kRfBoxCount; ++i)
+    for (int b = 0; b < 64; ++b) g_rfh.box[i] += c[(kRfBoxFirst + i) * 64 + b];
   if (f[6]) {   // checked tier (a) hits this frame
     const double d = (double(f[8]) - double(f[9])) / kRfHitScale / double(f[6]);
     g_rfh.d_sum += d;
@@ -1173,6 +1181,12 @@ void rf_hit_fold(const uint32_t* c) {
                 g_rfh.frames, (unsigned long long)t[6], t[11] * q / ck, t[15] * q / ck, t[12] * q / ck, t[16] * q / ck,
                 t[17] * q / ck, t[18] * q / ck, t[19] * q / ck, t[20] * q / ck, t[21] * q / ck, t[22] * q / ck,
                 t[9] ? double(t[8]) / double(t[9]) : 0.0, t[9] ? double(t[18]) / double(t[9]) : 0.0);
+    // The projector (box) part of L_b (after its AO-on-direct factor), the bias breakdown's missing term:
+    // a share of "L_b direct" above (tier a) and of the shaded mean (tier b).
+    host->log("rf hit shade boxes (%u frames): tier a L_b projector lights %.5f of L_b %.5f; tier b shaded L_b projector "
+              "lights %.5f of %.5f",
+              g_rfh.frames, g_rfh.box[0] * q / ck, t[8] * q / ck, t[1] ? g_rfh.box[1] * q / double(t[1]) : 0.0,
+              t[1] ? t[5] * q / double(t[1]) : 0.0);
   }
   g_rfh = RfHitWindow{};
 }

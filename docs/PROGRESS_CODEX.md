@@ -1,401 +1,145 @@
-# BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
+# BG3RTX progress - 2026-11-01 (main ac57418, ABI 25)
 
-## M5.5 step 1 water refraction (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4b)
-
-- Medium mapped (PLAN_M5_WATER M5.5): the water FS's transmittance is 1 - a, a grey quadratic ramp over the
-  camera-axis depth difference d (not a path length); the bed is the pre-water colour copy at the pixel plus a wave
-  jitter (no Snell); caustics are a flipbook added to the surface; the reflection is scaled by a. S8 sea opaque
-  (template OpacityBlendDistance 0), pool transmissive (OpacityBlendDistance 4).
-- S8 offline model (replay pack depth): refracted rays of the transmissive pool 65% screen hit, 35% hidden (8.9%
-  transmission-weighted), 0% off screen; Snell shift 52 px median. Off-screen rays change nothing at S8.
-- `rt_water_refraction=0` (GUI `exp_water_refraction`; on needs a restart, off is live): 104-B records add the FS's
-  Refr and 1 - a; the compose traces refract(-V, N, 1/n) (n 1.326 from the FS's own F0) and reads the water draw's
-  colour copy at the hit: C' = max(C + (1 - a) (Copy(hit) - Refr), 0); unresolved rays keep Refr.
-- Key off: plain, sun, LS compose SPIR-V byte-identical; M5.3 / M5.4 / M5.4b patches word for word (FNV pinned);
-  refraction patches pass spirv-val. Test 4j (swap = FS with Refr replaced, identity bit for bit, Snell). 75 CPU
-  CTests. Expected cost < 0.05 ms. Live: job `m5w6` (S8, OFF/ON/OFF, rt_debug 28); dry run passes (21.1 min, 1.31 GB).
-
-## M5.4b water local-light shadows (offline, READY_FOR_LIVE, 2026-11-01; on top of M5.4)
-
-- `rt_water_ls_shadows=0` (GUI `exp_water_ls_shadows`; on needs a restart, off is live). The patched FS also stores
-  its points + spots sum L, F = a T X, F0, diffuse colour, channel, froxel depth, P, N, roughness (96-B records).
-  The compose walks the FS's own froxel list (the water draw's set 2 light buffers, captured at the draw: the
-  D-LS structures), recomputes each light (bg3_light_eval, bg3_atlas_shadow), checks the sum against L, and traces
-  every light the game leaves unshadowed: C' = max(C - F sum (1 - V_k) c_k, 0). Shadow-mapped lights keep the atlas.
-- Sum match offline (test 4g, the FS loops vs our recompute): 9124/9124 records within 2^-10 (one half ulp); a
-  dropped light never within. Live gate: `sum check` within >= 99%, ratio of the means 1 within 0.1%.
-- Key off: plain and sun compose SPIR-V byte-identical, M5.3 and M5.4 patches word for word (FNV pinned); the LS
-  patches pass spirv-val. 76 CTests. Expected cost < 0.15 ms. Live: job `m5w5` (S8, OFF/ON/OFF, rt_debug 27);
-  dry run passes (batch now 16.9 min, 1.06 GB).
-
-## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
-
-- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
-  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
-  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
-  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
-- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
-  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
-- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
-  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
-  Merge the branch only if the energy and capacity gates pass.
-
-## Replay pack lighting inputs + `--native-ambient` (offline, layer + tools, READY_FOR_LIVE, 2026-11-01)
-
-- The pack now carries the deferred lighting's inputs as sets 2-3 (tools/frame_replay.md "Lighting inputs"):
-  G-buffer albedo/material, AO, sky irradiance + specular cubes, DFG LUT, probe records + the cubes they name,
-  atmosphere constants, transmittance LUT, clouds. Read in the core's pre-lighting hook with query_binding:
-  no ABI, core or shader change; only with `replay_pack` set (default path untouched). Budget priority:
-  lighting 4 > hit cache 3 > probe cubes 2 > alpha caches 1, so the S8 2054 MB cache still fits 3300 MB.
-- `frame_replay --native-ambient`: native diffuse ambient per GI pixel (tools/native_ambient.hlsl, the
-  in-game replica functions) vs k x PT far field (> 1 m) + PT sky at misses (`PT_ENV`), mean and 16 x 9
-  tiles; the PT sun from the game's LUT (`PT_SUN_LUT`). Self-test 13-16 closed form, 76 CTests pass.
-- Pending: one `rc1-replay-s8-fg2` run (expect line `lighting inputs: 19 of 19 slots bound`); its post
-  step prints the S8 native / PT far-field ratio. No real pack with these inputs exists yet.
-
-## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
-
-- Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun
-  term has the clouds but no cascade sample, so the temple and columns cast no shadow on the S8 pool.
-- `rt_water_shadows=0` (GUI `exp_water_shadows`; on needs a restart, off is live; needs `rt_water_reflections`):
-  the patched FS also stores its unshadowed sun term D = a T X (Sd + Ss) (40-B records), and the compose pass
-  traces one sun-disc ray per record: C' = max(C - (1 - V) D, 0). Only the visibility changes; lit and unknown
-  rays keep C. Alone or with `rt_water_compose`. rt_debug 26 the shadow view; log `[water] shadows`.
-- Key off: patch, buffer and compose SPIR-V are M5.3's word for word (FNV pinned in the test). Counters are
-  device-local, reduced per 8x8 group. 75 CTests, the sun patch passes spirv-val on the three dumps.
-- Expected cost < 0.05 ms (one first-hit ray per sunlit water pixel). Live: job `m5w4` (S8, OFF/ON/OFF, rt_debug 26),
-  dry run passes. Local lights (M5.4b) designed, not built: PLAN_M5_WATER M5.4.
-## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
-
-- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
-  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
-  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
-  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
-- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
-  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
-- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
-  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
-  Merge the branch only if the energy and capacity gates pass.
-
-## gi_far: far-field sun bounce (branch, offline, READY_FOR_LIVE; promotion waits for a corrected reference, 2026-11-01)
-
-- Key `gi_far=0` / `gi_far_m=6` (GUI Experimental, off / 4 / 6 / 8 m, needs gi_hit_sun). RT_GI_FAR on the gi_hit_sun
-  files only; off is byte-identical SPIR-V (368 requests). Rays reach gi_far_m; screen hits and qualified sun-lit
-  hits replace the native ambient (qualified keep rho x w); every other hit keeps the old 1 m rule; roof rule for
-  the GI ray. Design: TRACK_C_GI "Far-field sun bounce". Fixture case 10 passes.
-- S8 replay (screen tier only, no VT cache): bounce 0.0069 -> 0.0105 / 0.0118 / 0.0129 at 4 / 6 / 8 m, 32 / 44 / 54%
-  of the PT's visible-far tier; giRaw.a 0.916 -> 0.886 / 0.875 / 0.867. Pass 0.58 -> 1.63 / 2.15 / 2.69 ms at
-  2.73 Mpx: +0.8 / +1.2 / +1.6 ms at 4K Performance before hit shading.
-- PT with the cut-away roofs (`PT_ROOFS=1`, tools/pt_roofs.py): far field on screen 56 -> 33%, sun 99 -> 84%, PT
-  total 14x lower. Go/no-go needs > ~30% far field from a casters-on, VT-cache, native-ambient pack. Live batch
-  `tools/live_batches/gi_far` (camp + S8, ~8 min, 0.4 GB; dry run passes) prepared, not queued.
-
-## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
-
-- `frame_replay --pack <dir> --pt-reference` (tools/pt_reference.hlsl; tools/frame_replay.md): N-vertex
-  opaque PT (sun + froxel lights NEE, FresnelBlend, native hit material else fallback albedo 0.5), split by
-  first hit / distance / light over the same paths; CTest `pt_reference_test` (furnace exact, RR unbiased).
-- S8 pack 071930 (no VT cache: all hits fallback): sun 99% of the traced bounce, multi-bounce 21% (14% at
-  albedo 0.3), hidden-on-screen first hits 48%, off screen 30%; the 1 m live domain 11.6%. Live GI within
-  its domain = 0.97 x calibrated PT (k 0.49). 56-86% comes from beyond 1 m, today the native ambient
-  (not in the pack). Per-region error 84% (one k, no real albedo).
-- Cost (5090, 1 spp, per Mpx): 1 vertex 300 m 1.36 ms, 2 vertices 2.29 ms; 8 m 0.88 / 0.97 ms. ReSTIR PT
-  estimate 6.5-9 ms at 4K DLSS Performance. Decision: no real-time PT now; far-field sun bounce first
-  (longer GI rays + `gi_hit_sun` at hidden hits), then traced SHaRC. Game path unchanged (no shader edits).
-
-## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
-
-- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
-  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
-  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
-  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
-- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
-  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
-- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
-  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
-  Merge the branch only if the energy and capacity gates pass.
-
-## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
-## rt_hit_material_instanced clip rejects: pairing and instance order (offline, READY_FOR_LIVE, 2026-11-01)
-
-- Live S14 (m4i 09:39) disproved the rounding theory: wind "within tolerance 0, over x256", 2S "differs", UV
-  differs 0, rigid 0; 2.6%, 3.1%, 0%, 0.4% of lookups per window at a static camera, the same share for both
-  families (24/27%, 10/16%, 2.2/2.4% of their hits) and 0 on the static per-draw rows. Same mesh, other instance
-  positions, whole frames. Causes in the pairing: (1) the instanced key has no frame identity and the packet /
-  source epoch `frame_index()` counts presents, which moves mid-frame (same log: "query reject source epoch
-  current 4320 source 4319"), so a previous-frame G-buffer packet can join; (2) the two passes may upload the same
-  instances in another order (rows are instance-major).
-- Fix (layer only, instanced rows only): both draws' VS inputs are read at record (frame time 0:0, camera 0:2;
-  2S translation 1:0 @32; wind UBO words) and must be equal (`pair_check`), else the row is not mapped; a new
-  `rt/hit_material_instanced_remap.hlsl` maps each depth instance to the G-buffer instance with the same first
-  triangle (clip + UV bit-exact) and copies that block. Per-hit check unchanged (bit-exact, fail closed).
-- New lines (per window): `pairs since the last line (wind/2S): same frame, other frame (time), camera,
-  placement, wind inputs, unread` and `instance order ...: rows, same order, permuted, unmatched`; they replace
-  the per-frame wind inputs line. 128 checks (reproduces the live signature: UV equal, clip differs, not rigid,
-  then all bit-exact after the remap), 75 CTests; no existing shader changed. Layer change: restart. Gate: clip
-  rejects < 0.04% in every ON window. Cost not measured (two small dispatches per instanced row).
-
-## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01; live: not the cause)
-
-- Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120
-  frames. Static camera, qualified + clip constant, clip varying: the wind rows (2S is all `precise`, static). The
-  wind VSs' non-`precise` displacement may be fused differently in the depth and the G-buffer module.
-- Fix (RT_HIT_INSTANCED variants, layer + core): the layer reads the wind VS inputs at both draws; equal (or time
-  only) -> the row compares clip within a derived fp32 tolerance (`wind_clip_tolerance`), UV bit-exact; 2S and
-  other input differences stay bit-exact. New lines: wind inputs match, `hit material instanced clip` per family.
-- Offline: 71 checks (fp32 simulation of both VSs: 13% of vertices flip bits, all within tau, another instance
-  5 cm away always outside), 75 CTests, key-off shaders byte-identical, m4_instanced dry run passes; job expect:
-  rejected < 0.04% of lookups. Layer change: restart. TRACK_D_REFLECTIONS 14.
-
-## Live 2026-11-01 ~07:10 (main f31c62b): water S8 valid, ls_k biased, replay sizes
-
-- Water S8 (audit merged): both planes captured (7b44a567 + c4e92ccd NoCaustics_Waves), views 120/120, reflections 0.12 ms.
-  Compose: 6 FS patched, 174 draws on variants, GPU 0.022 ms, but composed on 3 of 120 frames
-  ("passes without this frame's lighting 117"), 66% of rays off screen (probe kept on 87%), and where composed
-  the traced term is 28% of the probe it replaces (mean -0.4%). Agent fixing all three.
-- ls_k at S7: cost OFF 0.717, k1 0.555 (-23%), k2 0.654 ms. Local-light buffer 3-4% darker than OFF in every
-  alternation (final image unchanged): biased, stays off. Agent on the root cause.
-- Replay: the hit VT cache is one 32688x26352 x2 BC image of 2054 MB; the pack (976 MB) keeps every other texture.
-  Shading hits offline needs it: next step a capped tile subset or a one-off 3.1 GB pack.
-- Raw captures before 07:00 deleted (3.0 GB -> 0.7 GB).
-
-## Live 2026-11-01 ~06:00: water S8, emission S6, replay textures (main 13c8817)
-
-- Merged: hit-emission, water-fix, m5-compose, replay textures (all merge-green).
-- `QuickSave_3784` now loads the Steel Watch Foundry (the sea is 19 m below, all hidden): water jobs moved to S8.
-- M5.2 at S8: reflections GPU 15 ms -> 0.113 ms (water-fix kept: device-local counters); gi 1.7 ms; water in
-  front 7.6%, rays screen hit 5.1%, hidden 4.3%. INVALID on `views 0 over 0 water passes`: S8 water is
-  FS family 99c1fcef `..._PixelLighting_ExtraWaves`, not audited, so not captured; compose cannot run. Agent auditing it.
-- rt_hit_emission at S6 (Forge, on all run): rf tier b emissive 7% of lookups, energy added, no fault. ON/OFF A/B still owed.
-- Replay pack with shader-read textures: 906 MB, but 4098 of 4099 images dropped by the budget (decoded
-  hit caches too big for the 2 GB cap); only 1 read. Next: size the caches, capture referenced pages only.
-
-## Removed features reviewed (offline, READY_FOR_LIVE, 2026-11-01)
-
-- `ls_k` re-added as the LS_K D-LS variant (off; GUI `exp_ls_exact_k`; unbiased cost option, 873/873 key-off shaders byte-identical, 74 CTests incl. GPU fixture case 8; live job `lsk1` S7, not queued; TRACK_D_LOCAL_LIGHTS 9.11). `gi_bounce_spec` not re-added: camera-direction specular is not physical, and hidden hits already bounce receiver-direction specular (TRACK_C_GI).
-
-## M5.3 water reflections composed (branch m5-compose, offline, READY_FOR_LIVE, 2026-11-01)
-
-- `rt_water_compose=0` (GUI `exp_water_compose`, needs `exp_water_reflections`; on needs a restart, off live):
-  the audited water FS 7b44a567 is patched at creation to store its own probe-term factors per pixel
-  (`common/water_fs_patch.h`, BDA stores, no layout change); a pass at the end of each water pass replaces
-  the probe term with the traced reflection where it resolves: `C' = max(C + A L - B, 0)`, A = a T X E,
-  B = a T X k Ks (exact, the FS's own normal, opacity, fog, atmosphere and LUT). Unresolved keeps the probe.
-- Debug view `rt_debug=25` (delta). Log `[water] compose`, `compose energy`, `compose GPU`, `compose variants`.
-- Key off: nothing allocated or bound; no existing shader changed. 73 CTests (patch checked with spirv-val on the
-  dumped FS), 745 shaders, QA detectors. Layer change: restart. Live: job `m5w3`, dry run passes.
-
-## Hit material: instanced wind and two-sided alpha-test rows (offline, READY_FOR_LIVE, 2026-11-01)
-
-- `rt_hit_material_instanced=0` (GUI `exp_hit_material_instanced`; startup patches the two G-buffer VSs, then live
-  A/B; needs `rt_hit_material=1`): per-draw rows for the instanced draws of 50fbfceb/8e49cde8 (wind) and
-  1e9145e4/923131c7 (two-sided alpha-test). They had no record because neither VS is class A (never pooled) and
-  the per-draw path took one instance only. Now depth alpha record + G-buffer XFB of all instances, joined by
-  draw words + index range; per-hit clip/UV check unchanged; 2S flips N with `nv_two_sided_sign`.
-- Classifier built share 48.2% -> 54.4% (+6.2, same 139 traces). No ABI change. 73 CTests (new
-  `native_hit_instanced_test`), GPU fixture 9a/9b. SPIR-V vs 2bf305e: 872/872 requests byte-identical (the flip and RtHit.dir are in
-  new `RT_HIT_INSTANCED=1` consumer variants, requested only with the startup key; 296 new, spirv-val clean).
-- Live (prepared, not queued): `tools/live_batches/m4_instanced` job `m4i-instanced-s14-fg2` (S14, 149 s, dry run
-  passes). Deciding: `[hit material instanced]` mapped > 0 per family; `hit material` qualified share ON - OFF;
-  reasons row/clip ON - OFF; cost ON - OFF on `[pace]` and `gi: trace pass`. Details: TRACK_D_REFLECTIONS 14.
-
-## M5.2 water reflections, measured (branch m5-water-rf, offline, READY_FOR_LIVE, 2026-11-01)
-
-- `rt_water_reflections=0` (GUI `exp_water_reflections`, live, needs `rt_water_geometry=1`): per visible water
-  pixel the water TLAS hit against the bed depth, the wave mesh's geometric normal and one mirror ray into the
-  scene TLAS, resolved from the screen (tier a), weight Schlick E (F0 0.0196 at the docks). Output wOut (L, E);
-  NOT composed: the image does not change. Views over the water: `rt_debug` 21 coverage, 22 L, 23 tiers, 24 E*L.
-- Water scene to the core without an ABI bump: persist key `bg3rtx.water_scene` (sequence lock, the
-  device-info pattern), written by layer/water.cpp per build (TLAS, build camera, roles).
-- Composition (M5.3) needs the FS's own normal, opacity and fog: plan in PLAN_M5_WATER "Composition plan".
-- Key off: nothing runs; no existing shader changed (ordinary SPIR-V byte-identical). 71 CTests, QA detectors.
-- Live: job `m5w2` (S1, OFF/ON/OFF PNGs, views 22/21, `[water] reflections` + `GPU` lines), dry run passes.
-
-## Hit material: ENV_DetailMap_Iridescent pool recipe (branch forge-family, offline, READY_FOR_LIVE, 2026-11-01)
-
-- c32ce535/9064a6bd (3.8% combined, the S6 forge family): new LayoutIridescent pool recipe, five plain 2D
-  textures + sampler 0:7, decode `nv_iridescent_fields` (camera-angle albedo mix, reflectance mix by p.w).
-  VS c32ce535 and its depth VS e6fc6bf6 are class A (dumps). Built share 44.3% -> 48.0% (regenerated
-  with 129 traces; the `log vtx` column is empty: the source logs rotated).
-- The FS writes class 4 (thin translucency): the hit gets the exact class 0 front lobe, no transmission.
-- 50fbfceb (wind) and 1e9145e4 (alpha-test 2S) stay "no capture path": neither option is clean (PLAN_M4).
-- Key `rt_hit_material` (off). Ordinary shaders byte-identical (584 of 753 modules; the 169 hit-material
-  consumers + the gather change). 71 CTests, QA detectors pass. No ABI change. Live check: S6,
-  `[hit material pool pairs]` c32ce535/9064a6bd records/ready > 0, `hit material` qualified up.
-
-## M4.4 rt_hit_emission (branch hit-emission, offline, READY_FOR_LIVE, 2026-11-01)
-
-- `rt_hit_emission=0` (GUI `exp_hit_emission`: Off / Hidden hits / All hits; live; needs `rt_emissive=1`,
-  `rt_hit_material=1`, acts through `gi_hit_direct` and/or `rf_hit_shade`): a GI bounce or reflection ray
-  hitting a captured emitter adds its D-EM record radiance, with the projected check's own lookup
-  (`rt/native_hit_emission.hlsli`). Exact families, calibrated approximate ones; excluded never.
-- Finding: the screen value has no emission (prevRadiance is before compose adds the effects target), so
-  `1` = hidden hits (GI zero-fallback hits, shaded D-RF tier b), `2` = also GI screen hits and tier (a).
-  SHaRC hits untouched (already injected). No ABI change: host emissive set as GI set 2 / D-RF set 5.
-- Offline: key off byte-identical (`tests/hit_emission_shader_test.py`), every `*_em` variant compiles and
-  matches its contract (`--em`); GPU fixture case 7 (emissive quads) 5/5 PASS; 71 CTests pass.
-- Not built: emitters as light sources at hidden hits (no CDF in the light list; double count with the
-  game's authored lights near lava/braziers): TRACK_D_EMISSIVE 13.23. Cost not measured. Live gate there.
-
-## M5.1 water geometry (branch m5-water, offline, READY_FOR_LIVE, 2026-11-01)
-
-- `rt_water_geometry=0` (GUI `exp_water_geometry`, live): forward water draws of the 7 audited FLUID_Water_Plane
-  FS/VS pairs go through the D-EM pass hook into their own XFB soup, BLAS and TLAS per submission
-  (`layer/water.cpp`), with a record per draw (Roughness_Base, Reflectance_Base). Policy `common/water_policy.h`,
-  run by the core via em_record (`BG3_EM_REQ_WATER`): no ABI change. Bound nowhere: no image change.
-- Offline answers: water VS displace Y only (flowmap + scrolling noise), XFB gets the animated positions; water
-  writes no depth (D24S8 identical across all ten traced water passes).
-- Key off: no hook, no allocation; no shader changed (741/741 compile). 69 CTests (+water_policy_test), QA pass.
-- Live: `tools/live_batches/m5_water/` (5 min, dry run passes). Details: PLAN_M5_WATER "M5.1 status".
-
-## Offline frame replay, step 3: live `replay_pack` writer (branch replay-writer, offline, READY_FOR_LIVE)
-
-- Key `replay_pack=0` (diagnostic, not in presets): a serial takes one pack of the next base-variant
-  gi_hit_direct dispatch; -1 one per trace. ABI 25: `Bg3HostApi::replay_pack` (layer + core rebuilt together).
-- Core: `replay_after_hit_gi` after the dispatch (push, set-0 writes, set 1, TLAS). Layer `layer/replay.cpp`:
-  records the material set's writes (wrapped `dd->vk`), copies set 0/1, the instance array, InstInfo spans or
-  whole soup/pool, image mips (budget 1 GB, largest dropped), samplers; writes after GPU done on a thread.
-- Log: `[replay] pack N written: <MB> MB (<n> images omitted), frame <f>, pass gi_hit_direct, instances <n> -> <dir>`.
-- Rendering unchanged (copies only); no existing shader changed (742/742 compile, + `replay_copy.hlsl`).
-  72 CTests (+`replay_pack_test`), frame_replay_test unchanged (356 qualified), QA pass, nodiag layer builds.
-- Cost and texture coverage not measured live (game textures without TRANSFER_SRC are omitted).
-  Live: `tools/live_batches/replay_capture/` (S8, ~3 min, dry run passes).
-
-## Offline frame replay, steps 1-2 for gi_hit_direct (branch frame-replay, offline, 2026-11-01)
-
-- `binrame_replay.exe` (tools/frame_replay.md): loads a replay pack (common/replay_pack.h), rebuilds BLAS/TLAS
-  from InstInfo + soup/pool + the instance array, binds both sets, compiles the REAL `gi_trace_rt_hit_direct.hlsl`
-  with the layer's DXC flags and dispatches it; writes giRaw (raw + PFM), the live `GI hit direct` / `lights` /
-  `policy` / `hit material` lines and the GPU time. About 3 s per shader edit.
-- CTest `frame_replay_test`: synthetic lit + dark packs; 356 hidden hits qualified (reason 0), supported and
-  nonzero; two dispatches bit-identical; dark bounce exactly 0 with giRaw.a bit-equal. 69 CTests pass.
-- The live writer is step 3 above.
-
-## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
-One current summary. Older entries, verbatim: [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md)
-(10-31 evening to 11-01) and [archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md) (before).
-Plan: [RENDERING_EXECUTION_PLAN.md](RENDERING_EXECUTION_PLAN.md). Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
+One current summary. Older entries, verbatim: [archive/PROGRESS_20261101.md](archive/PROGRESS_20261101.md)
+(11-01 until the afternoon rewrite), [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md),
+[archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md). Branches write
+`docs/progress/<branch>.md`; `py -3 scripts/fold_progress.py` folds them here. Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
 
 ## Open questions for the user
 
-- M4 promotion (not blocking, after `m4_promotion` runs): `rf_hit_shade` fails the strict M4.2 bias gate
-  (tier (a) L_b / L_a 0.93 at S8, 1.09 at S6; any bias is significant with 10^7 hits) and costs +1.4 to +1.8 ms.
-  Promote it with the bundle (bias within 9%) or keep it out of Ultra? Conservative default: decide on the batch's
-  energy and cost numbers; the branch includes it.
-- Not blocking (M4.4): the plan said screen hits already contain emission; the code says they do not
-  (prevRadiance is before compose). `rt_hit_emission=2` adds it at screen hits too. The live gate tests 1
-  and 2; which one to qualify for presets is your call after it (conservative default: 1).
+- **`rf_hit_shade` bias.** Tier (a) L_b / L_a is 0.926 at S8 (-7%) and 1.091 at S6 (+9%). The strict M4.2 gate
+  fails (any bias is significant with 10^7 hits). Accept "bias within 9%" for Ultra, or keep it out of the
+  bundle? Conservative default: out of Ultra until you decide. Its cost is also +1.4 to +1.8 ms (rf pass).
+- **`rt_hit_emission` 1 or 2** (not blocking): 1 = hidden hits only, 2 = also screen hits (the screen value has
+  no emission). Conservative default: 1.
+- Answered: **`ls_k` stays off** (user decision, 11-01).
 
-## Stage 0: closed (2026-10-31 evening)
+## Consolidation report, 2026-11-01
 
-- Consolidation done ([CONSOLIDATION.md](CONSOLIDATION.md)). Live batch cb1-cb7 and lean regression
-  lr1-lr3: no regression against pre-consolidation (same pass costs, same primary match).
+- Done: water M5.1-M5.5 step 1 built and live at S8; hit-material instanced pairing fix; M6 PT reference and replay
+  pack with lighting inputs; `gi_far` (off); tooling (every-window gates, atomics lint, progress fragments).
+- Merged to main (all off by default): M5.1-M5.5 step 1, M4.4 emission, instanced rows + pairing fix, replay
+  writer and inputs, PT reference, `gi_far`, `ls_k` (LS_K variant), queue `expect_every`, atomics lint.
+- Not merged: M4 Ultra bundle (promotion batch failed), M5.4 R = C - D fix (pending live), `ls_box=2` (offline),
+  `low-prio` (live game keeps Normal priority).
+- Open: S6 Forge NaN with the bundle (2.9k -> 8.7k px, being fixed); bundle cost; `gi_hit_sun` at S3; M4.1 motion.
+- Try in game: S8 Water Queens House, water options in order (below); S14 instanced foliage; S6 reflections.
+- Nothing new is on in Ultra today. Only `rt_cascade_casters` (10-31) is.
+
+## M4 hit shading (Experimental, NOT in Ultra; promotion blocked)
+
+Plan and gate table: [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md) "Promotion".
+- `rt_hit_material` (restart): qualified share of hit lookups S8 48.1%, S6 27.9% (S8 was 0.4%). Classifier
+  built share 54.4%. Next families: [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md).
+- `rt_hit_material_instanced` (startup patch, then live): the wind tolerance theory was disproved live (m4i
+  09:39). The real cause was pairing across frames and instance order; fix 4925937 merged. Live at S14: 0 clip
+  rejects in every window (gate < 0.04%), qualified 22% -> 37-42%. Cost gi trace +0.14 ms. Gate passes.
+- `gi_hit_direct` + `gi_hit_sun` (live): never darker (R3 0 negative px), S8 gi trace +0.52 ms together.
+  `gi_hit_sun` S3 gate not run; M4.1 motion and isolated cost not run.
+- `rf_hit_shade` (live): bias above (user question). Tier (b) shaded share S8 24%, S6 3%. Cost +1.4 to +1.8 ms,
+  unexplained (budget 0.2-0.4 ms); split `hit_ao_rays` 0/2 next.
+- `rt_hit_emission` (live, needs `rt_emissive=1` at startup): S6 participation 6.9% of rf lookups.
+- **Promotion batch `m4_promotion`: FAILED.** S6 Forge NaN pixels 2.9k (OFF) -> 8.7k (bundle ON). Whole-GI
+  cost with the bundle: camp +4.8 ms, S8 +3.4 ms, S6 +9.1 ms. The preset branch
+  (worktree-agent-a9e0aabd4d7f18008) stays unmerged. The NaN fix is in progress; rerun after it.
+
+## M5 water (all Experimental, off; live at S8 Water Queens House)
+
+Plan: [PLAN_M5_WATER.md](PLAN_M5_WATER.md). `QuickSave_3784` loads the foundry, so all water jobs run at S8.
+- **M5.1** `rt_water_geometry` (live): both S8 planes captured (7b44a567, c4e92ccd), views 120 of 120. No image change.
+- **M5.2** `rt_water_reflections` (live): GPU 15 ms -> 0.113 ms (device-local counters). Water in front 7.6%,
+  rays screen hit 5.1%, hidden 4.3%. Measured only, no image change.
+- **M5.3** `rt_water_compose` (restart): every frame composes now (112-120 of 120, was 3). Compose cost
+  7.2 -> 0.098 ms (statistics device-local). The probe stays on 87% of owned pixels; mean change -0.35 to
+  -0.65%. Open: traced / probe ratio 0.31 needs a reference crop; one moving window.
+- **M5.4** `rt_water_shadows` (restart): live m5w4 shows the right shadow (the far rim shades the far half of the
+  pool), but with black and bright specks: 1213 per frame (0.44% of sun records), rounding of C - D in the
+  B10G11R11 target. Fix (the FS stores R = C - D) on branch worktree-agent-abd9303a6e22b012e, 80 CTests,
+  pending live. Gate: clamped < 120 per ON window.
+- **M5.4b** `rt_water_ls_shadows` (restart): live S8 sum check 100% within 0.098%, ratio of the means 1.0000.
+  Only 0.2% of S8 water has a local light. Cost 0.18 ms. Passes; little visible at S8.
+- **M5.5 step 1** `rt_water_refraction` (restart): live S8 69.6% of transmissive pixels composed, bed shift 24 px
+  median, energy +0.07% (within noise), cost 0.24 ms. Passes.
+- Next: S1 docks need a save with open sea; `rt_water_hit_shade` for the 8.8% hidden rays.
+
+## M6 PT reference and far field (offline; `gi_far` Experimental, off)
+
+- PT reference (`frame_replay --pt-reference`, merged): no real-time PT now (ReSTIR PT estimate 6.5-9 ms at 4K
+  DLSS Performance). The first S8 numbers (sun 99%, 56-86% beyond 1 m) had no roofs; with `PT_ROOFS=1` the far
+  field on screen fell 56% -> 33% and the PT total 14x.
+- Replay pack with all textures: 3.06 GB. Offline hit material on it: 48.7% qualified, 99.58% bit-equal.
+- `--native-ambient`: native ambient vs PT far field + env 0.70 (preliminary: no roofs in that pack).
+- `gi_far` / `gi_far_m` (GUI `exp_gi_far` 4 / 6 / 8 m, needs `gi_hit_sun`): merged off. S8 replay bounce 32-54%
+  of the PT's visible far tier; +0.8 / +1.2 / +1.6 ms at 4K Performance. Go/no-go needs > ~30% far field
+  from a casters-on, VT-cache, native-ambient pack. Live batch `gi_far` prepared, not queued.
+
+## Local lights (D-LS)
+
+- `ls_k` (LS_K variant, GUI `exp_ls_exact_k`): S7 cost 0.717 -> 0.555 ms (k1, -23%). The 3-4% darker buffer was
+  the game's bloom min filter, not the estimator (c1951a4). **Stays off: user decision.**
+- `ls_box` (Experimental): game box lights are 37.9% of S6 lit luminance, 0.009 traced per pixel, all occluded;
+  validation has 0 samples. Branch worktree-agent-ab66efcab091c48ec: `ls_box=2` shadows the 3,329 unshadowed box
+  lights, with an accuracy bound and `box_light_test`. Offline, not merged.
+- `gi_hit_direct` still skips projector (box) lights at GI hits.
+
+## Tooling (merged unless noted)
+
+- Queue `expect_every`: a gate must hold in every ON window. It turned m4i 093913 and m5w3 083416 INVALID.
+- CTest `host_atomics_lint_test`: no new shader atomic into a host-visible buffer (13 baseline targets).
+- Progress fragments + `scripts/fold_progress.py`; cb2 retired; coverage HANDLING dated 11-01.
+- Offline work at BelowNormal priority (merged). Branch `low-prio` (not merged): the live game keeps Normal
+  priority, because BelowNormal starved the level load behind dxc.
+- Replay pack (`replay_pack`, `replay_pack_cap_mb`) and `frame_replay` (about 3 s per shader edit).
+- `python -m tools.m4_promotion_gate <log>`: the promotion gate table.
+
+## Stage 0 (closed 10-31) and watch items
+
 - Real fps, focused, diagnostics off: camp 60 RT on / 93 off, inn ~71 / 89, forge ~100.
-- `rt_stats` + `rt_primary_check` cost ~80 ms per frame: never inside cost windows (lean jobs).
-- `rt_cascade_casters` ON in Ultra (roof sun shadows; +0.3 to +1.3 ms; user confirmed outdoor roofs).
-- `ls_box` stays Experimental (S6: 99.999% of box rays traced occluded, suspect; no accuracy gate yet).
-- `rt_scene_wait=2` removed (stale scene after rotation). Lean batches: ~11 min and 0.4 GB instead of
-  90 min and 35 GB.
-- Meta-audit of what was closed too early: [META_AUDIT_20261031.md](META_AUDIT_20261031.md).
-
-## Stage 1: M4 offscreen reflections and GI hit lighting (in progress)
-
-Plan and gates: [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md). Every key below is off by default
-and Experimental in the GUI.
-
-### Hit material coverage (`rt_hit_material`, restart)
-- Qualified share of hits, live: S8 0.4% -> ~17%, S6 ~6.7%.
-- What landed: capture caps lifted (rows 4096, samplers 64, views 256), pool hit path for BVH-cached
-  statics (STI 2d2ac3c3/14678345: UV/basis capture, pool rows, pool lookup), reflectance-variant pairs
-  (2d2ac3c3/3df678c0, 2d2ac3c3/81657854, 3812bc98/3da860be), reasons logged by the real consumers.
-- Ranking of what is left: [MATERIAL_FAMILIES.md](MATERIAL_FAMILIES.md). Built pairs hold 48.0% of the
-  combined share (54df894a/613ead9c and c32ce535/9064a6bd built since). Largest next: 735d5a19/83831811
-  (3.4%, wind VS); 50fbfceb and 1e9145e4 need a new capture path (PLAN_M4 "Families 2").
-
-### Reflections tier (b): `rf_hit_shade` (live)
-- In-frame check on tier (a) hits, ratio L_b / L_a (hit shading against the game's screen result):
-  - S8 Water Queens House: **0.95** with `rt_cascade_casters` on. AO estimate at the hit 0.805 against
-    the screen's 0.802.
-  - S6 Adamantine Forge: **1.48**. Cause analysed offline ([LIGHT_CONVENTIONS.md](LIGHT_CONVENTIONS.md) 4):
-    not units, b13, PreExpose or BRDF; box lights at hits skipped the game's AO-on-direct (x1.32 on box
-    diffuse). Fix landed after the run (a9b7e75): unmeasured.
-- Hit lighting now matches the screen's light policy: D-LS light set, projector (box) lights at hits,
-  local diffuse probes in the ambient, exact hit point, AO estimate, per-term log.
-
-### GI hidden-hit bounce: `gi_hit_direct` (live)
-- Nonzero contribution live (was 0 of 22871 supported: the ray traced into the light's own fixture;
-  it now stops `ls_clear` short of the light, as D-LS).
-- Motion qualification and isolated GPU ms (M4.1) still open.
-
-### Sun at GI hidden hits: `gi_hit_sun` (live, merged)
-- Landed with the shared R0 roof rule: without casters, a hit under a roof volume (or with volumes
-  unknown) gets no sun, counted. The same rule applies to `rf_hit_shade`. Live gate (S3 OFF/ON/OFF) pending.
-
-### Emissive (D-EM, `rt_emissive` stays 0)
-- AF gate: 5 of 6 families pass.
-- 304be1c7 excluded (`rt_em_fx_pulse=0`): the record matches its shader term for term; the deficit is
-  additive, the game adds a non-pulsing light there. TRACK_D_EMISSIVE 13.22.
-- 159a6211 is legitimately 0 (GlowMultiplier 0 in its live record).
-
-### Inn rotation primary match (~83%)
-- Pool not lagging: mesh audits while the camera moves, 0 failed ([INN_ROTATION_MATCH.md](INN_ROTATION_MATCH.md)).
-- About half of the "in front" mismatch is camera-faded walls (`rt_primary_fade_class`). User decision:
-  faded walls keep casting shadows in every RT effect; only the measurement excludes them.
-- In normal play the scene is ready in time (scene wait got this frame's scene, 0 timeouts).
-
-### Offline tooling (no game launch)
-- `python -m tools.material_families`: ranking of G-buffer shader families with COPY/VARIANT/NEW class.
-- `native_hit_gpu_fixture` (CTest): windowless analytic GPU fixture of the hit-shading functions, 23 checks.
-- `python -m tools.assets.check_conventions`: light conventions of the asset DB (flags, units, box ramps,
-  roofed rooms). Found the box join denominator (fixed 12e592b) and the Kelvin x Color rule.
-- Ranked offline work: [OFFLINE_OPPORTUNITIES.md](OFFLINE_OPPORTUNITIES.md) (B, F, D done first; A frame replay next).
-
-### Incident (2026-11-01)
-- Removing a worktree followed its NTFS junctions and emptied the shared SDKs (`external/`) once.
-  Restored. Worktrees are now removed with a safe script that unlinks the junctions first and checks
-  the targets afterwards (AGENTS.md "Never").
+- `rt_stats` + `rt_primary_check` cost ~80 ms per frame: never in cost windows.
+- Watch (no cause): camp rug/plank rectangles, Astarion hairline, dialogue shadow flicker.
+- Inn rotation: faded walls keep casting shadows (user decision). `pool hit match` 34-37% rotating vs 99.6%
+  static is not explained (META_AUDIT_20261101 3).
 
 ## How to test in game
 
-All in the settings window, section Experimental (off in every preset). Leave the preset on Ultra so
-GI is Ray-traced, Reflections on and Roof sun shadows (cascade casters) on.
+All in the settings window, section Experimental (off in every preset). Leave the preset on Ultra, so GI is
+Ray-traced, Reflections are on and Roof sun shadows (cascade casters) are on. "Restart" means: turn it on,
+quit, start the game again. Turning any of these off is live.
 
-Dependency order:
-1. **Native hit materials** (`exp_hit_material`): **restart required**. Everything below needs it.
-2. Then, live (the first enable compiles shaders, a short hitch):
-   - **Shaded hidden-surface bounce** (`exp_gi_hit_direct`): needs Global illumination Ray-traced.
-   - **Sunlit hidden-surface bounce** (`exp_gi_hit_sun`): needs Shaded hidden-surface bounce on.
-   - **Shaded hidden-surface reflections** (`exp_rf_hit_shade`): needs Reflections on.
+**Water** (S8 Water Queens House, the pool under the temple and columns). In this order, each needs the one before:
+1. Water geometry capture (`exp_water_geometry`, live). No visible change.
+2. Water reflections, measured (`exp_water_reflections`, live). No visible change; debug views only.
+3. Water reflections, composed (`exp_water_compose`, **restart**). Reflections of the columns and temple on the pool.
+4. Water sun shadows (`exp_water_shadows`, **restart**). The far half of the pool in shadow. Known bug until the
+   R = C - D fix merges: black and bright specks in the shadowed half.
+5. Water local-light shadows (`exp_water_ls_shadows`, **restart**). Almost nothing at S8 (0.2% of the water lit).
+6. Water refraction (`exp_water_refraction`, **restart**). The pool bed should shift with the view, not slide.
 
-Where to look:
-- **S8 Water Queens House** (polished stone): reflections of surfaces behind the camera or behind
-  columns should show the lit surface instead of the flat probe colour. Toggle the reflections option
-  off and on at the same view.
-- **S6 Adamantine Forge**: same check; reflections there may still read too bright (the 1.48 run predates
-  the box fix). Report it if they do.
-- **S3 Campsite - 27h** (outdoor): GI bounce from sunlit ground and walls into shaded areas with the sun
-  option on; it should never get darker when an option is turned on.
-- **Inn interiors**: camera-faded walls still cast shadows by design; not a defect.
-- **Ctrl+Shift+F9** switches every RT effect off and on for a whole-lighting comparison.
+**Hit materials** (reflections and bounce of surfaces the screen does not show):
+1. Native hit materials (`exp_hit_material`, **restart**). Everything below needs it.
+2. Wind and two-sided foliage (`exp_hit_material_instanced`, **restart** to enable, then live). S14 foliage.
+3. Shaded hidden-surface bounce (`exp_gi_hit_direct`, live).
+4. Sunlit hidden-surface bounce (`exp_gi_hit_sun`, live, needs 3). S3 Campsite 27h: shaded areas get
+   bounce from sunlit ground; it must never get darker.
+5. Shaded hidden-surface reflections (`exp_rf_hit_shade`, live). S8 polished stone: surfaces behind the camera
+   show lit, not the flat probe colour. About 7% darker than the screen at S8, 9% brighter at S6.
+6. Emission at ray hits (`exp_hit_emission`, Hidden hits, live; needs Emissive geometry capture `rt_emissive=1`
+   at startup). S6 Adamantine Forge: lava and braziers in reflections.
 
-Costs of these options are not measured yet; quality is not qualified. Report visible defects, the save
-and the option combination.
+**Known bug:** S6 Forge with the whole hit bundle on shows NaN pixels (black or white dots, 8.7k vs 2.9k off).
+Being fixed. Report the save and the option combination if you see dots elsewhere.
 
-## Watch items (not reproducible since 10-31, no cause established)
-
-- Camp rug/plank rectangles: `rt_alpha_spill` ready for an OFF/ON/OFF if they return.
-- Astarion hairline band: Hair/Pubes/Scalp share class 5 (real identity gap); guard ready, image A/B open.
-- Slight dialogue shadow flicker: source not established; needs temporal native/RT evidence.
-- GI R3 (descriptor fix): VALID run, but final image review, motion and visible gain unqualified.
+Ctrl+Shift+F9 switches every RT effect off and on. These options cost GPU time (bundle: +3.4 to +9.1 ms whole
+GI, water about 0.6 ms with every water option); quality is not qualified for Ultra yet.
 
 ## Milestones
 
 | Milestone | State |
 |---|---|
-| M0 | Queue authorization and ownership done; respect the live boundary. |
+| M0 | Queue authorization and ownership done. |
 | M1 | Watch items above; offline cutout fixes ready. |
 | M2 | 27 native-matched components; room closure unproven. Only when an offscreen need requires it. |
-| M3 | Hit materials: S8 ~17%, S6 ~6.7% qualified; more families next. World lights open. |
-| M4 | rf_hit_shade, gi_hit_direct, gi_hit_sun built and running live; gates open (above). |
-| M5 | Water: M5.1 `rt_water_geometry` in progress offline ([PLAN_M5_WATER.md](PLAN_M5_WATER.md)). |
-| M6 | Shared opaque reference / PT research last. |
+| M3 | Hit materials: S8 48.1%, S6 27.9%, S14 37-42% qualified. |
+| M4 | All keys built and live; Ultra promotion blocked by the S6 NaN and cost; `rf_hit_shade` bias is the user's call. |
+| M5 | M5.1-M5.5 step 1 live at S8, off; M5.4 speck fix pending live; S1 not measured. |
+| M6 | PT reference offline; `gi_far` off, waiting for a roofs-on reference pack. |

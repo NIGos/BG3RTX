@@ -89,10 +89,14 @@ float3 bg3_box_colour(Bg3Box b, float2 uv, float2 duv_x, float2 duv_y) {
 
 // Is the surface lit by the box at all (channel, inside the box)? uvw out.
 bool bg3_box_reaches(Bg3Box b, uint channel, float3 P, out float3 uvw) {
-  uvw = 0;
-  if (((b.m4 & 16777215u) & (1u << (channel & 31u))) == 0u) return false;
-  uvw = bg3_box_uvw(b, P);
-  return bg3_box_inside(uvw);
+  return bl_reaches(b.m4, b.r0, b.r1, b.r2, channel, P, uvw);
+}
+// The same test from record bi's four words (_m4 and the _m6 rows) without loading the rest: the
+// rf_hit_shade early-out (native_hit_direct.hlsli). The caller checks bg3_box_in(bi).
+bool bg3_box_reaches_rec(uint bi, uint channel, float3 P, out float3 uvw) {
+  const uint a = bi * kBoxStride;
+  return bl_reaches(lBoxes.Load(a + 40), asfloat(lBoxes.Load4(a + 48)), asfloat(lBoxes.Load4(a + 64)),
+                    asfloat(lBoxes.Load4(a + 80)), channel, P, uvw);
 }
 
 // One box light's exact unshadowed contribution for the pixel's class: bg3_light_eval_mat

@@ -19,9 +19,15 @@ inline float smoothstep(float a, float b, float x) { float t = saturate((x - a) 
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 inline float bl_pow(float a, float b) { return std::pow(a, b); }
 #define BL_INLINE inline
+#define BL_OUT(T) T&
+#define BL3(x, y, z) float3{x, y, z}
+inline float bl_dot4p(float4 r, float3 P) { return r.x * P.x + r.y * P.y + r.z * P.z + r.w; }
 #else
 float bl_pow(float a, float b) { return pow(a, b); }
 #define BL_INLINE
+#define BL_OUT(T) out T
+#define BL3(x, y, z) float3(x, y, z)
+float bl_dot4p(float4 r, float3 P) { return dot(r, float4(P, 1.0)); }
 #endif
 
 static const float kBlFar = 3.0e38f;
@@ -36,6 +42,16 @@ BL_INLINE float bl_curve(uint k, float t) {
 // f469db78: lit only strictly inside the box.
 BL_INLINE bool bl_inside(float3 uvw) {
   return abs(uvw.x - 0.5f) < 0.5f && abs(uvw.y - 0.5f) < 0.5f && abs(uvw.z - 0.5f) < 0.5f;
+}
+// Does the box light reach P at all (f469db78: its channel mask _m4 bits 0-23 holds the surface's
+// channel, and P is strictly inside the box)? From the four record words _m4 and the _m6 rows alone,
+// so a caller can skip the rest of the record (rf_hit_shade's early-out). uvw out (0 when the channel
+// is off).
+BL_INLINE bool bl_reaches(uint m4, float4 r0, float4 r1, float4 r2, uint channel, float3 P, BL_OUT(float3) uvw) {
+  uvw = BL3(0.0f, 0.0f, 0.0f);
+  if (((m4 & 16777215u) & (1u << (channel & 31u))) == 0u) return false;
+  uvw = BL3(bl_dot4p(r0, P), bl_dot4p(r1, P), bl_dot4p(r2, P));
+  return bl_inside(uvw);
 }
 // The box falloff x * y * z (f469db78 _1320.x * _1320.y * _1320.z): along z a ramp below ramp.x
 // (slope ramp.z) or above ramp.y (slope ramp.w), the if/else of the game; across x/y the edge ramps.

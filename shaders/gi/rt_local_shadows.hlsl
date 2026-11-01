@@ -92,7 +92,7 @@
 #include "../../common/ufloat_interval.h"
 // Box statistics (ls_stats=1): a device-local buffer (set 4 b0, core/gi.cpp ensure_bx), reduced per
 // 8x8 group in groupshared memory (one atomic per counter and group), copied after the pass into
-// rtStats 372.. (kLsBoxXFirst). Counters 0-15 counts, 16-31 eight 64-bit sums (Q24: 24 fractional bits)
+// rtStats 385..416 (kLsBoxXFirst). Counters 0-15 counts, 16-31 eight 64-bit sums (Q24: 24 fractional bits)
 // as (low, high) words. Never host-visible atomics (META_AUDIT 2026-11-01 5).
 [[vk::binding(0, 4)]] RWByteAddressBuffer lsBoxStats;
 static const uint kBxN = 32u, kBxPairs = 16u;
