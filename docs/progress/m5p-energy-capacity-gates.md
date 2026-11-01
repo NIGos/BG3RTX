@@ -13,4 +13,17 @@
 - Gates re-run on the existing logs with the updated jobs: m5p1 ok (13), m5p2 ok (10, was INVALID), m5p3 ok (11).
 - Tests: m5_promotion_gate_test (sun-inclusive mean delta not counted twice), queue_gates_test (when_present
   absent/present, lint flags a cascade gate without it).
-- Left: Flymm step-compose and step-sun flag NONFINITE 32571 > OFF 31743 (info, the verdict still matches).
+
+## Flymm "+828 non-finite": depth texels, not water; compose fail-closed (branch m5p-energy-capacity-gates, READY_FOR_LIVE, 2026-11-01)
+- Per-dump counts of all 20 m5p2 traces: every RR colour input has 0 non-finite pixels, every colour image
+  0. All the counted ones are in one 2048x2048 D32F depth image, dumped 9 times per frame, with
+  3328..3527 infinite texels per frame with every key off (OFF-a alone: 29952..31743 totals). The gate's
+  sum over every dump made frame-to-frame depth variation look like water NaN.
+- tools/m5_promotion_gate.py counts colour images only (formats not D*); Flymm rows now flag nothing.
+- Compose fail-closed anyway (shaders/rt/water_compose.hlsl, every variant): C' = max(Cu, 0) only where
+  Cu is finite, else the game's C, counted in word 56 (common/water_compose.h kCsNonFinite, compose_writes);
+  the base/sun/GSH variants reduce 57 words. Logged as "non-finite terms N" in the compose stability line.
+  water_compose_test reproduces 0 x Inf, Inf radiance, a half-packed Inf and Inf - Inf. All 14 compose
+  variants compile and validate; the other 2019 requests are byte-identical to main.
+- Gate: expect_every "non-finite terms 0" in every compose-on window of m5w3..m5w6, m5p1..m5p3, su1
+  (the old logs predate the word: the next run judges it). sw3-motion: cascade gate when_present.

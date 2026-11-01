@@ -177,6 +177,16 @@
     "cost-on"
    ],
    "min": 1
+  },
+  {
+   "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "; non-finite terms 0 \\(",
+   "windows": [
+    "precheck-shadows-on",
+    "cost-on"
+   ],
+   "min": 1
   }
  ]
 }

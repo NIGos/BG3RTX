@@ -137,6 +137,20 @@
     "static-b"
    ],
    "min": 1
+  },
+  {
+   "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "; non-finite terms 0 \\(",
+   "windows": [
+    "static-a",
+    "pan-q",
+    "pan-e",
+    "rotate-r",
+    "rotate-l",
+    "static-b"
+   ],
+   "min": 1
   }
  ],
  "forbid": [

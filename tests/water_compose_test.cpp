@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -708,6 +709,30 @@ int main(int argc, char** argv) {
     CHECK(pick(LightingUse::kEarlier, true, false, 100, 100) == ScenePick::kStashKept && newer_calls == 1 && keep_calls == 1);
     keep_ok = false;    // the lighting's slot retired: refused (counted, an uncomposed frame)
     CHECK(pick(LightingUse::kEarlier, false, false, 0, 100) == ScenePick::kNone);
+  }
+
+  // 4d2b. Fail-closed composition (kCsNonFinite): C + A L - B with a non-finite term keeps C.
+  {
+    const float inf = std::numeric_limits<float>::infinity();
+    const float C[3] = {0.2f, 0.3f, 0.4f}, B[3] = {0.01f, 0.01f, 0.01f};
+    auto cu = [&](const float A[3], const float L[3], float out[3]) {
+      for (int i = 0; i < 3; ++i) out[i] = C[i] + A[i] * L[i] - B[i];
+    };
+    float o[3];
+    const float A0[3] = {0, 0.1f, 0.1f}, A1[3] = {0.1f, 0.1f, 0.1f}, Lok[3] = {1, 1, 1}, Linf[3] = {inf, 1, 1};
+    cu(A1, Lok, o);
+    CHECK(compose_writes(true, o) && !compose_writes(false, o));   // finite: written where a term changed it
+    cu(A0, Linf, o);
+    CHECK(std::isnan(o[0]) && !compose_writes(true, o));            // 0 x Inf (a lit hit of another pass's Inf)
+    cu(A1, Linf, o);
+    CHECK(std::isinf(o[0]) && !compose_writes(true, o));            // Inf radiance
+    // A record word past 65504 packs to the half Inf (f32tof16 rounds to Inf), e.g. a glint's R: B = Inf.
+    float o2[3];
+    for (int i = 0; i < 3; ++i) o2[i] = C[i] + A1[i] * Lok[i] - (i ? B[i] : inf);
+    CHECK(std::isinf(o2[0]) && !compose_writes(true, o2));
+    float o3[3] = {inf - inf, 0.1f, 0.1f};                           // Inf - Inf: NaN
+    CHECK(!compose_writes(true, o3));
+    CHECK(kCsNonFinite >= kCsGshWords && kCsNonFinite < kCsLsRec && kCsGsWordsMin == 57);
   }
 
   // 4d3. Uncomposed frames and on/off flips per frame index.

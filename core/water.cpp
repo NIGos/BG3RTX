@@ -640,7 +640,7 @@ void collect_compose(uint32_t slot) {
     using bg3::water::kCsRrRec, bg3::water::kCsRrSumGame;
     for (uint32_t i = 0; i < kCStatWords; ++i)   // the counters (the 64-bit sums below)
       if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= bg3::water::kCsGshRec && i < bg3::water::kCsGshSumDg) ||
-          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin ||
+          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin || i == bg3::water::kCsNonFinite ||
           (i >= kCsRrRec && i < kCsRrSumGame))
         g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
@@ -709,12 +709,14 @@ void maybe_log_compose() {
   host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
             "(on/off flips %llu); refused passes: no recent lighting (cleared %llu, older than %llu frames %llu, ahead "
             "%llu), no scene %llu; earlier lighting: current slot stale %llu, newer build before this frame %llu, newer "
-            "pair unavailable %llu, lighting's pair kept %llu",
+            "pair unavailable %llu, lighting's pair kept %llu; non-finite terms %llu (the game's colour kept: "
+            "water_compose.h kCsNonFinite)",
             (unsigned long long)W.frames, (unsigned long long)g_ccont.frames, (unsigned long long)g_ccont.composed_frames,
             (unsigned long long)g_ccont.uncomposed, (unsigned long long)g_ccont.flips, (unsigned long long)W.nl_cleared,
             (unsigned long long)kLightingLagFrames, (unsigned long long)W.nl_old, (unsigned long long)W.nl_ahead,
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
-            (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept);
+            (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
+            (unsigned long long)w[kCsNonFinite]);
   g_ccont.reset_counts();
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
   host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "

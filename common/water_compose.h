@@ -405,6 +405,19 @@ inline constexpr uint32_t kCsGshRec = 44, kCsGshRestored = 45, kCsGshOccLit = 46
 inline constexpr uint32_t kCsGshSumDg = 48, kCsGshSumRestored = 50, kCsGshSumVg = 52;   // 64-bit pairs
 inline constexpr uint32_t kCsGshWords = 54;
 static_assert(kCsGshWords <= 64, "the M5.4c words fit the WATER_SHADOWS slot and precede the local words (64)");
+// Fail-closed composition (every variant): a record whose new colour C' has a non-finite channel keeps the
+// game's C (written back unchanged) and is counted here. Inputs that can produce one: L or the colour copy
+// (another pass's NaN), a half-packed record word at 65504+, a refraction copy read of an Inf. m5p2 Flymm
+// 11-01 ("+828 non-finite") was not one: every RR colour input of the run had 0; the counted pixels were a
+// 2048x2048 D32F depth image (dumped 9 times per frame) whose infinite texels vary frame to frame with every
+// key off (3328..3527). The word sits after the M5.4c ones (the base and sun variants reduce 57 words).
+inline constexpr uint32_t kCsNonFinite = 56, kCsGsWordsMin = kCsNonFinite + 1;
+static_assert(kCsGshWords <= kCsNonFinite && kCsNonFinite < 64, "a word no variant uses (the local words start at 64)");
+// The decision, mirrored by shaders/rt/water_compose.hlsl (Cn): write C' = max(Cu, 0) only where a term
+// changed the pixel and every channel of Cu is finite (max(NaN, 0) is 0 or NaN by implementation).
+inline bool compose_writes(bool changed, const float cu[3]) {
+  return changed && std::isfinite(cu[0]) && std::isfinite(cu[1]) && std::isfinite(cu[2]);
+}
 // M5.4b local-light words (WATER_LS variant only; the slot grows to 128 words): local records (owned,
 // valid, words written, a local term), no local term, invalid words, then per record the counts of the
 // lights the FS evaluates (channel, range, cone, N.L), of those with a game shadow map (kept), traced

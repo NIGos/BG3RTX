@@ -201,7 +201,10 @@ def frame_values(run, frame, cap):
     e = exposure_at(run, frame)
     if not e:
         return "no exposure probe"
-    nonfinite = sum(int(x.get("nonfinite", 0) or 0) for x in dumps.values())
+    # Colour images only: a depth image's infinite texels are depth, not radiance (m5p2 Flymm 11-01: the
+    # "+828" were one 2048x2048 D32F image dumped 9 times per frame, 3328..3527 texels with every key off;
+    # every RR colour input had 0). Water writes colour only (common/water_compose.h kCsNonFinite).
+    nonfinite = sum(int(x.get("nonfinite", 0) or 0) for x in dumps.values() if not str(x.get("fmt", "")).startswith("D"))
     return {"post": lum(post_d["mean"]) / e, "pre": lum(pre_d["mean"]) / e, "e": e, "frame": frame, "nonfinite": nonfinite}
 
 

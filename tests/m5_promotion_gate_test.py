@@ -97,7 +97,10 @@ def main():
             dumps = {"d1": {"pass_fs": "5c3fdabc477f316a", "slot": 0, "fmt": "R11G11B10F", "w": W_, "h": H_, "mean": [pre] * 3, "nonfinite": 0},
                      "d2": {"pass_fs": "0000000000000000", "slot": 0, "fmt": "RGBA8", "w": W_, "h": H_, "mean": [0.9, 0.9, 0.9, 1], "nonfinite": 0},
                      "d3": {"pass_fs": "0000000000000000", "slot": 0, "fmt": "R11G11B10F", "w": W_, "h": H_, "mean": [post] * 3,
-                            "nonfinite": 7 if label == "shot-step-rf" else 0}}
+                            "nonfinite": 7 if label == "shot-step-rf" else 0},
+                     # a depth image's infinite texels vary per frame with every key off (m5p2 Flymm): not counted
+                     "d4": {"pass_fs": "76433aef79eadc86", "slot": "depth", "fmt": "D32F", "w": 2048, "h": 2048, "mean": [0.5],
+                            "nonfinite": 3600 if label == "shot-on" else 3300}}
             (cap / "dumps.json").write_text(json.dumps(dumps))
             log.append(f"{hms(t + ts)}  [rrpost] exposure probe (frame {frame}): 2cdd9f08 b0 = [{e:g} 1 2 3 4 5], b1 = [1 2 3 4 5 6], lighting s1b13 = [1 2 3 4]; applied k = 1; 0.8333/2^b0[2] = 1, 0.8333/2^b1[2] = 1")
             log.append(f"{hms(t + ts + 0.1)}  [trace] frame {frame} written: 4 submits, 10 images -> {cap}")
