@@ -8,6 +8,8 @@
 // Volumes from byte 192 (counters 64-191), 48 bytes each
 // (Bg3DbVolume: centre, kind, rotation quaternion, half extents, trigger; absolute world).
 #pragma once
+// The volume cap: core/sun_trust.h kSunMaxVolumes (tests/roof_cap_test.py keeps them equal).
+#define SUN_MAX_VOLUMES 512u
 
 // The hidden-hit sun (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF) reads the same image from the
 // D-LS sun set's b8 (D-RF's push set is full): SUN_TRUST_BINDING / SUN_TRUST_SET.

@@ -119,6 +119,21 @@ inline unsigned allowed(const char* file) {
   return f;
 }
 
+// The keys under which the water passes (core/water.cpp) have no variant and skip: each changes the
+// alpha set or the scene's primitives that the gi/ passes follow with refresh()'s flags. Counted as
+// "variant" in the [water] reflections line and logged "[water] reflections skipped: no variant for
+// <keys>" (the convention for every such skip; smoke_ultra forbids "skipped: no variant for").
+// `defines`: what a water variant would add. tests/variant_matrix_test.cpp builds those requests
+// (tools/shader_identity.py compiled all 24 on 2026-11-01), so routing them is the fix. A key added
+// here without updating that test's expected skips fails it.
+struct NoVariant { const char* key; const char* defines; };
+inline constexpr NoVariant kWaterNoVariant[] = {
+    {"rt_omm", "RT_OMM_SCENE=1"},
+    {"rt_native_tileset", "RT_NATIVE_TILESET=1"},
+    {"rt_native_scalp", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
+    {"rt_native_hair", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
+    {"rt_hair_physical_origin", "RT_HAIR_PHYSICAL_ORIGIN=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"}};
+
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
 // each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, gi_far, then rf_hit_gi.

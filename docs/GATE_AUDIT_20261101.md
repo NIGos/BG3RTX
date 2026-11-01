@@ -272,3 +272,40 @@ the `[rrpost] exposure` lines and expect `exposure held` and `hold released`. Li
 (an ON shot between two OFF shots, as the gate tool compares them) that does not hold from its first to its
 last compared shot, holds in phase 0, or lacks the `exposure held` expect line. Dry runs of the nine
 batches passed (Windows PowerShell 5). With the hold, the exposure ratio must read 1.0000 (a check of the hold).
+
+## 8. Silent degradations: fixed limits and key combinations (branch worktree-agent-a29080dd15a8a2223)
+
+Inventory of fixed capacities, skips and fallbacks in core/, layer/, shaders/, checked against the user's
+run (bg3rtx.log 17:26-17:35, CTY_Main_A, Ultra) and the 56 queue logs of 2026-11-01. "Gated" = a
+smoke_ultra or lean-job gate fails when it is hit.
+
+| Limit | Where | Logged | Gated | Hit 2026-11-01 | Status |
+|---|---|---|---|---|---|
+| Roof volumes `kSunMaxVolumes` 256 | core/sun_trust.h, 3 shader loops | WARNING + `sun stats` | now (forbid) | yes: 359 within 1980 m, 103 dropped on 306/600 frames | **fixed**: 512 > 398 (largest level), `roof_cap_test` |
+| Set-1 range guard (InstInfo / vertex / alpha record reads) | rt_common.hlsli:509,842,1325 | `[core] guard:` (cumulative) | now (forbid nonzero) | yes: 0 at frame 574, 19.2e9 by frame 16216 (~1.5e6 per frame) | **open, visible**: alpha unknown or normal 0 at those hits |
+| Water reflections under `rt_cascade_casters` | core/water.cpp | `variant N` only | expect_every | yes: variant 300/300 in all windows | fixed on main by 64c0f5d (18:15, after the run) |
+| Water under rt_omm / tileset / scalp / hair / hair origin | core/water.cpp, `kWaterNoVariant` | `skipped: no variant for` | now (forbid) | no (keys off) | by design, matrix-tested; 24 variant requests compile |
+| Cascade casters buffer (rt_cascade_mb 427) | layer/geocapture.cpp | `buffer full N` | expect_every (CAPACITY_GATES) | yes: 1.3/frame, 427.0 of 427 MB | open (cascade owner) |
+| RT capture alpha region / opaque buffer | layer/geocapture.cpp | `region full`, `buffer full` | opaque: CAPACITY_GATES | alpha 1.15/frame (load), opaque 0.03/frame | open (capture owner) |
+| Emissive soup | layer/emissive.cpp | `soup full` | no | 0.10/build in 13 windows | open, small |
+| Hit-material basis pool 256 MB | common/native_hit_pool.h | pool size only; over-cap skip silent | no | 240.1 of 256 MB (94%) | open: log the skip count |
+| Alpha records 8192 / textures 4095 / caches 15 | layer/alphatest.cpp | `records full` etc. | no | no (522 draws, 29 textures max) | ok |
+| Emissive records 1024 / tex 256 / inst 16384 | layer/emissive.cpp | yes | no | no | ok |
+| Water draws 256, hit-material records 16384 and tables | layer/water.cpp, native_hit_pool.h | `overflow N` | no | no | ok |
+| `kMaxCandidates` 4096, loop caps, light-list OOB | rt_common.hlsli | `[core] guard:` | no | no | ok |
+| D-LS sun set ring 32 | core/gi.cpp | once | pattern | no | ok |
+| Runtime lights 1024, froxel lights 1024, lsSlots 4095, cluster bit fields | ls_lights.h, bg3_lights.hlsli, rt_local_shadows | **silent** | no | max 393 runtime lights | ok today; no log |
+| Scene wait: `skipped` | layer/rtscene.cpp:1325 | yes | SCENE_WAIT_GATE (timeouts) | 73 and 168 | by design: after 8 timeouts in a row with no scene in the last 2 frames (menu, loading) the wait probes every 64 frames; both windows end before the level was known (17:27:35), every in-game window has 0 |
+| Sun stats "0 roof volumes, scene top -96.8" | core/sun_trust.cpp | now with the reason | no | first window (menu) | by design: fail-closed (replace 0) until the asset DB knows the level; the line now says "level unknown: nothing trusted" |
+
+**Combination matrix** (`variant_matrix_test`, CTest): every pair of the raw keys of the Experimental
+knobs plus the water, hit-material, box, D-LS and GI keys. Each gi/ pass gets its request from
+`shader_variant::request` (the flags refresh() derives from the keys), each water pass from
+`water_request`; every request must be in `shaders/variants.txt`. The only skips are the water passes
+under the five `kWaterNoVariant` keys; the test fails if that table changes, if any pair lacks its
+variant, or if a preset turns on a skip key. The water requests those variants would make
+(`variant_matrix_test <root> --requests`) all compile with `tools/shader_identity.py` (24 of 24), so
+routing them is the follow-up. Key-combination fallbacks that are logged once and not variants:
+`gi_far` without `gi_hit_sun`, `rf_hit_shade` without `rt_hit_material`, `gi_hit_sun` without a sun set.
+Convention: a pass that skips for a missing variant logs `[<area>] <pass> skipped: no variant for <keys>`;
+smoke_ultra forbids it (the m5 jobs' old "no water variant" forbids now use the same text).

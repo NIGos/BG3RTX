@@ -8,7 +8,7 @@
 namespace {
 
 constexpr uint32_t kRing = 8;   // frames in flight are far fewer
-constexpr VkDeviceSize kSlotBytes = 16384;
+constexpr VkDeviceSize kSlotBytes = 32768;   // header + kSunMaxVolumes records (24768 B)
 static_assert(kSunHeader + kSunMaxVolumes * sizeof(Bg3DbVolume) <= kSlotBytes, "trust slot too small");
 
 // Header (bytes): 0 volume count, 4 flags (bit 0 replace, 1 roof volumes known, 2 off-screen
@@ -230,12 +230,17 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
 
   if (g_sum_n >= 600) {   // counters, as fractions of the traced pixels
     const double px = double(g_sum[0] ? g_sum[0] : 1), dis = double(g_sum[2] ? g_sum[2] : 1);
-    host->log("sun stats (%u frames, replace %d, %zu roof volumes, scene top %.1f): traced %.1f%% of px, lit %.1f%%; "
+    // Why no volumes: fail-closed (nothing trusted) until the asset DB knows the level, e.g. the
+    // main menu and loading (2026-11-01: "0 roof volumes, scene top -96.8" before CTY_Main_A loaded).
+    const char* why = roofs ? "" : !want_roofs ? " (rt_sun_roofs=0)"
+                    : level < 0 ? " (level unknown: nothing trusted)"
+                    : !have_cam2 ? " (no camera set: nothing trusted)" : " (no camera yet: nothing trusted)";
+    host->log("sun stats (%u frames, replace %d, %zu roof volumes%s, scene top %.1f): traced %.1f%% of px, lit %.1f%%; "
               "game dark & RT lit %.2f%% of traced px: replaced (lit) %.1f%%, partly %.1f%%, kept by roofs %.1f%%, "
               "kept off screen %.1f%%; px under roofs %.1f%%, off-screen ramp %.1f%%; game lit & RT shadowed %.2f%%; "
               "mean brightening %.4f per traced px; roof query %.0f m (farthest roof-tested px %.0f m), over "
               "kSunMaxVolumes on %llu frames (max %u volumes, %.1f dropped per such frame)",
-              g_sum_n, int(active), size_t(n), g_top, 100.0 * g_sum[0] / double(g_sum[15] ? g_sum[15] : 1),
+              g_sum_n, int(active), size_t(n), why, g_top,100.0 * g_sum[0] / double(g_sum[15] ? g_sum[15] : 1),
               100.0 * g_sum[1] / px, 100.0 * g_sum[2] / px, 100.0 * g_sum[3] / dis, 100.0 * g_sum[4] / dis,
               100.0 * g_sum[5] / dis, 100.0 * g_sum[6] / dis, 100.0 * g_sum[7] / px, 100.0 * g_sum[8] / px,
               100.0 * g_sum[9] / px, g_sum[10] / 255.0 / px, g_radius, g_dmax, (unsigned long long)g_over_frames,
