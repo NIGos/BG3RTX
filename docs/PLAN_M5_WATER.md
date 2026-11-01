@@ -67,12 +67,16 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
   the game's submit. Nothing binds it (no image change). Key off: no hook, nothing allocated.
 - Policy in the core without an ABI bump: `common/water_policy.h` via `Bg3CoreApi::em_record` with
   `forward == BG3_EM_REQ_WATER` (VS hash >> 32 in `decal`); a core without it returns no `WATR` magic and
-  nothing is captured. Classes: supported (7 audited FS/VS pairs, below), unknown (other forward Fluids
+  nothing is captured. Classes: supported (9 audited FS/VS pairs, below), unknown (other forward Fluids
   water variants), excluded flow (falls, mist, foam, bridges), excluded VFX; lava, glass are not water.
 - Audited pairs (traced 2026-10-30, each VS read): 7b44a567/60d4357d huge_PixelLighting (S1 docks),
   1d4bff2e/824dcd7b flowmap (S1), fda628a5/b02e4616 flowmap_PixelLighting, 64d9cb77/f0491919 huge_PL_V2,
   06e66a6f/7a485e6a PL_noCaustics_Shadows, 857ccb90/ffc5bb29 flowmap_noCaustics, 68068cab/bbdf7b8a Water_Plane.
-  The DB has 31 Fluids templates; FLUID_Water_Plane* forward FS without a trace are counted as unknown.
+  S8 (11-01, no trace: the pair is the asset DB's StaticInstancedForward bshd, both modules dumped in
+  captures/shaders; `python -m tools.assets shader <hash>` names it): 99c1fcef/e0530238 huge_PL_ExtraWaves (VS =
+  60d4357d plus a second UV output), c4e92ccd/8113bd39 flowmap_NoCaustics_Waves (noise at world xz * m5 + time *
+  m7, offset clamped below by m15). Both: Y-only displacement, the same gl_Position, no discard, no FragDepth.
+  The DB has 31 Fluids templates; FLUID_Water_Plane* forward FS outside the list are counted as unknown.
 - Vertex shaders: world Y displacement only (flowmap at the mesh UV, noise at world xz * m10 + time * m11,
   set 1 b1), gl_Position = camera-relative world * `_m2`: XFB captures the animated surface. The normal is
   the vertex frame (not the displaced one): M5.2 takes the shading normal from the FS.
@@ -123,6 +127,12 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
   the camera was hit by 95.75% of the rays and occluded at 100% (no water on screen), so no reflection
   ray ran. Cost 15.1-15.9 ms: the statistics' per-wave atomics went to host-visible memory (gi GPU cost
   2.1 -> 19.5 ms). Fixed (branch water-fix): device-local counters, reduced per 16x16 group, copied to the host slot.
+  m5w2 at S8 Water Queens House (11-01): cost 0.113 ms, in front 7.55%, screen hit 5.1%, hidden 4.3%. The scene
+  has 7b44a567 (captured, 14474 triangles) and c4e92ccd NoCaustics_Waves (unknown then); 99c1fcef ExtraWaves only
+  before the save loaded. `views 0 over 0 water passes` in the rt_debug 21/22 phases: the views (and M5.3) took a
+  pass only when its first or last FS was audited water, and at S8 the water draws sit between other forward
+  draws. Fixed: the core's water policy notes the command buffer of each supported draw (em_record), and the pass
+  end takes it; the log adds `(K with water between other draws)`. Both S8 pairs added (above).
 
 #### Composition plan (M5.3, not built)
 1. The water FS (7b44a567, end of main) is opaque: `C = mix(Refr, (Lw * X + G) * T + S, a)`, Refr the
@@ -141,7 +151,37 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 6. No double count: the native Ks is subtracted exactly; unresolved rays keep it. Gates: P6
    "Composition", "Physics", "Motion" (one moving run, key toggled), S1 and S8; tier (b) after M4.2.
 
-### M5.3 Water reflections composed (the plan above), `rt_water_reflections=2` or its own key
+### M5.3 Water reflections composed: `rt_water_compose=0`
+
+#### M5.3 status (2026-11-01, branch m5-compose, offline, READY_FOR_LIVE)
+- Built: `rt_water_compose` (GUI `exp_water_compose`, Experimental, needs `exp_water_reflections`; enabling needs a
+  restart, off is live). Files: `common/water_compose.h` (record, buffer, ownership check),
+  `common/water_fs_patch.h` (FS patch), `layer/water.cpp` (variants, swap), `core/water.cpp` +
+  `shaders/rt/water_compose.hlsl` (copy, compose, rt_debug 25), `tests/water_compose_test.cpp`.
+- Plan step 4 (recompute the FS's N, a, T, X, Ks from its sets) was dropped: N needs the FS's interpolated UV
+  and tangent frame, and a, T, X need its flow-mapped textures at that UV; none of it exists after the pass.
+  The "minimal extra copy" instead: the FS writes its own values. `water_fs_patch.h` adds to the audited FS
+  (id tables: 7b44a567 huge_PixelLighting, and for S8 99c1fcef ExtraWaves and c4e92ccd NoCaustics_Waves, whose
+  end of main is the same `mix(Refr, fma(Lw X + G k (+ foam), T, S), a)` with Lw = direct + (Kd + Ks) k; all three
+  patched dumps pass spirv-val; the other six keep the probe, counted "without") eight
+  stores at the end of main through a physical-storage-buffer address baked into the module (the game's
+  layout and sets untouched) plus EarlyFragmentTests (valid: no discard, no depth write). Record per pixel:
+  `A = a T X E`, `B = a T X k Ks`, N, C, t, roughness (ids `_784 _4096.w _2063 _3799 _3379 _3303 _3352 _1207
+  _4335 _1480 _5`). The patched dump passes `spirv-val` (vulkan1.3) and decompiles to the intended stores.
+- Composition at the end of each water pass: `C' = max(C + A L - B, 0)` where the mirror ray along the FS's
+  own N resolves on screen (tier a, as M5.2), the probe kept otherwise. L is lit radiance (b10 + b11), whose
+  unit is the probe's times k (D-EN4), so A has no k and B does: a ray that sees what the probe holds
+  changes nothing. Kept as well: roughness above `rf_mirror_rough` (the probe is a filtered lobe), N.V <= 0,
+  and records whose C is not the target's (overlapping water fragments store in any order; the check is
+  one ulp of B10G11R11, derived). The traced path's own fog (water to the hit) is not applied (as D-RF).
+- Limits: the variants exist only if the key was on when the water pipelines were created; 160 MB record
+  buffer (`rt_water_compose_mb`, 5.2 Mpx); shaderInt64 required (`sharc_device=1`); the pass must have an
+  audited water FS first or last or a supported water draw (as the M5.2 views); compose needs this frame's lighting recorded first.
+- Log: `[water] compose variants` (layer), `[water] compose` (records, owned, kept, tiers, unresolved share),
+  `compose energy` (mean C, B removed, A L added, mean delta absolute and % of C), `compose GPU` (copy +
+  compose dispatches). Offline: 73 CTests (+water_compose_test with the dumped FS), 745 shaders, ordinary
+  SPIR-V byte-identical (no existing shader changed), QA detectors, dry run of `m5w3`.
+- Live: job `m5w3` (S8 Water Queens House, compose on at launch, OFF/ON/OFF PNGs, rt_debug 25, cost), after `m5w2`.
 
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.

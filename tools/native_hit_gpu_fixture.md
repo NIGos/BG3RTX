@@ -54,10 +54,16 @@ Each dispatch has one froxel listing that dispatch's lights.
    with the camera moved 0.5 m since the build, a ray 0.3 m off the quad meets it and one 0.2 m inside
    leaves it (7e: the sign of `em_shift`).
 
-8. Two-sided frame at hits (`rt_hit_material_instanced`, Base_AlphaTest_2s_VT FS 923131c7): rays from
+8. D-LS exact-k selection (`ls_k`, `common/ls_exact_k.h`, the header gi/rt_local_shadows*_k.hlsl
+   include; no scene): four six-light weight sets, K 1/2/4, NR 1/2, the two uniforms on a 4096-cell
+   midpoint grid. The exact set is the K largest weights in list order, exactly (8a); sample j is
+   drawn with p_j = w_j / sum_R w and the grid mean of the estimator is the full sum (8b, 8c), within
+   the grid bound (|R| + 1) / N; a sample's scaled weight never exceeds sum_R w (8c); the GPU selection
+   equals the C++ header's, at most one boundary cell per decision may differ (8d; 0 observed).
+9. Two-sided frame at hits (`rt_hit_material_instanced`, Base_AlphaTest_2s_VT FS 923131c7): rays from
    above, below and oblique onto the open floor, authored N up or down, ng either sign. `RtHit.dir` must be
-   the traced direction bit for bit (8b) and the consumer's N-column sign `nv_two_sided_sign(ng, N, dir)` on
-   the GPU must equal the C++ function (8a; front and back both present).
+   the traced direction bit for bit (9b) and the consumer's N-column sign `nv_two_sided_sign(ng, N, dir)` on
+   the GPU must equal the C++ function (9a; front and back both present).
 
 ## Tolerance
 

@@ -35,7 +35,8 @@
   "hit material",
   "rt stats",
   "rf: reflection pass",
-  "rf hit shade"
+  "rf hit shade",
+  "hit emission"
  ],
  "expect": [
   "\\[auto\\] scene ready",

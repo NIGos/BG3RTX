@@ -216,6 +216,18 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}}},
    {}, {0, 0, 0, 0}, true},
 
+  {"exp_ls_exact_k", "Local light sampling (exact-k)",
+   "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own "
+   "shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the "
+   "mean brightness is unchanged (unbiased, a little noisier before Ray Reconstruction). Needs Local light "
+   "shadows Full. Look at a lamp-lit inn: the shadows and brightness must match Off. Measured 2026-10-27: "
+   "-22% (k1) of the 0.7 ms pass in Grymforge, about -10% at camp. Quality and cost on this build are unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"ls_k", "0"}, {"ls_rest_samples", "1"}}, {}},
+    {"k1", "1 exact light", kCapRayQuery, {{"ls_k", "1"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}},
+    {"k2", "2 exact lights", kCapRayQuery, {{"ls_k", "2"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}}},
+   {}, {0, 0, 0, 0}, true},
+
   {"exp_native_scalp", "Native scalp coverage",
    "Uses audited native scalp coverage in ray queries. Needs Full ray-traced geometry. "
    "Unsupported material/input domains keep the existing path. First use may compile shaders. "
@@ -364,6 +376,17 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_water_reflections", "1"}}, {{"rt_geometry", 1}, {"exp_water_geometry", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"}}},
 
+  {"exp_water_compose", "Water reflections (composed)",
+   "Puts the ray-traced water reflections into the picture: where a reflection ray finds what it reflects "
+   "on screen, it replaces the game's reflection probe on the water, with the water's own Fresnel, opacity "
+   "and fog; elsewhere the game's probe stays. Look at the docks: the piers and boats reflected in the "
+   "water. Debug view rt_debug 25 shows the change. Needs Water reflections (measured). Restart required to "
+   "turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+   Kind::Choice, Apply::Restart, "restart to enable", true,
+   {{"off", "Off", 0, {{"rt_water_compose", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_water_compose", "1"}}, {{"rt_geometry", 1}, {"exp_water_reflections", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_water_geometry","1","Water geometry capture"},{"rt_water_reflections","1","Water reflections (measured)"}}},
+
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
    "receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the "
@@ -393,7 +416,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 216 keys of bg3rtx.ini, in file order.
+// 220 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -497,6 +520,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_mb", "32"},
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
+    {"rt_water_compose", "0"},
+    {"rt_water_compose_mb", "160"},
     {"rt_alpha", "1"},
     {"rt_alpha_test", "1"},
     {"rt_alpha_cut", "1"},
@@ -551,6 +576,8 @@ inline constexpr KV kDefaults[] = {
     {"ls_clear", "0.2"},
     {"ls_min_radius", "0"},
     {"ls_samples", "0"},
+    {"ls_k", "0"},
+    {"ls_rest_samples", "1"},
     {"ls_strength", "1.0"},
     {"ls_debug", "0"},
     {"ls_stats", "0"},
@@ -661,6 +688,8 @@ inline Map code_defaults() {
 // Keys read only at instance/device creation (or by static initialisers).
 inline bool key_change_needs_restart(const std::string& key, const std::string& from, const std::string& to) {
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
+  // M5.3: the water FS variants exist only if the key was on when the pipelines were created.
+  if (key == "rt_water_compose") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material"};
   for (const char* k : kRestart)

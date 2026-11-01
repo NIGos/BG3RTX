@@ -23,6 +23,9 @@ bool core_em_record(const Bg3EmRecordIn* in, Bg3EmRecordOut* out);
 bool core_em_calib_update(Bg3EmCalib* cal, uint32_t first, double ratio, uint32_t flags, uint64_t frames, double bright);
 void core_em_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 bool em_check_due();
+// True once per pass when a supported water draw (water policy, em_record) was recorded in cmd
+// since its last pass begin / take: the pass end that follows holds water.
+bool core_water_pass_take(VkCommandBuffer cmd);
 
 // water.cpp (M5.2 water reflections, rt_water_reflections; docs/PLAN_M5_WATER.md): the trace in
 // run_post (after the views), its views (rt_debug 21-24) at the end of the forward water pass.

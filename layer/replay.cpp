@@ -10,14 +10,19 @@
 //   set 1: what the layer wrote into that material set (recorded here: the layer writes its sets
 //          through dd->vk, which this file wraps), whole buffers except the soup (b6) and the mesh
 //          pool (b8): only the spans the frame's InstInfo names unless the whole binding fits;
-//          the sampled images (gAlphaTex, gAlphaCache, gHitCache: all mips of the view) within the
-//          budget, largest dropped first; the samplers' states; the TLAS instance array of the
-//          scene ring region (bvhsplit.cpp) whose InstInfo set 1 binds.
-// Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl);
-// images without TRANSFER_SRC are "omitted" (replayed as NaN: their lookups fail as "sampling").
+//          the sampled images the set binds (gAlphaTex, gAlphaCache, gHitCache: all mips of the
+//          view) within the hard cap, those only alpha tests read dropped first, then the largest;
+//          the samplers' states; the TLAS instance array of the scene ring region (bvhsplit.cpp)
+//          whose InstInfo set 1 binds.
+// Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl).
+// Images without TRANSFER_SRC (most game textures and the VT caches) are read through a sampled
+// 2D-array view by shaders/replay_image.hlsl and stored decoded (rp::shader_read_format: BCn as
+// 8-bit or half texels; `image ... SOURCE` names the game format). Images in pieces of at most a
+// staging chunk. Integer formats without TRANSFER_SRC stay "omitted" (replayed as NaN).
 // Once the GPU has run the frame (life_gpu_done, no wait), a worker thread writes the pack folder
-// and logs "[replay] pack <serial> written: <MB> MB (<n> images omitted), frame <f>, pass
-// gi_hit_direct, instances <n> -> <dir>". Rendering is unchanged: copies only, layouts restored.
+// and logs "[replay] pack <serial> written: <MB> MB (<n> images omitted, <r> read by shader), frame
+// <f>, pass gi_hit_direct, instances <n> -> <dir>". Rendering is unchanged: copies and reads only,
+// layouts restored.
 #include "host.h"
 #include "../common/replay_pack.h"
 
@@ -38,7 +43,7 @@ namespace rp = bg3::replay;
 
 // ---- object records (every image, view, sampler and buffer created on the device) ----
 struct ImgRec { VkImageType type; VkFormat format; uint32_t w, h, d, mips, layers; VkImageUsageFlags usage; };
-struct ViewInfo { VkImage image; VkFormat format; VkImageViewType type; VkImageSubresourceRange range; };
+struct ViewInfo { VkImage image; VkFormat format; VkImageViewType type; VkImageSubresourceRange range; VkComponentMapping comp; };
 struct SamplerRec { uint32_t mag, min, mip, au, av, aw; float aniso, max_lod; };
 struct BufRec { VkDeviceSize size; VkBufferUsageFlags usage; };
 struct Desc {
@@ -90,7 +95,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice d, const VkImageViewCrea
   const VkResult r = g_next.CreateImageView(d, ci, a, out);
   if (r == VK_SUCCESS) {
     std::unique_lock<std::shared_mutex> lock(g_obj_mu);
-    g_views[*out] = {ci->image, ci->format, ci->viewType, ci->subresourceRange};
+    g_views[*out] = {ci->image, ci->format, ci->viewType, ci->subresourceRange, ci->components};
   }
   return r;
 }
@@ -193,12 +198,22 @@ VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice d, uint32_t wc, const V
 constexpr uint32_t kMagic = 0x52504B31u;   // "RPK1": the staging's first 16 bytes once the copies ran
 constexpr VkDeviceSize kAlign = 16;        // bufferOffset of image copies: texel block (<= 16) and 4
 
+// One captured image (all its descriptor uses share it): a transfer copy, or a shader read.
 struct ImageCopy {
-  VkImage image;
-  VkImageLayout layout;
-  VkImageAspectFlags copy_aspect, barrier_aspect;
-  VkFormat format;   // the image's (the copy's texel layout)
-  uint32_t base_mip, mips, base_layer, layers, w, h;
+  VkImage image = VK_NULL_HANDLE;
+  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageAspectFlags copy_aspect = 0, barrier_aspect = 0;
+  uint32_t pack_format = 0;               // the file's texel layout (depth as R32F / R16)
+  uint32_t base_mip = 0, mips = 1, base_layer = 0, layers = 1, w = 1, h = 1;
+  bool shader = false;                    // read by replay_image.hlsl (no TRANSFER_SRC, or a swizzled view)
+  rp::ShaderRead read{};
+  VkFormat view_format = VK_FORMAT_UNDEFINED;   // shader read: the game view's format and mapping
+  VkComponentMapping comp{};
+  VkImageView read_view = VK_NULL_HANDLE; // shader read: created after the budget
+  size_t first_copy = 0, copies = 0;      // its pieces in Plan::copies
+  uint64_t bytes = 0;
+  uint32_t priority = 0;                  // 1: the hit material reads it (gHitCache)
+  bool droppable = true, dropped = false, view_failed = false;
 };
 struct Copy {
   enum Kind : uint8_t { kTransfer, kShader, kCpu, kImage } kind = kCpu;
@@ -206,7 +221,9 @@ struct Copy {
   VkDeviceSize src_offset = 0;            // kTransfer: in `src`; kShader: in `bound`
   VkDescriptorBufferInfo bound{};         // kShader: the source as bound by the copy shader
   std::vector<uint8_t> cpu;               // kCpu
-  size_t image = SIZE_MAX;                // kImage: Plan::images
+  size_t image = SIZE_MAX;                // kImage: Plan::images, one piece of it:
+  uint32_t mip = 0, layer = 0, layers = 0, row = 0, rows = 0;   //   transfer (rp::CopyPiece)
+  uint64_t first = 0, count = 0;          //   shader read (rp::ReadPiece)
   uint64_t bytes = 0;
   uint32_t chunk = 0;
   VkDeviceSize offset = 0;                // in the chunk
@@ -224,8 +241,9 @@ struct Job {
   rp::Manifest m;
   std::vector<Copy> copies;   // in file order (a file's pieces contiguous, rising file offsets)
   std::vector<Chunk> chunks;
+  std::vector<VkImageView> views;   // the shader reads' views, released with the chunks
   uint64_t bytes = 0;
-  uint32_t omitted = 0, instances = 0;
+  uint32_t omitted = 0, instances = 0, read_images = 0;
   bool writing = false;
   std::atomic<bool> done{false};
   std::thread worker;
@@ -273,12 +291,61 @@ bool copy_pipeline() {
   return g_copy_pipe != VK_NULL_HANDLE;
 }
 
+// The image read shader (shaders/replay_image.hlsl): binding 0 the sampled 2D-array view, 1 the
+// staging chunk; 32 bytes of push constants. Built on first use; without it such images are omitted.
+VkDescriptorSetLayout g_read_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_read_pl = VK_NULL_HANDLE;
+VkPipeline g_read_pipe = VK_NULL_HANDLE;
+bool g_read_failed = false;
+
+bool read_pipeline() {
+  if (g_read_pipe) return true;
+  if (g_read_failed) return false;
+  const VkDeviceFuncs& vk = g_dd->vk;
+  Bg3ShaderBlob blob{};
+  bool ok = vk.CmdPushDescriptorSet && shader_get("replay_image.hlsl", "main", "cs_6_6", &blob);
+  if (ok && !g_read_dsl) {
+    VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+    VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    dci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    dci.bindingCount = 2;
+    dci.pBindings = b;
+    ok = vk.CreateDescriptorSetLayout(g_dd->device, &dci, nullptr, &g_read_dsl) == VK_SUCCESS;
+  }
+  if (ok && !g_read_pl) {
+    VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, 32};
+    VkPipelineLayoutCreateInfo pci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pci.setLayoutCount = 1; pci.pSetLayouts = &g_read_dsl; pci.pushConstantRangeCount = 1; pci.pPushConstantRanges = &push;
+    ok = vk.CreatePipelineLayout(g_dd->device, &pci, nullptr, &g_read_pl) == VK_SUCCESS;
+  }
+  if (ok) {
+    VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    mci.codeSize = blob.size_bytes; mci.pCode = blob.code;
+    VkShaderModule mod = VK_NULL_HANDLE;
+    ok = vk.CreateShaderModule(g_dd->device, &mci, nullptr, &mod) == VK_SUCCESS;
+    if (ok) {
+      VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+      ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main"};
+      ci.layout = g_read_pl;
+      ok = vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &g_read_pipe) == VK_SUCCESS;
+      vk.DestroyShaderModule(g_dd->device, mod, nullptr);
+    }
+  }
+  if (!ok) { g_read_pipe = VK_NULL_HANDLE; g_read_failed = true; log("[replay] the image read shader (shaders/replay_image.hlsl) did not build: images without TRANSFER_SRC are omitted"); }
+  return ok;
+}
+
 void release_chunks(std::vector<Chunk>& chunks) {
   for (Chunk& c : chunks) {
     defer_destroy(BG3_DEFER_BUFFER, uint64_t(c.b));
     defer_destroy(BG3_DEFER_MEMORY, uint64_t(c.m));
   }
   chunks.clear();
+}
+void release_views(std::vector<VkImageView>& views) {
+  for (VkImageView v : views) defer_destroy(BG3_DEFER_IMAGE_VIEW, uint64_t(v));
+  views.clear();
 }
 
 bool depth_format(VkFormat f) {
@@ -294,10 +361,12 @@ struct Plan {
   rp::Manifest m;
   std::vector<Copy> copies;
   std::vector<ImageCopy> images;
-  std::map<VkImage, size_t> image_copy;   // image -> its copy (one view range per image)
-  struct Use { uint32_t set, binding, element, format, w, h, layers, mips; size_t copy; bool output; };
+  std::map<VkImage, size_t> image_index;  // image -> Plan::images (one view range per image)
+  struct Use { uint32_t set, binding, element; size_t image; bool output; };
   std::vector<Use> uses;
   uint32_t omit_view = 0, omit_format = 0, omit_transfer = 0, omit_layout = 0, omit_size = 0, omit_budget = 0;
+  std::map<uint32_t, uint32_t> omit_formats;   // VkFormat -> descriptor uses omitted for "format"
+  bool can_read = false;                       // the image read shader built
   VkDeviceSize chunk_bytes = 0;
   std::string why;   // the failure
 };
@@ -372,8 +441,17 @@ bool add_buffer(Plan& p, uint32_t set, uint32_t binding, VkDescriptorBufferInfo 
   return ok;
 }
 
+bool readable_layout(VkImageLayout l) {
+  return l == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL || l == VK_IMAGE_LAYOUT_GENERAL || l == VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+}
+bool identity(const VkComponentMapping& c) {
+  auto id = [](VkComponentSwizzle s, VkComponentSwizzle own) { return s == VK_COMPONENT_SWIZZLE_IDENTITY || s == own; };
+  return id(c.r, VK_COMPONENT_SWIZZLE_R) && id(c.g, VK_COMPONENT_SWIZZLE_G) && id(c.b, VK_COMPONENT_SWIZZLE_B) && id(c.a, VK_COMPONENT_SWIZZLE_A);
+}
+
 // One image descriptor element. Returns false only for a hard failure (set 0); an image set 1
-// cannot carry is "omitted".
+// cannot carry is "omitted". A transfer copy when the image has TRANSFER_SRC and the view shows
+// its texels as stored; else (sampled colour views) a shader read, stored decoded.
 bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImageView view, VkImageLayout layout, const rp::Slot& slot,
                bool output, bool droppable) {
   const std::string name = std::string(slot.name) + " (s" + std::to_string(set) + " b" + std::to_string(binding) + ")";
@@ -394,19 +472,34 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
     if (ii == g_imgs.end()) return omit(p.omit_view, "image not recorded");
     im = ii->second;
   }
-  if (im.type != VK_IMAGE_TYPE_2D || im.d != 1) return omit(p.omit_format, "not a 2D image");
-  const bool depth = depth_format(im.format);
-  uint32_t pack_format = uint32_t(v.format), block = 1, copy_block = 1;
+  auto omit_format = [&](const char* why) { ++p.omit_formats[uint32_t(v.format)]; return omit(p.omit_format, why); };
+  if (im.type != VK_IMAGE_TYPE_2D || im.d != 1) return omit_format("not a 2D image");
+  const bool depth = depth_format(im.format), transfer = (im.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
+  uint32_t pack_format = uint32_t(v.format);
+  bool shader = false;
+  rp::ShaderRead read{};
   if (depth) {
     if (im.format == VK_FORMAT_D32_SFLOAT || im.format == VK_FORMAT_D32_SFLOAT_S8_UINT) pack_format = rp::kR32Sfloat;
     else if (im.format == VK_FORMAT_D16_UNORM || im.format == VK_FORMAT_D16_UNORM_S8_UINT) pack_format = 70;   // R16_UNORM
-    else return omit(p.omit_format, "24-bit depth");
+    else return omit_format("24-bit depth");
+    if (!transfer) return omit(p.omit_transfer, "depth without TRANSFER_SRC usage");
   } else {
+    uint32_t block = 1, copy_block = 1;
     const uint32_t vb = rp::block_bytes(uint32_t(v.format), block), ib = rp::block_bytes(uint32_t(im.format), copy_block);
-    if (!vb || vb != ib || block != copy_block) return omit(p.omit_format, "format the pack does not carry");
+    const bool swizzled = !identity(v.comp);
+    if (!transfer || swizzled || !vb || vb != ib || block != copy_block) {
+      // Storage images (set 0 outputs) are only ever copied: the read needs SAMPLED usage.
+      if (slot.kind == rp::kStorage)
+        return transfer ? omit_format("storage format the pack does not carry") : omit(p.omit_transfer, "no TRANSFER_SRC usage");
+      if (!(im.usage & VK_IMAGE_USAGE_SAMPLED_BIT)) return omit(p.omit_transfer, "neither TRANSFER_SRC nor SAMPLED usage");
+      if (!p.can_read) return omit(p.omit_transfer, "no TRANSFER_SRC usage and no image read shader");
+      if (!rp::shader_read_format(uint32_t(v.format), swizzled, read)) return omit_format("format the shader read does not carry");
+      if (!readable_layout(layout)) return omit(p.omit_layout, "not in a shader-readable layout");
+      shader = true;
+      pack_format = read.pack_format;
+    }
   }
-  if (slot.kind == rp::kStorage && pack_format != slot.storage_format) return omit(p.omit_format, "storage format differs from the shader's");
-  if (!(im.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return omit(p.omit_transfer, "no TRANSFER_SRC usage");
+  if (slot.kind == rp::kStorage && pack_format != slot.storage_format) return omit_format("storage format differs from the shader's");
   const uint32_t base_mip = v.range.baseMipLevel, base_layer = v.range.baseArrayLayer;
   if (base_mip >= im.mips || base_layer >= im.layers) return omit(p.omit_view, "view outside its image");
   uint32_t mips = v.range.levelCount == VK_REMAINING_MIP_LEVELS ? im.mips - base_mip : (std::min)(v.range.levelCount, im.mips - base_mip);
@@ -414,38 +507,64 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   if (set == 0 || slot.kind == rp::kStorage) mips = 1;   // set 0 reads mip 0 (Load / SampleLevel 0)
   if (slot.kind != rp::kSampled2DArray) layers = 1;
   const uint32_t w = (std::max)(im.w >> base_mip, 1u), h = (std::max)(im.h >> base_mip, 1u);
-  const uint64_t bytes = rp::image_bytes(pack_format, w, h, layers, mips);
-  if (!bytes || bytes > p.chunk_bytes - kAlign) return omit(p.omit_size, "larger than a staging chunk");
-  size_t copy;
-  auto known = p.image_copy.find(v.image);
-  if (known != p.image_copy.end()) {
-    const ImageCopy& ic = p.images[p.copies[known->second].image];
+  const uint32_t priority = set == 1 && binding == 14 ? 1u : 0u;   // gHitCache: what the hit material samples
+  auto known = p.image_index.find(v.image);
+  if (known != p.image_index.end()) {
+    ImageCopy& ic = p.images[known->second];
     if (ic.layout != layout) return omit(p.omit_layout, "bound in two layouts");
-    if (ic.base_mip != base_mip || ic.mips != mips || ic.base_layer != base_layer || ic.layers != layers)
+    if (ic.base_mip != base_mip || ic.mips != mips || ic.base_layer != base_layer || ic.layers != layers || ic.pack_format != pack_format ||
+        ic.shader != shader || (shader && ic.view_format != v.format))
       return omit(p.omit_layout, "two views of one image");
-    copy = known->second;
-    p.copies[copy].droppable = p.copies[copy].droppable && droppable;
-  } else {
-    ImageCopy ic{};
-    ic.image = v.image; ic.layout = layout; ic.format = im.format;
-    ic.copy_aspect = depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    const bool separate = layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL || layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    ic.barrier_aspect = depth ? (VK_IMAGE_ASPECT_DEPTH_BIT | (stencil_format(im.format) && !separate ? VK_IMAGE_ASPECT_STENCIL_BIT : 0u))
-                              : VK_IMAGE_ASPECT_COLOR_BIT;
-    ic.base_mip = base_mip; ic.mips = mips; ic.base_layer = base_layer; ic.layers = layers; ic.w = w; ic.h = h;
-    p.images.push_back(ic);
+    ic.droppable = ic.droppable && droppable;
+    ic.priority = (std::max)(ic.priority, priority);
+    for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].droppable = ic.droppable;
+    p.uses.push_back({set, binding, element, known->second, output});
+    return true;
+  }
+  ImageCopy ic{};
+  ic.image = v.image; ic.layout = layout; ic.pack_format = pack_format;
+  ic.copy_aspect = depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+  const bool separate = layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL || layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+  ic.barrier_aspect = depth ? (VK_IMAGE_ASPECT_DEPTH_BIT | (stencil_format(im.format) && !separate ? VK_IMAGE_ASPECT_STENCIL_BIT : 0u))
+                            : VK_IMAGE_ASPECT_COLOR_BIT;
+  ic.base_mip = base_mip; ic.mips = mips; ic.base_layer = base_layer; ic.layers = layers; ic.w = w; ic.h = h;
+  ic.shader = shader; ic.read = read; ic.view_format = v.format; ic.comp = v.comp;
+  ic.bytes = rp::image_bytes(pack_format, w, h, layers, mips);
+  ic.priority = priority; ic.droppable = droppable;
+  // Pieces of at most a staging chunk (a shader read's last word is rounded up to 4 bytes).
+  const uint64_t max_piece = p.chunk_bytes - 2 * kAlign;
+  const std::string file = output ? slot_file(set, binding, ".live") : "img" + std::to_string(p.images.size()) + ".bin";
+  std::vector<Copy> pieces;
+  auto piece = [&](uint64_t file_offset, uint64_t bytes) {
     Copy c;
     c.kind = Copy::kImage;
-    c.image = p.images.size() - 1;
-    c.bytes = bytes;
-    c.file = output ? slot_file(set, binding, ".live") : "img" + std::to_string(p.images.size() - 1) + ".bin";
+    c.image = p.images.size();
+    c.bytes = bytes; c.file = file; c.file_offset = file_offset;
     c.droppable = droppable;
     c.set = int(set); c.binding = binding;
-    p.copies.push_back(std::move(c));
-    copy = p.copies.size() - 1;
-    p.image_copy[v.image] = copy;
+    return c;
+  };
+  if (shader) {
+    for (const rp::ReadPiece& r : rp::shader_read_pieces(read, w, h, layers, mips, max_piece)) {
+      Copy c = piece(r.file_offset, r.bytes);
+      c.mip = r.mip; c.first = r.first; c.count = r.count;
+      pieces.push_back(std::move(c));
+    }
+  } else {
+    for (const rp::CopyPiece& r : rp::transfer_pieces(pack_format, w, h, layers, mips, max_piece)) {
+      Copy c = piece(r.file_offset, r.bytes);
+      c.mip = r.mip; c.layer = r.layer; c.layers = r.layers; c.row = r.row; c.rows = r.rows;
+      pieces.push_back(std::move(c));
+    }
   }
-  p.uses.push_back({set, binding, element, pack_format, w, h, layers, mips, copy, output});
+  uint64_t sum = 0;
+  for (const Copy& c : pieces) sum += c.bytes;
+  if (!ic.bytes || pieces.empty() || sum != ic.bytes) return omit(p.omit_size, "no piece plan within a staging chunk");
+  ic.first_copy = p.copies.size(); ic.copies = pieces.size();
+  for (Copy& c : pieces) p.copies.push_back(std::move(c));
+  p.image_index[v.image] = p.images.size();
+  p.images.push_back(ic);
+  p.uses.push_back({set, binding, element, p.images.size() - 1, output});
   return true;
 }
 
@@ -521,8 +640,9 @@ void write_pack(Job* job) {
     if (!rp::parse(text, back, error)) { ok = false; log("[replay] pack %s failed: manifest does not parse (%s)", job->label.c_str(), error.c_str()); }
     ok = ok && write_file(job->dir + "\\manifest.txt", text.data(), text.size());
     if (ok)
-      log("[replay] pack %s written: %s MB (%u images omitted), frame %llu, pass %s, instances %u -> %s", job->label.c_str(),
-          mb(job->bytes).c_str(), job->omitted, (unsigned long long)job->m.frame, job->m.pass.c_str(), job->instances, job->dir.c_str());
+      log("[replay] pack %s written: %s MB (%u images omitted, %u read by shader), frame %llu, pass %s, instances %u -> %s", job->label.c_str(),
+          mb(job->bytes).c_str(), job->omitted, job->read_images, (unsigned long long)job->m.frame, job->m.pass.c_str(), job->instances,
+          job->dir.c_str());
     else
       log("[replay] pack %s failed: writing %s", job->label.c_str(), job->dir.c_str());
   }
@@ -554,6 +674,7 @@ void replay_device_destroyed(DeviceData* dd) {
   if (g_job) {
     if (g_job->worker.joinable()) g_job->worker.join();
     release_chunks(g_job->chunks);
+    release_views(g_job->views);
     g_job.reset();
   }
   const VkDeviceFuncs& vk = g_dd->vk;
@@ -561,6 +682,10 @@ void replay_device_destroyed(DeviceData* dd) {
   if (g_copy_pl) vk.DestroyPipelineLayout(g_dd->device, g_copy_pl, nullptr);
   if (g_copy_dsl) vk.DestroyDescriptorSetLayout(g_dd->device, g_copy_dsl, nullptr);
   g_copy_pipe = VK_NULL_HANDLE; g_copy_pl = VK_NULL_HANDLE; g_copy_dsl = VK_NULL_HANDLE;
+  if (g_read_pipe) vk.DestroyPipeline(g_dd->device, g_read_pipe, nullptr);
+  if (g_read_pl) vk.DestroyPipelineLayout(g_dd->device, g_read_pl, nullptr);
+  if (g_read_dsl) vk.DestroyDescriptorSetLayout(g_dd->device, g_read_dsl, nullptr);
+  g_read_pipe = VK_NULL_HANDLE; g_read_pl = VK_NULL_HANDLE; g_read_dsl = VK_NULL_HANDLE; g_read_failed = false;
 }
 
 void replay_on_present() {
@@ -571,6 +696,7 @@ void replay_on_present() {
     if (!job.done) return;
     if (job.worker.joinable()) job.worker.join();
     release_chunks(job.chunks);
+    release_views(job.views);
     g_job.reset();
     return;
   }
@@ -581,6 +707,7 @@ void replay_on_present() {
     log("[replay] pack %s failed: frame %llu has not completed on the GPU after 900 presents", job.label.c_str(),
         (unsigned long long)job.record_frame);
     release_chunks(job.chunks);
+    release_views(job.views);
     g_job.reset();
   }
 }
@@ -606,6 +733,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   if (d->push_bytes != pass->push_bytes || !d->push) return fail("push constants are not " + std::to_string(pass->push_bytes) + " bytes");
   if (!copy_pipeline()) return fail("the copy shader (shaders/replay_copy.hlsl) did not build");
   Plan p;
+  p.can_read = read_pipeline();
   {
     VkPhysicalDeviceProperties props{};
     if (g_dd->inst && g_dd->inst->GetPhysicalDeviceProperties) g_dd->inst->GetPhysicalDeviceProperties(g_dd->physical, &props);
@@ -758,39 +886,80 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
         slot_sizes(p, *pass, true).c_str());
     return -1;
   }
-  // ---- the budget: droppable images, largest first ----
+  // ---- the budget: droppable images up to the hard cap; alpha-only ones first, then the largest ----
   {
     std::vector<size_t> idx;
     std::vector<uint64_t> sizes;
-    for (size_t i = 0; i < p.copies.size(); ++i) if (p.copies[i].droppable) { idx.push_back(i); sizes.push_back(p.copies[i].bytes); }
+    std::vector<uint32_t> priority;
+    for (size_t i = 0; i < p.images.size(); ++i)
+      if (p.images[i].droppable) { idx.push_back(i); sizes.push_back(p.images[i].bytes); priority.push_back(p.images[i].priority); }
     bool over = false;
-    for (size_t k : rp::drop_over_budget(fixed + kAlign, sizes, rp::kPackBudgetBytes, over)) p.copies[idx[k]].dropped = true;
+    for (size_t k : rp::drop_over_budget(fixed + kAlign, sizes, rp::kPackHardCapBytes, over, priority)) p.images[idx[k]].dropped = true;
+  }
+  // The shader reads' views: a 2D-array view of the game view's format, mapping and range (only
+  // SAMPLED usage), so the read sees what the pass's shader sampled. Released with the staging.
+  std::vector<VkImageView> views;
+  uint32_t omit_view_create = 0;
+  for (ImageCopy& ic : p.images) {
+    if (!ic.shader || ic.dropped) continue;
+    VkImageViewUsageCreateInfo usage{VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO};
+    usage.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, &usage};
+    vci.image = ic.image; vci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY; vci.format = ic.view_format; vci.components = ic.comp;
+    vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, ic.base_mip, ic.mips, ic.base_layer, ic.layers};
+    if (g_dd->vk.CreateImageView(g_dd->device, &vci, nullptr, &ic.read_view) != VK_SUCCESS) {
+      ic.read_view = VK_NULL_HANDLE;
+      ic.dropped = ic.view_failed = true;
+      ++omit_view_create;
+      continue;
+    }
+    views.push_back(ic.read_view);
+  }
+  uint32_t read_images = 0, read_bc = 0, copied_images = 0;
+  uint64_t read_bytes = 0;
+  for (const ImageCopy& ic : p.images) {
+    for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].dropped = ic.dropped;
+    if (ic.dropped) continue;
+    if (ic.shader) { ++read_images; read_bytes += ic.bytes; read_bc += rp::block_compressed(uint32_t(ic.view_format)); }
+    else ++copied_images;
   }
   for (const auto& u : p.uses) {
-    const Copy& c = p.copies[u.copy];
-    if (c.dropped) { ++p.omit_budget; m.omitted.push_back({u.set, u.binding, u.element}); continue; }
-    if (u.output) m.outputs.push_back({u.set, u.binding, u.format, u.w, u.h, c.file});
-    else m.images.push_back({u.set, u.binding, u.element, u.format, u.w, u.h, u.layers, u.mips, c.file});
+    const ImageCopy& ic = p.images[u.image];
+    const std::string& file = p.copies[ic.first_copy].file;
+    if (ic.dropped) { ++(ic.view_failed ? p.omit_view : p.omit_budget); m.omitted.push_back({u.set, u.binding, u.element}); continue; }
+    if (u.output) m.outputs.push_back({u.set, u.binding, ic.pack_format, ic.w, ic.h, file});
+    else
+      m.images.push_back({u.set, u.binding, u.element, ic.pack_format, ic.w, ic.h, ic.layers, ic.mips, file,
+                          ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u});
   }
   const uint32_t omitted = uint32_t(m.omitted.size());
-  char note[512];
+  char note[640];
   snprintf(note, sizeof note,
-           " live: frame_index %llu, %u instances, %s; images omitted %u (no TRANSFER_SRC %u, format %u, view %u, layout %u, size %u, budget %u)",
+           " live: frame_index %llu, %u instances, %s; images omitted %u (no TRANSFER_SRC or SAMPLED %u, format %u, view %u, layout %u, "
+           "size %u, budget %u); images copied %u, read by shader %u (%u BCn decoded, %s MB)",
            (unsigned long long)frame_index(), region.count, geometry.c_str(), omitted, p.omit_transfer, p.omit_format, p.omit_view,
-           p.omit_layout, p.omit_size, p.omit_budget);
+           p.omit_layout, p.omit_size, p.omit_budget, copied_images, read_images, read_bc, mb(read_bytes).c_str());
   m.notes.insert(m.notes.begin(), note);
+  if (!p.omit_formats.empty()) {
+    std::string f = " omitted for their format (VkFormat x uses):";
+    for (const auto& [format, n] : p.omit_formats) f += " " + std::to_string(format) + " x" + std::to_string(n);
+    m.notes.insert(m.notes.begin() + 1, f);
+  }
+  if (omit_view_create) m.notes.push_back(" " + std::to_string(omit_view_create) + " shader-read views failed to create (omitted)");
 
   // ---- staging: chunks, placement ----
   auto job = std::make_unique<Job>();
+  job->views = std::move(views);
   {
     VkDeviceSize at = kAlign;   // the marker
     uint32_t chunk = 0;
     std::vector<VkDeviceSize> sizes(1, 0);
     for (Copy& c : p.copies) {
       if (c.dropped || c.kind == Copy::kCpu) continue;
+      const VkDeviceSize need = (c.bytes + 3) & ~VkDeviceSize(3);   // a shader read writes whole words
       at = (at + kAlign - 1) & ~(kAlign - 1);
-      if (at + c.bytes > p.chunk_bytes) { sizes[chunk] = at; ++chunk; sizes.push_back(0); at = 0; }
-      c.chunk = chunk; c.offset = at; at += c.bytes;
+      if (at + need > p.chunk_bytes) { sizes[chunk] = at; ++chunk; sizes.push_back(0); at = 0; }
+      c.chunk = chunk; c.offset = at; at += need;
     }
     sizes[chunk] = (std::max)(at, kAlign);
     for (VkDeviceSize s : sizes) {
@@ -819,19 +988,18 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       job->chunks.push_back(ch);
       if (!ok) {
         release_chunks(job->chunks);
+        release_views(job->views);
         return fail("staging allocation of " + mb(s) + " MB (host-visible) failed");
       }
     }
     std::memset(job->chunks[0].map, 0, kAlign);
   }
 
-  // ---- record the copies ----
+  // ---- record the copies and reads ----
   const VkDeviceFuncs& vk = g_dd->vk;
   std::vector<VkImageMemoryBarrier> pre, post;
-  for (const Copy& c : p.copies) {
-    if (c.dropped || c.kind != Copy::kImage) continue;
-    const ImageCopy& ic = p.images[c.image];
-    if (ic.layout == VK_IMAGE_LAYOUT_GENERAL) continue;
+  for (const ImageCopy& ic : p.images) {   // transfer copies: TRANSFER_SRC_OPTIMAL and back; reads stay in their layout
+    if (ic.dropped || ic.shader || ic.layout == VK_IMAGE_LAYOUT_GENERAL) continue;
     VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     b.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
     b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -851,26 +1019,19 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
                         &before, 0, nullptr, uint32_t(pre.size()), pre.data());
-  uint32_t n_images = 0, n_transfer = 0, n_shader = 0;
-  for (const Copy& c : p.copies) {
+  uint32_t n_images = 0, n_transfer = 0, n_shader = 0, n_reads = 0;
+  for (const Copy& c : p.copies) {   // one region per piece (rp::transfer_pieces)
     if (c.dropped || c.kind != Copy::kImage) continue;
     const ImageCopy& ic = p.images[c.image];
-    uint32_t block;
-    const uint32_t bb = rp::block_bytes(uint32_t(depth_format(ic.format) ? (ic.format == VK_FORMAT_D32_SFLOAT || ic.format == VK_FORMAT_D32_SFLOAT_S8_UINT ? VK_FORMAT_R32_SFLOAT : VK_FORMAT_R16_UNORM) : ic.format), block);
-    std::vector<VkBufferImageCopy> regions;
-    VkDeviceSize at = c.offset;
-    for (uint32_t mip = 0; mip < ic.mips; ++mip) {
-      const uint32_t mw = (std::max)(ic.w >> mip, 1u), mh = (std::max)(ic.h >> mip, 1u);
-      VkBufferImageCopy r{};
-      r.bufferOffset = at;
-      r.imageSubresource = {ic.copy_aspect, ic.base_mip + mip, ic.base_layer, ic.layers};
-      r.imageExtent = {mw, mh, 1};
-      regions.push_back(r);
-      at += VkDeviceSize((mw + block - 1) / block) * ((mh + block - 1) / block) * bb * ic.layers;
-    }
+    if (ic.shader) continue;
+    VkBufferImageCopy r{};
+    r.bufferOffset = c.offset;
+    r.imageSubresource = {ic.copy_aspect, ic.base_mip + c.mip, ic.base_layer + c.layer, c.layers};
+    r.imageOffset = {0, int32_t(c.row), 0};
+    r.imageExtent = {(std::max)(ic.w >> c.mip, 1u), c.rows, 1};
     vk.CmdCopyImageToBuffer(cmd, ic.image, ic.layout == VK_IMAGE_LAYOUT_GENERAL ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                            job->chunks[c.chunk].b, uint32_t(regions.size()), regions.data());
-    ++n_images;
+                            job->chunks[c.chunk].b, 1, &r);
+    n_images += c.file_offset == 0;
   }
   for (const Copy& c : p.copies) {   // one region per call: few transfer sources, all different
     if (c.dropped || c.kind != Copy::kTransfer) continue;
@@ -902,6 +1063,35 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
       ++n_shader;
     }
   }
+  {   // image reads (shaders/replay_image.hlsl), one piece per rp::ReadPiece
+    VkImageView bound_view = VK_NULL_HANDLE; uint32_t bound_chunk = UINT32_MAX;
+    for (const Copy& c : p.copies) {
+      if (c.dropped || c.kind != Copy::kImage) continue;
+      const ImageCopy& ic = p.images[c.image];
+      if (!ic.shader) continue;
+      if (!n_reads) vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pipe);
+      if (ic.read_view != bound_view || c.chunk != bound_chunk) {
+        VkDescriptorImageInfo ii{VK_NULL_HANDLE, ic.read_view, ic.layout};
+        VkDescriptorBufferInfo bi{job->chunks[c.chunk].b, 0, job->chunks[c.chunk].size};
+        VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+        w[0].dstBinding = 0; w[0].descriptorCount = 1; w[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; w[0].pImageInfo = &ii;
+        w[1].dstBinding = 1; w[1].descriptorCount = 1; w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w[1].pBufferInfo = &bi;
+        vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_read_pl, 0, 2, w);
+        bound_view = ic.read_view; bound_chunk = c.chunk;
+      }
+      const uint64_t per = rp::shader_read_per_thread(ic.read), tb = rp::shader_read_texel_bytes(ic.read);
+      const uint64_t thread_bytes = tb >= 4 ? tb : 4, threads = (c.count + per - 1) / per;
+      constexpr uint64_t kMaxThreads = 65535ull * 256;
+      for (uint64_t t = 0; t < threads; t += kMaxThreads) {
+        const uint64_t n = (std::min)(threads - t, kMaxThreads);
+        const uint32_t push[8] = {uint32_t(c.offset + t * thread_bytes), uint32_t(c.first + t * per), uint32_t((std::min)(n * per, c.count - t * per)),
+                                  (std::max)(ic.w >> c.mip, 1u), (std::max)(ic.h >> c.mip, 1u), c.mip, ic.read.encode, ic.read.channels};
+        vk.CmdPushConstants(cmd, g_read_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
+        vk.CmdDispatch(cmd, uint32_t((n + 255) / 256), 1, 1);
+      }
+      ++n_reads;
+    }
+  }
   vk.CmdFillBuffer(cmd, job->chunks[0].b, 0, kAlign, kMagic);
   VkMemoryBarrier after{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT;
@@ -919,13 +1109,14 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
   job->record_frame = frame_index();
   job->bytes = total;
   job->omitted = omitted;
+  job->read_images = read_images;
   job->instances = region.count;
   job->m = std::move(p.m);
   job->copies = std::move(p.copies);
-  log("[replay] pack %s recorded at frame %llu: %u image, %u transfer and %u shader copies, %s MB in %zu staging chunks "
-      "(%s); written once the GPU has run it; by slot: %s",
-      label.c_str(), (unsigned long long)job->record_frame, n_images, n_transfer, n_shader, mb(total).c_str(), job->chunks.size(),
-      geometry.c_str(), by_slot.c_str());
+  log("[replay] pack %s recorded at frame %llu: %u image copies, %u image reads (%u BCn decoded, %s MB in %u pieces), %u transfer and %u shader "
+      "copies, %s MB in %zu staging chunks (%s); written once the GPU has run it; by slot: %s",
+      label.c_str(), (unsigned long long)job->record_frame, n_images, read_images, read_bc, mb(read_bytes).c_str(), n_reads, n_transfer, n_shader,
+      mb(total).c_str(), job->chunks.size(), geometry.c_str(), by_slot.c_str());
   g_job = std::move(job);
   return 1;
 }

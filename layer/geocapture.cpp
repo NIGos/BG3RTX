@@ -320,6 +320,7 @@ struct EmPass {
   bool capture = false;      // rt_emissive: draws are captured (otherwise only timed)
   bool water = false;        // rt_water_geometry: water draws are captured (water.cpp)
   bool xfb_active = false;
+  bool water_swap = false;   // M5.3: the composition variant is bound for this draw (water_unswap after)
   uint32_t draws = 0, water_draws = 0;      // all draws of the pass; water draws (water.cpp census)
   std::vector<WaterRange> water_ranges;     // captured water draws
   int ts = -1;
@@ -2006,6 +2007,7 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
   if (geo_is(s, GeoKind::Em)) {
     auto* e = geo_empass(s);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    if (e && e->water_swap) water_unswap(cmd, s), e->water_swap = false;
     return;
   }
   auto* c = geo_capture(s);
@@ -2112,7 +2114,7 @@ static bool water_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& arg
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   WaterRange r{};
-  const int w = water_draw(cmd, s, args, in, pi.depth_write, &r);
+  const int w = water_draw(cmd, s, args, in, pi.depth_write, &r, &e->water_swap);
   if (w) ++e->water_draws;
   if (w != 2) return false;
   em_pass_ubo(cmd, e);
@@ -2380,6 +2382,7 @@ void geo_post_draw(VkCommandBuffer cmd, CmdState* s) {
   if (geo_is(s, GeoKind::Em)) {
     auto* e = geo_empass(s);
     if (e && e->xfb_active) p_end_xfb(cmd, 0, 0, nullptr, nullptr), e->xfb_active = false;
+    if (e && e->water_swap) water_unswap(cmd, s), e->water_swap = false;
     return;
   }
   auto* c = geo_capture(s);

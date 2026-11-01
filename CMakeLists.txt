@@ -219,6 +219,8 @@ add_executable(native_hair_origin_test tests/native_hair_origin_test.cpp)
 add_test(NAME native_hair_origin_test COMMAND native_hair_origin_test)
 add_executable(shader_variant_test tests/shader_variant_test.cpp)
 add_test(NAME shader_variant_test COMMAND shader_variant_test ${CMAKE_SOURCE_DIR})
+add_executable(ls_exact_k_test tests/ls_exact_k_test.cpp)
+add_test(NAME ls_exact_k_test COMMAND ls_exact_k_test)
 add_executable(native_hair_receiver_test tests/native_hair_receiver_test.cpp)
 add_test(NAME native_hair_receiver_test COMMAND native_hair_receiver_test)
 add_executable(native_hair_test tests/native_hair_test.cpp)
@@ -337,6 +339,23 @@ add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 # M5.1 water policy (common/water_policy.h): classes of the asset-DB water families, records.
 add_executable(water_policy_test tests/water_policy_test.cpp)
 add_test(NAME water_policy_test COMMAND water_policy_test)
+# M5.3 water composition (common/water_compose.h, water_fs_patch.h): record buffer, ownership
+# check, FS patch refusals; with the dumped game module (captures/, not in git) the patch itself.
+add_executable(water_compose_test tests/water_compose_test.cpp)
+# The shader dump folder (every FS of the water id table it holds is patched): the checkout's own
+# captures/, else the main checkout's when this is a worktree under .claude/worktrees/.
+get_filename_component(_bg3_root "${CMAKE_SOURCE_DIR}/../../.." ABSOLUTE)
+set(BG3RTX_WATER_FS_DUMP "")
+foreach(_d "${CMAKE_SOURCE_DIR}/captures/shaders" "${CMAKE_SOURCE_DIR}/../captures/shaders" "${_bg3_root}/captures/shaders")
+  if(NOT BG3RTX_WATER_FS_DUMP AND EXISTS "${_d}/7b44a567771ecbec.spv")
+    set(BG3RTX_WATER_FS_DUMP "${_d}")
+  endif()
+endforeach()
+if(BG3RTX_WATER_FS_DUMP)
+  add_test(NAME water_compose_test COMMAND water_compose_test "${BG3RTX_WATER_FS_DUMP}" "${CMAKE_BINARY_DIR}")
+else()
+  add_test(NAME water_compose_test COMMAND water_compose_test)
+endif()
 # D-EM policy in the core (ABI 24): core/em_policy.cpp against the former layer path, bit for bit.
 add_executable(emissive_core_test tests/emissive_core_test.cpp core/em_policy.cpp)
 target_include_directories(emissive_core_test PRIVATE ${VULKAN_SDK}/Include)

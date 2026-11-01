@@ -39,8 +39,8 @@
   "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
   "\\[cfg\\] settings read",
-  "\\[replay\\] pack 1 recorded at frame \\d+: ",
-  "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted\\), frame \\d+, pass gi_hit_direct, instances [1-9]\\d* -> .+",
+  "\\[replay\\] pack 1 recorded at frame \\d+: \\d+ image copies, [1-9]\\d* image reads \\(\\d+ BCn decoded, [0-9]+\\.[0-9] MB in [1-9]\\d* pieces\\), ",
+  "\\[replay\\] pack 1 written: [0-9]+\\.[0-9] MB \\(\\d+ images omitted, [1-9]\\d* read by shader\\), frame \\d+, pass gi_hit_direct, instances [1-9]\\d* -> .+",
   "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+ direct supported \\d+ nonzero \\d+",
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+"
  ],
@@ -52,7 +52,8 @@
   "compile call failed",
   "RR creation failed",
   "RR evaluate failed",
-  "\\[replay\\] pack 1 (failed|over budget)"
+  "\\[replay\\] pack 1 (failed|over budget)",
+  "\\[replay\\] the image read shader"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
@@ -60,6 +61,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Offline frame replay (tools/frame_replay.md): one gi_hit_direct replay pack at S8 (static view), taken inside a 15 s rt_stats window so the live 'GI hit direct' / 'hit material' lines of the same frames are the replay's reference. Needs a layer + core build with the replay_pack writer (layer/replay.cpp, ABI 25).",
+ "purpose": "Offline frame replay (tools/frame_replay.md): one gi_hit_direct replay pack at S8 (static view), taken inside a 15 s rt_stats window so the live 'GI hit direct' / 'hit material' lines of the same frames are the replay's reference. Needs a layer + core build with the replay_pack writer (layer/replay.cpp, ABI 25) and its texture read (shaders/replay_image.hlsl).",
  "estimated_phase_seconds": 35
 }

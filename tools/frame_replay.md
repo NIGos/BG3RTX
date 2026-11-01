@@ -23,6 +23,8 @@ frame_replay --self-test <dir>          (CTest frame_replay_test)
 - Every descriptor of the pass contract (common/replay_pack.h `kGiHitDirect`) is bound: pack data,
   else a zero dummy (listed as "not in the pack"). An image the writer `omitted` is bound NaN, so a
   material lookup that needs it fails as "sampling" (reason 6) instead of shading with garbage.
+  One VkImage per pack file (the writer names a shared image from every element that binds it);
+  a note counts the images the writer stored decoded (`image ... SOURCE`).
 - Output in `--out` (default `<pack>/replay`): `giRaw.raw` (RGBA16F), `giRaw.pfm` (RGB float),
   `giRawDepth.raw`, `stats.txt`, `pass.spv`. The console prints the dispatch GPU time and the live
   log's lines for this pass with "1 frames": `rt stats ... hybrid GI`, `GI hit direct`,
@@ -32,7 +34,8 @@ frame_replay --self-test <dir>          (CTest frame_replay_test)
 ## Pack format (common/replay_pack.h)
 
 A folder with `manifest.txt` (grammar in the header) and raw files: `push`, `buffer`/`range` (sparse
-buffer slices at their real offsets, so record offsets stay valid), `image` (VkFormat, mips, layers),
+buffer slices at their real offsets, so record offsets stay valid), `image` (VkFormat, mips, layers;
+an optional last field names the game format of an image stored decoded),
 `omitted`, `sampler`, `instances` (VkAccelerationStructureInstanceKHR as read at submit, the BLAS
 address kept only as a key), `output` (+ the live result). The geometry is not duplicated: it is the
 soup / pool slices the InstInfo entries name.
@@ -48,9 +51,24 @@ replays each twice from disk and checks: rays and hits; candidates = qualified (
 supported = nonzero (356); two dispatches bit-identical (images and counters); outputs finite; dark:
 bounce exactly 0, same candidates; giRaw.a bit-equal lit vs dark (occlusion does not depend on the
 light); no validation errors. Skips (77) without a ray-query device or the validation layer.
+Checks 9-11 run the writer's image read (`shaders/replay_image.hlsl`, the same piece plan) on 13 x 9
+x 3-layer, 3-mip images of all 37 mapped formats: uncompressed texels keep their bits (BGRA8 as
+RGBA8), every stored texel is within half a step of the game format's decoded value, and the piece
+split does not change the bytes. RTX 5090, 2026-11-01: BC1/2/3/7 (UNORM and sRGB) and BC6H come back
+bit-exact (0.00 steps); BC4/BC5 0.50 / 0.49 steps (the decoder keeps more than 8 bits); A2B10G10R10
+0.50 steps of 16 bits.
 Pack 3.5 MB (the hit-record table is 3.1 MB of it). Wall about 3.3 s; dispatch 0.004 ms (RTX 5090).
 
-## Size (target < 1 GB per pack, `bg3::replay::kPackBudgetBytes`)
+## Size (at most 2 GB per pack, `bg3::replay::kPackHardCapBytes`)
+
+Since the texture read (2026-11-01): the geometry is taken whole while the never-dropped part stays
+under 1 GB (`kPackBudgetBytes`), and the textures fill the rest up to the 2 GB hard cap. Over it,
+images only alpha tests read go first, then those the hit material reads (gHitCache), largest first
+within each. First live pack (S8): 973 MB with 67 MB of textures and 4336 image elements omitted
+(4333 without TRANSFER_SRC, 3 larger than a staging chunk). Most of those elements are the 4 x 4
+dummies of the unused table slots (one image each, now 64 bytes); the real cost is the VT tile
+caches, stored decoded (BC7 x4, BC1 x8, BC4/BC5 x2, BC6H x8 their BCn size). Expect a pack near the
+2 GB cap, with the omitted count, the decoded MB and any budget drops in the manifest's first note.
 
 Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's own line:
 - set 0 images: depth 4 + normal 4 + velocity 4 + prevRadiance 8 + rtOrigin 8 B/px = 103 MB;
@@ -58,11 +76,10 @@ Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's
 - set 1: hit records 3.1 MB + pool rows 1 MB; InstInfo + instances 80 B per instance (5 MB at 60k);
   soup and pool slices only where an instance points (3 x stride x tris each: about 200-400 MB at
   2-4 M unique triangles; static meshes counted once per BLAS key, not per instance); pool basis ranges.
-- textures: only the elements the frame's records and alpha records index (gAlphaTex, gAlphaCache,
-  gHitCache) with their mip chains. They are dropped first, largest first, when the total passes the
-  budget (`omitted`); geometry and set 0 are never dropped (a pack whose never-dropped part passes
-  the 2 GB hard cap `kPackHardCapBytes` is "over budget" and not written; its log line lists the MB
-  per slot).
+- textures: the elements the material set binds (gAlphaTex, gAlphaCache, gHitCache; unused slots
+  hold the layer's 4 x 4 dummies) with their mip chains. Only they are dropped (`omitted`), as above;
+  geometry and set 0 never (a pack whose never-dropped part passes the 2 GB hard cap
+  `kPackHardCapBytes` is "over budget" and not written; its log line lists the MB per slot).
 - Only each descriptor's bound bytes are captured (`rp::bound_bytes`). A set-1 buffer bound inside
   the soup or pool VkBuffer reuses the geometry's slices (`rp::alias_ranges`, `range` lines into the
   soup's file): with the split BVH gAlphaSoup b1 binds the whole soup like b6. First live pack (S8,
@@ -91,20 +108,34 @@ leaves `Bg3HostApi::replay_pack` null and the core does nothing. Capture only, n
    - set 1: whole buffers (records, alpha records/soup, stamp, InstInfo, hit records, basis); the soup
      b6 and pool b8 whole when they fit the budget (pool first: its basis rows lie outside the
      InstInfo spans), else the InstInfo spans merged (4 KB gaps) as `range` slices of one file
-     (`range S B OFFSET FILE FOFF BYTES`); every recorded image element with all mips of its view; the
-     samplers (b4/b5 immutable, b15 as written);
+     (`range S B OFFSET FILE FOFF BYTES`); every image element the set binds (gAlphaTex, gAlphaCache,
+     gHitCache: what the alpha test and the hit material can index) with all mips of its view (both
+     sample with a computed LOD, so any mip can be read), each VkImage once; the samplers (b4/b5
+     immutable, b15 as written);
    - the TLAS instance array of the scene ring region whose InstInfo set 1 binds (rt_replay_region).
    Buffers without TRANSFER_SRC are copied by `shaders/replay_copy.hlsl`. Images without TRANSFER_SRC
-   (most game textures), in a format the pack does not carry, or over the budget (largest first) are
-   `omitted`; the counts per reason are the manifest's first `note`.
+   (most game textures, the VT caches, the layer's dummies), or whose view swizzles, are read by
+   `shaders/replay_image.hlsl` through a new SAMPLED-only 2D-array view of the game view's format and
+   mapping, in their descriptor layout (no transition), and stored decoded (`rp::shader_read_format`):
+   BC1/2/3/7 as RGBA8 (sRGB kept: the replay's sampler linearizes and filters as the game's), BC4/BC5
+   as R8/RG8 (UNORM or SNORM), BC6H as RGBA16F, BGRA8 as RGBA8, B10G11R11 / E5B9G9R9 as RGBA16F; the
+   manifest's `image` line names the game format. Why 8 bits: on the RTX 5090 BC1/2/3/7 decode exactly
+   to 8-bit values and BC6H to halves (self-test 10), so those replays sample the same texels; BC4/BC5
+   are within 0.5/255 (R16 would be exact-er at twice the size, which the 2 GB cap cannot afford).
+   Images and copies larger than a staging chunk are split (`rp::shader_read_pieces`,
+   `rp::transfer_pieces`: mips, layer groups, block rows). Still `omitted`: integer formats and 24-bit
+   depth without TRANSFER_SRC, non-2D images, views outside a shader-readable layout, two views of one
+   image, and the budget; the counts per reason and the omitted VkFormats are the manifest's first notes.
 3. When the GPU has run that frame (life_gpu_done, no wait) a worker thread checks the staging marker,
    writes `captures/replay-<stamp>-<serial>/` and logs
-   `[replay] pack <serial> written: <MB> MB (<n> images omitted), frame <f>, pass gi_hit_direct, instances <n> -> <dir>`
+   `[replay] pack <serial> written: <MB> MB (<n> images omitted, <r> read by shader), frame <f>, pass gi_hit_direct, instances <n> -> <dir>`
    (or `failed: <why>` / `over budget: <MB> MB without textures`). At record it logs
-   `[replay] pack <serial> recorded at frame ...` with the copy counts and the geometry mode.
-Cost: one frame records the copies (a few ms of CPU, a GPU copy of up to 1 GB) and allocates the
-staging; the file writing is off the render thread. Not measured live yet (`READY_FOR_LIVE`).
-CTests: `replay_pack_test` (manifest writer round trip, InstInfo spans, budget); `frame_replay_test`
-writes its synthetic pack with the same writer (`rp::serialize`, soup as two file slices) and replays it.
-Open: the share of textures with TRANSFER_SRC (omitted ones fail material lookups as reason 6) and the
-VT cache sizes at S8: the first live pack's note line answers both.
+   `[replay] pack <serial> recorded at frame <f>: <n> image copies, <r> image reads (<b> BCn decoded, <MB> MB in <p> pieces), ...`
+   with the buffer copy counts and the geometry mode.
+Cost: one frame records the copies and reads (a few ms of CPU, GPU copies of up to 2 GB) and allocates
+the staging; the file writing is off the render thread. Not measured live yet (`READY_FOR_LIVE`).
+CTests: `replay_pack_test` (manifest writer round trip with the SOURCE field, InstInfo spans, budget
+with priorities, shader-read format mapping and pieces, transfer pieces); `frame_replay_test` writes
+its synthetic pack with the same writer, replays it, and runs the image read on every mapped format.
+Open: the VT cache sizes and formats at S8 and whether the textures fit the cap: the next live
+pack's note lines answer both.

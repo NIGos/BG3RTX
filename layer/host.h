@@ -71,7 +71,7 @@ enum class CfgHot : int {
   fg_input_copy, pan_inputs, rt_event_flush, sl_log_barriers, rt_build, rt_bvh_split, rt_omm,
   rt_hit_material, rt_native_hair, rt_native_scalp, rt_mesh_audit_frames, rt_mesh_audits,
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
-  rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_hit_material_instanced,
+  rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   Count
 };
 int cfg_hot(CfgHot key);
@@ -862,8 +862,18 @@ bool water_pass_begin(VkCommandBuffer cmd);   // outside the pass; false: no wat
 // Per draw of such a pass: 0 not a water draw, 1 a water draw counted but not captured,
 // 2 captured: bind XFB to *out (soup, off, bytes) for this draw. depth_write: the pipeline's
 // (1, 0, -1 dynamic/unknown).
+// *swapped: M5.3 (rt_water_compose) bound the composition variant of the draw's pipeline in place
+// of the game's (water_unswap after the draw rebinds the game's).
 int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const EmDrawIn& in, int depth_write,
-               WaterRange* out);
+               WaterRange* out, bool* swapped);
+void water_unswap(VkCommandBuffer cmd, const CmdState* s);
+// M5.3 composition variants (common/water_fs_patch.h), from the tracker's creation hooks: an
+// audited water FS module is patched (rt_water_compose nonzero when it is created), and each
+// pipeline using it gets a variant pipeline with the patched FS (same layout and state).
+void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, size_t bytes);
+void water_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
+                          const VkPipeline* out);
+void water_forget_pipeline(VkPipeline p);
 // After the pass, outside it: the captured ranges to camera-relative world (pass camera UBO).
 void water_pass_done(VkCommandBuffer cmd, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
                      const std::vector<WaterRange>& ranges, uint32_t pass_draws, uint32_t water_draws);

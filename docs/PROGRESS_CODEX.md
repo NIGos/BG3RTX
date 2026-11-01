@@ -1,4 +1,30 @@
-# BG3RTX progress - 2026-11-01 (main 5202bc2, ABI 25 on branch replay-writer)
+# BG3RTX progress - 2026-11-01 (main 13c8817, ABI 25)
+
+## Live 2026-11-01 ~06:00: water S8, emission S6, replay textures (main 13c8817)
+
+- Merged: hit-emission, water-fix, m5-compose, replay textures (all merge-green).
+- `QuickSave_3784` now loads the Steel Watch Foundry (the sea is 19 m below, all hidden): water jobs moved to S8.
+- M5.2 at S8: reflections GPU 15 ms -> 0.113 ms (water-fix kept: device-local counters); gi 1.7 ms; water in
+  front 7.6%, rays screen hit 5.1%, hidden 4.3%. INVALID on `views 0 over 0 water passes`: S8 water is
+  FS family 99c1fcef `..._PixelLighting_ExtraWaves`, not audited, so not captured; compose cannot run. Agent auditing it.
+- rt_hit_emission at S6 (Forge, on all run): rf tier b emissive 7% of lookups, energy added, no fault. ON/OFF A/B still owed.
+- Replay pack with shader-read textures: 906 MB, but 4098 of 4099 images dropped by the budget (decoded
+  hit caches too big for the 2 GB cap); only 1 read. Next: size the caches, capture referenced pages only.
+
+## Removed features reviewed (offline, READY_FOR_LIVE, 2026-11-01)
+
+- `ls_k` re-added as the LS_K D-LS variant (off; GUI `exp_ls_exact_k`; unbiased cost option, 873/873 key-off shaders byte-identical, 74 CTests incl. GPU fixture case 8; live job `lsk1` S7, not queued; TRACK_D_LOCAL_LIGHTS 9.11). `gi_bounce_spec` not re-added: camera-direction specular is not physical, and hidden hits already bounce receiver-direction specular (TRACK_C_GI).
+
+## M5.3 water reflections composed (branch m5-compose, offline, READY_FOR_LIVE, 2026-11-01)
+
+- `rt_water_compose=0` (GUI `exp_water_compose`, needs `exp_water_reflections`; on needs a restart, off live):
+  the audited water FS 7b44a567 is patched at creation to store its own probe-term factors per pixel
+  (`common/water_fs_patch.h`, BDA stores, no layout change); a pass at the end of each water pass replaces
+  the probe term with the traced reflection where it resolves: `C' = max(C + A L - B, 0)`, A = a T X E,
+  B = a T X k Ks (exact, the FS's own normal, opacity, fog, atmosphere and LUT). Unresolved keeps the probe.
+- Debug view `rt_debug=25` (delta). Log `[water] compose`, `compose energy`, `compose GPU`, `compose variants`.
+- Key off: nothing allocated or bound; no existing shader changed. 73 CTests (patch checked with spirv-val on the
+  dumped FS), 745 shaders, QA detectors. Layer change: restart. Live: job `m5w3`, dry run passes.
 
 ## Hit material: instanced wind and two-sided alpha-test rows (offline, READY_FOR_LIVE, 2026-11-01)
 
@@ -8,7 +34,7 @@
   the per-draw path took one instance only. Now depth alpha record + G-buffer XFB of all instances, joined by
   draw words + index range; per-hit clip/UV check unchanged; 2S flips N with `nv_two_sided_sign`.
 - Classifier built share 48.2% -> 54.4% (+6.2, same 139 traces). No ABI change. 73 CTests (new
-  `native_hit_instanced_test`), GPU fixture 8a/8b. SPIR-V vs 2bf305e: 872/872 requests byte-identical (the flip and RtHit.dir are in
+  `native_hit_instanced_test`), GPU fixture 9a/9b. SPIR-V vs 2bf305e: 872/872 requests byte-identical (the flip and RtHit.dir are in
   new `RT_HIT_INSTANCED=1` consumer variants, requested only with the startup key; 296 new, spirv-val clean).
 - Live (prepared, not queued): `tools/live_batches/m4_instanced` job `m4i-instanced-s14-fg2` (S14, 149 s, dry run
   passes). Deciding: `[hit material instanced]` mapped > 0 per family; `hit material` qualified share ON - OFF;

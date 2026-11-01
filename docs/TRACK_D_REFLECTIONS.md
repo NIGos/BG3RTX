@@ -395,7 +395,7 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     capability `native-hit-instanced-v1` is set; the live key only gates the rows (word 220 is 0 on every other row).
     Key off: all 872 requests of 2bf305e byte-identical; the 296 new variants compile and pass spirv-val.
   - Offline: `native_hit_instanced_test` (54 checks: families, key, geometry, staging, flags), recipe test, GPU
-    fixture 8a/8b (12 rays, both sides), 73 CTests. Log (`rt_stats`): `[hit material instanced] frame F key K; wind:
+    fixture 9a/9b (12 rays, both sides), 73 CTests. Log (`rt_stats`): `[hit material instanced] frame F key K; wind:
     prepass N, G-buffer N (pipeline N, bindings N, stream N) captured N, mapped N rows N triangles; alpha-test 2S: ...`.
   - Risks: the wind VSs' non-`precise` terms may round differently (reason `clip` rises); two draws with one key in
     a pass are declined. Cost (not measured): XFB of the instanced G-buffer draws (64 B per vertex) plus 2x query
