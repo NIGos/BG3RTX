@@ -90,6 +90,7 @@ struct Ui {
   int desc_knob = -2;   // -1 preset, >= 0 knob
   COLORREF badge_color[st::kKnobCount] = {};
   HBRUSH bg = nullptr;
+  bool dev = false;   // dev=1 in the merged ini: developer-only knobs and choices are shown
 };
 static Ui g;
 
@@ -145,10 +146,17 @@ static st::Map effective_settings() {
   return map;
 }
 
+// The settings of the saved files (what the game starts from), for the restart markers.
+static st::Map saved_settings() {
+  st::Map map;st::apply_layer(map,g.st.base);st::apply_layer(map,g.st.user);
+  return map;
+}
+
 static void refresh() {
   g.updating = true;
   State& s = g.st;
   const auto effective=effective_settings();
+  const auto saved=saved_settings();
   SendMessageW(item(IDC_PRESET), CB_SETCURSEL, s.preset, 0);
   std::vector<int> pv = st::preset_values_for(s.preset, s.caps);
   int changed = 0;
@@ -161,6 +169,7 @@ static void refresh() {
   for (int i = 0; i < st::kKnobCount; ++i) {
     const st::Knob& k = st::kKnobs[i];
     int v = s.values[i];
+    if (!item(IDC_KNOB + i)) continue;   // developer-only knob, hidden (dev=0): its value is kept
     if (k.kind == st::Kind::Choice) {
       SendMessageW(item(IDC_KNOB + i), CB_SETCURSEL, v, 0);   // -1: no selection (hand-edited)
       bool any = false;
@@ -175,14 +184,14 @@ static void refresh() {
     COLORREF col = RGB(110, 110, 110);
     std::string need = st::unmet_need(k, v, s.values);
     if(need.empty())need=st::unmet_key_need(k,v,effective);
+    // Restart: a key this choice writes changes from the saved files' value in a way only a game
+    // start applies (also right after a migrated file, whose level writes keys the file lacked).
     bool restart = false;
-    if (v >= 0 && s.loaded[i] >= 0 && v != s.loaded[i]) {
-      st::KVList from, to;
-      st::knob_kvs(k, s.loaded[i], from);
+    if (v >= 0) {
+      st::KVList to;
       st::knob_kvs(k, v, to);
       for (auto& t : to)
-        for (auto& f : from)
-          if (t.first == f.first && st::key_change_needs_restart(t.first, f.second, t.second)) restart = true;
+        if (st::key_change_needs_restart(t.first, st::lookup(saved, t.first), t.second)) restart = true;
     }
     if (v < 0) badge = L"hand-edited in the ini (kept)";
     else if (!need.empty()) badge = widen(need), col = RGB(200, 30, 30);
@@ -222,10 +231,11 @@ static void build_window() {
   y += 34;
   int desc_top = y;
 
-  bool adv_done = false, exp_done = false;
+  bool adv_done = false, exp_done = false, dev_done = false;
   for (int i = 0; i < st::kKnobCount; ++i) {
     const st::Knob& k = st::kKnobs[i];
-    if (k.advanced && !adv_done) {
+    if (!st::knob_visible(k, g.dev)) continue;
+    if (k.advanced && !k.experimental && !adv_done) {
       adv_done = true;
       y += 8;
       add(L"STATIC", L"Advanced", SS_LEFT, L, y, 190, 20, IDC_ADVANCED, true);
@@ -237,10 +247,18 @@ static void build_window() {
       add(L"STATIC", L"Experimental (being tested)", SS_LEFT, L, y, 300, 20, IDC_EXPERIMENTAL, true);
       y += 26;
     }
+    if (k.dev_only && !dev_done) {
+      dev_done = true;
+      y += 8;
+      add(L"STATIC", L"Developer (dev=1)", SS_LEFT, L, y, 300, 20, 0, true);
+      y += 26;
+    }
     add(L"STATIC", widen(k.label).c_str(), SS_LEFT, L, y + 4, 196, 20, IDC_LABEL + i);
     if (k.kind == st::Kind::Choice) {
       HWND c = add(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, CTRL, y, 210, 200, IDC_KNOB + i);
       for (int ch = 0; ch < st::choice_count(k); ++ch) {
+        // Developer-only choices are the last ones: hidden unless dev=1 or already selected.
+        if (k.choices[ch].dev && !g.dev && s.values[i] < ch) break;
         std::wstring label = widen(k.choices[ch].label);
         if (!st::choice_supported(k, ch, s.caps)) label += L" (not supported)";
         SendMessageW(c, CB_ADDSTRING, 0, LPARAM(label.c_str()));
@@ -317,6 +335,10 @@ static void browse() {
 }
 
 static bool save(bool quiet) {
+  // Dependencies are enforced: a choice whose required setting is off is lowered before saving.
+  std::wstring lowered;
+  for (int i : st::enforce_needs(g.st.values))
+    lowered += (lowered.empty() ? L"" : L", ") + widen(st::kKnobs[i].label);
   std::wstring err;
   if (!save_state(g.st, &err)) {
     status(L"Save failed: " + err);
@@ -325,7 +347,10 @@ static bool save(bool quiet) {
   if (!quiet)
     status(L"Saved " + user_ini_path() +
            (game_running() ? L". The running game applies it within a second (restart-only settings at the next start)."
-                           : L"."));
+                           : L".") +
+           (lowered.empty() ? L"" : L" Lowered (a required setting is off): " + lowered + L"."));
+  else if (!lowered.empty())
+    status(L"Lowered (a required setting is off): " + lowered + L".");
   refresh();
   return true;
 }
@@ -500,6 +525,7 @@ static int run_window(HINSTANCE inst, const std::wstring& game_dir_arg) {
 
   load_state(g.st);
   detect_gpu(g.st, &g.gpu_err);
+  g.dev = st::dev_mode(st::lookup(saved_settings(), "dev"));
 
   WNDCLASSEXW wc{sizeof wc};
   wc.lpfnWndProc = wndproc;

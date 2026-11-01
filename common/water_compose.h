@@ -313,17 +313,77 @@ static_assert(kCsRrWords <= 128, "the refraction words fit the 128-word slot");
 // radiance / depth image and ONE camera block that the copy overwrites each frame, the scene TLAS
 // + set taken at the pass (hand_out stamps it for the frame that records it). The stash only gives
 // the push constants and the statistics slot, so the latest lighting may be this frame's or the
-// previous one's. Frame indices advance at each present: with frame generation 2 presents per app
-// frame, plus one present that may land between the lighting's and the pass's recording, the
-// previous app frame's lighting is at most 3 indices old. A lighting that did not copy (water_rf or
-// compose_at_lighting skipped) clears the stash (frame 0): the GPU copy would be a frame stale.
-inline constexpr uint64_t kLightingLagFrames = 3;
+// previous one's. Frame indices advance at the app's presents only (layer/layer.cpp QueuePresentKHR):
+// the frames DLSS-G generates are presented by Streamline below the layer (layer/streamline.cpp
+// w_QueuePresentKHR) and do not advance them (the [sl] DLSS-G line: 60 indices, 120 displayed at 2x),
+// so frame generation adds no lag. The bound: the previous app frame's lighting (1) plus the frames
+// the CPU may record ahead of the GPU (2) = 3 indices. A lighting that did not copy (water_rf or
+// compose_at_lighting skipped) clears the stash (frame 0): the GPU copy would be stale.
+inline constexpr uint64_t kIndicesPerAppFrame = 1, kRecordAheadFrames = 2;
+inline constexpr uint64_t kLightingLagFrames = kIndicesPerAppFrame * (1 + kRecordAheadFrames);
 enum class LightingUse : uint32_t { kNone = 0, kThisFrame, kEarlier };
 inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
   if (!stash_frame || stash_frame > now) return LightingUse::kNone;
   if (stash_frame == now) return LightingUse::kThisFrame;
   return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
 }
+// Why lighting_use refused (the "[water] compose stability" line): the stash cleared, too old, ahead.
+enum class LightingRefusal : uint32_t { kCleared = 0, kOld, kAhead };
+inline LightingRefusal lighting_refusal(uint64_t stash_frame, uint64_t now) {
+  return !stash_frame ? LightingRefusal::kCleared : stash_frame > now ? LightingRefusal::kAhead : LightingRefusal::kOld;
+}
+
+// The scene pair (TLAS + set 1) a pass composes with (core/water.cpp compose_at_pass_end). A pass on
+// this frame's lighting uses the stash's pair (handed out this frame). A pass on an earlier lighting
+// looks at the current scene (rt_scene, which stamps the current slot): the stash's own -> the stash;
+// a newer one built this frame -> rt_scene_set (it never waits then); otherwise the stash's pair, the
+// one the GPU-current lighting traced, kept alive for this frame (rt_omm_scene_reference stamps that
+// slot unless it is retired). Before, that last case was refused: after a scene-wait timeout the
+// lighting traced the previous build, its frame's late build then committed with an index below the
+// next pass's, and that pass left the water uncomposed for one frame (the in-game flicker of 11-01:
+// 51 to 84 "no scene" refusals per 300 frames at S8 with 116 to 133 timeouts per 600).
+// take_newer() and keep_stash() are the host calls; take_newer is never called for a build older
+// than this frame (rt_scene_set would wait for this frame's scene on the game's recording thread).
+enum class ScenePick : uint32_t { kStash = 0, kNewer, kStashKept, kNone };
+template <class TakeNewer, class KeepStash>
+ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t built, uint64_t now, TakeNewer take_newer,
+                     KeepStash keep_stash) {
+  if (use == LightingUse::kNone) return ScenePick::kNone;
+  if (use == LightingUse::kThisFrame || (cur_ok && cur_is_stash)) return ScenePick::kStash;
+  if (cur_ok && built >= now && take_newer()) return ScenePick::kNewer;
+  return keep_stash() ? ScenePick::kStashKept : ScenePick::kNone;
+}
+
+// Composed / uncomposed per frame index of the water passes: a frame with a refused pass and no
+// composed one is uncomposed (the game's probe term and unshadowed water on screen); right after a
+// composed frame it is an on/off flip. Gate: 0 uncomposed frames in every window with water.
+struct ComposeContinuity {
+  uint64_t frame = 0;
+  bool composed = false, refused = false, prev_composed = false;
+  uint64_t frames = 0, composed_frames = 0, uncomposed = 0, flips = 0;
+  void close() {
+    if (!frame) return;
+    ++frames;
+    if (composed) {
+      ++composed_frames;
+    } else if (refused) {
+      ++uncomposed;
+      if (prev_composed) ++flips;
+    }
+    prev_composed = composed;
+    composed = refused = false;
+  }
+  void note(uint64_t now, bool ok) {
+    if (now != frame) {
+      const bool next = now == frame + 1;
+      close();
+      if (!next) prev_composed = false;   // frames without a water pass in between: no flip
+      frame = now;
+    }
+    (ok ? composed : refused) = true;
+  }
+  void reset_counts() { frames = composed_frames = uncomposed = flips = 0; }
+};
 
 // Statistics words of shaders/rt/water_compose.hlsl (cStats), mirrored there.
 inline constexpr uint32_t kCsRays = 7, kCsTier1 = 8;   // tiers 1..6 at kCsTier1 + tier - 1
@@ -345,6 +405,19 @@ inline constexpr uint32_t kCsGshRec = 44, kCsGshRestored = 45, kCsGshOccLit = 46
 inline constexpr uint32_t kCsGshSumDg = 48, kCsGshSumRestored = 50, kCsGshSumVg = 52;   // 64-bit pairs
 inline constexpr uint32_t kCsGshWords = 54;
 static_assert(kCsGshWords <= 64, "the M5.4c words fit the WATER_SHADOWS slot and precede the local words (64)");
+// Fail-closed composition (every variant): a record whose new colour C' has a non-finite channel keeps the
+// game's C (written back unchanged) and is counted here. Inputs that can produce one: L or the colour copy
+// (another pass's NaN), a half-packed record word at 65504+, a refraction copy read of an Inf. m5p2 Flymm
+// 11-01 ("+828 non-finite") was not one: every RR colour input of the run had 0; the counted pixels were a
+// 2048x2048 D32F depth image (dumped 9 times per frame) whose infinite texels vary frame to frame with every
+// key off (3328..3527). The word sits after the M5.4c ones (the base and sun variants reduce 57 words).
+inline constexpr uint32_t kCsNonFinite = 56, kCsGsWordsMin = kCsNonFinite + 1;
+static_assert(kCsGshWords <= kCsNonFinite && kCsNonFinite < 64, "a word no variant uses (the local words start at 64)");
+// The decision, mirrored by shaders/rt/water_compose.hlsl (Cn): write C' = max(Cu, 0) only where a term
+// changed the pixel and every channel of Cu is finite (max(NaN, 0) is 0 or NaN by implementation).
+inline bool compose_writes(bool changed, const float cu[3]) {
+  return changed && std::isfinite(cu[0]) && std::isfinite(cu[1]) && std::isfinite(cu[2]);
+}
 // M5.4b local-light words (WATER_LS variant only; the slot grows to 128 words): local records (owned,
 // valid, words written, a local term), no local term, invalid words, then per record the counts of the
 // lights the FS evaluates (channel, range, cone, N.L), of those with a game shadow map (kept), traced

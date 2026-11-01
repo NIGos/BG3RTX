@@ -224,6 +224,18 @@ def main():
     check("capacity lint: casters off: the RT capture gate alone over both cost windows is ok", queue_gates.capacity_problems(cj, sw_plan) == [])
     p = queue_gates.capacity_problems(dict(cj, set="rt=1,rt_cascade_casters=1"), sw_plan)
     check("capacity lint: casters on without the cascade gate is flagged", len(p) == 1 and "cascade" in p[0])
+    p = queue_gates.capacity_problems(dict(cj, set="rt=1,rt_cascade_casters=1", expect_every=[
+        dict(cap[0], windows=["cost-off-a", "cost-on"]),
+        {k: v for k, v in cap[1].items() if k != "when_present"} | {"windows": ["cost-off-a", "cost-on"]}]), sw_plan)
+    check("capacity lint: a cascade gate without when_present is flagged (an interior has no cascade line)",
+          len(p) == 1 and "cascade" in p[0])
+    # when_present (m5p2 Flymm 11-01): a window without the pass's line passes; with it, the gate judges as usual.
+    absent = gate(select=r"cascade\] casters: nothing", windows=["diag-on"])
+    check("when_present: a window without any selected line fails without the flag ...",
+          len(queue_gates.check(absent, bad_run, RUNNER, PLAN)) == 1)
+    check("... and passes with it", queue_gates.check([dict(absent[0], when_present=True)], bad_run, RUNNER, PLAN) == [])
+    f = queue_gates.check(gate(windows=["diag-on"], when_present=True), bad_run, RUNNER, PLAN)
+    check("when_present: present lines are still judged (the bad window fails)", len(f) == 1 and "3.1362" in f[0])
     p = queue_gates.capacity_problems(dict(cj, expect_every=[]), sw_plan)
     check("capacity lint: no gate is flagged", len(p) == 1 and "cost-off-a, cost-on" in p[0])
     p = queue_gates.capacity_problems(dict(cj, expect_every=[dict(cap[0], match="opaque draws dropped", windows=["cost-on", "cost-off-a"])]), sw_plan)

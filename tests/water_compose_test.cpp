@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -677,10 +678,76 @@ int main(int argc, char** argv) {
   CHECK(lighting_use(0, 100) == LightingUse::kNone);           // no lighting yet, or the last one skipped
   CHECK(lighting_use(100, 100) == LightingUse::kThisFrame);    // lighting recorded first
   CHECK(lighting_use(99, 100) == LightingUse::kEarlier);       // the pass recorded before the lighting's flush
-  CHECK(lighting_use(100 - kLightingLagFrames, 100) == LightingUse::kEarlier);   // 2 presents per app frame + 1
+  CHECK(lighting_use(100 - kLightingLagFrames, 100) == LightingUse::kEarlier);   // 1 + the frames recorded ahead
   CHECK(lighting_use(100 - kLightingLagFrames - 1, 100) == LightingUse::kNone);  // lighting stopped
   CHECK(lighting_use(101, 100) == LightingUse::kNone);         // never from the future
-  CHECK(kLightingLagFrames == 2 + 1);
+  // Frame indices count the app's presents (DLSS-G's generated ones do not advance them): 1 x (1 + 2).
+  CHECK(kIndicesPerAppFrame == 1 && kLightingLagFrames == 1 + kRecordAheadFrames);
+  CHECK(lighting_refusal(0, 100) == LightingRefusal::kCleared);
+  CHECK(lighting_refusal(100 - kLightingLagFrames - 1, 100) == LightingRefusal::kOld);
+  CHECK(lighting_refusal(101, 100) == LightingRefusal::kAhead);
+
+  // 4d2. The scene pair of a pass (the 11-01 flicker: "no scene" after scene-wait timeouts).
+  {
+    int newer_calls = 0, keep_calls = 0;
+    bool newer_ok = true, keep_ok = true;
+    auto take = [&] { ++newer_calls; return newer_ok; };
+    auto keep = [&] { ++keep_calls; return keep_ok; };
+    auto pick = [&](LightingUse u, bool cur_ok, bool is_stash, uint64_t built, uint64_t now) {
+      newer_calls = keep_calls = 0;
+      return pick_scene(u, cur_ok, is_stash, built, now, take, keep);
+    };
+    CHECK(pick(LightingUse::kNone, true, true, 100, 100) == ScenePick::kNone && !newer_calls && !keep_calls);
+    CHECK(pick(LightingUse::kThisFrame, false, false, 0, 100) == ScenePick::kStash && !newer_calls && !keep_calls);
+    CHECK(pick(LightingUse::kEarlier, true, true, 98, 100) == ScenePick::kStash && !newer_calls && !keep_calls);
+    CHECK(pick(LightingUse::kEarlier, true, false, 100, 100) == ScenePick::kNewer && newer_calls == 1 && !keep_calls);
+    // The refused case of 11-01: a newer build of the previous frame (the lighting's wait timed out).
+    // rt_scene_set is never asked (it would wait on the recording thread); the lighting's pair is kept.
+    CHECK(pick(LightingUse::kEarlier, true, false, 99, 100) == ScenePick::kStashKept && !newer_calls && keep_calls == 1);
+    CHECK(pick(LightingUse::kEarlier, false, false, 0, 100) == ScenePick::kStashKept && !newer_calls && keep_calls == 1);
+    newer_ok = false;   // this frame's pair unavailable: the lighting's pair still
+    CHECK(pick(LightingUse::kEarlier, true, false, 100, 100) == ScenePick::kStashKept && newer_calls == 1 && keep_calls == 1);
+    keep_ok = false;    // the lighting's slot retired: refused (counted, an uncomposed frame)
+    CHECK(pick(LightingUse::kEarlier, false, false, 0, 100) == ScenePick::kNone);
+  }
+
+  // 4d2b. Fail-closed composition (kCsNonFinite): C + A L - B with a non-finite term keeps C.
+  {
+    const float inf = std::numeric_limits<float>::infinity();
+    const float C[3] = {0.2f, 0.3f, 0.4f}, B[3] = {0.01f, 0.01f, 0.01f};
+    auto cu = [&](const float A[3], const float L[3], float out[3]) {
+      for (int i = 0; i < 3; ++i) out[i] = C[i] + A[i] * L[i] - B[i];
+    };
+    float o[3];
+    const float A0[3] = {0, 0.1f, 0.1f}, A1[3] = {0.1f, 0.1f, 0.1f}, Lok[3] = {1, 1, 1}, Linf[3] = {inf, 1, 1};
+    cu(A1, Lok, o);
+    CHECK(compose_writes(true, o) && !compose_writes(false, o));   // finite: written where a term changed it
+    cu(A0, Linf, o);
+    CHECK(std::isnan(o[0]) && !compose_writes(true, o));            // 0 x Inf (a lit hit of another pass's Inf)
+    cu(A1, Linf, o);
+    CHECK(std::isinf(o[0]) && !compose_writes(true, o));            // Inf radiance
+    // A record word past 65504 packs to the half Inf (f32tof16 rounds to Inf), e.g. a glint's R: B = Inf.
+    float o2[3];
+    for (int i = 0; i < 3; ++i) o2[i] = C[i] + A1[i] * Lok[i] - (i ? B[i] : inf);
+    CHECK(std::isinf(o2[0]) && !compose_writes(true, o2));
+    float o3[3] = {inf - inf, 0.1f, 0.1f};                           // Inf - Inf: NaN
+    CHECK(!compose_writes(true, o3));
+    CHECK(kCsNonFinite >= kCsGshWords && kCsNonFinite < kCsLsRec && kCsGsWordsMin == 57);
+  }
+
+  // 4d3. Uncomposed frames and on/off flips per frame index.
+  {
+    ComposeContinuity c;
+    c.note(10, true), c.note(11, true), c.note(11, false);   // a refused extra pass in a composed frame
+    c.note(12, false);                                        // a flip
+    c.note(13, true), c.note(14, false), c.note(14, false);  // one more, two passes
+    c.note(20, false);                                        // after a gap without water: no flip
+    c.note(21, true);
+    c.close();
+    CHECK(c.frames == 7 && c.composed_frames == 4 && c.uncomposed == 3 && c.flips == 2);
+    c.reset_counts();
+    CHECK(c.frames == 0 && c.uncomposed == 0 && c.flips == 0);
+  }
 
   // 4e. The statistics' group reduction (the 7.2 ms of m5w3-fg2): a group's sum in one 32-bit
   //     groupshared word, then one 64-bit add, gives the same counter as the per-wave adds it

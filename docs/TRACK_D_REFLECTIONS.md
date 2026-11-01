@@ -481,7 +481,7 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     camp (0d91554d is 6.6% of camp's unsupported alpha triangles; hits per triangle are higher for these trees than
     for grass), 0 at S6 (not in that scene).
 - **Pool family: Base_MSK_VT (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Live key
-  `rt_hit_material_mask=0` (GUI Experimental "Native hit materials: colour-mask props").
+  `rt_hit_material_mask=0` (ini only: the GUI knob "Hidden-surface shading" is at its 8-key limit).
   - Why "pool without row" (14.9% of S8 replay lookups, 133 instances): every one is a class A G-buffer pair with no
     recipe (layer log `without record: other pair 67/172`; basis ready 99/100, no slot shortage). The pack has no
     VS/FS per pool instance, so the split is from the S8 traces (class A pairs without a recipe, draws per frame):

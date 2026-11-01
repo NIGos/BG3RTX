@@ -478,8 +478,14 @@ struct CWindow {
   // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
   // refused (no recent lighting, no scene to stamp), and a newer scene than the stash's taken.
   uint64_t this_frame = 0, earlier = 0, no_lighting = 0, no_scene = 0, newer_scene = 0;
+  // The "[water] compose stability" line: the no-lighting refusals by cause (lighting_refusal), why
+  // an earlier lighting's pass did not find the stash's pair current (the current slot stale, a newer
+  // build older than this frame, the newer pair unavailable), and the stash's pair kept (pick_scene).
+  uint64_t nl_cleared = 0, nl_old = 0, nl_ahead = 0;
+  uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0;
 };
 CWindow g_cwin;
+bg3::water::ComposeContinuity g_ccont;   // across windows (the counts reset with each line)
 
 VkDeviceSize cslot_off(uint32_t slot) { return VkDeviceSize(slot) * kCSlotBytes; }
 
@@ -634,7 +640,7 @@ void collect_compose(uint32_t slot) {
     using bg3::water::kCsRrRec, bg3::water::kCsRrSumGame;
     for (uint32_t i = 0; i < kCStatWords; ++i)   // the counters (the 64-bit sums below)
       if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= bg3::water::kCsGshRec && i < bg3::water::kCsGshSumDg) ||
-          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin ||
+          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin || i == bg3::water::kCsNonFinite ||
           (i >= kCsRrRec && i < kCsRrSumGame))
         g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
@@ -698,6 +704,20 @@ void maybe_log_compose() {
             (unsigned long long)W.no_buffer, (unsigned long long)W.layout, (unsigned long long)W.size,
             (unsigned long long)W.this_frame, (unsigned long long)W.earlier, (unsigned long long)W.no_lighting,
             (unsigned long long)W.no_scene, (unsigned long long)W.newer_scene);
+  // Temporal stability (common/water_compose.h ComposeContinuity, pick_scene): the frames whose water
+  // passes were all refused show the game's water for one frame (gate: uncomposed 0).
+  host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
+            "(on/off flips %llu); refused passes: no recent lighting (cleared %llu, older than %llu frames %llu, ahead "
+            "%llu), no scene %llu; earlier lighting: current slot stale %llu, newer build before this frame %llu, newer "
+            "pair unavailable %llu, lighting's pair kept %llu; non-finite terms %llu (the game's colour kept: "
+            "water_compose.h kCsNonFinite)",
+            (unsigned long long)W.frames, (unsigned long long)g_ccont.frames, (unsigned long long)g_ccont.composed_frames,
+            (unsigned long long)g_ccont.uncomposed, (unsigned long long)g_ccont.flips, (unsigned long long)W.nl_cleared,
+            (unsigned long long)kLightingLagFrames, (unsigned long long)W.nl_old, (unsigned long long)W.nl_ahead,
+            (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
+            (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
+            (unsigned long long)w[kCsNonFinite]);
+  g_ccont.reset_counts();
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
   host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
             "added (A L) %.5f, delta %+.5f (+%.5f / -%.5f) per composed pixel; mean delta over owned %+.6f = %+.3f%% of mean "
@@ -939,34 +959,55 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   const LightingUse use = lighting_use(g_st.frame, now);
   if (use == LightingUse::kNone) {
     ++g_cwin.no_lighting;
+    const LightingRefusal r = lighting_refusal(g_st.frame, now);
+    ++(r == LightingRefusal::kCleared ? g_cwin.nl_cleared : r == LightingRefusal::kOld ? g_cwin.nl_old : g_cwin.nl_ahead);
+    g_ccont.note(now, false);
     return;
   }
   if (p->width != g_st.w || p->height != g_st.h || !g_compose.p || !g_rad.view || !g_dep.view) return;
-  // The scene pair. The stash's was handed out (stamped) for the frame the lighting recorded in;
-  // a pass of a later frame stamps the current pair itself, or the slot could be rebuilt before
-  // this command buffer runs. rt_scene never waits; rt_scene_set waits only for a scene older than
-  // this frame, so it is called only when the current build is this frame's.
+  // The scene pair (common/water_compose.h pick_scene). The stash's was handed out (stamped) for the
+  // frame the lighting recorded in; a pass of a later frame stamps the pair it binds, or the slot
+  // could be rebuilt before this command buffer runs. rt_scene never waits; rt_scene_set waits only
+  // for a scene older than this frame, so it is called only when the current build is this frame's.
   VkAccelerationStructureKHR tlas = g_st.tlas;
   VkDescriptorSet alpha = g_st.alpha;
+  uint64_t built = 0;
+  VkAccelerationStructureKHR cur = VK_NULL_HANDLE;
+  const bool cur_ok = use != LightingUse::kThisFrame && host->rt_scene && host->rt_scene(&cur, &built) && cur;
   if (use != LightingUse::kThisFrame) {
-    uint64_t built = 0;
-    VkAccelerationStructureKHR cur = VK_NULL_HANDLE;
-    if (!host->rt_scene || !host->rt_scene(&cur, &built) || !cur) {
-      tlas = VK_NULL_HANDLE;
-    } else if (cur != g_st.tlas) {
-      alpha = VK_NULL_HANDLE;
-      if (built >= now && host->rt_scene_set && host->rt_scene_set(&cur, &alpha, &built) && alpha) {
-        tlas = cur;
-        ++g_cwin.newer_scene;
-      } else {
-        tlas = VK_NULL_HANDLE;
-      }
-    }
+    if (!cur_ok) ++g_cwin.cur_stale;
+    else if (cur != g_st.tlas && built < now) ++g_cwin.newer_old;
   }
-  if (!tlas || !alpha) {
+  auto take_newer = [&] {
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    if (!host->rt_scene_set || !host->rt_scene_set(&cur, &set, &built) || !set || !cur) {
+      ++g_cwin.newer_failed;
+      return false;
+    }
+    tlas = cur, alpha = set;
+    return true;
+  };
+  // The lighting's own pair, kept alive through this frame: rt_omm_scene_reference finds the slot of
+  // that TLAS, refuses a retired one and stamps it (last_use = now, its set's views with it). With
+  // rt_omm off (water has no OMM variant) it returns false with the slot's baseline TLAS.
+  auto keep_stash = [&] {
+    if (!host->rt_omm_scene_reference || !g_st.tlas || !g_st.alpha) return false;
+    VkAccelerationStructureKHR ref = VK_NULL_HANDLE;
+    uint64_t id = 0;
+    host->rt_omm_scene_reference(cmd, g_st.tlas, &ref, &id);
+    if (!ref || !id) return false;
+    tlas = ref, alpha = g_st.alpha;
+    return true;
+  };
+  const ScenePick pick = pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
+  if (pick == ScenePick::kNewer) ++g_cwin.newer_scene;
+  if (pick == ScenePick::kStashKept) ++g_cwin.stash_kept;
+  if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
+    g_ccont.note(now, false);
     return;
   }
+  g_ccont.note(now, true);
   ++(use == LightingUse::kThisFrame ? g_cwin.this_frame : g_cwin.earlier);
   const uint32_t slot = g_st.slot;
   const uint32_t pass = g_cpasses[slot]++;
@@ -1086,6 +1127,7 @@ void release_compose() {
   g_cbuf_seen = 0;
   g_st = Stash{};
   g_cwin = CWindow{};
+  g_ccont = bg3::water::ComposeContinuity{};
 }
 
 }  // namespace

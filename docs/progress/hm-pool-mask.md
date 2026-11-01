@@ -2,8 +2,8 @@
 - Cause of "pool without row" (S8 replay, 14.9% of lookups, 133 instances): class A pairs with no recipe ("other
   pair" 67 draws / 172 instances in the live log; basis ready 99/100, slots free). By S8 trace draws/frame:
   HeightGradient 54df894a/7a07134e 17.9, Tileset 6044c8cf/02807a68 13, then five smaller pairs (MSK 5).
-- Built the smallest: Base_MSK_VT 2d2ac3c3/a5f44c48 (`LayoutMask`, live key `rt_hit_material_mask=0`, GUI
-  Experimental). Classifier vs 14678345: only RT1 (albedo tint by a 2D colour mask and three colours) and RT2.y at
+- Built the smallest: Base_MSK_VT 2d2ac3c3/a5f44c48 (`LayoutMask`, live key `rt_hit_material_mask=0`, ini only:
+  the GUI knob "Hidden-surface shading" holds 8 keys, its kv[8] limit, so it is not in it yet). Classifier vs 14678345: only RT1 (albedo tint by a 2D colour mask and three colours) and RT2.y at
   byte 12 differ (tests/material_families_test.py BaseMask; native_hit_pool_test pins the recipe and nv_mask_albedo).
 - Tileset needs per-vertex COLOR in the pool basis; HeightGradient needs world height and more than 256 B of row.
   Both are infrastructure; not started.

@@ -60,8 +60,8 @@
   "\\[geo\\] RT capture, last \\d+ frames: .* MB of a 1024 MB buffer",
   "\\[rt\\] scene wait: 120 frames",
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+",
-  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 0\\)",
-  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 1\\)",
+  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 0[,)]",
+  "\\[cpu\\] hit material over \\d+ frames, .*\\(rt_hit_material_recycle 1[,)]",
   "\\[cpu\\] scene build recording, ms/build over \\d+: .*capture end to commit [0-9.]+, of which scene lock wait",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
@@ -147,7 +147,8 @@
     "cost-on-static",
     "cost-on-q",
     "cost-on-e"
-   ]
+   ],
+   "when_present": true
   }
  ]
 }

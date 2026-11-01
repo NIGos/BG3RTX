@@ -163,7 +163,16 @@ std::condition_variable g_scene_cv;
 struct BuildCpu { double total = 0, bvh = 0, alpha = 0, lock = 0, prepare = 0, commit = 0; uint64_t n = 0; };
 BuildCpu g_bcpu;
 double qpc_ms() { LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f); return double(t.QuadPart) * 1000.0 / double(f.QuadPart); }
-struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; };
+// Where the scene thread was when a wait timed out (g_scene_phase): 0 no capture begun this frame,
+// 1 recording the prepass (its draws and their hooks), 2 waiting for g_mu at the capture end,
+// 3 hit-material scene_prepare, 4 bvh_build, 5 alpha_commit and the commit.
+constexpr int kScenePhases = 6;
+const char* const kScenePhaseName[kScenePhases] = {"no capture yet", "prepass recording", "scene lock",
+                                                   "hit material prepare", "BVH build", "alpha commit"};
+std::atomic<int> g_scene_phase{0};
+std::atomic<uint64_t> g_scene_phase_frame{0};
+struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; uint64_t at[kScenePhases] = {}; };
+void scene_phase(int p) { g_scene_phase.store(p, std::memory_order_relaxed); g_scene_phase_frame.store(frame_index(), std::memory_order_relaxed); }
 WaitStats g_wait;
 uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
 uint32_t g_scene_next = 0;
@@ -816,6 +825,7 @@ bool rt_alloc_device_address() { return g_bda_core; }
 
 void rt_before_capture(VkCommandBuffer cmd) {
   if (!g_rt) return;
+  scene_phase(1);
   // Last frame's BLAS build read the XFB buffer this pass is about to overwrite.
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.dstAccessMask = VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT;
@@ -994,6 +1004,8 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   if (!g_rt) return;
   const bool cpu_t = cfg_int("cpu_timing", 0) != 0;
   const double t_entry = cpu_t ? qpc_ms() : 0;
+  scene_phase(2);
+  struct PhaseReset { ~PhaseReset() { scene_phase(0); } } phase_reset;   // every exit: done (or no build)
   std::lock_guard<std::mutex> lock(g_mu);
   const double t_locked = cpu_t ? qpc_ms() : 0;
   if (order_trace_active())
@@ -1025,6 +1037,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     scene.used=true;scene.last_use=frame_index();scene.tlas=VK_NULL_HANDLE;scene.set=VK_NULL_HANDLE;
     scene.material_record=bvh_rec_register(cmd);
   }
+  scene_phase(3);
   const double t_prep0 = cpu_t ? qpc_ms() : 0;
   native_hit::scene_prepare(cmd,uint32_t(scene_slot),cap);
   const double t_prep1 = cpu_t ? qpc_ms() : 0;
@@ -1080,6 +1093,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     timestamp(cmd, slot, 0);
     g_stamp_slot = slot;
     BvhResult res{};
+    scene_phase(4);
     const double t_bvh0 = cpu_t ? qpc_ms() : 0;
     const bool bvh_ok = bvh_build(cmd, capx, &stamp_cb, uint32_t(scene_slot), &res);
     const double t_bvh1 = cpu_t ? qpc_ms() : 0;
@@ -1089,6 +1103,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
       return;
     }
     restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+    scene_phase(5);
     AlphaBindings ab{xfb, cap.alpha_base, aprims ? VkDeviceSize(aprims) * tri_bytes : 0, VkDeviceSize(prims) * tri_bytes,
                      cap.xfb_size, stride, true, res.info, res.info_off, res.info_bytes, res.pool, res.pool_bytes};
     ab.camera = cap.ubo;
@@ -1330,7 +1345,12 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
       ++g_wait.waited;
       g_wait.ms += dt;
       g_wait.ms_max = (std::max)(g_wait.ms_max, dt);
-      if (ok) { ++g_wait.got; g_wait_misses = 0; } else { ++g_wait.timeouts; ++g_wait_misses; }
+      if (ok) { ++g_wait.got; g_wait_misses = 0; } else {
+        ++g_wait.timeouts; ++g_wait_misses;
+        // A phase set in an earlier frame means this frame's capture has not begun.
+        const int ph = g_scene_phase_frame.load(std::memory_order_relaxed) == now ? g_scene_phase.load(std::memory_order_relaxed) : 0;
+        ++g_wait.at[(std::clamp)(ph, 0, kScenePhases - 1)];
+      }
     }
   }
   // rt_scene_wait_log_frames: lean jobs use 120 (complete lines in every cost window for the gate).
@@ -1340,6 +1360,11 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
         (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
         g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+    if (g_wait.timeouts) {
+      std::string at;
+      for (int i = 0; i < kScenePhases; ++i) { char b[64]; snprintf(b, sizeof b, "%s%s %llu", i ? ", " : "", kScenePhaseName[i], (unsigned long long)g_wait.at[i]); at += b; }
+      log("[rt] scene wait timeouts by the scene thread's phase: %s", at.c_str());
+    }
     g_wait = WaitStats{};
   }
 }

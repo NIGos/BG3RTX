@@ -195,7 +195,7 @@ bool mark_owner(VkCommandBuffer cmd,Slot& slot){
 }
 uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_cast<VkCommandBuffer>(uintptr_t(command)));}
 bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_hot(CfgHot::rt_native_tileset)!=0);}
-DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
+DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
  // Legacy candidate for other shader families. The audited static pair below
@@ -256,7 +256,7 @@ DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
 }
 // cpu_timing=1: CPU split of the provider's recording work ("[cpu] hit material" line, cpu_report).
 // Phases are summed over all threads; alloc/free/collect are inside the phase that called them.
-enum CpuPhase {CpuPrepass,CpuScenePrepare,CpuMaterial,CpuQuery,CpuCollect,CpuAlloc,CpuFree,CpuPhases};
+enum CpuPhase {CpuPrepass,CpuScenePrepare,CpuMaterial,CpuQuery,CpuCollect,CpuAlloc,CpuFree,CpuKey,CpuLockWait,CpuPhases};
 std::atomic<bool> cpu_on{false};
 std::atomic<uint64_t> cpu_ns[CpuPhases],cpu_allocs{},cpu_frees{},cpu_reuses{},cpu_alloc_mb{};
 struct CpuTimer {
@@ -265,11 +265,26 @@ struct CpuTimer {
  ~CpuTimer(){if(phase>=0)cpu_ns[phase].fetch_add(uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-t0).count()),std::memory_order_relaxed);}
  CpuTimer(const CpuTimer&)=delete;CpuTimer& operator=(const CpuTimer&)=delete;
 };
+// The per-draw key (inside the prepass / G-buffer hook phases) and the provider mutex waits of the per-draw hooks.
+DrawKey key(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){CpuTimer t(CpuKey);return key_impl(cmd,s,a);}
+void lock_timed(std::unique_lock<std::mutex>& l){CpuTimer t(CpuLockWait);l.lock();}
 // rt_hit_material_recycle=1 (common/native_hit_recycle.h): retired buffers are kept for reuse.
 // recycle_mutex is a leaf: the buffers it evicts are freed after it is released.
 std::mutex recycle_mutex;
 recycle::Pool<Buffer> recycled;
 bool recycle_live(){return cfg_hot(CfgHot::rt_hit_material_recycle)!=0;}
+// rt_hit_material_capture_unlocked=1: the G-buffer material hooks read a draw's bindings (capture /
+// capture_tileset: tracker lookups, sampler and view currency) without the provider mutex, which the
+// prepass hooks (note_prepass, note_opaque_prepass) take on every draw while the scene is recorded.
+// capture() touches no provider state but its rt_stats log throttles (capture_log_mutex).
+bool capture_unlocked(){return cfg_hot(CfgHot::rt_hit_material_capture_unlocked)!=0;}
+std::mutex capture_log_mutex;
+// rt_hit_material_lean_hooks=1 (sw3 2026-11-01: prepass hooks 2.7-3.2 and G-buffer material hooks 2.5-3.5 ms/frame,
+// collect 1.3-1.5 ms of it, every motion timeout in "prepass recording"): no vkFreeMemory on a recording thread
+// (evicted buffers wait in deferred_free for service() at present), best-fit reuse (take_fit), collect() once per
+// frame (again only when a capacity bound is hit), and the G-buffer draw key only for draws that qualify.
+bool lean_hooks(){return cfg_hot(CfgHot::rt_hit_material_lean_hooks)!=0;}
+std::vector<Buffer> deferred_free; // under recycle_mutex
 void free_now(Buffer& b){
  CpuTimer t(CpuFree);if(cpu_on.load(std::memory_order_relaxed))cpu_frees.fetch_add(1,std::memory_order_relaxed);
  if(b.mapped)dd->vk.UnmapMemory(dd->device,b.m);if(b.b)dd->vk.DestroyBuffer(dd->device,b.b,nullptr);if(b.m)dd->vk.FreeMemory(dd->device,b.m,nullptr);b={};
@@ -280,7 +295,8 @@ bool create(Buffer& out,VkDeviceSize bytes,VkBufferUsageFlags usage,bool host=fa
  // Recycling allocates rounded sizes so a retired buffer fits the next similar request; every
  // user's descriptor ranges, fills and copies use its own byte count, never the buffer size.
  const bool reuse=recycle_live();const VkDeviceSize alloc=reuse?recycle::round_bytes(bytes):bytes;
- if(reuse){std::lock_guard lock(recycle_mutex);Buffer b{};if(recycled.take(recycle::Key{alloc,uint32_t(usage),host},b)){out=b;
+ if(reuse){std::lock_guard lock(recycle_mutex);Buffer b{};const recycle::Key k{alloc,uint32_t(usage),host};
+  if(lean_hooks()?recycled.take_fit(k,b):recycled.take(k,b)){out=b;
   if(cpu_on.load(std::memory_order_relaxed))cpu_reuses.fetch_add(1,std::memory_order_relaxed);return true;}}
  CpuTimer timer(CpuAlloc);
  if(cpu_on.load(std::memory_order_relaxed)){cpu_allocs.fetch_add(1,std::memory_order_relaxed);cpu_alloc_mb.fetch_add(uint64_t(alloc>>20),std::memory_order_relaxed);}
@@ -299,14 +315,15 @@ bool create(Buffer& out,VkDeviceSize bytes,VkBufferUsageFlags usage,bool host=fa
 // Called only where a buffer has no GPU user left (retired, or never recorded): freed, or kept.
 void destroy(Buffer& b){
  if(!b.b){b={};return;}
- if(recycle_live()){std::vector<Buffer> evict;
-  {std::lock_guard lock(recycle_mutex);recycled.give(recycle::Key{b.bytes,uint32_t(b.usage),b.host},b,frame_index(),evict);}
+ if(recycle_live()){std::vector<Buffer> evict;const bool lean=lean_hooks();
+  {std::lock_guard lock(recycle_mutex);recycled.give(recycle::Key{b.bytes,uint32_t(b.usage),b.host},b,frame_index(),lean?deferred_free:evict);}
   b={};free_all(evict);return;
  }
  free_now(b);
 }
 // Once per frame (from collect): idle buffers are freed, and all of them once the key is off.
-void recycle_trim(){
+void recycle_trim(bool from_service=false){
+ if(lean_hooks()!=from_service)return; // lean: at present (service), else from collect
  static std::atomic<uint64_t> last{UINT64_MAX};const uint64_t now=frame_index();if(last.exchange(now)==now)return;
  // Activation line on every change of the key (lean jobs expect it).
  static std::atomic<int> logged{-1};const int live=recycle_live()?1:0;
@@ -314,6 +331,11 @@ void recycle_trim(){
  std::vector<Buffer> evict;
  {std::lock_guard lock(recycle_mutex);if(live)recycled.trim(now,evict);else recycled.clear(evict);}
  free_all(evict);
+}
+// Present thread, once per frame: the idle trim and the frees the recording threads deferred.
+void recycle_service(){
+ recycle_trim(true);
+ std::vector<Buffer> v;{std::lock_guard lock(recycle_mutex);v.swap(deferred_free);}free_all(v);
 }
 void barrier(VkCommandBuffer cmd,VkPipelineStageFlags source,VkAccessFlags access,VkPipelineStageFlags target,VkAccessFlags next){
  VkMemoryBarrier b{VK_STRUCTURE_TYPE_MEMORY_BARRIER};b.srcAccessMask=access;b.dstAccessMask=next;
@@ -365,7 +387,7 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
  if(!omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<12;
  const auto& c=material.sampler.sampler;
  if(!c.complete || c.info.flags || c.info.compareEnable || c.info.unnormalizedCoordinates || c.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<13;
- if(failed && cfg_hot(CfgHot::rt_stats) && frame_index()%120==0){
+ if(failed && cfg_hot(CfgHot::rt_stats) && frame_index()%120==0){std::lock_guard log_lock(capture_log_mutex);
   static uint64_t frame=UINT64_MAX;static uint32_t count=0;if(frame!=frame_index()){frame=frame_index();count=0;}
   if(count++<2){log("[hit material tileset capture] frame %llu failures 0x%x (UBO bits0..1, native2D views2..10, sampler metadata/frozen/policy11..13); sampler generation %llu",(unsigned long long)frame,failed,(unsigned long long)c.id);
    for(uint32_t i=0;i<9;++i)if(failed&(1u<<(2+i))){const auto& f=facts[i];log("[hit material tileset view] binding %u queried/known/current %u/%u/%u format/type %u/%u mip/layer %u/%u extent %u/%u frozen set/layout/version %llu/%llu/%llu",
@@ -426,7 +448,7 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  // Two full prerequisite records per 120-frame window, not one missing-term
  // experiment at a time. These are actual draw bindings, not a native-proof claim.
  static uint64_t logged_frame=UINT64_MAX;static uint32_t logged=0;const auto frame=frame_index();
- if(cfg_hot(CfgHot::rt_stats) && frame%120==0){if(logged_frame!=frame){logged_frame=frame;logged=0;}
+ if(cfg_hot(CfgHot::rt_stats) && frame%120==0){std::lock_guard log_lock(capture_log_mutex);if(logged_frame!=frame){logged_frame=frame;logged=0;}
   if(logged++<2){
    log("[hit material capture] frame %llu failures 0x%x (bits0..2 buffers,3..6 views,7 sampler metadata,8 frozen sampler,9 sampler policy) pipe %u",
     (unsigned long long)frame,failed,state->pipe_id[0]);
@@ -457,7 +479,10 @@ void destroy_query(Query& q){if(q.pool)dd->vk.DestroyDescriptorPool(dd->device,q
  for(auto sampler:q.pool_samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);q.pool_samplers.clear();}
 void destroy_packet(Deferred& p){for(auto sampler:p.samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);for(auto& c:p.chunks)destroy(c);p.chunks.clear();destroy(p.rows);destroy(p.staged);}
 bool retired(uint64_t id){auto i=owners.find(id);return i!=owners.end() && i->second.retired(current_recording(i->second.command),life_gpu_done());}
-void collect(){
+// force: a capacity bound (packets, queries) is hit; lean_hooks otherwise collects once per frame.
+void collect(bool force=false){
+ static uint64_t last=UINT64_MAX;const uint64_t now=frame_index(); // under mutex
+ if(!force && last==now && lean_hooks())return;last=now;
  CpuTimer timer(CpuCollect);recycle_trim();
  for(auto i=queries.begin();i!=queries.end();)if(retired(i->first)){destroy_query(*i->second);i=queries.erase(i);}else ++i;
  for(auto i=packets.begin();i!=packets.end();)if(i->second.use_count()==1 && retired(i->first)){destroy_packet(*i->second);i=packets.erase(i);}else ++i;
@@ -593,15 +618,16 @@ bool pool_current(PoolMaterial& m,uint64_t frame){
 }
 bool enabled(){return on;}
 void cpu_report(uint64_t frames){
+ if(on)recycle_service();
  const bool want=on && cfg_int("cpu_timing",0)!=0;cpu_on.store(want,std::memory_order_relaxed);
  static uint64_t last=0;if(!want){last=frames;return;}if(frames-last<300)return;const uint64_t n=frames-last;last=frames;
  double ms[CpuPhases];for(int i=0;i<CpuPhases;++i)ms[i]=double(cpu_ns[i].exchange(0))*1e-6/double(n);
  uint64_t retained=0;size_t count=0;{std::lock_guard lock(recycle_mutex);retained=recycled.retained();count=recycled.size();}
  log("[cpu] hit material over %llu frames, ms/frame (all threads): prepass hooks %.3f, scene_prepare %.3f, G-buffer material hooks %.3f, query (lighting thread) %.3f; "
-     "inside them: collect %.3f, buffer allocations %.3f (%.2f/frame, %.1f MB/frame), frees %.3f (%.2f/frame); reused %.2f/frame, retained %.1f MB in %zu buffers (rt_hit_material_recycle %d)",
-  (unsigned long long)n,ms[CpuPrepass],ms[CpuScenePrepare],ms[CpuMaterial],ms[CpuQuery],ms[CpuCollect],ms[CpuAlloc],double(cpu_allocs.exchange(0))/double(n),
+     "inside them: draw keys %.3f, mutex waits %.3f, collect %.3f, buffer allocations %.3f (%.2f/frame, %.1f MB/frame), frees %.3f (%.2f/frame); reused %.2f/frame, retained %.1f MB in %zu buffers (rt_hit_material_recycle %d, lean_hooks %d)",
+  (unsigned long long)n,ms[CpuPrepass],ms[CpuScenePrepare],ms[CpuMaterial],ms[CpuQuery],ms[CpuKey],ms[CpuLockWait],ms[CpuCollect],ms[CpuAlloc],double(cpu_allocs.exchange(0))/double(n),
   double(cpu_alloc_mb.exchange(0))/double(n),ms[CpuFree],double(cpu_frees.exchange(0))/double(n),double(cpu_reuses.exchange(0))/double(n),
-  double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle));
+  double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle),cfg_hot(CfgHot::rt_hit_material_lean_hooks));
 }
 bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on);}
 void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return;dd=device;on=cfg_hot(CfgHot::rt_hit_material)!=0 && cfg_int("rt_alpha",1)!=0 && cfg_int("rt_bvh_split",1)!=0;
@@ -620,13 +646,15 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);if(dd!=dev
  for(auto& f:pair_window)for(auto& c:f)c=0;for(auto& f:order_window)for(auto& c:f)c=0;tolerant_window=0;
  {std::lock_guard pool(pool_mutex);pool_table.clear();pool_slots.clear();for(auto& j:pool_jobs){destroy(j.xfb);destroy(j.host);}pool_jobs.clear();
   pool_basis={};pool_tilesets={};for(auto& o:pool_obs)o={};pool_counter_frame=0;}
- {std::vector<Buffer> all;{std::lock_guard lock(recycle_mutex);recycled.clear(all);}free_all(all);}
+ {std::vector<Buffer> all;{std::lock_guard lock(recycle_mutex);recycled.clear(all);all.insert(all.end(),deferred_free.begin(),deferred_free.end());deferred_free.clear();}free_all(all);}
  gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
+size_t pre_hint=0; // under mutex: the prepass candidates of the last prepared scene
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;CpuTimer timer(CpuPrepass);std::lock_guard lock(mutex);collect();
  for(auto i=pending.begin();i!=pending.end();)if(current_recording(i->second.command)!=i->second.recording)i=pending.erase(i);else ++i;
  if(pending.size()>=128 && !pending.contains(s->recording))return;
  auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.join.begin(p.command,p.recording);
+ if(lean_hooks())p.pre.reserve(pre_hint); // last frame's candidates: no regrowth per draw
 }
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
  if(!on || !state || args.kind>1 || record>=max_records)return;CpuTimer timer(CpuPrepass);
@@ -637,7 +665,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
- Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return;
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record)){
   p->second.pre.push_back(pre);if(family!=instanced::None)++p->second.instanced_prepass[family];}
@@ -646,7 +674,7 @@ uint32_t note_opaque_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs&
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || !opaque_prepass_geometry_ok(args.kind,args.instances,args.count,triangles,stride))return UINT32_MAX;
  CpuTimer timer(CpuPrepass);
  Pre pre{};pre.key=key(cmd,*state,args);pre.raw=raw;pre.stride=stride;pre.triangles=triangles;pre.vs=state->vs;pre.fs=state->fs;pre.opaque=true;
- std::lock_guard lock(mutex);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
+ std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
  ++p->second.candidate_draws;
  if(!p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX))return UINT32_MAX;
  if(p->second.opaque_count>=nh_opaque_rows){++p->second.opaque_overflow;return UINT32_MAX;}
@@ -678,7 +706,7 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
   if(!pre.stride || !byte_range(pre.raw,bytes,cap.xfb_size) || !byte_range(need,bytes,source_cap)){++range_dropped;continue;}
   accepted.push_back(&pre);need+=bytes;
  }
- s.source_overflow=range_dropped;
+ s.source_overflow=range_dropped;pre_hint=p->second.pre.size();
  const VkDeviceSize size=source_stream_bytes(need,stream_bytes,source_cap);
  if(s.data.b && (s.data_bytes<size || s.data_bytes>2*size)){destroy(s.data);s.data_bytes=0;}
  if(!size || !create(s.data,size,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT))return;
@@ -727,19 +755,28 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state))return false;
  if(tileset_deferred(state->vs,state->fs) && !tileset_active())return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
  CpuTimer timer(CpuMaterial);
- auto draw=key(cmd,*state,args);std::lock_guard lock(mutex);const bool lean=recycle_live();if(!lean)collect();
+ // rt_hit_material_lean_hooks: the key (bindings, mapped reads, buffer sizes) only for a draw that qualifies.
+ const bool lean_key=lean_hooks();bool keyed=false;DrawKey draw{};
+ {const bool ts=tileset_deferred(state->vs,state->fs);
+  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
+  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
+  const auto q=ir?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):
+   deferred_qualify(audited_static_family(state->vs,state->fs)||ts||ir,ts,exactPipeline,args.kind,args.instances,stride);
+  if(!lean_key || (q!=DeferredQualify::FamilyDeclined && q!=DeferredQualify::PipelineDeclined)){draw=key(cmd,*state,args);keyed=true;}}
+ std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);const bool lean=recycle_live();if(!lean)collect();
  auto it=packets.find(state->recording);
  if(it==packets.end()){
   // rt_hit_material_recycle: collect once per new packet, not per G-buffer draw (it only frees
   // retired work; this bound is the one place here that needs it current).
   if(lean)collect();
+  if(packets.size()>=kSceneSlots)collect(true);
   if(packets.size()>=kSceneSlots)return false;
   auto p=std::make_shared<Deferred>();p->command=handle(cmd);p->recording=state->recording;p->frame=frame_index();p->camera=camera.buffer;p->camera_offset=camera.offset;p->join.begin(p->command,p->recording);
   // XFB chunks are allocated on demand by the draws that need them.
   if(!create(p->rows,packet_rows,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT)){destroy_packet(*p);return false;}
   it=packets.emplace(state->recording,std::move(p)).first;
  }
- auto& p=*it->second;
+ const auto hold=it->second;auto& p=*hold; // held: collect() keeps a packet with another owner
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);
  // rt_hit_material_instanced: the instanced wind / 2S pairs take the per-draw path, any instance count.
@@ -752,12 +789,18 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
   if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
  auto* counts=irecipe?&p.instanced[family]:nullptr;if(counts)++counts->seen;
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;if(counts)++counts->pipeline;return false;}
+ if(!keyed)draw=key(cmd,*state,args); // unreachable when lean (declined above); kept exact
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated
  // shader families never reserve an audited candidate's geometry identity.
  if(p.materials.size()>=material_slots){++p.slot_overflow;return false;}
- Material material{};if(!(tileset?capture_tileset(cmd,material):capture(cmd,material,irecipe))){++p.binding_declined;if(counts)++counts->bindings;return false;}
+ // rt_hit_material_capture_unlocked: only this recording's thread writes this packet until it is
+ // finalized (other threads read finalized packets only), so the binding reads run unlocked.
+ const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
+ Material material{};const bool captured=tileset?capture_tileset(cmd,material):capture(cmd,material,irecipe);
+ if(unlocked)lock.lock();
+ if(!captured){++p.binding_declined;if(counts)++counts->bindings;return false;}
  // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
  unsigned char stage[instanced::kStageBytes];
  if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
@@ -897,7 +940,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   else{
    // Same bindings as the audited pair (native_vt_surface.h). capture() keeps its own
    // statics, so it runs under the main mutex, never under pool_mutex.
-   Material m{};bool ok;{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
+   Material m{};bool ok;if(capture_unlocked())ok=capture(cmd,m,recipe,&failures);else{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
    const uint32_t engine=pool::engine_bytes(*recipe);
    const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
@@ -1018,6 +1061,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   *query_alpha=q.set;return mark_owner(cmd,slot);
  }
  if(lean)collect(); // rt_hit_material_recycle: once per new query, not per RT pass
+ if(queries.size()>=2u*kSceneSlots)collect(true);
  auto packet=packet_for(slot);if(!packet || queries.size()>=2u*kSceneSlots || !compute_ready(true)){
   static uint64_t logged=UINT64_MAX;if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0 && logged!=slot.frame){logged=slot.frame;log("[hit material query] unavailable frame %llu scene %u packet %u pending packets %zu queries %zu source camera %p+%llu",
    (unsigned long long)slot.frame,slot.generation,unsigned(bool(packet)),packets.size(),queries.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);}return false;

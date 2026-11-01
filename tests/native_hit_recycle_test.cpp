@@ -41,6 +41,13 @@ int main(){
  // Clear hands back everything.
  ev.clear();p.give(a,20,1,ev);p.give(d,21,1,ev);p.clear(ev);CHECK(ev.size()==2 && p.size()==0 && p.retained()==0);
 
+ // Best fit: smallest of the same usage/kind within [need, 2 x need].
+ {Pool<int> f(10000,10);std::vector<int> e;
+  f.give(Key{300,1,false},1,1,e);f.give(Key{150,1,false},2,1,e);f.give(Key{120,2,false},3,1,e);f.give(Key{400,1,true},4,1,e);
+  int g=0;CHECK(f.take_fit(Key{100,1,false},g) && g==2 && f.retained()==820);   // 150, not 300; usage 2 / host never
+  CHECK(!f.take_fit(Key{100,1,false},g));                                     // 300 > 2 x 100
+  CHECK(f.take_fit(Key{160,1,false},g) && g==1);                               // 300 <= 320
+  CHECK(!f.take_fit(Key{500,1,true},g) && f.take_fit(Key{400,1,true},g) && g==4);}
  // Default cap holds one frame's largest transient set (4 x 32 MB chunks + a 256 MB query).
  Pool<int> q;ev.clear();
  for(int i=0;i<4;++i)q.give(Key{round_bytes(32ull<<20),1,false},i,1,ev);
