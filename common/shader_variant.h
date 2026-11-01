@@ -67,9 +67,11 @@ inline bool cascade_entry(const char* file) {
 
 // Fixed requests outside gi/ (core/water.cpp): M5.4's compose variant with the 40-byte records and
 // the sun ray (shaders/rt/water_compose.hlsl WATER_SHADOWS; the plain file stays M5.3's), and M5.4b's
-// with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS).
+// with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
+// the 104-byte records and the refraction ray (WATER_REFR on top of both).
 inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SHADOWS=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1"};
 
 // The current-caster sun pipe (core/gi.cpp g_rt_shadow_current) runs this file only.
 inline bool sun_current_entry(const char* file) { return std::strcmp(file, "gi/rt_shadow.hlsl") == 0; }

@@ -70,6 +70,17 @@ inline constexpr uint32_t kRecordWordsSun = kRecordBytesSun / 4;
 //   C' = max(C [+ A L - B] [- (1 - V) D] - F * sum_k (1 - V_k) c_k, 0).
 inline constexpr uint32_t kRecordBytesLs = 96;
 inline constexpr uint32_t kRecordWordsLs = kRecordBytesLs / 4;
+// M5.5 step 1 (rt_water_refraction on when the water pipelines are created): the M5.4b record plus the
+// FS's refraction sample and its weight, 2 more words (104 B):
+//   w24 half2(Refr.r, Refr.g)   w25 half2(Refr.b, 1 - a)
+// Refr = the FS's screen-space refraction sample (its colour copy, set 2 b4, at the pixel plus the
+// wave offset: _4332 / _4530 / _3668), 1 - a = dC/dRefr (C = mix(Refr, surface, a), a scalar). The
+// compose traces the refracted ray (Snell at the FS's own N, n from the FS's own F0) and, where its hit
+// resolves on screen, reads the same colour copy there: C' = max(C + (1 - a) (Copy(hit) - Refr), 0).
+// The medium (the game's opacity a over the view-depth difference) is unchanged: only WHERE the bed
+// is seen changes. Unresolved rays (hidden, off screen, miss) keep the FS's Refr.
+inline constexpr uint32_t kRecordBytesRefr = 104;
+inline constexpr uint32_t kRecordWordsRefr = kRecordBytesRefr / 4;
 
 inline constexpr const char* kComposeKey = "bg3rtx.water_compose";
 inline constexpr uint32_t kComposeVersion = 1;
@@ -81,7 +92,7 @@ struct ComposeBuffer {
   uint32_t capacity;    // records (without the sink)
   uint64_t buffer;      // VkBuffer (STORAGE_BUFFER | SHADER_DEVICE_ADDRESS | TRANSFER_DST)
   uint64_t bytes;       // its size
-  uint32_t record_bytes;   // kRecordBytes, kRecordBytesSun (M5.4) or kRecordBytesLs (M5.4b); 0 (an older layer) = kRecordBytes
+  uint32_t record_bytes;   // kRecordBytes, kRecordBytesSun (M5.4), kRecordBytesLs (M5.4b) or kRecordBytesRefr (M5.5); 0 (an older layer) = kRecordBytes
   uint32_t pad[9];
 };
 static_assert(sizeof(ComposeBuffer) == 64, "ComposeBuffer layout is shared by the layer and the core");
@@ -96,12 +107,15 @@ inline uint32_t capacity_of_mb(int mb, uint32_t record_bytes = kRecordBytes) {
   return n > 1 ? uint32_t(n - 1) : 1u;
 }
 inline uint32_t record_bytes_of(const ComposeBuffer& b) {
-  return b.record_bytes == kRecordBytesSun || b.record_bytes == kRecordBytesLs ? b.record_bytes : kRecordBytes;
+  return b.record_bytes == kRecordBytesSun || b.record_bytes == kRecordBytesLs || b.record_bytes == kRecordBytesRefr
+             ? b.record_bytes
+             : kRecordBytes;
 }
 // The record buffer's MiB for rt_water_compose_mb (sized for 32-B records): the 96-B records of M5.4b
-// get the same pixel count (160 -> 480 MB covers 5.2 Mpx); M5.3 / M5.4 use the key as is.
+// (and M5.5's 104-B ones) get the same pixel count (160 -> 480 / 520 MB covers 5.2 Mpx); M5.3 / M5.4
+// use the key as is.
 inline int record_mb(int mb, uint32_t record_bytes) {
-  return record_bytes == kRecordBytesLs ? int((int64_t(mb) * kRecordBytesLs + kRecordBytes - 1) / kRecordBytes) : mb;
+  return record_bytes >= kRecordBytesLs ? int((int64_t(mb) * record_bytes + kRecordBytes - 1) / kRecordBytes) : mb;
 }
 
 inline void publish_buffer(ComposeBuffer* dst, uint64_t buffer, uint64_t bytes, uint32_t capacity,
@@ -204,6 +218,52 @@ inline LsBin ls_check_bin(const float sum[3], const float rec[3]) {
   return r <= kLsSumTol ? LsBin::kWithin : r <= kLsSumFar ? LsBin::kMid : LsBin::kFar;
 }
 
+// ---- M5.5 step 1 refraction (rt_water_refraction; water_compose.hlsl WATER_REFR) ----
+// The FS's end of main is C = Refr + (surface - Refr) a: dC/dRefr = 1 - a, exactly (a scalar). The
+// record's w25 high half. Swapping the FS's screen sample Refr for the colour copy at the refracted
+// ray's hit Lc: C' = max(C + (1 - a) (Lc - Refr), 0) is the FS with Refr replaced by Lc; Lc = Refr is
+// the identity bit for bit (the added term is exactly 0).
+inline float record_rw(const FsTerms& f) { return 1.0f - f.a; }
+inline float refract_swap(float c, float rw, float lc, float refr) {
+  const float v = c + rw * (lc - refr);
+  return v > 0.0f ? v : 0.0f;
+}
+// The relative index of refraction from the FS's own F0 (normal incidence, air to the medium):
+// F0 = ((n - 1) / (n + 1))^2, so n = (1 + sqrt(F0)) / (1 - sqrt(F0)). The audited water F0 is
+// 0.16 Reflectance_Base^2 = 0.0196 (Reflectance_Base 0.35): n = 1.3256, water's 1.333 within the
+// game's rounding of its own parameter. Derived, not a constant of ours: a material with another F0
+// refracts by its own. F0 outside [0, 1) has no index (the caller keeps the FS's sample).
+inline bool ior_from_f0(float f0, float& n) {
+  if (!(f0 >= 0.0f) || !(f0 < 1.0f)) return false;
+  const float s = std::sqrt(f0);
+  n = (1.0f + s) / (1.0f - s);
+  return std::isfinite(n);
+}
+// HLSL refract(i, n, eta) (i the incident direction, n facing against it, eta = n1 / n2), in f32 as
+// the shader evaluates it; false on total internal reflection (not reachable from air: eta < 1).
+inline bool refract_dir(const float i[3], const float n[3], float eta, float t[3]) {
+  const float c = -(i[0] * n[0] + i[1] * n[1] + i[2] * n[2]);
+  const float k = 1.0f - eta * eta * (1.0f - c * c);
+  if (k < 0.0f) return false;
+  const float m = eta * c - std::sqrt(k);
+  for (int j = 0; j < 3; ++j) t[j] = eta * i[j] + m * n[j];
+  return true;
+}
+// Statistics words of the WATER_REFR variant (the 128-word slot, after the local-light words):
+// transmissive records (owned, valid, refraction words ok, 1 - a > 0), opaque (1 - a = 0), invalid
+// words, traced, the tiers (screen hit = composed, hidden, off screen, miss, aborted), not traced (N.V
+// <= 0 or no index), clamped, records without a usable copy (its size is not the target's); then
+// 64-bit sums x 4096: lum((1 - a) Refr) over composed, lum((1 - a) Lc) over composed, lum((1 - a)
+// Refr) over transmissive records, the hit's screen shift in pixels over composed, (1 - a) over hidden
+// and over traced (the transmission-weighted hidden share).
+inline constexpr uint32_t kCsRrRec = 96, kCsRrOpaque = 97, kCsRrInvalid = 98, kCsRrTraced = 99, kCsRrHit = 100;
+inline constexpr uint32_t kCsRrHidden = 101, kCsRrOff = 102, kCsRrMiss = 103, kCsRrAborted = 104, kCsRrNotTraced = 105;
+inline constexpr uint32_t kCsRrClamped = 106, kCsRrNoCopy = 107;
+inline constexpr uint32_t kCsRrSumGame = 108, kCsRrSumNew = 110, kCsRrSumAll = 112, kCsRrSumShift = 114;
+inline constexpr uint32_t kCsRrSumRwHidden = 116, kCsRrSumRwTraced = 118;
+inline constexpr uint32_t kCsRrWords = 120;
+static_assert(kCsRrWords <= 128, "the refraction words fit the 128-word slot");
+
 // ---- Which lighting a forward water pass composes with (core/water.cpp compose_at_pass_end) ----
 // run_post (and so the lighting's copy) is recorded when the lighting's command buffer ENDS
 // (core/gi.cpp flush), and the game records the forward water pass in another command buffer,
@@ -256,7 +316,9 @@ inline constexpr uint32_t kCsSlotWordsLs = 128;   // core/water.cpp kCStatBytes 
 // bit 1 the traced sun visibility (rt_water_shadows, WATER_SHADOWS variant only), bit 2 the traced
 // local-light visibility (rt_water_ls_shadows, WATER_LS variant only). Each bit both traces and
 // applies its term; a clear bit leaves its term the FS's.
-inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u;
+// Bit 3 the traced refraction (rt_water_refraction, WATER_REFR variant only; cleared per pass without the
+// water draw's colour copy).
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;

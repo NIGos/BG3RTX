@@ -47,9 +47,19 @@ m5w3 ran at S8 on 2026-11-01: patching worked (`water draws on a variant 174, wi
 - Shadows: `occluded % of traced` and `removed % of F L` reported; `unknown` and `clamped` near 0.
 - Cost: `[water] compose GPU` ON minus OFF (estimate < 0.15 ms); cost-on minus cost-off frame time against the OFF spread.
 
+5. `m5w6-water-refraction-s8-fg2` (Water Queens House, S8, 132 s, after `m5w2`): [PLAN_M5](../../../docs/PLAN_M5_WATER.md) M5.5 step 1 `rt_water_refraction` (a layer change: test-main must be that build). `rt_water_refraction=1` at launch (104-B records: the M5.4b words plus the FS's refraction sample and its weight 1 - a), compose, sun and local-light shadows off throughout (the A/B isolates the refraction), the key toggled live. Warm-up OFF, `precheck-refraction-on` (15 s: its `[water] refraction` expect line needs transmissive records and screen hits, else INVALID: no clear water in view), OFF-a / ON / OFF-b with a cost window and a PNG each, and `diag-view-refraction` (`rt_debug=28`: green composed, its brightness the weight 1 - a; red hidden; blue off screen; magenta miss; white aborted; dark cyan not traced; dark grey opaque water; orange no usable copy; yellow not owned / invalid).
+
+## Gates of m5w6 (read the deciding numbers in the log)
+- Valid run: as m5w2, plus `compose record buffer ... of 104 B`, `FS ... patched (... with the sun, local-light and refraction terms)`, `passes with the colour copy` > 0 and `without` near 0, `no usable copy 0`, `skipped: records without the refraction words 0`.
+- Offline expectation at this view (PLAN_M5 M5.5, replay pack depth, flat planes): transmissive records are the pool (c4e92ccd, about 2% of the view; the sea 7b44a567 is opaque with its template's OpacityBlendDistance 0: `opaque` large); of the traced pool rays about 65% screen hits, 35% hidden, 0% off screen; transmission-weighted hidden share about 9%; screen shift about 52 px at 2560 wide. A very different split means the view or the medium differs from the model: report it.
+- Key off is the game: `shot-off-a` vs `shot-off-b` within the OFF repeat noise.
+- Image: `shot-on` minus `shot-off-a` only on pixels `diag-view-refraction` shows green (the pool bed, shifted towards the camera: apparent depth), never on the sea, stone or characters. `clamped` near 0.
+- Energy: `ratio of the means` (traced / game over composed records) reported against the spatial spread of the copy: a displaced sample of the same bed, no systematic brightening expected; the medium (1 - a) is the game's.
+- Cost: `[water] refraction GPU` = the compose GPU line ON minus OFF (estimate < 0.05 ms: one ray per transmissive record, ~56k at this view); cost-on minus cost-off frame time against the OFF spread.
+
 Not in this batch: motion (one moving run with the key toggled, where the one-frame water geometry latency and the screen-space resolve matter to the image); the other six audited water FS (no id table yet: they keep the probe; mapped: 7b44a567, 99c1fcef, c4e92ccd).
 
-Duration: plans 536 s; four launches, about 17 min (at most 30 min of timeouts). Disk: 17 PNG traces at about 60 MB plus logs, about 1.1 GB.
+Duration: plans 668 s; five launches, about 21 min (at most 37 min of timeouts). Disk: 21 PNG traces at about 60 MB plus logs, about 1.3 GB. To save a launch, m5w6 (rt_water_refraction=1 at launch: its records hold the local-light words too) can carry m5w5's phases.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m5w` and receipt `m5-water.json` (test-main must be the m5-water-rf commit under test).
 
-Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3 + m5w4 + m5w5, M5.4b branch; budget now 20 min / 1.5 GB): all checks passed.
+Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3 + m5w4 + m5w5 + m5w6, M5.5 branch; budget now 22 min / 1.5 GB): all checks passed.

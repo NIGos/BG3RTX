@@ -32,6 +32,8 @@ These rules come from mistakes already made in this repo. They apply on every br
 - `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
   `python scripts/gen_settings_defaults.py`, and the settings test must pass.
 - `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.
+- Offline work runs at BelowNormal priority (`scripts/low-priority.ps1`, dot-sourced by build and
+  merge-green; children inherit it); no-activate live runs start the game BelowNormal too.
 - Tests: `.\scripts\build.ps1 -Test` (build + all CTests); `tests/qa_detectors_test.py`; QA
   harness `python -m scripts.qa` (docs/QA.md). Add a unit test for any non-trivial CPU logic.
 

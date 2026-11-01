@@ -435,6 +435,81 @@ int main(int argc, char** argv) {
   for (uint32_t w : {kCsLsSumL, kCsLsSumRemoved, kCsLsSumChk, kCsLsSumChkL, kCsLsSumBox}) CHECK(w % 2 == 0);
   CHECK((kFlagLs & (kFlagRf | kFlagSun)) == 0);
 
+  // 4j. M5.5 step 1 refraction. (1 - a) is the FS's dC/dRefr: refract_swap(C, 1 - a, Lc, Refr) is the FS
+  //     with its screen sample Refr replaced by Lc (the colour copy at the traced hit), for any Lc; Lc = Refr
+  //     is the identity bit for bit; a = 1 (opaque water) never changes C. Together with the other swaps
+  //     (independent terms of the FS) the single clamp equals the FS with every swap.
+  {
+    const FsTerms base{0.25f, 0.04f, 0.3f, 2.2f, 0.0196f, 0.0101725f, 0.93f, 0.002f, 0.97f, 0.003f, 0.5f, 0.07f, 0.02f};
+    uint32_t seed = 77u;
+    for (int it = 0; it < 4000; ++it) {
+      FsTerms f = base;
+      f.a = it % 7 == 0 ? 1.0f : it % 11 == 0 ? 0.0f : u01(seed);
+      f.refr = 4.0f * u01(seed) * u01(seed);
+      f.t = 0.5f + 0.5f * u01(seed);
+      const float c = fs_colour(f);
+      const float rw = record_rw(f);
+      const float lc = it % 13 == 0 ? f.refr : 4.0f * u01(seed) * u01(seed);
+      FsTerms g = f;
+      g.refr = lc;
+      const float want = fs_colour(g), got = refract_swap(c, rw, lc, f.refr);
+      const float tol = 4e-6f * (1.0f + std::fabs(c) + f.refr + lc);
+      CHECK(std::fabs(got - (want > 0.0f ? want : 0.0f)) <= tol);
+      if (lc == f.refr) CHECK(got == (c > 0.0f ? c : 0.0f));   // the identity, bit for bit
+      if (f.a == 1.0f) CHECK(got == (c > 0.0f ? c : 0.0f));     // opaque: the weight is exactly 0
+      // dC/dRefr numerically (C is linear in Refr): 1 - a.
+      FsTerms h = f;
+      h.refr = f.refr + 1.0f;
+      CHECK(std::fabs((fs_colour(h) - c) - rw) <= 4e-6f * (1.0f + std::fabs(c)));
+      // With the reflection swap in the same expression: the FS with both swaps.
+      const float L = 0.6f * f.k * f.sp;
+      FsTerms both = g;
+      both.sp = L / f.k;
+      const float wb = fs_colour(both);
+      const float gb = refract_swap(c + record_a(f) * L - record_b(f), rw, lc, f.refr);
+      if (wb > 0.0f) CHECK(std::fabs(gb - wb) <= tol + 4e-6f * record_b(f));
+    }
+    // n from the FS's own F0: the audited water's 0.16 x 0.35^2 = 0.0196 gives water's index.
+    float n = 0.0f;
+    CHECK(ior_from_f0(0.16f * 0.35f * 0.35f, n) && std::fabs(n - 1.3256f) < 5e-4f);
+    CHECK(std::fabs(((n - 1) / (n + 1)) * ((n - 1) / (n + 1)) - 0.0196f) < 1e-6f);   // the round trip
+    CHECK(ior_from_f0(0.0f, n) && n == 1.0f);                                         // no interface: no bend
+    CHECK(!ior_from_f0(1.0f, n) && !ior_from_f0(-0.1f, n) && !ior_from_f0(std::nanf(""), n));
+    // Snell: n sin(theta_t) = sin(theta_i), the refracted ray in the plane of incidence, unit length,
+    // below the surface, bent towards the normal; normal incidence goes straight through.
+    for (int it = 0; it < 2000; ++it) {
+      const float th = 1.5f * u01(seed), ph = 6.2831853f * u01(seed);
+      const float nn[3] = {0.0f, 1.0f, 0.0f};
+      const float in[3] = {std::sin(th) * std::cos(ph), -std::cos(th), std::sin(th) * std::sin(ph)};
+      float t[3];
+      CHECK(refract_dir(in, nn, 1.0f / 1.3256f, t));
+      const float len = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+      CHECK(std::fabs(len - 1.0f) < 1e-5f && t[1] < 0.0f);
+      const float st = std::sqrt(t[0] * t[0] + t[2] * t[2]);
+      CHECK(std::fabs(1.3256f * st - std::sin(th)) < 2e-5f && st <= std::sin(th) + 1e-6f);
+      CHECK(std::fabs(t[0] * in[2] - t[2] * in[0]) < 2e-5f);   // same azimuth: in the plane of incidence
+    }
+    const float down[3] = {0.0f, -1.0f, 0.0f}, up[3] = {0.0f, 1.0f, 0.0f};
+    float t[3];
+    CHECK(refract_dir(down, up, 1.0f / 1.3256f, t) && t[0] == 0.0f && t[2] == 0.0f && std::fabs(t[1] + 1.0f) < 1e-6f);
+    const float graze[3] = {0.999f, -0.0447f, 0.0f};
+    CHECK(!refract_dir(graze, up, 1.3256f, t));   // water to air beyond the critical angle: total internal reflection
+    // The statistics words: after the local-light words, inside the 128-word slot, sums as 64-bit pairs.
+    CHECK(kCsRrRec >= kCsLsWords && kCsRrNoCopy < kCsRrSumGame && kCsRrSumRwTraced + 2 == kCsRrWords);
+    CHECK(kCsRrWords <= kCsSlotWordsLs);
+    for (uint32_t w : {kCsRrSumGame, kCsRrSumNew, kCsRrSumAll, kCsRrSumShift, kCsRrSumRwHidden, kCsRrSumRwTraced})
+      CHECK(w % 2 == 0);
+    CHECK((kFlagRefr & (kFlagRf | kFlagSun | kFlagLs)) == 0);
+    // The record buffer: 104-B records get the same pixel count as the 32-B ones (record_mb), and the
+    // buffer description round-trips the size (record_bytes_of).
+    const uint32_t cap_rr = capacity_of_mb(record_mb(160, kRecordBytesRefr), kRecordBytesRefr);
+    CHECK(cap_rr >= cap - 2 && buffer_bytes(cap_rr, kRecordBytesRefr) <= (520ull << 20));
+    CHECK(record_mb(160, kRecordBytesLs) == 480 && record_mb(160, kRecordBytesSun) == 160 && record_mb(160, kRecordBytes) == 160);
+    ComposeBuffer rb{};
+    rb.record_bytes = kRecordBytesRefr;
+    CHECK(record_bytes_of(rb) == kRecordBytesRefr);
+  }
+
   // 4c. The statistics words (shaders/rt/water_compose.hlsl mirrors them): six tiers after the ray
   //     count, before the skin / clamped words; the m5w3 shader wrote tier k at 6 + k (tier 1 into
   //     the ray count).
@@ -562,6 +637,30 @@ int main(int argc, char** argv) {
       bad.ls_d12 = fi.C;   // a vec3 of main that is not a loop sum still types; the table is the claim (spirv-val)
       CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_ls, tmp, true, true) == PatchStatus::kApplied);
     }
+    // M5.4b off M5.5: the local-light patch word for word as before the refraction code (FNV-1a of the LS patch
+    // made by 48e1347, same addr / cap).
+    const uint64_t m54b = fi.fs == 0x7b44a567771ecbecull ? 0x5389606ce4c6d88eull
+                        : fi.fs == 0x99c1fcef82b253c1ull ? 0x9e156a501b26fbb6ull
+                        : fi.fs == 0xc4e92ccdb08dd777ull ? 0x092432cf04848295ull : 0;
+    CHECK(fnv(out_ls.data(), out_ls.size() * 4) == m54b);
+    // M5.5 on: the refraction words on top of the local-light record (2 more stores).
+    const uint32_t cap_rr = capacity_of_mb(record_mb(160, kRecordBytesRefr), kRecordBytesRefr);
+    std::vector<uint32_t> out_rr, out_ls2;
+    const PatchStatus st_rr = patch_fs(words.data(), words.size(), fi, addr, cap_rr, out_rr, false, false, true);
+    std::printf("patch %016llx with the refraction words %s: %zu -> %zu words\n", (unsigned long long)fi.fs,
+                patch_status_name(st_rr), words.size(), out_rr.size());
+    CHECK(st_rr == PatchStatus::kApplied && out_rr.size() > out_ls.size() && out_rr[3] > out_ls[3]);
+    CHECK(patch_fs(words.data(), words.size(), fi, addr, cap_ls, out_ls2, true, true, false) == PatchStatus::kApplied &&
+          out_ls2 == out_ls);
+    {
+      FsIds bad = fi;   // the refraction id must be a vec4 of main; refused only when its words are asked for
+      bad.refr = fi.C;
+      std::vector<uint32_t> tmp;
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_rr, tmp, true, true, true) == PatchStatus::kIdMismatch);
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_ls, tmp, true, true) == PatchStatus::kApplied);
+      bad.refr = fi.fog;   // a vec4 of main that is not the copy sample still types; the table is the claim
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_rr, tmp, true, true, true) == PatchStatus::kApplied);
+    }
     // Every original instruction is still there, in order (the patch only inserts).
     size_t q = 5;
     for (size_t p = 5; p < words.size();) {
@@ -601,6 +700,9 @@ int main(int argc, char** argv) {
       std::snprintf(name, sizeof name, "/water_fs_%08x_patched_ls.spv", unsigned(fi.fs >> 32));
       std::ofstream ol(std::string(argv[2]) + name, std::ios::binary);
       ol.write(reinterpret_cast<const char*>(out_ls.data()), std::streamsize(out_ls.size() * 4));
+      std::snprintf(name, sizeof name, "/water_fs_%08x_patched_refr.spv", unsigned(fi.fs >> 32));
+      std::ofstream orr(std::string(argv[2]) + name, std::ios::binary);
+      orr.write(reinterpret_cast<const char*>(out_rr.data()), std::streamsize(out_rr.size() * 4));
     }
     ++patched;
   }
