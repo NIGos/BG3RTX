@@ -1,5 +1,16 @@
 # BG3RTX current progress — 2026-10-31
 
+## Offline frame replay, steps 1-2 for gi_hit_direct (branch frame-replay, offline, 2026-11-01)
+
+- `binrame_replay.exe` (tools/frame_replay.md): loads a replay pack (common/replay_pack.h), rebuilds BLAS/TLAS
+  from InstInfo + soup/pool + the instance array, binds both sets, compiles the REAL `gi_trace_rt_hit_direct.hlsl`
+  with the layer's DXC flags and dispatches it; writes giRaw (raw + PFM), the live `GI hit direct` / `lights` /
+  `policy` / `hit material` lines and the GPU time. About 3 s per shader edit.
+- CTest `frame_replay_test`: synthetic lit + dark packs; 356 hidden hits qualified (reason 0), supported and
+  nonzero; two dispatches bit-identical; dark bounce exactly 0 with giRaw.a bit-equal. 69 CTests pass.
+- Not built: the live `replay_pack` writer (needs one host call, ABI 25; design in tools/frame_replay.md).
+  The live job `tools/live_batches/replay_capture/` (S8, one pack) passes its dry run and waits for it.
+
 ## M4.3 gi_hit_sun + shared sun roof rule (branch gi-hit-sun, offline, READY_FOR_LIVE)
 
 - `gi_hit_sun=0` (GUI `exp_gi_hit_sun`): the sun at gi_hit_direct's supported hidden hits, rf_hit_shade's
