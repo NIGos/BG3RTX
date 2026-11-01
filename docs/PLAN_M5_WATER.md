@@ -492,6 +492,35 @@ Scripts: the session scratchpad (`refr.py`, `refr2.py`); not kept in the repo (o
   run passes, batch 21.1 min, 1.31 GB). User check: Water Queens House, the pool from the balcony: with the key on
   the tiles and steps under the water move towards the camera (the pool looks shallower) and follow the waves.
 
+## Promotion to Ultra (2026-11-01, batch tools/live_batches/m5_promotion, NOT run)
+
+Gate table from the latest valid S8 runs (each key alone, static view; `py -3 -m tools.m5_promotion_gate <log>`).
+Energy is the post-water image (RR colour input) over the exposure, against the compose's own accounting:
+
+| key (log) | participation, every window | image energy: measured / predicted (tol.) | GPU ms | clamped |
+|---|---|---|---|---|
+| geometry (all) | 2 planes, 240 draws/window, overflow 0, failed 0 | - | build 0.28 | - |
+| reflections (m5w2 140754) | in front 9.67%; rays screen 14.8%, hidden 5.9%, off 1.6%, miss 77.7% | +0.44% / 0 (0.50%): matches | 0.119 | - |
+| compose (m5w3 121606) | 112-120 of 120 composed; 12.7% of owned; ratio bins 38/53/9%, means 0.31 | -2.19% / -0.07% (0.55%): DARKER | 0.096 | 0 |
+| shadows, R = C - D (m5w4 141148) | occluded 62.7%; removed 46.3-46.7% of water C | -9.10% / -9.39% (0.83%): matches | 0.113 | 0 every window (was 145573) |
+| ls_shadows (m5w5 122327) | 0.20% of owned; sum check 100.00% within 0.098%, ratio 0.99998-1.00001 | -2.56% / 0.00% (0.34%): DARKER | 0.181 | 0..46 per 120 frames |
+| refraction (m5w6 131651) | transmissive 51.7%, screen hit 69.6%, shift 24.1 px, ratio 1.013 | +0.85% / +0.02% (3.08%): matches | 0.240 | 0 |
+
+- Energy observable corrected. The m4 gate's 5c3fdabc is the lighting before the forward water pass: water reaches it
+  only through the eye adaptation (m5w4: exposure +2.74%, "+2.20% brighter" while the shadows removed 46% of the
+  water). The RR colour input after the water, divided by the probe's b0[0], shows -9.10% against the predicted -9.39%.
+- Glint noise. One frame per state is not enough: the water's sun glints (up to ~1000 against an image mean of 0.18)
+  carry about 100% of every frame-to-frame difference (about 1,900 preview pixels, OFF-b vs OFF-a included). The
+  two DARKER rows (compose, ls; one frame each, the darkening already in the water pass before the compose) are
+  within that noise (pooled OFF pairs: single-frame SD about 0.55%, up to 1.7% apart); unresolved until the batch's
+  3+3 OFF and 3 ON frames with the exposure held.
+- Missing before Ultra: the whole chain in one run; a second water scene (S1 docks no longer loads: Flymm Cargos
+  Basement - 101h 05m, family unknown); a moving window (the compose always runs on the previous lighting: 114-120
+  of 120 passes); multi-frame energy with the exposure held; frame time (every run was unfocused, 30 fps cap).
+- Preset commit (separate, merge only if the batch passes): the six knobs leave Experimental (Advanced, before the
+  Experimental section), on in Ultra only; the four restart keys also need sharc_device=1 (shaderInt64). Record
+  buffer 520 MB at the default `rt_water_compose_mb=160` (104-B records).
+
 ## Open questions
 
 - Does the water pipeline write depth? Answered offline (M5.1 status): no; the gate compares t_w with
