@@ -313,6 +313,18 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"gi_hit_sun", "1"}}, {{"exp_gi_hit_direct",1}}}},
    {}, {0,0,0,0}, true, {{"gi_hit_direct","1","Shaded hidden-surface bounce"}}},
 
+  {"exp_gi_far", "Far-field sun bounce",
+   "Lengthens the bounce rays from 1 m to the chosen reach. Surfaces up to that distance that are on screen, or "
+   "hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other "
+   "surfaces beyond 1 m keep the game's ambient. Requires Sunlit hidden-surface bounce. Quality and GPU cost "
+   "remain unqualified.",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   {{"off", "Off", 0, {{"gi_far", "0"}}, {}},
+    {"m4", "4 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "4"}}, {{"exp_gi_hit_sun",1}}},
+    {"m6", "6 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "6"}}, {{"exp_gi_hit_sun",1}}},
+    {"m8", "8 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "8"}}, {{"exp_gi_hit_sun",1}}}},
+   {}, {0,0,0,0}, true, {{"gi_hit_sun","1","Sunlit hidden-surface bounce"}}},
+
   {"exp_rf_hit_shade", "Shaded hidden-surface reflections",
    "Reflection rays that hit a surface hidden from the camera are shaded with that surface's verified native "
    "material and lighting (point and spot lights, the sun with a traced shadow ray, the game's ambient) "
@@ -458,7 +470,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 224 keys of bg3rtx.ini, in file order.
+// 226 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -592,6 +604,8 @@ inline constexpr KV kDefaults[] = {
     {"gi_rt_fallback", "0"},
     {"gi_hit_direct", "0"},
     {"gi_hit_sun", "0"},
+    {"gi_far", "0"},
+    {"gi_far_m", "6"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},

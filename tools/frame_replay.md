@@ -70,6 +70,13 @@ frame_replay --pt-self-test <dir>                                               
 - Calibration k = game screen radiance / PT radiance on the visible first hits of the same paths: it
   absorbs the fallback albedo, the estimated sun transmittance and what the PT lacks (ambient, emission).
   Shares (%) are scale-free; absolute comparisons use PT x k.
+- Cut-away roofs (`--define PT_ROOFS=1`): `py -3 tools/pt_roofs.py --pack <dir> --level <name>` first writes the
+  pack level's asset-DB roof volumes to `captures/pt_roofs.hlsli` (camera-relative, from the pack's cam2). Sun rays
+  through a padded volume (3 m around, `PT_ROOF_SUN_UP` 50 m up: the production rule) are occluded; path rays that
+  cross a volume's roof plane (`PT_ROOF_PLANE_UP` 3 m above the trigger top) end there with no radiance, and first
+  rays that do so are reported in the `aborted` fraction (0 without PT_ROOFS on a pack without aborts).
+- gi_far offline: `--define RT_GI_FAR=1 --define GI_FAR_M=6` runs the pass with the far rule (the pack's push holds
+  the base pass's radius; GI_FAR_M stands in for gi_far_m).
 - Cost kernels (`pt cost` lines): 1 spp with 1 and 2 vertices, rays up to 300 m and 8 m, median of 9
   dispatches, scaled per Mpx to the DLSS 4K render resolutions.
 - CTest `pt_reference_test`: a closed box (synthetic pack) where every vertex emits 1: Lambert rho 0.5 with

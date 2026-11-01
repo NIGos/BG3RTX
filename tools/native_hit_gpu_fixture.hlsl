@@ -27,6 +27,8 @@
 #include "../shaders/rt/native_hit_emission.hlsli"
 // D-LS exact-k (case 8, ls_k): the selection header gi/rt_local_shadows*_k.hlsl include (no scene).
 #include "../common/ls_exact_k.h"
+// gi_far (case 10): the per-ray rule of gi_trace_rt.hlsl RT_GI_FAR.
+#include "../shaders/gi/gi_far.hlsli"
 
 // Case record, 80 bytes (FxCase in the .cpp).
 //   0 p, 12 mode, 16 n, 28 key, 32 v (outgoing), 44 footprint, 48 albedo, 60 roughness,
@@ -45,10 +47,15 @@
 // Mode 8 (two-sided frame, rt_hit_material_instanced): p the ray origin, v its direction, n the authored N,
 //   c48 the triangle's geometric normal; rt_closest_hit, then a.x = nv_two_sided_sign(c48, n, RtHit.dir) (the
 //   consumer's N-column sign), a.y the hit t, 12 1 if aborted; b.rgb RtHit.dir; material status 0.
+// Mode 9 (gi_far, gi_far.hlsli): p the ray origin, v its unit direction; the ray reaches R = max(Push::radius,
+//   gi_rt_radius), the base radius R0 = gi_rt_radius. At the hit: native_hit_direct and native_hit_sun with the
+//   case material (word 76 bit 0: unqualified, bit 1: sun unsupported), then gi_far_hit as gi_trace_rt does.
+//   a.rgb the ray's bounce, 12 1 if aborted; b = (occlusion, w, w0), 28 the hit t (asuint, -1 none);
+//   c.rgb the sun term at the hit; 44 1 if the hit had radiance; 48 rho.
 [[vk::binding(60, 0)]] ByteAddressBuffer fxCases;
 [[vk::binding(61, 0)]] RWByteAddressBuffer fxOut;
 static const uint kFxDirect = 0u, kFxSun = 1u, kFxAo = 2u, kFxFurnace = 3u, kFxCombined = 4u, kFxSunDir = 5u, kFxEmission = 6u,
-                  kFxExactK = 7u, kFxTwoSided = 8u;
+                  kFxExactK = 7u, kFxTwoSided = 8u, kFxFar = 9u;
 
 NativeHitMaterial fx_material(float3 albedo, float rough, float metal, float refl, float3 n, uint channel) {
   NtInput i;
@@ -132,6 +139,30 @@ void main(uint id : SV_DispatchThreadID) {
     const RtHit h = rt_closest_hit(p, v, 100.0, cone);
     ra = float3(nv_two_sided_sign(c48, n, h.dir), h.t, 0.0); sa = h.aborted ? 1u : 0u;
     rb = h.dir; sb = 0u; m.status = 0u;
+  }
+  if (mode == kFxFar) {
+    RtCone cone = {footprint, 0.0};
+    const float R = max(pc.radius, pc.gi_rt_radius), R0 = max(pc.gi_rt_radius, 0.01);
+    const RtHit h = rt_closest_hit(p, v, R, cone);
+    const GiFarRay fr = gi_far_ray(h.t, h.aborted, R, R0);
+    const uint flags = fxCases.Load(a + 76u);
+    const float rho = gi_far_luminance(m.scattering.value.Rd);
+    float3 bounce = 0;
+    float occ = h.t >= 0.0 || h.aborted ? fr.w0 : 0.0;   // the fallback: base fade
+    // Bit 0: treated as unqualified (the output's material status stays the synthetic one's, 0).
+    if (h.t >= 0.0 && !h.aborted && m.status == 0u && (flags & 1u) == 0u) {
+      // The fixture's TLAS has no InstInfo rows (rt_hit_normal / native_hit_position need them): the case's
+      // normal n and the ray point, as the other cases pass them.
+      const float3 hp = p + v * h.t, hn = n;
+      const NativeHitDirect d = native_hit_direct(m, hp, -v, hn, footprint);
+      g_hs_seed = pcg3d(uint3(id, key, 0x2545f491u)).x;
+      HdDirect sun; sun.radiance = 0; sun.status = HdInvalid;
+      if ((flags & 2u) == 0u) sun = native_hit_sun(m, hp, -v, hn, footprint);
+      const GiFarHit fh = gi_far_hit(fr, h.t, R0, d.status == HdOk ? kGiFarLocalKnown : kGiFarLocalUnknown, d.radiance,
+                                     sun.status == HdOk, sun.radiance, rho);
+      bounce = fh.bounce; occ = fh.occ; rc = sun.radiance; lights = fh.radiance ? 1u : 0u;
+    }
+    ra = bounce; sa = h.aborted ? 1u : 0u; rb = float3(occ, fr.w, fr.w0); sb = asuint(h.t); ao = rho;
   }
   fxOut.Store3(o, asuint(ra)); fxOut.Store(o + 12u, sa);
   fxOut.Store3(o + 16u, asuint(rb)); fxOut.Store(o + 28u, sb);

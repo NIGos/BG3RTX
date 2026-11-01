@@ -65,6 +65,30 @@
   device-local, reduced per 8x8 group. 75 CTests, the sun patch passes spirv-val on the three dumps.
 - Expected cost < 0.05 ms (one first-hit ray per sunlit water pixel). Live: job `m5w4` (S8, OFF/ON/OFF, rt_debug 26),
   dry run passes. Local lights (M5.4b) designed, not built: PLAN_M5_WATER M5.4.
+## M4 bundle promotion to Ultra (branch, NOT merged; READY_FOR_LIVE, 2026-11-01)
+
+- Preset change: `rt_hit_material`, `rt_hit_material_instanced`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`,
+  `rt_hit_emission=1` on in Ultra only (knobs out of Experimental, under Advanced); Ultra adds `rt_emissive=1` and
+  capture sizes for the 64 B hit-material vertex (`rt_xfb_mb` 1024, `rt_cascade_mb` 427 = 384/160 x 64/24).
+  `rt_emissive` 0 -> 1 needs a restart. Settings test 542 checks, 75 CTests pass.
+- Measured so far (PLAN_M4 "Promotion"): rf_hit_shade tier (a) L_b / L_a S8 0.926, S6 1.091 after the box fix (was
+  1.48); costs rf_hit_shade +1.4 to +1.8 ms (rf pass), gi_hit_direct + sun +0.52 ms (gi trace), instanced +0.14 ms.
+- Live batch `tools/live_batches/m4_promotion` (camp, inn, S6, S8; ~18 min, 1.2-1.8 GB; dry run passes): bundle
+  OFF / ON / OFF cost, a PNG per cumulative step, S6 emission OFF/ON/OFF. Gate table: `py -3 -m tools.m4_promotion_gate`.
+  Merge the branch only if the energy and capacity gates pass.
+
+## gi_far: far-field sun bounce (branch, offline, READY_FOR_LIVE; promotion waits for a corrected reference, 2026-11-01)
+
+- Key `gi_far=0` / `gi_far_m=6` (GUI Experimental, off / 4 / 6 / 8 m, needs gi_hit_sun). RT_GI_FAR on the gi_hit_sun
+  files only; off is byte-identical SPIR-V (368 requests). Rays reach gi_far_m; screen hits and qualified sun-lit
+  hits replace the native ambient (qualified keep rho x w); every other hit keeps the old 1 m rule; roof rule for
+  the GI ray. Design: TRACK_C_GI "Far-field sun bounce". Fixture case 10 passes.
+- S8 replay (screen tier only, no VT cache): bounce 0.0069 -> 0.0105 / 0.0118 / 0.0129 at 4 / 6 / 8 m, 32 / 44 / 54%
+  of the PT's visible-far tier; giRaw.a 0.916 -> 0.886 / 0.875 / 0.867. Pass 0.58 -> 1.63 / 2.15 / 2.69 ms at
+  2.73 Mpx: +0.8 / +1.2 / +1.6 ms at 4K Performance before hit shading.
+- PT with the cut-away roofs (`PT_ROOFS=1`, tools/pt_roofs.py): far field on screen 56 -> 33%, sun 99 -> 84%, PT
+  total 14x lower. Go/no-go needs > ~30% far field from a casters-on, VT-cache, native-ambient pack. Live batch
+  `tools/live_batches/gi_far` (camp + S8, ~8 min, 0.4 GB; dry run passes) prepared, not queued.
 
 ## M6 offline PT reference on the S8 replay pack (offline, tools only, 2026-11-01)
 
