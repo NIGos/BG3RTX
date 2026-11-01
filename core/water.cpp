@@ -29,6 +29,14 @@
 //    C' = max(C + A L - B, 0); rt_debug 25 the delta view;
 //  - "[water] compose", "compose energy", "compose ratio", "compose GPU" every rt_timing_frames.
 // Key off: nothing is allocated, dispatched or bound; core/gi.cpp only tests the key.
+//
+// M5.4 water shadows (rt_water_shadows, default 0; needs rt_water_reflections=1 and the key on when
+// the water pipelines are created: the layer then patches the FS with the sun words, 40-byte
+// records). The same lighting copy and pass as M5.3, with the WATER_SHADOWS variant of the compose
+// shader: one sun ray per record with a sun term, C' = max(C - (1 - V) D, 0) (plus the reflection
+// term when rt_water_compose is on too); its statistics are reduced per group into a device-local
+// buffer and copied to the host slot after each dispatch. "[water] shadows" every rt_timing_frames;
+// rt_debug 26 the shadow view.
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -363,7 +371,7 @@ void maybe_log() {
 // ---- M5.3 composition (rt_water_compose; shaders/rt/water_compose.hlsl, common/water_compose.h) ----
 constexpr uint32_t kMaxComposePasses = 4;                 // timed compose dispatches per frame
 constexpr uint32_t kCQ = 2 + 2 * kMaxComposePasses;      // timestamps per frame slot
-constexpr uint32_t kCStatWords = 32;
+constexpr uint32_t kCStatWords = bg3::water::kCsSunWords;   // 32 M5.3 words + the M5.4 sun words
 constexpr VkDeviceSize kCStatBytes = 256, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
 constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
 // ONE camera block after the slots (common/water_compose.h lighting_use): every frame's copy
@@ -386,6 +394,10 @@ bool g_cimg_init = false, g_cbuf_zeroed = false;
 uint64_t g_cbuf_seen = 0;   // the record buffer the zero fill was for
 VkBuffer g_chost = VK_NULL_HANDLE;
 VkDeviceMemory g_chost_mem = VK_NULL_HANDLE;
+// M5.4: the WATER_SHADOWS compose (40-byte records) and its device-local statistics slots.
+bool g_csun = false;
+VkBuffer g_cdev = VK_NULL_HANDLE;
+VkDeviceMemory g_cdev_mem = VK_NULL_HANDLE;
 uint8_t* g_cmap = nullptr;
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
@@ -406,6 +418,8 @@ struct CWindow {
   uint64_t frames = 0, ran = 0, passes = 0;
   uint64_t w[kCStatWords] = {};
   double sumC = 0, sumB = 0, sumAL = 0, sumPos = 0, sumNeg = 0, sumBown = 0;
+  double sumD = 0, sumRm = 0;   // M5.4: lum(D) and the removed lum((1 - V) D) over sun records
+  uint64_t sun_passes = 0, no_sun_records = 0;
   std::vector<float> ms;
   uint64_t no_buffer = 0, layout = 0, size = 0, untimed = 0;
   // Passes: on this frame's lighting stash, on the previous lighting's (the pass recorded first),
@@ -417,6 +431,7 @@ CWindow g_cwin;
 VkDeviceSize cslot_off(uint32_t slot) { return VkDeviceSize(slot) * kCSlotBytes; }
 
 bool compose_wanted() { return host->cfg_int("rt_water_compose", 0) != 0 && water_rf_wanted(); }
+bool shadows_wanted() { return host->cfg_int("rt_water_shadows", 0) != 0 && water_rf_wanted(); }
 
 void release_compose_images() {
   for (Bg3Image* im : {&g_rad, &g_dep}) {
@@ -457,9 +472,19 @@ constexpr struct { uint32_t binding; VkDescriptorType type; } kCBind[] = {
 };
 constexpr uint32_t kNumCBind = uint32_t(sizeof kCBind / sizeof kCBind[0]);
 
-bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
+bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
+  if (sun && !g_cdev &&
+      !make_device_buffer(kRing * kCStatBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                                                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                          g_cdev, g_cdev_mem))
+    return false;
+  if (g_compose.p && g_csun != sun) {   // the record layout of the buffer decides the variant
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
+    g_compose = Pipe{};
+  }
+  g_csun = sun;
   if (!g_chost) {
     void* m = nullptr;
     if (!host->alloc_host_buffer(kCHostBytes,
@@ -503,7 +528,8 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
     g_cpush_bytes = push_bytes;
   }
   return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &&
-         make_pipe(g_compose, "rt/water_compose.hlsl", "water_compose", g_clayout);
+         make_pipe(g_compose, sun ? "rt/water_compose.hlsl?WATER_SHADOWS=1" : "rt/water_compose.hlsl", "water_compose",
+                   g_clayout);
 }
 
 // Reads the compose slot about to be reused (kRing frames later) into the window.
@@ -515,13 +541,15 @@ void collect_compose(uint32_t slot) {
     ++g_cwin.ran;
     g_cwin.passes += w[0];
     for (uint32_t i = 0; i < kCStatWords; ++i)
-      if (i < 16 || i > 27) g_cwin.w[i] += w[i];
+      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD)) g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
     g_cwin.sumB += u64(w, 18) / 4096.0;
     g_cwin.sumAL += u64(w, 20) / 4096.0;
     g_cwin.sumPos += u64(w, 22) / 4096.0;
     g_cwin.sumNeg += u64(w, 24) / 4096.0;
     g_cwin.sumBown += u64(w, 26) / 4096.0;
+    g_cwin.sumD += u64(w, bg3::water::kCsSunSumD) / 4096.0;
+    g_cwin.sumRm += u64(w, bg3::water::kCsSunSumRemoved) / 4096.0;
   }
   if (g_cqp) {
     const uint32_t n = 1 + (std::min)(g_cpasses[slot], kMaxComposePasses);
@@ -588,6 +616,23 @@ void maybe_log_compose() {
   host->log("[water] compose GPU %.3f ms median, p90 %.3f (%zu timed frames: the lighting copy + the compose dispatches; "
             "%llu passes beyond %u untimed)",
             med, p90, ms.size(), (unsigned long long)W.untimed, kMaxComposePasses);
+  if (g_csun || W.no_sun_records || host->cfg_int("rt_water_shadows", 0)) {
+    // M5.4: the traced sun visibility on the water (WATER_SHADOWS words, common/water_compose.h).
+    const double srec = double(w[kCsSunRec]), straced = double(w[kCsSunTraced]), socc = double(w[kCsSunOccluded]);
+    const double meanD = srec > 0 ? W.sumD / srec : 0.0, meanRm = srec > 0 ? W.sumRm / srec : 0.0;
+    const double removed_own = own > 0 ? W.sumRm / own : 0.0;
+    host->log("[water] shadows (%llu frames, %llu passes, variant %s): sun records %.0f/frame = %.2f%% of owned (no sun "
+              "term %.2f%%, invalid %llu); traced %.2f%% of sun records, occluded %.2f%% of traced (traced shadow share "
+              "%.2f%% of sun records), unknown %llu (kept); sun term D %.5f per sun record, removed %.5f = %.2f%% of D; "
+              "mean removed over owned %.6f = %.3f%% of mean C; clamped %llu; GPU %.3f ms median, p90 %.3f (the "
+              "compose dispatches with the sun ray + the lighting copy); skipped: records without the sun words %llu",
+              (unsigned long long)W.frames, (unsigned long long)W.sun_passes, g_csun ? "sun" : "none",
+              W.ran ? srec / double(W.ran) : 0.0, pct(srec, own), pct(double(w[kCsSunNone]), own),
+              (unsigned long long)w[kCsSunInvalid], pct(straced, srec), pct(socc, straced), pct(socc, srec),
+              (unsigned long long)w[kCsSunUnknown], meanD, meanRm, meanD > 0 ? 100.0 * meanRm / meanD : 0.0, removed_own,
+              meanC > 0 ? 100.0 * removed_own / meanC : 0.0, (unsigned long long)w[kCsSunClamped], med, p90,
+              (unsigned long long)W.no_sun_records);
+  }
   g_cwin = CWindow{};
 }
 
@@ -602,7 +647,15 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     g_st.frame = 0;
     return maybe_log_compose();
   }
-  if (!ensure_compose(alpha_layout, in.push_bytes)) {
+  // M5.4: the sun words exist only if rt_water_shadows was on when the water FS were patched.
+  const bool sun = record_bytes_of(cb) == kRecordBytesSun;
+  const bool want_rf = compose_wanted(), want_sun = shadows_wanted() && sun;
+  if (shadows_wanted() && !sun) ++g_cwin.no_sun_records;
+  if (!want_rf && !want_sun) {
+    g_st.frame = 0;
+    return maybe_log_compose();
+  }
+  if (!ensure_compose(alpha_layout, in.push_bytes, sun)) {
     ++g_cwin.layout;
     g_st.frame = 0;
     return maybe_log_compose();
@@ -627,11 +680,14 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   const uint32_t header[4] = {in.w, cb.capacity, 0, 0};
   vk.CmdUpdateBuffer(cmd, rb, 0, sizeof header, header);
   vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes, 0);
+  if (sun) vk.CmdFillBuffer(cmd, g_cdev, VkDeviceSize(slot) * kCStatBytes, kCStatBytes, 0);
   ComposeParams prm{};
   prm.a[0] = in.w;
   prm.a[1] = cb.capacity;
   prm.a[2] = uint32_t((std::max)(host->cfg_int("rt_debug", 0), 0));
-  prm.a[3] = 1u;
+  // M5.3's variant: bit 0 always (the pass runs only with the compose key). The WATER_SHADOWS one:
+  // each term by its key, live (common/water_compose.h kFlagRf, kFlagSun).
+  prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) : 1u;
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
   std::memcpy(g_cmap + cslot_off(slot) + kCStatBytes, &prm, sizeof prm);
   if (!g_cimg_init) {
@@ -734,11 +790,15 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
   if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
   else ++g_cwin.untimed;
+  // The WATER_SHADOWS variant counts into the device-local slot (one atomic per word per group),
+  // copied to the host slot after the dispatch; M5.3's variant into the host slot as before.
+  const bool dev_stats = g_csun && g_cdev;
   VkDescriptorBufferInfo bufs[6] = {{g_chost, kCCamOff, 400},
                                     {g_chost, kCCamOff + kCVpOff, 16},
                                     {g_rts, 0, kRtStatsBytes},
                                     {g_chost, cslot_off(slot) + kCStatBytes, sizeof(ComposeParams)},
-                                    {g_chost, cslot_off(slot), kCStatBytes},
+                                    dev_stats ? VkDescriptorBufferInfo{g_cdev, VkDeviceSize(slot) * kCStatBytes, kCStatBytes}
+                                              : VkDescriptorBufferInfo{g_chost, cslot_off(slot), kCStatBytes},
                                     {VkBuffer(g_st.buf.buffer), 0, g_st.buf.bytes}};
   VkDescriptorImageInfo imgs[3] = {{VK_NULL_HANDLE, g_dep.view, G}, {VK_NULL_HANDLE, g_rad.view, G},
                                    {VK_NULL_HANDLE, p->color_views[0], G}};
@@ -768,6 +828,13 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
   if (g_cqp && pass < kMaxComposePasses)
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 3 + pass * 2);
+  if (dev_stats) {   // the slot's running total (every pass of the slot adds, the last copy holds all)
+    memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    const VkBufferCopy cp{VkDeviceSize(slot) * kCStatBytes, cslot_off(slot), kCStatBytes};
+    vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &cp);
+    memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+    ++g_cwin.sun_passes;
+  }
   // The consumed records, the statistics and the target before the later passes and the host.
   memory_barrier(cmd, kCS, kAll | VK_PIPELINE_STAGE_HOST_BIT);
   if (from != G) image_barrier(cmd, p->color_images[0], G, from, kCS, kAll);
@@ -785,6 +852,11 @@ void release_compose() {
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_chost_mem);
   g_chost = VK_NULL_HANDLE;
   g_chost_mem = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_cdev);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_cdev_mem);
+  g_cdev = VK_NULL_HANDLE;
+  g_cdev_mem = VK_NULL_HANDLE;
+  g_csun = false;
   g_cmap = nullptr;
   if (g_cqp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_cqp);
   g_cqp = VK_NULL_HANDLE;
@@ -930,7 +1002,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   g_written[slot] = true;
   g_out_frame = now;
   g_out_w = in.w, g_out_h = in.h;
-  if (compose_wanted()) compose_at_lighting(cmd, in, alpha_layout);   // M5.3
+  if (compose_wanted() || shadows_wanted()) compose_at_lighting(cmd, in, alpha_layout);   // M5.3, M5.4
   maybe_log();
 }
 
@@ -940,7 +1012,8 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   const bool drawn = core_water_pass_take(cmd);
   const int view = host->cfg_int("rt_debug", 0);
   const bool views = view >= 21 && view <= 24 && water_rf_wanted();
-  const bool comp = compose_wanted();
+  // M5.3, or M5.4 alone on a buffer with the sun words (else compose_at_lighting stashed nothing).
+  const bool comp = compose_wanted() || (shadows_wanted() && g_csun);
   if (!views && !comp) return;
   if (p->color_count != 1 || p->color_formats[0] != VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
       p->depth_format != VK_FORMAT_D24_UNORM_S8_UINT || !p->color_views[0] || !p->color_images[0])
@@ -950,7 +1023,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   for (const auto& a : kAudited) ends |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
   if (!ends && !drawn) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (comp) compose_at_pass_end(cmd, p);   // M5.3, before the views (they show M5.2's data)
+  if (comp) compose_at_pass_end(cmd, p);   // M5.3 / M5.4, before the views (they show M5.2's data)
   if (!views) return;
   ++g_win.view_passes;
   if (!ends) ++g_win.view_passes_inner;

@@ -34,6 +34,15 @@
 //   22/23 sum positive lum(C' - C), 24/25 sum negative |lum(C' - C)|, 26/27 sum lum(B) over owned,
 //   28 composed, 29/30/31 composed with A L / B below 0.5 / 0.5..2 / above 2; sums x 4096 (64-bit).
 // Key off: nothing of this runs (no ordinary shader includes this file).
+//
+// M5.4 water shadows (WATER_SHADOWS=1, rt_water_shadows on when the water pipelines were created:
+// the records have kRecordBytesSun with the FS's unshadowed sun colour D, common/water_compose.h).
+// The audited water FS light the water with sun visibility 1 (clouds only, no cascade), so where
+// the record has a sun term one ray towards the sun disc (rt_shadow.hlsl's sample, the lighting's
+// sun_radius and rt_tmax) gives V and C' = max(C [+ A L - B] - (1 - V) D, 0): only the visibility
+// changes. Lit and unknown rays keep D. rt_debug 26: the shadow view. Statistics: the whole slot
+// reduced per 8x8 group in groupshared, one atomic per word per group into a device-local buffer
+// (core/water.cpp copies it to the host slot after each dispatch), words 32.. kCsSun*.
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
 
@@ -49,9 +58,41 @@ struct ComposeParams {
 [[vk::binding(66, 0)]] RWByteAddressBuffer cRec;                                     // the FS's records
 [[vk::binding(67, 0)]] [[vk::image_format("r11g11b10f")]] RWTexture2D<float3> target;   // the forward water target
 
+#ifdef WATER_SHADOWS
+static const uint kHeaderBytes = 64u, kRecordBytes = 40u;   // common/water_compose.h kRecordBytesSun
+#else
 static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_compose.h
+#endif
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
 
+#ifdef WATER_SHADOWS
+// Per-group reduction (8x8 threads): wave counts into groupshared, one device atomic per word per
+// group at the flush (every thread reaches it). Sums: a group adds at most 64 x 4.1e7 < 2^32.
+static const uint kCsWords = 44u;   // common/water_compose.h kCsSunWords
+groupshared uint gsC[kCsWords];
+void cstat_begin(uint gi) {
+  if (gi < kCsWords) gsC[gi] = 0u;
+  GroupMemoryBarrierWithGroupSync();
+}
+void cstat(uint word, bool cond) {
+  const uint n = WaveActiveCountBits(cond);
+  if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsC[word], n);
+}
+void csum64(uint word, float v, bool cond) {
+  const uint q = cond ? uint(clamp(v, 0.0, 1e4) * 4096.0 + 0.5) : 0u;
+  const uint s = WaveActiveSum(q);
+  if (WaveIsFirstLane() && s != 0u) InterlockedAdd(gsC[word], s);
+}
+void cstat_flush(uint gi) {
+  GroupMemoryBarrierWithGroupSync();
+  if (gi >= kCsWords || gsC[gi] == 0u) return;
+  // The low halves of the 64-bit sums (16..27 and 40..43, even words) carry into the next word.
+  const bool sum = ((gi >= 16u && gi < 28u) || gi >= 40u) && (gi & 1u) == 0u;
+  uint old;
+  cStats.InterlockedAdd(gi * 4u, gsC[gi], old);
+  if (sum && old + gsC[gi] < old) cStats.InterlockedAdd(gi * 4u + 4u, 1u);
+}
+#else
 void cstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
   if (WaveIsFirstLane() && n != 0u) cStats.InterlockedAdd(word * 4u, n);
@@ -65,6 +106,7 @@ void csum64(uint word, float v, bool cond) {
     if (old + s < old) cStats.InterlockedAdd(word * 4u + 4u, 1u);
   }
 }
+#endif
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
 [numthreads(8, 8, 1)]
@@ -94,7 +136,12 @@ bool same_encoded(float c, float t, int mbits) {
 }
 
 [numthreads(8, 8, 1)]
+#ifdef WATER_SHADOWS
+void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
+  cstat_begin(gi);
+#else
 void water_compose(uint3 tid : SV_DispatchThreadID) {
+#endif
   g_rt_pass = kRtPassRefl;
   const uint2 fp = tid.xy;
   if (all(fp == 0)) cStats.InterlockedAdd(0, 1u);
@@ -128,7 +175,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   const float3 V = -dir;
   const bool smooth = rough <= cp.b.x;
   const bool above = dot(N, V) > 0.0;
+#ifdef WATER_SHADOWS
+  const bool trace = valid && smooth && above && (cp.a.w & 1u) != 0u;   // kFlagRf: rt_water_compose
+#else
   const bool trace = valid && smooth && above;
+#endif
   uint tier = 0u;
   bool skin = false;
   float3 L = 0.0.xxx;
@@ -171,8 +222,45 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
     }
   }
   const bool composed = tier == 1u;
+#ifdef WATER_SHADOWS
+  // M5.4: the FS's sun visibility (1) replaced by one traced ray: remove (1 - V) D.
+  uint2 r2 = 0u;
+  if (has) r2 = cRec.Load2(at + 32u);
+  const float2 d01 = f16tof32(uint2(r2.x, r2.x >> 16)), d2m = f16tof32(uint2(r2.y, r2.y >> 16));
+  const float3 D = float3(d01, d2m.x);
+  const bool sun_on = (cp.a.w & 2u) != 0u;   // kFlagSun: rt_water_shadows
+  const bool d_ok = all(isfinite(D)) && all(D >= 0.0) && d2m.y == 1.0;
+  const bool sunrec = sun_on && valid && d_ok && any(D > 0.0);
+  const float3 Ls = normalize(cam.v0.xyz);
+  uint sv = kRtLit;
+  bool straced = false;
+  if (sunrec && dot(N, Ls) > 0.0) {
+    g_rt_pass = kRtPassSun;
+    float3 sdir = Ls;
+    if (pc.sun_radius > 0.0) {   // rt_shadow.hlsl's uniform sample of the sun's disc
+      uint sd = pixel_seed(fp, 1u);
+      const float u1 = rand01(sd), u2 = rand01(sd);
+      const float3 st = abs(Ls.y) < 0.99 ? normalize(cross(float3(0, 1, 0), Ls)) : normalize(cross(float3(0, 0, 1), Ls));
+      const float3 sb = cross(Ls, st);
+      const float sr = sqrt(u1) * tan(pc.sun_radius), sphi = 6.2831853 * u2;
+      sdir = normalize(Ls + (st * cos(sphi) + sb * sin(sphi)) * sr);
+    }
+    const float spa = pixel_angle(uv);
+    const float3 so = P + N * (t * spa);   // the scene TLAS has no water: one footprint clears the surface
+    RtCone scone = {t * spa, spa};
+    if (all(isfinite(so)) && all(isfinite(sdir))) {
+      sv = rt_visibility(so, sdir, pc.rt_tmax, scone);
+      straced = true;
+    }
+  }
+  const bool occluded = straced && sv == kRtOccluded;
+  const float3 Rm = occluded ? D : 0.0.xxx;   // (1 - V) D
+  const float3 Cu = Ct + (composed ? A * L - B : 0.0.xxx) - Rm;
+  const float3 Cn = composed || occluded ? max(Cu, 0.0) : Ct;
+#else
   const float3 Cu = Ct + A * L - B;
   const float3 Cn = composed ? max(Cu, 0.0) : Ct;
+#endif
   const float d = lum(Cn) - lum(Ct);
   cstat(1, has);
   cstat(2, own);
@@ -185,7 +273,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   // ray count (7) and every logged tier was the next one (m5w3: "off screen 66%" were sky misses).
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
   cstat(14, trace && tier == 2u && skin);
+#ifdef WATER_SHADOWS
+  cstat(15, composed && any(Ct + A * L - B < 0.0));
+#else
   cstat(15, composed && any(Cu < 0.0));
+#endif
   csum64(16, lum(Ct), own);
   csum64(18, lum(B), composed);
   csum64(20, lum(A * L), composed);
@@ -200,11 +292,38 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
   cstat(29, composed && rb > 0.0 && rr < 0.5);
   cstat(30, composed && rb > 0.0 && rr >= 0.5 && rr <= 2.0);
   cstat(31, composed && rb > 0.0 && rr > 2.0);
+#ifdef WATER_SHADOWS
+  cstat(32, sunrec);
+  cstat(33, straced);
+  cstat(34, occluded);
+  cstat(35, straced && sv == kRtUnknown);
+  cstat(36, sun_on && valid && d_ok && !any(D > 0.0));
+  cstat(37, sun_on && valid && !d_ok);
+  cstat(38, occluded && any(Cu < 0.0));
+  csum64(40, lum(D), sunrec);
+  csum64(42, lum(Rm), sunrec);
+  cstat_flush(gi);
+#endif
   if (!has) return;
   // rt_debug 25, over every record of this pass (exact codes, no tonemap of ours):
   //   composed: green = the relative brightening d / lum(C), red = the relative darkening;
   //   kept (unresolved ray): dark blue; kept (rough or below the surface): dark cyan;
   //   not owned (another fragment's colour) or invalid: yellow.
+#ifdef WATER_SHADOWS
+  // rt_debug 26, over every record of this pass: occluded = red (the removed share of C, at least
+  // 0.25), lit = green 0.35, unknown (aborted, kept) = blue, no sun term = dark grey, a sun term at
+  // N.L <= 0 of the FS's N (not traced) = dark magenta, not owned / invalid = yellow.
+  if (cp.a.z == 26u) {
+    const float share = lum(Rm) / max(lum(Ct), 1e-4);
+    target[fp] = !own || !valid ? float3(1, 1, 0)
+               : !sunrec ? float3(0.08, 0.08, 0.08)
+               : !straced ? float3(0.25, 0, 0.25)
+               : occluded ? float3(max(saturate(share), 0.25), 0, 0)
+               : sv == kRtUnknown ? float3(0, 0, 1)
+               : float3(0, 0.35, 0);
+    return;
+  }
+#endif
   if (cp.a.z == 25u) {
     const float rel = d / max(lum(Ct), 1e-4);
     const float3 c = !own || !valid ? float3(1, 1, 0)
@@ -212,7 +331,13 @@ void water_compose(uint3 tid : SV_DispatchThreadID) {
                    : composed ? float3(max(-rel, 0.0), max(rel, 0.0), 0.0)
                    : float3(0, 0, 0.3);
     target[fp] = c;
+#ifdef WATER_SHADOWS
+  } else if (composed || occluded) {   // each term only where its flag traced it
+    target[fp] = Cn;
+  }
+#else
   } else if (composed && (cp.a.w & 1u) != 0u) {
     target[fp] = Cn;
   }
+#endif
 }

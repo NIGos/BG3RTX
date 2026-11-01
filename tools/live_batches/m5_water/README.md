@@ -28,9 +28,18 @@ m5w3 ran at S8 on 2026-11-01: patching worked (`water draws on a variant 174, wi
 - Composition: `owned` share (not owned is overlapping water), `unresolved (probe kept)` share, `kept: rough` share, tiers; `compose energy`: B removed vs A L added, mean delta per composed pixel and over owned as % of mean C (reported: the traced reflection is meant to differ from the probe; no brightness gate on a correction of the probe's error), `clamped` near 0.
 - Cost: `[water] compose GPU` median and p90 (copy + compose dispatches); cost-on minus cost-off frame time against the OFF spread.
 
+3. `m5w4-water-shadows-s8-fg2` (Water Queens House, S8, 132 s, after `m5w2`): [PLAN_M5](../../../docs/PLAN_M5_WATER.md) M5.4 `rt_water_shadows` (sun; a layer change: test-main must be that build). `rt_water_shadows=1` at launch (the water FS are patched with the sun words, 40-B records), compose off throughout (the A/B isolates the sun visibility), the shadow key toggled live. Warm-up OFF, `precheck-shadows-on` (15 s: its `[water] shadows` expect line needs sun records and traced rays above 0, else INVALID), OFF-a / ON / OFF-b with a cost window and a PNG each, and `diag-view-shadow` (`rt_debug=26`: red occluded, its brightness the removed share of C; green lit; blue unknown; dark grey no sun term; dark magenta sun term at N.L <= 0; yellow not owned).
+
+## Gates of m5w4 (read the deciding numbers in the log)
+- Valid run: as m5w2, plus `compose record buffer ... of 40 B`, `FS 7b44a567... / c4e92ccd... patched (... with the sun term)`, `compose variants` with `water draws on a variant` > 0, `refused 0`, `failed 0`; `[water] shadows ... variant sun ... skipped: records without the sun words 0`.
+- Key off is the game: `shot-off-a` vs `shot-off-b` within the OFF repeat noise.
+- Image: `shot-on` only darker than OFF, only on water pixels that `diag-view-shadow` shows red (the temple and columns over the pool). Brighter anywhere is a FAIL (D >= 0 by construction).
+- Shadows: `occluded % of traced` > 0 at S8 (the deciding observable: the game's water has sun visibility 1), `unknown` near 0, `clamped` near 0; `removed % of D` and `mean removed over owned % of mean C` reported (physical darkening, no brightness gate).
+- Cost: `[water] shadows GPU` median and p90 (copy + compose with the sun ray; estimate < 0.05 ms); cost-on minus cost-off frame time against the OFF spread.
+
 Not in this batch: motion (one moving run with the key toggled, where the one-frame water geometry latency and the screen-space resolve matter to the image); the other six audited water FS (no id table yet: they keep the probe; mapped: 7b44a567, 99c1fcef, c4e92ccd).
 
-Duration: plans 272 s; two launches, about 9 min (at most 15 min of timeouts). Disk: 9 PNG traces at about 60 MB plus logs, about 0.6 GB.
+Duration: plans 404 s; three launches, about 13 min (at most 22 min of timeouts). Disk: 13 PNG traces at about 60 MB plus logs, about 0.8 GB.
 Start, results and rollback: as in ../lean_regression/README.md with this folder, prefix `m5w` and receipt `m5-water.json` (test-main must be the m5-water-rf commit under test).
 
-Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3, branch m5-compose on main 3e7f126): all checks passed.
+Offline check: `powershell -File tools\live_batches\m5_water\dryrun.ps1 [-Out <scratch dir>]`. Last result 2026-11-01 (m5w2 + m5w3 + m5w4, M5.4 branch on main 92c71e0): all checks passed.

@@ -1,5 +1,18 @@
 # BG3RTX progress - 2026-11-01 (main f31c62b, ABI 25)
 
+## M5.4 water sun shadows (offline, READY_FOR_LIVE, 2026-11-01)
+
+- Finding: the audited water FS (7b44a567, 99c1fcef, c4e92ccd) light the water with sun visibility 1. Their sun
+  term has the clouds but no cascade sample, so the temple and columns cast no shadow on the S8 pool.
+- `rt_water_shadows=0` (GUI `exp_water_shadows`; on needs a restart, off is live; needs `rt_water_reflections`):
+  the patched FS also stores its unshadowed sun term D = a T X (Sd + Ss) (40-B records), and the compose pass
+  traces one sun-disc ray per record: C' = max(C - (1 - V) D, 0). Only the visibility changes; lit and unknown
+  rays keep C. Alone or with `rt_water_compose`. rt_debug 26 the shadow view; log `[water] shadows`.
+- Key off: patch, buffer and compose SPIR-V are M5.3's word for word (FNV pinned in the test). Counters are
+  device-local, reduced per 8x8 group. 75 CTests, the sun patch passes spirv-val on the three dumps.
+- Expected cost < 0.05 ms (one first-hit ray per sunlit water pixel). Live: job `m5w4` (S8, OFF/ON/OFF, rt_debug 26),
+  dry run passes. Local lights (M5.4b) designed, not built: PLAN_M5_WATER M5.4.
+
 ## Wind clip tolerance for rt_hit_material_instanced (offline, READY_FOR_LIVE, 2026-11-01)
 
 - Live S14 (m4i 07:46): instanced key ON raised qualified 22% -> 36-40% but reason `clip` 0 -> 0.4-1.9M per 120

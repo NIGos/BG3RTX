@@ -50,6 +50,11 @@ int main(int argc, char** argv) {
       }
   }
   CHECK(bases > 0);
+  for (const char* r : kFixedRequests) {   // outside gi/: each names an existing file
+    const std::string f(r, std::strchr(r, '?'));
+    CHECK(std::filesystem::exists(root / "shaders" / f));
+    want.insert(r);
+  }
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {
     std::ofstream o(manifest, std::ios::binary);

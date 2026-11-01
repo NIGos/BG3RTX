@@ -229,6 +229,66 @@ GPU 0.022 ms, reflections 0.12 ms.
   gets a pass; 100 allows a slot without one where the recording order flips between frames.
 
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
+
+#### Design (2026-11-01, from the three S8/S1 FS dumps, spirv-dis --raw-id)
+- What lights the water. In all three mapped FS (7b44a567, 99c1fcef, c4e92ccd) the end of main is
+  `Lw = ((Ld + Sd) + (Ls + Ss)) * m + (Kd + Ks) * k`: Ld/Ls the local lights' diffuse/specular sums of the
+  clustered loop (set 2 b16 records, b10-b12 tiles), Sd/Ss the sun's diffuse/specular times N.L, m =
+  mix(1, 1, b26 _m1) = 1. The sun radiance is `Lsun = sun colour (atmosphere) * clouds * b0 exposure`
+  (c4e92ccd `_3224 = _1485 * (_1657 * _20._m0[0])`, `_1657` = the two cloud-shadow layers b29/b30 and
+  b4x): NO cascade or other geometric visibility. The FS has no shadow-map sample at all; its only
+  textureGather is the local lights' shadow atlas (b28, records b27). So, correcting the brief: the game's
+  water gets no sun shadow from the temple or the columns (sun visibility 1, clouds only), and its local
+  lights with a game shadow map are shadowed by the atlas, the others not.
+- The record can carry the sun term: `D = a T X (Sd + Ss) m` is dC/dDsun times the unshadowed sun term
+  (the M5.3 G = a T X times the FS's own SSA values; ids per FS in water_fs_patch.h kFsIds: 7b44a567
+  %3889 %3892 %3898, 99c1fcef %4087 %4090 %4096, c4e92ccd %3310 %3313 %3319). Two more words per record
+  (half3 D + a marker), 40 B instead of 32.
+- Replacement, visibility only: `C' = max(C - (1 - V) D, 0)`, V from one ray towards the sun disc from
+  the FS's own surface point (P = t dir, its shading N for the offset; rt_shadow.hlsl's disc sample,
+  `sun_radius`, `rt_tmax`) into the scene TLAS (no water in it: no self-shadow). Lit and unknown
+  (aborted) rays keep C bit-identically; the clouds stay in D (they are the game's radiance, not
+  visibility). With M5.3 on, the reflection term is added in the same expression (independent terms).
+  The water's position is the lighting's camera times the FS's t, as M5.3 (one frame old when the pass
+  composes with the previous lighting).
+- Energy rule: the unshadowed radiance is the FS's own; only V changes. Static camera: ON can only be
+  darker, by exactly the occluded records' D (logged as "removed"); V = 1 everywhere is the identity
+  (unit test 4e). Brightening is impossible by construction (D >= 0, clamp at 0).
+- Local lights (M5.4b, not built): the loop sums are not separable per light in the record. Plan: record
+  Ld + Ls (G times, two more words) and reuse the D-LS selection (TRACK_D_LOCAL_LIGHTS RIS, one light
+  per pixel) only for lights WITHOUT a game shadow map (V_game = 1 in the FS): evaluate that light's
+  unshadowed term with the FS's own BRDF terms (Burley diffuse 0.3183, GGX with the FS's F0/roughness),
+  trace its visibility, `C' = C - (1 - V_k) D_k / p_k`. Gate first (D-EN4 style): our sum of D_k over all
+  unshadowed lights reproduces the recorded local sum within half precision where no shadowed light
+  contributes; shadow-mapped lights keep the atlas (replacing them needs the FS's per-light atlas term).
+- Cost estimate: one first-hit-terminating ray per water pixel with a sun term. The deferred sun pass
+  traces 2.73 M rays in 0.08-0.11 ms (TRACK_D_ALPHA_GI); S8's water is ~8% of the view, so the sun ray
+  adds ~0.01-0.02 ms to the compose dispatch (M5.3: 0.022 ms copy + compose). Expected `[water] shadows
+  GPU` < 0.05 ms.
+
+#### M5.4 status (2026-11-01, branch worktree-agent-ae7ec6c83bc4f7137, offline, READY_FOR_LIVE)
+- Built (sun only): `rt_water_shadows` (GUI `exp_water_shadows`, Experimental, needs
+  `exp_water_reflections`; enabling needs a restart like rt_water_compose, off is live). Works alone or
+  with `rt_water_compose`. Files: `common/water_compose.h` (40-B record, `record_d`, `shadow`, flags, sun
+  statistics words 32-43), `common/water_fs_patch.h` (sun ids, `patch_fs(..., sun)`), `layer/water.cpp`
+  (40-B buffer and the sun patch when the key is on at creation; swap with either key), `core/water.cpp`
+  (variant choice, flags, device-local statistics, `[water] shadows`), `shaders/rt/water_compose.hlsl`
+  `?WATER_SHADOWS=1` (sun ray, per-group reduced statistics, rt_debug 26).
+- Key off: the patch, the buffer and the compose shader are M5.3's word for word (test pins the FNV of the
+  three patched modules made by main 92c71e0; the plain water_compose.hlsl compiles to identical SPIR-V;
+  no other shader changed). The WATER_SHADOWS variant also moves M5.3's own counters to device-local
+  memory, reduced per 8x8 group (the plain M5.3 variant still adds per wave into the host slot).
+- Offline: water_compose_test 4e (the FS model: shadow = the FS with sun visibility V, identity at V = 1,
+  D never above C, both swaps together) and the sun patch of the three dumps (spirv-val clean, decompiles to
+  `D = G * ((Sd + Ss) * m)` stores at words 8-9); 75 CTests; shader_variant_test lists the fixed request.
+- Log: `[water] shadows (N frames, P passes, variant sun): sun records R/frame = x% of owned (no sun term,
+  invalid); traced y% of sun records, occluded z% of traced (traced shadow share w% of sun records),
+  unknown; sun term D, removed, % of D; mean removed over owned = q% of mean C; clamped; GPU median, p90`.
+  `[water] compose: FS ... patched (a -> b words, with the sun term)`; compose record buffer `of 40 B`.
+- Live: job `m5w4-water-shadows-s8-fg2` (tools/live_batches/m5_water). Deciding: `[water] shadows` with
+  traced > 0 and occluded > 0 in the ON phase at S8 (the temple and columns over the pool), `removed`
+  > 0 and only on water (shot-on minus shot-off-a coloured only where rt_debug 26 is red), shot-off-a vs
+  shot-off-b within the OFF repeat noise, GPU median against the estimate.
 ### M5.5 Transmission and absorption, only after medium and material mapping are proven.
 
 ## Open questions

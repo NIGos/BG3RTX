@@ -5,7 +5,7 @@
 // The capture ("the minimal extra copy"): the factors of the probe term are not reconstructable
 // after the forward water pass (the FS's normal needs its interpolated UV and tangent frame,
 // its opacity and fog need the flow-mapped textures at that UV), so the audited water FS writes
-// them itself. common/water_fs_patch.h adds, at the end of its main, eight 32-bit stores into
+// them itself. common/water_fs_patch.h adds, at the end of its main, eight (M5.4: ten) 32-bit stores into
 // one device buffer (a physical storage buffer address baked into the patched module; the
 // game's pipeline layout and descriptor sets are untouched). The layer swaps the variant in for
 // the game's pipeline around each audited water draw while the key is on; its colour output is
@@ -44,6 +44,14 @@ namespace bg3::water {
 inline constexpr uint32_t kHeaderBytes = 64;
 inline constexpr uint32_t kRecordBytes = 32;
 inline constexpr uint32_t kRecordWords = kRecordBytes / 4;
+// M5.4 (rt_water_shadows on when the water pipelines are created): the record grows by two words,
+//   w8 half2(D.r, D.g)  w9 half2(D.b, 1)
+// D = G * Dsun, Dsun = the FS's sun term in Lw (diffuse + specular, cloud shadow and k included,
+// NO geometric visibility: the audited water FS sample no cascade, only the clouds), so dC/dDsun = G
+// and C' = C - (1 - V) D replaces the FS's sun visibility (1) by the traced V. Without the key at
+// creation the patch, the buffer and the compose shader are the M5.3 ones, word for word.
+inline constexpr uint32_t kRecordBytesSun = 40;
+inline constexpr uint32_t kRecordWordsSun = kRecordBytesSun / 4;
 
 inline constexpr const char* kComposeKey = "bg3rtx.water_compose";
 inline constexpr uint32_t kComposeVersion = 1;
@@ -55,24 +63,30 @@ struct ComposeBuffer {
   uint32_t capacity;    // records (without the sink)
   uint64_t buffer;      // VkBuffer (STORAGE_BUFFER | SHADER_DEVICE_ADDRESS | TRANSFER_DST)
   uint64_t bytes;       // its size
-  uint32_t pad[10];
+  uint32_t record_bytes;   // kRecordBytes or kRecordBytesSun (M5.4); 0 (an older layer) = kRecordBytes
+  uint32_t pad[9];
 };
 static_assert(sizeof(ComposeBuffer) == 64, "ComposeBuffer layout is shared by the layer and the core");
 
-inline uint64_t buffer_bytes(uint32_t capacity) {
-  return uint64_t(kHeaderBytes) + (uint64_t(capacity) + 1) * kRecordBytes;
+inline uint64_t buffer_bytes(uint32_t capacity, uint32_t record_bytes = kRecordBytes) {
+  return uint64_t(kHeaderBytes) + (uint64_t(capacity) + 1) * record_bytes;
 }
 // Records that fit in `mb` MiB (header and sink included), at least 1.
-inline uint32_t capacity_of_mb(int mb) {
+inline uint32_t capacity_of_mb(int mb, uint32_t record_bytes = kRecordBytes) {
   const uint64_t bytes = uint64_t(mb < 1 ? 1 : mb > 2048 ? 2048 : mb) << 20;
-  const uint64_t n = (bytes - kHeaderBytes) / kRecordBytes;
+  const uint64_t n = (bytes - kHeaderBytes) / record_bytes;
   return n > 1 ? uint32_t(n - 1) : 1u;
 }
+inline uint32_t record_bytes_of(const ComposeBuffer& b) {
+  return b.record_bytes == kRecordBytesSun ? kRecordBytesSun : kRecordBytes;
+}
 
-inline void publish_buffer(ComposeBuffer* dst, uint64_t buffer, uint64_t bytes, uint32_t capacity) {
+inline void publish_buffer(ComposeBuffer* dst, uint64_t buffer, uint64_t bytes, uint32_t capacity,
+                           uint32_t record_bytes = kRecordBytes) {
   dst->buffer = buffer;
   dst->bytes = bytes;
   dst->capacity = capacity;
+  dst->record_bytes = record_bytes;
   std::atomic_ref<uint32_t>(dst->version).store(kComposeVersion, std::memory_order_release);
 }
 inline bool read_buffer(const ComposeBuffer* src, ComposeBuffer& out) {
@@ -80,7 +94,7 @@ inline bool read_buffer(const ComposeBuffer* src, ComposeBuffer& out) {
   const uint32_t v = std::atomic_ref<uint32_t>(const_cast<ComposeBuffer*>(src)->version).load(std::memory_order_acquire);
   if (v != kComposeVersion) return false;
   out = *src;
-  return out.buffer != 0 && out.capacity != 0 && out.bytes >= buffer_bytes(out.capacity);
+  return out.buffer != 0 && out.capacity != 0 && out.bytes >= buffer_bytes(out.capacity, record_bytes_of(out));
 }
 
 // Whether a B10G11R11 channel value t (read back from the attachment) is the encoding of the
@@ -105,9 +119,10 @@ inline bool same_encoded(float c, float t, int mantissa_bits) {
 // hit than the probe's radiance in that direction, never a unit factor.
 struct FsTerms {
   float refr, direct, kd, sp, e, k, x, ge, t, s, a;
+  float sun = 0.0f;   // M5.4: the sun term of Lw (direct holds the local lights), visibility 1 in the FS
 };
 inline float fs_colour(const FsTerms& f) {
-  const float lw = f.direct + (f.kd + f.sp * f.e) * f.k;
+  const float lw = f.direct + f.sun + (f.kd + f.sp * f.e) * f.k;
   return f.refr + ((lw * f.x + f.ge) * f.t + f.s - f.refr) * f.a;
 }
 inline float record_a(const FsTerms& f) { return f.x * (f.a * f.t) * f.e; }
@@ -115,6 +130,19 @@ inline float record_b(const FsTerms& f) { return f.x * (f.a * f.t * f.k) * (f.sp
 inline float compose(float c, float a, float l, float b) {
   const float v = c + a * l - b;
   return v > 0.0f ? v : 0.0f;
+}
+// ---- M5.4 sun visibility (rt_water_shadows; shaders/rt/water_compose.hlsl WATER_SHADOWS) ----
+// D = a T X Dsun = dC/dDsun * Dsun: the record's sun word, the colour the FS's unshadowed sun adds.
+// The FS lights the water with sun visibility 1 (no cascade sample in any audited water FS; the
+// cloud shadow is part of its sun radiance and stays). The compose swaps that 1 for the traced
+// visibility V of one ray towards the sun disc: C' = max(C - (1 - V) D, 0) (with M5.3 on, the
+// reflection's A L - B is added in the same expression: the two terms are independent in the FS).
+// V = 1 (lit, or an aborted / unknown ray: the FS's own value) leaves C bit-identical; only the
+// visibility changes, never the unshadowed radiance.
+inline float record_d(const FsTerms& f) { return f.x * (f.a * f.t) * f.sun; }
+inline float shadow(float c, float d, float v) {
+  const float r = c - (1.0f - v) * d;
+  return r > 0.0f ? r : 0.0f;
 }
 
 // ---- Which lighting a forward water pass composes with (core/water.cpp compose_at_pass_end) ----
@@ -143,6 +171,17 @@ inline constexpr uint32_t kCsRays = 7, kCsTier1 = 8;   // tiers 1..6 at kCsTier1
 inline constexpr uint32_t kCsSkin = 14, kCsClamped = 15, kCsComposed = 28;
 inline constexpr uint32_t kCsRatioLow = 29, kCsRatioMid = 30, kCsRatioHigh = 31;   // A L / B per composed pixel
 inline constexpr float kRatioLow = 0.5f, kRatioHigh = 2.0f;
+// M5.4 shadow words (WATER_SHADOWS variant only; the slot is 64 words): sun records (owned, valid,
+// D > 0), traced rays, occluded, unknown (kept), no sun term (owned, valid, D = 0), invalid D,
+// clamped, then 64-bit sums x 4096 of lum(D) and of the removed lum((1 - V) D) over sun records.
+inline constexpr uint32_t kCsSunRec = 32, kCsSunTraced = 33, kCsSunOccluded = 34, kCsSunUnknown = 35;
+inline constexpr uint32_t kCsSunNone = 36, kCsSunInvalid = 37, kCsSunClamped = 38;
+inline constexpr uint32_t kCsSunSumD = 40, kCsSunSumRemoved = 42;   // 64-bit pairs
+inline constexpr uint32_t kCsSunWords = 44;
+// Flags (ComposeParams.a.w): bit 0 the traced reflection (rt_water_compose: M5.3 always sets it),
+// bit 1 the traced sun visibility (rt_water_shadows, WATER_SHADOWS variant only). Each bit both
+// traces and applies its term; a clear bit leaves its term the FS's.
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;
