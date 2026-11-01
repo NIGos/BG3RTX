@@ -1,0 +1,181 @@
+{
+ "name": "m5p3-camp-fg2",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 475,
+ "repeat": 1,
+ "live_batch": "m5-promotion",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=1,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/m5_promotion/plans/m5p3_camp.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[water\\]",
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|probe)",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
+  "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+  "\\[water\\] capture \\(\\d+ frames\\): supported draws [1-9]\\d*, unknown \\d+, excluded \\d+ \\(flow \\d+, VFX \\d+\\), triangles [1-9]\\d*, overflow 0, failed 0 ",
+  "\\[water\\] families: captured [0-9a-f]{16} FLUID_Water_Plane\\w* [1-9]\\d* \\(Roughness_Base",
+  "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\): water px (?!0\\.00%)[0-9.]+% of [0-9]+ px/frame \\(in front (?!0\\.00%)[0-9.]+%",
+  "\\[water\\] reflections GPU [0-9.]+ ms median",
+  "\\[water\\] compose record buffer \\d+ MB \\(\\d+ records of 112 B, with the game-shadow words: up to [0-9.]+ Mpx\\); patching the audited water FS",
+  "\\[water\\] compose: FS [0-9a-f]{16} patched \\(\\d+ -> \\d+ words, with the sun, local-light and refraction terms(; the game's sun shadow Vg recorded)?\\)",
+  "\\[water\\] compose variants \\(\\d+ frames\\): FS patched [1-9]\\d*, refused \\d+ \\([^)]*\\), variant pipelines [1-9]\\d* \\(refused: blend \\d+, library \\d+; failed 0\\), water draws on a variant [1-9]\\d*, without \\d+",
+  "\\[water\\] compose images \\d+x\\d+ \\(radiance RGBA16F, depth R32F: \\d+ MB\\)",
+  "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+%",
+  "\\[water\\] compose energy: mean C [0-9.]+ over owned; composed [0-9.]+% of owned: .*mean delta over owned [-+][0-9.]+ = [-+][0-9.]+% of mean C",
+  "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median",
+  "\\[water\\] shadows \\(120 frames, [1-9]\\d* passes, variant sun\\): sun records [1-9][0-9.]*/frame = (?!0\\.00%)[0-9.]+% of owned \\(no sun term [0-9.]+%, invalid 0\\); traced (?!0\\.00%)[0-9.]+% of sun records",
+  "\\[water\\] local shadows \\(120 frames, \\d+ passes with the light list, \\d+ without\\): local records [0-9.]+/frame",
+  "\\[water\\] refraction \\(120 frames, \\d+ passes with the colour copy, \\d+ without\\): transmissive records [0-9.]+/frame",
+  "\\[water\\] compose: FS 06e66a6fbd88a6b3 patched \\(\\d+ -> \\d+ words, with the sun, local-light and refraction terms; the game's sun shadow Vg recorded\\)",
+  "\\[water\\] game shadow \\(120 frames, variant gsh\\): game-shadowed records [0-9.]+/frame = [0-9.]+% of owned \\(invalid 0\\)"
+ ],
+ "expect_every": [
+  {
+   "name": "capture: supported, no overflow, no failure, every complete chain-on window",
+   "select": "\\[water\\] capture \\(\\d+ frames\\)",
+   "match": "supported draws [1-9]\\d*, .*overflow 0, failed 0 ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "composed frames and owned share, every complete chain-on window (static and moving)",
+   "select": "\\[water\\] compose \\(\\d+ frames, ",
+   "match": "\\[water\\] compose \\(120 frames, (1[01]\\d|120) composed, [0-9.]+ passes/frame\\): records [1-9][0-9.]*/frame, owned (?!0\\.00%)[0-9.]+% ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "compose GPU median below 0.5 ms (4 x M5.2's 0.12 ms for the same rays), every complete cost-on window",
+   "select": "\\[water\\] compose GPU ",
+   "match": "\\[water\\] compose GPU 0\\.[0-4]\\d\\d ms median",
+   "windows": [
+    "cost-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "sun shadows: clamped below one record per frame (window total), every complete chain-on window",
+   "select": "\\[water\\] shadows \\(\\d+ frames, ",
+   "match": "; clamped (\\d|[1-9]\\d|1[01]\\d); GPU ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "local shadows: clamped below one record per frame, every complete chain-on window",
+   "select": "\\[water\\] local shadows \\(\\d+ frames, ",
+   "match": "; clamped (\\d|[1-9]\\d|1[01]\\d); GPU ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "refraction: clamped below one record per frame and no unusable copy, every complete chain-on window",
+   "select": "\\[water\\] refraction \\(\\d+ frames, ",
+   "match": "no usable copy 0\\); .*; clamped (\\d|[1-9]\\d|1[01]\\d); GPU ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  },
+  {
+   "name": "game shadow: no invalid words, every complete chain-on window",
+   "select": "\\[water\\] game shadow \\(\\d+ frames, ",
+   "match": "\\(invalid 0\\), mean Vg ",
+   "windows": [
+    "cost-on",
+    "move-on-q",
+    "move-on-e"
+   ],
+   "min": 1
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[water\\] water geometry UNAVAILABLE",
+  "\\[water\\] build submission failed",
+  "\\[water\\] reflections unavailable",
+  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] compose UNAVAILABLE",
+  "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+  "\\[water\\] compose: variant pipeline creation failed",
+  "\\[water\\] compose: a water pipeline blends",
+  "\\[rrpost\\] exposure hold REFUSED",
+  "\\[cascade\\] could not allocate"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=4 label=shot-step-rf repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-step-compose repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-step-sun repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-step-ls repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=10 label=diag-view-compose repeat=0",
+  "\\[motion-trace\\] phase=11 label=diag-view-shadow repeat=0",
+  "\\[motion-trace\\] phase=12 label=diag-view-ls repeat=0",
+  "\\[motion-trace\\] phase=14 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=15 label=move-on-q repeat=0",
+  "\\[motion-trace\\] phase=17 label=move-off-q repeat=0",
+  "\\[motion-plan\\] complete phases=20\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "M5 promotion, third water scene and the M5.4c check: S3 Campsite - 27h (outdoor day). Its pond under the log bridge is FLUID_Water_Plane_flowmap_PixelLighting_noCaustics_Shadows (06e66a6f), the family that samples the game's cascade sun shadow; it is mapped since M5.4c, with rt_water_game_shadow=1 at startup (112-B records). The 10-30 camp captures (20261030-163004, -163010) show it at about 1% of the frame (bottom centre); the pans widen it. Same plan as m5p2; rt_water_game_shadow follows rt_water_shadows (the sun step is the M5.4c swap here: lit water restored C + Dg, occluded R). Its precheck lines decide validity: the 06e66a6f patch with Vg, a variant drawing, game-shadowed records with no invalid words. Local-light and refraction participation are reported, not required.",
+ "estimated_phase_seconds": 215
+}

@@ -1288,5 +1288,8 @@ gi/sharc_roof.hlsl?RT_NATIVE_TILESET=1;RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;RT_NATIV
 gi/sharc_roof.hlsl?RT_OMM_SCENE=1
 gi/sharc_roof.hlsl?RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 rt/water_compose.hlsl?WATER_SHADOWS=1
+rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1
 rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1
+rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1
 rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1
+rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1

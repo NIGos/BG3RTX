@@ -314,6 +314,15 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_refraction": "0"}, "needs": {}},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_refraction": "1"}, "needs": {"rt_geometry": 1, "exp_water_reflections": 1}}
      ]},
+    {"id": "exp_water_game_shadow", "label": "Water game shadow replaced",
+     "description": "Replaces the game's own sun shadow on the few water surfaces that have one (the camp's pond, some large lakes) by the ray-traced sun shadow. Without it Water sun shadows leaves those surfaces as the game shadows them (soft, blocky, often missing small casters); with it a traced ray decides: lit water gets back the sun light the game's shadow took, shadowed water loses it. Look at the water by the camp (Campsite) in daylight: tree and tent shadows on the pond. Debug view rt_debug 26 shows restored water in cyan. Needs Water sun shadows. Restart required to turn it on (the water shaders are prepared at load); turning it off is live. Experimental: unqualified.",
+     "apply": "restart", "apply_note": "restart to enable", "advanced": true, "experimental": true,
+     "required_on": {"rt": "1", "rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_shadows": "1"},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_game_shadow": "0"}, "needs": {}},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_water_game_shadow": "1"}, "needs": {"rt_geometry": 1, "exp_water_shadows": 1}}
+     ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
      "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split to be enabled. Unsupported receiver/input domains retain native shadows. Physical sun size is unchanged. Restart required; in-game quality and GPU cost are unqualified.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": true,

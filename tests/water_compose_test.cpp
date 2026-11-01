@@ -174,6 +174,29 @@ int main(int argc, char** argv) {
   CHECK(record_mb(160, kRecordBytesLs) == 480 && record_mb(160, kRecordBytesSun) == 160 && record_mb(160, kRecordBytes) == 160);
   const uint32_t cap_ls = capacity_of_mb(record_mb(160, kRecordBytesLs), kRecordBytesLs);
   CHECK(cap_ls >= cap - 2 && cap_ls >= 2560u * 1440u && buffer_bytes(cap_ls, kRecordBytesLs) <= (480ull << 20));
+  // M5.4c: the game-shadow words after each sun form (8 B); the stride is published with the flag, an older
+  // layer's 0 flags (or a non-sun form) means none.
+  {
+    ComposeBuffer b{};
+    b.record_bytes = kRecordBytesSun, b.flags = kBufGsh;
+    CHECK(gsh_of(b) && stride_of(b) == 48u);
+    b.record_bytes = kRecordBytesLs;
+    CHECK(stride_of(b) == 104u);
+    b.record_bytes = kRecordBytesRefr;
+    CHECK(stride_of(b) == 112u);
+    b.record_bytes = kRecordBytes;
+    CHECK(!gsh_of(b) && stride_of(b) == kRecordBytes);   // no sun form: no words
+    b.record_bytes = kRecordBytesRefr, b.flags = 0;
+    CHECK(!gsh_of(b) && stride_of(b) == kRecordBytesRefr);
+    CHECK(kGshWords == 2 && record_mb(160, kRecordBytesSun + kGshBytes) == 160);
+    const uint32_t s3 = kRecordBytesRefr + kGshBytes, cg = capacity_of_mb(record_mb(160, s3), s3);
+    CHECK(cg >= 2560u * 1440u && buffer_bytes(cg, s3) <= (uint64_t(record_mb(160, s3)) << 20));
+    ComposeBuffer pub{}, got{};
+    publish_buffer(&pub, 0x1234, buffer_bytes(cg, s3), cg, kRecordBytesRefr, kBufGsh);
+    CHECK(read_buffer(&pub, got) && stride_of(got) == s3);
+    pub.bytes = buffer_bytes(cg, kRecordBytesRefr);   // a buffer sized without the words is refused
+    CHECK(!read_buffer(&pub, got));
+  }
 
   // 2. Publication: invisible until complete, then exact.
   ComposeBuffer pub{}, got{};
@@ -237,11 +260,13 @@ int main(int argc, char** argv) {
   CHECK(fs_ids(0x99c1fcef82b253c1ull) == &kFsIds[1]);   // S8 ExtraWaves
   CHECK(fs_ids(0xc4e92ccdb08dd777ull) == &kFsIds[2]);   // S8 NoCaustics_Waves
   // The pre-audit of 2026-11-01 (tools/water_audit.py derives each row; water_audit_test pins them).
-  CHECK(kFsIdsCount == 9);
+  CHECK(kFsIdsCount == 11);
   CHECK(fs_ids(0x2bd6cb9de954c2f9ull) == &kFsIds[7]);   // Flymm Cargos basement, instanced
   CHECK(fs_ids(0x269de9047e587ea2ull) == &kFsIds[8]);   // the same template, static
-  CHECK(fs_ids(0x06e66a6fbd88a6b3ull) == nullptr);      // the game's sun shadow map in Lsun: not mapped
-  CHECK(fs_ids(0xced49ee370940201ull) == nullptr);
+  // M5.4c: the game's sun shadow map in Lsun, mapped with its Vg (the only rows with one).
+  CHECK(fs_ids(0x06e66a6fbd88a6b3ull) == &kFsIds[9] && kFsIds[9].vg == 1365);   // PL_noCaustics_Shadows (S3 camp)
+  CHECK(fs_ids(0xced49ee370940201ull) == &kFsIds[10] && kFsIds[10].vg == 1869);  // huge_PL_Shadow
+  for (uint32_t i = 0; i < 9; ++i) CHECK(kFsIds[i].vg == 0);
   CHECK(fs_ids(0x7813e701eb642285ull) == nullptr);      // Debris: a mask scales the probe term
   for (uint32_t i = 0; i < kFsIdsCount; ++i)
     for (uint32_t j = i + 1; j < kFsIdsCount; ++j) CHECK(kFsIds[i].fs != kFsIds[j].fs);
@@ -370,6 +395,77 @@ int main(int argc, char** argv) {
     const float c = fs_colour(f), ct = encode(c, 6, true);
     CHECK(std::fabs(c - 976.0f) < 1e-3f && std::fabs(ct - c) <= 8.0f);
     CHECK(std::fabs(shadow(ct, to_half(record_r(f)), 0.0f) - 0.05f) < 1e-4f);
+  }
+
+  // 4k. M5.4c the game's sun shadow (the FS model of PL_noCaustics_Shadows / huge_PL_Shadow: Lsun = colour *
+  //     (Vg * clouds * b0), so the sun term is D = Vg D_u). gsh_shadow(C, R, Dg, V) is the FS with its Vg
+  //     replaced by V, for any V in [0, 1]; V = Vg is C (the energy rule); V = Vg = 1 is C bit for bit (Dg = 0);
+  //     V = 0 is R whatever Vg (the M5.4 occluded case).
+  {
+    const FsTerms base{0.25f, 0.04f, 0.3f, 2.2f, 0.09f, 0.0101725f, 0.93f, 0.002f, 0.97f, 0.003f, 0.8f, 0.6f};
+    for (float a : {0.0f, 0.35f, 1.0f})
+      for (float sun : {0.0f, 0.02f, 0.6f, 40.0f})
+        for (float vg : {1.0f, 0.6f, 0.05f, 1.6e-9f})   // 1.6e-9: pow(1e-4, 2.2), the FS's floor
+          for (float v : {0.0f, 0.25f, vg, 1.0f}) {
+            FsTerms f = base;
+            f.a = a, f.sun = sun, f.vg = vg;
+            const float c = fs_colour(f), D = record_d(f), R = record_r(f), Dg = record_dg(f);
+            FsTerms g = f;
+            g.vg = v;
+            const float want = fs_colour(g);
+            FsTerms u = f;
+            u.vg = 1.0f;
+            const float Du = record_d(u);
+            const float tol = 4e-6f * (1.0f + std::fabs(c) + Du);
+            CHECK(std::fabs(gsh_shadow(c, R, Dg, v) - (want > 0.0f ? want : 0.0f)) <= tol);
+            CHECK(std::fabs((D + Dg) - Du) <= 4e-6f * (1.0f + Du));   // Dg = D_u - D
+            if (v == vg) CHECK(std::fabs(gsh_shadow(c, R, Dg, v) - c) <= tol);
+            if (v == 1.0f && vg == 1.0f) CHECK(Dg == 0.0f && gsh_shadow(c, R, Dg, v) == c);
+            if (v == 0.0f) CHECK(std::fabs(gsh_shadow(c, R, Dg, v) - (R > 0.0f ? R : 0.0f)) <= tol);
+          }
+    // The record's halves and the target's encoding at V = Vg: C' = Vg (Ct + Dg') + (1 - Vg) R' differs from
+    // C by Vg (Ct - C) + Vg (Dg' - Dg) + (1 - Vg) (R' - R): at most the target's ulp and the halves' 2^-11.
+    uint32_t seed = 777u, n = 0;
+    for (int i = 0; i < 20000; ++i) {
+      FsTerms f{};
+      f.refr = 0.3f * u01(seed) * u01(seed);
+      f.direct = 0.05f * u01(seed) * u01(seed);
+      f.kd = 0.5f * u01(seed), f.sp = 4.0f * u01(seed), f.e = 0.02f + 0.5f * u01(seed);
+      f.k = (i & 1) ? 0.0101725f : 1.0f;
+      f.x = 0.5f + 0.5f * u01(seed), f.ge = 0.01f * u01(seed), f.t = 0.6f + 0.4f * u01(seed);
+      f.s = 0.01f * u01(seed), f.a = (i % 5 == 0) ? 1.0f : u01(seed);
+      f.sun = std::pow(10.0f, -3.0f + 6.0f * u01(seed));
+      const int vk = i % 4;
+      f.vg = vk == 0 ? 1.0f : vk == 1 ? u01(seed) : vk == 2 ? std::pow(u01(seed), 2.2f) : 1.6e-9f;
+      if (!(f.vg > 0.0f)) f.vg = 1.6e-9f;
+      const float c = fs_colour(f);
+      if (!(c > 0.0f) || c > 6.0e4f) continue;
+      const float R = record_r(f), Dg = record_dg(f), Rh = to_half(R), Dgh = to_half(Dg), vh = to_half(f.vg);
+      if (!std::isfinite(Dg) || std::fabs(Dg) > 6.0e4f) continue;   // beyond a half: the compose keeps C (invalid)
+      ++n;
+      FsTerms lit = f;
+      lit.vg = 1.0f;
+      const float c1 = fs_colour(lit);
+      const float h = std::ldexp(1.0f, -11), e32 = 8.0f * std::ldexp(c1 + std::fabs(R), -24) + 1e-7f;
+      for (int mb : {6, 5})
+        for (bool nearest : {true, false}) {
+          const float ct = encode(c, mb, nearest);
+          const float ulp = std::fabs(ct - c);
+          // V = Vg (a soft PCF value: the expectation of the traced V): C within the rounding.
+          const float at_vg = gsh_shadow(ct, Rh, Dgh, f.vg);
+          CHECK(std::fabs(at_vg - c) <= f.vg * (ulp + h * std::fabs(Dg)) + (1.0f - f.vg) * h * std::fabs(R) + e32);
+          if (f.vg == 1.0f) CHECK(Dgh == 0.0f && gsh_shadow(ct, Rh, Dgh, 1.0f) == ct);   // bit for bit
+          // Lit: the FS at visibility 1; occluded: the FS at 0 (R), whatever the game's Vg.
+          CHECK(std::fabs(gsh_shadow(ct, Rh, Dgh, 1.0f) - c1) <= ulp + h * std::fabs(Dg) + e32);
+          CHECK(gsh_shadow(ct, Rh, Dgh, 0.0f) == (Rh > 0.0f ? Rh : 0.0f));
+          CHECK(vh >= 0.0f && vh <= 1.0f);   // the record's Vg half stays a visibility
+        }
+    }
+    std::printf("4k: %u game-shadowed FS samples x 4 encodings\n", n);
+    CHECK(n > 19000);
+    CHECK(kCsGshRec == kCsSunWords && kCsGshWords <= kCsLsRec && kCsGshSumDg % 2 == 0 && kCsGshSumRestored % 2 == 0 &&
+          kCsGshSumVg % 2 == 0 && kCsGshSumVg + 2 == kCsGshWords);
+    CHECK((kFlagGsh & (kFlagRf | kFlagSun | kFlagLs | kFlagRefr)) == 0);
   }
 
   // 4g. M5.4b sum match, offline (the FS model): over random froxel lists at water points (points and
@@ -729,6 +825,41 @@ int main(int argc, char** argv) {
       bad.refr = fi.fog;   // a vec4 of main that is not the copy sample still types; the table is the claim
       CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_rr, tmp, true, true, true) == PatchStatus::kApplied);
     }
+    // M5.4c on: the game-shadow words after each sun form (2 more stores); off, every module above is the
+    // call's own (pinned). A game-shadowed FS (vg) without them stores lum(D) = 0 (one more constant).
+    const uint32_t s_sun = kRecordBytesSun + kGshBytes, s_ls = kRecordBytesLs + kGshBytes, s_rr = kRecordBytesRefr + kGshBytes;
+    const uint32_t cg_sun = capacity_of_mb(record_mb(160, s_sun), s_sun), cg_ls = capacity_of_mb(record_mb(160, s_ls), s_ls);
+    const uint32_t cg_rr = capacity_of_mb(record_mb(160, s_rr), s_rr);
+    std::vector<uint32_t> out_gsun, out_gls, out_grr;
+    CHECK(patch_fs(words.data(), words.size(), fi, addr, cg_sun, out_gsun, true, false, false, true) == PatchStatus::kApplied &&
+          out_gsun.size() > out_sun.size());
+    CHECK(patch_fs(words.data(), words.size(), fi, addr, cg_ls, out_gls, false, true, false, true) == PatchStatus::kApplied &&
+          out_gls.size() > out_ls.size());
+    CHECK(patch_fs(words.data(), words.size(), fi, addr, cg_rr, out_grr, false, false, true, true) == PatchStatus::kApplied &&
+          out_grr.size() > out_rr.size());
+    {
+      std::vector<uint32_t> tmp;   // gsh implies the sun form
+      CHECK(patch_fs(words.data(), words.size(), fi, addr, cg_sun, tmp, false, false, false, true) == PatchStatus::kApplied &&
+            tmp == out_gsun);
+      FsIds bad = fi;   // Vg must be a float of main; refused only with a sun form
+      bad.vg = fi.N;
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cg_sun, tmp, true, false, false, true) == PatchStatus::kIdMismatch);
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cap_sun, tmp, true) == PatchStatus::kIdMismatch);
+      CHECK(patch_fs(words.data(), words.size(), bad, addr, cap, tmp) == PatchStatus::kApplied && tmp == out);
+      if (fi.vg) {
+        FsIds novg = fi;
+        novg.vg = 0;
+        std::vector<uint32_t> a, b;
+        CHECK(patch_fs(words.data(), words.size(), novg, addr, cap_sun, a, true) == PatchStatus::kApplied);
+        CHECK(patch_fs(words.data(), words.size(), fi, addr, cap_sun, b, true) == PatchStatus::kApplied);
+        CHECK(b.size() == a.size() + 3 && b != a && b == out_sun);   // + OpConstantNull float: the skip's lum(D) = 0
+        std::vector<uint32_t> g0;   // with the words, an FS without vg stores Dg = 0, Vg = 1 (no division)
+        CHECK(patch_fs(words.data(), words.size(), novg, addr, cg_sun, g0, true, false, false, true) == PatchStatus::kApplied &&
+              g0.size() < out_gsun.size());
+      }
+    }
+    std::printf("patch %016llx with the game-shadow words (%s): sun %zu, local %zu, refraction %zu words\n",
+                (unsigned long long)fi.fs, fi.vg ? "Vg" : "no game shadow", out_gsun.size(), out_gls.size(), out_grr.size());
     // Every original instruction is still there, in order (the patch only inserts).
     size_t q = 5;
     for (size_t p = 5; p < words.size();) {
@@ -771,6 +902,13 @@ int main(int argc, char** argv) {
       std::snprintf(name, sizeof name, "/water_fs_%08x_patched_refr.spv", unsigned(fi.fs >> 32));
       std::ofstream orr(std::string(argv[2]) + name, std::ios::binary);
       orr.write(reinterpret_cast<const char*>(out_rr.data()), std::streamsize(out_rr.size() * 4));
+      const std::pair<const char*, const std::vector<uint32_t>*> gm[] = {
+          {"sun_gsh", &out_gsun}, {"ls_gsh", &out_gls}, {"refr_gsh", &out_grr}};
+      for (const auto& [kind, mod] : gm) {
+        std::snprintf(name, sizeof name, "/water_fs_%08x_patched_%s.spv", unsigned(fi.fs >> 32), kind);
+        std::ofstream og(std::string(argv[2]) + name, std::ios::binary);
+        og.write(reinterpret_cast<const char*>(mod->data()), std::streamsize(mod->size() * 4));
+      }
     }
     ++patched;
   }

@@ -14,12 +14,14 @@ For every Fluids/ forward variant of the asset DB (data/assetdb), with its dumpe
   roughness), Ld / Ls the projector-loop phis fed by the spot-loop phis (fed by the point loop),
   Ss = (Lsun (F0l + (1 - F0l) pow) ...) N.L and Sd = (Lsun (dif ...)) N.L, the channel the engine
   CB's only uint member (set 1 b0), z the Input float at location 0. Every id is derived, none typed.
-- The sun: M5.4 replaces the FS's sun term (it has no geometric visibility). An FS that samples a
-  shadow map (OpImageSampleDref*) has the game's sun shadow in Lsun: mapping it would shadow twice.
+- The sun: M5.4 replaces the FS's sun visibility. An FS that samples a shadow map (OpImageSampleDref*) has
+  the game's sun shadow Vg in Lsun (game_sun_shadow: a separable factor, derived and checked): its row
+  names Vg (vg), the M5.4c record stores the sun light Vg removed, and without the M5.4c words the
+  patch marks its sun term absent (the sun step skips it, the game's shadow stays: never shadowed twice).
 Classes as common/water_policy.h (falls / mist / foam / bridges excluded; lava, minimap not water).
 
 --check compares the derivation with the headers (every kFsIds entry equal to its dump's ids, every
-kAudited VS passing, no kFsIds FS with a shadow map) and exits 1 on a difference; it skips (exit 0)
+kAudited VS passing, no kFsIds FS with a shadow map but no vg) and exits 1 on a difference; it skips (exit 0)
 without the asset DB, the dumps or the SPIR-V tools. --emit prints FsIds / Audited lines for passing
 pairs that are not in the headers yet.
 """
@@ -36,7 +38,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIELDS = ["a", "fog", "k", "X", "Ks", "f0", "dfg", "N", "C", "rough", "pos", "sun_d", "sun_s", "sun_m",
-          "ls_d12", "ls_s12", "ls_d", "ls_s", "ls_dif", "ls_f0", "ls_chan", "ls_z", "refr"]
+          "ls_d12", "ls_s12", "ls_d", "ls_s", "ls_dif", "ls_f0", "ls_chan", "ls_z", "refr", "vg"]
 
 
 class Fail(Exception):
@@ -189,6 +191,7 @@ def match_fs(text: str) -> dict:
     lsun2, dd = args(lsd, "OpFMul")
     if lsun2 != lsun or args(dd, "OpVectorTimesScalar")[0] != ldif:
         raise Fail("sun diffuse colour")
+    out["vg"] = game_sun_shadow(defs, consts, main, lsun, (sd, ss), C)
     d12, s12 = args(ld, "OpPhi")[0], args(ls, "OpPhi")[0]
     for v in (d12, s12):
         if defs.get(v, ("",))[0] != "OpPhi" or defs.get(args(v, "OpPhi")[0], ("",))[0] != "OpPhi":
@@ -212,6 +215,80 @@ def match_fs(text: str) -> dict:
         raise Fail("the location-0 input")
     out["ls_z"] = zs[0]
     return out
+
+
+def game_sun_shadow(defs, consts, main, lsun, sun_terms, C) -> int:
+    """The game's sun visibility Vg in Lsun, or 0 (none: the FS samples no shadow map).
+
+    Lsun = colour * (chain * b0) with chain = Vg times the cloud layers: each step a phi(p, p * x) of an
+    if (the cloud layer taken or not), down to Vg = phi(1, max(0, pow(PCF, 2.2))) of the cascade block's
+    if (cascades on or off). Every operation from Vg to Lsun and from Lsun to the two sun terms is a
+    product, so the sun term D is linear in Vg: D = Vg D_u exactly (the M5.4c record stores D_u - D).
+    Refused (Fail) unless every shadow-map sample (OpImageSampleDref*) reaches the colour only through
+    Vg and Vg reaches the colour only through Lsun's sun terms."""
+    drefs = {int(m.group(1)) for s in main for m in [re.match(r"%(\d+) = OpImageSampleDref", s)] if m}
+    uses = {}
+    for i, (op, r) in defs.items():
+        for j in _ids(r[1:]):
+            uses.setdefault(j, set()).add(i)
+    o, r = defs[lsun]
+    if o != "OpVectorTimesScalar":
+        raise Fail(f"Lsun %{lsun} is {o}")
+    f = _ids(r)[2]
+    o, r = defs[f]
+    if o != "OpFMul":
+        raise Fail(f"the sun factor %{f} is {o}")
+    chain, v = [], _ids(r)[1]
+    while defs.get(v, ("",))[0] == "OpPhi":
+        inc = _ids(defs[v][1])[1::2]   # incoming values (labels skipped)
+        if len(inc) != 2:
+            break
+        a, b = inc
+        prod = [x for x in (a, b) if defs.get(x, ("",))[0] == "OpFMul" and (a if x == b else b) in _ids(defs[x][1])[1:]]
+        if len(prod) != 1:
+            break
+        chain.append((v, prod[0]))
+        v = a if prod[0] == b else b
+    vg = 0
+    if defs.get(v, ("",))[0] == "OpPhi":
+        inc = _ids(defs[v][1])[1::2]
+        if len(inc) == 2 and any(consts.get(x) == "1" for x in inc):
+            vg = v
+    if not drefs:
+        return 0
+    if not vg:
+        raise Fail("the shadow-map samples are not a separable factor of Lsun")
+    back, todo = set(), [vg]
+    while todo:
+        x = todo.pop()
+        if x in back or x not in defs:
+            continue
+        back.add(x)
+        todo.extend(_ids(defs[x][1])[1:])
+    if not drefs <= back:
+        raise Fail("a shadow-map sample outside the sun visibility")
+    allowed = {vg, f, lsun} | {p for p, _ in chain} | {m for _, m in chain}
+    for x in allowed - {lsun}:
+        if not uses.get(x, set()) <= allowed:
+            raise Fail(f"the sun visibility chain %{x} is used outside Lsun")
+    # Lsun only in the two sun terms' products (sun_d = (Lsun * dif) * NL, sun_s = (Lsun * spec) * NL).
+    sun_prod = {_ids(defs[t][1])[1] for t in sun_terms}
+    if not uses.get(lsun, set()) <= sun_prod:
+        raise Fail("Lsun is used outside the sun terms")
+    for p in sun_prod:
+        if not uses.get(p, set()) <= set(sun_terms):
+            raise Fail("a sun product is used outside the sun terms")
+    # The samples reach the colour only through Vg.
+    seen, todo = set(), list(drefs)
+    while todo:
+        x = todo.pop()
+        if x in seen or x == vg:
+            continue
+        seen.add(x)
+        if x == C:
+            raise Fail("a shadow-map sample reaches the colour outside Vg")
+        todo.extend(uses.get(x, ()))
+    return vg
 
 
 def fs_facts(text: str) -> dict:
@@ -317,7 +394,9 @@ def header_tables():
     ids = {}
     for m in re.finditer(r"\{0x([0-9a-f]{16})ull,([^}]*)\}", body):
         nums = [int(x) for x in m.group(2).replace("\n", " ").split(",") if x.strip()]
-        ids[int(m.group(1), 16)] = dict(zip(FIELDS, nums))
+        row = dict(zip(FIELDS, nums))
+        row.setdefault("vg", 0)   # rows without a game sun shadow end at refr
+        ids[int(m.group(1), 16)] = row
     return aud, ids
 
 
@@ -380,7 +459,7 @@ def main(argv=None):
         elif got and not shadow:
             verdict = "PASS (supported + compose ids)"
         elif got:
-            verdict = f"PASS supported; compose NOT mapped: game sun shadow map ({facts['dref']} Dref samples)"
+            verdict = f"PASS (supported + compose ids; game sun shadow Vg %{got['vg']} from {facts['dref']} Dref samples)"
         else:
             verdict = f"PASS supported; compose NOT mapped: {fwhy}"
         in_aud = (fs, vs) in aud_pairs
@@ -394,12 +473,13 @@ def main(argv=None):
             elif got != ids[fs]:
                 diff = {k: (ids[fs][k], got[k]) for k in FIELDS if ids[fs].get(k) != got[k]}
                 bad.append(f"{fs:016x} ids differ from the derivation (table, derived): {diff}")
-            if shadow:
-                bad.append(f"{fs:016x} has ids but samples a shadow map")
+            if shadow and not ids[fs]["vg"]:
+                bad.append(f"{fs:016x} has ids but samples a shadow map without its Vg")
         if vok and not side and not in_aud:
             emit.append(f'    {{0x{fs:016x}ull, 0x{vs:016x}ull, "{short}"}},')
-        if vok and not side and got and not shadow and not in_ids:
-            emit.append(f"    {{0x{fs:016x}ull, " + ", ".join(str(got[k]) for k in FIELDS) + "},")
+        if vok and not side and got and not in_ids:
+            keys = FIELDS if got["vg"] else FIELDS[:-1]
+            emit.append(f"    {{0x{fs:016x}ull, " + ", ".join(str(got[k]) for k in keys) + "},")
     for f, v, n in aud:   # audited pairs the DB does not list are reported
         if not any(f == fs and v == vs for _, _, vs, fs in db_pairs(a.db)):
             print(f"audited pair not in the DB: {f:016x}/{v:016x} {n}")
