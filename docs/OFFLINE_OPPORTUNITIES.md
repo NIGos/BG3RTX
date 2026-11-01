@@ -47,6 +47,13 @@ days), L (a week or more). Live tests still need explicit user steering (AGENTS.
   kept, b14[1] dropped; the two caches exceed the 2 GB cap together, so qualified hits need either
   a larger cap for this job or a tile capture of the pages the hits sample (decision after the
   next pack's sizes). READY_FOR_LIVE: `rc1-replay-s8-fg2` (gates in its README).
+- Third S8 pack (071930, 976 MB): tables kept, the hit cache s1b3+b14[1] dropped at 2053.7 MB (BC3
+  sRGB 32688 x 26352 x 2, 2 mips). Decision (user, 2026-11-01): a larger cap for this one job. Ini key
+  `replay_pack_cap_mb` (default 2048 = the old cap); the job sets 3300 (976 + 2054 = 3.03 GB) and
+  expects `s1b3+b14 2/2`. frame_replay streams pack images in 256 MB pieces (no 2 GB host
+  allocation; `--load-test` fills that cache shape on the RTX 5090 in 0.9 s, 2218 MB of a 32 GB heap).
+  The job's post step replays the new pack and, if hit material qualified > 0 and sampling <= live,
+  deletes the older packs (only the newest is kept).
 
 ## E. Re-analysis of existing captures (S, low gain)
 - Mine `captures/` logs and dumps for numbers not yet extracted.

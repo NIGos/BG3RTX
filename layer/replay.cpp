@@ -11,7 +11,7 @@
 //          through dd->vk, which this file wraps), whole buffers except the soup (b6) and the mesh
 //          pool (b8): only the spans the frame's InstInfo names unless the whole binding fits;
 //          the sampled images the set binds (gAlphaTex, gAlphaCache, gHitCache: all mips of the
-//          view) within the hard cap (rp::fill_budget: the hit material's bindings b14/b2 first,
+//          view) within the cap (replay_pack_cap_mb; rp::fill_budget: the hit material's bindings b14/b2 first,
 //          smallest first, each image that still fits; "[replay] pack N textures: ..." lists what
 //          was kept per binding and the 10 largest);
 //          the samplers' states; the TLAS instance array of the scene ring region (bvhsplit.cpp)
@@ -906,12 +906,15 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     if (!add_buffer(p, 1, a.binding, a.bi, false, a.name)) return fail(p.why);
     for (size_t k = before; k < p.copies.size(); ++k) fixed += p.copies[k].bytes;
   }
-  if (fixed + kAlign > rp::kPackHardCapBytes) {
-    log("[replay] pack %s over budget: %s MB without textures (%s); by slot: %s", label.c_str(), mb(fixed).c_str(), geometry.c_str(),
+  // The cap: ini replay_pack_cap_mb (rp::pack_cap_bytes, default 2048 MB = rp::kPackHardCapBytes).
+  const uint64_t cap = rp::pack_cap_bytes(cfg_int("replay_pack_cap_mb", int(rp::kPackHardCapBytes >> 20)));
+  if (fixed + kAlign > cap) {
+    log("[replay] pack %s over budget: %s MB without textures over the %s MB cap (%s); by slot: %s", label.c_str(), mb(fixed).c_str(),
+        mb(cap).c_str(), geometry.c_str(),
         slot_sizes(p, *pass, true).c_str());
     return -1;
   }
-  // ---- the budget: droppable images up to the hard cap (rp::fill_budget: the hit material's
+  // ---- the budget: droppable images up to the cap (rp::fill_budget: the hit material's
   // bindings first, smallest first, each one that still fits), and what it kept, per binding and
   // the largest images (the "textures" note and log line) ----
   std::string textures, conflicts;
@@ -922,7 +925,7 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     for (size_t i = 0; i < p.images.size(); ++i)
       if (p.images[i].droppable) { idx.push_back(i); sizes.push_back(p.images[i].bytes); priority.push_back(p.images[i].priority); }
     bool over = false;
-    for (size_t k : rp::fill_budget(fixed + kAlign, sizes, rp::kPackHardCapBytes, over, priority)) p.images[idx[k]].dropped = true;
+    for (size_t k : rp::fill_budget(fixed + kAlign, sizes, cap, over, priority)) p.images[idx[k]].dropped = true;
     std::vector<std::set<uint32_t>> bound(p.images.size());   // set * 64 + binding of every use
     std::vector<const Plan::Use*> first(p.images.size(), nullptr);
     for (const auto& u : p.uses) {
@@ -947,8 +950,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     std::vector<size_t> largest = idx;
     std::sort(largest.begin(), largest.end(), [&](size_t a, size_t b) { return p.images[a].bytes > p.images[b].bytes; });
     if (largest.size() > 10) largest.resize(10);
-    const uint64_t used = fixed + kAlign, cap = rp::kPackHardCapBytes;
-    textures = " textures: " + mb(used <= cap ? cap - used : 0) + " MB free under the cap for " + std::to_string(all.n) + " droppable images of " +
+    const uint64_t used = fixed + kAlign;
+    textures = " textures: " + mb(used <= cap ? cap - used : 0) + " MB free under the " + mb(cap) + " MB cap for " + std::to_string(all.n) + " droppable images of " +
                mb(all.bytes) + " MB; kept " + std::to_string(all.kept) + " (" + mb(all.kept_bytes) + " MB), dropped " +
                std::to_string(all.n - all.kept) + " (" + mb(all.bytes - all.kept_bytes) + " MB); by binding (kept/images, MB kept/all):";
     for (const auto& [k, g] : groups)
