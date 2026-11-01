@@ -11,7 +11,9 @@
 //          through dd->vk, which this file wraps), whole buffers except the soup (b6) and the mesh
 //          pool (b8): only the spans the frame's InstInfo names unless the whole binding fits;
 //          the sampled images the set binds (gAlphaTex, gAlphaCache, gHitCache: all mips of the
-//          view) within the hard cap, those only alpha tests read dropped first, then the largest;
+//          view) within the hard cap (rp::fill_budget: the hit material's bindings b14/b2 first,
+//          smallest first, each image that still fits; "[replay] pack N textures: ..." lists what
+//          was kept per binding and the 10 largest);
 //          the samplers' states; the TLAS instance array of the scene ring region (bvhsplit.cpp)
 //          whose InstInfo set 1 binds.
 // Buffers without TRANSFER_SRC usage are read by a small compute shader (shaders/replay_copy.hlsl).
@@ -30,6 +32,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <thread>
 #include <tuple>
 
@@ -212,7 +215,7 @@ struct ImageCopy {
   VkImageView read_view = VK_NULL_HANDLE; // shader read: created after the budget
   size_t first_copy = 0, copies = 0;      // its pieces in Plan::copies
   uint64_t bytes = 0;
-  uint32_t priority = 0;                  // 1: the hit material reads it (gHitCache)
+  uint32_t priority = 0;                  // rp::texture_priority, the highest of its uses
   bool droppable = true, dropped = false, view_failed = false;
 };
 struct Copy {
@@ -361,11 +364,12 @@ struct Plan {
   rp::Manifest m;
   std::vector<Copy> copies;
   std::vector<ImageCopy> images;
-  std::map<VkImage, size_t> image_index;  // image -> Plan::images (one view range per image)
-  struct Use { uint32_t set, binding, element; size_t image; bool output; };
+  std::map<VkImage, std::vector<size_t>> image_index;   // image -> its captures in Plan::images
+  struct Use { uint32_t set, binding, element; size_t image; bool output; uint32_t format; };   // format: of this use's view
   std::vector<Use> uses;
   uint32_t omit_view = 0, omit_format = 0, omit_transfer = 0, omit_layout = 0, omit_size = 0, omit_budget = 0;
   std::map<uint32_t, uint32_t> omit_formats;   // VkFormat -> descriptor uses omitted for "format"
+  std::vector<std::string> conflicts;          // "two views of one image": which fields differ (first few)
   bool can_read = false;                       // the image read shader built
   VkDeviceSize chunk_bytes = 0;
   std::string why;   // the failure
@@ -507,19 +511,40 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   if (set == 0 || slot.kind == rp::kStorage) mips = 1;   // set 0 reads mip 0 (Load / SampleLevel 0)
   if (slot.kind != rp::kSampled2DArray) layers = 1;
   const uint32_t w = (std::max)(im.w >> base_mip, 1u), h = (std::max)(im.h >> base_mip, 1u);
-  const uint32_t priority = set == 1 && binding == 14 ? 1u : 0u;   // gHitCache: what the hit material samples
-  auto known = p.image_index.find(v.image);
-  if (known != p.image_index.end()) {
-    ImageCopy& ic = p.images[known->second];
-    if (ic.layout != layout) return omit(p.omit_layout, "bound in two layouts");
-    if (ic.base_mip != base_mip || ic.mips != mips || ic.base_layer != base_layer || ic.layers != layers || ic.pack_format != pack_format ||
-        ic.shader != shader || (shader && ic.view_format != v.format))
+  const uint32_t priority = rp::texture_priority(set, binding);
+  // An image already captured: the same capture when this view stores the same bytes (same range;
+  // a transfer copy of a raw-compatible format, e.g. BC7 UNORM / SRGB views, each use keeps its own
+  // format; a shader read of the same format and mapping). Another shader read of the same range
+  // (other format or mapping) is a capture of its own. Other differences stay "omitted" (a second
+  // transfer range would need its own layout transitions) and are listed in a manifest note.
+  if (auto known = p.image_index.find(v.image); known != p.image_index.end()) {
+    bool own_read = false;
+    for (size_t idx : known->second) {
+      ImageCopy& ic = p.images[idx];
+      if (ic.layout != layout) return omit(p.omit_layout, "bound in two layouts");
+      const bool same_range = ic.base_mip == base_mip && ic.mips == mips && ic.base_layer == base_layer && ic.layers == layers;
+      const bool same_bytes = same_range && ic.shader == shader &&
+                              (shader ? ic.view_format == v.format && std::memcmp(&ic.comp, &v.comp, sizeof v.comp) == 0
+                                      : rp::raw_compatible(ic.pack_format, pack_format));
+      if (same_bytes) {
+        ic.droppable = ic.droppable && droppable;
+        ic.priority = (std::max)(ic.priority, priority);
+        for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].droppable = ic.droppable;
+        p.uses.push_back({set, binding, element, idx, output, pack_format});
+        return true;
+      }
+      if (same_range && shader && ic.shader) { own_read = true; continue; }
+      if (p.conflicts.size() < 6) {
+        char d[256];
+        const Copy& first = p.copies[ic.first_copy];
+        snprintf(d, sizeof d, "s%ub%u[%u] vs the capture for s%db%u: mips %u+%u/%u+%u layers %u+%u/%u+%u view format %u/%u %s/%s", set,
+                 binding, element, first.set, first.binding, base_mip, mips, ic.base_mip, ic.mips, base_layer, layers, ic.base_layer, ic.layers,
+                 uint32_t(v.format), uint32_t(ic.view_format), shader ? "read" : "copy", ic.shader ? "read" : "copy");
+        p.conflicts.push_back(d);
+      }
       return omit(p.omit_layout, "two views of one image");
-    ic.droppable = ic.droppable && droppable;
-    ic.priority = (std::max)(ic.priority, priority);
-    for (size_t k = 0; k < ic.copies; ++k) p.copies[ic.first_copy + k].droppable = ic.droppable;
-    p.uses.push_back({set, binding, element, known->second, output});
-    return true;
+    }
+    if (!own_read) return omit(p.omit_layout, "two views of one image");
   }
   ImageCopy ic{};
   ic.image = v.image; ic.layout = layout; ic.pack_format = pack_format;
@@ -562,9 +587,9 @@ bool add_image(Plan& p, uint32_t set, uint32_t binding, uint32_t element, VkImag
   if (!ic.bytes || pieces.empty() || sum != ic.bytes) return omit(p.omit_size, "no piece plan within a staging chunk");
   ic.first_copy = p.copies.size(); ic.copies = pieces.size();
   for (Copy& c : pieces) p.copies.push_back(std::move(c));
-  p.image_index[v.image] = p.images.size();
+  p.image_index[v.image].push_back(p.images.size());
   p.images.push_back(ic);
-  p.uses.push_back({set, binding, element, p.images.size() - 1, output});
+  p.uses.push_back({set, binding, element, p.images.size() - 1, output, pack_format});
   return true;
 }
 
@@ -886,7 +911,10 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
         slot_sizes(p, *pass, true).c_str());
     return -1;
   }
-  // ---- the budget: droppable images up to the hard cap; alpha-only ones first, then the largest ----
+  // ---- the budget: droppable images up to the hard cap (rp::fill_budget: the hit material's
+  // bindings first, smallest first, each one that still fits), and what it kept, per binding and
+  // the largest images (the "textures" note and log line) ----
+  std::string textures, conflicts;
   {
     std::vector<size_t> idx;
     std::vector<uint64_t> sizes;
@@ -894,7 +922,52 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     for (size_t i = 0; i < p.images.size(); ++i)
       if (p.images[i].droppable) { idx.push_back(i); sizes.push_back(p.images[i].bytes); priority.push_back(p.images[i].priority); }
     bool over = false;
-    for (size_t k : rp::drop_over_budget(fixed + kAlign, sizes, rp::kPackHardCapBytes, over, priority)) p.images[idx[k]].dropped = true;
+    for (size_t k : rp::fill_budget(fixed + kAlign, sizes, rp::kPackHardCapBytes, over, priority)) p.images[idx[k]].dropped = true;
+    std::vector<std::set<uint32_t>> bound(p.images.size());   // set * 64 + binding of every use
+    std::vector<const Plan::Use*> first(p.images.size(), nullptr);
+    for (const auto& u : p.uses) {
+      bound[u.image].insert(u.set * 64 + u.binding);
+      if (!first[u.image]) first[u.image] = &u;
+    }
+    auto where = [&](size_t i) {
+      std::string s;
+      for (uint32_t k : bound[i]) s += (s.empty() ? "s" + std::to_string(k / 64) : std::string("+")) + "b" + std::to_string(k % 64);
+      return s;
+    };
+    struct Group { uint32_t n = 0, kept = 0; uint64_t bytes = 0, kept_bytes = 0; };
+    std::map<std::string, Group> groups;
+    Group all;
+    for (size_t i : idx) {
+      const ImageCopy& ic = p.images[i];
+      for (Group* g : {&groups[where(i)], &all}) {
+        ++g->n; g->bytes += ic.bytes;
+        if (!ic.dropped) { ++g->kept; g->kept_bytes += ic.bytes; }
+      }
+    }
+    std::vector<size_t> largest = idx;
+    std::sort(largest.begin(), largest.end(), [&](size_t a, size_t b) { return p.images[a].bytes > p.images[b].bytes; });
+    if (largest.size() > 10) largest.resize(10);
+    const uint64_t used = fixed + kAlign, cap = rp::kPackHardCapBytes;
+    textures = " textures: " + mb(used <= cap ? cap - used : 0) + " MB free under the cap for " + std::to_string(all.n) + " droppable images of " +
+               mb(all.bytes) + " MB; kept " + std::to_string(all.kept) + " (" + mb(all.kept_bytes) + " MB), dropped " +
+               std::to_string(all.n - all.kept) + " (" + mb(all.bytes - all.kept_bytes) + " MB); by binding (kept/images, MB kept/all):";
+    for (const auto& [k, g] : groups)
+      textures += " " + k + " " + std::to_string(g.kept) + "/" + std::to_string(g.n) + " " + mb(g.kept_bytes) + "/" + mb(g.bytes) + ";";
+    textures += " largest:";
+    for (size_t i : largest) {
+      const ImageCopy& ic = p.images[i];
+      char d[200];
+      snprintf(d, sizeof d, " %s[%u] %u%s %ux%u x%u m%u %s %s MB p%u %s;", where(i).c_str(), first[i] ? first[i]->element : 0u,
+               uint32_t(ic.view_format), ic.shader && uint32_t(ic.view_format) != ic.pack_format ? ("->" + std::to_string(ic.pack_format)).c_str() : "",
+               ic.w, ic.h, ic.layers, ic.mips, ic.shader ? "read" : "copy", mb(ic.bytes).c_str(), ic.priority, ic.dropped ? "dropped" : "kept");
+      textures += d;
+    }
+    log("[replay] pack %s%s", label.c_str(), textures.c_str());
+    if (!p.conflicts.empty()) {
+      conflicts = " two views of one image (omitted):";
+      for (const auto& c : p.conflicts) conflicts += " " + c + ";";
+      log("[replay] pack %s%s", label.c_str(), conflicts.c_str());
+    }
   }
   // The shader reads' views: a 2D-array view of the game view's format, mapping and range (only
   // SAMPLED usage), so the read sees what the pass's shader sampled. Released with the staging.
@@ -928,8 +1001,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     const std::string& file = p.copies[ic.first_copy].file;
     if (ic.dropped) { ++(ic.view_failed ? p.omit_view : p.omit_budget); m.omitted.push_back({u.set, u.binding, u.element}); continue; }
     if (u.output) m.outputs.push_back({u.set, u.binding, ic.pack_format, ic.w, ic.h, file});
-    else
-      m.images.push_back({u.set, u.binding, u.element, ic.pack_format, ic.w, ic.h, ic.layers, ic.mips, file,
+    else   // a transfer copy shared by raw-compatible views: each use names its own format
+      m.images.push_back({u.set, u.binding, u.element, ic.shader ? ic.pack_format : u.format, ic.w, ic.h, ic.layers, ic.mips, file,
                           ic.shader && uint32_t(ic.view_format) != ic.pack_format ? uint32_t(ic.view_format) : 0u});
   }
   const uint32_t omitted = uint32_t(m.omitted.size());
@@ -946,6 +1019,8 @@ int replay_pack(VkCommandBuffer cmd, const Bg3ReplayDispatch* d) {
     m.notes.insert(m.notes.begin() + 1, f);
   }
   if (omit_view_create) m.notes.push_back(" " + std::to_string(omit_view_create) + " shader-read views failed to create (omitted)");
+  m.notes.push_back(textures);
+  if (!conflicts.empty()) m.notes.push_back(conflicts);
 
   // ---- staging: chunks, placement ----
   auto job = std::make_unique<Job>();

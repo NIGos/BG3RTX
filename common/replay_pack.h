@@ -45,8 +45,8 @@ inline constexpr int kVersion = 1;
 // never-dropped part stays under it, else as the InstInfo spans.
 inline constexpr uint64_t kPackBudgetBytes = 1ull << 30;
 // Hard cap (disk budget): a pack whose never-dropped part (set 0, buffers, geometry) passes it is
-// "over budget" and not written; under it the textures fill the rest up to this cap (drop_over_budget:
-// textures the hit material does not read go first, then the largest).
+// "over budget" and not written; under it the textures fill the rest up to this cap (fill_budget:
+// the hit material's bindings first, smallest first, each image that still fits).
 inline constexpr uint64_t kPackHardCapBytes = 2ull << 30;
 inline constexpr uint64_t kWholeSize = ~0ull;   // VK_WHOLE_SIZE
 
@@ -392,25 +392,44 @@ inline void instinfo_spans(const uint32_t* info, uint32_t count, std::vector<Spa
   }
 }
 
+// Texture priority of a set-1 image binding (higher is kept first, fill_budget): the hit material
+// samples gHitCache (b14) and the texture table gAlphaTex (b2: its VT page tables and 2D detail /
+// iridescent / tile-set views; the writer cannot tell those entries from the alpha test's, and the
+// whole table is small), so both rank above the alpha test's own tile caches (b3). An image bound
+// by several bindings takes the highest.
+inline constexpr uint32_t kPriorityAlphaCache = 1, kPriorityHit = 2;
+inline uint32_t texture_priority(uint32_t set, uint32_t binding) {
+  if (set != 1) return 0;
+  return binding == 14 || binding == 2 ? kPriorityHit : binding == 3 ? kPriorityAlphaCache : 0u;
+}
+// Two views whose formats store the same raw bytes (same texel block size and footprint, e.g. a
+// BC7 UNORM and a BC7 SRGB view of one image): one transfer copy serves both.
+inline bool raw_compatible(uint32_t a, uint32_t b) {
+  uint32_t ba = 0, bb = 0;
+  const uint32_t sa = block_bytes(a, ba), sb = block_bytes(b, bb);
+  return sa && sa == sb && ba == bb;
+}
+
 // The budget (tools/frame_replay.md "Size"): `fixed` bytes are never dropped (set 0, geometry,
-// records); the droppable images go lowest `priority` first (none given: all equal), within one
-// priority largest first, until the total fits. Returns the indices dropped; `over` when even the
-// fixed part does not fit (the pack is then not written).
-inline std::vector<size_t> drop_over_budget(uint64_t fixed, const std::vector<uint64_t>& droppable, uint64_t budget, bool& over,
-                                            const std::vector<uint32_t>& priority = {}) {
+// records). The droppable images are kept highest `priority` first (none given: all equal),
+// within one priority smallest first, each one that still fits; an image larger than what is
+// left is dropped and the next ones still fill the rest (2026-11-01 S8: dropping lowest priority
+// first, largest first, removed all 4098 table and cache elements to make room for one cache
+// larger than the free space, which was then dropped too). Returns the indices dropped, sorted;
+// `over` (all dropped) when even the fixed part does not fit (the pack is then not written).
+inline std::vector<size_t> fill_budget(uint64_t fixed, const std::vector<uint64_t>& droppable, uint64_t budget, bool& over,
+                                       const std::vector<uint32_t>& priority = {}) {
   std::vector<size_t> order(droppable.size()), dropped;
   for (size_t i = 0; i < order.size(); ++i) order[i] = i;
   auto pri = [&](size_t i) { return i < priority.size() ? priority[i] : 0u; };
   std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-    return pri(a) != pri(b) ? pri(a) < pri(b) : droppable[a] > droppable[b];
+    return pri(a) != pri(b) ? pri(a) > pri(b) : droppable[a] < droppable[b];
   });
-  uint64_t total = fixed;
-  for (uint64_t b : droppable) total += b;
   over = fixed > budget;
+  uint64_t total = fixed;
   for (size_t i : order) {
-    if (total <= budget) break;
-    total -= droppable[i];
-    dropped.push_back(i);
+    if (!over && droppable[i] <= budget - total) total += droppable[i];
+    else dropped.push_back(i);
   }
   std::sort(dropped.begin(), dropped.end());
   return dropped;

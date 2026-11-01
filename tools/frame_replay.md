@@ -61,14 +61,37 @@ Pack 3.5 MB (the hit-record table is 3.1 MB of it). Wall about 3.3 s; dispatch 0
 
 ## Size (at most 2 GB per pack, `bg3::replay::kPackHardCapBytes`)
 
-Since the texture read (2026-11-01): the geometry is taken whole while the never-dropped part stays
-under 1 GB (`kPackBudgetBytes`), and the textures fill the rest up to the 2 GB hard cap. Over it,
-images only alpha tests read go first, then those the hit material reads (gHitCache), largest first
-within each. First live pack (S8): 973 MB with 67 MB of textures and 4336 image elements omitted
-(4333 without TRANSFER_SRC, 3 larger than a staging chunk). Most of those elements are the 4 x 4
-dummies of the unused table slots (one image each, now 64 bytes); the real cost is the VT tile
-caches, stored decoded (BC7 x4, BC1 x8, BC4/BC5 x2, BC6H x8 their BCn size). Expect a pack near the
-2 GB cap, with the omitted count, the decoded MB and any budget drops in the manifest's first note.
+The geometry is taken whole while the never-dropped part stays under 1 GB (`kPackBudgetBytes`); the
+textures fill the rest up to the 2 GB hard cap (`rp::fill_budget`): highest `rp::texture_priority`
+first (2: gHitCache b14 and the table gAlphaTex b2, whose VT page tables and 2D views the hit
+material samples too; 1: the alpha tile caches b3), within a priority smallest first, each image
+that still fits. An image larger than what is left is dropped and the smaller ones still go in.
+
+S8 packs (2026-11-01), what they measured:
+- All real textures have TRANSFER_SRC and are copied raw (BCn kept): the first pack copied all 32
+  table elements (20 images, 67 MB); the 4064 elements without it were the layer's 4 x 4 dummies.
+  So `read by shader` counts the two dummies (2D and array), not game textures.
+- The VT caches: the first pack omitted 3 cache uses as larger than a 256 MB staging chunk. The
+  second (055812, 906 MB) kept no texture: `images omitted 4099 (... layout 1, budget 4098); images
+  copied 7, read by shader 1`. The old order (alpha-only first, largest first) dropped every table
+  element and the alpha cache, then still had to drop the hit cache b14[1]: so b14[1] alone is
+  larger than the 1142 MB left (2048 - 906). b14[0] was omitted as "two views of one image": the
+  same VkImage as the alpha cache b3[1] (at least 256 MB) through another view.
+- So the two caches together exceed the cap even with nothing else in the pack. With the fill the
+  pack keeps the tables, the dummies and every cache that fits: expected 906 + 67 MB + b3[1]
+  (if under 1075 MB); b14[1] stays dropped. Carrying both needs a cap of more than 2.4 GB (906 + 67
+  + 256 + 1142 MB, all lower bounds; the textures line gives the real sizes) or a tile capture of
+  only the cache pages the hits sample (the pass's own feedback: core and hit-material shader,
+  outside the replay files). Tiles named by the hit tables' page tables would likely not shrink it:
+  the 16 hit tables are the scene's tile sets, whose page tables point at nearly every resident tile.
+- Two views of one image now share one capture when their formats store the same bytes (transfer
+  copy, `rp::raw_compatible`, e.g. BC7 UNORM / SRGB: each `image` line keeps its view's format) or
+  are shader reads of the same range (another format: its own read). Other differences stay
+  omitted; the note `two views of one image (omitted): ...` names the mips, layers and formats.
+- Measured per pack: the note and log line `[replay] pack <n> textures: <MB> MB free under the cap
+  for <n> droppable images of <MB> MB; kept ..., dropped ...; by binding (kept/images, MB kept/all):
+  ...; largest: <bindings>[<element>] <VkFormat> <w>x<h> x<layers> m<mips> copy|read <MB> MB
+  p<priority> kept|dropped; ...` (the 10 largest).
 
 Estimate for a 2560 x 1440 render frame, to be replaced by the first live pack's own line:
 - set 0 images: depth 4 + normal 4 + velocity 4 + prevRadiance 8 + rtOrigin 8 B/px = 103 MB;
@@ -134,8 +157,9 @@ leaves `Bg3HostApi::replay_pack` null and the core does nothing. Capture only, n
    with the buffer copy counts and the geometry mode.
 Cost: one frame records the copies and reads (a few ms of CPU, GPU copies of up to 2 GB) and allocates
 the staging; the file writing is off the render thread. Not measured live yet (`READY_FOR_LIVE`).
-CTests: `replay_pack_test` (manifest writer round trip with the SOURCE field, InstInfo spans, budget
-with priorities, shader-read format mapping and pieces, transfer pieces); `frame_replay_test` writes
-its synthetic pack with the same writer, replays it, and runs the image read on every mapped format.
-Open: the VT cache sizes and formats at S8 and whether the textures fit the cap: the next live
-pack's note lines answer both.
+CTests: `replay_pack_test` (manifest writer round trip with the SOURCE field, InstInfo spans, the
+budget fill with priorities and the S8 case, raw-compatible formats, shader-read format mapping and
+pieces, transfer pieces); `frame_replay_test` writes its synthetic pack with the same writer,
+replays it, and runs the image read on every mapped format.
+Open: the exact VT cache sizes, formats, layers and mips at S8 (the next pack's `textures` line),
+then the choice between a larger cap for this one job and a hit-sampled tile capture.
