@@ -381,7 +381,9 @@ $displayUser = Join-Path $script:DisplayUsers "$PID.json"
 if ($Background) {
   # Borderless at the desktop resolution; the player's values come back after the
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
-  Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:$UnfocusedFG
+  # Real-present runs stay windowed: a borderless desktop-sized swapchain (e.g. a 3840x2160 desktop with
+# a 3840x1600 game output) breaks the FG input size match (layer/streamline.cpp), 2026-11-01.
+Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:($UnfocusedFG -or $RealPresent)
   if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 
