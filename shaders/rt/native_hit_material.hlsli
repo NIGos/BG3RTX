@@ -313,11 +313,19 @@ void hit_material_count(RtHit hit,uint status,uint bin){
   const bool pool_row=(ii.meta&(nh_pool_meta|kInfoPool|kInfoLegacy))==(nh_pool_meta|kInfoPool);
   uncovered=!pool_row && ((ii.meta&(nh_opaque_meta|kInfoAlpha))==0u || (ii.meta&(kInfoLegacy|kInfoPool))!=0u);}
  stat_add(127u,uncovered,bin);
+#ifdef HM_BLOCKERS
+ // frame_replay only (--define HM_BLOCKERS=1, never a game variant): the outcome per TLAS instance in
+ // the raw slots 448 x 64 + 4 inst + k (inst < 1024; 0 qualified, 1 base without a record, 2 row,
+ // 3 any other), which frame_replay writes to rtstats.bin (tools/hit_material_blockers.py ranks them).
+ if(hit.t>=0 && !hit.aborted && hit.inst<1024u){const uint k=status==0u?0u:uncovered?1u:status==3u?2u:3u;
+  rtStats.InterlockedAdd((448u*64u+hit.inst*4u+k)*4u,1u);}
+#endif
 #ifdef RT_HIT_INSTANCED
- // The clip check per instanced family (core/gi.cpp kHitClipFirst 356: wind 356.., 2S 364..): checked,
- // bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256, over x256, rigid offset.
+ // The clip check per instanced family (core/gi.cpp kHitClipFirst 356: wind 356.., 2S 364..; kHitClip3First:
+ // wind RGB 2S 419..): checked, bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256,
+ // over x256, rigid offset.
  const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
- [unroll]for(uint f=1;f<3;++f){const uint base=356u+(f-1u)*8u;const bool mine=family==f;
+ [unroll]for(uint f=1;f<4;++f){const uint base=f<3u?356u+(f-1u)*8u:419u;const bool mine=family==f;
   stat_add(base,mine,bin);
   [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
   stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}

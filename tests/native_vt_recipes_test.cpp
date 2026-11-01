@@ -81,6 +81,27 @@ int main(int argc, char** argv) {
     }
     CHECK(nv_two_sided_sign(up, V{.6f, 0, .8f}, V{.6f, 0, -.8f}) == 1.f);  // oblique, same side
   }
+  // 2b. ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT (735d5a19/83831811, rt_hit_material_wind_rgb):
+  //     VARIANT of 14678345 "same sampling, 10 statements differ, outputs out0,out2,out3"
+  //     (tests/material_families_test.py): engine 1:0 as 14678345 (index @32, channel @36), RT2.y =
+  //     clamp(1:1 _m5) of {float _m0.._m7} (byte 20), the two-sided N column (out0, as 923131c7); RT2.w
+  //     and out3 are the class 4 translucency terms the class 0 decode does not read.
+  {
+    const auto* r = vt::recipe(0x838318119b2f43d8ull);
+    CHECK(r && r->vs == 0x735d5a19130262bdull);
+    CHECK(r->transform_offset == sti.transform_offset && r->tileset_index_offset == sti.tileset_index_offset &&
+          r->channel_offset == sti.channel_offset && engine_bytes(*r) == engine_bytes(sti) && engine_bytes(*r) == 40);
+    CHECK(r->reflectance == vt::ReflectanceUbo && r->reflectance_offset == scalar_member(5) && vt::material_bytes(*r) == 24);
+    CHECK(r->two_sided && r->layout == vt::LayoutBase);   // the FS writes class 4; the hit takes the class 0 front lobe
+    vt::Surface x, y;
+    for (float refl : {0.f, .2f, .5f, 1.f}) {
+      CHECK(vt::decode(0x838318119b2f43d8ull, samples(refl), x) == vt::Status::SupportedFields);
+      CHECK(vt::decode(kSti, samples(refl), y) == vt::Status::SupportedFields && same(x, y));
+    }
+    // VS 735d5a19 (wind RGB) displaces W before the clip transform: not class A, never pooled.
+    CHECK(r->capture == vt::CaptureDraw && pool_recipe(r->vs, r->fs) == nullptr && uncaptured_recipe(r->vs, r->fs));
+    CHECK(pool_recipe(kStiVs, r->fs) == nullptr && !uncaptured_recipe(kStiVs, r->fs));
+  }
   // 3. ENV_DetailMap_VT (54df894a/613ead9c): NEW recipe. Bindings: engine 1:0 as 14678345
   //    {vec4 _m0[2]; uint index @32, channel @36 (`& 7`), flag @40}, 1:1 {float _m0.._m7}:
   //    _m0 strength, _m1 tiling, _m2 reflectance (RT2.y), _m3 mask power, _m4 roughness add.

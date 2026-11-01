@@ -294,7 +294,7 @@ add_test(NAME settings_test COMMAND settings_test)
 # queue gates, the lean-batch energy gate, progress fragments, the coverage HANDLING table.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates m4_promotion_gate fold_progress coverage_handling)
+  foreach(py_test host_atomics_lint queue_gates m4_promotion_gate fold_progress coverage_handling hit_material_blockers)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
