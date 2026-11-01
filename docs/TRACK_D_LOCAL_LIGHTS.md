@@ -813,4 +813,45 @@ removed only for the 0.5 ms Grymforge budget, which is a preset question, not a 
 - Expected cost: the 9.11 numbers (k1 −22% of a 0.78 ms Grymforge pass, −9.5% at camp; k2 −8%
   / −1%). Live gate: job `lsk1-exact-k-inn-s7-fg2` (tools/live_batches/ls_exact_k, S7 inn, one
   launch, NOT queued). Keep k only where its `ls:` GPU median is below the OFF-a/OFF-b spread
-  and the PNG mean equals OFF within that spread.
+  and the scene mean equals OFF within that spread (energy rule: see the live result below).
+
+**Live S7 inn (2026-11-01, `lsk1-exact-k-inn-s7-fg2`, log `lsk1-exact-k-inn-s7-fg2.1.071324.log`;
+static camera, OFF / k1 / k2 / OFF, then k1 / OFF / k1 / OFF alternated).**
+- Cost (`ls:` GPU median): OFF 0.717 ms, k1 0.555 (−23%), k2 0.654 (−9%); the OFF spread is 0.002.
+  k-hit 78.6% of px, 2.84 remainder lights per capped px, 26% of the weight, 34% of its rays occluded.
+- First reading (PNG previews of the R11G11B10F dumps p8 / p9): k1 3-4% darker than OFF in every
+  alternation (p9: OFF 4.99 / 4.92 / 5.00 / 4.84, k1 4.75 / 4.84 / 4.76, k2 4.74), final image (p14)
+  unchanged within 0.1/255.
+- **Root cause: not the estimator; the measurement read the game's bloom.** The R11G11B10F dumps
+  p1-p9 there are the bloom pyramid (1280x534 down to 160x67 and back up; `FRAME_MAP` step 14), not
+  the lighting. Its prefilter (fs `3434e561`, 2560 → 1280) takes 4 bilinear taps, multiplies each by
+  `saturate((lum − T)·S)` and keeps the **minimum** of the four (a firefly filter). The minimum is
+  concave: `E[min(X1..X4)] < min E[X]` for any noisy unbiased X, so the remainder sample's extra
+  per-pixel noise darkens the bloom at the same scene mean. With `rr_post=1` the bloom is built from
+  the pre-RR (noisy) scene colour and enters after RR as `+0.2·bloom`. The PNG preview (Reinhard,
+  then gamma 1/2.2, point-sampled) is concave too and amplified the gap (float means: −2.6%).
+- **Float means of the same dumps (`dumps.json`, luminance, k / mean of the neighbouring OFFs, three
+  alternations):** scene colour before post (`5c3fdabc`, 2560 R11G11B10F, RR's input) −0.38 /
+  −0.34 / +0.12%, OFF spread 0.89%: **equal energy**. Bloom prefilter output (`3434e561`) −3.6 /
+  −3.9 / −0.8%, the same ratio down and up the pyramid (`6bfc74d7`, `779cbf3a`): the min filter.
+  k2: scene +0.04%, bloom −1.9% (less remainder noise). Final image: bloom is about 1.8% of it, so
+  −3.6% of the bloom is −0.07%, as p14 shows.
+- **Checks of the estimator with shadows** (both in the build): `ls_exact_k_test` (CPU) and GPU
+  fixture 8e: RGB contributions of other chromas than their luminance weight, visibilities 0 / 1 /
+  0.25, the grid mean of the shader's delta (both) and of its `ao_direct` sum `c·t` (CPU) per
+  channel equals the full sum within the grid bound (8e worst 3e-4 rel). The CPU test also models the bloom prefilter with the
+  estimator's own samples: per-pixel mean exact, min-of-4 mean lower. Read against the shader:
+  visibility is a property of the light (its ray stream is keyed by the light, the selection's by
+  `x | 2^20`), the selection weight is the unshadowed `lum(c)`, the factor multiplies `c(t − s)`
+  and `c·t` alike, the `ls_finish` tail is the same; `ao_direct` gives back nothing here (`m0.y` 0),
+  and the `max(·, 0)` clamp could only brighten. No shader change: the default path is unchanged.
+- **Energy rule for this option from now on:** the float mean of the scene colour before post
+  (`5c3fdabc`, in `dumps.json`), never PNG previews and never the bloom chain. The bloom darkening
+  is real but 0.07% of the final image; it applies to every stochastic term the game's bloom sees
+  (soft shadows, GI). The fix belongs to the post chain, not to D-LS: build the bloom prefilter
+  from RR's denoised colour (rr_post already runs at that point; TRACK_A_RR "RR before post"), or
+  leave it (below the final image's precision here). Not done (not an ls file; no visible effect).
+- Verdict: unbiased, −23% cost at k1. Still off by default: the preset decision (k1 for a lower
+  preset; quality before frame rate on Ultra) is the user's. Next live run: the scene-colour float
+  means of k1 within the OFF spread in each alternation (expected), bloom lower (expected, not a
+  gate).
