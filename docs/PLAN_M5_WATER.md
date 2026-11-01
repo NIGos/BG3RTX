@@ -77,6 +77,20 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
   60d4357d plus a second UV output), c4e92ccd/8113bd39 flowmap_NoCaustics_Waves (noise at world xz * m5 + time *
   m7, offset clamped below by m15). Both: Y-only displacement, the same gl_Position, no discard, no FragDepth.
   The DB has 31 Fluids templates; FLUID_Water_Plane* forward FS outside the list are counted as unknown.
+  Pre-audit (11-01, offline, `py -3 -m tools.water_audit`: every Fluids forward pair of the DB with its dumps; CTest
+  `water_audit_test` keeps the tables equal to the derivation and spirv-vals every patched FS). 16 supported pairs:
+  the 9 above plus ced49ee3/60d4357d huge_PL_Shadow, d44c390b/1d64d76a flowmap_Brine, fb7cc2ea/d7d9539d
+  huge_PL_SphereMask, 2bd6cb9d/ffc5bb29 and 269de904/8cdf7b4a PL_noCaustics (instanced, static), 4af3450e/bf2b63d0
+  flowmap_OnlyNormals, 7813e701/0f00693c Debris (VS: vec4(P, 1) * set 0 b2 _m2, y negated, P = vertex + vec3(0, h, 0)
+  or none). Compose ids (9 FS): 7b44a567, 99c1fcef, c4e92ccd plus fda628a5, 64d9cb77, d44c390b, fb7cc2ea, 2bd6cb9d,
+  269de904 (the same end of main, sun without game visibility, three light loops). Supported without ids: 06e66a6f
+  and ced49ee3 (Lsun carries the game's cascade shadow, 7 Dref samples: M5.4 would shadow twice), Debris (a mask
+  scales the probe term and the direct factor), 1d4bff2e, 857ccb90, 68068cab, 4af3450e (no light loops: another
+  lighting model). Rejected: WIP 0f9a1874/0516c804 (the VS displaces x, y and z). Not water by name: BloodRiver.
+  No dump: the GlowLichen, flowmap_Shadows, flowmap_Test, Minimap, Reflections instanced pairs and every static
+  variant but PL_noCaustics (the m5_promotion jobs dump the missing modules).
+  Flymm Cargos Basement (save level CTY_Main_A; basement level CTY_DockWarehouseBasement_A, planes
+  `NAT_RVR_DockWarehouseBasement_Dock_NoSub` / `_Grates`): FLUID_Water_Plane_flowmap_PixelLighting_noCaustics, mapped.
 - Vertex shaders: world Y displacement only (flowmap at the mesh UV, noise at world xz * m10 + time * m11,
   set 1 b1), gl_Position = camera-relative world * `_m2`: XFB captures the animated surface. The normal is
   the vertex frame (not the displaced one): M5.2 takes the shading normal from the FS.
@@ -161,7 +175,7 @@ scene (ABI 18). One bump to ABI 25, merged early, alone (AGENTS: ABI changes con
 - Plan step 4 (recompute the FS's N, a, T, X, Ks from its sets) was dropped: N needs the FS's interpolated UV
   and tangent frame, and a, T, X need its flow-mapped textures at that UV; none of it exists after the pass.
   The "minimal extra copy" instead: the FS writes its own values. `water_fs_patch.h` adds to the audited FS
-  (id tables: 7b44a567 huge_PixelLighting, and for S8 99c1fcef ExtraWaves and c4e92ccd NoCaustics_Waves, whose
+  (id tables, 9 FS since the 11-01 pre-audit above: 7b44a567 huge_PixelLighting, and for S8 99c1fcef ExtraWaves and c4e92ccd NoCaustics_Waves, whose
   end of main is the same `mix(Refr, fma(Lw X + G k (+ foam), T, S), a)` with Lw = direct + (Kd + Ks) k; all three
   patched dumps pass spirv-val; the other six keep the probe, counted "without") eight
   stores at the end of main through a physical-storage-buffer address baked into the module (the game's

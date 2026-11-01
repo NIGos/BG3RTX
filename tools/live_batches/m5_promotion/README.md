@@ -25,6 +25,20 @@ thumbnails and 218 captures scanned for the audited water FS): S14 Lower City an
 screen; S3 camp draws 06e66a6f (not mapped for the compose); Wyrms Crossing / Rivington need the missing mods;
 `QuickSave_3781` shows the same basement as Flymm (a quick save can be overwritten: the named save is used).
 
+Flymm's water family (offline, 11-01, read-only game data): both saves are in CTY_Main_A; the basement is the level
+CTY_DockWarehouseBasement_A, whose water planes `NAT_RVR_DockWarehouseBasement_Dock_NoSub` and `_Grates` use
+FLUID_Water_Plane_flowmap_PixelLighting_noCaustics (plus Fall_Core / Fall_Foam: excluded flow). Both forward variants of
+that template (instanced 2bd6cb9d/ffc5bb29, static 269de904/8cdf7b4a) are now audited and mapped
+(`py -3 -m tools.water_audit`): the Flymm run is expected valid. A material override at the placement was not checked:
+the `[water] families` line decides.
+
+Shader dump (both jobs, `dump_shaders=1`): the layer writes only the modules that have no file yet in the test tree's
+`captures/shaders` (about 6100 there), so the run dumps the water pairs that have none (an unknown family in the
+`[water] families` "counted" list, the GlowLichen / flowmap_Shadows / flowmap_Test / Minimap / Reflections instanced
+pairs and every static water variant but PL_noCaustics). No hash filter exists (a layer change); the cost is the new
+modules' files at pipeline creation. After the run: `py -3 -m tools.water_audit --dump <test tree>\captures\shaders --emit`
+audits them (VS contract, compose structure, shadow-map samples) and prints the table rows to add.
+
 Phases (both): `warmup-on` 10 s, `diag-stats-on` 12 s (rt_stats=1, chain on), `cost-off-a` 20 s, `shot-off-a` 10 s
 (traces at 2, 5, 8 s), cumulative steps of 8 s with one trace each: `shot-step-rf` (+geometry, +measured reflections:
 no image change), `shot-step-compose` (+reflections composed), `shot-step-sun` (+sun shadows), `shot-step-ls` (+local
