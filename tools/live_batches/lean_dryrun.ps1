@@ -59,7 +59,7 @@ foreach ($job in $jobs) {
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
   $sec = ($plan | Measure-Object seconds -Sum).Sum; $totalSec += $sec
   $state = @{}; $ok = Apply-Set $state $job.set
-  $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $traceLines = @(); $roleNote = ''
+  $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
     $step = $plan[$i]
     if (-not (Apply-Set $state $step.set)) { $ok = $false }
@@ -75,6 +75,7 @@ foreach ($job in $jobs) {
       if (@($step.trace_at | Where-Object { $_ -ge $step.seconds }).Count) { $ok = $false }
       if ($diag -and -not $label.StartsWith('diag-view-')) { $roles = $false; $roleNote += " $label(trace in diag)" }
       $traceLines += "[motion-trace] phase=$i label=$label repeat=0"
+      for ($r = 0; $r -lt @($step.trace_at).Count; $r++) { $traceAll += "[motion-trace] phase=$i label=$label repeat=$r" }
     }
   }
   Check "${n}: plan $(Split-Path $planRel -Leaf) ($($plan.Count) phases, $sec s) parses, sets are key=value, traces inside phases" $ok
@@ -89,7 +90,7 @@ foreach ($job in $jobs) {
     -not @($traceLines | Where-Object { $t = $_; -not @($er | Where-Object { $t -match $_ }).Count }).Count)
   # The runner prints "[motion-trace] phase=..." only for phases with trace_at (scripts/auto-run.ps1): an expect
   # for a phase without one never matches (ef1-af-em-fg2 2026-11-02 was INVALID for that).
-  $orphan = @($er | Where-Object { $e = $_; $e -match 'motion-trace' -and -not @($traceLines | Where-Object { $_ -match $e }).Count })
+  $orphan = @($er | Where-Object { $e = $_; $e -match 'motion-trace' -and -not @($traceAll | Where-Object { $_ -match $e }).Count })
   Check "${n}: every expect_runner [motion-trace] line names a phase with trace_at$(if ($orphan.Count) { ': not ' + ($orphan -join ' | ') })" (-not $orphan.Count)
   Check "${n}: foreground single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
     -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' -and

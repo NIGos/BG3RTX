@@ -557,13 +557,13 @@ fs::path g_sun_trust;
 bool g_no_casters = false;
 // --push FIELD=VALUE (repeatable): overwrite one Push field of the pack's push before the dispatch, as the live
 // core sets it per pass (e.g. radius=6: core/gi.cpp hit_gi_dispatch's gi_far ray length; rt_stats=0 / 1).
-// Fields: radius (float, offset 24), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
+// Fields: radius (float, offset 24), rays (uint, offset 32), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
 std::vector<std::pair<std::string, std::string>> g_push_set;
 void apply_push_set(std::vector<uint8_t>& push) {
   for (const auto& [k, v] : g_push_set) {
     const bool f = k == "radius" || k == "gi_rt_radius";
-    const size_t off = k == "radius" ? 24 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
-    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (radius, gi_rt_radius, rt_stats)");
+    const size_t off = k == "radius" ? 24 : k == "rays" ? 32 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
+    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (radius, rays, gi_rt_radius, rt_stats)");
     if (f) { const float x = std::stof(v); std::memcpy(push.data() + off, &x, 4); }
     else { const uint32_t x = uint32_t(std::stoul(v)); std::memcpy(push.data() + off, &x, 4); }
   }
@@ -1041,7 +1041,7 @@ struct Push {
 static_assert(sizeof(Push) == 256 && offsetof(Push, rt_tmax) == 84 && offsetof(Push, rt_ao_rays) == 100 &&
               offsetof(Push, gi_rt_radius) == 112 && offsetof(Push, sun_radius) == 128 && offsetof(Push, ls_source_radius) == 144 &&
               offsetof(Push, ls_flags) == 188, "Push must match gi_common.hlsli");
-static_assert(offsetof(Push, radius) == 24 && offsetof(Push, rt_stats) == 124, "--push offsets (apply_push_set)");
+static_assert(offsetof(Push, radius) == 24 && offsetof(Push, rays) == 32 && offsetof(Push, rt_stats) == 124, "--push offsets (apply_push_set)");
 
 // box (the PT furnace, tools/pt_reference.hlsl): the camera inside a closed cube |x|, |y|, |z| <= 2 of
 // 12 inward triangles without a material record (instance 0 only); every pixel sees the face y = 2.
