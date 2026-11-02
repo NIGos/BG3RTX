@@ -267,7 +267,8 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_SPEC_CASCADE=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_SPEC_CASCADE_SUN=1");
   }
-  if (flags & kGiFar) add("RT_GI_FAR=1");
+  // Step S2b: gi_far is constant 1007 of the gi_hit_sun files (core/gi.cpp refresh), never RT_GI_FAR.
+  if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (flags & kRfHitGi) add("RF_HIT_GI=1");
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;

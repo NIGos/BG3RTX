@@ -36,8 +36,8 @@ int main(int argc, char** argv) {
   CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
   // gi_far: the gi_hit_sun files only, last; never the direct-only or ordinary files.
-  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kGiFar | kCascade) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_CASCADE=1;RT_GI_FAR=1;GI_SPEC_GUARDS=1");
-  CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_CASCADE=1;RT_GI_FAR=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kGiFar | kCascade) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   // rf_hit_gi: the four rf_hit_shade files only, last; never the ordinary D-RF or the GI files.
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_hit_material.hlsl", kHitIpGrass) == "gi/rt_hit_material.hlsl?RT_SPEC_CASCADE=1");   // needs the instanced key
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
         "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1");
-  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
   // rt_spec_cascade, the only cascade path: one request for both cascade values; the constant carries kCascade.
   CHECK(request("gi/gi_trace_rt.hlsl", 0) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_ao_apply.hlsl", 0) == "gi/gi_ao_apply.hlsl");   // not a cascade pass: unchanged

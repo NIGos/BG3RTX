@@ -1020,8 +1020,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                nullptr};
   pci.layout = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
-  uint32_t spec_data[5];
-  VkSpecializationMapEntry spec_entries[5];
+  uint32_t spec_data[8];
+  VkSpecializationMapEntry spec_entries[8];
   uint32_t n_spec = 0;
   auto spec_add = [&](uint32_t id, uint32_t v) {
     spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
@@ -1034,6 +1034,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     spec_add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
     spec_add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
   }
+  // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
+  // value keeps its own slot and pipeline, as the cascade constant does.
+  if (sv::gi_far_entry(file)) spec_add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
   const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
   if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;

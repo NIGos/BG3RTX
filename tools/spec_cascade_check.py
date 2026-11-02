@@ -88,6 +88,13 @@ def old_requests_family(spec_request):
     return out
 
 
+def old_requests_swap(spec_request, marker, define):
+    """(without the marker, with the old define in its place): a key whose spec build replaces one define."""
+    file, defs = split_request(spec_request)
+    join = lambda ds: file + ("?" + ";".join(ds) if ds else "")  # noqa: E731
+    return join([d for d in defs if d != marker]), join([define if d == marker else d for d in defs])
+
+
 def two(olds, id_of):
     """A key with one constant: [({id: 0}, old0), ({id: 1}, old1)]."""
     return lambda r: [({id_of(split_request(r)[0]): v}, o) for v, o in enumerate(olds(r))]
@@ -96,7 +103,9 @@ def two(olds, id_of):
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
 KEYS = {"cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
         "guards": (GUARDS, two(old_requests_guards, guard_id)),
-        "hitfam": (FAMILY, old_requests_family)}
+        "hitfam": (FAMILY, old_requests_family),
+        "gifar": ("RT_SPEC_GI_FAR=1", two(lambda r: old_requests_swap(r, "RT_SPEC_GI_FAR=1", "RT_GI_FAR=1"),
+                                          lambda f: 1007))}
 
 
 def opt(tool, src, dst, *passes):
@@ -196,9 +205,11 @@ def check_one(tool, tmp, i, spec_path, old_path, assign):
     s = opt(tool, spec_path, d / "s.spv",
             "--set-spec-const-default-value=" + " ".join(f"{k}:{v}" for k, v in sorted(assign.items())))
     s = opt(tool, s, d / "f.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
-    s = opt(tool, s, d / "sO.spv", "-O")
+    # S2b: the far main() declares SV_GroupID / SV_GroupIndex even with the constant 0; dropping unused interface
+    # variables on both sides compares the programs, not the declarations.
+    s = opt(tool, s, d / "sO.spv", "-O", "--remove-unused-interface-variables")
     o = opt(tool, old_path, d / "of.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
-    o = opt(tool, o, d / "oO.spv", "-O")
+    o = opt(tool, o, d / "oO.spv", "-O", "--remove-unused-interface-variables")
     return differ(canonical(tool, s), canonical(tool, o))
 
 
