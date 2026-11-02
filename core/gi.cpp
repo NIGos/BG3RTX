@@ -23,6 +23,7 @@
 #include "../common/native_hair_origin.h"
 #include "../common/shader_variant.h"
 #include "../common/pipeline_async.h"
+#include <chrono>
 #include "../common/ls_exact_k.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
@@ -3403,7 +3404,22 @@ void gi_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) {
 
 void gi_on_cmd_end(VkCommandBuffer cmd) { flush(cmd); }
 
-void gi_on_frame(uint64_t) {}
+// The background builds' status (common/pipeline_async.h Monitor): a line every rt_timing_frames presents and
+// one when a burst of builds is done (the gates of tools/live_batches/hair_qual).
+void gi_on_frame(uint64_t) {
+  static bg3::pipe_async::Monitor mon;
+  const double now = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  bg3::pipe_async::Monitor::Window w;
+  bg3::pipe_async::Monitor::Burst b;
+  const int frames = host->cfg_int("rt_timing_frames", 120);
+  const unsigned ev = mon.tick(g_builds.pending(), g_builds.started_total(), now, unsigned(frames > 0 ? frames : 120), &w, &b);
+  if (ev & bg3::pipe_async::Monitor::kWindow)
+    host->log("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,
+              w.pending, w.started);
+  if (ev & bg3::pipe_async::Monitor::kBurst)
+    host->log("gi: background builds done: %u builds in %.0f ms over %llu presents, longest present interval %.0f ms",
+              b.builds, b.ms, (unsigned long long)b.frames, b.longest_ms);
+}
 
 void gi_release() {
   g_builds.join();   // the background builds read the layouts released below; their unclaimed pipelines are discarded

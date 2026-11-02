@@ -96,6 +96,39 @@ int main() {
     CHECK(discarded.count(61) == 0);   // the queued one never ran
   }
   CHECK(inits >= 2);
+
+  // Monitor: windows of 4 presents; a burst from the interval where a build started to the first present with none
+  // pending (its wall time includes the interval the start fell in), the longest present interval inside it.
+  {
+    pa::Monitor m;
+    pa::Monitor::Window w;
+    pa::Monitor::Burst b;
+    // t: 0, 16, 32 idle; a build starts in (32, 48]; pending until the present at 1048 (a 1000 ms present gap at 1048).
+    CHECK(m.tick(0, 0, 0, 4, &w, &b) == 0);
+    CHECK(m.tick(0, 0, 16, 4, &w, &b) == 0);
+    CHECK(m.tick(0, 0, 32, 4, &w, &b) == 0);
+    CHECK(m.tick(1, 1, 48, 4, &w, &b) == pa::Monitor::kWindow);   // 4th present: the window; the burst runs
+    CHECK(w.frames == 4 && w.waiting == 1 && w.started == 1 && w.pending == 1);
+    CHECK(m.tick(2, 2, 64, 4, &w, &b) == 0);
+    CHECK(m.tick(1, 2, 1064, 4, &w, &b) == 0);
+    const unsigned ev = m.tick(0, 2, 1080, 4, &w, &b);
+    CHECK(ev == pa::Monitor::kBurst);
+    CHECK(b.builds == 2 && b.frames == 4);
+    CHECK(b.ms == 1080 - 32);        // from the present before the start
+    CHECK(b.longest_ms == 1000);
+    CHECK(m.tick(0, 2, 1096, 4, &w, &b) == pa::Monitor::kWindow);
+    CHECK(w.frames == 4 && w.waiting == 2 && w.started == 1 && w.pending == 0);
+    // A build that starts and finishes between two presents is still a burst (pending 0 at the tick).
+    CHECK(m.tick(0, 3, 1112, 4, &w, &b) == pa::Monitor::kBurst);
+    CHECK(b.builds == 1 && b.frames == 1 && b.ms == 16);
+    // Idle windows report zeros.
+    for (int i = 0; i < 2; ++i) m.tick(0, 3, 1128 + 16 * i, 4, &w, &b);
+    CHECK(m.tick(0, 3, 1160, 4, &w, &b) == pa::Monitor::kWindow);
+    CHECK(w.waiting == 0 && w.started == 1 && w.pending == 0);   // the window holds the 1112 start
+    for (int i = 0; i < 3; ++i) m.tick(0, 3, 1176 + 16 * i, 4, &w, &b);
+    CHECK(m.tick(0, 3, 1224, 4, &w, &b) == pa::Monitor::kWindow);
+    CHECK(w.waiting == 0 && w.started == 0 && w.pending == 0);
+  }
   std::printf("pipeline_async_test: %d checks passed\n", checks);
   return 0;
 }

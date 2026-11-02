@@ -72,6 +72,7 @@ class Builds {
     job->fn = fn;
     jobs_[key] = job;
     queue_.push_back(job);
+    ++started_;
     while (threads_.size() < workers_) threads_.emplace_back([this] { work(); });
     cv_.notify_one();
     return State::kStarted;
@@ -89,6 +90,11 @@ class Builds {
     std::unique_lock<std::mutex> lock(mu_);
     parked_.push_back({dep, std::move(destroy)});
     drain_locked();
+  }
+
+  uint64_t started_total() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return started_;
   }
 
   size_t pending() const {
@@ -204,7 +210,63 @@ class Builds {
   std::unordered_map<std::string, unsigned> failed_;
   std::vector<Parked> parked_;
   std::vector<std::thread> threads_;
+  uint64_t started_ = 0;
   bool stopping_ = false;
+};
+
+// Per-present status of the builds (core/gi.cpp gi_on_frame), the observables of the live gates:
+// - a window of `window_frames` presents: frames with a build pending (a new request's pass skipped), builds
+//   started, builds still pending at its end ("gi: background builds (N frames): ...");
+// - a burst, from the frame a build started to the first frame with none pending: builds started, wall time,
+//   presents and the longest present interval inside it ("gi: background builds done: ..."): the first enable of
+//   native hair used to block one present for each variant (DXC up to 10.4 s + creation up to 7 s).
+class Monitor {
+ public:
+  struct Window { unsigned frames = 0, waiting = 0, started = 0; size_t pending = 0; };
+  struct Burst { unsigned builds = 0; uint64_t frames = 0; double ms = 0, longest_ms = 0; };
+  enum : unsigned { kWindow = 1, kBurst = 2 };
+  // One call per present: `pending` and `started_total` from Builds, `now_ms` a steady clock.
+  unsigned tick(size_t pending, uint64_t started_total, double now_ms, unsigned window_frames, Window* w, Burst* b) {
+    unsigned out = 0;
+    const unsigned starts = unsigned(started_total - last_started_);
+    last_started_ = started_total;
+    const double dt = have_last_ ? now_ms - last_ms_ : 0.0;
+    last_ms_ = now_ms;
+    have_last_ = true;
+    if (!in_burst_ && (pending || starts)) {   // started during the interval that ends here
+      in_burst_ = true;
+      burst_ = Burst{};
+      t0_ = now_ms - dt;
+    }
+    if (in_burst_) {
+      ++burst_.frames;
+      burst_.builds += starts;
+      if (dt > burst_.longest_ms) burst_.longest_ms = dt;
+      if (!pending) {
+        burst_.ms = now_ms - t0_;
+        if (b) *b = burst_;
+        in_burst_ = false;
+        out |= kBurst;
+      }
+    }
+    ++win_.frames;
+    if (pending) ++win_.waiting;
+    win_.started += starts;
+    if (win_.frames >= (window_frames ? window_frames : 1)) {
+      win_.pending = pending;
+      if (w) *w = win_;
+      win_ = Window{};
+      out |= kWindow;
+    }
+    return out;
+  }
+
+ private:
+  Window win_;
+  Burst burst_;
+  uint64_t last_started_ = 0;
+  double last_ms_ = 0, t0_ = 0;
+  bool have_last_ = false, in_burst_ = false;
 };
 
 }  // namespace bg3::pipe_async

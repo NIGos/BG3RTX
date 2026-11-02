@@ -13,6 +13,11 @@
   appearing within about a minute, no `skipped: no variant for` with hair on, water reflections still drawn.
   Layer stat "render thread waited" now also counts worker waits (layer unchanged).
 
+- Qualification batch tools/live_batches/hair_qual (READY_FOR_LIVE, not authorized): S8 water + Test Dialogue1-3,
+  smoke_ultra keys + hair latches, hair toggled live, every checklist item below gated per window; new core lines
+  `gi: background builds (N frames)` / `... done: ... longest present interval L ms` gate "no pass skipped while
+  measuring" and the startup (first enable) burst (L < 1000 ms, done by settle-cam). Needs a0c9be1 (char_energy.py).
+
 ### What native hair still needs for Ultra (NATIVE_HAIR.md, DIALOGUE_SHADOWS.md)
 - [ ] Participation: `[alpha hair] native coverage records` > 0 and `[alpha scalp]` > 0 in every hair window, all three dialogue saves.
 - [ ] Invalid/missing native state 0, retired bounds-invalid 0, alpha made opaque 0.00 per window (10-31 lost 28-31 cutouts/frame).
