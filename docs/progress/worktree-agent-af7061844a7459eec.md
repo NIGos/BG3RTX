@@ -13,3 +13,13 @@
   alpha 1 at every mip down to 1x1, so cutout triangles stay UNKNOWN. When ranges are attached, the guard
   makes five per-lane host-visible atomics per ray query.
 - Docs: docs/P4_OMM.md section 1 and 1a.
+
+## rt_omm follow-up: guard cost fix, LOD and VT plan (branch worktree-agent-af7061844a7459eec, offline, 2026-11-02)
+- Merged main; the OMM check moved to rtStats 443..447 (5 counters; main took 435..442).
+- Guard: scene-current check once per wave and invocation instead of five per-lane atomics per query;
+  content epochs in BAR VRAM (`device_local=1` on the log line). Off by default (rt_omm=0).
+- Coverage at camp (lr1 alpha table): the one audited recipe is 0.06% of about 700k alpha triangles; VT
+  738494714d50b4c7 is 91%. The classification rule cannot raise that; VT masks can.
+- Not done (not small): classification at the any-hit LOD. The LOD is per ray, so a static state agrees only
+  under a footprint gate (option A, exact) or a fixed fine-LOD policy for baked materials (option B, image
+  change). Plan with costs, and the offline VT mask plan, in docs/P4_OMM.md section 11.

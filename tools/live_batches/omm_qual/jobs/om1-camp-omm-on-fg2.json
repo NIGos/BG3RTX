@@ -57,9 +57,9 @@
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[omm\\] requesting EXT micromap \\+ synchronization2",
   "\\[omm\\] EXT backend available max_four_state_level=\\d+",
-  "\\[omm content\\] GPU epochs active slots=\\d+",
+  "\\[omm content\\] GPU epochs active slots=\\d+ stride=\\d+ bytes=\\d+ device_local=1",
   "\\[omm\\] last \\d+ builds: alpha draws \\d+, native plain captures \\d+; alpha-tested triangles per build [0-9.]+M",
-  "omm check \\(\\d+ frames\\): compared visibility \\d+, closest hit \\d+; accelerated scene not current \\d+; violations visibility \\d+, closest hit \\d+;",
+  "omm check \\(\\d+ frames\\): compared \\d+, not compared \\(accelerated scene not current or an unknown answer\\) \\d+; violations \\d+;",
   "gi: rt_omm_reference 1 \\(OMM variants trace the reference scene\\)",
   "gi: rt_omm_reference 0 \\(OMM variants trace the accelerated scene\\)"
  ],
@@ -125,7 +125,7 @@
   {
    "name": "omm violations: the same rays give the same answer in the accelerated and the reference scene (docs/P4_OMM.md 9.5)",
    "select": "omm check \\(\\d+ frames\\):",
-   "match": "violations visibility 0, closest hit 0;",
+   "match": "; violations 0;",
    "windows": [
     "diag-check"
    ],

@@ -28,10 +28,22 @@ static bool g_omm_traced = false, g_omm_current = false;
 static uint g_omm_cand = 0u;
 // rt_omm_reference=1 (ls_flags bit 28, live A/B): the guard still runs and costs the
 // same, but every query traces the reference scene. The check's second trace forces it.
+// The guard's atomics run once per wave and invocation, not per query (rt_omm_scene_current
+// was five per-lane atomics on every ray query): the first active lane reads the epochs, the
+// wave shares the answer, and later queries of the same invocation reuse it.
+static int g_omm_scene_state = -1;
+bool rt_omm_scene_current_wave() {
+  if (g_omm_scene_state < 0) {
+    bool current = false;
+    if (WaveIsFirstLane()) current = rt_omm_scene_current();
+    g_omm_scene_state = WaveReadLaneFirst(current) ? 1 : 0;
+  }
+  return g_omm_scene_state == 1;
+}
 bool rt_omm_use_accelerated() {
   g_omm_traced = true;
   if (g_omm_reference_pass) return false;
-  g_omm_current = rt_omm_scene_current();
+  g_omm_current = rt_omm_scene_current_wave();
   return g_omm_current && (pc.ls_flags & (1u << 28)) == 0u;
 }
 // rtStats 443..447 (core/gi.cpp kOmmCheckFirst, rt_stats=1, logged as "omm check"):

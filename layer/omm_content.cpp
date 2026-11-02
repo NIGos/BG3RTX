@@ -82,7 +82,12 @@ bool content_device_created(DeviceData* dd){
   if(dd->vk.CreateBuffer(dd->device,&b,nullptr,&counters)!=VK_SUCCESS){cleanup();return false;}
   VkMemoryRequirements req{};dd->vk.GetBufferMemoryRequirements(dd->device,counters,&req);
   VkPhysicalDeviceMemoryProperties mem{};dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical,&mem);
-  uint32_t type=UINT32_MAX;for(uint32_t i=0;i<mem.memoryTypeCount;++i)if((req.memoryTypeBits&(1u<<i)) && (mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}
+  // VRAM first (DEVICE_LOCAL|HOST_VISIBLE|HOST_COHERENT, the BAR heap): the RT guard's GPU atomics stay
+  // on the device; the host only memsets once below. System memory is the fallback (logged).
+  constexpr VkMemoryPropertyFlags kBar=VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  uint32_t type=UINT32_MAX;for(uint32_t i=0;i<mem.memoryTypeCount;++i)if((req.memoryTypeBits&(1u<<i)) && (mem.memoryTypes[i].propertyFlags&kBar)==kBar){type=i;break;}
+  const bool deviceLocal=type!=UINT32_MAX;
+  if(!deviceLocal)for(uint32_t i=0;i<mem.memoryTypeCount;++i)if((req.memoryTypeBits&(1u<<i)) && (mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}
   VkMemoryAllocateInfo a{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};a.allocationSize=req.size;a.memoryTypeIndex=type;
   if(type==UINT32_MAX || dd->vk.AllocateMemory(dd->device,&a,nullptr,&counterMemory)!=VK_SUCCESS ||
      dd->vk.BindBufferMemory(dd->device,counters,counterMemory,0)!=VK_SUCCESS || dd->vk.MapMemory(dd->device,counterMemory,0,bytes,0,&mapped)!=VK_SUCCESS){cleanup();return false;}
@@ -104,7 +109,7 @@ bool content_device_created(DeviceData* dd){
   const auto beginResult=result==VK_SUCCESS?dd->vk.CreateComputePipelines(dd->device,VK_NULL_HANDLE,1,&p,nullptr,&beginPipeline):result;
   dd->vk.DestroyShaderModule(dd->device,shader,nullptr);
   if(result!=VK_SUCCESS || beginResult!=VK_SUCCESS){cleanup();return false;}
-  active.store(true,std::memory_order_release);log("[omm content] GPU epochs active slots=%u stride=%llu bytes=%llu",registry.capacity,stride,bytes);return true;
+  active.store(true,std::memory_order_release);log("[omm content] GPU epochs active slots=%u stride=%llu bytes=%llu device_local=%d",registry.capacity,stride,bytes,int(deviceLocal));return true;
 }
 void content_device_destroyed(DeviceData* dd){
   std::lock_guard lock(contentMutex);if(owner!=dd)return;active.store(false,std::memory_order_release);
