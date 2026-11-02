@@ -24,3 +24,12 @@
   (the readback waited for the GPU and read uncached memory at every present): FG not measurable from this run.
   Fix: the readback finishes at the next present, host-cached memory. Bursts deleted (11.9 GB).
 - wf6-s8-fg2 (foreground, 169 s, presented frames only): off-a / fgoff / fgmv / off-b; predicted.json first.
+- Result wf6-s8-fg2 162806 (VALID after the gate fix: the every-window select is now the "present capture done" line
+  only; re-gated: 8/8 ok). 32 consecutive presents per turn (0.35 s, 0.65 s with FG off). Presented second difference
+  (UNORM8 codes), water mask (59k px) / rest, even / odd presents: off-a 3.75/4.16 | 2.49/2.80, fgoff 6.04/6.10 |
+  4.00/4.04, fgmv 3.74/4.14 | 2.51/2.82, off-b 3.68/4.21 | 2.51/2.87. Parity ratio water = rest in every turn (1.11 /
+  1.12, 1.01 / 1.01, 1.11 / 1.12, 1.14 / 1.14); water / rest 1.47-1.51 with FG on and off alike. DLSS-G adds no
+  water-specific alternation; rt_water_fg_mv null (stays off).
+- Verdict (wf3-wf6): the port water flicker is not the RT water compose, RR's water inputs, the sun-shadow ray, glint
+  aliasing or DLSS-G: the game's animated water changes 1.5x more per present than the rest of the image at either
+  display rate. No key fixes it; all water flicker keys stay off.

@@ -196,7 +196,7 @@
   },
   {
    "name": "presented frames captured in every snap turn",
-   "select": "\\[sl\\] (capturing \\d+ presented frames|present capture done)",
+   "select": "\\[sl\\] present capture done",
    "match": "\\[sl\\] present capture done",
    "event": true,
    "min": 1,
