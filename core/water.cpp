@@ -198,8 +198,8 @@ VkDeviceSize param_off(uint32_t slot) { return kRing * kStatBytes + VkDeviceSize
 
 bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout layout) {
   // The variant of the scene layout (rt_cascade_casters); a pipeline of another request never runs.
-  // water_view traces nothing: always its plain file.
-  const bool traces = std::strncmp(base, "rt/water_view", 13) != 0;
+  // water_view and water_mv trace nothing: always their plain file.
+  const bool traces = std::strncmp(base, "rt/water_view", 13) != 0 && std::strncmp(base, "rt/water_mv", 11) != 0;
   const std::string req = bg3::shader_variant::water_request(base, traces && cascade_on());
   const char* file = req.c_str();
   Bg3ShaderBlob blob{};
@@ -1138,6 +1138,135 @@ void release_compose() {
 
 bool water_rf_wanted() { return host->cfg_int("rt_water_reflections", 0) != 0; }
 
+// ---- rt_water_rr_mv (shaders/rt/water_mv.hlsl, ABI 26 set_rr_motion_vectors) ----
+// RR's motion vectors: the game's, with the water surface's parallax on the water pixels (the water
+// writes no motion, so the game's vectors there are the bed's). Our own RG16F image (the game's MV
+// format, checked), handed to the layer each frame it is written; FG keeps the game's vectors.
+Pipe g_mvp;
+VkDescriptorSetLayout g_mv_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_mv_pl = VK_NULL_HANDLE;
+uint32_t g_mv_push = 0;
+Bg3Image g_mvw{};
+uint32_t g_mvw_w = 0, g_mvw_h = 0;
+bool g_mvw_init = false, g_mvw_set = false;
+VkBuffer g_mvh = VK_NULL_HANDLE;
+VkDeviceMemory g_mvh_mem = VK_NULL_HANDLE;
+
+void release_mv_image() {
+  if (g_mvw_set && host->set_rr_motion_vectors) host->set_rr_motion_vectors(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_FORMAT_UNDEFINED, 0, 0);
+  g_mvw_set = false;
+  host->defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)g_mvw.view);
+  host->defer_destroy(BG3_DEFER_IMAGE, (uint64_t)g_mvw.image);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_mvw.memory);
+  g_mvw = Bg3Image{};
+  g_mvw_w = g_mvw_h = 0;
+  g_mvw_init = false;
+}
+
+void release_mv() {
+  release_mv_image();
+  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_mvp.p);
+  g_mvp = Pipe{};
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_mv_pl);
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_mv_dsl);
+  g_mv_pl = VK_NULL_HANDLE, g_mv_dsl = VK_NULL_HANDLE, g_mv_push = 0;
+  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_mvh);
+  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_mvh_mem);
+  g_mvh = VK_NULL_HANDLE, g_mvh_mem = VK_NULL_HANDLE;
+}
+
+// The bindings of water_mv.hlsl: cam, vp, the G-buffer depth, the game's MV, wT, cam2, the camera history, the output.
+constexpr struct { uint32_t binding; VkDescriptorType type; } kMvBind[] = {
+    {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}, {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}, {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
+    {17, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE}, {63, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}, {65, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
+    {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}, {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
+constexpr uint32_t kNumMvBind = uint32_t(sizeof kMvBind / sizeof kMvBind[0]);
+constexpr VkDeviceSize kMvHistBytes = 2 * 96;   // water_mv.hlsl kHistBytes, two slots
+
+// After water_reflect (wT of this frame written and visible to compute). False: nothing written this frame.
+bool water_mv(VkCommandBuffer cmd, const WaterRfIn& in) {
+  const VkDeviceFuncs& vk = *host->vk;
+  const bool cam2 = in.cam2.buffer && in.cam2.range >= 224;
+  if (!host->set_rr_motion_vectors || !in.mv_view || !in.mv_image || in.mv_format != VK_FORMAT_R16G16_SFLOAT || !cam2)
+    return false;
+  if (g_mv_pl && g_mv_push != in.push_bytes) release_mv();
+  if (!g_mv_dsl) {
+    VkDescriptorSetLayoutBinding b[kNumMvBind];
+    for (uint32_t i = 0; i < kNumMvBind; ++i) b[i] = {kMvBind[i].binding, kMvBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    ci.bindingCount = kNumMvBind;
+    ci.pBindings = b;
+    if (vk.CreateDescriptorSetLayout(host->device, &ci, nullptr, &g_mv_dsl) != VK_SUCCESS) return g_mv_dsl = VK_NULL_HANDLE, false;
+  }
+  if (!g_mv_pl) {
+    VkPushConstantRange pr{VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes};
+    VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    li.setLayoutCount = 1;
+    li.pSetLayouts = &g_mv_dsl;
+    li.pushConstantRangeCount = 1;
+    li.pPushConstantRanges = &pr;
+    if (vk.CreatePipelineLayout(host->device, &li, nullptr, &g_mv_pl) != VK_SUCCESS) return g_mv_pl = VK_NULL_HANDLE, false;
+    g_mv_push = in.push_bytes;
+  }
+  if (!g_mvh && !make_device_buffer(kMvHistBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_mvh,
+                                    g_mvh_mem))
+    return false;
+  if (!g_mvw.image || g_mvw_w != in.w || g_mvw_h != in.h) {
+    if (g_mvw.image) release_mv_image();
+    if (!host->alloc_image(in.w, in.h, VK_FORMAT_R16G16_SFLOAT,
+                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &g_mvw))
+      return false;
+    g_mvw_w = in.w, g_mvw_h = in.h;
+  }
+  if (!make_pipe(g_mvp, "rt/water_mv.hlsl", "water_mv", g_mv_pl)) return false;
+  if (!g_mvw_init) {
+    image_barrier(cmd, g_mvw.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    vk.CmdFillBuffer(cmd, g_mvh, 0, kMvHistBytes, 0);   // frame 0 in both slots: no previous camera yet
+    memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
+    g_mvw_init = true;
+  }
+  // The game's MVs are sampled in SHADER_READ_ONLY (as the GI passes do, core/gi.cpp).
+  const VkImageLayout RO = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, G = VK_IMAGE_LAYOUT_GENERAL;
+  const bool move = in.mv_layout != RO;
+  if (move) image_barrier(cmd, in.mv_image, in.mv_layout, RO, kAll, kCS);
+  // The previous readers of our image (RR, an earlier command buffer) and of the camera history.
+  memory_barrier(cmd, kAll, kCS);
+  VkDescriptorBufferInfo bufs[4] = {{in.cam.buffer, in.cam.offset, in.cam.range},
+                                    {in.vp.buffer, in.vp.offset, in.vp.range},
+                                    {in.cam2.buffer, in.cam2.offset, 224},
+                                    {g_mvh, 0, kMvHistBytes}};
+  VkDescriptorImageInfo imgs[4] = {{VK_NULL_HANDLE, in.dep.view, in.dep.layout}, {VK_NULL_HANDLE, in.mv_view, RO},
+                                   {VK_NULL_HANDLE, g_t.view, G}, {VK_NULL_HANDLE, g_mvw.view, G}};
+  VkWriteDescriptorSet wr[kNumMvBind];
+  for (uint32_t i = 0; i < kNumMvBind; ++i) {
+    wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wr[i].dstBinding = kMvBind[i].binding;
+    wr[i].descriptorCount = 1;
+    wr[i].descriptorType = kMvBind[i].type;
+    switch (kMvBind[i].binding) {
+      case 0: wr[i].pBufferInfo = &bufs[0]; break;
+      case 1: wr[i].pBufferInfo = &bufs[1]; break;
+      case 5: wr[i].pImageInfo = &imgs[0]; break;
+      case 17: wr[i].pImageInfo = &imgs[1]; break;
+      case 63: wr[i].pImageInfo = &imgs[2]; break;
+      case 65: wr[i].pBufferInfo = &bufs[2]; break;
+      case 66: wr[i].pBufferInfo = &bufs[3]; break;
+      case 67: wr[i].pImageInfo = &imgs[3]; break;
+    }
+  }
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_mvp.p);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_mv_pl, 0, kNumMvBind, wr);
+  vk.CmdPushConstants(cmd, g_mv_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
+  vk.CmdDispatch(cmd, (in.w + 15) / 16, (in.h + 15) / 16, 1);
+  if (move) image_barrier(cmd, in.mv_image, RO, in.mv_layout, kCS, kAll);
+  memory_barrier(cmd, kCS, kAll);   // RR (the DLSS evaluate, later in the frame) reads it
+  host->set_rr_motion_vectors(g_mvw.image, g_mvw.view, VK_FORMAT_R16G16_SFLOAT, in.w, in.h);
+  if (!g_mvw_set) host->log("[water] RR motion vectors on (rt_water_rr_mv=1): %ux%u RG16F, water pixels get the surface's parallax", in.w, in.h);
+  g_mvw_set = true;
+  return true;
+}
+
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   if (!water_rf_wanted()) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1275,6 +1404,14 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   memory_barrier(cmd, kCS, kCS);
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
   vk.CmdDispatch(cmd, gx, gy, 1);
+  // rt_water_rr_mv: RR's motion vectors with the water surface's (inside the timed region: its cost is
+  // part of "reflections GPU"). Off: the layer gets the game's vectors back.
+  if (host->cfg_int("rt_water_rr_mv", 0)) {
+    memory_barrier(cmd, kCS, kCS);
+    if (!water_mv(cmd, in) && g_mvw_set) release_mv_image();
+  } else if (g_mvw_set) {
+    release_mv_image();
+  }
   if (g_qp) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
   // The views (later passes, other command buffers), the copy of the counters to this slot and
   // its host read kRing frames later.
@@ -1348,6 +1485,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
 void water_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_compose();
+  release_mv();
   release_images();
   for (Pipe* p : {&g_primary, &g_reflect, &g_view}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
   host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);

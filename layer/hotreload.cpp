@@ -203,6 +203,7 @@ void core_init(DeviceData* dd) {
   g_host.alloc_host_buffer = &alloc_host_buffer;
   g_host.query_set = &query_set;
   g_host.set_spec_hit_distance = &ngx_set_spec_hit_distance;
+  g_host.set_rr_motion_vectors = &ngx_set_rr_motion_vectors;
   g_host.assetdb = assetdb_api();
   g_host.rr_active = &ngx_rr_active;
   g_host.rt_emissive = &em_scene;
