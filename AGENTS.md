@@ -110,6 +110,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   forbid new frameworks, and cap the report (~15 lines: commit, cause, fix, numbers, what is left).
 - The coordinator does not implement: it merges, resolves conflicts, reads logs and assigns work.
 - Bundle verified branches into one merge-green (merge them in a worktree first, resolve conflicts there).
+- Before running a gate or a long tool, an agent runs `git merge main` in its tree: the tools on main are the
+  latest and fastest (cache, progress, DXC slots); an old copy once ran a 40-minute uncached shader gate.
 - Shared registries cause most conflicts: allocate rtStats counters only after the last index of the table
   next to kStatsCounters in core/gi.cpp; add Python tests to the single CMake foreach list; branches write
   docs/progress/<branch>.md, never PROGRESS_CODEX.md.
