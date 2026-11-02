@@ -952,3 +952,30 @@ docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
   Validation: 94 / 94 permitted CTests passed (21.44 s); final layer rebuild and
   5 / 5 targeted CTests passed after lifetime safeguards. CPU compaction test: 68 checks.
   GPU cost and visual/energy invariance remain unmeasured; no game was launched.
+
+### BLAS motion fragmentation (2026-11-02, codex-vram-motion, offline candidate)
+
+- vg2 at 21:55:12: 62 chunks, 4077.7 MB reserved, 867.3 MB live and 588.3 MB
+  pending. The other 2622.1 MB is free space inside pinned chunks, not pending
+  retirement. Existing freed-range suballocation and fence retirement already work.
+- The fullest-chunk policy mixes short-lived rebuilds with cached compacted meshes.
+  A small mesh placed in a rebuild chunk's tail keeps the entire chunk alive after
+  the large range retires. A slightly larger next rebuild cannot fit its old hole.
+  Per-draw, cascade and sun rebuilds all used that same allocation domain. The log
+  does not identify every chunk owner; the exact contribution awaits vg3.
+- With rt_vram_compact on, allocations now use three chunk arenas: cached mesh and
+  compaction, per-draw, cascade/sun. Cached relocation destinations also stay in the
+  cached arena. Sizes, chunk granularity and all retirement fences stay unchanged.
+  There is no extra GPU command and no unsafe in-place full BLAS rebuild.
+- Turning the key on does not move existing mixed allocations. They drain through
+  ordinary ownership/retirement or verified cached relocation. Turning it off restores
+  mixed placement; a chunk's arena records its original allocation class.
+- CPU regression: 96 frames of increasing rebuild demand plus small persistent
+  compaction destinations, with six-present/GPU/scene retirement. Segregated reserve
+  stays at most 448 MB; mixed reserve reaches 1344 MB. Both finish with 354.8 MB
+  occupied (including retirement) and 24.0 MB live. This reproduces fragmentation,
+  not the exact game workload or an expected 3x runtime gain.
+  Tests also preserve pending fences and exclude dynamic/cascade relocation targets.
+- No shader/ABI change, variants delta 0. Keep the key off by default. Actual motion
+  coverage, physical reserve and GPU ms require the separately authorized vg3 batch
+  at S8 low long view; no game was launched for this change.

@@ -573,6 +573,7 @@ static void log_memory_budget(DeviceData* dd) {
 // before it takes g_vg_mu, never inside it.
 static std::mutex g_vg_mu;
 static vram_guard::Guard g_vg;                               // under g_vg_mu
+static uint64_t g_vg_real_budget = 0;                       // same sample as g_vg.used, before test override
 static std::atomic<bool> g_vg_on{false};
 static std::atomic<uint64_t> g_vg_budget{0};
 static std::atomic<uint64_t> g_vg_ask[vram_guard::kYieldCount];
@@ -590,7 +591,8 @@ uint64_t vram_cap(int consumer, uint64_t fallback) {
 bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
   if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return true;
   std::lock_guard<std::mutex> lock(g_vg_mu);
-  if (!over_cap && g_vg.allow(bytes)) return true;
+  const bool capture = consumer == vram_guard::kRtCapture;
+  if (capture ? g_vg.allow_capture(bytes, g_vg_real_budget) : !over_cap && g_vg.allow(bytes)) return true;
   VgRefusal& r = g_vg_ref[consumer];
   r.note(bytes);
   if (!r.first) r.first = what;
@@ -599,7 +601,8 @@ bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
     g_vg_refused_new = true;
     log("[vram] guard: refused %s, %.0f MB (%s): used %.0f MB, budget %.0f MB, margin %.0f MB%s",
         vram_guard::kConsumerName[consumer], double(bytes) / 1048576.0, what ? what : "?", double(g_vg.used) / 1048576.0,
-        double(g_vg.budget) / 1048576.0, double(g_vg.margin_now()) / 1048576.0,
+        double(capture ? g_vg_real_budget : g_vg.budget) / 1048576.0, double(g_vg.margin_now()) / 1048576.0,
+        capture ? "; full RT replacement exceeds real budget (including outstanding grants)" :
         over_cap ? "; over this consumer's cap for the budget" : g_vg.low ? "; low headroom" : "; would not fit");
   }
   return false;
@@ -624,7 +627,7 @@ static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint
       double(rtcap) * mb, double(alpha) * mb, double(cascade) * mb, double(recycled) * mb, double(em) * mb,
       double(water) * mb, double(ours) * mb, double(used) * mb, double(used > ours ? used - ours : 0) * mb,
       double(budget) * mb, used <= budget ? "within budget" : "OVER budget",
-      !vram_guard_on() ? "off" : low ? "LOW (growth refused, yielding)" : "normal");
+      !vram_guard_on() ? "off" : low ? "LOW (cache growth refused, yielding)" : "normal");
 }
 
 // Present thread (g_main), every frame: sample every 16 frames (one physical-device query), the
@@ -645,6 +648,7 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
     if (window_end) s_window_start = frame;
     return;
   }
+  const uint64_t real_budget = avail;
   // Test budget (rt_vram_guard_budget_mb > 0, a test key): the guard, its caps and the [mem] ours line use
   // min(driver budget, this), so a fresh launch reproduces the pressure of a long session or a smaller card
   // (vg1 2026-11-02: 18.6 of 31.4 GB, the user's 31.7 GB event did not reproduce in a 4-minute run).
@@ -658,6 +662,7 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
   uint64_t need = 0, margin = 0;
   if (on) {
     std::lock_guard<std::mutex> lock(g_vg_mu);
+    g_vg_real_budget = real_budget;
     changed = g_vg.sample(used, avail);
     low = g_vg.low;
     need = g_vg.trim_need();
@@ -670,7 +675,7 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
     if (changed)
       log("[vram] guard: headroom %s: used %.0f MB, budget %.0f MB, margin %.0f MB; asking %.0f MB (%s %.0f, %s %.0f, "
           "%s %.0f)",
-          low ? "LOW, growth refused" : "back, growth allowed", used / 1048576.0, avail / 1048576.0,
+          low ? "LOW, cache growth refused" : "back, growth allowed", used / 1048576.0, avail / 1048576.0,
           double(margin) / 1048576.0, double(need) / 1048576.0, vram_guard::kYieldName[0], ask[0] / 1048576.0,
           vram_guard::kYieldName[1], ask[1] / 1048576.0, vram_guard::kYieldName[2], ask[2] / 1048576.0);
   }

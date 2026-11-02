@@ -421,7 +421,7 @@ uint64_t elastic_cap(bool cascade){
   static_assert(capture_budget::ElasticWindow::samples==3*kSceneSlots);
   const uint64_t start=uint64_t(cascade?cascade_mb():(std::max)(xfb_mb(),16))<<20;
   return (std::min)(capture_budget::kMeshPoolHardCap,(std::max)(start,
-      vram_cap(vram_guard::kCascade,capture_budget::kMeshPoolHardCap)));
+      vram_cap(cascade?vram_guard::kCascade:vram_guard::kRtCapture,capture_budget::kMeshPoolHardCap)));
 }
 // Detach before recording the next producer. Existing descriptors retain the old
 // handle; keep it through the fence covering the last possible cascade consumer.

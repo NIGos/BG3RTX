@@ -134,5 +134,14 @@ int main() {
   chunks[1].ra.cancel(256, 256);
   CHECK(evacuation(chunks, 0, {768}, moves));
   CHECK(chunks[moves[0].chunk].ra.alloc(768, 256, &off) && off == moves[0].off);
+  // Cached relocation must not reintroduce long-lived pins into rebuild arenas.
+  chunks = std::vector<Chunk>(3);
+  for (auto& c : chunks) c.ra.init(1024);
+  CHECK(chunks[0].ra.alloc(256, 256, &off));
+  CHECK(chunks[1].ra.alloc(768, 256, &off));chunks[1].ra.arena = 1;
+  CHECK(chunks[2].ra.alloc(512, 256, &off));chunks[2].ra.arena = 2;
+  CHECK(!evacuation(chunks, 0, {256}, moves));
+  chunks[2].ra.arena = 0;
+  CHECK(evacuation(chunks, 0, {256}, moves) && moves[0].chunk == 2);
   std::printf("VRAM compact: %u checks passed\n", checks);
 }

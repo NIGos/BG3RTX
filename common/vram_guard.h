@@ -36,6 +36,7 @@ inline uint64_t margin(uint64_t budget, uint64_t largest_step, uint64_t observed
 // Each growable consumer's cap is its size qualified on the reference card (RTX 5090, budget 31419 MB,
 // the evidence log) scaled by budget / reference, never below the size it starts at (the default, which
 // every card ran before the guard) and never above the reference cap (unchanged behaviour on 32 GB).
+// RT capture keeps its layout cap: required geometry uses real aggregate headroom instead of a share.
 inline constexpr uint64_t kRefBudget = 31419 * mib;
 enum Consumer : int { kAsChunks, kMeshPool, kCascade, kHitRecycle, kRtCapture, kConsumerCount };
 inline constexpr const char* kConsumerName[kConsumerCount] = {"BLAS chunks", "mesh pool", "cascade capture",
@@ -63,6 +64,9 @@ struct RefusedRequests {
 };
 inline uint64_t cap(Consumer c, uint64_t budget) {
   const CapRef r = kCapRef[c];
+  // Required RT geometry is limited by real aggregate headroom at allocation,
+  // not by a scaled share that can discard opaque draws with gigabytes free.
+  if (c == kRtCapture) return r.ref;
   if (!budget) return r.ref;
   const uint64_t scaled = uint64_t(double(r.ref) * double(budget) / double(kRefBudget)) / mib * mib;
   return (std::clamp)(scaled, r.floor, r.ref);
@@ -71,7 +75,7 @@ inline uint64_t cap(Consumer c, uint64_t budget) {
 // ---- state: hysteresis ----
 // Low when the next largest step would not fit (used + margin > budget); back to normal only when two
 // margins fit (far below), so one freed chunk does not flip it every sample. In Low every growth is
-// refused and the yielders are asked to free down to the exit threshold. Growth in normal state is still
+// refused (except required RT capture) and the yielders are asked to free down to the exit threshold. Growth in normal state is still
 // checked per request against the headroom left (used + the bytes granted since the sample + slack).
 struct Guard {
   bool low = false;
@@ -99,7 +103,20 @@ struct Guard {
     step_cur = (std::max)(step_cur, bytes);
     if (!budget) return true;   // no budget known (extension missing, no sample yet): unchanged behaviour
     if (low) return false;
-    if (used + granted + bytes + slack(budget, max_drop) > budget) return false;
+    const uint64_t reserve = slack(budget, max_drop);
+    if (reserve > budget || used > budget - reserve || granted > budget - reserve - used ||
+        bytes > budget - reserve - used - granted) return false;
+    granted += bytes;
+    return true;
+  }
+  // Required RT capture growth must not inherit cache-trimming hysteresis,
+  // speculative slack or a simulated budget. Count the FULL replacement while
+  // its old buffer survives, and share reservations with ordinary consumers.
+  bool allow_capture(uint64_t bytes, uint64_t real_budget) {
+    step_cur = (std::max)(step_cur, bytes);
+    if (!real_budget) return true;  // extension/sample unavailable: legacy behaviour
+    if (used > real_budget || granted > real_budget - used ||
+        bytes > real_budget - used - granted) return false;
     granted += bytes;
     return true;
   }

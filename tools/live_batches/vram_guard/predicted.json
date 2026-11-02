@@ -70,5 +70,32 @@
     "basis": "At the final vg2 ON snapshot, shrinking pool 2047 -> 1312.5 MiB alone predicts process 15178 -> about 14443.5 MiB after retirement, assuming other allocations unchanged. Replacement overlap temporarily raises usage; it is not a steady-state saving. No budget guarantee for arbitrary game streaming."
    }
   }
+ },
+ "vg3-s8-low-long-view-fg2": {
+  "_rule": "Iteration 4 predictions written before vg3 job/plan generation. No live execution authorized. Real driver budget; no simulated override.",
+  "motion_quality": {
+   "predicted": "No extra opaque drops or alpha fallback in either matched ON turn",
+   "tolerance": "Compare turn-wide peak and mean of complete 120-frame summaries separately for each direction/metric. For each statistic tolerance=abs(OFF-a statistic - OFF-b statistic)+0.02 draws/frame (two rounded hundredths). ON statistic <= max(OFF-a statistic,OFF-b statistic)+tolerance. Require equal summary counts >=2; missing/mismatched evidence fails. No ordinal camera-angle alignment is claimed.",
+   "basis": "OFF-a / ON / OFF-b identical right-left cycles in one launch. A 10 s static reset before each cycle allows retirement/cadence settling. Opposite turns return camera; stochastic animation remains."
+  },
+  "energy_shot_on_vs_off_pct": {
+   "predicted": 0.0,
+   "range": [
+    -0.92,
+    0.92
+   ],
+   "basis": "Pre-post scene float RGB, static exposure-held OFF/ON/OFF. Existing S8 2 x OFF-OFF sigma 0.458%; also report current OFF-OFF spread."
+  },
+  "vram": {
+   "predicted": "Every measured ON snapshot within real driver budget",
+   "basis": "Count retained/copy buffers and all process memory. Report every consumer, BLAS reserved/live/pending, tracked/rest/process/budget. No exact MB target. Recovery repack not mandatory without pressure."
+  },
+  "gpu_cost": {
+   "predicted": "Report existing RT passes and GI GPU ms by complete window; no new pass"
+  },
+  "disk_mb": {
+   "predicted": 190,
+   "basis": "3 PNG traces x 60 MB + log; no float burst"
+  }
  }
 }
