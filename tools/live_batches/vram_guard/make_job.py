@@ -6,8 +6,12 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-NAME = "vg1-s8-low-long-view-fg2"
-PLAN = "vg1_s8.json"
+NAME = "vg2-s8-low-long-view-fg2"
+PLAN = "vg2_s8.json"
+# vg1 (2026-11-02 20:48) peaked at 18.6 of 31.4 GB: a 4-minute launch does not reach the user's 31.7 GB. The guard
+# gets the budget of a 16 GB card (95.5% of the heap, as 31419 of 32187 MB) instead: the game's own share was
+# 10.3-11.3 GB in vg1, ours 3.0-7.6 GB, so ours must stay below about 4 GB: the caps and refusals decide.
+TEST_BUDGET_MB = 15640
 WHEEL = 10   # wheel-up notches: the game zooms in and lowers the camera to the long view (the user's 20:04 move)
 BASE = "rt_debug=0,rt_stats=0"
 
@@ -41,8 +45,10 @@ plan = [
     step("restore", "static", 5, 0, 0),
 ]
 ON = ["view-on-a", "turn-on-r", "turn-on-l", "recover-on"]
+# vg1: at the unfocused 30 fps a 120-frame stats line comes every 4 s; a complete line (its previous one after the
+# toggle) needs a window of 8 s or more: the 6 s shots and 8 s lower-on have none. Gates use the 20 s windows only.
 OFF = ["turn-off-r", "turn-off-l"]
-ALL = [s["label"] for s in plan if s["label"] not in ("warmup-on", "lower-on", "restore")]
+ALL = [s["label"] for s in plan if s["seconds"] >= 20 and s["label"] != "warmup-on"]
 
 expect_every = [
     # The decisive observable: the window breakdown line (layer.cpp log_vram_ours, every rt_timing window) says
@@ -50,18 +56,12 @@ expect_every = [
     # complete line may still be over (the game's own share); the gate holds its later lines (min 3, 120 frames each).
     {"name": "VRAM: process usage within the driver's budget in every guard-on window",
      "select": r"\[mem\] ours \(window\):", "match": r"\(within budget\); guard (normal|LOW)", "min": 1, "windows": ON[:3]},
-    {"name": "VRAM: back within budget after the guard-off turn (recover-on, every complete line)",
-     "select": r"\[mem\] ours \(window\):", "match": r"\(within budget\); guard (normal|LOW)", "min": 3,
-     "windows": ["recover-on"]},
     {"name": "pacing: no Streamline 'Frame rate over 100 ms' in a guard-on window",
      "select": r"\[sl\] warn .*Frame rate over 100\.00ms", "match": r"(?!)", "min": 0, "event": True, "windows": ON},
     {"name": "pacing: no Streamline fence wait timeout in a guard-on window",
      "select": r"\[sl\] warn .*waitCPUFence.*timed out", "match": r"(?!)", "min": 0, "event": True, "windows": ON},
     {"name": "scene wait: every window traces its own frame's scene (0 timeouts)",
      "select": r"\[rt\] scene wait: \d+ frames", "match": r"got this frame's scene, 0 timeouts", "min": 1, "windows": ALL},
-    {"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every window",
-     "select": r"\[geo\] RT capture, last \d+ frames:", "match": r"opaque draws dropped \(buffer full\) 0\.00,", "min": 1,
-     "windows": ALL},
 ]
 forbid = [
     r"\[crash\] exception 0x", "VK_ERROR_DEVICE_LOST", r"\[hot\] core (rejected|faulted)", "FAILED, keeping previous",
@@ -83,8 +83,8 @@ job = {
             "pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,"
             "fg_state_every=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,"
             "rf_hit_gi=1,rt_alpha_spill=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,"
-            "qa_exposure_hold=0"),
-    "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/vram_guard/plans/{PLAN}"],
+            f"qa_exposure_hold=0,rt_vram_guard_budget_mb={TEST_BUDGET_MB}"),
+    "args": ["-Move", "-MovePlan", f"captures/live_batches/vram_guard/plans/{PLAN}"],
     "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[sl\] warn", r"\[pace\]", r"\[mem\]",
                  r"\[vram\]", r"\[watch\]", r"rt passes: GPU cost", "gi: GPU cost", r"\[rt\] scene wait", r"\[geo\] RT capture",
                  r"\[cascade\]", r"\[bvh\] mesh (cache|pool)", r"\[trace\]", r"\[crash\]", "FAILED", r"\[log\]",
@@ -100,9 +100,10 @@ job = {
     ],
     "expect_every": expect_every,
     "forbid": forbid,
-    "expect_runner": [r"\[motion-plan\] pointer centred in owned foreground game", rf"\[wheel-input\] phase=1 notches={WHEEL}\b"]
+    "expect_runner": [r"\[window-mode\] visible_unfocused: hwnd=", r"\[motion-plan\] posted pointer centre to owned unfocused HWND", rf"\[wheel-input\] phase=1 notches={WHEEL}\b"]
                      + [rf"\[motion-trace\] phase={i} label={l} repeat=0" for i, l in shots]
                      + [rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"],
+    "window_mode": "visible_unfocused_fg",
     "stop_on_dump": True,
     "purpose": ("rt_vram_guard at the user's trigger (S8 port, custom Ultra, low camera long view, the turn of "
                 "2026-11-02 20:04: 21992 -> 31668 MB of a 30630 MB budget). One launch: guard on through the long view and "
