@@ -83,7 +83,31 @@ you start the game twice more. Send, on the mod page's Bugs tab:
    on helps a lot.
 4. For a frame generation or DLSS problem, also the `sl_logs` folder.
 
-Never send a save unless you are asked for one. BG3RTX never reads, copies or uploads your saves.
+Never send a save unless you are asked for one. The diagnostic tool below copies only a save you
+explicitly select. It uploads nothing.
+
+### Diagnostic package
+
+Double-click **Diagnostics.cmd** in the BG3RTX install folder (Windows PowerShell 5.1 is included
+with Windows). It creates one timestamped `BG3RTX-diagnostics-*.zip` in that folder and prints its
+contents and size. No save is included by default. To choose one optional save in a file dialog,
+run `Diagnostics.cmd -IncludeSave`; cancel or answer No to keep it out. The dialog shows the save's
+size and defaults to No at confirmation. Close the game first: save collection refuses while
+`bg3.exe` or `bg3_dx11.exe` runs. The selected original is opened read-only and never changed.
+
+The zip contains install-root `bg3rtx.log` and rotated/tagged logs, `bg3rtx.ini`, `bg3rtx_user.ini`,
+`VERSION.txt`, the logs' `[cfg] knobs`/`keys` and device lines, OS version and a light GPU/driver
+query (`Win32_VideoController`). Existing `.dmp` files in `captures\crash` and `.nv-gpudmp` files in
+`captures\aftermath` are included if present. Crash dumps remain off for players; this tool never
+enables them. Missing files are listed in `CONTENTS.txt`. It does not scan save folders or include
+other capture files, shader caches, or `sl_logs`.
+
+Text is redacted for Windows user names in profile paths and obvious credentials (tokens, API keys,
+passwords and bearer headers). Binary dumps and a selected save are copied unchanged and **can contain
+personal data that cannot be redacted**. Review the package before sharing it on the Bugs tab; no files
+are uploaded automatically. Other personal text may remain. For scripted use, the same tool accepts
+`powershell -NoProfile -ExecutionPolicy Bypass -File diagnostics.ps1 -InstallDir "D:\Mods\BG3RTX"`
+and an explicitly selected `-SavePath "D:\Chosen\save.lsv"` instead of the dialog.
 
 ## Licences and credits
 
