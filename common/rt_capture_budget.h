@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cstdint>
 
 namespace bg3::capture_budget {
@@ -41,20 +42,27 @@ inline uint64_t elastic_capacity(uint64_t demand,uint64_t storage_limit,uint64_t
 }
 // 24 samples cover three complete eight-slot scene rings for RT, nine for
 // a cascade slot sampled once per three builds, rather than a loading frame.
-// A new high demand invalidates the whole low-demand window immediately.
+// Retain a rolling peak even across replacement. Grow for live need, not just
+// to restore the 25% reserve; shrink only when another 25% step still fits.
 struct ElasticWindow {
  static constexpr unsigned samples=24;
  unsigned count=0;
  uint64_t peak=0;
+ std::array<uint64_t,samples> recent{};
+ unsigned next=0;
  uint64_t observe(uint64_t current,uint64_t wanted,uint64_t demand=0){
   // A falling card cap can restrict future growth, never discard live need.
   if(wanted<current && wanted<demand)wanted=current;
-  if(wanted>=current){count=0;peak=0;return wanted;}
-  peak=(std::max)(peak,wanted);
+  recent[next]=wanted;next=(next+1)%samples;
+  peak=*std::max_element(recent.begin(),recent.end());
+  if(wanted>=current){
+   count=0;
+   return wanted>current && (!demand || demand>current)?wanted:current;
+  }
   if(count<samples)++count;
-  return count<samples?current:peak;
+  return count<samples || peak+peak/4>current?current:peak;
  }
- void reset(){count=0;peak=0;}
+ void reset(){count=0;peak=0;recent={};next=0;}
 };
 // A producer can be consumed by the next two cascade builds. Their command
 // buffers may submit a frame later; use the same +2 fence coverage as scenes.

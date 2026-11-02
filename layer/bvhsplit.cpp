@@ -941,11 +941,11 @@ bool compact_status_ready() {
 
 void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
   const VkDeviceSize initial = VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20;
-  const VkDeviceSize target = vram_compact::pool_target(g_pool_ra.used, g_pool.size, initial);
+  VkDeviceSize target = vram_compact::pool_target(g_pool_ra.used, g_pool.size, initial);
   // Outlast the existing 240-frame build-result watchdog, plus the scene ring
   // and six-present range retirement. Demand must remain low for the full window.
   const bool quiet = g_pool_quiet.ready(now, cfg_int("rt_vram_compact", 0) && target,
-                                         240 + kSceneSlots + 6);
+                                         240 + kSceneSlots + 6, target);
   if (!cfg_int("rt_vram_compact",0) || !target) return;
   static uint64_t next_log=0;
   auto deferred=[&](const char* why){
@@ -956,6 +956,7 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
     }
   };
   if (!quiet) {deferred("low-demand window");return;}
+  target = (std::max)(target, VkDeviceSize(g_pool_quiet.peak_target));
   if (g_pool_copy.target.b || !g_old_pools.empty()) {deferred("copy or old scene retirement");return;}
   if (geo_native_hair_enabled()) {deferred("native hair ranges");return;}
   {

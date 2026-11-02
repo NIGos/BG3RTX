@@ -3,7 +3,7 @@
  "vg2-s8-low-long-view-fg2": {
   "on_windows_within_test_budget": {
    "predicted": true,
-   "basis": "With guard, compact and elastic enabled: process used <= 15640 MB in measured ON windows after reserves shrink; pending copies and deferred retirement still count. Recovery is measured only after a separate 25 s settling phase. This is a hypothesis, not a measured pass; strict capture retirement can block resizing."
+   "basis": "Hypothesis for iteration 3, not a measured pass: process <= 15640 MiB in measured ON windows after reserves shrink; copies and retained allocations count. vg2 21:38 reached 15178 MiB before restore; restore deliberately disables the bundle and restored cascade 1056 -> 1632 MiB."
   },
   "refusals_on_turn": {
    "predicted": ">0",
@@ -31,7 +31,7 @@
   },
   "rt_capture_opaque_drops": {
    "predicted": ">0 in turns, on and off",
-   "basis": "report, not the guard: vg1 opaque peak 1182 MB of the fixed 1024 MB RT capture (409 MB alpha floor), 5.4 drops/frame in turn-on-l and 1.6-5.0 in the off turn; elastic may remove them only after successful growth. Keep drops as a report until the continuous-capture retirement limitation is resolved; require replacement log evidence separately."
+   "basis": "Report, not a pass: RT replacement now detaches submitted producers but true growth can still be budget-refused. A capped buffer cannot cover all turn demand. Inspect drops, energy and actual replacement evidence."
   },
   "disk_mb": {
    "predicted": 190,
@@ -39,14 +39,14 @@
   },
   "per_consumer_mb_after_retirement": {
    "mesh_pool": {
-    "predicted": 934,
-    "basis": "vg1 467 MB used x 2, from 2047 MB: 1113 MB released; requires used <= reserve/4 for 254 frames, no dynamic/hair pin. Early guard-capped 1018 MB pool may not qualify; prediction concerns recovery after the OFF turn."
+    "predicted": 1312.5,
+    "basis": "vg2 21:38 recovery used 1049.9 MiB of 2047. With 25% headroom and >=25% savings, 1050 MiB rounds to 1312.5 MiB (16-byte alignment), about 734.5 MiB released after retirement. Retain the maximum target throughout the 254-frame qualification window; safety blockers can still defer."
    },
    "cascade_capture": {
-    "per_buffer": 224,
+    "per_buffer": 352,
     "buffers": 3,
-    "predicted": 672,
-    "basis": "169 MiB demand x 1.25 rounded up to 16 MiB = 224; from 3 x 560 = 1680, releases 1008 MiB after successful replacement/retirement."
+    "predicted": 1056,
+    "basis": "vg2 recovery demand 272.5 MiB x 1.25 rounded to 16 MiB = 352. Rolling 24-sample peak survives replacement; reserve-only pressure cannot immediately regrow. Key off deliberately returns to legacy 3 x 544 MiB."
    },
    "blas_chunks": {
     "predicted_upper_bound": 2102,
@@ -55,7 +55,7 @@
    },
    "rt_capture": {
     "predicted_upper_bound": 1024,
-    "basis": "In the simulated 15640 MiB budget the cascade cap is 1018 MiB; elastic_cap(false) retains the RT startup floor of 1024 MiB. Synthetic 1182 opaque + 169 alpha needs 2047 MiB on the reference card, but cannot fit here: drops may persist. A successful RT shrink/replacement is still required as feature evidence; retirement can starve it."
+    "basis": "Existing simulated-card cap remains 1024 MiB; demand-dependent target. vg2 recovery physically held 624 MiB and refused requests around 960 MiB. Peak retry allocation is reported separately from attempt count, under RT capture rather than cascade. No guaranteed turn coverage."
    },
    "hit_material_recycled": {
     "predicted_upper_bound": 254,
@@ -67,7 +67,7 @@
    },
    "overlap": {
     "mesh_pool_copy_retirement_predicted": 0,
-    "basis": "After retirement only; count all overlap before then. Pool 934 + cascade 672 + BLAS 2048 + RT 1024 + recycle 254 = 4932 MB. With vg1 rest 10300-11300 MB, process would be 15232-16232 MB: high-rest windows need at least 592 MB of additional yielding/refusal savings. Shrink arithmetic alone cannot prove the 15640 MB gate."
+    "basis": "At the final vg2 ON snapshot, shrinking pool 2047 -> 1312.5 MiB alone predicts process 15178 -> about 14443.5 MiB after retirement, assuming other allocations unchanged. Replacement overlap temporarily raises usage; it is not a steady-state saving. No budget guarantee for arbitrary game streaming."
    }
   }
  }

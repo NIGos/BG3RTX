@@ -37,28 +37,30 @@ struct UncertainCommands {
   bool empty() const { return commands.empty(); }
   void clear() { commands.clear(); }
 };
-// Pool growth doubles capacity. Shrink only below one quarter, retaining twice
-// the live demand: a shrink frees at least half and leaves one growth step free.
+// Keep the capture policy's 25% demand reserve and require at least 25% savings.
+// The old quarter-full rule never qualified vg2's 1050 / 2047 MiB pool.
 inline uint64_t pool_target(uint64_t used, uint64_t reserved, uint64_t initial) {
-  if (!reserved || used > reserved / 4 || initial >= reserved) return 0;
-  if (used > (std::numeric_limits<uint64_t>::max)() / 2 - 15) return 0;
-  const uint64_t target = (std::max)(initial, (used * 2 + 15) / 16 * 16);
-  return target <= reserved / 2 ? target : 0;
+  if (!reserved || initial >= reserved || used > reserved) return 0;
+  if (used > (std::numeric_limits<uint64_t>::max)() - used/4 - 15) return 0;
+  const uint64_t target = (std::max)(initial, (used + used/4 + 15) / 16 * 16);
+  return target <= reserved - reserved/4 ? target : 0;
 }
 // Bounded replacement overlap is the operation that releases the old reserve.
 // Applying the growth guard here deadlocks shrink precisely when headroom is low.
 inline bool pool_shrink_overlap(uint64_t target,uint64_t reserved){
- return target && target<=reserved/2;
+ return target && target<=reserved-reserved/4;
 }
 inline bool hold_move_matches(uint64_t offset,uint64_t size,uint64_t source,uint64_t bytes){
  return size && offset==source && size==bytes;
 }
 struct QuietWindow {
   uint64_t since = 0;
+  uint64_t peak_target = 0;
   bool active = false;
-  bool ready(uint64_t frame, bool low, uint64_t window) {
-    if (!low || (active && frame < since)) { active = false; return false; }
-    if (!active) { since = frame; active = true; }
+  bool ready(uint64_t frame, bool low, uint64_t window, uint64_t target = 0) {
+    if (!low || (active && frame < since)) { active = false; peak_target = 0; return false; }
+    if (!active) { since = frame; active = true; peak_target = 0; }
+    peak_target = (std::max)(peak_target, target);
     return frame - since >= window;
   }
 };
