@@ -158,7 +158,27 @@ float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt
 // kRtCascadeId). The cascade variants (gi/cascade*/, RT_CASCADE_MASKS) trace 0x01 so that
 // only the sun (RT_CASCADE_SUN: rt_shadow.hlsl's rt_visibility) sees it. Ordinary builds
 // trace 0xFF, the literal they always had: their SPIR-V is unchanged.
-#ifdef RT_CASCADE_MASKS
+#if defined(RT_SPEC_CASCADE)
+// rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, step S1): one module for the plain and the
+// RT_CASCADE_MASKS variant. Specialization constant 1000 (core/gi.cpp refresh: 1 = rt_cascade_casters on)
+// selects the masks and the cascade candidate test at pipeline creation; folded by the driver, each value is
+// the same program as the old variant (tools/spec_cascade_check.py). RT_SPEC_CASCADE_SUN marks the sun pass
+// (rt_shadow.hlsl), RT_CASCADE_SUN's place. The current-caster sun pipe keeps its defines.
+#if defined(RT_CASCADE_MASKS) || defined(RT_CASCADE_SUN) || defined(RT_SUN_CURRENT)
+#error RT_SPEC_CASCADE replaces RT_CASCADE_MASKS / RT_CASCADE_SUN and is not for the current-caster sun
+#endif
+[[vk::constant_id(1000)]] const uint kSpecCascadeMasks = 0u;
+#define RT_CASCADE_ON (kSpecCascadeMasks != 0u)
+#define RT_HIT_MASK (RT_CASCADE_ON ? 0x01u : 0xFFu)
+#if defined(RT_SPEC_CASCADE_SUN)
+#define RT_VIS_MASK 0xFF
+#elif defined(RT_CASCADE_SUN_HIT)
+static bool g_rt_cascade_ray = false;
+#define RT_VIS_MASK (RT_CASCADE_ON ? (g_rt_cascade_ray ? 0xFFu : 0x01u) : 0xFFu)
+#else
+#define RT_VIS_MASK (RT_CASCADE_ON ? 0x01u : 0xFFu)
+#endif
+#elif defined(RT_CASCADE_MASKS)
 #define RT_HIT_MASK 0x01
 #ifdef RT_CASCADE_SUN
 #define RT_VIS_MASK 0xFF
@@ -179,7 +199,8 @@ static bool g_rt_cascade_ray = false;
 #undef RT_VIS_MASK
 #define RT_VIS_MASK (2u<<gSunLayer)
 #endif
-#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS))
+#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)) || \
+    (defined(RT_SPEC_CASCADE) && (defined(RT_SPEC_CASCADE_SUN) || defined(RT_CASCADE_SUN_HIT)))
 static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCustomIndex
 // The cascade soup holds the casters again where the camera drew them too, at the shadow
 // LOD: its hits nearer than this to the ray origin are ignored (no self-shadowing by a
@@ -994,9 +1015,14 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
       continue;
     }
 #endif
-#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS))
+#if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)) || \
+    (defined(RT_SPEC_CASCADE) && (defined(RT_SPEC_CASCADE_SUN) || defined(RT_CASCADE_SUN_HIT)))
     // The cascade instance is not opaque only for this test (no alpha: its triangles are solid).
+#ifdef RT_SPEC_CASCADE
+    if (RT_CASCADE_ON && q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+#else
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+#endif
 #ifdef RT_SUN_CURRENT
         q.CandidateInstanceID()<=kRtCascadeId && q.CandidateInstanceID()>=kRtCascadeId-3u
 #else

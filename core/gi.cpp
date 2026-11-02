@@ -975,11 +975,16 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hit_material_ip_grass at startup: the fourth family's field and counters (RT_HIT_IP_GRASS), as wind RGB.
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // rt_spec_cascade (off; docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): one RT_SPEC_CASCADE module for both
+  // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
+  // Not the current-caster sun pipe (its request keeps the cascade defines).
+  const bool spec_cascade = sv::cascade_entry(file) && !sun_current && host->cfg_int("rt_spec_cascade", 0) != 0;
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
-                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u));
+                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) |
+                                                 (spec_cascade ? unsigned(sv::kSpecCascade) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
@@ -1003,6 +1008,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
                nullptr};
   pci.layout = layout ? layout : g_layout;
+  const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
+  const VkSpecializationMapEntry spec_entry{sv::kSpecCascadeId, 0, sizeof(uint32_t)};
+  const VkSpecializationInfo spec_info{1, &spec_entry, sizeof(uint32_t), &spec_value};
+  if (spec_cascade) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;
   VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
@@ -1018,7 +1027,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   p.variant_files[variant] = selected;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
+  host->log("gi: %s generation %llu%s", selected.c_str(), (unsigned long long)blob.generation,
+            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "");
   return true;
 }
 

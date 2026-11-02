@@ -15,7 +15,12 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kSpecCascade = 4096 };
+// rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
+// carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
+// RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
+// (kSpecCascadeId, spec_cascade_value) at pipeline creation. Not with kSunCurrent (that pipe keeps its defines).
+inline constexpr unsigned kSpecCascadeId = 1000;
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -130,7 +135,7 @@ inline bool sun_current_entry(const char* file) { return std::strcmp(file, "gi/r
 inline unsigned allowed(const char* file) {
   if (std::strncmp(file, "gi/", 3) != 0) return 0;
   unsigned f = kScalp | kOmm | kTileset;
-  if (cascade_entry(file)) f |= kCascade;
+  if (cascade_entry(file)) f |= kCascade | kSpecCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
   if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass;
@@ -161,6 +166,8 @@ inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
   if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb | kHitIpGrass);
+  if (flags & kSunCurrent) flags &= ~unsigned(kSpecCascade);
+  if (flags & kSpecCascade) flags &= ~unsigned(kCascade);   // the constant, not the request, carries it
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -194,9 +201,19 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF
   }
+  if (flags & kSpecCascade) {
+    add("RT_SPEC_CASCADE=1");
+    if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_SPEC_CASCADE_SUN=1");
+  }
   if (flags & kGiFar) add("RT_GI_FAR=1");
   if (flags & kRfHitGi) add("RF_HIT_GI=1");
   return out;
+}
+
+// The value of specialization constant kSpecCascadeId for a request built with kSpecCascade: 1 when the
+// pass would have had RT_CASCADE_MASKS (kCascade allowed for the file), else 0.
+inline unsigned spec_cascade_value(const char* file, unsigned flags) {
+  return (flags & kCascade) && (allowed(file) & kCascade) ? 1u : 0u;
 }
 
 }  // namespace bg3::shader_variant

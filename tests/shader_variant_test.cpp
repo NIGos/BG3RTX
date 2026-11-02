@@ -53,6 +53,14 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
         "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1");
   CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
+  // rt_spec_cascade: one request for both cascade values; the constant carries kCascade.
+  CHECK(request("gi/gi_trace_rt.hlsl", kSpecCascade | kCascade) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1");
+  CHECK(request("gi/gi_trace_rt.hlsl", kSpecCascade) == request("gi/gi_trace_rt.hlsl", kSpecCascade | kCascade));
+  CHECK(request("gi/rt_shadow.hlsl", kSpecCascade | kCascade) == "gi/rt_shadow.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
+  CHECK(request("gi/rt_shadow.hlsl", kSpecCascade | kCascade | kSunCurrent).find("RT_SPEC") == std::string::npos);
+  CHECK(request("gi/gi_ao_apply.hlsl", kSpecCascade) == "gi/gi_ao_apply.hlsl");   // not a cascade pass
+  CHECK(spec_cascade_value("gi/gi_trace_rt.hlsl", kCascade) == 1 && spec_cascade_value("gi/gi_trace_rt.hlsl", 0) == 0);
+  CHECK(spec_cascade_value("gi/gi_ao_apply.hlsl", kCascade) == 0);
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -61,7 +69,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 4096; ++m)
+    for (unsigned m = 0; m < 8192; ++m)   // every flag up to kSpecCascade
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);
