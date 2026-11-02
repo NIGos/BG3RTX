@@ -1,0 +1,136 @@
+{
+ "name": "hpa1-pool-alpha-s6-fg2",
+ "save": "Adamantine Forge",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 480,
+ "repeat": 1,
+ "live_batch": "m4-pool-alpha",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_primary_check=0,rt_primary_epoch=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,rt_hit_reference=0,sharc=0,fg_state_every=30,rt_bvh_split=1,rt_alpha=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_pool_alpha=0,rt_xfb_mb=1408,rt_cascade_mb=587,gi=1,gi_rt=1,gi_rt_fallback=0,gi_hit_direct=1,rt_stats=0,rf_hit_shade=0,rt_hit_emission=0,rt_reflections=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/m4_pool_alpha/plans/hpa_s6.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] transform feedback",
+  "\\[geo\\] \\d+ vertex shader modules",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "GI hit direct",
+  "hit material",
+  "rt stats",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[hit material pool"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[geo\\] transform feedback enabled: vertex shaders get Position \\+ UV XFB decorations \\(stride 64\\)",
+  "\\[hit material capacity\\] frame \\d+ ",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
+  "GI hit direct \\([0-9]+ frames\\): candidates [1-9]\\d* qualified \\d+",
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "\\[hit material pool basis\\] frame \\d+ UV/basis ranges"
+ ],
+ "expect_every": [
+  {
+   "name": "alpha pool instances get pool rows with the key on (instances with a pool row grow), every diag-on window",
+   "select": "\\[hit material pool basis\\] frame \\d+ UV/basis ranges",
+   "match": "this frame instances with a pool row [1-9]\\d*",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1
+  },
+  {
+   "name": "hit-material capacity: no overflow with the mask rows, every diag window",
+   "select": "\\[hit material capacity\\] frame \\d+ ",
+   "match": "opaque rows \\d+/\\d+ overflow 0; deferred rows \\d+/\\d+ overflow 0; samplers \\d+/\\d+ overflow 0; cache views \\d+/\\d+ overflow 0;.* tables \\d+/\\d+ overflow 0",
+   "windows": [
+    "diag-off-a",
+    "diag-on",
+    "diag-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "when_present": true
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_hit_material_pool_alpha at S6 (Adamantine Forge): pool rows for alpha-tested static instanced meshes (Base_AlphaTest_VT shares 2d2ac3c3/14678345 with Base_VT; S6 replay 021627: 'pool alpha, no row' 39.0% of hit lookups, depth FS 84d5df19 27.5% / 5afd54a9 11.5%; live m4p3 012015: 2d2ac3c3/14678345 66 records, 21 with a UV/basis, because alpha meshes got none). Ultra (+ Bounce, Hidden hits) with live OFF/ON/OFF of the key, exposure held: diag windows (hit material qualified and reasons, pool basis rows), cost windows, PNGs.",
+ "estimated_phase_seconds": 144
+}

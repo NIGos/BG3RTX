@@ -77,6 +77,14 @@ int main(int argc, char** argv) {
   CHECK(nv_reflectance(vt::ReflectanceNormalMix, 0.f, 0.9f) == 0.5f);
   CHECK(nv_reflectance(vt::ReflectanceNormalMix, 1.f, 0.9f) == 0.9f);
   CHECK(std::fabs(nv_reflectance(vt::ReflectanceNormalMix, 0.25f, 0.9f) - 0.6f) < 1e-6f);
+  // rt_hit_material_pool_alpha: an alpha pool instance's row slot + 1 sits above every InstInfo flag and the stride
+  // (bits 0..15: stride 0..7, kInfo flags 8..15 incl. nh_pool_meta) and every slot fits (rec keeps the alpha record).
+  CHECK(nh_pool_meta < (1u << nh_pool_alpha_slot_shift) && nh_opaque_meta < (1u << nh_pool_alpha_slot_shift));
+  CHECK(uint64_t(nh_pool_rows) << nh_pool_alpha_slot_shift <= 0xffffffffull);
+  for (uint32_t slot : {0u, 1u, nh_pool_rows - 1u}) {
+    const uint32_t meta = 64u | (1u << 8) | (1u << 10) | nh_pool_meta | ((slot + 1u) << nh_pool_alpha_slot_shift);
+    CHECK((meta >> nh_pool_alpha_slot_shift) - 1u == slot && (meta & 255u) == 64u && (meta & nh_pool_meta) != 0);
+  }
   // Base_MSK_VT (rt_hit_material_mask; FS a5f44c48 audit, tests/material_families_test.py BaseMask): a pool pair of
   // VS 2d2ac3c3 with the 14678345 engine UBO, reflectance at 1:1 byte 12, the 1:1 colours up to byte 44.
   const auto* msk = pool_recipe(0x2d2ac3c38992b7f0ull, 0xa5f44c487527d272ull);

@@ -1219,6 +1219,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   const VkDeviceAddress soup_addr = rt_buffer_address(cap.xfb);
   const bool alpha_test = cfg_hot(CfgHot::rt_alpha_test) != 0;
+  // rt_hit_material_pool_alpha (live, off): alpha-tested pool meshes (Base_AlphaTest_VT STI shares the G-buffer pair
+  // 2d2ac3c3/14678345 with Base_VT) get a UV/basis range and a pool row too; their InstInfo rec keeps the alpha
+  // record, the row slot + 1 goes to meta bits 16..31 (native_hit_records.h nh_pool_alpha_slot_shift).
+  const bool pool_alpha_rows = native_hit::enabled() && cfg_int("rt_hit_material_pool_alpha", 0) != 0;
   const int rebuild_frames = (std::max)(cfg_int("rt_rebuild_frames", 60), 1);
   // This command buffer's build record (bvh_on_submit marks it submitted).
   const uint64_t rec = bvh_rec_register(cmd);
@@ -1539,12 +1543,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       use = native_hit::pool_lookup(fd.geo_key, fd.pos_key, fd.instances,
                                     {mm.gen, mm.pool_off, mm.tris, stride, mm.basis_off, mm.basis_size, g_pool_epoch});
       const VkDeviceSize need = native_hit::pool::basis_bytes(mm.tris);
-      if (use.wants_basis && !alpha && !mm.basis_size && g_basis_bytes + need <= native_hit::pool::kBasisCapBytes &&
+      if (use.wants_basis && (!alpha || pool_alpha_rows) && !mm.basis_size && g_basis_bytes + need <= native_hit::pool::kBasisCapBytes &&
           pool_alloc(cmd, need, &mm.basis_off)) {
         mm.basis_size = need;   // passed to the record by the next lookup; extracted at its G-buffer draw
         g_basis_bytes += need;
         if (mm.basis_over) { --g_basis_over; g_basis_over_bytes -= (std::min)(g_basis_over_bytes, mm.basis_over); mm.basis_over = 0; }
-      } else if (use.wants_basis && !alpha && !mm.basis_size && !mm.basis_over &&
+      } else if (use.wants_basis && (!alpha || pool_alpha_rows) && !mm.basis_size && !mm.basis_over &&
                  g_basis_bytes + need > native_hit::pool::kBasisCapBytes) {
         mm.basis_over = need;   // its hits keep the base material (no pool row) until a range frees up
         ++g_basis_over;
@@ -1558,9 +1562,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         }
       }
     }
-    const bool pool_row = !alpha && use.slot < native_hit::nh_pool_rows;
+    const bool pool_row = (!alpha || pool_alpha_rows) && use.slot < native_hit::nh_pool_rows;
     const uint32_t inf[4] = {uint32_t(m.pool_off), (stride & 0xffu) | kInfoPool | (alpha ? kInfoAlpha : 0u) |
-                             (fd.camera_fade ? kInfoCameraFade : 0u) | (pool_row ? native_hit::nh_pool_meta : 0u),
+                             (fd.camera_fade ? kInfoCameraFade : 0u) | (pool_row ? native_hit::nh_pool_meta : 0u) |
+                             (pool_row && alpha ? (use.slot + 1u) << native_hit::nh_pool_alpha_slot_shift : 0u),
                              alpha ? 16 + fd.rec * kRecBytes : pool_row ? native_hit::nh_pool_rec_flag | use.slot : 0u, m.tris};
     if (fd.camera_fade) camera_fade_marked(fd.instances, uint64_t(m.tris) * fd.instances);
     for (uint32_t i = 0; i < fd.instances; ++i, ++n) {

@@ -1,0 +1,17 @@
+{
+ "_rule": "Committed BEFORE the run. Scene colour before post (5c3fdabc float mean), shot-on vs shot-off-a/b; the qualified share (diag-on minus the diag-off mean, points of all hit lookups).",
+ "hpa1-pool-alpha-s6-fg2": {
+  "shot-on": {
+   "predicted": 0.005,
+   "basis": "m4p3 012015: + Bounce (gi_hit_direct) added +0.34% at 14.8% qualified, about 0.023% per point; this key can qualify up to the 39 points of alpha pool lookups (S6 replay 021627), about 60% of them with a ready basis in 300 frames: 0.023% x 23 = +0.5%"
+  },
+  "qualified_share_points": {
+   "predicted": 23,
+   "range": [
+    10,
+    39
+   ],
+   "basis": "S6 replay 021627: pool alpha 39.0% of lookups; their pair's records are qualified (live 94% of pool instances) but lacked a basis"
+  }
+ }
+}

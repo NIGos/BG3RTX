@@ -90,8 +90,10 @@ NativeLayer hit_material_2d(uint index,uint sampler,float2 uv,float g){
 // normalize(A_i * b), then interpolated as the rasterizer does. Same status codes as below.
 NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  NativeHitMaterial result=hit_material_unknown(1);
- const uint slot=ii.rec&~nh_pool_rec_flag,stride=ii.meta&255u;
- if((ii.meta&kInfoAlpha)!=0 || (ii.rec&nh_pool_rec_flag)==0 || slot>=nh_pool_rows || hit.prim>=ii.tris || stride<16u)return result;
+ // An alpha-tested pool instance (rt_hit_material_pool_alpha) keeps its alpha record in rec: slot + 1 in meta bits 16..31.
+ const bool alpha=(ii.meta&kInfoAlpha)!=0;
+ const uint slot=alpha?(ii.meta>>nh_pool_alpha_slot_shift)-1u:ii.rec&~nh_pool_rec_flag,stride=ii.meta&255u;
+ if((alpha?(ii.meta>>nh_pool_alpha_slot_shift)==0u:(ii.rec&nh_pool_rec_flag)==0) || slot>=nh_pool_rows || hit.prim>=ii.tris || stride<16u)return result;
  uint bytes,pbytes;gHitRecords.GetDimensions(bytes);gMeshPool.GetDimensions(pbytes);
  const uint row=nh_pool_row_base+slot*256u;
  if(bytes<row+256u || !tri_in_range(ii.base,hit.prim,stride,pbytes))return result;
