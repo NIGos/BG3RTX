@@ -15,6 +15,21 @@
   "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
  },
  {
+  "label": "settle-cam",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
+ },
+ {
   "label": "shot-off-a",
   "kind": "static",
   "speed": "static",
@@ -288,92 +303,92 @@
   "label": "motion-base",
   "kind": "static",
   "speed": "static",
-  "seconds": 8,
+  "seconds": 12,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
+  "motion_start": 12,
+  "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
   "trace_at": [
-   4,
-   4.5
+   6,
+   6.5
   ]
  },
  {
   "label": "motion-nosun",
   "kind": "static",
   "speed": "static",
-  "seconds": 8,
+  "seconds": 12,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
+  "motion_start": 12,
+  "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
   "trace_at": [
-   4,
-   4.5
+   6,
+   6.5
   ]
  },
  {
   "label": "view-lsremoved",
   "kind": "static",
   "speed": "static",
-  "seconds": 8,
+  "seconds": 12,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
+  "motion_start": 12,
+  "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=2,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
   "trace_at": [
-   5
+   6
   ]
  },
  {
   "label": "view-lsowners",
   "kind": "static",
   "speed": "static",
-  "seconds": 8,
+  "seconds": 12,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
+  "motion_start": 12,
+  "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=9,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
   "trace_at": [
-   5
+   6
   ]
  },
  {
   "label": "diag-view-sunmask",
   "kind": "static",
   "speed": "static",
-  "seconds": 8,
+  "seconds": 12,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
+  "motion_start": 12,
+  "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=2,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
   "trace_at": [
-   5
+   6
   ]
  },
  {

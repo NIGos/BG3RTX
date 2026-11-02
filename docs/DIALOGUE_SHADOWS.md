@@ -213,6 +213,49 @@ scene wait 599/599 this frame's scene. Code reading per hypothesis, most plausib
    RT and lighting together. No key removes foliage casters only (none in common/settings.h): the batch
    uses PNG pairs 0.5 s apart with RT on and with the game's map only, rt_cascade_casters=0, and rt_debug=2.
 
+### ds1 result (Test Dialogue1, 2026-11-02 10:52, ran to the end, INVALID only on gates)
+
+Outdoor camp, daylight, two characters in close-up; the dialogue camera was static in every shot (it still moved
+until 41 s after the load: a settle-cam phase now precedes shot-off-a). Character ROI = G-buffer class skin or hair
+(5.2% of the frame); preview linearised; OFF shots a-e spread 1.9% whole frame, 12.9% ROI (dialogue animation).
+
+| shot | ROI vs OFF mean | whole frame | look (crops) |
+|---|---|---|---|
+| noao (gi_ao=0) | +35.1% (neighbours -5.5 / -2.8) | +4.9% | hair and the face under the hair clearly brighter: the only obvious change |
+| nosun | +15.1% (neighbours +7.4 / +2.1) | +3.0% | slight; rt_debug=2 shows RT-only sun shadow (red) on the hair |
+| nocascade | +10.3% (-5.5 / -2.8) | +1.2% | slight |
+| noart / nobox / nolocal | +8.6 / +7.8 / +7.5% | +1.7 / +0.9 / +2.1% | within the ROI spread |
+| charlights / nohold / hair / hairorigin | +1.0 / -4.1 / -7.7 / +4.5% | within spread | no visible change |
+
+Verdict for this save: the character darkening is mostly the RT AO (gi_ao, 1-ray ambient visibility; hair cards
+are opaque in it) on hair and the face under it, beyond the OFF spread. The RT sun adds a smaller hair shadow.
+Local, box, art-unshadowed, held-draw and native-hair toggles stay inside the ROI noise here (no rig light dominates:
+ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG pairs were taken 3 frames apart
+(the trace queue), too close to show motion. The R8 sun mask in the trace is the game's own, dumped before the RT
+fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
+next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
+
+### Occluder-kind diagnostic (requested 2026-11-02, designed, not built)
+
+No existing view names the occluder: rt_debug 1/2 give visibility and game-vs-traced mask, ls_debug 2/9 the removed
+light and the light owner, rt_stats has no free index range. Smallest design, key `rt_occ_stats` (0 default, diag
+windows only), its own device-local buffer, variant define `RT_OCC_STATS` so the ordinary SPIR-V stays identical:
+- At the commit points of rt_visibility (rt_common.hlsli: procedural hair commit, cascade commit, alpha commit,
+  RT_HAS_COMMITTED) store the committed instance index / id and hit t in statics.
+- Kind from what InstInfo already holds (rt_common.hlsli:497-516): cascade copy (id kRtCascadeId), cached static mesh
+  (kInfoPool), dynamic opaque (per-draw BLAS: characters, wind foliage, other skinned), dynamic alpha by AlphaRec kind
+  (table cutout / scalp 3 / hair 4), native hair procedural (kInfoHair); "near" = hit t < 0.5 m as the stand-in for
+  self-shadowing (no per-object identity exists in the TLAS). Held (rt_dyn_hold) needs one InstInfo meta bit set in
+  layer/bvhsplit.cpp for fd.held (layer change: restart, no ABI change).
+- Receivers: character px (G-buffer class 3 skin / 5 hair). Sources: sun (rt_shadow.hlsl), each D-LS light
+  (point/spot vs box) in rt_local_shadows*.hlsl, AO (gi_trace_rt). Counters [source][kind], per-workgroup
+  groupshared reduce, one atomic per group into the device-local buffer, copied after the timed region (host
+  atomics lint); log per window: "occ (60 frames): character px darkened by sun x%, local y%, box z%, AO w%;
+  occluder kinds sun [...] local [...] AO [...]".
+- Float energy of the character mask per shot: the trace dumps are PNG previews (dump_raw=1 writes every target);
+  a core-side reduce of the pre-post colour over the class mask in the same diag window gives it without disk.
+Scope: about 6 shaders + core buffer/log + one layer bit, shader identity and GPU gates: its own work item.
+
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).
 

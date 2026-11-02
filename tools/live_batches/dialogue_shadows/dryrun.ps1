@@ -3,5 +3,5 @@
 # Foreground jobs (user 2026-11-02: the PC is free); ds0 warms the shader variants (4 launches). 22 PNG traces per job at 1024 px: about 28 MB each
 # (44 MB measured at 1280 px on the 2026-11-02 su1/sh2 traces, x (1024/1280)^2).
 param([string]$Out = '')
-& (Join-Path $PSScriptRoot '..\lean_dryrun.ps1') -Batch dialogue_shadows -Out $Out -MaxMinutes 26 -MaxMB 2048 -TraceMB 28
+& (Join-Path $PSScriptRoot '..\lean_dryrun.ps1') -Batch dialogue_shadows -Out $Out -MaxMinutes 28 -MaxMB 2048 -TraceMB 28
 exit $LASTEXITCODE
