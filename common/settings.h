@@ -334,6 +334,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}},
 
+  {"exp_vt_alpha_masks", "Offline cutout masks",
+   "Matched virtual-texture cutouts (foliage) read alpha masks extracted offline from the game's tile "
+   "sets instead of the streaming page cache, so the ray-traced alpha test no longer uses a coarser "
+   "page where the requested one is not resident. Camp grass only for now. Experimental until its "
+   "brightness gate holds.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_vt_alpha_masks", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}},
+
   {"exp_alpha_spill", "Preserve cutout capture on overflow",
    "Uses free space in the existing capture buffer when its cutout partition fills. "
    "Retains native coverage and hair geometry for exact split draws. Does not increase memory "
@@ -434,7 +444,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 241 keys of bg3rtx.ini, in file order.
+// 244 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -566,12 +576,15 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_pool_alpha", "1"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
+    {"rt_omm_reference", "0"},
     {"rt_native_hair", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
     {"rt_alpha_spill", "0"},
+    {"rt_vt_alpha_masks", "0"},
+    {"rt_alpha_fine_lod", "0"},
     {"rt_alpha_max_pct", "60"},
     {"rt_strips", "1"},
     {"gi_rt", "1"},

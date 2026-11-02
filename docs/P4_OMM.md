@@ -10,7 +10,7 @@ Contents: 1 status, 2 native alpha predicate, 3 CPU groundwork, 4 EXT backend,
 ## 1. Status: isolated runtime candidate
 
 Default rt_omm=0, Experimental GUI off in all presets. Both DLLs must match
-(ABI 21 today, `BG3RTX_ABI_VERSION` in `common/host_api.h`). Main/user build is unchanged. No current game/GPU validation
+(ABI 25 on 2026-11-02, `BG3RTX_ABI_VERSION` in `common/host_api.h`; OMM needs no ABI change since 19). Main/user build is unchanged. No current game/GPU validation
 or measured acceleration/cost is claimed. Restart is required to request the extension.
 
 The isolated renderer now wires alpha bindings 10/11 (original micromap-free
@@ -45,10 +45,62 @@ byte-identical; 198 OMM wrappers compile/validate. Wrappers retain native DXC 16
 flags. Short owned baseline extraction fixes Windows MAX_PATH without changing
 the archived baseline source. No GPU execution follows from this shader gate.
 
+2026-11-02 re-check on main 566db3d (ABI 25): both DLLs build, 96/96 CTests, the
+OMM variants compile, the key-off shaders are byte-identical (section 1a). Nothing
+was broken. Observables added for the live qualification (section 1a).
+
 OPEN: actual renderer descriptor/GPU traversal validation; nonzero useful known
 coverage; same-ray reference violation counts; energy/movement/FG2 quality;
 capture/build/traversal GPU ms and real residency. All-UNKNOWN or missing RT never
 passes. Current code is an unqualified opt-in candidate, not a shipped speedup.
+READY_FOR_LIVE: tools/live_batches/omm_qual (S3 camp, 2 launches, about 7 min), not
+authorized, not run.
+
+**Expected outcome (offline, before the run).** Known coverage is about 0 at camp,
+so no speedup is expected. (1) Only one audited recipe can bake
+(`omm_native_plain_recipes.h` fs 16ac1391689391d0: a plain texture, no VT, 90-6340
+triangles per frame in the 2026-10-30 logs); VT foliage is not eligible. (2) A
+known state needs alpha exactly 1 under the triangle at EVERY mip down to 1x1,
+because the cone can reach any mip and the stochastic hull is [0,1]: a cutout
+texture's coarsest mip is fractional, so its triangles stay UNKNOWN; known
+transparent never occurs. (3) When any range is attached, `rt_omm_scene_current()`
+makes five per-lane atomics into the host-visible content-epoch buffer on every ray
+query (the host-atomics pattern, 7-15 ms in 2026-11; fixed 2026-11-02, 1a). If the run confirms ~0
+coverage, reject rt_omm for Ultra; a useful version needs a VT provider, a
+footprint-bounded mip domain and a device-local guard first.
+
+### 1a. Live observables (2026-11-02)
+- `[omm] last N builds` (layer, every rt_timing_frames builds while the backend is
+  available): alpha draws / native plain captures; alpha-tested triangles per build
+  (static, per-draw), with a capture, with an attached micromap BLAS (and the % of
+  alpha-tested); variants baked / reused / declined; accelerated scenes recorded /
+  declined; micromap + BLAS bytes (requested), bake input bytes; cumulative baked
+  microtriangles: known opaque, known transparent, unknown with a complete proof,
+  unknown for a missing proof (omm_bake_plain.hlsl `bakeStats`, device-local,
+  wave-reduced, copied to a transfer-only readback after each bake).
+- `omm check (N frames)` (core, rt_stats=1, rtStats 435..442): the OMM variants'
+  `rt_visibility` and `rt_closest_hit` trace again in the reference scene when the
+  accelerated one was current; compared queries, queries without a current
+  accelerated scene, visibility / closest-hit violations (must be 0; closest hit
+  compares t exactly), unknown pairs excluded, candidates in each trace. The
+  reference trace counts nothing in the ordinary counters. `rt_closest` (t only) and
+  `rt_closest_debug` are not checked.
+- `rt_omm_reference` (live, ls_flags bit 28, logged as `gi: rt_omm_reference`):
+  the guard still runs but every OMM query traces the reference scene: the
+  in-launch A/B of the traversal saving.
+- Cost: the existing `rt passes: GPU cost`, `gi: GPU cost`, `[rt] scene build GPU`
+  (bake, micromap BLAS and clone TLAS sit in its TLAS part) and `[mem]` lines. The
+  content-epoch dispatches at image writes run in the game's command buffers and
+  are in no timed pass.
+- Key-off identity: with rt_omm=0 the ordinary shaders compile to the same SPIR-V
+  (the traced bodies keep their names through `RT_OMM_TRACED`).
+- 2026-11-02 after the merge of main: the check moved to rtStats 443..447 (main took
+  435..442; 448 is the frame_replay limit), 5 counters: compared, not compared
+  (not current or an unknown answer), violations, candidates per trace.
+- Guard cost fix (2026-11-02): `rt_omm_scene_current()` runs once per wave and
+  invocation (first active lane, `WaveReadLaneFirst`), not five per-lane atomics
+  per query; the content-epoch buffer prefers BAR VRAM (DEVICE_LOCAL|HOST_VISIBLE|
+  HOST_COHERENT; the host only memsets it once), logged `device_local=1`.
 Only an explicitly authorized queue batch may test it, with automated A/B/settings,
 input/captures/restoration. No manual INI/toggles are requested.
 
@@ -341,3 +393,135 @@ User tried OMM and Current Cascade Sun together and reports encouraging visuals,
 no obvious new defects. This is not an isolated OMM A/B or performance gate.
 Slight dialogue shadow flicker predates this test; source remains unknown.
 No default promotion. See HANDOFF_SESSION.md for the current state.
+
+## 11. Path to a useful OMM (plan, 2026-11-02)
+
+Live upper bound (camp hig1 09:54, rt_alpha_test=0 forced opaque, static, exposure
+held): rt passes 8.0 -> 3.8 ms, local-light shadows 1.03 -> 0.41, reflections
+1.16 -> 0.39: about 5.7 ms if every alpha candidate were resolved. 78% of the
+evaluated candidates are clear texels, so known-transparent is where OMM wins.
+
+**Coverage today (camp, lr1 043856 alpha table).** About 700k alpha-tested
+triangles per frame: VT shader 738494714d50b4c7 636k (91%), other VT about 33k,
+plain-texture shaders about 26k (c65dc7ff 16.2k, c22b2025 8.4k, 9aaa6d61 1.3k,
+16ac1391 0.45k). The only audited recipe (16ac1391) is 0.06%: the current code
+cannot reach more than that, whatever the classification rule. VT decides it.
+
+**11.1 Classification at the any-hit's LOD (not done: not small).** The RT test
+(rt_common.hlsli alpha_eval / tex_alpha) picks the LOD per ray:
+lod = log2(g x max|scale| x texsize), g = footprint x sqrt(area_uv / area_world),
+footprint = cone.f0 + cone.spread x t, positions in world space (o2w applied), and
+k = saturate(lod - 1) blends the cut towards a per-frame hash. A micromap state is
+per triangle and ray-independent: it agrees with the test only for rays whose
+footprint keeps lod <= L at the triangle. Two exact options:
+- A, footprint gate (no image change). Bake mips 0..1 with the hard cut [cut, cut]
+  (k = 0 there), so known-transparent is allowed (all decoded texels 0 under the
+  UV rectangle plus halo, certificate 2; mixed values only with certificate 1).
+  The bake also writes, per variant, F_obj = min over KNOWN triangles of
+  2 / (max|scale| x texsize x sqrt(area_uv / area_obj)) (InterlockedMin on the float
+  bits into the data header). The clone pass takes F_scene = min over replaced
+  instances of sigma_min(o2w) x F_obj (Gershgorin bound on M^T M; <= 0 closes the
+  gate) and writes it next to the scene proof. A query uses the accelerated scene
+  only if max(f0, f0 + spread x tmax) <= F_scene; else the reference scene.
+  Splitting a visibility ray at t_gate = (F_scene - f0) / spread (accelerated
+  [0, t_gate], reference after) keeps it exact for long rays at two traversals.
+  Files: omm_bake_plain.hlsl (domain, F_obj), omm_bake.cpp / omm_native_plain.cpp
+  (max_lod 1, threshold [cut, cut]), omm_scene_clone/validate.hlsl + bvhsplit.cpp
+  (F_scene in the proof), omm_scene_guard.hlsli (gate per query). About 150 lines
+  plus fixtures. Open risk: with foliage at about 512 texels per metre the bound is
+  a few mm; any shadow ray with spread > 0 and tmax ~100 m fails the gate, so the
+  split variant is the only one with a real share. That share must be measured
+  (candidates per trace in `omm check`) before it is worth the work.
+- B, fixed fine-LOD policy for baked materials (image change). The RT test of OMM
+  materials uses lod <= 1 with the hard cut for every ray, which is the geometric
+  mask; the micromap then agrees by construction. Gate: energy of the pre-post
+  colour key-on vs key-off within noise (a hard cut at the fine mip keeps the
+  coverage for 0/1 masks; stochastic coarse coverage differs only for fractional
+  texels). Smaller code (about 40 lines: a flag bit in the alpha record, the LOD
+  clamp in tex_alpha/vt_alpha, the bake domain). Needs a coordinator decision: it
+  changes the RT image at distance.
+
+**11.2 VT foliage (the 91%).** The RT test reads VT alpha from the game's streaming
+page cache (vt_alpha: indirection entry, tile cache layer, coarser resident page
+when the requested one is not resident, counter 15). States baked from that cache
+would depend on residency and change with streaming; the content-epoch protocol
+declines it (cache images are written by the game). So the bake source must be
+offline, and the RT test of those materials must read the same data:
+1. Offline (tools/assets, like the assetdb): for each foliage VT material, extract
+   the alpha layer of its texture from the GTS/GTP tile set with LSLib
+   (`VirtualTileSet.ExtractTexture`, already used by tools/assets/probe_foundry_vt.ps1),
+   mips 0..1 (option A/B) or all mips, store as BC4 (0.5 B/texel) in data/assetdb
+   keyed by material + tile-set texture name. Cost: a 2048 x 2048 mask with mips is
+   about 2.8 MB; camp's foliage is a few dozen materials, about 100-150 MB on disk
+   and in VRAM when resident; extraction minutes once per game version.
+2. Runtime: the layer binds these masks as ordinary textures (gAlphaTex slots) and
+   sets the alpha record of a matched VT draw to the tex kind with the offline mask
+   (a new record flag), so the RT alpha test no longer depends on residency (also a
+   quality fix: no coarser-page reads). Matching uses the existing material
+   identity (VirtualTexture_TilesetDataIndex / uv transform in the asset db,
+   tools/assets/extract/materials.py).
+3. OMM bake per pooled mesh and material once (existing variant cache), from the
+   offline mask through the existing plain producer (content epochs not needed:
+   the mask is immutable after upload; its view identity is enough).
+Estimated work: offline extractor + db format about 1 day; runtime binding and
+record about 1 day; OMM provider from immutable masks about 0.5 day; then the
+omm_qual batch. Prerequisite either way: 11.1 A or B for the LOD domain.
+
+**11.2a Done offline (2026-11-02): camp grass masks, key `rt_vt_alpha_masks` (live, off).**
+- Source: the camp pack 013545-2 has 7 distinct (tile set, texture) VT records of shader 738494714d50b4c7
+  (1.30M triangles, one texture 1.155M). Tile set = record m0 row 3 column 3, texture rectangle = p0 x the
+  tile set's level-0 size (65536). `tools/assets/vt_alpha_masks.py` extracts the 7 GTS and the needed GTP from
+  VirtualTextures*.pak, LSLib (`tools/assets/vt_alpha.ps1`, pwsh 7) decodes levels 0..P1.x (LSLib gives no
+  level below one tile; the RT test never reads past the record's mip clamp P1.x = 2, 3 for one texture), and
+  the BC3 alpha halves are the BC4 masks, bit-exact. Size: 7 masks, 1.65 MB (512 x 512 x 3 levels = 168 KB
+  each). Files ADDED to data/assetdb/vt_alpha/ (index, manifest, 7 .vtalpha); nothing there was changed.
+- Agreement (`tools/assets/vt_alpha_agree.py`, the pack's indirection + BC3 tile cache, vt_alpha() with the
+  mip forced, every mask texel of every requestable level): where the page is resident at the requested level
+  the read equals the mask bit for bit (100.00%); triangle-weighted the alpha test agrees on 98.51%, differs on
+  1.49%: 1.48% on coarser pages, 0.01% elsewhere (bilinear at page borders).
+- Runtime (layer/alphatest.cpp, common/vt_alpha_masks.h + unit test): at the first alpha_commit with the key
+  on, the masks are loaded and uploaded (BC4 images, once); from the next capture a matched VT record (same
+  tile set, same p0 bits) becomes a plain-texture record (kind 2: tex_alpha with the mask, channel 0, scale 1).
+  No shader change, so key-off SPIR-V is untouched. Differences of the kind-2 path from the VT rule: trilinear
+  LOD log2(N g) instead of the VT's rounded mip of log2(N g) - 0.5, and a continuous stochastic weight. Held
+  records keep mask views (no tracker id). GUI: Experimental "Offline cutout masks".
+- Live job (not run): tools/live_batches/vt_alpha (camp, OFF/ON/OFF, 4.1 min, 0.19 GB).
+- Option A share (`tools/assets/vt_alpha_gate_share.py`, same pack): foliage texel world size median 1.08 mm
+  (p10 0.69, p90 2.03); receiver distance median 22.2 m (p10 14.6, p90 50.6), pixel angle 1.04 mrad. The gate
+  (footprint < 4 texels, VT mip <= 1) holds for 1.15% of shadow-ray (pixel, foliage triangle) pairs at t = 0
+  (an upper bound; 0.39% at t = 5 m) and 0.005% for GI rays. At camp distances the RT test reads the clamped
+  mip 2 with a stochastic threshold: option A is not worth building; only B (a fine-LOD policy) can give OMM a
+  share.
+
+**11.2b Option B chosen (2026-11-02, coordinator for the user): `rt_alpha_fine_lod` (live, off).**
+- Implementation without a shader change: a masked record (rt_vt_alpha_masks) binds a mip-0-only view of its
+  mask; tex_alpha clamps its LOD to the view's last level (0), so every ray reads mip 0 bilinearly and
+  k = saturate(lvl - 1) = 0 gives the hard cut. Logged as `[vt alpha] ... X at mip 0 with the hard cut`.
+- Energy, derived offline from the masks: the triangle-weighted grass alpha coverage is 0.2622 with B off
+  (camp distances reach the clamped mip 2 with a stochastic threshold, P(solid) = E[a2]) and 0.2951 with B
+  (fraction of mip-0 texels >= cut 0.2): x1.125 occluder area for grass. B is NOT energy-neutral by
+  construction; the scene-level change is measured by omm_qual om3 (B OFF/ON/OFF, masks on, camp, 123 s).
+- Micromap coverage at mip 0 (`tools/assets/omm_mask_coverage.py`, camp pack, 35,047 of the 1.30M grass
+  triangles, uniform subdivision, bilinear support = uv box + 1 texel, margin 1/255 for BC4 decode):
+  level 0 2.5% known; 1 9.3%; 2 20.4%; 3 34.3% (19.0% opaque, 15.3% transparent); 4 48.7% (22.9 / 25.8);
+  5 61.9% (27.8 / 34.1). Per-triangle micromaps would be 19.8 / 79.3 / 317 MB at levels 3 / 4 / 5 for 1.30M
+  triangles; the 179 grass instances are instances of few meshes, so micromaps shared per mesh (index
+  buffer per triangle) are far smaller. Level 4 is the first candidate.
+
+**11.2c Bake for VT foliage (not implemented yet).** Camp grass is 179 per-draw BLAS (wind VS, refit every
+frame), 0 pool meshes: the static-variant path (bvhsplit native_omm_variant, clone TLAS, guard) does not
+reach it. Needed: (1) a subdivision-level producer entry in omm_bake_plain.hlsl reading the immutable mask
+mip 0 per micro-triangle (EXT barycentric order, uv box + 1-texel bilinear support, the cut from the record,
+certificate: exact BC4 decode bounds), no content epochs (the mask never changes after upload); (2) the
+per-draw BLAS build in bvhsplit attaching the triangle-opacity pNext for masked records, a micromap per
+(mesh identity, UV hash, mask, cut) reused across frames and instances, rebuilt when the UVs change (wind
+moves positions only, UVs must be checked, not assumed); refits keep the same micromap; (3) with B on the
+known states agree with the test for every ray, so the micromaps can sit in the ordinary BLAS; the violation
+check traces a reference TLAS whose instances carry VK_GEOMETRY_INSTANCE_DISABLE_OPACITY_MICROMAPS_EXT;
+(4) omm_qual windows B-on/OMM-off vs B-on/OMM-on in one launch via a live key that switches the instance
+flag (no rebuild). Estimate about 2 days.
+
+**11.3 Order.** (1) Decide A (exact, small share) vs B (image change, full
+share). (2) Offline VT masks with the RT test switched to them, gated alone
+(energy, `coarser` counter to 0), useful without OMM. (3) OMM on top, measured
+with omm_qual (coverage, violations 0, ON vs REF).

@@ -14,6 +14,7 @@ void device_destroyed(DeviceData*);
 bool available();
 bool available_for(DeviceData*);
 bool has_resources();
+VkDeviceSize live_bytes(); // micromap storage/scratch + attached BLAS bytes (requested sizes)
 void retain_until_idle(); // Lost completion/provenance: collection AND discard stop.
 void reserve_submissions(std::span<const uint64_t>);
 void release_submissions(std::span<const uint64_t>);

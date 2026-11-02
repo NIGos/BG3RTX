@@ -1,0 +1,52 @@
+{
+ "_rule": "Written and committed BEFORE the run (docs/P4_OMM.md 9.6). Energy: relative change of the pre-post scene colour (5c3fdabc float mean, divided by the trace's exposure) of shot-on against the shot-ref-a/b mean, judged against |ref-b - ref-a|; null = no change. Images are never compared across launches (om1 vs om2).",
+ "om1-camp-omm-on-fg2": {
+  "shot-on": {
+   "predicted": null,
+   "source": "same-ray answers are identical when violations are 0, so the accelerated and the reference scene give the same image up to RR noise",
+   "written": "2026-11-02"
+  },
+  "violations": {
+   "predicted": 0,
+   "source": "omm check line, diag-check window: visibility and closest-hit violations; the bake only marks known-opaque when every texel of every reachable mip under the triangle is exactly 1 (omm_bake_plain.hlsl certificate 2), known-transparent never (threshold hull [0,1])",
+   "written": "2026-11-02"
+  },
+  "coverage": {
+   "predicted": "about 0",
+   "source": "only one audited recipe is eligible (common/omm_native_plain_recipes.h fs 16ac1391689391d0, plain texture, no VT; the second has vertex deformation and declines): 1-14 draws, 90-6340 triangles per frame in the 2026-10-30 logs, against about 2.9M RT triangles per build at camp (lr1-camp 043856). VT foliage is not eligible at all. Of the eligible triangles, a known state needs alpha exactly 1 over the footprint at EVERY mip down to 1x1 (the cone can reach any mip): any cutout texture's coarsest mip is fractional, so its triangles stay UNKNOWN. Expect attached micromaps < 0.3% of alpha-tested triangles and known-opaque microtriangles near 0",
+   "written": "2026-11-02"
+  },
+  "candidates": {
+   "predicted": "0% fewer within noise",
+   "source": "follows from coverage: only known microtriangles drop out of the any-hit loop",
+   "written": "2026-11-02"
+  },
+  "cost": {
+   "predicted": null,
+   "reason": "not derivable as a number. Sign only: cost-on minus cost-ref about 0 ms (no known coverage to remove candidates). cost-ref minus om2 cost-off: 0 within the OFF spread if no OMM scene is built (the guard returns before its atomics when no clone TLAS proof exists); if ranges are attached, POSITIVE and possibly several ms, from the scene guard (once per wave and invocation since 2026-11-02, epochs in BAR VRAM), plus the clone TLAS build and two content-epoch dispatches per tracked image write (not inside any timed pass).",
+   "written": "2026-11-02"
+  }
+ },
+ "om2-camp-omm-off-fg2": {
+  "cost": {
+   "predicted": null,
+   "reason": "baseline only (OFF level and spread of rt passes / gi / scene build GPU ms)",
+   "written": "2026-11-02"
+  }
+ },
+ "om3-camp-option-b-fg2": {
+  "shot-on": {
+   "predicted": "negative (darker), small",
+   "source": "offline masks (data/assetdb/vt_alpha): triangle-weighted grass alpha coverage 0.2622 with B off (mip 2 reached at camp distances, stochastic: P(solid) = E[a2]) vs 0.2951 with B (mip 0, hard cut 0.2): x1.125 grass occluder area; the scene-level magnitude depends on the grass share of shadow/AO and is not derived",
+   "written": "2026-11-02"
+  },
+  "stochastic": {
+   "predicted": "the masked records leave the stochastic share (k = 0 at lod 0)",
+   "written": "2026-11-02"
+  },
+  "cost": {
+   "predicted": null,
+   "reason": "mip 0 reads more texture bandwidth than mip 2; not derived"
+  }
+ }
+}
