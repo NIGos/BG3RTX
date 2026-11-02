@@ -40,6 +40,16 @@ inline constexpr int kXfbDefaultMb=384, kCascadeDefaultMb=160, kBaseStride=24;
 // first frames after a scene change (region at its floor, demand from the last frame unknown) hold the
 // same triangles as at 24 B (su1 S8 2026-11-01: 0.58 alpha draws/frame made opaque in the first window).
 inline constexpr int kAlphaDefaultMb=64;
+// The floor is also what the first frame of a new scene gets (the region shrinks to it during loading,
+// when the demand is near 0): at 171 MB the S8 load frame (223.8 MB wanted) made 36 draws opaque (smoke_ultra
+// 2026-11-01, "region full ... 0.30" per frame in that window). With the default rt_alpha_mb at a wide
+// stride the floor is 40% of the buffer: the largest alpha demand of the day was 404.6 MB of 1024 MB (39.5%),
+// the largest opaque peak 463.8 MB (45%), so both fit together (the cap still yields to opaque demand).
+inline constexpr unsigned kAlphaFloorPctWide=40;
+inline uint64_t alpha_floor(uint64_t effective_floor,uint64_t size,bool default_mb,uint32_t stride){
+ if(!default_mb || stride<=uint32_t(kBaseStride))return effective_floor;
+ return (std::max)(effective_floor,size/100*kAlphaFloorPctWide/mib*mib);
+}
 inline int effective_mb(int value,int default_mb,uint32_t stride){
  if(value!=default_mb || stride<=uint32_t(kBaseStride) || value<=0)return value;
  return int((uint64_t(value)*stride+kBaseStride/2)/kBaseStride);
