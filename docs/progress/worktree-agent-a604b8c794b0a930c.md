@@ -22,3 +22,5 @@
   `[sl] game output ... backbuffer subrect`, FG displayed/rendered 2.00, no UI ghosting at the bars.
 - Live batch prepared, not run: tools/live_batches/fg_letterbox (one S8 job, 75 s, borderless via the new auto-run.ps1
   `-Borderless`, fg_letterbox 1 -> 0 -> 1; gates and predicted.json in its README). dryrun + lints pass. 95/95 CTests.
+- fl1 022810 INVALID: borderless gave a 3840x1600 swapchain (desktop now 3840x1600; 3840x2160 on 11-01 14:16-14:28).
+  Job now adds `-GameResolution 2560x1440` (new auto-run.ps1 option, graphicSettings restored after the run).

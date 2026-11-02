@@ -12,6 +12,8 @@
   "-RealPresent",
   "-Foreground",
   "-Borderless",
+  "-GameResolution",
+  "2560x1440",
   "-Move",
   "-MovePlan",
   "captures/live_batches/fg_letterbox/plans/fl1_s8.json"
@@ -52,9 +54,9 @@
   "\\[hot\\] core generation \\d+ loaded",
   "\\[ngx\\] RR create .*: Success",
   "\\[cfg\\] settings read",
-  "\\[sl\\] fg_letterbox=1: UI composite pass 3840x2160",
-  "\\[sl\\] game output 3840x1600 in a 3840x2160 swapchain pass \\(fg_letterbox\\): backbuffer subrect \\d+,\\d+ 3840x1600",
-  "\\[sl\\] fg_letterbox=0: UI composite pass 3840x2160",
+  "\\[sl\\] fg_letterbox=1: UI composite pass 3840x1600",
+  "\\[sl\\] game output \\d+x\\d+ in a 3840x1600 swapchain pass \\(fg_letterbox\\): backbuffer subrect \\d+,\\d+ \\d+x\\d+",
+  "\\[sl\\] fg_letterbox=0: UI composite pass 3840x1600",
   "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00 .*api errors 0 \\(last 0\\)",
   "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
   "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts"
@@ -128,6 +130,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "FG letterbox live check at S8: the game borderless at the 3840x2160 desktop (-Borderless) with its 3840x1600 output, so the swapchain is larger than the output (the gf1 141602 case). Ultra with the smoke_ultra keys, fg=2. fg_letterbox=1 at launch, 0 in 'off', 1 again from 'settle'. Gates: the 3840x2160 composite pass and 3840x1600 backbuffer subrect lines; DLSS-G displayed/rendered 2.00, status 0x0, api errors 0 in every ON window; capacity and scene-wait gates in every window. 'off' is not gated on FG (bindings found in on-a may persist); 'settle' absorbs the FG cooldown after the toggle.",
+ "purpose": "FG letterbox live check at S8: the game borderless (-Borderless) at the 3840x1600 desktop with its own resolution 2560x1440 for this run (-GameResolution, restored after), so the swapchain is larger than the output (the gf1 141602 class: 3840x1600 game on the 3840x2160 desktop of 11-01). Ultra with the smoke_ultra keys, fg=2. fg_letterbox=1 at launch, 0 in 'off', 1 again from 'settle'. Gates: the 'game output WxH in a 3840x1600 swapchain pass' subrect line; DLSS-G displayed/rendered 2.00, status 0x0, api errors 0 in every ON window; capacity and scene-wait gates in every window. 'off' is not gated on FG (bindings found in on-a may persist); 'settle' absorbs the FG cooldown after the toggle.",
  "estimated_phase_seconds": 75
 }

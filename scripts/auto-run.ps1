@@ -48,6 +48,11 @@ param(
   # larger than the game's output (3840x2160 vs 3840x1600), the case fg_letterbox=1 handles.
   # Only for jobs that test that case (tools/live_batches/fg_letterbox); restored like the others.
   [switch]$Borderless,
+  # With -Borderless: the game's own resolution for this run (graphicSettings ScreenWidth x ScreenHeight,
+  # e.g. 2560x1440), restored afterwards with the display entries. A borderless swapchain takes the desktop
+  # size, so an output below it reproduces a swapchain larger than the output without a desktop mode change
+  # (on 2026-11-01 14:16-14:28 the desktop was 3840x2160 and the game 3840x1600; since then both are 3840x1600).
+  [string]$GameResolution = "",
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
@@ -387,7 +392,12 @@ if ($Background) {
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
   # Real-present runs stay windowed: a borderless desktop-sized swapchain (e.g. a 3840x2160 desktop with
 # a 3840x1600 game output) breaks the FG input size match (layer/streamline.cpp), 2026-11-01.
-Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:(($UnfocusedFG -or $RealPresent) -and -not $Borderless)
+$resArgs = @()
+if ($GameResolution) {
+  if (-not $Borderless -or $GameResolution -notmatch '^(\d{3,4})x(\d{3,4})$') { throw "-GameResolution WxH needs -Borderless" }
+  $resArgs = @("ScreenWidth=$($matches[1])", "ScreenHeight=$($matches[2])")
+}
+Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:(($UnfocusedFG -or $RealPresent) -and -not $Borderless) -Extra $resArgs
   if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 

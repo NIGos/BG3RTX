@@ -4,8 +4,8 @@
   "on-a": {
    "fg_displayed_per_rendered": 2.0,
    "api_errors": 0,
-   "composite_pass": "3840x2160",
-   "game_output": "3840x1600",
+   "composite_pass": "3840x1600",
+   "game_output": "2560x1440",
    "written": "2026-11-02"
   },
   "off": {
@@ -16,8 +16,8 @@
   "on-b": {
    "fg_displayed_per_rendered": 2.0,
    "api_errors": 0,
-   "composite_pass": "3840x2160",
-   "game_output": "3840x1600",
+   "composite_pass": "3840x1600",
+   "game_output": "2560x1440",
    "written": "2026-11-02"
   }
  }
