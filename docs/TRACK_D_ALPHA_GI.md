@@ -628,3 +628,16 @@ open. Details and exact limits: [OPAQUE_TWO_SURFACE_REFERENCE.md](OPAQUE_TWO_SUR
 | 9 | D-TR, D-VOL | low-medium | medium | niche |
 | 10 | D-RFR, transparents/particles | low | high | forward-pass capture and shader patching |
 | — | D-PT | reference only | medium | not a product |
+
+## CPU descriptor batching candidate (2026-11-02)
+
+`perf_submit_batch=1` (developer GUI, live, off in every preset) coalesces hit-set
+clone copies and texture-table overlays by excluding overwritten copy intervals.
+Vulkan still applies writes before copies; final descriptors equal copy then overlay.
+Sun clones keep their copy boundary and combine subsequent independent writes,
+with image/sampler arrays owned until the call returns. Scene slots, pools and
+retirement are unchanged. Game updates still reach the driver in original order;
+tracker write bookkeeping takes one lock per call, then preserves the existing
+OMM callback and sequential copy boundary. No ABI or shader request changes.
+Offline checks and pending A/B: [codex-perf-submit2](progress/codex-perf-submit2.md).
+No measured CPU or GPU saving yet; this is not a quality pass.

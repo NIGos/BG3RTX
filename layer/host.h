@@ -349,7 +349,7 @@ inline void terrain_capture_finish(uint64_t, const std::string&, VkQueue) {}
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
-                   DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_COUNT };
+                   DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_SUBMIT_US, DIAG_DESCRIPTOR_US, DIAG_ALPHA_DESC_US, DIAG_ALPHA_DESC_CALLS, DIAG_AUX_COALESCED, DIAG_COUNT };
 void diag(DiagCounter c, uint64_t n = 1);
 void watchdog_start();                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);

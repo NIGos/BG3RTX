@@ -156,6 +156,9 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(submit_batch_test tests/submit_batch_test.cpp)
+target_include_directories(submit_batch_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME submit_batch_test COMMAND submit_batch_test)
 add_executable(native_hit_gi_bindings_test tests/native_hit_gi_bindings_test.cpp)
 target_include_directories(native_hit_gi_bindings_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME native_hit_gi_bindings_test COMMAND native_hit_gi_bindings_test)
