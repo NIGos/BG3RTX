@@ -235,6 +235,27 @@ ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG 
 fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
 next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
 
+### Occluder-kind diagnostic (requested 2026-11-02, designed, not built)
+
+No existing view names the occluder: rt_debug 1/2 give visibility and game-vs-traced mask, ls_debug 2/9 the removed
+light and the light owner, rt_stats has no free index range. Smallest design, key `rt_occ_stats` (0 default, diag
+windows only), its own device-local buffer, variant define `RT_OCC_STATS` so the ordinary SPIR-V stays identical:
+- At the commit points of rt_visibility (rt_common.hlsli: procedural hair commit, cascade commit, alpha commit,
+  RT_HAS_COMMITTED) store the committed instance index / id and hit t in statics.
+- Kind from what InstInfo already holds (rt_common.hlsli:497-516): cascade copy (id kRtCascadeId), cached static mesh
+  (kInfoPool), dynamic opaque (per-draw BLAS: characters, wind foliage, other skinned), dynamic alpha by AlphaRec kind
+  (table cutout / scalp 3 / hair 4), native hair procedural (kInfoHair); "near" = hit t < 0.5 m as the stand-in for
+  self-shadowing (no per-object identity exists in the TLAS). Held (rt_dyn_hold) needs one InstInfo meta bit set in
+  layer/bvhsplit.cpp for fd.held (layer change: restart, no ABI change).
+- Receivers: character px (G-buffer class 3 skin / 5 hair). Sources: sun (rt_shadow.hlsl), each D-LS light
+  (point/spot vs box) in rt_local_shadows*.hlsl, AO (gi_trace_rt). Counters [source][kind], per-workgroup
+  groupshared reduce, one atomic per group into the device-local buffer, copied after the timed region (host
+  atomics lint); log per window: "occ (60 frames): character px darkened by sun x%, local y%, box z%, AO w%;
+  occluder kinds sun [...] local [...] AO [...]".
+- Float energy of the character mask per shot: the trace dumps are PNG previews (dump_raw=1 writes every target);
+  a core-side reduce of the pre-post colour over the class mask in the same diag window gives it without disk.
+Scope: about 6 shaders + core buffer/log + one layer bit, shader identity and GPU gates: its own work item.
+
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).
 
