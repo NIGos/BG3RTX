@@ -995,3 +995,34 @@ no isolated compaction timer). smoke_ultra retains opaque drops 0.00 and adds
 every-window `[mem] ours` within budget. Check a long low-camera view and turns at
 S8 Water Queens House port: `[mem] ours` within budget, no new stutter/flicker.
 Full gate numbers, GI costs and source log: [progress/vram-default-on.md](progress/vram-default-on.md).
+
+### Elastic primary capture drop regression (2026-11-02, fix-elastic-drops, offline candidate)
+
+su1-ultra-s8-fg2.1.223616 is INVALID: pan-e and rotate-r violate the every-window
+zero opaque-drop gate. At 22:38:10-12 primary capture grows 544 -> 720 -> 912 MiB;
+the following 120-frame summary reports opaque peak 394.2 MiB, alpha demand
+118.5 MiB, final alpha region 364 MiB and final capacity 912 MiB. Peak demand
+already includes rejected opaque bytes. Comparing it to final capacity hides
+the smaller allocations/partitions earlier in the window. Growth after a
+completed capture cannot recover draws already rejected during that capture.
+
+The primary capture now retains at least effective rt_xfb_mb (1024 MiB for
+Ultra's 64-byte layout). Predicting an arbitrary next draw from past frames
+cannot safely permit a smaller buffer; replacing it mid-recording would need
+to preserve existing Vulkan commands, geometry and published offsets. This
+conservative floor gives up primary shrink savings below the fixed baseline.
+Cascade shrinking remains unchanged. Primary growth restores the 25% reserve
+at the next safe producer boundary, before observed demand exhausts capacity.
+Demand includes the actual alpha reservation and physical opaque placement.
+The rolling maximum plus margin persists for 120 captures, across replacement;
+a lower card cap cannot force a shrink below reserve already allocated.
+
+A separate fixed-capacity alpha hysteresis state bounds the elastic split so
+both streams retain at least their fixed-path room. This also covers the inn
+proportional-split threshold: 1024 -> 1040 MiB could otherwise reduce opaque
+room from 483 -> 413 MiB. Lifetime fences and allocation guards are unchanged.
+Defaults remain on. No shader/ABI changes; variant request delta 0. No added
+GPU commands; cost and live coverage remain unmeasured. Layer restart required.
+S8 smoke_ultra must pass buffer-full 0.00 in every pan/rotation window before
+qualification. No game launched. Unapplied, independently tested default-OFF
+alternative: [patch](alternatives/fix-elastic-drops-default-off.patch).

@@ -311,6 +311,7 @@ struct Capture {
   VkDeviceSize c_legacy_bytes=0;
   uint64_t c_legacy_sig=1469598103934665603ull;
   capture_budget::ElasticWindow elastic;
+  capture_budget::RtElasticWindow rt_elastic;
   uint64_t elastic_target=0;
   Buf elastic_old;
   uint64_t elastic_detached=0;
@@ -320,6 +321,7 @@ struct Capture {
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
 // triangles, sized from the previous frame's demand (rt_alpha_auto=1).
 std::atomic<uint64_t> g_alpha_region{0}, g_alpha_demand_prev{0}, g_opaque_demand_prev{0};
+std::atomic<uint64_t> g_fixed_alpha_region{0}; // Fixed-capacity partition hysteresis, independent of elastic size.
 // Logged loudly: per-window totals, and the first occurrence at once.
 struct RtDropLog {
   uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
@@ -426,6 +428,7 @@ uint64_t elastic_cap(bool cascade){
 // Detach before recording the next producer. Existing descriptors retain the old
 // handle; keep it through the fence covering the last possible cascade consumer.
 void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
+  if(!cascade && wanted)wanted=(std::max)(wanted,uint64_t((std::max)(xfb_mb(),16))<<20);
   const uint64_t now=frame_index();
   if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))
     free_buf(c.elastic_old); // Only now enter the ordinary deferred destruction path.
@@ -501,7 +504,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   if(!readback && cfg_int("rt_capture_elastic",0))elastic_resize(c,c.elastic_target,false);
   else {
     if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))free_buf(c.elastic_old);
-    c.elastic.reset();c.elastic_target=0;
+    c.elastic.reset();c.rt_elastic.reset();c.elastic_target=0;
   }
   if (!c.xfb.b) {
     // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
@@ -577,11 +580,21 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // rt_alpha_mb left at its default follows the vertex size, as rt_xfb_mb does (rt_capture_budget.h).
     VkDeviceSize floor_b = VkDeviceSize((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb", 64),
         capture_budget::kAlphaDefaultMb, g_stride), 1)) * mb;
+    const VkDeviceSize fixed_size=uint64_t((std::max)(xfb_mb(),16))<<20;
+    const VkDeviceSize fixed_floor=capture_budget::alpha_floor(floor_b,fixed_size,
+        cfg_int("rt_alpha_mb",64)==capture_budget::kAlphaDefaultMb,g_stride);
+    const VkDeviceSize fixed_region=capture_budget::alpha_region(fixed_size,fixed_floor,
+        g_fixed_alpha_region.load(),g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),
+        cfg_int("rt_alpha_auto",1)!=0,cfg_int("rt_alpha_max_pct",60));
+    g_fixed_alpha_region=fixed_region;
     // A wide stride's first frame after loading: 40% of the buffer (rt_capture_budget.h alpha_floor).
     floor_b = capture_budget::alpha_floor(floor_b, size, cfg_int("rt_alpha_mb", 64) == capture_budget::kAlphaDefaultMb, g_stride);
-    const VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
+    VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
       g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),cfg_int("rt_alpha_auto",1)!=0,
       cfg_int("rt_alpha_max_pct",60));
+    if(cfg_int("rt_capture_elastic",0))
+      amb=capture_budget::elastic_alpha_region(size,amb,fixed_size,fixed_region);
+    else g_fixed_alpha_region=amb;
     if (amb < size) {
       g_alpha_region = amb;
       c.alpha_base = c.alpha_cursor = c.opaque_end = (size - amb) & ~VkDeviceSize(255);
@@ -2172,17 +2185,20 @@ void rt_capture_stats(const Capture& c) {
     const uint64_t floor=uint64_t((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb",64),
                                 capture_budget::kAlphaDefaultMb,g_stride),1))*capture_budget::mib;
     const uint64_t demand=g_alpha_mode?capture_budget::elastic_rt_demand(g_opaque_demand_prev.load(),c.alpha_demand,
-        floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60)):
+        floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
+        c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
         uint64_t(c.cursor+c.opaque_overflow_bytes);
-    const uint64_t wanted=capture_budget::elastic_capacity(demand,g_storage_range,
-        elastic_cap(false));
+    const uint64_t wanted=capture_budget::elastic_rt_capacity(demand,g_storage_range,
+        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
     // rt_capture_stats runs only for the main (non-minor) scene capture.
-    const uint64_t target=g_scratch.elastic.observe(c.xfb.size,wanted,demand);
+    // Restore reserve before the next frame reaches capacity. Unlike cascade
+    // overflow recovery, primary capture must not wait for a dropped draw.
+    const uint64_t target=g_scratch.rt_elastic.observe(c.xfb.size,wanted,demand,true);
     if(target!=g_scratch.elastic_target && target!=c.xfb.size)
       log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
           double(g_opaque_demand_prev.load())/1048576.0,double(c.alpha_demand)/1048576.0,
           (unsigned long long)(target>>20),(unsigned long long)(c.xfb.size>>20),
-          g_scratch.elastic.count,capture_budget::ElasticWindow::samples);
+          g_scratch.rt_elastic.count,capture_budget::RtElasticWindow::samples);
     g_scratch.elastic_target=target;
   }
   std::lock_guard<std::mutex> lock(g_drop_mu);
