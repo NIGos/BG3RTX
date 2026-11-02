@@ -1,0 +1,15 @@
+{
+ "_rule": "Written and committed BEFORE the run (2026-11-02). One observable per trend gate: the tail (cycles 20-22) against the baseline (cycles 2-4) of the same launch. null = no growth predicted: the tail median within the baseline max + its own spread + the print precision (scripts/queue_gates.py trend_failures). Cycle 1 is excluded because the camera loop sees each view there first (mesh cache, hit-material pool and shader cache fill).",
+ "ls1-long-session-camp-fg2": {
+  "vram_used_mb": {"predicted": null, "basis": "every pool of the layer is sized at start or grows by demand and is reused (mesh pool LRU, rt_xfb_mb fixed, hit-material buffer reuse rt_hit_material_recycle=1, water records fixed); the same 100 s loop asks for the same demand after cycle 1"},
+  "mesh_pool_mb": {"predicted": null, "basis": "same views every cycle: no new meshes after cycle 1; audits evict and rebuild in place (rt_mesh_audits=2)"},
+  "as_mb": {"predicted": null, "basis": "static BLAS built once per mesh; per-draw BLAS refit; compaction keeps AS at the compacted size"},
+  "frame_time_median_ms": {"predicted": null, "basis": "no per-frame work scales with session length; smoke_ultra median 16.65 ms at S8 for scale"},
+  "frame_time_p99_ms": {"predicted": null, "basis": "as the median; no growing hitch source known (shader cache warm after cycle 1)"},
+  "hit_material_pool_records": {"predicted": null, "basis": "records follow the drawn set, evicted with their mesh; same set every cycle"},
+  "scene_wait_timeouts": {"predicted": 0, "basis": "gated 0 in every lean cost window since the scene-wait fix (smoke_ultra valid 2026-11-02)"},
+  "capture_drops": {"predicted": 0, "basis": "capture buffers follow the scene (rt_xfb_mb, cascade grows on demand); camp passed in cb1 and gf1"},
+  "log_mb": {"predicted": 12, "range": [5, 40], "basis": "~3 KB/s default plus rt_timing_frames=120 cost lines and 22 x 10 s rt_stats windows; below the 64 MB rotation cap ([log] reached is forbidden)"},
+  "disk_mb": {"predicted": 40, "basis": "no traces or dumps: the log and the runner files only"}
+ }
+}

@@ -27,7 +27,7 @@ RT path could not compile in a player package; and no asset database. Both fixed
 | `rt_mesh_audits=2`, `rt_em_calib=1`, `rt_em_check_*` | on | correctness: stale-mesh eviction, emissive calibration (sliced, cheap) |
 | `dev_fault=1` (code literal) | on | `VK_EXT_device_fault` details in the log after a device lost: the most useful line of a crash report |
 | `watchdog_s=5` (literal), `fg_state_every=60` | on | one log line per 5 s; shows where a hang happened |
-| `bg3rtx.log` | always | ~3 KB/s, truncated each launch, **no size cap**: ~11 MB/hour (long sessions, section 4) |
+| `bg3rtx.log` | always | ~3 KB/s (~11 MB/hour); capped at 64 MB, then moved to `bg3rtx.prev.log` (also the previous session); common/log_rotate.h |
 | `sl_logs\` | always | Streamline at its default level; needed for FG reports |
 | core hot reload | on | `bin\hot\` copy + mtime poll; also isolates a core fault (core disabled, game keeps running) |
 | `trace.request` file | honoured | a trace only when the user creates that file on request; no hotkey with `dev=0` |
@@ -40,7 +40,7 @@ RT path could not compile in a player package; and no asset database. Both fixed
 2. Developer-only knobs `ls_k`, `rt_sun_cascade_current`, `rt_hit_emission=2`: hidden with `dev=0` but honoured
    when typed into `bg3rtx_user.ini`. Not pinned: they are quality keys, parked by user decision.
 3. `crash_dump=0`: kept off (decision of 11-01); the diagnostic package (section 5) is the planned path.
-4. Log size: no cap. A cap (for example 50 MB, then only warnings) is a small layer change; needs a restart test.
+4. Log size: capped (64 MB x 2 files, common/log_rotate.h, unit test log_rotate_test). A queue job longer than ~6 h of default logging would lose its early lines to `bg3rtx.prev.log`.
 
 ## 2. Package and install
 
@@ -92,7 +92,7 @@ and flags:
 - **Non-5090 GPUs:** presets below Ultra are estimates; at least one RTX 40 and one RTX 30 run.
 - **Fresh-PC install test:** unzip, Install.cmd, launch via window and via Steam, uninstall, check nothing is
   left (no VULKAN_SDK on that PC: DXC must come from `bin\`).
-- `docs/USER_SETTINGS.md` still says Experimental entries are off in every preset; RT water, Hidden-surface
+- Done: `docs/USER_SETTINGS.md` now lists the Ultra levels (RT water, Hidden-surface
   shading, Emission and Far-field moved to the main list and into Ultra.
 - Game-version check: log `bg3.exe` ProductVersion and warn on an unknown one.
 - SE bridge (`mods/BG3RTX_Bridge`): not packaged; optional, needs the Script Extender.
@@ -100,8 +100,8 @@ and flags:
 ## 5. Diagnostic package mode (design only, not built)
 
 `BG3RTX.exe --report` (and a "Create bug report" button) builds `BG3RTX-report-<stamp>.zip` on the Desktop:
-- `bg3rtx.log` (+ the previous one: the layer would rename `bg3rtx.log` to `bg3rtx.prev.log` at start instead of
-  truncating), `sl_logs\`, `VERSION.txt`, `bg3rtx_user.ini` and the effective `[cfg] keys` line of the last log;
+- `bg3rtx.log` and `bg3rtx.prev.log` (the previous session, or the earlier part of a long one;
+  common/log_rotate.h), `sl_logs\`, `VERSION.txt`, `bg3rtx_user.ini` and the effective `[cfg] keys` line of the last log;
 - GPU info: `--detect` output, driver version, OS build, display modes (no serials, no user names: paths are
   rewritten to `%LOCALAPPDATA%`);
 - a crash dump only if one exists: `crash_dump` stays 0; the report offers "turn crash dumps on for the next

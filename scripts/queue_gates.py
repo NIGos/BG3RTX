@@ -33,6 +33,11 @@ once the window has one, "min" and "match" apply as usual. The cascade-capacity 
 casters line counts the sun cascade's frames, and an interior has none (m5p2 Flymm 11-01: 4 lines
 during the load, none in a cost window, the run INVALID for a buffer that never filled).
 
+An entry with "trend": true (long sessions, tools/live_batches/long_session) has "value" (a regex whose
+group 1 is a number), "baseline" and "tail" window labels, and optional "abs" / "rel" allowances: the
+tail's median must not exceed the baseline's max plus the baseline's own spread plus the allowance
+(trend_failures). It catches a pool, VRAM or frame time that keeps growing over a session.
+
 Plan drift: the runner's "[pan-plan] window N ... set=<keys>" line carries the keys the phase
 applied. When the plan's step N has a "set" and it differs, the plan file changed after the run
 (m4p3 / m4p4 11:2x ran before cost-ao0 was inserted, so every later label was one phase off):
@@ -137,6 +142,53 @@ def plan_drift(wins, plan):
     return out
 
 
+def _median(v):
+    s = sorted(v)
+    n = len(s)
+    return s[n // 2] if n % 2 else 0.5 * (s[n // 2 - 1] + s[n // 2])
+
+
+def trend_failures(g, name, picked, wins):
+    """A "trend" gate (long sessions): a value must not grow between early and late windows.
+
+    Every selected line inside the "baseline" windows and inside the "tail" windows counts (event
+    semantics: from the window's applied settings to its end); "value" is a regex whose first group is
+    the number. The baseline's own spread (max - min) is the noise, derived from the run itself: the tail
+    median must stay <= baseline max + spread + allow, where allow = max("abs", "rel" x baseline median)
+    covers the value's print precision or a documented allowance. "min" lines are needed on each side.
+    """
+    val = re.compile(g["value"])
+    need = int(g.get("min", 2))
+    out = []
+    side = {}
+    for part in ("baseline", "tail"):
+        labels = set(g[part])
+        found = {w["label"] for w in wins if w["label"] in labels}
+        if found != labels:
+            out.append(f"trend {name}: {part} window(s) not in the runner log: {sorted(labels - found)[:4]}")
+        vals = []
+        for w in wins:
+            if w["label"] not in labels:
+                continue
+            for t, l in picked:
+                if w["applied"] <= t < w["end"]:
+                    m = val.search(l)
+                    if m:
+                        vals.append(float(m.group(1)))
+        if len(vals) < need:
+            out.append(f"trend {name}: {len(vals)} {part} value(s), need {need}")
+        side[part] = vals
+    if out:
+        return out
+    base, tail = side["baseline"], side["tail"]
+    allow = max(float(g.get("abs", 0.0)), float(g.get("rel", 0.0)) * abs(_median(base)))
+    limit = max(base) + (max(base) - min(base)) + allow
+    if _median(tail) > limit:
+        out.append(f"trend {name}: grew: tail median {_median(tail):.4g} over {len(tail)} lines > limit {limit:.4g} "
+                   f"(baseline {min(base):.4g}-{max(base):.4g} median {_median(base):.4g} over {len(base)} lines, allow {allow:.4g})")
+    return out
+
+
 def check(gates, game_text, runner_text="", plan=None):
     """Failure strings for the expect_every gates (empty list: every gate holds)."""
     plan = plan or []
@@ -146,10 +198,19 @@ def check(gates, game_text, runner_text="", plan=None):
     failures = []
     for g in gates:
         sel = re.compile(g["select"])
-        match = re.compile(g["match"])
+        match = re.compile(g.get("match", ""))
         need = int(g.get("min", 1))
         picked = [(t, l) for t, l in lines if sel.search(l)]
         name = g.get("name") or g["select"]
+        if g.get("trend"):
+            if wins is None:
+                wins = windows(runner_text, plan, lines)
+                drift = plan_drift(wins, plan)
+            if drift:
+                failures.append(f"trend {name}: plan drift, the windows are not trusted")
+            else:
+                failures += trend_failures(g, name, picked, wins)
+            continue
         labels = g.get("windows")
         if not labels:
             bad = [l for _, l in picked if not match.search(l)]

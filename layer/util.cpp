@@ -1,6 +1,7 @@
 #include "host.h"
 
 #include "../common/settings.h"
+#include "../common/log_rotate.h"
 
 #include <atomic>
 #include <cctype>
@@ -95,7 +96,6 @@ uint64_t hash64(const void* data, size_t size) {
 // ---- log ----
 
 static std::mutex g_log_mu;
-static FILE* g_log = nullptr;
 
 void log(const char* fmt, ...) {
   char msg[2048];
@@ -110,11 +110,15 @@ void log(const char* fmt, ...) {
   snprintf(line, sizeof line, "%02d:%02d:%02d.%03d  %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg);
 
   std::lock_guard<std::mutex> lock(g_log_mu);
-  if (!g_log) g_log = _fsopen(tagged(root_dir() + "\\bg3rtx", ".log").c_str(), "w", _SH_DENYNO);  // readable while running
-  if (g_log) {
-    fputs(line, g_log);
-    fflush(g_log);
-  }
+  // Size cap (common/log_rotate.h): the previous session's file, then each full one, becomes
+  // bg3rtx.prev.log; at most two files.
+  static logrot::Writer w = [] {
+    logrot::Writer v;
+    v.path = tagged(root_dir() + "\\bg3rtx", ".log");
+    v.open = [](const char* p) { return _fsopen(p, "w", _SH_DENYNO); };  // readable while running
+    return v;
+  }();
+  w.write(line);
   OutputDebugStringA(line);
 }
 

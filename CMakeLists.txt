@@ -334,6 +334,9 @@ add_executable(fg_copy_lease_test tests/fg_copy_lease_test.cpp)
 add_test(NAME fg_copy_lease_test COMMAND fg_copy_lease_test)
 add_executable(fg_extent_test tests/fg_extent_test.cpp)
 add_test(NAME fg_extent_test COMMAND fg_extent_test)
+# bg3rtx.log size cap (common/log_rotate.h, docs/release/RELEASE_BETA.md).
+add_executable(log_rotate_test tests/log_rotate_test.cpp)
+add_test(NAME log_rotate_test COMMAND log_rotate_test)
 add_executable(async_capture_queue_test tests/async_capture_queue_test.cpp)
 add_test(NAME async_capture_queue_test COMMAND async_capture_queue_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).

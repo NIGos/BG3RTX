@@ -62,7 +62,7 @@ and on again. DLSS and frame generation stay as they are.
 
 - Tested mostly in Act 1 (camp, Grymforge, Adamantine Forge) and a few Act 3 places (Water Queen's
   House, the Blushing Mermaid). Act 2 and most of Act 3 are not systematically tested.
-- Long sessions (several hours) are not tested yet. The log grows by about 10 MB per hour of play.
+- Long sessions (several hours) are not tested yet. The log is capped (two files of at most 64 MB).
 - Frame generation on <-> off, and some Experimental levels, need a game restart (the window marks them).
 - "Experimental" settings are being tested: they can cost a lot of GPU time or look wrong in places.
 - Other Vulkan overlays (Steam, EOS, GOG) can conflict: tick "Disable other Vulkan overlays" in the
@@ -73,11 +73,11 @@ and on again. DLSS and frame generation stay as they are.
 
 ## Reporting a bug
 
-BG3RTX writes `bg3rtx.log` in its install folder (`%LOCALAPPDATA%\Programs\BG3RTX` by default). The
-log is **overwritten at every game start**, so copy it right after the problem, before you start the
-game again. Send, on the mod page's Bugs tab:
+BG3RTX writes `bg3rtx.log` in its install folder (`%LOCALAPPDATA%\Programs\BG3RTX` by default). At the
+next game start it becomes `bg3rtx.prev.log`, so only the last two sessions are kept: copy the logs before
+you start the game twice more. Send, on the mod page's Bugs tab:
 
-1. `bg3rtx.log`, `bg3rtx_user.ini` (your settings) and `VERSION.txt` from the install folder.
+1. `bg3rtx.log` and `bg3rtx.prev.log`, `bg3rtx_user.ini` (your settings) and `VERSION.txt` from the install folder.
 2. Your GPU, driver version, and the preset or settings you changed.
 3. Where it happens (act, place, time of day) and what you see. A screenshot with Ctrl+Shift+F9 off and
    on helps a lot.

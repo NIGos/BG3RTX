@@ -37,7 +37,7 @@ The window opens on your GPU and suggests a preset:
 | Low | RTX 2060-3060, 4060; AMD/Intel with ray tracing | No ray-traced scene, no Ray Reconstruction. Screen-space GI and contact shadows |
 | Medium | RTX 3070/3080, 4060 Ti/4070 | Ray-traced scene without alpha-tested objects, RT GI, fast local-light shadows, glossy reflections |
 | High | RTX 4080/4090, 5080 | Everything ray traced |
-| Ultra (RTX 5090) | RTX 5090 | High plus 2 GI rays, shadowed lights, rougher reflections, frame cap 58 (116 shown with frame generation 2x) |
+| Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, roof sun shadows, rough reflections, RT water + Refraction, Hidden-surface shading + Bounce, Emission at ray hits (Hidden hits), Far-field sun bounce 6 m, frame cap 58 (116 shown with frame generation 2x) |
 
 The presets below RTX 5090 are estimates and have not been measured on those GPUs yet. Settings
 your GPU cannot run are marked "(not supported)" and the presets skip them. For example, an
@@ -65,15 +65,23 @@ a change reaches a running game:
 | Frame cap (rendered fps) | Off / 30-240 | live |
 | NVIDIA Reflex (Advanced) | Off / On / On + Boost | live |
 
-**Experimental (being tested, off in every preset).** Each entry is one choice with levels; a
-higher level includes the lower ones and writes all of their ini keys.
+**Advanced levels (on in Ultra, off in Low, Medium and High).** Each entry is one choice with
+levels; a higher level includes the lower ones and writes all of their ini keys. Ultra uses the
+level in brackets.
 
 | Setting | Choices | Needs | Applies |
 |---|---|---|---|
-| Hidden-surface shading | Off / Materials / + Bounce / + Reflections | Full geometry; + Bounce: RT GI; + Reflections: Reflections on | **first enable: restart**; levels above Materials live |
-| Emission at ray hits | Off / Hidden hits | Hidden-surface shading | live |
-| Far-field sun bounce | Off / 6 m | Hidden-surface shading + Bounce | live |
-| RT water | Off / Reflections / + Shadows / + Refraction | Ray-traced geometry | **raising a level: restart**; lowering live |
+| RT water (Ultra: + Refraction) | Off / Reflections / + Shadows / + Refraction | Ray-traced geometry | **raising a level: restart**; lowering live |
+| Hidden-surface shading (Ultra: + Bounce) | Off / Materials / + Bounce / + Reflections | Full geometry; + Bounce: RT GI; + Reflections: Reflections on | **first enable: restart**; levels above Materials live |
+| Emission at ray hits (Ultra: Hidden hits) | Off / Hidden hits | Hidden-surface shading | live |
+| Far-field sun bounce (Ultra: 6 m) | Off / 6 m | Hidden-surface shading + Bounce | live |
+
+"+ Reflections" of Hidden-surface shading is still being tested and is in no preset.
+
+**Experimental (being tested, off in every preset).**
+
+| Setting | Choices | Needs | Applies |
+|---|---|---|---|
 | Native coverage | Off / Hair + scalp / + Tilesets | Full geometry | **restart** |
 | Physical hair ray origins (advanced) | Off / On | Native coverage | enable at startup, then live |
 | Opacity micromaps | Off / On | Full geometry, GPU support | **restart** |
@@ -92,8 +100,10 @@ reference (`rt_hit_reference`), Local light sampling exact-k (`ls_k`), Current c
 (`rt_sun_cascade_current`), and Emission at ray hits "All hits" (`rt_hit_emission=2`).
 **No entry (automatic):** `fg_letterbox=1` (frame generation in a swapchain larger than the game's
 output; equal sizes are unchanged), the hit-material buffer reuse, unlocked captures and lean hooks
-(default 1, keys kept for A/B), `rt_scene_wait=1`; the foliage rows come with Hidden-surface shading;
-capture buffer sizes follow the scene.
+(default 1, keys kept for A/B), `rt_scene_wait=1`; the foliage rows and the alpha-tested static mesh
+rows (`rt_hit_material_pool_alpha=1`) come with Hidden-surface shading; capture buffer sizes follow the scene.
+`bg3rtx.log` is capped at 64 MB: the earlier part moves to `bg3rtx.prev.log`, which also keeps the previous
+session's log.
 
 - **Dependencies.** Every ray-traced effect needs "Ray-traced geometry", and reflections also
   need global illumination. A red marker shows that a dependency is off; the effect cannot

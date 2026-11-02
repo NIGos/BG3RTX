@@ -90,6 +90,7 @@ struct InstanceData {
   PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties = nullptr;
   PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties = nullptr;
+  PFN_vkGetPhysicalDeviceMemoryProperties2 GetPhysicalDeviceMemoryProperties2 = nullptr;   // VK_EXT_memory_budget ([mem] line)
   PFN_vkGetPhysicalDeviceFeatures2 GetPhysicalDeviceFeatures2 = nullptr;
   PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR = nullptr;
   PFN_vkDestroySurfaceKHR DestroySurfaceKHR = nullptr;
