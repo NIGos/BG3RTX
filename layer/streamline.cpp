@@ -293,8 +293,15 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
     int n = requested;
     // fg_snap_delay=N: start N rendered frames after the request (a plan step sets fg_snap at its start; the
     // capture then lands inside the camera turn that starts later in the step).
-    if (!s_requested_at) s_requested_at = frame_index();
-    if (frame_index() < s_requested_at + uint64_t(std::max(cfg_int("fg_snap_delay", 0), 0))) return false;
+    // fg_snap_delay_ms=N (when > 0, instead): N wall-clock ms, so launches at different frame rates (rt=1 / rt=0)
+    // capture at the same point of the same turn.
+    static uint64_t s_requested_ms = 0;
+    if (!s_requested_at) s_requested_at = frame_index(), s_requested_ms = GetTickCount64();
+    if (const int ms = cfg_int("fg_snap_delay_ms", 0); ms > 0) {
+      if (GetTickCount64() < s_requested_ms + uint64_t(ms)) return false;
+    } else if (frame_index() < s_requested_at + uint64_t(std::max(cfg_int("fg_snap_delay", 0), 0))) {
+      return false;
+    }
     // fg_snap_any=1: also while frame generation is off (fg=0 live), so an FG on / off A/B scores the
     // presented frames of both states with the same tool.
     const bool any = cfg_int("fg_snap_any", 0) != 0 && !fg_running_now();

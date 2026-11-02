@@ -33,3 +33,8 @@
 - Verdict (wf3-wf6): the port water flicker is not the RT water compose, RR's water inputs, the sun-shadow ray, glint
   aliasing or DLSS-G: the game's animated water changes 1.5x more per present than the rest of the image at either
   display rate. No key fixes it; all water flicker keys stay off.
+- wf7 (READY_FOR_LIVE): two launches, wf7a rt=1 (Ultra) and wf7b rt=0 rr=0 (the game's own rendering, DLSS SR),
+  same pose and turns, two snap turns of 32 presents each captured 2000 ms into the turn by wall clock (new layer key
+  fg_snap_delay_ms: the same pose at either frame rate), wf7a's rt_debug 21 mask from the same start pose and time
+  (wf6's mask turn started one turn away from the snaps), one static PNG shot per launch. predicted.json: water / rest
+  ~1.5 in both = the game's water, closed.
