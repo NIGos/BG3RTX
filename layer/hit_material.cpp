@@ -128,9 +128,9 @@ const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
 // The VS inputs of an instanced draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
 // at record: frame 0:0 word 0, camera 0:2 _m2/_m6; wind: scene 0:1 wind words, material 1:1 _m0.._m3;
 // 2S: the per-draw translation 1:0 _m1. Unread (ok false) never pairs (pair_check).
-instanced::WindInputs read_inputs(VkCommandBuffer cmd,instanced::Family family){
+instanced::WindInputs read_inputs(VkCommandBuffer cmd,CmdState* state,instanced::Family family){
  instanced::WindInputs w{};Bg3Binding frame{},scene{},camera{},material{},engine{};
- auto bound=[&](uint32_t set,uint32_t binding,Bg3Binding& b){return query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&b) && b.buffer;};
+ auto bound=[&](uint32_t set,uint32_t binding,Bg3Binding& b){return query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&b,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) && b.buffer;};
  if(family==instanced::None || !bound(0,0,frame) || !bound(0,2,camera))return w;
  bool ok=read_mapped(frame.buffer,frame.offset,&w.time,4) &&
   read_mapped(camera.buffer,camera.offset+instanced::kCameraViewProjOffset,w.viewproj,64) &&
@@ -246,11 +246,11 @@ DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  StaticInputs attributes{};StaticKeyInputs inputs{};Bg3Binding engine{},pulled{};
  const auto layout=depth_input_layout(s.vs,s.fs);const uint32_t engine_bytes=layout.engine_bytes,pull_offset=layout.pull_offset;
  bool available=geo_native_hit_inputs(s.pipe[0],&attributes) &&
-  query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,0,0,&engine) && engine.buffer && engine.range>=engine_bytes && geo_uniform_buffer_range(engine.buffer,engine.offset,engine_bytes);
+  query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,0,0,&engine,cfg_hot(CfgHot::perf_hook_state)?&s:nullptr) && engine.buffer && engine.range>=engine_bytes && geo_uniform_buffer_range(engine.buffer,engine.offset,engine_bytes);
  if(available){
   inputs.engine_buffer=uint64_t(engine.buffer);inputs.engine_offset=engine.offset;
   inputs.pull_hint_known=read_mapped(engine.buffer,engine.offset+pull_offset,&inputs.pull_index,4);
-  if(inputs.pull_hint_known && inputs.pull_index>0 && query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled)){
+  if(inputs.pull_hint_known && inputs.pull_index>0 && query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled,cfg_hot(CfgHot::perf_hook_state)?&s:nullptr)){
    inputs.pull_buffer=uint64_t(pulled.buffer);inputs.pull_offset=pulled.offset;inputs.pull_range=pulled.range;
   }
   auto stream=[&](const InputAttribute& attr,InputStream& out){
@@ -374,8 +374,8 @@ struct ViewFacts {
  VkImageViewType type{VK_IMAGE_VIEW_TYPE_MAX_ENUM};VkFormat format{VK_FORMAT_UNDEFINED};
  VkStructureType extension{VK_STRUCTURE_TYPE_MAX_ENUM};VkImageSubresourceRange range{};
 };
-bool view(VkCommandBuffer cmd,uint32_t binding,VkImageViewType type,View& out,ViewFacts& fact,bool native2d=false){
- auto& b=fact.binding;fact.queried=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&b);
+bool view(VkCommandBuffer cmd,CmdState* state,uint32_t binding,VkImageViewType type,View& out,ViewFacts& fact,bool native2d=false){
+ auto& b=fact.binding;fact.queried=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&b,cfg_hot(CfgHot::perf_hook_state)?state:nullptr);
  bool frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,binding,0,&fact.ordinary);
  if(!fact.queried || !b.view)return false;
  std::shared_lock lock(tracker().mu);auto i=tracker().views.find(b.view);if(i==tracker().views.end())return false;
@@ -400,16 +400,16 @@ bool material_current(const Material& m){
  if(m.row.reserved==2){for(const auto& v:m.tileset_views)if(!current(v))return false;return true;}
  return current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical);
 }
-bool capture_tileset(VkCommandBuffer cmd,Material& material){
- auto* state=cmd_state(cmd);if(!state || !tileset_deferred(state->vs,state->fs))return false;
+bool capture_tileset(VkCommandBuffer cmd,CmdState* resolved,Material& material){
+ auto* state=cfg_hot(CfgHot::perf_hook_state)?resolved:cmd_state(cmd);if(!state || !tileset_deferred(state->vs,state->fs))return false;
  material.row.reserved=2;uint32_t failed=0;
  for(uint32_t n=0;n<2;++n){auto& out=n?material.physical_ubo:material.engine;
-  bool known=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,n,0,&out) &&
+  bool known=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,n,0,&out,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) &&
    omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,n,0) && out.buffer && out.range>=16 && geo_uniform_buffer_range(out.buffer,out.offset,16);
   if(!known)failed|=1u<<n;
  }
  ViewFacts facts[9]{};
- for(uint32_t i=0;i<9;++i)if(!view(cmd,2+i,VK_IMAGE_VIEW_TYPE_2D,material.tileset_views[i],facts[i],true))failed|=1u<<(2+i);
+ for(uint32_t i=0;i<9;++i)if(!view(cmd,state,2+i,VK_IMAGE_VIEW_TYPE_2D,material.tileset_views[i],facts[i],true))failed|=1u<<(2+i);
  if(!omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,material.sampler))failed|=1u<<11;
  if(!omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.sampler))failed|=1u<<12;
  const auto& c=material.sampler.sampler;
@@ -425,12 +425,12 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
 }
 // recipe: a pool pair (native_hit_pool.h, persistent record); nullptr: the audited per-draw pair.
 // recipe of an instanced pair (native_hit_instanced.h): the same LayoutBase bindings, per-draw row.
-bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
- auto* state=cmd_state(cmd);
+bool capture(VkCommandBuffer cmd,CmdState* resolved,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
+ auto* state=cfg_hot(CfgHot::perf_hook_state)?resolved:cmd_state(cmd);
  if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows())==recipe):audited_static_family(state->vs,state->fs)))return false;
  omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
  auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
-  queried[n]=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out);
+  queried[n]=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out,cfg_hot(CfgHot::perf_hook_state)?state:nullptr);
   bool frozen=omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&buffer_facts[n]);
   if(out.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(out.buffer);if(out.offset<=size)out.range=size-out.offset;}
   bool valid=queried[n] && out.buffer && out.range>=minimum && frozen;if(!valid)failed|=1u<<n;
@@ -451,12 +451,12 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  const bool mask=vt && vt->layout==native_vt::LayoutMask;
  material.layout=detail?native_vt::LayoutDetail:plain?native_vt::LayoutIridescent:mask?native_vt::LayoutMask:native_vt::LayoutBase;
  ViewFacts views[4]{};View* targets[4]={&material.table,&material.normal,&material.albedo,&material.physical};
- if(plain){ViewFacts f[5]{};for(uint32_t i=0;i<5;++i)if(!view(cmd,2+i,VK_IMAGE_VIEW_TYPE_2D,material.plain[i],f[i],true))failed|=1u<<(i<4?3+i:11);}
- else for(uint32_t i=0;i<4;++i)if(!view(cmd,mask && i==3?7u:first+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
+ if(plain){ViewFacts f[5]{};for(uint32_t i=0;i<5;++i)if(!view(cmd,state,2+i,VK_IMAGE_VIEW_TYPE_2D,material.plain[i],f[i],true))failed|=1u<<(i<4?3+i:11);}
+ else for(uint32_t i=0;i<4;++i)if(!view(cmd,state,mask && i==3?7u:first+i,i?VK_IMAGE_VIEW_TYPE_2D_ARRAY:VK_IMAGE_VIEW_TYPE_2D,*targets[i],views[i]))failed|=1u<<(3+i);
  if(detail || mask){
   ViewFacts d[2]{};
-  if(mask?!view(cmd,6,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true):
-     (!view(cmd,3,VK_IMAGE_VIEW_TYPE_2D,material.detail_normal,d[0],true) || !view(cmd,8,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true)))failed|=1u<<11;
+  if(mask?!view(cmd,state,6,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true):
+     (!view(cmd,state,3,VK_IMAGE_VIEW_TYPE_2D,material.detail_normal,d[0],true) || !view(cmd,state,8,VK_IMAGE_VIEW_TYPE_2D,material.detail_mask,d[1],true)))failed|=1u<<11;
   const bool bound=omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,material.detail_sampler);const auto& ds=material.detail_sampler.sampler;
   if(!bound || !omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0) || !omm::ordinary_sampler_current(material.detail_sampler) ||
      !ds.complete || ds.info.flags || ds.info.compareEnable || ds.info.unnormalizedCoordinates || ds.reduction!=VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)failed|=1u<<12;
@@ -716,7 +716,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
- Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,state,family);std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
  ++p->second.candidate_draws;
  if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record)){
   p->second.pre.push_back(pre);if(family!=instanced::None)++p->second.instanced_prepass[family];}
@@ -805,7 +805,7 @@ bool attach(VkCommandBuffer,uint32_t index,VkDescriptorSet set,VkBuffer dummyBuf
 }
 bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,bool exactPipeline,uint32_t stride,VkBuffer* buffer,VkDeviceSize* offset,VkDeviceSize* bytes){
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state))return false;
- if(tileset_deferred(state->vs,state->fs) && !tileset_active())return false;Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
+ if(tileset_deferred(state->vs,state->fs) && !tileset_active())return false;Bg3Binding camera{};if(!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) || !camera.buffer)return false;
  CpuTimer timer(CpuMaterial);
  // rt_hit_material_lean_hooks: the key (bindings, mapped reads, buffer sizes) only for a draw that qualifies.
  const bool lean_key=lean_hooks();bool keyed=false;DrawKey draw{};
@@ -851,7 +851,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // rt_hit_material_capture_unlocked: only this recording's thread writes this packet until it is
  // finalized (other threads read finalized packets only), so the binding reads run unlocked.
  const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
- Material material{};const bool captured=tileset?capture_tileset(cmd,material):capture(cmd,material,irecipe);
+ Material material{};const bool captured=tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);
  if(unlocked)lock.lock();
  if(!captured){++p.binding_declined;if(counts)++counts->bindings;if(gen)++gen->bindings;return false;}
  // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
@@ -859,7 +859,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
   if(eb>sizeof engine || mb>sizeof ubo || !read_mapped(material.engine.buffer,material.engine.offset,engine,eb) || (mb && !read_mapped(material.physical_ubo.buffer,material.physical_ubo.offset,ubo,mb)) ||
      !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage)){++p.binding_declined;++counts->bindings;if(gen)++gen->bindings;return false;}
-  material.family=family;material.staged=true;material.instances=args.instances;material.inputs=read_inputs(cmd,family);material.generated=gen!=nullptr;
+  material.family=family;material.staged=true;material.instances=args.instances;material.inputs=read_inputs(cmd,state,family);material.generated=gen!=nullptr;
   const uint32_t flags=instanced::row_flags(*irecipe)|instanced::family_flags(family);std::memcpy(&material.row.parameters[3],&flags,4); // row word 220
  }
  uint32_t vertices=0;if(!tileset_vertex_count(args.count,args.instances,vertices))return false;
@@ -953,7 +953,7 @@ PoolMaterial* pool_job_due(uint64_t geometry,uint64_t frame,const DrawArgs& args
 bool pool_job(VkCommandBuffer cmd,CmdState* s,const DrawArgs& args,const InstPipe& inst,uint64_t geometry,uint64_t frame,uint32_t stride,
               VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes){
  if(!one_time(s))return false;
- Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera) || !camera.buffer)return false;
+ Bg3Binding camera{};if(!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) || !camera.buffer)return false;
  if(camera.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(camera.buffer);camera.range=camera.offset<size?size-camera.offset:0;}
  if(camera.range<224 || camera.offset%geo_ubo_align())return false; // 14 float4: _m2 rows at 128 (xfb_to_world.hlsl)
  float rows[12];
@@ -981,7 +981,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
  bool due=false,throttled=false;
  if(keyed && recipe && poolPipeline){
-  Bg3Binding tilesets{};const bool table=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,12,0,&tilesets) && tilesets.buffer;
+  Bg3Binding tilesets{};const bool table=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,12,0,&tilesets,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) && tilesets.buffer;
   if(table && tilesets.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(tilesets.buffer);tilesets.range=tilesets.offset<size?size-tilesets.offset:0;}
   // A current qualified record is not captured again before its refresh frame.
   std::lock_guard lock(pool_mutex);if(table)pool_tilesets={tilesets,frame};
@@ -994,7 +994,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   else{
    // Same bindings as the audited pair (native_vt_surface.h). capture() keeps its own
    // statics, so it runs under the main mutex, never under pool_mutex.
-   Material m{};bool ok;if(capture_unlocked())ok=capture(cmd,m,recipe,&failures);else{std::lock_guard lock(mutex);ok=capture(cmd,m,recipe,&failures);}
+   Material m{};bool ok;if(capture_unlocked())ok=capture(cmd,state,m,recipe,&failures);else{std::lock_guard lock(mutex);ok=capture(cmd,state,m,recipe,&failures);}
    const uint32_t engine=pool::engine_bytes(*recipe);
    const bool constant=recipe->reflectance==native_vt::ReflectanceConstant;const float half=0.5f;
    if(ok && constant)std::memcpy(&payload.reflectance,&half,4); // FS 3df678c0: RT2.y is 0.5, no 1:1 UBO
@@ -1132,7 +1132,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(cfg_hot(CfgHot::rt_stats) && frame_index()%120==0)log("[hit material query reject] source epoch current %llu source %llu prepared %u attached %u",
    (unsigned long long)frame_index(),(unsigned long long)slot.frame,unsigned(slot.prepared),unsigned(slot.attached));return false;
  }
- Bg3Binding camera{};if(!query_binding(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera) || camera.buffer!=slot.camera || camera.offset!=slot.camera_offset){
+ Bg3Binding camera{};if(!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) || camera.buffer!=slot.camera || camera.offset!=slot.camera_offset){
   if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0)log("[hit material query reject] camera frame %llu source %p+%llu query %p+%llu",
    (unsigned long long)slot.frame,(void*)slot.camera,(unsigned long long)slot.camera_offset,(void*)camera.buffer,(unsigned long long)camera.offset);return false;
  }

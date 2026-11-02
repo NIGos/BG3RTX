@@ -228,6 +228,16 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false}
      ]},
+    {"id": "perf_hook_state", "label": "Reuse capture hook state",
+     "description": "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. Experimental CPU optimization; geometry and material coverage stay the same.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"perf_hook_state": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": [], "keys": {"perf_hook_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
+     ]},
     {"id": "exp_vram_guard", "label": "VRAM budget guard",
      "description": "Keeps the game's video memory below the driver's budget: when headroom is low, the ray-tracing caches stop growing (new geometry may be left out of ray tracing, logged) and give back memory no frame uses; their sizes also follow the card's memory. Aims to stop the stutter and flicker when a long view runs out of VRAM. Experimental until its live gate holds.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,

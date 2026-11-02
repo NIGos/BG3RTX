@@ -354,6 +354,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}},
 
+  {"perf_hook_state", "Reuse capture hook state",
+   "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. "
+   "Experimental CPU optimization; geometry and material coverage stay the same.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}},
+    {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}},
+
   {"exp_vram_guard", "VRAM budget guard",
    "Keeps the game's video memory below the driver's budget: when headroom is low, the ray-tracing caches stop "
    "growing (new geometry may be left out of ray tracing, logged) and give back memory no frame uses; their "
@@ -603,6 +611,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_recycle", "1"},
     {"rt_hit_material_capture_unlocked", "1"},
     {"rt_hit_material_lean_hooks", "1"},
+    {"perf_hook_state", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},

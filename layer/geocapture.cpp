@@ -1,3 +1,4 @@
+#include "../common/perf_hook_state.h"
 #include "../common/rt_capture_budget.h"
 #include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
@@ -169,6 +170,25 @@ struct PipeInfo {
   uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
+std::atomic<uint64_t> g_pipe_generation{1};
+// Registry values are immutable after publication. Invalidate on create/destroy,
+// including handle reuse. No command-state pointers are retained across hooks.
+static bool draw_pipe(VkPipeline pipe, PipeInfo& out, uint64_t* generation = nullptr) {
+  auto load = [&] {
+    std::lock_guard lock(g_mu);
+    auto it = g_pipes.find(pipe);
+    return it == g_pipes.end() ? std::pair{false, PipeInfo{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM}} : std::pair{true, it->second};
+  };
+  if (!cfg_hot(CfgHot::perf_hook_state)) {
+    auto value = load();
+    if(value.first) out = value.second;
+    return value.first;
+  }
+  thread_local perf::GenerationCache<VkPipeline, std::pair<bool, PipeInfo>> cache;
+  const auto& value = cache.get(pipe, g_pipe_generation.load(std::memory_order_acquire), load);
+  if(generation) *generation = cache.generation;
+  if(value.first) out = value.second; return value.first;
+}
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
 std::unordered_map<VkBuffer, VkDeviceSize> g_buffer_size;
 std::atomic<uint32_t> g_patch_count{0}, g_patch_skipped{0}, g_inst_modules{0}, g_inst_pipes{0};
@@ -1152,7 +1172,7 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
     d.place = uint64_t(vb.buffer), d.place_offset = vb.offset;
   } else {            // per-draw UBO (set 1 binding 0: the model matrix of the depth-only VS)
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b) && b.buffer)
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer)
       d.place = uint64_t(b.buffer), d.place_offset = b.offset;
   }
   return d;
@@ -1267,7 +1287,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
 
 void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawArgs& args, const PipeInfo& pi) {
   Bg3Binding b;
-  const bool have = query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) && b.buffer &&
+  const bool have = query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer &&
                     (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
   if (c->probe) {   // only the matrix: the first draw's UBO, then no more hooks in this pass
     CcMat m;
@@ -2019,6 +2039,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
     }
     g_pipes[out[i]] = pi;
+    g_pipe_generation.fetch_add(1, std::memory_order_release);
   }
 }
 
@@ -2026,6 +2047,7 @@ void geo_forget_pipeline(VkPipeline p) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_pipes.erase(p);
+  g_pipe_generation.fetch_add(1, std::memory_order_release);
 }
 
 // Before the game's vkCmdBeginRenderPass (outside the pass).
@@ -2249,10 +2271,10 @@ void rt_capture_stats(const Capture& c) {
 }
 
 // The pass's camera UBO (set 0 binding 2), from its first draw that has one.
-static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e) {
+static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e, CmdState* s) {
   if (e->ubo) return;
   Bg3Binding b;
-  if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+  if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
       (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
       b.offset % g_ubo_align == 0) {
     e->ubo = b.buffer;
@@ -2263,18 +2285,14 @@ static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e) {
 // M5.1: a draw of a forward/effects pass with rt_water_geometry on. True: captured as water.
 static bool water_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args, EmPass* e) {
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   WaterRange r{};
   const int w = water_draw(cmd, s, args, in, pi.depth_write, &r, &e->water_swap);
   if (w) ++e->water_draws;
   if (w != 2) return false;
-  em_pass_ubo(cmd, e);
+  em_pass_ubo(cmd, e, s);
   p_bind_xfb(cmd, 0, 1, &r.soup, &r.off, &r.bytes);
   p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
   e->xfb_active = true;
@@ -2293,11 +2311,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
   if (!e->em) return;
   if (!e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   if (pi.em_state && cfg_hot(CfgHot::rt_em_overlap_check)) {
     static thread_local std::unordered_set<uint64_t> seen;
     if (seen.insert(s->pipe_id[0]).second && seen.size() <= 16)
@@ -2306,7 +2320,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
           pi.em_raster[0], pi.em_raster[1], pi.em_raster[2], pi.em_raster[3], pi.em_raster[4],
           pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
   }
-  em_pass_ubo(cmd, e);
+  em_pass_ubo(cmd, e, s);
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   VkBuffer soup = VK_NULL_HANDLE;
@@ -2322,28 +2336,45 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(geo_is(s,GeoKind::Material)){
     bool exact=false,pool_pipeline=false,basis_pipeline=false;InstPipe pool_inst{};
-    {std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
-      s->geo_material_no_writes&=i->second.no_storage_writes;
-      const auto& p=i->second;
+    PipeInfo p{}; uint64_t generation = 0;
+    if(draw_pipe(s->pipe[0], p, &generation)) {
+      s->geo_material_no_writes &= p.no_storage_writes;
+      struct Eligibility { bool exact=false, pool=false, basis=false; InstPipe inst{}; };
+      auto classify = [&] {
+        Eligibility value;
       const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
       native_hit::MaterialPipelineFacts facts;
       facts.tileset=tileset;facts.tileset_capture=g_tileset_capture;facts.stride=g_stride;
       facts.tileset_outputs=p.tileset_outputs;facts.tileset_inputs_valid=p.tileset_material_inputs.valid;facts.vt_outputs=p.vt_outputs;
       facts.xfb=p.xfb;facts.material_state=p.material_state;facts.depth_test=p.depth_test;facts.blend_mask=p.blend_mask;
       facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
-      exact=native_hit::exact_material_pipeline(facts);
+      value.exact=native_hit::exact_material_pipeline(facts);
       // Class A G-buffer draws feed the pool material records (their meshes are BVH-cached).
-      if(native_hit::enabled() && p.inst.ok){pool_inst=p.inst;pool_pipeline=native_hit::pool::pool_material_pipeline(facts);
-        basis_pipeline=pool_pipeline && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
+      if(p.inst.ok){value.inst=p.inst;value.pool=native_hit::pool::pool_material_pipeline(facts);
+        value.basis=value.pool && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
+        return value;
+      };
+      Eligibility value;
+      if(cfg_hot(CfgHot::perf_hook_state)) {
+        thread_local perf::GenerationCache<std::array<uint64_t,5>, Eligibility> cache;
+        value = cache.get({uint64_t(s->pipe[0]), s->vs, s->fs, g_stride, uint64_t(g_tileset_capture)},
+                          generation, classify);
+      } else value = classify();
+      exact=value.exact;
+      if(native_hit::enabled()) { pool_inst=value.inst; pool_pipeline=value.pool; basis_pipeline=value.basis; }
+      const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
-      if(native_hit::enabled() && cfg_hot(CfgHot::rt_stats) && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
+      std::unique_lock report_lock(g_mu, std::defer_lock);
+      const bool report = native_hit::enabled() && cfg_hot(CfgHot::rt_stats);
+      if(report) report_lock.lock();
+      if(report && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
          reported.size()<16 && reported.insert(uint64_t(s->pipe[0])).second)
         log("[hit material pipeline] pipe %u accepted %u xfb %u basis %u static %u reasons 0x%x depth test %d blend 0x%x color 0x%x topo %u uv %u; raster/multisample/blend pNext %u/%u/%u",
           s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
 
-    }else s->geo_material_no_writes=false;}
+    } else s->geo_material_no_writes=false;
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
     if(pool_inst.ok && native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline,basis_pipeline,g_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;return;
@@ -2359,11 +2390,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(c->rt)native_hit::prepass_observe(cmd,s,args);
   DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   if (c->rt && c->discard_filter && pi.always_discard) {
     ++c->discard_skipped;
     return;
@@ -2380,7 +2407,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
         (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
         b.offset % g_ubo_align == 0) {
       c->rt_ubo = b.buffer;
@@ -2389,7 +2416,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->readback && c->draws.size() < 65536) {
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
         (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)) {
       d.ubo = b.buffer;
       d.ubo_off = b.offset;
