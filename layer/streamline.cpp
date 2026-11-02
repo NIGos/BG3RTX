@@ -275,12 +275,20 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
                   VkSemaphore& wait) {
   // Allow separate off/on snapshot windows in one live A/B session.
   const int requested = cfg_int("fg_snap", 0);
-  if (requested <= 0) { g_snaps_left = -1; return false; }
+  static uint64_t s_requested_at = 0;   // fg_snap_delay: the frame the request was first seen
+  if (requested <= 0) { g_snaps_left = -1; s_requested_at = 0; return false; }
   if (g_snaps_left == 0 || info->swapchainCount != 1 || !g_sc_extent.width) return false;
   if (g_snaps_left < 0) {
     int n = requested;
-    if (n <= 0 || !fg_running_now() || g_fg_enables < cfg_int("fg_snap_on", 1) ||
-        frame_index() < g_fg_on_frame + uint64_t(cfg_int("fg_snap_after", 60)))
+    // fg_snap_delay=N: start N rendered frames after the request (a plan step sets fg_snap at its start; the
+    // capture then lands inside the camera turn that starts later in the step).
+    if (!s_requested_at) s_requested_at = frame_index();
+    if (frame_index() < s_requested_at + uint64_t(std::max(cfg_int("fg_snap_delay", 0), 0))) return false;
+    // fg_snap_any=1: also while frame generation is off (fg=0 live), so an FG on / off A/B scores the
+    // presented frames of both states with the same tool.
+    const bool any = cfg_int("fg_snap_any", 0) != 0 && !fg_running_now();
+    if (n <= 0 || (!any && (!fg_running_now() || g_fg_enables < cfg_int("fg_snap_on", 1) ||
+                            frame_index() < g_fg_on_frame + uint64_t(cfg_int("fg_snap_after", 60)))))
       return false;
     g_snaps_left = n;
     g_snap_dir = root_dir() + "\\captures\\fg_" + capture_stamp();
@@ -2355,6 +2363,20 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         dview = copied ? g_preserved_depth.view : g_depth_only_view;
         ld = copied ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : layout_of(d.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         lm = layout_of(m.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        // rt_water_fg_mv: the core's vectors (the game's with the water surface's parallax on the water pixels,
+        // core/water.cpp water_mv, double-buffered there) instead of the game's, at the same size and format.
+        if (cfg_int("rt_water_fg_mv", 0)) {
+          Img cm{};
+          static bool said = false;
+          if (ngx_core_motion_vectors(&cm.image, &cm.view, &cm.format, &cm.w, &cm.h) && cm.w == m.w && cm.h == m.h &&
+              cm.format == m.format) {
+            cm.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            cm.seen = m.seen;
+            m = cm;
+            lm = VK_IMAGE_LAYOUT_GENERAL;
+            if (!said) said = true, log("[sl] DLSS-G gets the core's motion vectors (rt_water_fg_mv), %ux%u", cm.w, cm.h);
+          }
+        }
         lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         input_layouts[0]=ld; input_layouts[1]=lm; input_layouts[2]=lh; input_layouts[3]=lu;

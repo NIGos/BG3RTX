@@ -1,19 +1,19 @@
 {
- "name": "wf4-s8-fg2",
+ "name": "wf5-s8-fg2",
  "save": "Water Queens House",
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 473,
+ "timeout": 571,
  "repeat": 1,
  "live_batch": "water-flicker",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_rr_mv=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_rr_mv=0,rt_water_fg_mv=0,rt_water_glint_aa=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=150,fg_log_presents=0",
  "args": [
   "-RealPresent",
   "-Foreground",
   "-Move",
   "-MovePlan",
-  "captures/live_batches/water_flicker/plans/wf4_s8.json"
+  "captures/live_batches/water_flicker/plans/wf5_s8.json"
  ],
  "patterns": [
   "\\[hot\\]",
@@ -46,7 +46,11 @@
   "\\[water\\]",
   "rf: reflection pass",
   "gi: GPU cost",
-  "\\[pan\\]"
+  "\\[pan\\]",
+  "\\[sl\\] capturing \\d+ presented frames",
+  "\\[sl\\] present capture done",
+  "slDLSSGSetOptions",
+  "\\[sl\\] DLSS-G gets"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -64,14 +68,18 @@
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
   "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
   "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-  "\\[water\\] RR motion vectors on \\(rt_water_rr_mv=1\\)",
-  "\\[ngx\\] RR gets the core's motion vectors \\(rt_water_rr_mv\\)",
-  "\\[ngx\\] upscaler for feature \\S+: DLSS SR",
-  "\\[pan\\] burst 94100 complete: 16 frames",
-  "\\[pan\\] burst 94101 complete: 16 frames",
-  "\\[pan\\] burst 94102 complete: 16 frames",
-  "\\[pan\\] burst 94103 complete: 16 frames",
-  "\\[pan\\] burst 94104 complete: 16 frames"
+  "\\[water\\] water motion vectors on \\(rt_water_rr_mv=0, rt_water_fg_mv=1\\)",
+  "\\[sl\\] DLSS-G gets the core's motion vectors \\(rt_water_fg_mv\\)",
+  "\\[water\\] rt/water_glint\\.hlsl\\?\\S*WATER_GLINT_AA=1\\S* water_glint: built",
+  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*WATER_GLINT_AA=1\\S* water_compose: built",
+  "glint filter passes [1-9]\\d* \\(rt_water_glint_aa\\)",
+  "slDLSSGSetOptions\\(mode off",
+  "slDLSSGSetOptions\\(mode on",
+  "\\[pan\\] burst 95100 complete: 16 frames",
+  "\\[pan\\] burst 95101 complete: 16 frames",
+  "\\[pan\\] burst 95102 complete: 16 frames",
+  "\\[pan\\] burst 95103 complete: 16 frames",
+  "\\[pan\\] burst 95104 complete: 16 frames"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -101,16 +109,17 @@
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
   "\\[motion-trace\\] phase=2 label=shot-off-a repeat=0",
-  "\\[motion-trace\\] phase=4 label=shot-rrwater repeat=0",
-  "\\[motion-trace\\] phase=6 label=shot-off-b repeat=0",
-  "\\[motion-trace\\] phase=7 label=diag-view-mask repeat=0",
-  "\\[motion-trace\\] phase=8 label=diag-view-mask-rot repeat=0",
-  "\\[motion-plan\\] complete phases=19\\b",
+  "\\[motion-trace\\] phase=4 label=shot-glint repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-fgmv repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=9 label=diag-view-mask repeat=0",
+  "\\[motion-trace\\] phase=10 label=diag-view-mask-rot repeat=0",
+  "\\[motion-plan\\] complete phases=33\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": false,
- "purpose": "S8 harbour water flicker (wf3 141227: not the RT water compose, nocompose 3.53% vs 3.38 / 3.61%): RR's inputs on water. FOREGROUND. rot-off-a / rot-rrwater / rot-rroff / rot-off-b: rt_water_rr_mv=1 (RR gets motion vectors with the water surface's parallax instead of the bed's), then rr=0 (the game's DLSS SR; the core's GI, D-LS and D-RF switch to their non-RR modes too), same direction from the same pose, keys changed at the start of each ret-* turn, 9 s before the burst. cal-static: pan_artifacts calibration; diag-view-mask(-rot): rt_debug 21 water masks. Static shots: energy (water-compose) and GPU cost of the key.",
- "estimated_phase_seconds": 193,
+ "purpose": "S8 harbour water flicker at DISPLAY rate (user: 'something switching on and off'; wf3/wf4 scored rendered frames and dips only). FOREGROUND, one launch. Presented frames (fg_snap, fg_snap_any: with FG off too; fg_snap_delay puts the 32 presents inside each turn) of off-a / fgoff (fg=0 live) / fgmv (rt_water_fg_mv: DLSS-G gets the water surface's motion vectors) / glint (rt_water_glint_aa: the sun glints spread over a +-1 px footprint) / noshadow (rt_water_shadows=0: the 1-spp sun-disc ray toggles glints per frame at shadow edges) / off-b, scored by scripts/qa/fg_present_flicker.py (second difference per present parity, water mask vs rest). Rendered K16 bursts of off-a / glint / noshadow / off-b for pan_artifacts (dips and now peaks). Same turn protocol as wf3/wf4 (keys set at the start of each ret-* turn). Static shots: energy and GPU cost of glint and fgmv. Per-window compose lines (uncomposed, lighting source this / previous frame) stay in the log.",
+ "estimated_phase_seconds": 291,
  "expect_every": [
   {
    "name": "water reflections traced in every window with the casters on (FAILS today: water is skipped with rt_cascade_casters=1)",
@@ -118,7 +127,8 @@
    "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ],
    "min": 1
@@ -129,7 +139,8 @@
    "match": "\\[trace\\] frame \\d+ written: ",
    "windows": [
     "shot-off-a",
-    "shot-rrwater",
+    "shot-glint",
+    "shot-fgmv",
     "shot-off-b",
     "diag-view-mask",
     "diag-view-mask-rot"
@@ -144,7 +155,8 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ]
   },
@@ -155,7 +167,8 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ],
    "when_present": true
@@ -167,7 +180,8 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ]
   },
@@ -177,7 +191,8 @@
    "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ],
    "min": 1
@@ -188,10 +203,26 @@
    "match": "; non-finite terms 0 \\(",
    "windows": [
     "cost-off-a",
-    "cost-rrwater",
+    "cost-glint",
+    "cost-fgmv",
     "cost-off-b"
    ],
    "min": 1
+  },
+  {
+   "name": "presented frames captured in every snap turn",
+   "select": "\\[sl\\] (capturing \\d+ presented frames|present capture done)",
+   "match": "\\[sl\\] present capture done",
+   "event": true,
+   "min": 1,
+   "windows": [
+    "snap-off-a",
+    "snap-fgoff",
+    "snap-fgmv",
+    "snap-glint",
+    "snap-noshadow",
+    "snap-off-b"
+   ]
   }
  ],
  "energy_fs": "water-compose"
