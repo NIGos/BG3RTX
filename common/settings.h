@@ -438,6 +438,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
+    {"ab_off", "0"},
     {"core", "1"},
     {"dump_shaders", "1"},
     {"shader_debug", "0"},
