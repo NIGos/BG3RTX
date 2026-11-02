@@ -1,4 +1,15 @@
-# S8 harbour water reflection flicker (live_batch water-flicker), NOT authorized
+# S8 harbour water reflection flicker (live_batch water-flicker)
+
+Current job: `wf3-s8-fg2` (foreground, 161 s, 4 K16 bursts about 9.2 GB, deleted after the analysis):
+attribution. rot-off-a / rot-nocompose / rot-off-b turn the same way from the same pose with every water image key
+(compose, sun / local shadows, refraction, game shadow) on / off / on, toggled at the start of each ret-* turn, 9 s
+before its burst; calibration burst, rt_debug 21 masks static and in the turn, energy (water-compose) and cost
+shots. predicted.json: nocompose energy +12.6%, compose GPU -0.41 ms; nocompose flash rate within the OFF spread =
+the game's own water flickers, clearly below = ours. Analysis: `py -3 -m scripts.qa.pan_artifacts <4 bursts>
+--log <log> --out <dir> --mask 93100=<static mask PNG> --mask 93101=<turn mask PNG> ...` (the mask PNG: the scene
+dump after the water pass of each diag-view trace).
+
+wf2-s8-fg2 110212 (below, done; its job removed): rt_water_rr_hitdist null, rt_water_rf_edge rejected.
 
 User report 2026-11-02 (Ultra on main): the water reflections at the port of Water Queens House flicker during camera
 rotation. Two keys under test, both default 0 and live, toggled inside one run:

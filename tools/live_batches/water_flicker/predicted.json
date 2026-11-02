@@ -10,6 +10,16 @@
    "written": "2026-11-02"
   }
  },
+ "wf3-s8-fg2": {
+  "shot-nocompose": {
+   "predicted": 0.126,
+   "source": "water-compose energy = 5c3fdabc + the in-frame compose delta. wf2 110212 at this save and pose: 5c3fdabc 0.1939, in-frame delta of the Ultra water keys -0.0217 (off-a / off-b mean; mostly the sun shadows removing glints, PLAN_M5_WATER M5.3c). With every water image key off the delta is the next pass's own draws only (+0.0001, m5w3 OFF): (0.1940 - 0.1722) / 0.1722 = +12.6%",
+   "cost_gpu_ms": -0.41,
+   "cost_source": "the [water] compose GPU line (lighting copy + compose dispatches with the sun, local-light and refraction rays) was 0.41 ms in every wf2 window; off, it does not run",
+   "flicker": "attribution, no fix: water-masked transient rate (pan_artifacts --mask, the rotating rt_debug 21 trace) of rot-nocompose vs rot-off-a / rot-off-b (wf2: 2.25 / 2.32%, OFF spread 0.07 points). Within the OFF spread or above: the flicker is the game's own water (its animated normals and probe); clearly below both: ours (the compose: the hit / miss and hidden switches, the shadow ray noise)",
+   "written": "2026-11-02"
+  }
+ },
  "wf2-s8-fg2": {
   "shot-rr": {
    "predicted": null,
