@@ -1021,7 +1021,11 @@ uint64_t vram_cap(int consumer, uint64_t fallback);
 uint64_t vram_take_ask(int yield);
 bool vram_guard_on();
 // Breakdown sources for the [mem] ours line (each module's own lock; never called with the guard lock held).
-struct BvhVram { uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0; uint32_t chunks = 0; };
+struct BvhVram {
+  uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0;
+  uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
+  uint32_t chunks = 0;
+};
 void bvh_vram(BvhVram* out);
 void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade);
 uint64_t em_vram_bytes();

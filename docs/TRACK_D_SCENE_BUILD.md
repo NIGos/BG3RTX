@@ -902,3 +902,53 @@ docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
   and actual reclaimed VRAM remain unmeasured: no game or GPU test was run. Restart the
   game for the layer change, then compare these counters in a separately authorized run
   of the S8 low long view, including a scene transition and a GPU backlog window.
+
+### Cached mesh VRAM compaction (2026-11-02, codex-mesh-pool, offline candidate)
+
+- `rt_vram_compact=0` by default, including every preset. Experimental GUI entry
+  "Compact ray-tracing caches". Host-layer change needs a restart to load the code;
+  the key itself is live. No host/core ABI or shader change; variant request delta 0.
+- Pool growth doubles capacity. Shrink qualification is therefore used <= reserved / 4,
+  with target max(start capacity, 2 x used), aligned for pool copies. This frees at
+  least half while retaining one doubling step of headroom. Demand must remain low
+  for 240 + 8 scene slots + 6 retirement presents = 254 frames, beyond the existing
+  build-result watchdog and retirement interval. A failed allocation resets the window.
+- Repack requires ready meshes, no outstanding BVH batch/pending pool range, no dynamic
+  hold/hair pool range, and no native material basis jobs. Native hair capability
+  disables pool repacking, because newly visible procedural bounds require pool writes.
+  These restrictions leave BLAS chunk relocation available independently.
+- GPU copies include every live vertex and material-basis range. While copying,
+  allocations and basis captures pause; existing cached geometry remains usable, and
+  new geometry keeps the ordinary per-draw soup path. Confirmation is a dedicated
+  private status word, separate from the ordinary status ring. Dropped recordings discard the candidate; stalled recordings
+  never publish on a timeout. The old allocator remains active until confirmation.
+  Timed-out BVH/native-basis pool users conservatively block repacking until their
+  command resets; another command's registered unsubmitted BVH work also blocks it.
+- Commit rebases surviving mesh generations, material rows (including offscreen ones),
+  and the pool epoch. Each scene keeps its own material offsets, so an old scene's
+  pool descriptor and rows agree. Evicted snapshot ranges are released in the new
+  allocator; old pending frees stay with the retained original buffer. Old/cancelled
+  buffers wait for the GPU frame + 2 fence, oldest live scene, and six presents before
+  entering deferred destruction. A key toggle cancels publication, not retirement.
+- BLAS relocation plans complete evacuation of the emptiest eligible chunk into
+  fuller existing chunks, largest mesh first. No new chunk or increased reservation
+  is allowed. Exact aligned sizes and allocator holes are used, not aggregate free
+  bytes. Only verified cached meshes participate, after ordinary compaction resolves;
+  the existing per-frame compaction count bounds a complete evacuation. CLONE copies
+  use the existing completion/swap path; future TLAS builds read the new addresses.
+- The source stays excluded from allocation until emptied ranges retire. Its AS
+  ranges remain pinned if meshes are evicted before the copy completes. Relocation
+  batches wait for completion or explicit recording drop without a 240-frame timeout.
+  Dynamic, cascade, current-sun and OMM-owned BLAS are not relocated; diagnostic kept
+  handles pin their chunks. A chunk with any such live owner is ineligible.
+- `[mem] ours` reports active pool used/capacity, candidate/retained buffer bytes,
+  repack count and successful cached BLAS moves. The existing mesh-cache capacity
+  line reports relocation MB, freed chunks and pool savings. Handed-off deferred
+  buffers are excluded once their explicit scene retirement has completed.
+- Supplied vg1 S8 evidence: pool 467 / 2047 MB predicts 934 MB target, 1113 MB less
+  active reservation after retirement. BLAS 211 / 2560 MB does not predict exact
+  savings without the cached/dynamic owner distribution. CPU sizing/planning tests
+  cover hysteresis, watchdog window, fragmentation, pinned ranges and no-growth moves.
+  Validation: 94 / 94 permitted CTests passed (21.44 s); final layer rebuild and
+  5 / 5 targeted CTests passed after lifetime safeguards. CPU compaction test: 68 checks.
+  GPU cost and visual/energy invariance remain unmeasured; no game was launched.
