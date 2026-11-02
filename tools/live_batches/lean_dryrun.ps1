@@ -10,9 +10,12 @@
 #    every job runs and every one is INVALID.
 # 3. Run B (expect/expect_every/forbid/post stripped): every job runs in order and is valid.
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
+# -Unfocused: the jobs are "window_mode": "visible_unfocused_fg" (user at the PC, AGENTS.md "Lean live tests") instead
+# of a foreground launch: args -Move -MovePlan only, expect_runner names the [window-mode] line, not the pointer line.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
+      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force,
+      [switch]$Unfocused)
 # Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
 # but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
 # queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
@@ -28,7 +31,7 @@ $scripts = Join-Path $repo 'scripts'
 . (Join-Path $scripts 'longrun.ps1')
 $inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
   @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
-$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB|$Unfocused")
 $reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
 if ($reuse) {
   foreach ($l in @($reuse.lines)) { Write-Host $l }
@@ -85,19 +88,23 @@ foreach ($job in $jobs) {
   Check "${n}: phases 5-25 s" $sizes
   Check "${n}: timeout $($job.timeout) >= plan + 240 s load" ($job.timeout -ge $sec + 240)
   $er = @($job.expect_runner)
-  Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
-    [bool]($er -match "phases=$($plan.Count)\\b") -and [bool]($er -match 'pointer centred in owned foreground game') -and
+  $modeLine = if ($Unfocused) { 'window-mode\\\] visible_unfocused' } else { 'pointer centred in owned foreground game' }
+  Check "${n}: expect_runner names phases=$($plan.Count), the $(if ($Unfocused) { 'window-mode' } else { 'foreground pointer' }) line and $($traceLines.Count) traces" (
+    [bool]($er -match "phases=$($plan.Count)\\b") -and [bool]($er -match $modeLine) -and
     -not @($traceLines | Where-Object { $t = $_; -not @($er | Where-Object { $t -match $_ }).Count }).Count)
   # The runner prints "[motion-trace] phase=..." only for phases with trace_at (scripts/auto-run.ps1): an expect
   # for a phase without one never matches (ef1-af-em-fg2 2026-11-02 was INVALID for that).
   $orphan = @($er | Where-Object { $e = $_; $e -match 'motion-trace' -and -not @($traceAll | Where-Object { $_ -match $e }).Count })
   Check "${n}: every expect_runner [motion-trace] line names a phase with trace_at$(if ($orphan.Count) { ': not ' + ($orphan -join ' | ') })" (-not $orphan.Count)
-  Check "${n}: foreground single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
-    -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' -and
+  $launchOk = if ($Unfocused) { $job.window_mode -eq 'visible_unfocused_fg' -and @($job.args) -notcontains '-Foreground' }
+              else { -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' }
+  Check "${n}: $(if ($Unfocused) { 'visible_unfocused_fg' } else { 'foreground' }) single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
+    $launchOk -and
     @($job.args) -contains '-Move' -and $job.set -match '(^|,)fg=2(,|$)' -and -not $job.session -and $job.hold -ge 90 -and
     @($job.patterns).Count -and @($job.expect).Count -and @($job.forbid).Count)
   $norm = ConvertTo-QueueWindowJob $job
-  Check "${n}: queue keeps the foreground args (no -NoActivate)" (@($norm.args) -notcontains '-NoActivate' -and (@($norm.args) -join ' ') -eq (@($job.args) -join ' '))
+  if ($Unfocused) { Check "${n}: queue makes it unfocused with FG kept (-NoActivate -UnfocusedFG, no fg=0)" (@($norm.args) -contains '-NoActivate' -and @($norm.args) -contains '-UnfocusedFG' -and $norm.set -notmatch '(^|,)fg=0(,|$)') }
+  else { Check "${n}: queue keeps the foreground args (no -NoActivate)" (@($norm.args) -notcontains '-NoActivate' -and (@($norm.args) -join ' ') -eq (@($job.args) -join ' ')) }
   if ($Independent) { Check "${n}: independent (no requires_success_of)" (-not $job.requires_success_of) }
   else { Check "${n}: stop-on-failure dependency" ($n -eq $first -or @($job.requires_success_of) -contains $first) }
 }
@@ -175,7 +182,8 @@ Check "run A: the $($jobs.Count - 1) dependent job(s) stayed in pending, not run
 $b = New-Root (Join-Path $Out 'b-structural') -Strip
 $recs = @(Invoke-Queue $b 'run B')
 Check "run B: $($jobs.Count) runs recorded, job 1 first" ($recs.Count -eq $jobs.Count -and $recs[0].job -eq $first)
-Check "run B: every run valid, done, single (not session), foreground (no window_mode)" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode }))
+if ($Unfocused) { Check "run B: every run valid, done, single (not session), visible_unfocused_fg" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode -ne 'visible_unfocused_fg' })) }
+else { Check "run B: every run valid, done, single (not session), foreground (no window_mode)" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode })) }
 Check "run B: pending empty" (@(Get-ChildItem (Join-Path $b 'captures\queue\pending') -Filter '*.json').Count -eq 0)
 Write-Host "scratch: $Out"
 if ($fail) { Write-Host "$fail check(s) failed"; exit 1 }

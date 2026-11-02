@@ -22,12 +22,12 @@ USER = ("ls_box=2,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_
 # the user's opaque peak 812.7 MB x 88/64 = 1117 MB would not fit 1024).
 HAIR_START = "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587"
 NOHAIR_START = "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_origin=1,rt_xfb_mb=1024,rt_cascade_mb=427"
-BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,"
+BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,"
             "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,"
-            "dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
+            "dump_png_width=1024,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
             "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,"
             "rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
-            "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_cascade_casters=1,rt_dyn_hold=4,"
+            "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,"
             "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_owners=31,ls_noshadow=1,gi_ao=1.0")
 
 # Every phase writes every toggled key, so a phase reads back on its own (no carried-over toggle).
@@ -45,11 +45,11 @@ def step(label, seconds, trace=False, **keys):
            "capture_at": 0, "serial": 0, "motion_start": seconds, "motion_end": seconds, "pixels_per_second": 0,
            "direction": 0, "set": ",".join(f"{k}={v}" for k, v in s.items())}
     if trace:
-        out["trace_at"] = [5]
+        out["trace_at"] = trace if isinstance(trace, list) else [5]
     return out
 
 
-SHOT = 8   # one PNG trace at 5 s; 8 s holds 3-4 lines of 120 frames at the foreground FG 2 rate
+SHOT = 8   # one PNG trace at 5 s; 8 s holds 3-4 lines of 60 frames at the unfocused 30 fps floor
 plan = [
     step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles; the hold latches after it
     step("shot-off-a", SHOT, True),
@@ -67,8 +67,13 @@ plan = [
     step("shot-hair-on", SHOT, True, **HAIR),                        # native Hair + Scalp coverage (else opaque cards)
     step("shot-hairorigin-on", SHOT, True, **ORIGIN),                # + physical secondary origins
     step("shot-off-e", SHOT, True),
+    # H7 (moving shadows): two traces 0.5 s apart (the real gap is the frame numbers of the '[trace] frame N written'
+    # lines), user config and the game's own sun map only. Moving with RT, still without = RT-only animated casters.
+    step("motion-base", SHOT, [4, 4.5]),
+    step("motion-nosun", SHOT, [4, 4.5], rt_shadows="0", contact_shadows="0"),
     step("view-lsremoved", SHOT, True, ls_debug="2"),                # local light removed x4 (where D-LS darkens)
     step("view-lsowners", SHOT, True, ls_debug="9"),                 # evaluated lights by owner (magenta character)
+    step("diag-view-sunmask", SHOT, True, rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
     step("diag-ls-stats", 10, ls_stats="1"),                         # light removed % of the lit luminance
     step("diag-rt-hairoff-a", 10, rt_stats="1", rt_primary_check="1"),
     step("diag-rt-hairon", 10, rt_stats="1", rt_primary_check="1", **ORIGIN),
@@ -80,10 +85,10 @@ plan = [
     step("restore", 5, qa_exposure_hold="0"),
 ]
 labels = [p["label"] for p in plan]
-shots = [l for l in labels if l.startswith("shot-")]
+shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
 traced = [p["label"] for p in plan if p.get("trace_at")]
 cost = [l for l in labels if l.startswith("cost-")]
-judged = shots + [l for l in labels if l.startswith("view-")] + cost
+judged = shots + [l for l in labels if l.startswith(("view-", "diag-view-"))] + cost
 seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]
 
@@ -134,14 +139,15 @@ def job(name, save, first, hair):
               "ls box: requested but native set/layout or pipeline unavailable",
               r"\[geo\] rt_native_hair rejected", r"\[alpha hair\] rt_native_hair requires restart",
               r"\[hair origin\] enable rejected"]
-    runner = [r"\[motion-plan\] pointer centred in owned foreground game"]
+    # The user is at the PC: the game never takes focus (PostMessage input, FG kept; AGENTS.md "Lean live tests").
+    runner = [r"\[window-mode\] visible_unfocused:.*preserve_fg=True"]
     runner += [rf"\[motion-trace\] phase={labels.index(l)} label={l} repeat=0" for l in traced]
     runner += [rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
     j = {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 250, "repeat": 1,
-        "live_batch": "dialogue-shadows",
+        "live_batch": "dialogue-shadows", "window_mode": "visible_unfocused_fg",
         "set": f"{BASE_SET},{USER},{start}",
-        "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/{PLAN}"],
+        "args": ["-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/{PLAN}"],
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "rt applied", r"\[rt\] scene wait", r"\[rt\] scene build GPU",
                      r"\[cpu\] capture hooks", r"\[trace\]", r"\[shaders\].*\?", r"\[crash\]", "FAILED", "ls box",
@@ -152,7 +158,8 @@ def job(name, save, first, hair):
         "purpose": ("Dialogue character shadows (docs/DIALOGUE_SHADOWS.md 2026-11-02): attribution inside one run at a held "
                     "dialogue shot, user config (Ultra + bg3rtx_user.ini). PNG shots base / RT sun off / local off / box off / "
                     "character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp "
-                    "/ + physical origin, ls_debug 2 and 9 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. "
+                    "/ + physical origin, H7 moving-shadow PNG pairs 0.5 s apart (RT on and game sun only), ls_debug 2 and 9 "
+                    "and rt_debug 2 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. "
                     "predicted.json names which shot removes the shadow under each hypothesis."),
         "estimated_phase_seconds": seconds,
         "expect_every": expect_every,

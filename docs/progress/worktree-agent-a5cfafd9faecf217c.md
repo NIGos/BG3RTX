@@ -9,7 +9,7 @@
   static camera; H4 AO soft only; contact shadows ruled out in Ultra (run only with rt_shadows=0); H6 excluded
   in the user session (0.00), gated per window.
 - Batch tools/live_batches/dialogue_shadows (make_job.py, README, predicted.json written before any run):
-  ds1/ds2/ds3 on `Test Dialogue1-3`, 236 s of plan each, 17 PNG traces, about 18 min and 2.3 GB for the batch.
+  ds1/ds2/ds3 on `Test Dialogue1-3` (sizes in the bullet below).
   One launch per save, all toggles inside the run: base / RT sun off / local off / box off / character lights
   off / art-unshadowed off / cascade off / dyn hold off / AO off / native hair+scalp / + physical origin, views
   ls_debug 2 and 9, ls_stats, rt_stats hair off/on/off, cost OFF/hair/OFF. Gates per window: scene wait 0
@@ -17,5 +17,8 @@
 - Hair validation in the same runs (NATIVE_HAIR.md "Dialogue validation plan"): startup latches on, keys 0 in
   the base phases; participation, invalid 0, origin counters, primary match, ROI energy, cost.
 - Dryrun (lean_dryrun: static checks, scene-wait and capacity lints, runs A and B) and the exposure-hold lint pass.
-- Question for the user: does each `Test Dialogue` save open its dialogue by itself on load (the queue cannot
-  click an NPC), and which character shows the shadow? Not run: needs the user's go for the batch.
+- User answers: saves load in dialogue; shadow on all characters, sometimes moving (trees?), not moving in the
+  isometric view. Added H7 (wind foliage captured live from the camera prepass into the RT sun scene; no
+  foliage-only key exists): PNG pairs 0.5 s apart with RT on and the game's map only, rt_debug=2 view.
+  Jobs now visible_unfocused_fg (user at the PC), stats every 60 frames, 1024 px: 260 s of plan, 22 traces,
+  about 19 min and 1.9 GB. lean_dryrun.ps1 gained `-Unfocused` (foreground path unchanged, box_lights passes).

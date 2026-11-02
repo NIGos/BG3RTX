@@ -4,13 +4,12 @@
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 486,
+ "timeout": 510,
  "repeat": 1,
  "live_batch": "dialogue-shadows",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_cascade_casters=1,rt_dyn_hold=4,rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_owners=31,ls_noshadow=1,gi_ao=1.0,ls_box=2,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587",
+ "window_mode": "visible_unfocused_fg",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1024,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_owners=31,ls_noshadow=1,gi_ao=1.0,ls_box=2,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587",
  "args": [
-  "-RealPresent",
-  "-Foreground",
   "-Move",
   "-MovePlan",
   "captures/live_batches/dialogue_shadows/plans/ds_dialogue.json"
@@ -79,7 +78,7 @@
   "\\[hair origin\\] enable rejected"
  ],
  "expect_runner": [
-  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
   "\\[motion-trace\\] phase=1 label=shot-off-a repeat=0",
   "\\[motion-trace\\] phase=2 label=shot-nosun-on repeat=0",
   "\\[motion-trace\\] phase=3 label=shot-nolocal-on repeat=0",
@@ -95,14 +94,17 @@
   "\\[motion-trace\\] phase=13 label=shot-hair-on repeat=0",
   "\\[motion-trace\\] phase=14 label=shot-hairorigin-on repeat=0",
   "\\[motion-trace\\] phase=15 label=shot-off-e repeat=0",
-  "\\[motion-trace\\] phase=16 label=view-lsremoved repeat=0",
-  "\\[motion-trace\\] phase=17 label=view-lsowners repeat=0",
-  "\\[motion-plan\\] complete phases=27\\b",
+  "\\[motion-trace\\] phase=16 label=motion-base repeat=0",
+  "\\[motion-trace\\] phase=17 label=motion-nosun repeat=0",
+  "\\[motion-trace\\] phase=18 label=view-lsremoved repeat=0",
+  "\\[motion-trace\\] phase=19 label=view-lsowners repeat=0",
+  "\\[motion-trace\\] phase=20 label=diag-view-sunmask repeat=0",
+  "\\[motion-plan\\] complete phases=30\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Dialogue character shadows (docs/DIALOGUE_SHADOWS.md 2026-11-02): attribution inside one run at a held dialogue shot, user config (Ultra + bg3rtx_user.ini). PNG shots base / RT sun off / local off / box off / character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp / + physical origin, ls_debug 2 and 9 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. predicted.json names which shot removes the shadow under each hypothesis.",
- "estimated_phase_seconds": 236,
+ "purpose": "Dialogue character shadows (docs/DIALOGUE_SHADOWS.md 2026-11-02): attribution inside one run at a held dialogue shot, user config (Ultra + bg3rtx_user.ini). PNG shots base / RT sun off / local off / box off / character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp / + physical origin, H7 moving-shadow PNG pairs 0.5 s apart (RT on and game sun only), ls_debug 2 and 9 and rt_debug 2 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. predicted.json names which shot removes the shadow under each hypothesis.",
+ "estimated_phase_seconds": 260,
  "expect_every": [
   {
    "name": "scene wait: every judged window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -125,8 +127,11 @@
     "shot-hair-on",
     "shot-hairorigin-on",
     "shot-off-e",
+    "motion-base",
+    "motion-nosun",
     "view-lsremoved",
     "view-lsowners",
+    "diag-view-sunmask",
     "cost-off-a",
     "cost-hair",
     "cost-off-b"
@@ -153,8 +158,11 @@
     "shot-hair-on",
     "shot-hairorigin-on",
     "shot-off-e",
+    "motion-base",
+    "motion-nosun",
     "view-lsremoved",
     "view-lsowners",
+    "diag-view-sunmask",
     "cost-off-a",
     "cost-hair",
     "cost-off-b"
@@ -181,8 +189,11 @@
     "shot-hair-on",
     "shot-hairorigin-on",
     "shot-off-e",
+    "motion-base",
+    "motion-nosun",
     "view-lsremoved",
     "view-lsowners",
+    "diag-view-sunmask",
     "cost-off-a",
     "cost-hair",
     "cost-off-b"
@@ -208,8 +219,11 @@
     "shot-hair-on",
     "shot-hairorigin-on",
     "shot-off-e",
+    "motion-base",
+    "motion-nosun",
     "view-lsremoved",
     "view-lsowners",
+    "diag-view-sunmask",
     "cost-off-a",
     "cost-hair",
     "cost-off-b"
@@ -236,7 +250,9 @@
     "shot-off-d",
     "shot-hair-on",
     "shot-hairorigin-on",
-    "shot-off-e"
+    "shot-off-e",
+    "motion-base",
+    "motion-nosun"
    ]
   }
  ]

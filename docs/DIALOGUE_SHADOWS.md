@@ -202,6 +202,20 @@ scene wait 599/599 this frame's scene. Code reading per hypothesis, most plausib
    build (stride 88 at a 384 MB buffer, before 64c0f5d) had 28-31 per frame (cb7 log).
    Also noted: skin and hair sun rays are traced from the far side when back-lit (rt_shadow.hlsl:87-93).
 
-Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one job per save, 236 s of plan,
-17 PNG traces, every toggle inside one run at a static dialogue shot. The queue cannot click: the save
-must open the dialogue itself; a `camera moving` line in any shot makes the run INVALID.
+7. **H7 wind-animated foliage (user: moving shadows in dialogue, none at the same spot in the isometric
+   view).** Every camera-prepass draw is captured from its own VS output each frame, wind included
+   (geocapture.cpp:5-11); wind VS never match the instancing pattern (spirv_xfb.h:312-320), so they are
+   never cached (bvhsplit.cpp:29). The RT sun therefore sees the current wind pose of every tree the
+   dialogue camera draws; the ground-level camera draws canopies the isometric one does not. Off-screen
+   trees come only from the F-1/F-2 cascade soup. The game's own sun shadow comes from its cascade passes;
+   their caster set, LOD and whether their VS applies wind are not verified here. RT uses the game's
+   lighting sun direction from the camera UBO (rt_shadow.hlsl:80), so a dialogue rig that moves the sun moves
+   RT and lighting together. No key removes foliage casters only (none in common/settings.h): the batch
+   uses PNG pairs 0.5 s apart with RT on and with the game's map only, rt_cascade_casters=0, and rt_debug=2.
+
+User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
+show wrong hair shadows (run without the native hair keys).
+
+Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one visible_unfocused_fg job per
+save, 260 s of plan, 22 PNG traces at 1024 px (about 1.9 GB for the batch), every toggle inside one run at
+a static dialogue shot; a `camera moving` line in any shot makes the run INVALID.
