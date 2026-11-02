@@ -31,6 +31,9 @@
 // (r cache, g screen, b no radiance: fallback), as fractions of the rays; sharc_debug=6 the
 // cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
+#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
+#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
+#endif
 #include "../rt/rt_common.hlsli"
 #if RT_HIT_GI_DIRECT
 #include "../rt/native_hit_material.hlsli"

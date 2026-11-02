@@ -38,6 +38,9 @@
 // the game's own shadows, as D-LS does) + projector lights + Tp, and the residual
 // b11 − local − Tp must be 0 where no projector light is listed.
 #include "gi_common.hlsli"
+#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
+#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
+#endif
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"

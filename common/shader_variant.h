@@ -180,6 +180,17 @@ inline std::string water_request(const char* req, bool cascade) {
 // The current-caster sun pipe (core/gi.cpp g_rt_shadow_current) runs this file only.
 inline bool sun_current_entry(const char* file) { return std::strcmp(file, "gi/rt_shadow.hlsl") == 0; }
 
+// Variant migration step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample and
+// gi_prev_radiance_guard are specialization constants 1001 / 1002 (core/gi.cpp refresh), never request defines: their
+// files always carry GI_SPEC_GUARDS=1. gi_temporal reads the motion vector at the rotating sample; the prev-radiance
+// guard covers screen-space GI, every ray-traced GI trace and every D-RF file (shaders/gi/gi_prev_guard.hlsli).
+inline bool temporal_mv_entry(const char* file) { return std::strcmp(file, "gi/gi_temporal.hlsl") == 0; }
+inline bool prev_radiance_entry(const char* file) {
+  return std::strcmp(file, "gi/gi_trace.hlsl") == 0 || std::strncmp(file, "gi/gi_trace_rt", 14) == 0 ||
+         std::strncmp(file, "gi/rt_reflections", 17) == 0;
+}
+inline bool guard_entry(const char* file) { return temporal_mv_entry(file) || prev_radiance_entry(file); }
+
 // The flags that may apply to `file` (scalp/OMM/tileset: every gi/ entry).
 inline unsigned allowed(const char* file) {
   if (std::strncmp(file, "gi/", 3) != 0) return 0;
@@ -258,6 +269,7 @@ inline std::string request(const char* file, unsigned flags) {
   }
   if (flags & kGiFar) add("RT_GI_FAR=1");
   if (flags & kRfHitGi) add("RF_HIT_GI=1");
+  if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
 

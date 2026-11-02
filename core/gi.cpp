@@ -986,12 +986,19 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
                                                  (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) |
                                                  (spec_cascade ? unsigned(sv::kSpecCascade) : 0u));
+  // Step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample / gi_prev_radiance_guard
+  // (docs/TRACK_C_GI.md "Reprojection guards", live, off) are constants 1001 / 1002 of their files' one module. The
+  // values join the slot key, so a toggle recreates the slot's pipeline (driver compile only, no DXC).
+  const bool guards = sv::guard_entry(file);
+  const uint32_t mv_sample = sv::temporal_mv_entry(file) && host->cfg_int("gi_temporal_mv_sample", 0) != 0 ? 1u : 0u;
+  const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
+  const std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
-  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == slot_key;
+  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == slot_key) {
     p.pipeline = p.variants[variant]; p.generation = blob.generation;
     return true;
   }
@@ -1003,16 +1010,25 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == slot_key;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
                nullptr};
   pci.layout = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
-  const VkSpecializationMapEntry spec_entry{sv::kSpecCascadeId, 0, sizeof(uint32_t)};
-  const VkSpecializationInfo spec_info{1, &spec_entry, sizeof(uint32_t), &spec_value};
-  if (spec_cascade) pci.stage.pSpecializationInfo = &spec_info;
+  uint32_t spec_data[3];
+  VkSpecializationMapEntry spec_entries[3];
+  uint32_t n_spec = 0;
+  auto spec_add = [&](uint32_t id, uint32_t v) {
+    spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
+    spec_data[n_spec++] = v;
+  };
+  if (spec_cascade) spec_add(sv::kSpecIdCascade, spec_value);
+  if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
+  if (sv::prev_radiance_entry(file)) spec_add(sv::kSpecIdPrevRadiance, prev_guard);
+  const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
+  if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;
   const auto t_pipe = std::chrono::steady_clock::now();   // driver compile on this thread (logged below)
   VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
@@ -1020,18 +1036,20 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == slot_key;
   }
   g_omm_pipelines.erase(p.variants[variant]);
   if(omm)g_omm_pipelines.insert(np);
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
-  p.variant_files[variant] = selected;
+  p.variant_files[variant] = slot_key;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)blob.generation,
-            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "", pipe_ms);
+  host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)blob.generation,
+            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
+            guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
+            pipe_ms);
   return true;
 }
 

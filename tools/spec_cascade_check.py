@@ -57,6 +57,26 @@ def old_requests(spec_request):
     return join(plain), join(casc)
 
 
+GUARDS = "GI_SPEC_GUARDS=1"
+
+
+def old_requests_guards(spec_request):
+    """(guards off, guard on) of a GI_SPEC_GUARDS request (step G): the define of gi-reproj-guards in its place."""
+    file, defs = split_request(spec_request)
+    on = "GI_TEMPORAL_MV_SAMPLE=1" if file == "gi/gi_temporal.hlsl" else "GI_PREV_RADIANCE_GUARD=1"
+    join = lambda ds: file + ("?" + ";".join(ds) if ds else "")  # noqa: E731
+    return join([d for d in defs if d != GUARDS]), join([on if d == GUARDS else d for d in defs])
+
+
+def guard_id(file):
+    return 1001 if file == "gi/gi_temporal.hlsl" else 1002
+
+
+# --key: the spec define marking a request, its old (value 0, value 1) requests, the constant id of a file.
+KEYS = {"cascade": (SPEC, old_requests, lambda f: SPEC_ID),
+        "guards": (GUARDS, old_requests_guards, guard_id)}
+
+
 def opt(tool, src, dst, *passes):
     r = subprocess.run([str(tool.dxc.with_name("spirv-opt.exe")), *passes, str(src), "-o", str(dst)],
                        capture_output=True, text=True)
@@ -147,13 +167,15 @@ def differ(a, b):
     return len(set(ga) ^ set(gb)) + abs(len(ga) - len(gb)) + sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
 
 
-def check_one(tool, tmp, i, spec_path, old_path, value):
+def check_one(tool, tmp, i, spec_path, old_path, value, spec_id=SPEC_ID):
+    """The other constants of both modules (e.g. 1000 in a guards request) stay at their default 0 on both sides."""
     d = Path(tmp) / f"{i}_{value}"
     d.mkdir()
-    s = opt(tool, spec_path, d / "s.spv", f"--set-spec-const-default-value={SPEC_ID}:{value}")
+    s = opt(tool, spec_path, d / "s.spv", f"--set-spec-const-default-value={spec_id}:{value}")
     s = opt(tool, s, d / "f.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
     s = opt(tool, s, d / "sO.spv", "-O")
-    o = opt(tool, old_path, d / "oO.spv", "-O")
+    o = opt(tool, old_path, d / "of.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
+    o = opt(tool, o, d / "oO.spv", "-O")
     return differ(canonical(tool, s), canonical(tool, o))
 
 
@@ -168,13 +190,12 @@ def bin_dir():
     return ROOT / "bin"
 
 
-def replay(tool, P, pack, tmp):
-    spec = "gi/gi_trace_rt_hit_direct.hlsl?" + SPEC
-    p0, p1 = old_requests(spec)
+def replay(tool, P, pack, tmp, spec, olds, spec_id):
+    p0, p1 = olds(spec)
     t = Path(tmp)
     mods = {"old0": P(p0), "old1": P(p1)}
     for v in (0, 1):
-        mods[f"new{v}"] = opt(tool, P(spec), t / f"replay_new{v}.spv", f"--set-spec-const-default-value={SPEC_ID}:{v}")
+        mods[f"new{v}"] = opt(tool, P(spec), t / f"replay_new{v}.spv", f"--set-spec-const-default-value={spec_id}:{v}")
     outs = {}
     for k, m in mods.items():
         o = t / f"replay_{k}"
@@ -203,12 +224,14 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--jobs", type=int, default=default_jobs())
     ap.add_argument("--replay", help="replay pack directory (read only)")
+    ap.add_argument("--key", choices=sorted(KEYS), default="cascade", help="which migration step's constants")
     args = ap.parse_args()
+    marker, olds, id_of = KEYS[args.key]
     lower_priority()
     tool = Toolchain()
     tree = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
     known = set(tree.requests())
-    spec = sorted(r for r in known if SPEC in split_request(r)[1])
+    spec = sorted(r for r in known if marker in split_request(r)[1])
     if not spec:
         say("no RT_SPEC_CASCADE request in shaders/variants.txt")
         return 1
@@ -221,8 +244,10 @@ def main():
         random.Random(args.seed).sample([r for r in spec if r not in by_file.values()],
                                         min(args.sample, len(spec) - len(by_file)))))
     if args.replay:
-        pick = sorted(set(pick) | {"gi/gi_trace_rt_hit_direct.hlsl?" + SPEC})
-    pairs = {r: old_requests(r) for r in pick}
+        replay_spec = next(r for r in spec if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl" and
+                           sorted(split_request(r)[1]) == sorted(d for d in ("RT_SPEC_CASCADE=1", marker)))
+        pick = sorted(set(pick) | {replay_spec})
+    pairs = {r: olds(r) for r in pick}
     # Once the spec build is the only cascade path the old requests are no longer listed; they still compile
     # from the same sources (the reference programs), so they are built here on demand.
     unlisted = sorted({o for r in pick for o in pairs[r] if o not in known})
@@ -265,7 +290,7 @@ def main():
         jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in (0, 1)]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \
                 concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
-            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v], e), v):
+            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v], e), v, id_of(split_request(r)[0])):
                     (r, e, v) for i, r, e, v in jobs}
             for f in concurrent.futures.as_completed(futs):
                 r, e, v = futs[f]
@@ -277,7 +302,7 @@ def main():
                     with lock:
                         fails.append((r, e, v, n))
                 prog.step(failed=bool(n))
-        ok_replay = replay(tool, P, args.replay, tmp) if args.replay else True
+        ok_replay = replay(tool, P, args.replay, tmp, replay_spec, olds, id_of("gi/gi_trace_rt_hit_direct.hlsl")) if args.replay else True
     for r, e, v, n in sorted(fails):
         say(f"DIFFERENT: {r} [{e}] value {v} vs {pairs[r][v]}: {n}")
     say(f"spec cascade: {len(pick) - len({r for r, _, _, _ in fails})}/{len(pick)} RT_SPEC_CASCADE requests are, "
