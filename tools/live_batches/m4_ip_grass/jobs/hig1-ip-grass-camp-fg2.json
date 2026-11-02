@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 480,
+ "timeout": 539,
  "repeat": 1,
  "live_batch": "m4-ip-grass",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=1,rt_hit_emission=1,rt_emissive=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
@@ -66,7 +66,8 @@
    "windows": [
     "diag-on"
    ],
-   "min": 1
+   "min": 1,
+   "event": true
   },
   {
    "name": "IP grass clip: checked > 0, rejected < 0.04% of all lookups, every diag-on stats window",
@@ -85,7 +86,8 @@
     "diag-off-a",
     "diag-off-b"
    ],
-   "min": 1
+   "min": 1,
+   "event": true
   },
   {
    "name": "the other instanced families keep rejected < 0.04% with IP grass on, every diag-on stats window",
@@ -103,7 +105,10 @@
    "windows": [
     "cost-off-a",
     "cost-on",
-    "cost-off-b"
+    "cost-off-b",
+    "omm-ub-on",
+    "omm-ub-opaque",
+    "omm-ub-on2"
    ],
    "min": 1
   },
@@ -129,6 +134,28 @@
     "cost-off-b"
    ],
    "when_present": true
+  },
+  {
+   "name": "OMM upper bound: the RT passes' GPU cost in every omm-ub window (alpha tested / forced opaque / tested)",
+   "select": "rt passes: GPU cost [0-9.]+ ms/frame",
+   "match": "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\)",
+   "windows": [
+    "omm-ub-on",
+    "omm-ub-opaque",
+    "omm-ub-on2"
+   ],
+   "min": 1
+  },
+  {
+   "name": "OMM upper bound: the GI trace pass GPU median in every omm-ub window",
+   "select": "gi: trace pass \\(ray-traced",
+   "match": "GPU median [0-9.]+ ms",
+   "windows": [
+    "omm-ub-on",
+    "omm-ub-opaque",
+    "omm-ub-on2"
+   ],
+   "min": 1
   }
  ],
  "forbid": [
@@ -145,10 +172,10 @@
   "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
   "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
   "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=11\\b",
+  "\\[motion-plan\\] complete phases=14\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "rt_hit_material_ip_grass at camp: per-draw instanced rows for IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT (depth 05d39f75/73849471, G-buffer 105e47e4/35a18400), camp's largest hit-material blocker (row reason 60% of lookups, m4p1 031746). Ultra (+ Bounce, Hidden hits) with startup rt_hit_material_ip_grass=1 (frame patch, RT_HIT_IP_GRASS variant), then live OFF/ON/OFF of its rows with the exposure held: diag windows (rows, pairing, the bit-exact clip check, hit material qualified), cost windows, PNGs.",
- "estimated_phase_seconds": 144
+ "purpose": "rt_hit_material_ip_grass at camp: per-draw instanced rows for IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT (depth 05d39f75/73849471, G-buffer 105e47e4/35a18400), camp's largest hit-material blocker (row reason 60% of lookups, m4p1 031746). Ultra (+ Bounce, Hidden hits) with startup rt_hit_material_ip_grass=1 (frame patch, RT_HIT_IP_GRASS variant), then live OFF/ON/OFF of its rows with the exposure held: diag windows (rows, pairing, the bit-exact clip check, hit material qualified), cost windows, PNGs. Then omm-ub-on / omm-ub-opaque / omm-ub-on2 (25 s, rt_alpha_test 1/0/1 live: alpha-tested instances FORCE_OPAQUE, geometry kept): the GPU ms of the alpha any-hit work, an upper bound of an OMM saving.",
+ "estimated_phase_seconds": 239
 }

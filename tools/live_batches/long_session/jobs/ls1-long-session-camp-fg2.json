@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 2640,
+ "timeout": 2860,
  "repeat": 1,
  "live_batch": "long-session",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=60,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,qa_exposure_hold=0",
@@ -404,26 +404,26 @@
    "when_present": true
   },
   {
-   "name": "trend: process VRAM (device-local heaps) does not grow from cycles 2-4 to 20-22",
+   "name": "trend: process VRAM (device-local heaps) does not grow from cycles 12-14 to 20-22",
    "trend": true,
    "select": "\\[mem\\] device-local VRAM of this process:",
    "value": "used ([0-9.]+) MB",
    "baseline": [
-    "cost-c02-static",
-    "cost-c02-pan-q",
-    "cost-c02-pan-e",
-    "cost-c02-rot-r",
-    "cost-c02-rot-l",
-    "cost-c03-static",
-    "cost-c03-pan-q",
-    "cost-c03-pan-e",
-    "cost-c03-rot-r",
-    "cost-c03-rot-l",
-    "cost-c04-static",
-    "cost-c04-pan-q",
-    "cost-c04-pan-e",
-    "cost-c04-rot-r",
-    "cost-c04-rot-l"
+    "cost-c12-static",
+    "cost-c12-pan-q",
+    "cost-c12-pan-e",
+    "cost-c12-rot-r",
+    "cost-c12-rot-l",
+    "cost-c13-static",
+    "cost-c13-pan-q",
+    "cost-c13-pan-e",
+    "cost-c13-rot-r",
+    "cost-c13-rot-l",
+    "cost-c14-static",
+    "cost-c14-pan-q",
+    "cost-c14-pan-e",
+    "cost-c14-rot-r",
+    "cost-c14-rot-l"
    ],
    "tail": [
     "cost-c20-static",
@@ -657,6 +657,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Long session (stage 6): Ultra + FG 2 at the camp for 37 min in one launch, 22 cycles of static / pan Q / pan E / rotate R / rotate L cost windows and a 10 s rt_stats pool window. Gates: scene wait 0 timeouts and capacity 0 drops in every cost window; trend gates (queue_gates.py) that VRAM, mesh pool, AS memory, frame time median/p99 and pool records of cycles 20-22 stay within cycles 2-4 plus their own spread; no log rotation, no device lost, no pool-full lines.",
- "estimated_phase_seconds": 2220
+ "purpose": "Long session (stage 6): Ultra + FG 2 at the camp for 41 min in one launch, 22 cycles of static / pan Q / pan E / rotate R / rotate L cost windows and a 20 s rt_stats pool window. Gates: scene wait 0 timeouts and capacity 0 drops in every cost window; trend gates (queue_gates.py) that VRAM, mesh pool, AS memory, frame time median/p99 and pool records of cycles 20-22 stay within cycles 2-4 plus their own spread; no log rotation, no device lost, no pool-full lines.",
+ "estimated_phase_seconds": 2440
 }

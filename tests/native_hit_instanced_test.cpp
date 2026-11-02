@@ -479,6 +479,15 @@ int main() {
   pairing_tests();
   wind_rgb_tests();
   ip_grass_tests();
+  // 7. Stats window lines: the first query of each 120-frame window logs, even when frame % 120 == 0 had none.
+  {
+    uint64_t logged = UINT64_MAX;
+    CHECK(stats_window_due(1801, logged) && logged == 15);   // frame 1800 rejected: 1801 still logs window 15
+    CHECK(!stats_window_due(1802, logged) && !stats_window_due(1919, logged));
+    CHECK(stats_window_due(1920, logged) && !stats_window_due(1920, logged));   // one line per window
+    CHECK(stats_window_due(2100, logged) && logged == 17);   // a window with no query at all is skipped, not owed
+    CHECK(!stats_window_due(2000, logged));                  // never a window twice (out-of-order slot frames)
+  }
   std::printf("native_hit_instanced_test: %u checks passed\n", checks);
   return 0;
 }
