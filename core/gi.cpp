@@ -976,10 +976,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hit_material_ip_grass at startup: the fourth family's field and counters (RT_HIT_IP_GRASS), as wind RGB.
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
-  // rt_spec_cascade (off; docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): one RT_SPEC_CASCADE module for both
+  // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
-  const bool spec_cascade = sv::cascade_entry(file) && !sun_current && host->cfg_int("rt_spec_cascade", 0) != 0;
+  const bool spec_cascade = sv::cascade_entry(file) && !sun_current;   // the only cascade path since qualification
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |

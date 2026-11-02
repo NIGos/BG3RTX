@@ -18,5 +18,8 @@
   370 MB; dryrun passes). Gates: no gi/ DXC compile when rt_cascade_casters toggles with the key on, pipeline
   creation logged ("gi: ... pipeline N ms", new in refresh), energy and gi/rf/ls/rt GPU ms of key-on vs off on both
   sides for casters on and off; predicted.json: every delta 0 within the off-a/off-b spread.
-- Next (S1 done): once qualified, make the spec build the only cascade path and drop the 1348 old cascade requests
-  plus their 1348 plain twins: 4225 -> ~1530 variants (2962 today -> ~1620 modules).
+- Follow-up branch spec-cascade-s1-default (apply only after scc1 qualifies): the spec build is the only cascade
+  path (key rt_spec_cascade removed, refresh always specializes); the old cascade requests and their plain twins
+  leave variants.txt: 4249 -> 1589 variants (2986 -> 1674 requests with the 85 base files; the 28 RT_CASCADE_MASKS
+  left are the current-caster sun and the water passes). 100 CTests pass; spec_cascade_check.py compiles the old
+  reference requests on demand.

@@ -194,6 +194,8 @@ inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
   if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb | kHitIpGrass);
+  // rt_spec_cascade is the only cascade path (qualified): every cascade pass but the current-caster sun gets the spec build.
+  if (cascade_entry(file) && !(flags & kSunCurrent)) flags |= kSpecCascade;
   if (flags & kSunCurrent) flags &= ~unsigned(kSpecCascade);
   if (flags & kSpecCascade) flags &= ~unsigned(kCascade);   // the constant, not the request, carries it
   std::string out = file;
