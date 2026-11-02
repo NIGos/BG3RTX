@@ -276,6 +276,26 @@ Compare primary agreement with this scene's own off/off repeat, not an assumed 9
 Compare Hair-local visibility and energy, unchanged non-Hair pixels, and report the
 `rt passes` GPU cost. Missing RT or no affected Hair cannot pass.
 
+## Dialogue validation plan (2026-11-02, prepared, not run)
+
+Reuses the dialogue attribution jobs (tools/live_batches/dialogue_shadows; close-ups). Start: rt_native_hair=1,
+rt_native_scalp=1, rt_hair_physical_origin=1 (latches: 88-byte vertices, origin image), rt_xfb_mb 1408 /
+rt_cascade_mb 587 (the user's explicit 1024 / 427 x 88/64: an explicit value is not scaled by the stride). Base
+phases set all three keys to 0 at run time, so hair is opaque as in the user's stride-64 game; `shot-hair-on`,
+`shot-hairorigin-on`, `diag-rt-hairon`, `cost-hair` turn them on. All three keys are read per draw or frame after
+the startup latch (alphatest.cpp:551, 566; core/gi.cpp:2566), so the A/B is inside one run.
+
+Gates per job: valid run (stride 88 line, `[hair origin] startup auxiliary capability 1`, no `rejected`);
+participation `[alpha hair] native coverage records` > 0 and `[alpha scalp]` records > 0 in the hair windows (a
+dialogue without CHAR_Hair is no evidence, not a pass); invalid/missing native state 0, retired bounds-invalid 0,
+unsupported interfaces reported; alpha made opaque 0.00 in every window (the 10-31 trial lost 28-31 cutouts per
+frame to a full region); `[hair origin]` matched / available / unresolved in `diag-rt-hairon`; primary-ray check
+match on against off-a / off-b of the same run; character-ROI energy ON >= OFF - spread (visibility only); the face
+shadow shape of `shot-off-*` gone or kept in the PNG pairs; cost cost-hair - mean(cost-off-a, cost-off-b) with that
+spread (prior 10-31: RT 3.44 / 3.41 ms, Hair sun visibility 0.150 -> 0.355 -> 0.164 off/on/off, CODEX_BRANCH_TRIAGE.md).
+Still open after it: the other hair families (lashes, beards, fur, ExtraUV), the Astarion hairline band (class 5
+shared by Hair/Pubes/Scalp), and the GUI default (Experimental until these gates pass in all three saves).
+
 ## Dated entries moved from TRACK_D_RT.md (2026-10-30)
 
 Newest first, as they were at the top of TRACK_D_RT.md. Later entries supersede earlier ones.

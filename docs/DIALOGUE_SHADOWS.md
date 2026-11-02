@@ -166,3 +166,42 @@ Positive GPU scene-unready counters come from the Current Sun shader itself,
 not just ordinary host fallback. Exact failed readiness conditions are not logged.
 No guard relaxation or renderer fix was made. User paused further work; temporal
 dialogue evidence remains necessary. See current HANDOFF_SESSION.md.
+
+## Attribution batch 2026-11-02 (prepared, not run)
+
+User report: intrusive shadows on the characters themselves in dialogues; saves `Test Dialogue1-3`.
+The user's session that made them (bg3rtx.log 06:24-06:32): preset=ultra + ls_box=2, hit materials,
+rt_alpha_spill=1; stride 64, so native Hair/Scalp OFF (hair cards opaque); alpha made opaque 0.00 and
+scene wait 599/599 this frame's scene. Code reading per hypothesis, most plausible first:
+
+1. **H2 cinematic lights shadowed by D-LS.** ls_owners=31 traces character-owned lights (15 left them
+   unshadowed), ls_noshadow=1 traces lights whose template sets neither Shadow nor CastShadow (only the
+   darkvision light is skipped), ls_box=2 traces every box light (rt_local_shadows.hlsl:146-158,
+   core/gi.cpp:1895-1896). The owner and art rules act only on lights joined to per-light data;
+   unmatched lights and box lights are always traced. Dialogue rig lights near the face, which the art
+   leaves unshadowed, get the head, hair and shoulders as casters.
+2. **H1 hair/scalp cards opaque.** Hair/Scalp FS are not in the alpha table; without rt_native_hair they
+   take the opaque path (geocapture.cpp:2330-2332, alphatest.cpp:551-565). Same defect as the 10-30
+   static face shadows above. Compounds H2 (opaque cards also block rig lights).
+3. **H5 cascade casters (Ultra rt_cascade_casters=1).** The sun-only cascade soup is frame F-1/F-2's
+   (rtscene.cpp:931-965). An opaque cascade draw is a duplicate only on an equal draw_key that includes the
+   per-draw UBO / instance-stream offset (cascade_casters.h:46-54, 72-77; geocapture.cpp:1088-1104); the
+   user log dedupes 22 of 264 cascade draws per frame. An animated character can be in the sun TLAS twice,
+   the copy 1-2 frames old and possibly a shadow LOD: a self-shadow offset on skin. Hair DepthShadow FS
+   34951669 is not in the alpha table: with rt_cascade_alpha=2 it goes in solid unless its mesh key
+   matches the camera pass (geocapture.cpp:1270-1290).
+4. **H3 stale pose, held draws.** The camera soup is this frame's (scene wait), but with a static camera
+   rt_dyn_hold=4 keeps absent draws of at most 8192 triangles for up to 4 frames (bvhsplit.cpp:1333-1356,
+   common/dyn_hold.h). The draw identity includes the vb[0] buffer and offset (bvhsplit.cpp:1037-1043): a
+   character draw whose identity changes per frame leaves 1-4 older poses in the TLAS (also a flicker
+   candidate for P4_OMM sec 10).
+5. **H4 AO.** gi_ao (core/gi.cpp:1857) is 1-ray RT AO on characters: soft crease darkening, not a hard
+   shape. Contact shadows run only when rt_shadows=0 (core/gi.cpp:2816): ruled out in Ultra.
+6. **H6 lashes/beards opaque.** Unlisted cutout FS (lashes) are opaque as in H1; a full alpha region also
+   makes listed ones opaque (geocapture.cpp:2364-2381). User session 0.00 per frame; the 10-31 trial
+   build (stride 88 at a 384 MB buffer, before 64c0f5d) had 28-31 per frame (cb7 log).
+   Also noted: skin and hair sun rays are traced from the far side when back-lit (rt_shadow.hlsl:87-93).
+
+Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one job per save, 236 s of plan,
+17 PNG traces, every toggle inside one run at a static dialogue shot. The queue cannot click: the save
+must open the dialogue itself; a `camera moving` line in any shot makes the run INVALID.

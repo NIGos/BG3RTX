@@ -1,0 +1,458 @@
+[
+ {
+  "label": "warmup",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
+ },
+ {
+  "label": "shot-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-nosun-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-nolocal-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=0,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-nobox-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=0,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-charlights-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=15,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-noart-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=2,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-c",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-nocascade-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-nohold-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-noao-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-d",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-hair-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-hairorigin-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "shot-off-e",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "view-lsremoved",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=2,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "view-lsowners",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=9,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "diag-ls-stats",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "diag-rt-hairoff-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1"
+ },
+ {
+  "label": "diag-rt-hairon",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1"
+ },
+ {
+  "label": "diag-rt-hairoff-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1"
+ },
+ {
+  "label": "settle",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 5,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 5,
+  "motion_end": 5,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "cost-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "cost-hair",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "cost-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "restore",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 5,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 5,
+  "motion_end": 5,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
+ }
+]

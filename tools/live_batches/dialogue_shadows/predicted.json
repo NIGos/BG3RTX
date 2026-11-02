@@ -1,0 +1,31 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). Observable: the intrusive shadow on the speaking characters at the held dialogue shot. Character ROI = G-buffer pixels of skin and hair class (RT2.a class bits of the trace; Hair/Scalp/Pubes class 5) in the shot's trace. A shot 'removes' the shadow when the ROI mean of the scene colour before post (dumps.json pass fs 5c3fdabc, 0.2126 r + 0.7152 g + 0.0722 b) rises above its OFF neighbours by more than the spread of shot-off-a..e in that ROI AND the shadow shape is gone in the PNG pair (ab_compare.py diff). 'keeps' = within the OFF spread. Whole-frame energy: every toggle except nosun and nohold only removes occlusion, so ON >= OFF - spread; a darker ON is a defect of the toggle, not attribution.",
+ "_hypotheses": {
+  "H1": "hair/scalp cards captured OPAQUE (rt_native_hair=0 in the user's session: stride 64) cast solid sun and local shadows on faces/necks",
+  "H2": "cinematic dialogue lights: D-LS now traces character-owned lights (ls_owners=31), art-unshadowed lights (ls_noshadow=1) and every box light (user ls_box=2), so rig lights the art leaves unshadowed get shadowed by the characters' own heads, hair and shoulders. ls_owners/ls_noshadow act only on lights joined to per-light data (rt_local_shadows.hlsl:153-158); unmatched lights and every box light are always traced, so 'nolocal removes, nobox/charlights/noart keep' = an unmatched (likely dialogue-spawned) point/spot light (ls_debug=9 red/cyan; ls stats 'matched %')",
+  "H3": "stale pose: the held absent draws (rt_dyn_hold=4, static camera) or the sun-only cascade soup of frame F-1/F-2 put an older pose of an animated character into the TLAS, offset from the real body",
+  "H4": "RT AO (gi_ao, 1 ray) darkening creases between hair and skin; contact shadows never run with rt_shadows=1 (core/gi.cpp:2816), so ruled out in Ultra",
+  "H5": "cascade casters: animated characters enter the sun TLAS twice (camera copy + cascade copy, opaque dedupe needs an equal per-draw UBO offset), the copy possibly another LOD and the hair DepthShadow FS 34951669 solid (not in the alpha table)",
+  "H6": "alpha-tested lashes/beards made opaque by a full alpha region: user session 0.00 per frame (rt_alpha_spill=1); gated in every judged window, so if the run is valid H6 is excluded for these shots"
+ },
+ "ds1-dialogue1-fg2": {"same_as": "_all"},
+ "ds2-dialogue2-fg2": {"same_as": "_all"},
+ "ds3-dialogue3-fg2": {"same_as": "_all"},
+ "_all": {
+  "shot-nosun-on":      {"H1": "removes if the shadow is sun-lit (part of it)", "H2": "keeps", "H3": "removes if via cascade/sun", "H4": "keeps", "H5": "removes", "energy": null, "note": "the game's mask only; also drops rt_sun_replace brightening (user log 1.61% of traced px): whole-frame sign not predicted"},
+  "shot-nolocal-on":    {"H1": "removes the local-light part", "H2": "removes", "H3": "removes the dyn-hold part under local lights", "H4": "keeps", "H5": "keeps", "energy": ">= 0"},
+  "shot-nobox-on":      {"H2": "removes if the rig light is a box (projector) light", "others": "keeps", "energy": ">= 0"},
+  "shot-charlights-on": {"H2": "removes if the rig light is owned by a character (ls_debug=9 magenta)", "others": "keeps", "energy": ">= 0"},
+  "shot-noart-on":      {"H2": "removes if the rig light sets neither Shadow nor CastShadow (expected for most dialogue fill/rim lights)", "others": "keeps", "energy": ">= 0"},
+  "shot-nocascade-on":  {"H5": "removes", "H3": "removes the cascade-lag part", "others": "keeps", "energy": ">= 0"},
+  "shot-nohold-on":     {"H3": "removes the dyn-hold part (and its frame-to-frame flicker)", "others": "keeps", "energy": null},
+  "shot-noao-on":       {"H4": "removes (soft darkening only, not a hard-edged shape)", "others": "keeps", "energy": ">= 0"},
+  "shot-hair-on":       {"H1": "removes (hair-card shapes become strand coverage; ROI brighter on faces under hair)", "others": "keeps", "energy": ">= 0", "participation": "[alpha hair] native coverage records > 0 and [alpha scalp] records > 0 in this window, invalid/missing 0"},
+  "shot-hairorigin-on": {"H1": "as shot-hair-on; hair pixels themselves may change (physical origin)", "others": "keeps", "energy": "within the OFF spread of shot-hair-on", "prior": "live 2026-10-31: Hair sun visibility 0.150 -> 0.355 -> 0.164 off/on/off, RT 3.44 / 3.41 ms (CODEX_BRANCH_TRIAGE.md)"},
+  "view-lsremoved":     {"H2": "the face shadow region is bright (light removed by D-LS) in this view", "H1": "removed light outlines hair-card shapes on the face", "others": "no removed light on the face"},
+  "diag-ls-stats":      {"report": "light removed % of the lit luminance, per-light data matched %, owners; no pass/fail"},
+  "diag-rt-hair":       {"report": "primary-ray check match off-a / on / off-b; [hair origin] matched, available, unresolved (counters 188-190) in diag-rt-hairon; on within the off-a/off-b spread or higher"},
+  "cost-hair":          {"report": "rt passes GPU cost cost-hair minus mean(cost-off-a, cost-off-b), with that spread; prior +0 to +0.1 ms (3.44 / 3.41 ms on 2026-10-31)"}
+ },
+ "_ranking_before_the_run": ["H2", "H1", "H5", "H3", "H4", "H6"]
+}
