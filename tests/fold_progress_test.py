@@ -63,6 +63,10 @@ def main():
     plain = fp.fold("# T (main 1234567)\n\n## Old\n- o\n", [(Path("x.md"), "## New (2026-11-01)\n- n\n")])
     check("without a decision section fragments go above the first entry",
           plain.splitlines()[2] == "## New (2026-11-01)", repr(plain))
+    lead = fp.fold("# T (main 1234567)\n\n## Report 2026-11-02 04:10 (main 1234567)\n- r\n\n## User questions and decisions\n- q\n\n"
+                   "## Old\n- o\n", [(Path("x.md"), "## New (2026-11-01)\n- n\n")])
+    check("stage report and decision sections stay first",
+          [l for l in lead.splitlines() if l.startswith("## ")][2] == "## New (2026-11-01)", repr(lead))
     errs = [e for p in fp.fragments(ROOT / "docs" / "progress") for e in fp.problems(p, p.read_text(encoding="utf-8"))]
     check("the repository's own fragments are valid", not errs, str(errs))
     if FAILS:

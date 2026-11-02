@@ -16,7 +16,7 @@ it never conflicts (each branch owns its file). After merging, the coordinator r
     py -3 scripts/fold_progress.py --dry-run  # print the folded PROGRESS, change nothing
     py -3 scripts/fold_progress.py --main abc1234   # also set "main <sha>" in the title line
 
-Sections go to the top of PROGRESS (below a leading user-decision section, which stays first),
+Sections go to the top of PROGRESS (below the leading stage report and user-decision sections, which stay first),
 newest date first. The coordinator then trims PROGRESS to ~150 lines by hand.
 """
 import argparse
@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MAX_LINES = 40
 _DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
-_DECISION = re.compile(r"^## .*(question|decision)", re.I)
+_LEADING = re.compile(r"^## (Report\b|.*(question|decision))", re.I)
 
 
 def fragments(folder):
@@ -60,9 +60,11 @@ def fold(progress_text, items, main=None):
     if main and lines:
         lines[0] = re.sub(r"\bmain [0-9a-f]{6,40}\b", f"main {main}", lines[0])
     heads = [i for i, l in enumerate(lines) if l.startswith("## ")]
-    at = heads[0] if heads else len(lines)
-    if heads and _DECISION.search(lines[heads[0]]):
-        at = heads[1] if len(heads) > 1 else len(lines)
+    # Leading report and user-decision sections stay first; fragments go below them.
+    k = 0
+    while k < len(heads) and _LEADING.search(lines[heads[k]]):
+        k += 1
+    at = heads[k] if k < len(heads) else len(lines)
     block = []
     for _, text in sorted(items, key=_sort_key, reverse=True):
         block += text.strip().splitlines() + [""]

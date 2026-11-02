@@ -1,7 +1,7 @@
-# Session handoff - 2026-11-01 evening (PAUSED by the user)
+# Session handoff - 2026-11-02 morning
 
-Main d089b7b + this docs commit, ABI 25. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next, then
-[GATE_AUDIT_20261101.md](GATE_AUDIT_20261101.md) and [META_AUDIT_20261101.md](META_AUDIT_20261101.md).
+Main 2e5b4c2 + this docs commit, ABI 25. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next (report and
+questions at the top), then [GOAL_NEXT.md](GOAL_NEXT.md) for the stage order. History: [archive/](archive/).
 
 ## Rules (read before any work)
 
@@ -12,44 +12,48 @@ Main d089b7b + this docs commit, ABI 25. Read [PROGRESS_CODEX.md](PROGRESS_CODEX
 - Live tests need explicit user steering for the batch. Prepare jobs outside every `pending` inbox.
 - Gates hold in every ON window (`expect_every`); capacity, scene-wait and exposure-hold lints in every dryrun.
 - Branches write `docs/progress/<branch>.md`, never PROGRESS; the coordinator folds them.
+- Agents run `git merge main` before gates or long tools (main has the cached, fastest tools).
 - Merge only with `scripts/merge-green.ps1` (shader step cached: ~1-5 min); features off until their gates pass.
 
 ## State
 
-- **Live tests paused by the user.** The coordinator holds the pause (its flag; queue `pending` and `running`
-  empty, no bg3.exe). Do not queue anything until the user resumes and names a batch.
-- **Bugfix round done offline and merged** (details in PROGRESS): `rt_hit_material_recycle` (off, needs live),
-  water cascade variants (water works on Ultra), capture buffers scaled by vertex size, capacity + scene-wait
-  gates in every job, `smoke_ultra` job, `fg_letterbox` (off, needs live at a 3840x2160 desktop), rtStats
-  renumber (rf_hit_gi 419..426, wind RGB 427..434), shader_identity cache.
-- Merged and off: `rf_hit_gi`, `rt_hit_material_wind_rgb`, `rt_water_game_shadow`, `ls_box=2`, D-EM sliced check.
+- Stages 1-3 done: bugfix round live-checked (smoke_ultra valid, scene wait 0, water 120/120 composed, shader
+  cache, fg_letterbox automatic); GUI levels (Experimental 5 entries); RT water "+ Refraction" in Ultra.
+- Ultra also has Hidden-surface shading "+ Bounce", Emission at ray hits "Hidden hits", Far-field sun bounce 6 m.
+  smoke_ultra with all of it: valid, median frame 16.65 ms (was 13.75).
+- Trace fix 385efd1 (layer/geocapture.cpp): traced frames keep the hit-material capture. Energies measured
+  before it are invalid for hit features.
+- M6 step 1 done: ambient ratio not consistent across scenes (S8 1.44, camp 0.84, inn 0.78): no global correction.
+- Off, waiting: `ls_box=2` (user visual check, question in PROGRESS), `rt_hit_material_pool_alpha` (live-tested
+  S6), `rt_hit_material_mask` (live `m4_hit_mask` ready), `rf_hit_shade` / `rf_hit_gi` (Experimental, bias).
 
-## Live batches ready, in priority order (when the user resumes)
+## Next
 
-1. `smoke_ultra` (su1, S8, ~4 min) with `rt_hit_material_recycle=1` and `fg_letterbox=1` added to the job
-   (not in it yet). Gates: water traced > 0, capacity 0, scene-wait 0 timeouts in every window.
-2. `scene_wait` (S8 + camp): recycle 0/1/0; expected 0 timeouts, mean 2-5 ms with 1. Then default 1.
-3. `m5_promotion` (S8, Flymm, camp; 16.8 min, ~2.5 GB) -> merge worktree-agent-a14b8f58ffc130189 if it passes.
-4. `m4_promotion` m4p3/m4p4 with `rf_hit_gi`, and `m4_promotion/s6_diag` (needs replay_pack_cap_mb=3300).
-5. `replay_capture/ambient` (camp + inn packs, up to 7 GB during the run).
-6. `m4_wind_rgb` (S8, 144 s).
-7. Box lights visual check (`box_lights`, S6 + S7).
+Stage 4 rest (M4):
+1. Coverage: S6 lava discs FLUID_Lava_Plane_Flowmap (animated flowmap recipe: time, vertex colour, world position);
+   camp grass IP_Wind_GrassFlowers (per-draw rows like wind RGB). Rank: `tools/hit_material_blockers.py`.
+2. `rf_hit_gi`: measure tier (a) L_b / L_a at S8 / S6 after the trace fix; then the S6 visibility suspect
+   (lit 71% of rf light rays vs 56% in the GI). rf_hit_shade stays Experimental until in the spread.
+3. `ls_box=2` into Ultra if the user approves; then smoke_ultra once.
+4. Decide `rt_hit_material_pool_alpha` / `_mask` defaults from their live numbers.
+
+Stage 5 (M6): SHaRC (radiance cache) behind a key, off; first an offline replay comparison against the PT reference.
+Why S8's native ambient is brighter than the reference (1.44) while camp and inn are darker.
+
+Stage 6: release hardening for a Nexus beta: release.ini vs the new Ultra keys (rt_emissive forced 0 there),
+long sessions, acts 2-3, installer, README, licences; later the diagnostic package (save picked by the user, read-only).
+
+Consolidation after each stage: non-regression batch + smoke_ultra, gate audit, remove superseded keys,
+HANDOFF <= 80 lines, PROGRESS ~150 (fold fragments), clean worktrees and dead captures.
 
 ## Branches not merged (ignoring codex/*)
 
 | Branch | What | Status |
 |---|---|---|
-| worktree-agent-a9e0aabd4d7f18008 | M4 bundle on in Ultra | merge only after m4_promotion passes |
-| worktree-agent-a14b8f58ffc130189 | water chain on in Ultra | merge only after m5_promotion passes |
-| lscheck-fix, sup/cascade-alphatest | old (10-27 / 10-30) | stale, superseded; keep |
+| worktree-agent-a9e0aabd4d7f18008 | old M4 bundle preset | superseded by m4-preset (merged); keep |
+| worktree-agent-a14b8f58ffc130189 | old water preset | superseded by ultra-water-preset (merged); keep |
+| lscheck-fix, sup/cascade-alphatest | old (10-27 / 10-30) | stale; keep |
 | worktree-agent-a2212c228ec492214, -a814985dd663a9b89, -a8b7cb486c1434ebd, -a94065fdd50bc8494 | old 10-27 WIP | stale; keep |
-
-## Next offline (no live needed)
-
-1. Expose `rt_hit_material_recycle` and `fg_letterbox` in the GUI Experimental section (AGENTS: no ini edits by the user).
-2. Wind RGB identity decision for RT_HIT_INSTANCED variants (336 requests differ with instanced on).
-3. `rf_hit_shade` S6 excess is in the direct and box terms: next fix there (stays Experimental, user decision).
-4. Release-hardening (Nexus beta question): defaults, FG letterbox, acts 2-3, long sessions, installer, README, licences.
 
 ## Working pattern
 
