@@ -3,7 +3,7 @@
  "vg2-s8-low-long-view-fg2": {
   "on_windows_within_test_budget": {
    "predicted": true,
-   "basis": "caps at 15640 MB: BLAS 2102, pool 1018, cascade 1018 MB; growth refused at used + margin (64 MB..1 GB step + 391 MB slack) > 15640; game share 10.3-11.3 GB in vg1 leaves 4.3-5.3 GB, ours started at 3.0-3.9 GB"
+   "basis": "With guard, compact and elastic enabled: process used <= 15640 MB in measured ON windows after reserves shrink; pending copies and deferred retirement still count. Recovery is measured only after a separate 25 s settling phase. This is a hypothesis, not a measured pass; strict capture retirement can block resizing."
   },
   "refusals_on_turn": {
    "predicted": ">0",
@@ -14,8 +14,8 @@
    "basis": "report: guard off, vg1 reached 18.6 GB"
   },
   "recover_on_within_test_budget": {
-   "predicted": false,
-   "basis": "report: the mesh pool, the cascade reserve and partly used BLAS chunks never shrink (VRAM_AUDIT ranks 1-3); the guard only stops growth and frees wholly empty chunks and idle buffers"
+   "predicted": true,
+   "basis": "Mesh pool repacking and sparse cached-BLAS evacuation plus elastic capture replacement should return unused reserves after GPU retirement. recover-settle-on allows 25 s (750 presents at 30 fps, exceeding the 254-frame pool watchdog and 72-frame cascade observation); every complete recover-on line must then be within 15640 MB. Failure to retire is a failed candidate, not an excused window."
   },
   "streamline_over_100ms_on_windows": {
    "predicted": 0,
@@ -31,11 +31,44 @@
   },
   "rt_capture_opaque_drops": {
    "predicted": ">0 in turns, on and off",
-   "basis": "report, not the guard: vg1 opaque peak 1182 MB of the fixed 1024 MB RT capture (409 MB alpha floor), 5.4 drops/frame in turn-on-l and 1.6-5.0 in the off turn"
+   "basis": "report, not the guard: vg1 opaque peak 1182 MB of the fixed 1024 MB RT capture (409 MB alpha floor), 5.4 drops/frame in turn-on-l and 1.6-5.0 in the off turn; elastic may remove them only after successful growth. Keep drops as a report until the continuous-capture retirement limitation is resolved; require replacement log evidence separately."
   },
   "disk_mb": {
    "predicted": 190,
    "basis": "3 PNG traces x 60 MB + the log"
+  },
+  "per_consumer_mb_after_retirement": {
+   "mesh_pool": {
+    "predicted": 934,
+    "basis": "vg1 467 MB used x 2, from 2047 MB: 1113 MB released; requires used <= reserve/4 for 254 frames, no dynamic/hair pin. Early guard-capped 1018 MB pool may not qualify; prediction concerns recovery after the OFF turn."
+   },
+   "cascade_capture": {
+    "per_buffer": 224,
+    "buffers": 3,
+    "predicted": 672,
+    "basis": "169 MiB demand x 1.25 rounded up to 16 MiB = 224; from 3 x 560 = 1680, releases 1008 MiB after successful replacement/retirement."
+   },
+   "blas_chunks": {
+    "predicted_upper_bound": 2102,
+    "chunk_mb": 64,
+    "basis": "Card-scaled cap at 15640 MB; actual 64 MB chunks fit <= 2048 MB for new allocations. Existing above-cap chunks require complete evacuation and retirement; live/pinned ownership can prevent release. No exact shrink amount promised."
+   },
+   "rt_capture": {
+    "predicted_upper_bound": 1024,
+    "basis": "In the simulated 15640 MiB budget the cascade cap is 1018 MiB; elastic_cap(false) retains the RT startup floor of 1024 MiB. Synthetic 1182 opaque + 169 alpha needs 2047 MiB on the reference card, but cannot fit here: drops may persist. A successful RT shrink/replacement is still required as feature evidence; retirement can starve it."
+   },
+   "hit_material_recycled": {
+    "predicted_upper_bound": 254,
+    "basis": "512 x 15640 / 31419 floored to MiB; guard yields idle buffers, ideally 0 under pressure."
+   },
+   "em_soup_water_soup_and_rest": {
+    "predicted": "Measured, no fixed reserve target",
+    "basis": "Use actual [mem] fields; rest includes game and core GI/RR images. vg1 rest 10300-11300 MB. At that rest the total tracked allowance is 4340-5340 MB; the consumer caps are NOT a simultaneously affordable allocation."
+   },
+   "overlap": {
+    "mesh_pool_copy_retirement_predicted": 0,
+    "basis": "After retirement only; count all overlap before then. Pool 934 + cascade 672 + BLAS 2048 + RT 1024 + recycle 254 = 4932 MB. With vg1 rest 10300-11300 MB, process would be 15232-16232 MB: high-rest windows need at least 592 MB of additional yielding/refusal savings. Shrink arithmetic alone cannot prove the 15640 MB gate."
+   }
   }
  }
 }
