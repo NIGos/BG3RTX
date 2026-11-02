@@ -33,12 +33,13 @@ with `hit_ao_rays=0`: the cost of the AO rays at hits). S6 adds `cost-em-off-a` 
 and `cost-em-off-b` / `shot-em-off-b` after it (bundle ON with `rt_hit_emission=0`, capture on). Shots: 6 s, trace
 at 4 s. Predictions: predicted.json (written from the m4p runs before this batch: every step within its band, null).
 
-Validity: the expect lines (stride-64 XFB, `[geo] RT capture ... of a 1024 MB buffer`, cascade `of 427 MB`, D-EM
+Validity: the expect lines (stride-64 XFB, `[geo] RT capture ... of a 1024 MB buffer`, cascade `of 427 MB` (no closing parenthesis: the line now goes on with the demand), D-EM
 capture available, `[hit material instanced] ... key 1`, `hit material`, `GI hit direct`, `GI hit sun`, gi trace
 median; camp: sun traced lit > 0; every job: `hit emission` GI hidden emissive > 0) and `expect_every`: one trace in
 every shot window, scene wait 0 timeouts, RT capture opaque dropped 0.00 and cascade buffer full 0.0 in every cost
 window. The S6 diagnostic m4p5 ([s6_diag](s6_diag/README.md)) keeps its replay-pack base variant (no instanced rows:
-the pack contract has no defines) and now holds the exposure in its shots, with the scene-wait and capture gates.
+the pack contract has no defines) and now holds the exposure in its shots, with the scene-wait and capture gates in its 8 s+ windows (a 6 s shot
+can end before a complete 120-frame line: m4p5 012922).
 
 ## Deciding numbers and gates (`py -3 -m tools.m4_promotion_gate`, after the runs)
 The script finds the latest log of each job in `captures\queue\logs`, times the phases from the runner, and prints:

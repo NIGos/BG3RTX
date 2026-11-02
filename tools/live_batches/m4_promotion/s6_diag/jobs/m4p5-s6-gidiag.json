@@ -95,23 +95,9 @@
    "select": "\\[rt\\] scene wait: \\d+ frames",
    "match": "got this frame's scene, 0 timeouts",
    "windows": [
-    "shot-off-1",
-    "shot-gi-1",
-    "shot-off-2",
-    "shot-gi-2",
-    "shot-off-3",
-    "shot-gi-3",
-    "shot-off-4",
-    "shot-gi-4",
-    "shot-off-5",
-    "shot-vis-off-1",
-    "shot-vis-gi-1",
-    "shot-vis-off-2",
-    "shot-vis-gi-2",
-    "shot-add-off-1",
-    "shot-add-gi-1",
-    "shot-add-off-2",
-    "shot-add-gi-2"
+    "warmup-off",
+    "diag-pack",
+    "settle-off"
    ],
    "min": 1
   },
@@ -121,23 +107,9 @@
    "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
    "min": 1,
    "windows": [
-    "shot-off-1",
-    "shot-gi-1",
-    "shot-off-2",
-    "shot-gi-2",
-    "shot-off-3",
-    "shot-gi-3",
-    "shot-off-4",
-    "shot-gi-4",
-    "shot-off-5",
-    "shot-vis-off-1",
-    "shot-vis-gi-1",
-    "shot-vis-off-2",
-    "shot-vis-gi-2",
-    "shot-add-off-1",
-    "shot-add-gi-1",
-    "shot-add-off-2",
-    "shot-add-gi-2"
+    "warmup-off",
+    "diag-pack",
+    "settle-off"
    ]
   }
  ]
