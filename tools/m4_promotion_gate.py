@@ -147,7 +147,9 @@ def main_checkout() -> Path:
 
 
 def find_job_file(name: str):
-    for f in sorted((REPO / "tools" / "live_batches").glob(f"*/jobs/{name}.json")):
+    # Nested batches too (m4_promotion/s6_diag: the S6 diagnostic and emission rerun, its own predicted.json).
+    root = REPO / "tools" / "live_batches"
+    for f in sorted(root.glob(f"*/jobs/{name}.json")) + sorted(root.glob(f"*/*/jobs/{name}.json")):
         return f
     return None
 
@@ -429,6 +431,7 @@ def energy_triples(labels):
     and after it in plan order (with only one side, the two nearest OFFs); shot-on also against the
     shot-em-off-* family when it has one on both sides (S6 emission). key names the prediction."""
     shots = [l for l in labels if l.startswith("shot-")]
+    views = {l.split("-off")[0] for l in shots if is_off(l)}
     out = []
     for fam in ("base", "em"):
         offs = [i for i, l in enumerate(shots) if is_off(l) and off_family(l) == fam]
@@ -440,14 +443,19 @@ def energy_triples(labels):
             em_on = l.startswith("shot-em-on")
             if is_off(l) or (fam == "em" and l != "shot-on" and not em_on) or (fam == "base" and em_on):
                 continue
-            before = [j for j in offs if j < i]
-            after = [j for j in offs if j > i]
+            # A debug view's ON shot (m4p5 shot-vis-gi-*, shot-add-gi-*) against the OFF shots of the same view only.
+            view = lambda s: max((p for p in views if s.startswith(p + "-")), key=len, default="shot")  # noqa: E731
+            mine = [j for j in offs if fam == "em" or view(shots[j]) == view(l)]
+            before = [j for j in mine if j < i]
+            after = [j for j in mine if j > i]
             if before and after:
                 a, b = before[-1], after[0]
             elif fam == "em":
                 continue
             else:
-                near = sorted(offs, key=lambda j: (abs(j - i), j))[:2]
+                near = sorted(mine, key=lambda j: (abs(j - i), j))[:2]
+                if len(near) < 2:
+                    continue
                 a, b = min(near), max(near)
             out.append((shots[a], l, shots[b], l if fam == "base" else f"{l}@em-off"))
     return out
@@ -457,8 +465,10 @@ def off_pairs(run):
     """Relative differences of consecutive OFF shots of one family: the shot-to-shot noise at a static view."""
     shots = [l for l in run.labels if l.startswith("shot-") and is_off(l)]
     out = []
-    for fam in ("base", "em"):
-        seq = [l for l in shots if off_family(l) == fam]
+    # One sequence per view: the part before "-off" (shot, shot-em, and m4p5's debug views shot-vis / shot-add,
+    # which show other images: a pair across them is not shot noise; m4p5 014357 gave sigma 23% that way).
+    for fam in dict.fromkeys(l.split("-off")[0] for l in shots):
+        seq = [l for l in shots if l.split("-off")[0] == fam]
         vals = []
         for l in seq:
             v = run.scene_colour(l)
