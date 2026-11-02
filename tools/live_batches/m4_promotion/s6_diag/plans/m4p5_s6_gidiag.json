@@ -381,6 +381,21 @@
   "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=0,replay_pack=0,rt_hit_emission=1,qa_exposure_hold=0"
  },
  {
+  "label": "diag-em",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=1,replay_pack=0,rt_hit_emission=1,qa_exposure_hold=1"
+ },
+ {
   "label": "warmup-em-off",
   "kind": "static",
   "speed": "static",

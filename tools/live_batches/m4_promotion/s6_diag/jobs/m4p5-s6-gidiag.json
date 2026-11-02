@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 554,
+ "timeout": 566,
  "repeat": 1,
  "live_batch": "m4-s6-diag",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,gi_hit_direct=0,gi_hit_sun=0,rf_hit_shade=0,rt_hit_emission=0,hit_ao_rays=2,gi_far=0,replay_pack=0,replay_pack_cap_mb=3300,rt_scene_wait_log_frames=120,rt_cascade_mb=427",
@@ -87,17 +87,17 @@
   "\\[motion-trace\\] phase=18 label=shot-add-gi-1 repeat=0",
   "\\[motion-trace\\] phase=19 label=shot-add-off-2 repeat=0",
   "\\[motion-trace\\] phase=20 label=shot-add-gi-2 repeat=0",
-  "\\[motion-trace\\] phase=24 label=shot-em-off-a repeat=0",
-  "\\[motion-trace\\] phase=25 label=shot-em-on-1 repeat=0",
-  "\\[motion-trace\\] phase=26 label=shot-em-off-b repeat=0",
-  "\\[motion-trace\\] phase=28 label=shot-em-on-2 repeat=0",
-  "\\[motion-trace\\] phase=30 label=shot-em-off-c repeat=0",
-  "\\[motion-plan\\] complete phases=32\\b",
+  "\\[motion-trace\\] phase=25 label=shot-em-off-a repeat=0",
+  "\\[motion-trace\\] phase=26 label=shot-em-on-1 repeat=0",
+  "\\[motion-trace\\] phase=27 label=shot-em-off-b repeat=0",
+  "\\[motion-trace\\] phase=29 label=shot-em-on-2 repeat=0",
+  "\\[motion-trace\\] phase=31 label=shot-em-off-c repeat=0",
+  "\\[motion-plan\\] complete phases=33\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
  "purpose": "S6 darkening diagnostic (docs/TRACK_C_GI.md 'S6 darkening'): is the m4p3 step darkening gi_hit_direct or the forge's animated lava? Every variant compiled in warmup (no DXC stall before a shot, unlike m4p3); one replay pack of the gi_hit_direct base variant (diag-pack, rt_stats: the GI hit direct line with the non-finite counters) for the offline invariant (py -3 -m tools.gi_hit_invariant --pack <dir>: giRaw.a bit-equal, mean hit >= base); five OFF and four gi_hit_direct shots interleaved (each ON bracketed by two OFF: linear drift cancels); gi_debug=3 (visibility only) and gi_debug=2 (the GI's added diffuse only) pairs. Startup: rt_hit_material=1, rt_cascade_casters=0 and rt_hit_material_instanced=0 (the pack contract's base variant, no defines), rt_emissive=0. replay_pack_cap_mb=3300 as rc1 (needs the user's approval for this job too). No post step: the S8 pack stays (replay_capture's post step would delete every older pack). Plus the S6 emission rerun in the same launch (m4_promotion 012015: the emission step +2.32% vs a 2.27% band without a prediction): startup with the Ultra bundle (instanced and wind RGB rows, cascade casters, rt_emissive), the diagnostic phases set the base variant live (instanced, casters, emissive, sun, emission 0: the pack contract), then bundle ON with rt_hit_emission OFF/ON/OFF/ON/OFF shots and cost-em-off-a / cost-on / cost-em-off-b; prediction in s6_diag/predicted.json.",
- "estimated_phase_seconds": 254,
+ "estimated_phase_seconds": 266,
  "expect_every": [
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -138,6 +138,15 @@
     "cost-em-off-b"
    ],
    "when_present": true
+  },
+  {
+   "name": "hit emission at GI hidden hits with the bundle ON (rt_stats window)",
+   "select": "hit emission \\(\\d+ frames\\): GI hidden hits",
+   "match": "GI hidden hits: lookups [1-9]\\d*, emissive [1-9]\\d*",
+   "windows": [
+    "diag-em"
+   ],
+   "min": 1
   }
  ]
 }
