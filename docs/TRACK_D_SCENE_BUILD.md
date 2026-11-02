@@ -979,3 +979,19 @@ docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
 - No shader/ABI change, variants delta 0. Keep the key off by default. Actual motion
   coverage, physical reserve and GPU ms require the separately authorized vg3 batch
   at S8 low long view; no game was launched for this change.
+
+### VRAM defaults qualified (2026-11-02, vram-default-on)
+
+vg3 at the S8 port passed real-budget OFF/ON/OFF motion, energy and budget gates.
+`rt_vram_guard`, `rt_vram_compact` and `rt_capture_elastic` now default to 1, automatic
+without GUI entries; the test-only budget override stays 0. This supersedes the
+default-off candidate status above. All presets inherit the automatic defaults.
+
+Opaque drop peaks right 1.78 / 0.39 / 1.20, left 1.10 / 0.64 / 1.77 draws/frame;
+ON energy +0.1836% within +/-0.92%; ON usage at most 21,860 / 31,419 MB.
+Complete-turn RT-pass GPU intervals OFF-a / ON / OFF-b: right
+5.363 / 5.464 / 5.657 ms, left 5.321 / 5.269 / 5.287 ms (whole-pass costs,
+no isolated compaction timer). smoke_ultra retains opaque drops 0.00 and adds
+every-window `[mem] ours` within budget. Check a long low-camera view and turns at
+S8 Water Queens House port: `[mem] ours` within budget, no new stutter/flicker.
+Full gate numbers, GI costs and source log: [progress/vram-default-on.md](progress/vram-default-on.md).

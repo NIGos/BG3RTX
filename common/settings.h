@@ -354,32 +354,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}},
 
-  {"exp_vram_guard", "VRAM budget guard",
-   "Keeps the game's video memory below the driver's budget: when headroom is low, the ray-tracing caches stop "
-   "growing (new geometry may be left out of ray tracing, logged) and give back memory no frame uses; their "
-   "sizes also follow the card's memory. Aims to stop the stutter and flicker when a long view runs out of "
-   "VRAM. Experimental until its live gate holds.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_vram_guard", "0"}}, {}},
-    {"on", "On", kCapRayQuery, {{"rt_vram_guard", "1"}}, {{"rt_geometry", 1}}}},
-   {}, {0, 0, 0, 0}, true, {}},
-
-  {"exp_vram_compact", "Compact ray-tracing caches",
-   "Returns unused video memory by packing cached mesh vertices into a smaller pool and moving cached "
-   "acceleration structures out of sparse chunks. Live geometry stays intact. Experimental until live validation.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_vram_compact", "0"}}, {}},
-    {"on", "On", kCapRayQuery, {{"rt_vram_compact", "1"}}, {{"rt_geometry", 1}}}},
-   {}, {0, 0, 0, 0}, true, {}},
-
-  {"exp_capture_elastic", "Demand-sized capture buffers",
-   "Returns unused geometry capture memory after sustained lower demand. Allows larger RT captures when "
-   "geometry would otherwise be dropped, subject to the VRAM guard. Experimental; resizing waits for GPU retirement.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_capture_elastic", "0"}}, {}},
-    {"on", "On", kCapRayQuery, {{"rt_capture_elastic", "1"}, {"rt_vram_guard", "1"}}, {{"rt_geometry", 1}}}},
-   {}, {0, 0, 0, 0}, true, {}},
-
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -451,8 +425,10 @@ inline constexpr KnobAlias kKnobAliases[] = {
 // 2026-11-01 22:13: 0 scene-wait timeouts in every pan and rotation, hooks ~2 ms instead of 5-6);
 // fg_letterbox, a no-op unless the swapchain is larger than the game's output (common/fg_extent.h;
 // smoke_ultra su1 2026-11-02 01:08 with it on: every-window gates ok, FG 2.00).
+// VRAM guard, cache compaction and elastic captures: vg3 S8 real-budget OFF/ON/OFF passed.
 inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_hit_material_capture_unlocked",
-                                                 "rt_hit_material_lean_hooks", "fg_letterbox"};
+                                                 "rt_hit_material_lean_hooks", "fg_letterbox",
+                                                 "rt_vram_guard", "rt_vram_compact", "rt_capture_elastic"};
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
 // Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
@@ -516,10 +492,10 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_budget_mb", "2048"},
     {"rt_mesh_audits", "2"},
     {"rt_mesh_audit_frames", "600"},
-    {"rt_vram_guard", "0"},
+    {"rt_vram_guard", "1"},
     {"rt_vram_guard_budget_mb", "0"},
-    {"rt_vram_compact", "0"},
-    {"rt_capture_elastic", "0"},
+    {"rt_vram_compact", "1"},
+    {"rt_capture_elastic", "1"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},
