@@ -1,25 +1,79 @@
 {
- "_rule": "Fill BEFORE queuing the batch and commit: predicted relative change of the scene colour before post (5c3fdabc float mean) of each cumulative step and of shot-on against the OFF neighbours (key shot-on@em-off: shot-on against the em-off shots, S6). null = no change predicted: the gate then passes only within the derived noise band. tools/m4_promotion_gate.py; a prediction committed after the run started does not pass. Written 2026-11-01 from the m4p runs 111854 (camp), 112258 (inn), 161852 (S6, the clean one), 113146 (S8), before this batch: bundle without rf_hit_shade (Ultra '+ Bounce' + Emission 'Hidden hits').",
- "_cost": "Reported, not gated (GPU ms, cost-on minus the OFF mean, the same runs with rf_hit_shade ON; the rf pass part goes away without it): whole GI camp +4.8, S6 +1.8, S8 +3.4; gi trace camp +2.1, S6 +0.2, S8 +0.7; rf pass camp +3.0, S6 +1.3, S8 +2.0 with rf_hit_shade, expected about 0 now; rt passes camp +1.7, S6 +0.3, S8 +0.7; emission on S6 +0.3 whole GI. Expected for this bundle: whole GI as measured, rf pass within its OFF spread.",
+ "_rule": "Committed BEFORE the rerun (after 385efd1: the hit-material capture skipped every traced frame, so every earlier traced energy measured the features OFF and the earlier nulls are void). Relative change of the scene colour before post (5c3fdabc float mean) against the OFF neighbours of the same view. Derivation (2026-11-02, offline): S6 GI share of the scene 18.4% (m4p5 021511 gi_debug=2 OFF shots, a base-path view: 4 x GI added 0.0504 vs scene 0.0685); gi_hit_direct raises the GI term +2.0% albedo-weighted (+1.59% raw giRaw, tools/gi_hit_invariant on the S6 pack 021627) -> +0.37%; emission at GI hidden hits adds 7.9x the direct term per frame (021511: hit emission 358397 / 300 frames vs GI hit direct 18139 / 120 frames, the same luminance-x-weight units) -> +2.9%; gi_hit_sun adds 1.17 vs 18126 at S6 (underground) -> 0. S8 pack 142819: gi_hit_direct +0.06% of the GI term -> null; its sun 26.5x the direct (m4p4 012459 counters) -> at most +0.3% at a GI share <= 20% -> null (band 1.85%). Camp, inn: no pack -> null (no derivation).",
  "m4p1-camp-fg2": {
-  "shot-step-gi": {"predicted": null, "basis": "111854: -0.04% (band 6.4%)"},
-  "shot-step-sun": {"predicted": null, "basis": "111854 lost this trace; gi_hit_sun only adds at sunlit hidden hits (never darker)"},
-  "shot-step-inst": {"predicted": null, "basis": "111854: -0.15% step"},
-  "shot-on": {"predicted": null, "basis": "111854: +0.31% step (emission), +0.25% vs OFF"}},
+  "shot-step-gi": {
+   "predicted": null,
+   "basis": "no camp pack: no derivation (earlier runs measured the features off)"
+  },
+  "shot-step-sun": {
+   "predicted": null,
+   "basis": "no camp pack: no derivation (earlier runs measured the features off)"
+  },
+  "shot-step-inst": {
+   "predicted": null,
+   "basis": "no camp pack: no derivation (earlier runs measured the features off)"
+  },
+  "shot-on": {
+   "predicted": null,
+   "basis": "no camp pack: no derivation (earlier runs measured the features off)"
+  }
+ },
  "m4p2-inn-fg2": {
-  "shot-step-gi": {"predicted": null, "basis": "112258: +0.14% step (band 2.5%)"},
-  "shot-step-sun": {"predicted": null, "basis": "112258: +0.29% step"},
-  "shot-step-inst": {"predicted": null, "basis": "112258: -0.39% step"},
-  "shot-on": {"predicted": null, "basis": "112258: -0.65% step, -0.04% vs OFF"}},
+  "shot-step-gi": {
+   "predicted": null,
+   "basis": "no inn pack: no derivation"
+  },
+  "shot-step-sun": {
+   "predicted": null,
+   "basis": "no inn pack: no derivation"
+  },
+  "shot-step-inst": {
+   "predicted": null,
+   "basis": "no inn pack: no derivation"
+  },
+  "shot-on": {
+   "predicted": null,
+   "basis": "no inn pack: no derivation"
+  }
+ },
  "m4p3-s6-fg2": {
-  "shot-step-gi": {"predicted": null, "basis": "161852: +0.33% step (band 2.6%); 112657's -1.0% was the DXC stall before the trace (now one warm-up per step)"},
-  "shot-step-sun": {"predicted": null, "basis": "161852: +0.44% step"},
-  "shot-step-inst": {"predicted": null, "basis": "161852: +0.00% step"},
-  "shot-on": {"predicted": null, "basis": "161852: -1.07% step, -1.18% vs OFF (lava animation, OFF spread 2.1%)"},
-  "shot-on@em-off": {"predicted": null, "basis": "112657: +0.16% (emission at hidden hits only)"}},
+  "shot-step-gi": {
+   "predicted": 0.0037,
+   "basis": "18.4% x 2.0%"
+  },
+  "shot-step-sun": {
+   "predicted": 0.0037,
+   "basis": "cumulative: + sun 0 at S6"
+  },
+  "shot-step-inst": {
+   "predicted": 0.0037,
+   "basis": "cumulative: the instanced rows add no S6 lookup in the base-variant pack (no evidence of a change)"
+  },
+  "shot-on": {
+   "predicted": 0.033,
+   "basis": "cumulative: + emission 7.9 x 0.37% = 2.9%"
+  },
+  "shot-on@em-off": {
+   "predicted": 0.029,
+   "basis": "emission alone"
+  }
+ },
  "m4p4-s8-fg2": {
-  "shot-step-gi": {"predicted": null, "basis": "113146: +0.08% step (band 2.0%)"},
-  "shot-step-sun": {"predicted": null, "basis": "113146: +0.01% step"},
-  "shot-step-inst": {"predicted": null, "basis": "113146: -0.15% step"},
-  "shot-on": {"predicted": null, "basis": "113146: -0.03% step, -0.15% vs OFF"}}
+  "shot-step-gi": {
+   "predicted": null,
+   "basis": "S8 pack: gi_hit_direct +0.06% of the GI term; sun at most +0.3% (band 1.85%)"
+  },
+  "shot-step-sun": {
+   "predicted": null,
+   "basis": "S8 pack: gi_hit_direct +0.06% of the GI term; sun at most +0.3% (band 1.85%)"
+  },
+  "shot-step-inst": {
+   "predicted": null,
+   "basis": "S8 pack: gi_hit_direct +0.06% of the GI term; sun at most +0.3% (band 1.85%)"
+  },
+  "shot-on": {
+   "predicted": null,
+   "basis": "S8 pack: gi_hit_direct +0.06% of the GI term; sun at most +0.3% (band 1.85%)"
+  }
+ }
 }
