@@ -5,9 +5,10 @@
 #include <cstdio>
 #include <initializer_list>
 #include <cstdlib>
+#include <source_location>
 using namespace bg3::native_hit;
 static unsigned checks;
-static void check(bool ok){++checks;if(!ok){std::fprintf(stderr,"material state check %u failed\n",checks);std::exit(1);}}
+static void check(bool ok,std::source_location at=std::source_location::current()){++checks;if(!ok){std::fprintf(stderr,"material state check %u failed (line %u)\n",checks,unsigned(at.line()));std::exit(1);}}
 int main(){
  VkGraphicsPipelineCreateInfo ci{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
  VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
@@ -112,6 +113,19 @@ int main(){
  {const uint64_t g=32ull<<20,cap=128ull<<20;check(source_stream_bytes(0,g,cap)==g && source_stream_bytes(1,g,cap)==g && source_stream_bytes(g,g,cap)==g);
   check(source_stream_bytes(g+1,g,cap)==2*g && source_stream_bytes(cap,g,cap)==cap && source_stream_bytes(cap+1,g,cap)==0 && source_stream_bytes(5,0,cap)==0);
   check(source_stream_bytes(100ull<<20,g,cap)==cap);}
+ // source_releasable: only after the slot's frame and once its owners retired; never an empty slot.
+ check(source_releasable(true,10,11,true) && !source_releasable(true,11,11,true) && !source_releasable(true,10,11,false));
+ check(!source_releasable(false,10,11,true) && !source_releasable(true,12,11,true));
+ // stream_caps: from the RT capture (40% in whole granules), deferred one chunk per source granule + 1, basis 2 x source.
+ {const uint64_t g=32ull<<20,mb=1ull<<20;
+  auto c=stream_caps(1024*mb,g);   // camp / Ultra at 64 B: rt_xfb_mb 384 -> 1024
+  check(c.source==384*mb && c.deferred_chunks==13 && c.query==768*mb);
+  check(c.source>=117*mb+55*mb && uint64_t(c.deferred_chunks)*g>=127*mb+55*mb && c.query>=234*mb+110*mb);   // hig1 09:54 + the evicted wind rows
+  c=stream_caps(0,g);check(c.source==128*mb && c.deferred_chunks==4 && c.query==256*mb);   // unknown capture: the old fixed caps
+  c=stream_caps(384*mb,g);check(c.source==128*mb && c.deferred_chunks==4 && c.query==256*mb);   // 24 B default: never below them
+  c=stream_caps(2047*mb,g);check(c.source==800*mb && c.query==1600*mb && c.query<=UINT32_MAX);   // the 2047 MB hard cap
+  c=stream_caps(uint64_t(64)<<30,g);check(c.query<=UINT32_MAX && c.source%g==0);
+  c=stream_caps(1024*mb,0);check(c.source==128*mb && c.deferred_chunks==4);}
  // Query rows buffer (host visible, one per live query): 16 + 256 x rows + control word.
  check(16ull+uint64_t(nh_material_rows)*256u+16u==3145760ull);
  ResourceBudget atomic;auto invalid=physical;invalid.image_generation=0;

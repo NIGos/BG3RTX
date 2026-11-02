@@ -618,8 +618,8 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     g_calpha = alpha_layout;
     g_cpush_bytes = push_bytes;
   }
-  return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &&
-         make_pipe(g_compose,
+  // rt_water_rf_edge: the screen-edge fade variant of the same request (live: make_pipe rebuilds on a new request).
+  const std::string creq = bg3::shader_variant::water_rf_edge_request(
                    refr && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"
                    : ls && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1"
                    : gsh       ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1"
@@ -627,7 +627,9 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
                    : ls        ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"
                    : sun       ? "rt/water_compose.hlsl?WATER_SHADOWS=1"
                                : "rt/water_compose.hlsl",
-                   "water_compose", g_clayout);
+                   host->cfg_int("rt_water_rf_edge", 0) != 0);
+  return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &&
+         make_pipe(g_compose, creq.c_str(), "water_compose", g_clayout);
 }
 
 // Reads the compose slot about to be reused (kRing frames later) into the window.

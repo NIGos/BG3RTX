@@ -7,7 +7,7 @@ import numpy as np
 from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load_burst,
                                      scene_camera_origin, texture_compatible, static_camera,
                                      calibration_noise, storage_quantum, positive_control_status,
-                                     index_burst_samples, REQUIRED)
+                                     index_burst_samples, coverage_mask, REQUIRED)
 
 
 class PanTests(unittest.TestCase):
@@ -163,6 +163,14 @@ class PanTests(unittest.TestCase):
         moved = (*c[:3],np.array([0,.1,0]))
         _,ix,_,_,_ = reproject(d,c,moved)
         np.testing.assert_array_equal(ix[:,1:],x[:,1:]-1)
+
+    def test_coverage_mask_codes_only(self):
+        # rt_debug 21: green / blue traced water; yellow (at the bed), red (behind) and game colours are not.
+        px = np.array([[[0,255,0],[0,0,255],[255,255,0],[255,0,0]],
+                       [[1,200,1],[0,100,0],[40,90,60],[0,0,0]]],dtype='u1')
+        m = coverage_mask(px,(2,4))
+        np.testing.assert_array_equal(m,[[True,True,False,False],[True,False,False,False]])
+        self.assertEqual(coverage_mask(px,(4,8)).sum(),12)   # nearest upscale keeps the codes
 
 
 if __name__ == '__main__':

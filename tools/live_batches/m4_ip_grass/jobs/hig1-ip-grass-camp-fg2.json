@@ -56,7 +56,8 @@
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[hit material instanced\\] frame \\d+ IP grass: prepass [1-9]\\d*, G-buffer [1-9]\\d* \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured [1-9]\\d*, mapped [1-9]\\d* rows [1-9]\\d* triangles",
   "\\[hit material instanced\\] frame \\d+ IP grass since the last line: pairs same frame [1-9]\\d*, ",
-  "hit material instanced clip IP grass \\(\\d+ frames\\): checked [1-9]\\d*, bit-exact [1-9]\\d*, "
+  "hit material instanced clip IP grass \\(\\d+ frames\\): checked [1-9]\\d*, bit-exact [1-9]\\d*, ",
+  "\\[hit material streams\\] frame \\d+ live [0-9]+ MB"
  ],
  "expect_every": [
   {
@@ -158,6 +159,41 @@
     "omm-ub-on2"
    ],
    "min": 1
+  },
+  {
+   "name": "the wind rows stay captured with IP grass on (no stream eviction), every diag-on window",
+   "select": "\\[hit material instanced\\] frame \\d+ key 1; wind:",
+   "match": "wind: prepass \\d+, G-buffer \\d+ \\(pipeline \\d+, bindings \\d+, stream 0\\) captured [1-9]\\d*, mapped [1-9]\\d*",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1,
+   "event": true,
+   "settle_s": 1.0
+  },
+  {
+   "name": "the wind RGB rows stay captured with IP grass on, every diag-on window",
+   "select": "\\[hit material instanced\\] frame \\d+ wind RGB 2S: prepass",
+   "match": "\\(pipeline \\d+, bindings \\d+, stream 0\\) captured [1-9]\\d*, mapped [1-9]\\d*",
+   "windows": [
+    "diag-on"
+   ],
+   "min": 1,
+   "event": true,
+   "settle_s": 1.0
+  },
+  {
+   "name": "hit-material capacity: no overflow (rows, streams, basis, tables), every diag window",
+   "select": "\\[hit material capacity\\] frame \\d+ ",
+   "match": "opaque rows \\d+/\\d+ overflow 0; deferred rows \\d+/\\d+ overflow 0; samplers \\d+/\\d+ overflow 0; cache views \\d+/\\d+ overflow 0; source stream [0-9.]+/[0-9.]+ MB overflow 0; deferred stream [0-9.]+ MB in \\d+/\\d+ chunks overflow 0; query mapped \\d+ basis [0-9.]+/[0-9.]+ MB overflow 0; tables \\d+/\\d+ overflow 0",
+   "windows": [
+    "diag-off-a",
+    "diag-on",
+    "diag-off-b"
+   ],
+   "min": 1,
+   "event": true,
+   "settle_s": 1.0
   }
  ],
  "forbid": [
