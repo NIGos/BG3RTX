@@ -1,0 +1,122 @@
+{
+ "name": "sh1-s8-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 413,
+ "repeat": 1,
+ "live_batch": "sharc-far",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,sharc_stats=0,sharc_stats_frames=120,sharc_device=1,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=1,gi_far_m=6,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/sharc_far/plans/sh1_s8.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "GI far",
+  "GI hit direct",
+  "GI hit sun",
+  "hit material",
+  "rt stats",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "sharc"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+",
+  "GI hit direct \\(\\d+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d*",
+  "GI hit sun \\(\\d+ frames\\): evaluated \\d+, ",
+  "GI far \\(\\d+ frames\\): rays [1-9]\\d*; beyond the base radius: screen hits \\d+, qualified sun-lit \\d+ \\(outside the froxels \\d+\\), kept as native ambient \\d+ \\(of them roof rule \\d+\\); per ray: ambient visibility [0-9.]+ \\(old rule [0-9.]+\\), bounce [0-9.]+ \\(old rule [0-9.]+\\)",
+  "gi: GPU cost [0-9.]+ ms/frame",
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "gi: gi/gi_trace_rt_sharc_hit_sun\\.hlsl\\?.*RT_GI_FAR=1 generation \\d+",
+  "sharc stats \\(\\d+ frames\\): GI hits not on screen [0-9.]+M/frame .*cache found [0-9.]+% of queried",
+  "sharc: resolve GPU median [0-9.]+ ms"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate",
+  "gi: gi_far needs gi_hit_sun",
+  "sharc: allocation of",
+  "sharc: the device lacks"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=9\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "SHaRC (sharc) OFF/ON/OFF on top of Ultra with gi_far 6 m (S8, the PT reference scene; static camera). Only sharc toggles live (sharc_device=1 at startup). diag-on: rt_stats + sharc_stats (GI far line, cache found share). Cost OFF/ON/OFF without diagnostics, one PNG trace per state, exposure held from cost-off-a. Prediction in predicted.json (committed before the run). No gi_debug views: they pause the injection, and the cache clears after 8 frames without it.",
+ "estimated_phase_seconds": 113,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "when_present": true
+  }
+ ]
+}
