@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 6);   // 7 before Hidden-surface shading left (M4 promotion, + Bounce)
+  CHECK(user_exp == 5);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) left
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
@@ -468,9 +468,9 @@ static void test_gui_levels() {
     const Knob* k = find_knob(l.knob);
     CHECK(k != nullptr);
     if (!k) continue;
-    // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" (M4).
+    // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" and Emission "Hidden hits" (M4).
     const std::string id = l.knob;
-    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface") && !k->dev_only);
+    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission") && !k->dev_only);
     CHECK(choice_count(*k) == int(l.values.size()));
     for (int c = 0; c < choice_count(*k); ++c) {
       Map m = on_map(*k, c);
@@ -649,7 +649,7 @@ static void test_user_ini_migration() {
   for (const char* key : {"rt_hit_material_wind_rgb", "rf_hit_gi", "rt_water_game_shadow"})
     CHECK_EQ(get(ew, key), "1");
   CHECK(get(ew, "rt_hit_material_recycle") == "1");   // automatic (default 1): no level writes it
-  CHECK_EQ(get(w, "rt_emissive"), "1");             // written by Emission at ray hits (the file's level)
+  CHECK_EQ(get(ew, "rt_emissive"), "1");            // Emission at ray hits: Ultra's own level now (Hidden hits)
   CHECK(out.find("rt_emissive=1") == out.rfind("rt_emissive=1"));   // once, no longer under "Other keys"
   CHECK_EQ(get(w, "rt_xfb_mb"), "1024");            // unmanaged keys kept
   CHECK_EQ(get(w, "rt_cascade_mb"), "427");
