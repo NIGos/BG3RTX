@@ -10,6 +10,14 @@
    "written": "2026-11-02"
   }
  },
+ "wf7a-s8-fg2": {
+  "_cross_launch": {
+   "predicted": null,
+   "source": "no ON/OFF shot pair inside a launch: the comparison is across launches wf7a (rt=1) and wf7b (rt=0), not an energy gate",
+   "flicker": "fg_present_flicker on snap-a / snap-b of both launches with wf7a's diag-view-mask-rot mask: water_over_rest about 1.5 in both (wf6: 1.47-1.51 with rt=1), the two launches within the snap-a / snap-b spread of each launch: the game's own water, closed. rt=1 clearly above rt=0: ours (the RT image as a whole, since every water key was already excluded)",
+   "written": "2026-11-02"
+  }
+ },
  "wf6-s8-fg2": {
   "shot-fgmv": {
    "predicted": null,
