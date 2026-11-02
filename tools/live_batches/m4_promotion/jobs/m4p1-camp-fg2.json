@@ -56,7 +56,7 @@
   "\\[trace\\] frame \\d+ written",
   "\\[geo\\] transform feedback enabled: vertex shaders get Position \\+ UV XFB decorations \\(stride 64\\)",
   "\\[geo\\] RT capture, last \\d+ frames: .* MB of a 1024 MB buffer",
-  "\\[cascade\\] casters: cascade \\d+, .*of 427 MB\\)",
+  "\\[cascade\\] casters: cascade \\d+, .*of 427 MB",
   "\\[em\\] emissive capture available \\(rt_emissive=1\\)",
   "\\[hit material instanced\\] frame \\d+ key 1; wind: ",
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}",

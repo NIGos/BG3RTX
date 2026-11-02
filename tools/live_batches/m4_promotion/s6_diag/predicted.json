@@ -1,0 +1,7 @@
+{
+ "_rule": "Committed BEFORE the run (tools/m4_promotion_gate.py; a prediction committed after the run started does not pass). Relative change of the scene colour before post (5c3fdabc float mean) of each emission-ON shot against its em-off neighbours, bundle ON (+ Bounce) in both. The m4p5 diagnostic shots (shot-gi-*, shot-vis-*, shot-add-*) keep no prediction (null: within the band), as in its README.",
+ "m4p5-s6-gidiag": {
+  "shot-em-on-1@em-off": {"predicted": 0.014, "basis": "not derivable offline (no S6 pack with the emission inputs): the measured m4p3 012015 shot-on vs its own emission-off pair (+1.40%), taken as the expected value; the earlier runs with rf_hit_shade on gave +0.16% (112657) and -1.98% (161852) with 0.8% OFF spread (lava)"},
+  "shot-em-on-2@em-off": {"predicted": 0.014, "basis": "as shot-em-on-1"}
+ }
+}

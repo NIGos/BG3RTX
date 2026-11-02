@@ -48,3 +48,11 @@ After the analysis: delete the 17 trace folders; keep the S6 pack only if a test
 
 Offline check: `powershell -File tools\live_batches\m4_promotion\s6_diag\dryrun.ps1 [-Out <scratch dir>]`.
 Last result 2026-11-01: all checks passed (estimate 4.5 min, 1030 MB without the pack).
+
+## Emission rerun in the same launch (2026-11-02)
+m4_promotion 012015 measured the S6 emission step at +2.32% (band 2.27%) without a prediction, so "Hidden hits" waits
+for this rerun. The job now starts with the Ultra bundle (instanced and wind RGB rows, cascade casters, rt_emissive);
+the diagnostic phases set the base variant live (instanced, casters, emissive, sun and emission 0: the pack contract).
+After them: `warmup-em-on`/`-off`, `cost-em-off-a`, shots em-off-a / em-on-1 / em-off-b, `cost-on`, shot em-on-2,
+`cost-em-off-b`, shot em-off-c (bundle ON, rt_hit_emission 1/0, exposure held). Gate: each `shot-em-on-N@em-off`
+against predicted.json (+1.4%; derivation there), cost `cost-on` vs `cost-em-off-a/b`. Plan 254 s, 22 PNG traces.
