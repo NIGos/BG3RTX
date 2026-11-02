@@ -522,6 +522,49 @@ counters (the vt bucket split by triangles, the tex bucket mostly the grass mask
 triangles at camp): about 97% of shadow-ray and 98% of visibility-ray alpha candidates would read a mask, up from
 18% / 37%. Total masks 80.9 MB (VRAM when the key is on).
 
+**11.2e va1 live (camp, 2026-11-02 140543, VALID): masks alone are image- and cost-neutral.** Energy shot-on vs
+the OFF mean +0.24%, band +-1.95% (OFF-pair sigma 0.72%): within noise, as predicted (null). GPU ms unchanged:
+rt passes 8.46-8.59 OFF-a, 8.42-8.70 ON, 8.43-8.56 OFF-b; GI 11.27-11.40, 11.21-11.70, 11.11-11.38. 181 masked
+records per frame. With the masks the grass moves from the vt to the tex candidates (shadow tex 2.1% -> 19.0%,
+visibility 3.6% -> 35.4%). Disproved: the "coarser page" share did NOT drop (shadow 0.38% -> 0.43%, visibility
+0.37% -> 0.38%): at camp distances the grass reads its clamped mip 2, which is resident; the coarser reads the
+offline check found are at the mips 0..1 that close rays request, a small share. The masks' value is the
+residency-independent, OMM-bakeable source, not a visible fix.
+
+**11.2f Game-wide catalogue (`tools/assets/vt_alpha_catalogue.py`, all paks, 2026-11-02).** 3,295 Content files,
+32,698 materials; 1,677 alpha-tested VT materials of 125 templates (template flags VT + alpha test); 1,174 unique
+textures, all found in the 16 GTS. BC4 masks: 1,713 MB for levels 0..2, 1,305 MB for level 0 only (enough for
+option B). Sizes: 1024^2 393, 2048^2 370, 512^2 181, 256^2 61, 4096^2 30. Top templates by texture count:
+Base_AlphaTest_VT 364 (466 MB), CHAR_BASE_AlphaTest_VT 113 (228 MB), Base_AlphaTest_2s_VT 81 (128 MB),
+CHAR_BASE_AlphaTest_VertCut_VT 78 (152 MB), CHAR_BASE_AlphaTest_2S_VT 64 (118 MB), Base_GM_Pulse_AlphaTest_VT 41,
+IP_Wind_GrassFlowers_AlphaTest_2S_PBR_VT 38 (7 MB), ATM_Wind_Banners_AlphaTest_2S_ClothModel_VT 37,
+ATM_Wind_Vertex_RGB_AlphaTest_2S_Translucency_VT 33. Masked so far: 65 textures (76 MB). Catalogue:
+data/assetdb/vt_alpha/vt_alpha_catalogue.json (added). The whole set does not fit resident next to the game:
+the runtime must load masks on demand (the textures of this frame's records, LRU under a budget), not all.
+
+**11.2g Miss list (`rt_vt_alpha_miss_log`, live, off).** At every alpha commit, each VT record still read from
+the tile cache and without an index entry adds its triangles to captures/vt_alpha_misses.tsv (per fragment
+shader, tile set, p0: triangle-frames, frames seen, peak triangles in a frame, sessions, cut), ranked and merged
+with earlier sessions at every [alpha] log window. `tools/assets/vt_alpha_masks.py --misses <tsv> [--top N]`
+extracts exactly those. Candidate weights per record would need a per-record GPU counter (a shader change, so a
+variant); triangle-frames are the CPU proxy.
+
+**11.2h Masks generated on the user's machine (design, not implemented).** No Larian data is redistributed: the
+release ships the tools, the user's own install is the source, the output lives in their data/assetdb.
+- Inputs: the 16 GTS (1.3 GB, read from VirtualTextures.pak) and the GTP page files the wanted textures use. Camp
+  measurement: 67 textures needed 80 GTP (3.7 GB read from the paks) and took about 11 min (about 10 s per
+  texture, LSLib decode included). All 1,174 textures: a few hours in one process; by tile set in parallel
+  (16 workers, I/O bound) an estimated 30-60 min. Recommended: at first install only the textures of the ranked
+  miss list plus a shipped list of texture NAMES (names are not game data) for the common foliage; the rest in a
+  background pass at low priority, resumable (per-texture output files, skip existing).
+- Disk: output 1.3 GB (level 0) to 1.7 GB (levels 0..2) for everything; working set bounded by extracting the GTP
+  of one tile set at a time and deleting it after its textures (peak a few GB; never inside the game folder).
+- LSLib: v1.20.4 (MIT, Norbyte) needs the .NET 8 runtime; today driven through pwsh 7 (tools/assets/vt_alpha.ps1).
+  For players: a small self-contained .NET console tool (LSLib + the extract loop, no PowerShell) shipped with its
+  licence, or a native GTS/GTP reader (the page format and BC3 tiles; LSLib's VirtualTextures code as reference)
+  to drop the .NET dependency. Integrity: masks keyed by the GTS GUID and the texture name, regenerated when a game
+  patch changes the GTS (GUID check at startup, as the asset DB fingerprints its paks).
+
 **11.2c Bake for VT foliage (not implemented yet).** Camp grass is 179 per-draw BLAS (wind VS, refit every
 frame), 0 pool meshes: the static-variant path (bvhsplit native_omm_variant, clone TLAS, guard) does not
 reach it. Needed: (1) a subdivision-level producer entry in omm_bake_plain.hlsl reading the immutable mask
