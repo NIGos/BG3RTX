@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 423,
+ "timeout": 427,
  "repeat": 1,
  "live_batch": "omm-qual",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=1,rt_omm_reference=0,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1",
@@ -40,7 +40,8 @@
   "\\[core\\] guard",
   "\\[mem\\]",
   "\\[rrpost\\] exposure (held|hold|probe)",
-  "\\[vt alpha\\]"
+  "\\[vt alpha\\]",
+  "\\[fault\\]"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -79,19 +80,24 @@
   "\\[omm\\] completion proof lost",
   "\\[omm\\] VK_EXT_opacity_micromap unavailable",
   "\\[omm dyn\\] WARNING",
-  "rejected ticket use without live ticket"
+  "rejected ticket use without live ticket",
+  "\\[fault\\] VK_ERROR_DEVICE_LOST",
+  "\\[fault\\] device fault",
+  "\\[bvh\\] WARNING frame \\d+ slot \\d+: TLAS instance",
+  "\\[bvh\\] WARNING frame \\d+: per-draw BLAS vertices"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=3 label=shot-ref-a repeat=0",
-  "\\[motion-trace\\] phase=5 label=shot-on repeat=0",
-  "\\[motion-trace\\] phase=7 label=shot-ref-b repeat=0",
-  "\\[motion-plan\\] complete phases=9\\b",
+  "\\[motion-trace\\] phase=1 label=smoke-refit1 repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-ref-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-ref-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
  "purpose": "rt_omm_dyn (docs/P4_OMM.md 11.2c) at S3 camp: B on (rt_vt_alpha_masks=1, rt_alpha_fine_lod=1) throughout, micro-maps on the masked per-draw BLAS (grass). One launch: rt_omm_reference REF / ON / REF switches the OMM variants between the reference scene (micro-maps disabled per instance) and the accelerated one, no rebuild. diag-check (rt_stats=1): omm check violations must be 0, candidates accelerated vs reference = work removed. Cost: rt passes / gi GPU ms per pass, cost-on vs the cost-ref mean. Energy: shot-on vs the shot-ref mean. Smoke-ultra startup, FG 2, static, exposure held from cost-ref-a.",
- "estimated_phase_seconds": 123,
+ "estimated_phase_seconds": 127,
  "expect_every": [
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",

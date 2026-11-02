@@ -37,6 +37,7 @@
 #include "../common/vt_alpha_masks.h"
 
 #include <algorithm>
+#include <map>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -259,11 +260,14 @@ bool vt_mask_view(VkImageView v) {
   return false;
 }
 
-bool vt_masks_load() {
+std::string vt_alpha_dir() {
   std::string dir = assetdb_file();
   const size_t cut = dir.find_last_of("\\/");
-  dir = (cut == std::string::npos ? std::string(".") : dir.substr(0, cut)) + "\\vt_alpha";
-  // Every vt_alpha_index*.txt (sets are only ever added, data/assetdb is shared): one entry per (tile set, p0).
+  return (cut == std::string::npos ? std::string(".") : dir.substr(0, cut)) + "\\vt_alpha";
+}
+
+// Every vt_alpha_index*.txt (sets are only ever added, data/assetdb is shared): one entry per (tile set, p0).
+std::vector<std::string> vt_index_lines(const std::string& dir) {
   std::vector<std::string> lines;
   WIN32_FIND_DATAA fd{};
   HANDLE find = FindFirstFileA((dir + "\\vt_alpha_index*.txt").c_str(), &fd);
@@ -274,6 +278,12 @@ bool vt_masks_load() {
     } while (FindNextFileA(find, &fd));
     FindClose(find);
   }
+  return lines;
+}
+
+bool vt_masks_load() {
+  const std::string dir = vt_alpha_dir();
+  const std::vector<std::string> lines = vt_index_lines(dir);
   if (lines.empty()) { log("[vt alpha] no index in %s: masks off", dir.c_str()); return false; }
   DeviceData* dd = g_dd;
   std::vector<uint8_t> staging;
@@ -350,6 +360,81 @@ void vt_masks_upload(VkCommandBuffer cmd) {
   }
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                         0, 0, nullptr, 0, nullptr, uint32_t(b.size()), b.data());
+}
+
+// ---- rt_vt_alpha_miss_log (live, off): the VT alpha records seen WITHOUT a mask, ranked, kept across sessions ----
+// captures/vt_alpha_misses.tsv, one line per (fragment shader, tile set, p0): triangle-frames (the record's
+// triangles summed over the frames it was drawn), frames seen, peak triangles in a frame, sessions, cut. Its
+// "<tileset> <p0 bits>" columns are what tools/assets/vt_alpha_masks.py --misses extracts. Candidate weights
+// would need a per-record GPU counter (a shader change); triangle-frames are the CPU proxy.
+struct VtMissKey { uint64_t fs; uint32_t tileset, p0[4];
+  bool operator<(const VtMissKey& o) const { return std::memcmp(this, &o, sizeof *this) < 0; } };
+struct VtMiss { uint64_t tri_frames = 0, frames = 0; uint32_t peak = 0, cur = 0, sessions = 0; float cut = 0; uint64_t last = ~0ull; bool now = false; };
+std::map<VtMissKey, VtMiss> g_vt_miss;
+bool g_vt_miss_merged = false;
+std::vector<bg3::vt_alpha::IndexEntry> g_vt_index;
+bool g_vt_index_loaded = false;
+
+bool vt_has_mask(const AlphaRec& r) {
+  if (!g_vt_index_loaded) {
+    g_vt_index_loaded = true;
+    for (const std::string& l : vt_index_lines(vt_alpha_dir())) {
+      bg3::vt_alpha::IndexEntry e;
+      if (bg3::vt_alpha::parse_index_line(l, &e)) g_vt_index.push_back(e);
+    }
+  }
+  for (const auto& e : g_vt_index) if (bg3::vt_alpha::matches(e, 1, r.p0, r.t[15])) return true;
+  return false;
+}
+
+std::string vt_miss_path() { return root_dir() + "\\captures\\vt_alpha_misses.tsv"; }
+
+// Once per commit: every VT record still read from the tile cache (kind 1) and without a mask in the index.
+void vt_miss_frame(uint64_t frame) {
+  if (!cfg_int("rt_vt_alpha_miss_log", 0)) return;
+  for (const AlphaRec& r : g_recs) {
+    if (r.kind != 1 || !(r.t[15] >= 0.0f) || vt_has_mask(r)) continue;
+    VtMissKey k{(uint64_t(r.fs_hi) << 32) | r.fs_lo, uint32_t(r.t[15]), {}};
+    std::memcpy(k.p0, r.p0, 16);
+    VtMiss& m = g_vt_miss[k];
+    m.tri_frames += r.tris; m.cut = r.cut; m.now = true;
+    if (m.last != frame) { m.last = frame; ++m.frames; m.cur = 0; }
+    m.cur += r.tris;   // this frame's triangles of the texture (several draws may share it)
+    m.peak = (std::max)(m.peak, m.cur);
+  }
+}
+
+void vt_miss_write() {
+  if (g_vt_miss.empty()) return;
+  if (!g_vt_miss_merged) {   // earlier sessions' lines: the file grows a ranked list over play sessions
+    g_vt_miss_merged = true;
+    std::ifstream f(vt_miss_path());
+    for (std::string l; std::getline(f, l);) {
+      unsigned long long fs = 0, tf = 0, fr = 0; unsigned ts = 0, a = 0, b = 0, c = 0, d = 0, peak = 0, ses = 0; float cut = 0;
+      if (l.empty() || l[0] == '#' ||
+          std::sscanf(l.c_str(), "%llx %u %x %x %x %x %llu %llu %u %u %f", &fs, &ts, &a, &b, &c, &d, &tf, &fr, &peak, &ses, &cut) != 11) continue;
+      VtMiss& m = g_vt_miss[VtMissKey{fs, ts, {a, b, c, d}}];
+      m.tri_frames += tf; m.frames += fr; m.peak = (std::max)(m.peak, peak); m.sessions += ses; if (!m.cut) m.cut = cut;
+    }
+  }
+  std::vector<std::pair<VtMissKey, VtMiss>> v(g_vt_miss.begin(), g_vt_miss.end());
+  std::sort(v.begin(), v.end(), [](const auto& x, const auto& y) { return x.second.tri_frames > y.second.tri_frames; });
+  CreateDirectoryA((root_dir() + "\\captures").c_str(), nullptr);
+  const std::string tmp = vt_miss_path() + ".tmp";
+  {
+    std::ofstream o(tmp);
+    o << "# rt_vt_alpha_miss_log (layer/alphatest.cpp): VT alpha records without an offline mask, by triangle-frames\n"
+         "# fs tileset p0.x p0.y p0.z p0.w (float32 bits) triangle_frames frames peak_triangles sessions cut\n";
+    char line[256];
+    for (const auto& [k, m] : v) {
+      std::snprintf(line, sizeof line, "%016llx %u %08x %08x %08x %08x %llu %llu %u %u %.6g\n", (unsigned long long)k.fs, k.tileset,
+                    k.p0[0], k.p0[1], k.p0[2], k.p0[3], (unsigned long long)m.tri_frames, (unsigned long long)m.frames, m.peak,
+                    m.sessions + (m.now ? 1u : 0u), m.cut);
+      o << line;
+    }
+  }
+  MoveFileExA(tmp.c_str(), vt_miss_path().c_str(), MOVEFILE_REPLACE_EXISTING);
+  log("[vt alpha] miss list: %zu VT alpha textures without a mask -> %s", v.size(), vt_miss_path().c_str());
 }
 
 // A matched VT record reads its offline mask through the plain-texture path (kind 2, channel 0 = BC4's R).
@@ -1268,6 +1353,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   if(native_hit::enabled() && !native_hit::attach(cmd,slot,g_sets[slot],g_dummy_buf,g_dummy_arr.view,g_clamp,g_stamp_gen))return VK_NULL_HANDLE;
 
   ++g_frames;
+  vt_miss_frame(frame_index());
   g_draws += g_recs.size();
   for (const auto& r : g_recs) g_tris += r.tris;
   if (!g_logged && !g_recs.empty()) {
@@ -1289,6 +1375,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
           (unsigned long long)g_frames, double(g_vt_substituted) / g_frames, cfg_int("rt_vt_alpha_masks", 0), g_vt_masks.size(), g_vt_state,
           double(g_vt_fine) / g_frames, cfg_int("rt_alpha_fine_lod", 0));
     g_vt_substituted = 0; g_vt_fine = 0;
+    if (cfg_int("rt_vt_alpha_miss_log", 0)) vt_miss_write();
     if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
       log("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",

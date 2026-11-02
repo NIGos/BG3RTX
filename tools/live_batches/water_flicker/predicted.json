@@ -10,6 +10,26 @@
    "written": "2026-11-02"
   }
  },
+ "wf4-s8-fg2": {
+  "shot-rrwater": {
+   "predicted": null,
+   "source": "rt_water_rr_mv changes only the motion vectors RR reads (our copy; FG and the core's passes keep the game's), not any radiance before post: the water-compose energy (5c3fdabc + the in-frame compose delta) is unchanged",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "one full-screen RG16F copy of the game's vectors (2.7 Mpx, ~11 MB read + 11 MB write: ~0.01-0.02 ms at the 5090's bandwidth) plus two projections per water pixel; inside the [water] reflections GPU line (0.12 ms in wf2/wf3)",
+   "flicker": "rot-rrwater: water-masked transient rate below both rot-off bursts by more than |off-a - off-b| if RR's reprojection of the water with the bed's motion is the flicker. rot-rroff (the game's DLSS SR instead of RR; the core's non-RR GI / D-LS / D-RF modes too): attribution only; clearly below both OFFs means the flicker is RR's handling of the water, within them means the game's water (its animated normals, probe) or the image whatever the upscaler. Not sized offline: the bed-vs-surface parallax per pixel during the turn is not measured",
+   "written": "2026-11-02"
+  }
+ },
+ "wf3-s8-fg2": {
+  "shot-nocompose": {
+   "predicted": 0.126,
+   "source": "water-compose energy = 5c3fdabc + the in-frame compose delta. wf2 110212 at this save and pose: 5c3fdabc 0.1939, in-frame delta of the Ultra water keys -0.0217 (off-a / off-b mean; mostly the sun shadows removing glints, PLAN_M5_WATER M5.3c). With every water image key off the delta is the next pass's own draws only (+0.0001, m5w3 OFF): (0.1940 - 0.1722) / 0.1722 = +12.6%",
+   "cost_gpu_ms": -0.41,
+   "cost_source": "the [water] compose GPU line (lighting copy + compose dispatches with the sun, local-light and refraction rays) was 0.41 ms in every wf2 window; off, it does not run",
+   "flicker": "attribution, no fix: water-masked transient rate (pan_artifacts --mask, the rotating rt_debug 21 trace) of rot-nocompose vs rot-off-a / rot-off-b (wf2: 2.25 / 2.32%, OFF spread 0.07 points). Within the OFF spread or above: the flicker is the game's own water (its animated normals and probe); clearly below both: ours (the compose: the hit / miss and hidden switches, the shadow ray noise)",
+   "written": "2026-11-02"
+  }
+ },
  "wf2-s8-fg2": {
   "shot-rr": {
    "predicted": null,

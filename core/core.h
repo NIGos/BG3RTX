@@ -50,6 +50,12 @@ struct WaterRfIn {
   // rt_water_rr_hitdist: RR's specular hit distance image (core/gi.cpp g_rf_hit, R16F) when D-RF wrote it
   // this frame and the key is on, else null (the variant is then not selected).
   VkImageView rf_hit = VK_NULL_HANDLE;
+  // rt_water_rr_mv: the game's motion vectors of this frame (core/gi.cpp g_mv_image, written this frame) and the
+  // layout its pass leaves them in; null when unknown or the key is off.
+  VkImage mv_image = VK_NULL_HANDLE;
+  VkImageView mv_view = VK_NULL_HANDLE;
+  VkFormat mv_format = VK_FORMAT_UNDEFINED;
+  VkImageLayout mv_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 };
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);

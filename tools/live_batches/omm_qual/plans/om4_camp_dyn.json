@@ -1,18 +1,48 @@
 [
  {
-  "label": "warmup-dyn",
+  "label": "smoke-build",
   "kind": "static",
   "speed": "static",
-  "seconds": 25,
+  "seconds": 8,
   "repeat_ms": 0,
   "scan": 16,
   "capture_at": 0,
   "serial": 0,
-  "motion_start": 25,
-  "motion_end": 25,
+  "motion_start": 8,
+  "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_dyn_refit=0,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
+ },
+ {
+  "label": "smoke-refit1",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=2,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
+ },
+ {
+  "label": "warmup-dyn",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 15,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 15,
+  "motion_end": 15,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "diag-check",
@@ -27,7 +57,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=1,qa_exposure_hold=0"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=1,qa_exposure_hold=0"
  },
  {
   "label": "cost-ref-a",
@@ -42,7 +72,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-ref-a",
@@ -57,7 +87,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -75,7 +105,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-on",
@@ -90,7 +120,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -108,7 +138,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-ref-b",
@@ -123,7 +153,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -141,6 +171,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=0,qa_exposure_hold=0"
  }
 ]

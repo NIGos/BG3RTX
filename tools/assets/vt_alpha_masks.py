@@ -53,6 +53,20 @@ def vt_records(pack, shaders):
     return out
 
 
+def miss_records(path, top=0):
+    """{(tileset, p0): triangle-frames} from the layer's captures/vt_alpha_misses.tsv (rt_vt_alpha_miss_log)."""
+    out = {}
+    for line in Path(path).read_text().splitlines():
+        if not line or line[0] == "#":
+            continue
+        f = line.split()
+        p0 = tuple(struct.unpack("<f", struct.pack("<I", int(x, 16)))[0] for x in f[2:6])
+        key = (int(f[1]), p0)
+        out[key] = out.get(key, 0) + int(f[6])
+    ranked = sorted(out.items(), key=lambda kv: -kv[1])
+    return dict(ranked[:top] if top else ranked)
+
+
 def bridge(lslib, work, request):
     req = Path(work) / "request.json"
     res = Path(work) / "result.json"
@@ -86,8 +100,10 @@ def dds_bc3_alpha(path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--pack", required=True)
-    ap.add_argument("--fs", nargs="+", required=True, help="fragment shader hashes (hex)")
+    ap.add_argument("--pack", help="a replay pack: its VT records of --fs")
+    ap.add_argument("--fs", nargs="+", default=[], help="fragment shader hashes (hex)")
+    ap.add_argument("--misses", help="instead of --pack: the layer's captures/vt_alpha_misses.tsv (ranked)")
+    ap.add_argument("--top", type=int, default=0, help="with --misses: only the N highest triangle-frame textures")
     ap.add_argument("--work", required=True)
     ap.add_argument("--out", default=None)
     ap.add_argument("--lslib", default=LSLIB)
@@ -96,7 +112,9 @@ def main():
     a = ap.parse_args()
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
-    recs = vt_records(a.pack, {int(h, 16) for h in a.fs})
+    if bool(a.pack) == bool(a.misses):
+        ap.error("give exactly one of --pack (with --fs) or --misses")
+    recs = miss_records(a.misses, a.top) if a.misses else vt_records(a.pack, {int(h, 16) for h in a.fs})
     print(f"[vt alpha] {len(recs)} distinct (tile set, texture) records, {sum(recs.values())} triangles", flush=True)
     ps = PackageSet(GAME, only=["VirtualTextures.pak"] + [f"VirtualTextures_{i}.pak" for i in range(1, 64)])
     masks, total, unsupported = [], 0, []
@@ -144,7 +162,7 @@ def main():
             (work / name).write_bytes(body)
             print(f"[vt alpha] {name}: {w0}x{h0}, {len(levels)} levels, {len(body)} bytes, {t['tris']} triangles", flush=True)
     print(f"[vt alpha] {len(masks)} masks, {total} bytes ({total / 1048576:.2f} MB)", flush=True)
-    manifest = {"source_pack": str(a.pack), "fs": a.fs, "format": "BG3VTA1: BC4 blocks per level (BC3 alpha halves)",
+    manifest = {"source_pack": str(a.pack or a.misses), "fs": a.fs, "format": "BG3VTA1: BC4 blocks per level (BC3 alpha halves)",
                 "masks": masks, "bytes": total, "unsupported": unsupported}
     man_name, idx_name = f"vt_alpha_manifest{a.set}.json", f"vt_alpha_index{a.set}.txt"
     (work / man_name).write_text(json.dumps(manifest, indent=1))

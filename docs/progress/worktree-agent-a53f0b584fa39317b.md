@@ -3,7 +3,7 @@
   grass and the other masked VT cutouts (per-draw BLAS, wind, refit every frame) get four-state micro-maps,
   subdivision 4, baked on the GPU from the offline masks at mip 0 (`common/omm_mask_bake.h`,
   `shaders/rt/omm_bake_mask.hlsl`), one per draw identity + mask + cuts + scale + triangle count, reused across
-  frames and draws. Design and margins: docs/P4_OMM.md 11.2e.
+  frames and draws. Design and margins: docs/P4_OMM.md 11.2i.
 - Exactness: every frame a check writes each triangle's micro-map index (itself if its uv bits equal the bake's
   snapshot, else FULLY_UNKNOWN_OPAQUE) before the build/refit. The ordinary TLAS disables the micro-maps per
   instance and is the reference scene of the existing omm check (rtStats 443..447); a flag-patched instance copy

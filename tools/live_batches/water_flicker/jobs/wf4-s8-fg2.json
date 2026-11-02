@@ -1,18 +1,19 @@
 {
- "name": "wf2-s8-fg2",
+ "name": "wf4-s8-fg2",
  "save": "Water Queens House",
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 499,
+ "timeout": 473,
  "repeat": 1,
  "live_batch": "water-flicker",
- "window_mode": "visible_unfocused_fg",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_rr_hitdist=0,rt_water_rf_edge=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_rr_mv=0",
  "args": [
+  "-RealPresent",
+  "-Foreground",
   "-Move",
   "-MovePlan",
-  "captures/live_batches/water_flicker/plans/wf2_s8.json"
+  "captures/live_batches/water_flicker/plans/wf4_s8.json"
  ],
  "patterns": [
   "\\[hot\\]",
@@ -63,13 +64,14 @@
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
   "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
   "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-  "\\[water\\] rt/water_reflect\\.hlsl\\?WATER_RR_HIT=1\\S* water_reflect: built",
-  "\\[water\\] rt/water_compose\\.hlsl\\?\\S*WATER_RF_EDGE=1\\S* water_compose: built",
-  "\\[pan\\] burst 92100 complete: 16 frames",
-  "\\[pan\\] burst 92101 complete: 16 frames",
-  "\\[pan\\] burst 92102 complete: 16 frames",
-  "\\[pan\\] burst 92103 complete: 16 frames",
-  "\\[pan\\] burst 92104 complete: 16 frames"
+  "\\[water\\] RR motion vectors on \\(rt_water_rr_mv=1\\)",
+  "\\[ngx\\] RR gets the core's motion vectors \\(rt_water_rr_mv\\)",
+  "\\[ngx\\] upscaler for feature \\S+: DLSS SR",
+  "\\[pan\\] burst 94100 complete: 16 frames",
+  "\\[pan\\] burst 94101 complete: 16 frames",
+  "\\[pan\\] burst 94102 complete: 16 frames",
+  "\\[pan\\] burst 94103 complete: 16 frames",
+  "\\[pan\\] burst 94104 complete: 16 frames"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -97,19 +99,18 @@
   "\\[bvh\\] mesh pool full at"
  ],
  "expect_runner": [
-  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
+  "\\[motion-plan\\] pointer centred in owned foreground game",
   "\\[motion-trace\\] phase=2 label=shot-off-a repeat=0",
-  "\\[motion-trace\\] phase=4 label=shot-rr repeat=0",
-  "\\[motion-trace\\] phase=6 label=shot-edge repeat=0",
-  "\\[motion-trace\\] phase=8 label=shot-off-b repeat=0",
-  "\\[motion-trace\\] phase=9 label=diag-view-mask repeat=0",
-  "\\[motion-trace\\] phase=10 label=diag-view-mask-rot repeat=0",
-  "\\[motion-plan\\] complete phases=21\\b",
+  "\\[motion-trace\\] phase=4 label=shot-rrwater repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=7 label=diag-view-mask repeat=0",
+  "\\[motion-trace\\] phase=8 label=diag-view-mask-rot repeat=0",
+  "\\[motion-plan\\] complete phases=19\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": false,
- "purpose": "S8 harbour water reflection flicker during camera rotation (user report 2026-11-02), unfocused (the user is at the PC). Two keys A/B inside one run: rt_water_rr_hitdist (RR hit distance on water) and rt_water_rf_edge (the composed reflection fades to the probe over rf_edge of the screen border instead of a hard switch). Static: energy (shot-*) and GPU cost (cost-*). diag-view-mask / diag-view-mask-rot: rt_debug 21 water coverage traces at the static pose and 3 s into the same turn as the bursts (the masks, pan_artifacts --mask). cal-static: the static K16 calibration burst of pan_artifacts. Rotations rot-*: all the same direction from the same pose (each followed by a return rotation ret-* that sets the next state), each burst 3 s into its phase, 9 s after its key toggled (a plan step's set applies at its capture_at: wf1's rot-on burst started at its toggle).",
- "estimated_phase_seconds": 219,
+ "purpose": "S8 harbour water flicker (wf3 141227: not the RT water compose, nocompose 3.53% vs 3.38 / 3.61%): RR's inputs on water. FOREGROUND. rot-off-a / rot-rrwater / rot-rroff / rot-off-b: rt_water_rr_mv=1 (RR gets motion vectors with the water surface's parallax instead of the bed's), then rr=0 (the game's DLSS SR; the core's GI, D-LS and D-RF switch to their non-RR modes too), same direction from the same pose, keys changed at the start of each ret-* turn, 9 s before the burst. cal-static: pan_artifacts calibration; diag-view-mask(-rot): rt_debug 21 water masks. Static shots: energy (water-compose) and GPU cost of the key.",
+ "estimated_phase_seconds": 193,
  "expect_every": [
   {
    "name": "water reflections traced in every window with the casters on (FAILS today: water is skipped with rt_cascade_casters=1)",
@@ -117,8 +118,7 @@
    "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ],
    "min": 1
@@ -129,8 +129,7 @@
    "match": "\\[trace\\] frame \\d+ written: ",
    "windows": [
     "shot-off-a",
-    "shot-rr",
-    "shot-edge",
+    "shot-rrwater",
     "shot-off-b",
     "diag-view-mask",
     "diag-view-mask-rot"
@@ -145,8 +144,7 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ]
   },
@@ -157,8 +155,7 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ],
    "when_present": true
@@ -170,8 +167,7 @@
    "min": 1,
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ]
   },
@@ -181,8 +177,7 @@
    "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ],
    "min": 1
@@ -193,8 +188,7 @@
    "match": "; non-finite terms 0 \\(",
    "windows": [
     "cost-off-a",
-    "cost-rr",
-    "cost-edge",
+    "cost-rrwater",
     "cost-off-b"
    ],
    "min": 1
