@@ -974,12 +974,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
   // rt_hit_material_ip_grass at startup: the fourth family's field and counters (RT_HIT_IP_GRASS), as wind RGB.
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
+  // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
+  const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
-                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u));
+                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) | (pool_2s ? unsigned(sv::kHitPool2s) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];

@@ -531,6 +531,11 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   Live (m4_generated 2026-11-02, hgn1 camp / hgn2 inn): qualified +2.3 / +0.12 points (predicted 12 / 1.5: below),
   generated 2S rows bit-exact, energy -0.12% / -0.10% (null), GI trace +0.58 / +0.03 ms, no overflow; the wind bushes
   rows captured 9 and mapped 0 (pairing to diagnose), 83 IP_Base_VT G-buffer draws captured and never mapped. Off.
+  Two-sided pool rows (2026-11-02): RT_HIT_POOL_2S (variant bit kHitPool2s, only instanced + wind RGB without IP grass /
+  OMM / tileset / scalp / hair origin, +45 requests) flips the pool row's N for h2.w = 5; other consumers reject such
+  rows. The generator also accepts an RT2-only difference equal to an audited recipe's RT2 (members erased, temporaries
+  renamed, RT2.w folded): 11 rows (+ Base_2S_VT, Base_AlphaTest_2s_Translucency, ATM_Wind_Vertex_R_AlphaTest). HLOD
+  two-sided 3b346b42 stays rejected (another page decode in its normal-mix sample).
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

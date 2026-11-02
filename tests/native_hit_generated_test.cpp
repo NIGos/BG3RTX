@@ -42,7 +42,7 @@ int main() {
     CHECK(r.layout == vt::LayoutBase || r.layout == vt::LayoutVt4);
     CHECK(pool::engine_bytes(r) <= 64u && vt::material_bytes(r) <= 32u);   // the layer's engine[16] / ubo[8] reads
     if (r.capture == vt::CapturePool) {
-      CHECK(g.family == 0 && g.depth_vs == 0 && !r.two_sided && r.layout == vt::LayoutBase);
+      CHECK(g.family == 0 && g.depth_vs == 0 && r.layout == vt::LayoutBase);   // two-sided: RT_HIT_POOL_2S consumers (h2.w 5)
       CHECK(pool::pool_recipe(r.vs, r.fs, false) == nullptr && pool::pool_recipe(r.vs, r.fs, true) == &r);
       CHECK(instanced::recipe(r.vs, r.fs, true, true, true) == nullptr);
     } else {
@@ -90,6 +90,9 @@ int main() {
   const auto* rgb = generated::row(0x9cc7094f4a674c1aull, 0x4464f4425bbb62aeull);    // wind RGB 2S: = 923131c7, two-sided
   CHECK(rgb && rgb->family == instanced::WindRgb && rgb->recipe.two_sided && rgb->recipe.reflectance_offset == 20u &&
         rgb->depth_vs == 0xea8f4071c5a3c181ull);
+  const auto* two = generated::row(0x2d2ac3c38992b7f0ull, 0x2d815e2ab9046501ull);    // Base_2S_VT: = 923131c7, pool two-sided
+  CHECK(two && two->recipe.capture == vt::CapturePool && two->recipe.two_sided && pool::pool_recipe(two->recipe.vs, two->recipe.fs, true) == &two->recipe);
+  for (const auto& r : vt::recipes) if (r.capture == vt::CapturePool) CHECK(!r.two_sided);   // audited pool rows keep h2.w 3
   std::printf("native_hit_generated_test: %u checks, %u generated rows\n", checks, generated::kRowCount);
   return 0;
 }

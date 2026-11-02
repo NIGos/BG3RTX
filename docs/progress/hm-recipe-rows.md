@@ -29,3 +29,22 @@
 - Job fix: at camp's ~8.5 fps with rt_stats, 120 frames = 14 s, so a 20-25 s diag window never held two stats lines.
   The plans now have 5 s gap-* phases (rt_stats=0 resets the core's 120-frame window) before diag-on and diag-off-b,
   and the share and clip gates are events (settle 1 s). Dryrun static checks pass; 13 phases, 9.8 min.
+
+## Two-sided pool rows (RT_HIT_POOL_2S) and RT2 matching (branch hm-recipe-rows, READY_FOR_LIVE, 2026-11-02)
+- Pool consumer (shaders/rt/native_hit_material.hlsli rt_hit_material_pool): with RT_HIT_POOL_2S + RT_HIT_INSTANCED, rows
+  with h2.w = 5 flip the N column by nv_two_sided_sign (world triangle, interpolated N, ray), as the per-draw 2S rows.
+  Every other consumer rejects h2.w 5 (fail closed, reason row). Variant bit kHitPool2s (common/shader_variant.h): only
+  with instanced + wind RGB and without IP grass / OMM / tileset / scalp / hair origin: +45 requests (variants.txt 2922).
+  The layer publishes `native-hit-pool-2s-v1` when the generated key starts on and a two-sided pool row exists.
+- Generator: two-sided pool rows allowed; an RT2-only difference is accepted when the FS's RT2 equals an audited recipe's
+  (UBO members erased, temporaries renamed, the RT2.w class/flag word folded) and takes its reflectance mode. 11 rows:
+  + Base_2S_VT 2d815e2a and Base_AlphaTest_2s_Translucency 80d6fb8f (pool, two-sided), + ATM_Wind_Vertex_R_AlphaTest
+  0289a872/55592de4 (wind RGB family). HLOD_TwoSided 3b346b42 (the inn's 19 draws) stays rejected: its RT2 normal-mix
+  sample uses another page decode than 81657854's, so it needs a hand audit, not the flip.
+- Job m4_generated updated for one rerun (window fix, IP grass pairing lines, `pairs \d+`); predicted.json rerun 2:
+  camp +2.5 (1.5-4), inn +0.3 (0-1), bushes pairing diagnostic only.
+- Remaining plan (for a fresh agent): (1) rerun m4_generated (needs the user's go); read the IP grass pairing line for
+  the bushes (unread / wind inputs / placement / no prepass) and fix that certificate or the depth-family match;
+  (2) skip capturing G-buffer draws of a generated pair that never pair (IP_Base_VT, 83 per camp frame): e.g. capture
+  only when a depth draw of the same key was noted this frame; (3) audit 3b346b42 by hand (RT2 decode) as a new
+  recipe; (4) promote only if the share gain is worth its GI ms (run 1: +2.3 points for +0.58 ms at camp).

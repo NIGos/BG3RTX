@@ -60,7 +60,7 @@
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[hit material streams\\] frame \\d+ live [0-9]+ MB",
-  "\\[hit material generated\\] frame \\d+ key 1: instanced G-buffer \\d+ \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured \\d+, mapped \\d+ rows \\d+ triangles; pairs 8",
+  "\\[hit material generated\\] frame \\d+ key 1: instanced G-buffer \\d+ \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured \\d+, mapped \\d+ rows \\d+ triangles; pairs \\d+",
   "hit material instanced clip \\(\\d+ frames\\): wind: checked [1-9]\\d*"
  ],
  "expect_every": [

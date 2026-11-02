@@ -667,8 +667,10 @@ void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return
  generated_on=on && cfg_int("rt_hit_material_generated",0)!=0;
  capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
  capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),ip_grass_on);
+ {bool pool_2s=false;for(uint32_t i=0;i<generated::kRowCount;++i)pool_2s=pool_2s||(generated::kRows[i].recipe.capture==native_vt::CapturePool && generated::kRows[i].recipe.two_sided);
+  capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),instanced_on && generated_on && pool_2s);}
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
-void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
+void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
@@ -1227,7 +1229,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(m.mask_layout()){if(!pool_mask_on.load(std::memory_order_relaxed))return;
     x.layout=native_vt::LayoutMask;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;std::memcpy(x.colours,m.colours,36);}
    x.row.valid=m.basis.slot+1;x.row.triangles=m.mesh.tris;x.row.pre=uint32_t(m.mesh.pool_off);x.row.deferred=uint32_t(m.mesh.basis_off);
-   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
+   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=recipe->two_sided?5:3; // 5: a generated two-sided pool row (RT_HIT_POOL_2S consumers only)
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
    // Row word 220: reflectance mode (rt_hit_material_pool: 2 mixes the normal layer's x).
    std::memcpy(&x.row.parameters[3],&recipe->reflectance,4);
