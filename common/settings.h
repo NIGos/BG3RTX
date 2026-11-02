@@ -674,7 +674,7 @@ inline constexpr KV kDefaults[] = {
     {"fg_letterbox", "1"},
     {"fg_ui_pq", "0"},
 };
-// 44 keys of data/release.ini, in file order.
+// 45 keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
     {"dump_shaders", "0"},
@@ -720,6 +720,7 @@ inline constexpr KV kReleaseDefaults[] = {
     {"sharc_fine_check", "0"},
     {"ls_check", "0"},
     {"rt_em_log", "0"},
+    {"rt_hit_reference", "0"},
 };
 // END GENERATED DEFAULTS
 // clang-format on
