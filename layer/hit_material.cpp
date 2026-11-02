@@ -25,13 +25,14 @@ namespace {
 // cap bounds one buffer kind (counted as overflow in "[hit material capacity]").
 // Before 2026-10-31: one fixed 32 MB stream each (source copies at most 16 MB).
 constexpr VkDeviceSize stream_bytes=32u<<20;
-constexpr VkDeviceSize source_cap=128ull<<20;     // per scene slot: the copied prepass geometry
-constexpr uint32_t deferred_chunks=4;             // per deferred packet: 4 x 32 MB XFB
-constexpr VkDeviceSize query_cap=256ull<<20;      // per query: prepass + deferred basis copies
+// The caps follow the RT capture (stream_caps, native_hit_resources.h), set at each scene_prepare from its size:
+// per scene slot the copied prepass geometry, per deferred packet the XFB chunks, per query both basis copies.
+StreamCaps caps=stream_caps(0,stream_bytes);
+VkDeviceSize source_cap=caps.source;uint32_t deferred_chunks=caps.deferred_chunks;VkDeviceSize query_cap=caps.query;
 constexpr VkDeviceSize row_payload=16u+VkDeviceSize(record_bytes)*nh_material_rows;
 constexpr VkDeviceSize row_bytes=row_payload+16u;
 static_assert(sampler_slots==nh_sampler_slots && cache_slots==nh_cache_slots && material_slots==nh_deferred_rows);
-static_assert(query_cap<=UINT32_MAX && source_cap<=UINT32_MAX && stream_bytes<=UINT32_MAX); // uint32 row offsets
+static_assert(stream_bytes<=UINT32_MAX); // uint32 row offsets (stream_caps keeps the query basis below 2^32)
 constexpr VkDeviceSize packet_rows=16u+VkDeviceSize(record_bytes)*material_slots;
 // bytes/usage/host: the allocation it was made with (its rt_hit_material_recycle key).
 struct Buffer {VkBuffer b{};VkDeviceMemory m{};void* mapped{};VkDeviceSize bytes{};VkBufferUsageFlags usage{};bool host{};};
@@ -706,6 +707,7 @@ void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&){
 void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuScenePrepare);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
  auto& s=slots[index];s.set={};s.handles.clear();s.pre.clear();s.owners.clear();s.prepared=s.attached=false;s.capacity_logged=false;
+ if(cap.xfb_size){caps=stream_caps(cap.xfb_size,stream_bytes);source_cap=caps.source;deferred_chunks=caps.deferred_chunks;query_cap=caps.query;}
  auto p=pending.find(state->recording);if(!cap.split || p==pending.end() || !p->second.join.current(handle(cmd),state->recording))return;
  s.command=handle(cmd);s.recording=state->recording;s.frame=frame_index();s.cursor=0;s.generation=0;
  s.camera=cap.ubo;s.camera_offset=cap.ubo_offset;s.join=p->second.join;if(!mark_owner(cmd,s))return;
@@ -1100,6 +1102,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    packet->resources.sampler_count,sampler_slots,packet->sampler_overflow,packet->resources.cache_count,cache_slots,packet->cache_overflow,
    double(slot.cursor)*mb,double(source_cap)*mb,slot.source_overflow,double(packet->total)*mb,packet->chunks.size(),deferred_chunks,packet->stream_overflow,
    q.materials.size(),double(cursor)*mb,double(query_cap)*mb,query_overflow,tables_used,table_free,table_overflow);
+  // The VRAM the three streams hold now (all slots, packets and queries alive): what the derived caps cost.
+  VkDeviceSize vs=0,vp=0,vq=0;for(const auto& sl:slots)vs+=sl.data.bytes;for(const auto& [k,pk]:packets)for(const auto& c:pk->chunks)vp+=c.bytes;
+  for(const auto& [k,qq]:queries)vq+=qq->data.bytes;
+  log("[hit material streams] frame %llu live %.0f MB: source %.0f MB in %u slots, deferred %.0f MB in %zu packets, query basis %.0f MB in %zu queries",
+   (unsigned long long)slot.frame,double(vs+vp+vq)*mb,double(vs)*mb,kSceneSlots,double(vp)*mb,packets.size(),double(vq)*mb,queries.size());
  };
  // rt_hit_material_instanced (native_hit_instanced.h): per family, the prepass alpha candidates, the
  // G-buffer draws (declined by pipeline / bindings / stream, captured) and the rows this query maps.
