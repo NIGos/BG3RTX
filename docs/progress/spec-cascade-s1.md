@@ -23,3 +23,7 @@
   leave variants.txt: 4249 -> 1589 variants (2986 -> 1674 requests with the 85 base files; the 28 RT_CASCADE_MASKS
   left are the current-caster sun and the water passes). 100 CTests pass; spec_cascade_check.py compiles the old
   reference requests on demand.
+- Then the migration
+  plan (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): G (gi-reproj guards as constants 1001/1002),
+  S2-S5 to ~100-180 requests, one merge-green at the end. Constant-id registry SpecId in common/shader_variant.h;
+  kSpecCascade moved to bit 16 (gi-reproj-guards uses 4096/8192).

@@ -23,6 +23,25 @@ enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset
 // RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
 // (kSpecCascadeId, spec_cascade_value) at pipeline creation. Not with kSunCurrent (that pipe keeps its defines).
 inline constexpr unsigned kSpecCascadeId = 1000;
+// Specialization constant ids, one per on/off key (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): the one
+// registry, so branches never pick the same id. Reserved for the steps that are not merged yet; an id is never reused.
+enum SpecId : unsigned {
+  kSpecIdCascade = kSpecCascadeId,   // S1  RT_CASCADE_MASKS (+ RT_CASCADE_SUN in rt_shadow)
+  kSpecIdTemporalMv = 1001,          // G   GI_TEMPORAL_MV_SAMPLE  (branch gi-reproj-guards)
+  kSpecIdPrevRadiance = 1002,        // G   GI_PREV_RADIANCE_GUARD (branch gi-reproj-guards)
+  kSpecIdHitInstanced = 1003,        // S2  RT_HIT_INSTANCED
+  kSpecIdWindRgb = 1004,             // S2  RT_HIT_WIND_RGB
+  kSpecIdIpGrass = 1005,             // S2  RT_HIT_IP_GRASS
+  kSpecIdPool2s = 1006,              // S2  RT_HIT_POOL_2S (branch hm-recipe-rows)
+  kSpecIdGiFar = 1007,               // S2  RT_GI_FAR
+  kSpecIdTileset = 1008,             // S3  RT_NATIVE_TILESET
+  kSpecIdHairOrigin = 1009,          // S3  RT_HAIR_PHYSICAL_ORIGIN
+  kSpecIdScalpHair = 1010,           // S3  RT_NATIVE_SCALP + RT_NATIVE_HAIR (always together)
+  kSpecIdOccStats = 1011,            // S3  RT_OCC_STATS (branch worktree-agent-a0c9be1ab336eae1a)
+  kSpecIdOmmScene = 1012,            // S4  RT_OMM_SCENE
+  kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
+  kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
+};
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
