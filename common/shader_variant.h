@@ -15,7 +15,9 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kSpecCascade = 4096 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kSpecCascade = 1u << 16 };
+// kSpecCascade sits at bit 16: bits 12-15 are left to the define keys of pending branches (gi-reproj-guards uses 4096
+// and 8192), so their merges do not collide with it.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
 // RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
