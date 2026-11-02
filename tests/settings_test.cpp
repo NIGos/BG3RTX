@@ -416,7 +416,14 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 6);   // Qualified VRAM controls retired; includes perf_hook_state.
-  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
+  if(submit_batch){
+    CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
+    for(int p=0;p<kPresetCount;++p) CHECK(submit_batch->preset[p]==0);
+    CHECK_EQ(code_default("perf_submit_batch"),"0");
+    CHECK(knob_value(*submit_batch,parse_ini("perf_submit_batch=1\n"))==1);
+  }
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
   CHECK(!dev_mode("0"));

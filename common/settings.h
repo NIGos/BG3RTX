@@ -369,6 +369,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}}},
    {}, {0, 0, 0, 0}, true, {}},
 
+  {"perf_submit_batch", "Batch descriptor and submit bookkeeping",
+   "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Unqualified CPU experiment.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"perf_submit_batch", "0"}}, {}},
+    {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}}},
+   {}, {0, 0, 0, 0}, false, {}, true},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -698,6 +705,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
     {"cpu_timing", "0"},
+    {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},
     {"rt_stability_log", "0"},
     {"rt_capture_state_log", "0"},
