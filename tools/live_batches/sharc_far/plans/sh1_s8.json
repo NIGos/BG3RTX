@@ -12,7 +12,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=0,sharc=1,sharc_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=0,sharc=1,sharc_stats=0,gi_rr_rays=2"
  },
  {
   "label": "diag-on",
@@ -27,7 +27,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=1,gi_debug=0,qa_exposure_hold=0,sharc=1,sharc_stats=1"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=1,gi_debug=0,qa_exposure_hold=0,sharc=1,sharc_stats=1,gi_rr_rays=2"
  },
  {
   "label": "cost-off-a",
@@ -42,7 +42,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2"
  },
  {
   "label": "shot-off-a",
@@ -57,7 +57,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2",
   "trace_at": [
    4
   ]
@@ -75,7 +75,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=1,sharc_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=1,sharc_stats=0,gi_rr_rays=2"
  },
  {
   "label": "shot-on",
@@ -90,7 +90,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=1,sharc_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=1,sharc_stats=0,gi_rr_rays=2",
   "trace_at": [
    4
   ]
@@ -108,7 +108,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2"
  },
  {
   "label": "shot-off-b",
@@ -123,9 +123,114 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0",
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2",
   "trace_at": [
    4
+  ]
+ },
+ {
+  "label": "cost-rays-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2"
+ },
+ {
+  "label": "shot-rays-off-a",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2",
+  "trace_at": [
+   2,
+   5,
+   8
+  ]
+ },
+ {
+  "label": "cost-rays-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=1"
+ },
+ {
+  "label": "shot-rays-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=1",
+  "trace_at": [
+   2,
+   5,
+   8
+  ]
+ },
+ {
+  "label": "cost-rays-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2"
+ },
+ {
+  "label": "shot-rays-off-b",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 10,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 10,
+  "motion_end": 10,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=1,sharc=0,sharc_stats=0,gi_rr_rays=2",
+  "trace_at": [
+   2,
+   5,
+   8
   ]
  },
  {
@@ -141,6 +246,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=0,sharc=0,sharc_stats=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,gi_far_m=6,gi_far=1,rt_stats=0,gi_debug=0,qa_exposure_hold=0,sharc=0,sharc_stats=0,gi_rr_rays=2"
  }
 ]

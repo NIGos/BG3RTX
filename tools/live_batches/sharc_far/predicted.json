@@ -1,6 +1,10 @@
 {
  "_rule": "Predicted relative change of the scene colour before post (5c3fdabc float mean) of each ON shot against its OFF neighbours, written and committed BEFORE the run (tools/m4_promotion_gate.py; a later commit is post hoc and does not pass). null: no change predicted.",
  "sh1-s8-fg2": {
-  "shot-on": {"predicted": 0.015, "source": "carried over from the last live SHaRC measurement at S8 (docs/DESIGN_SOTA_NEXT.md 2.15-2.16: cache vs no cache, 4 m rays, interior mean +1.5% to +1.9%): found cache hits replace the native ambient kept at unqualified hits beyond 1 m with cached screen radiance. Not re-derived offline (frame_replay has no SHaRC binding; a one-frame pack has no cache history). Upper side: since then 63% of S8's hidden hits are qualified and keep their own shading only where the cache misses", "written": "2026-11-02"}
+  "shot-on": {"predicted": 0.015, "source": "carried over from the last live SHaRC measurement at S8 (docs/DESIGN_SOTA_NEXT.md 2.15-2.16: cache vs no cache, 4 m rays, interior mean +1.5% to +1.9%): found cache hits replace the native ambient kept at unqualified hits beyond 1 m with cached screen radiance. Not re-derived offline (frame_replay has no SHaRC binding; a one-frame pack has no cache history). Upper side: since then 63% of S8's hidden hits are qualified and keep their own shading only where the cache misses", "written": "2026-11-02"},
+  "shot-rays-on": {"predicted": null, "source": "gi_rr_rays 1 vs 2 under Ultra + gi_far 6 m: equal energy. Replay of pack 142819-1 (live defines, push radius 6): giRaw.a 0.8321 vs 0.8320, bounce 0.01763 vs 0.01761; camp pack 013545-2 0.7492 vs 0.7492",
+   "cost_gi_trace_ms": -2.6, "cost_source": "replay GPU medians S8 4.31 -> 1.73 ms (camp 7.36 -> 3.90); live 2-ray trace pass 4.31 ms (gf2 031330)",
+   "flicker": "not derived (RR's temporal accumulation of a doubled input variance has no closed form here): gated by the QA temporal detector's own limits (rays_flicker.py), rays 1 against both rays-2 shot sets; the OFF-b vs OFF-a null must pass",
+   "written": "2026-11-02"}
  }
 }

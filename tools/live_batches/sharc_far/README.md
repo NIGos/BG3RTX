@@ -21,4 +21,13 @@ Phases: `warmup-on` 10 s (compiles `gi_trace_rt_sharc_hit_sun.hlsl?...RT_GI_FAR=
 - Cost: `gi: trace pass` ON minus mean OFF, plus `sharc: resolve ... inject` medians (2.14: +0.37 ms at 4 m).
 - Images: shot-on vs shot-off-a/b: no light through walls under the cut-away roofs (S8 2.15 crops were shaded stone).
 
+## Second section: gi_rr_rays 2 / 1 / 2 (sharc 0, Ultra + gi_far 6 m, exposure held)
+`cost-rays-off-a` / `cost-rays-on` / `cost-rays-off-b` 20 s, each followed by a 10 s `shot-rays-*` with three traces
+(2, 5, 8 s). Plan 203 s in all, 12 PNG traces (~0.7 GB).
+- Energy: the gate tool's `shot-rays` view, predicted null (replay: giRaw.a 0.8321 vs 0.8320).
+- Cost: `gi: trace pass` of cost-rays-on against the rays-2 windows, predicted -2.6 ms (replay 4.31 -> 1.73 ms).
+- Flicker / stippling: `py -3 tools/live_batches/sharc_far/rays_flicker.py <log>`: the QA temporal detector (final
+  frame PQ code, static px, derived limits) on the three rays-1 traces against each rays-2 set; the OFF-b vs OFF-a
+  null must pass, else the verdict is void. Static camera only (a pan needs K16 bursts, 2.3 GB each).
+
 Offline check: `powershell -File tools\live_batches\sharc_far\dryrun.ps1 [-Out <scratch dir>]`.

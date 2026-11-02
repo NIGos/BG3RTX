@@ -4,10 +4,10 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 413,
+ "timeout": 503,
  "repeat": 1,
  "live_batch": "sharc-far",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,sharc_stats=0,sharc_stats_frames=120,sharc_device=1,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=1,gi_far_m=6,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,sharc_stats=0,sharc_stats_frames=120,sharc_device=1,gi_rr_rays=2,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_radius=1.0,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_xfb_mb=1024,rt_cascade_mb=427,rf_hit_shade=0,rt_hit_emission=0,rt_emissive=0,gi_hit_direct=1,gi_hit_sun=1,gi_far=1,gi_far_m=6,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -57,7 +57,8 @@
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "gi: gi/gi_trace_rt_sharc_hit_sun\\.hlsl\\?.*RT_GI_FAR=1 generation \\d+",
   "sharc stats \\(\\d+ frames\\): GI hits not on screen [0-9.]+M/frame .*cache found [0-9.]+% of queried",
-  "sharc: resolve GPU median [0-9.]+ ms"
+  "sharc: resolve GPU median [0-9.]+ ms",
+  "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, .*\\) GPU median [0-9.]+ ms"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -77,12 +78,21 @@
   "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
   "\\[motion-trace\\] phase=5 label=shot-on repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=9\\b",
+  "\\[motion-trace\\] phase=9 label=shot-rays-off-a repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-rays-off-a repeat=1",
+  "\\[motion-trace\\] phase=9 label=shot-rays-off-a repeat=2",
+  "\\[motion-trace\\] phase=11 label=shot-rays-on repeat=0",
+  "\\[motion-trace\\] phase=11 label=shot-rays-on repeat=1",
+  "\\[motion-trace\\] phase=11 label=shot-rays-on repeat=2",
+  "\\[motion-trace\\] phase=13 label=shot-rays-off-b repeat=0",
+  "\\[motion-trace\\] phase=13 label=shot-rays-off-b repeat=1",
+  "\\[motion-trace\\] phase=13 label=shot-rays-off-b repeat=2",
+  "\\[motion-plan\\] complete phases=15\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "SHaRC (sharc) OFF/ON/OFF on top of Ultra with gi_far 6 m (S8, the PT reference scene; static camera). Only sharc toggles live (sharc_device=1 at startup). diag-on: rt_stats + sharc_stats (GI far line, cache found share). Cost OFF/ON/OFF without diagnostics, one PNG trace per state, exposure held from cost-off-a. Prediction in predicted.json (committed before the run). No gi_debug views: they pause the injection, and the cache clears after 8 frames without it.",
- "estimated_phase_seconds": 113,
+ "purpose": "SHaRC (sharc) OFF/ON/OFF on top of Ultra with gi_far 6 m (S8, the PT reference scene; static camera). Only sharc toggles live (sharc_device=1 at startup). diag-on: rt_stats + sharc_stats (GI far line, cache found share). Cost OFF/ON/OFF without diagnostics, one PNG trace per state, exposure held from cost-off-a. Prediction in predicted.json (committed before the run). No gi_debug views: they pause the injection, and the cache clears after 8 frames without it. Then gi_rr_rays 2/1/2 under the same Ultra + gi_far (sharc 0): cost-rays-* 20 s, shot-rays-* 10 s with 3 traces each (energy: m4_promotion_gate view shot-rays; flicker: rays_flicker.py, the QA temporal detector on the final frame).",
+ "estimated_phase_seconds": 203,
  "expect_every": [
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -91,7 +101,10 @@
    "windows": [
     "cost-off-a",
     "cost-on",
-    "cost-off-b"
+    "cost-off-b",
+    "cost-rays-off-a",
+    "cost-rays-on",
+    "cost-rays-off-b"
    ],
    "min": 1
   },
@@ -103,7 +116,10 @@
    "windows": [
     "cost-off-a",
     "cost-on",
-    "cost-off-b"
+    "cost-off-b",
+    "cost-rays-off-a",
+    "cost-rays-on",
+    "cost-rays-off-b"
    ]
   },
   {
@@ -114,7 +130,10 @@
    "windows": [
     "cost-off-a",
     "cost-on",
-    "cost-off-b"
+    "cost-off-b",
+    "cost-rays-off-a",
+    "cost-rays-on",
+    "cost-rays-off-b"
    ],
    "when_present": true
   }

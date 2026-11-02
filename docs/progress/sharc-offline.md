@@ -14,6 +14,10 @@
   | camp giRaw.a / ms | 0.8149 / 2.68 | 0.7492 / 7.36 | 0.7492 / 3.90 | 0.7636 / 6.62 | - |
   One ray per pixel (gi_rr_rays=1 for the whole GI pass) keeps the mean visibility and bounce (S8 bounce 0.01763 vs
   0.01761) at 40-53% of the 2-ray cost; the price is variance into RR. 4 m / 3 m lose 26% / 44% of the S8 change.
-  Not changed; a live 1-ray A/B (flicker, stippling) would decide it.
+  Not changed; sh1 now also runs gi_rr_rays 2/1/2 (energy null, GI trace -2.6 ms, flicker via rays_flicker.py:
+  the QA temporal detector on 3 traces per state, OFF-OFF null). Plan 203 s, 12 traces.
 - Risk noted: gi_far screen hits beyond 1 m take no roof rule; a ray leaving a roofed room through the cut-away roof
   can reach on-screen exterior ground (S8 went darker as predicted, so not dominant).
+- lean_regression lr1/lr2 (04:12 INVALID): the shader expect now takes the core's `gi: gi/...RT_CASCADE_MASKS=1 ...
+  generation N` (cache reads have no compile line); diag-primary 15 -> 25 s (camp at 11 fps did not close one
+  120-frame stats window in 15 s). lean_dryrun: the motion-trace lint covers every trace_at repeat.
