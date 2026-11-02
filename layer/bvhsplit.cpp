@@ -39,6 +39,7 @@
 #include "../common/cascade_casters.h"
 #include "../common/rt_capture_budget.h"
 #include "../common/vram_guard.h"
+#include "../common/as_chunk_alloc.h"
 #include "omm_native_plain.h"
 #include "omm_submit.h"
 #include "../common/omm_material_cache.h"
@@ -169,56 +170,11 @@ uint64_t mix(uint64_t h, uint64_t v) {
   return h * 1099511628211ull;
 }
 
-// ---- a first-fit range allocator ----
-struct RangeAlloc {
-  VkDeviceSize cap = 0, used = 0;
-  std::map<VkDeviceSize, VkDeviceSize> free;   // offset -> size
-  void init(VkDeviceSize c) {
-    cap = c;
-    used = 0;
-    free.clear();
-    if (c) free[0] = c;
-  }
-  bool alloc(VkDeviceSize size, VkDeviceSize align, VkDeviceSize* off) {
-    for (auto it = free.begin(); it != free.end(); ++it) {
-      VkDeviceSize s0 = it->first, e0 = it->first + it->second, a = (s0 + align - 1) / align * align;
-      if (a + size > e0) continue;
-      free.erase(it);
-      if (a > s0) free[s0] = a - s0;
-      if (a + size < e0) free[a + size] = e0 - (a + size);
-      *off = a;
-      used += size;
-      return true;
-    }
-    return false;
-  }
-  void release(VkDeviceSize off, VkDeviceSize size) {
-    used -= (std::min)(used, size);
-    auto next = free.lower_bound(off);
-    if (next != free.end() && off + size == next->first) {
-      size += next->second;
-      next = free.erase(next);
-    }
-    if (next != free.begin()) {
-      auto prev = std::prev(next);
-      if (prev->first + prev->second == off) {
-        prev->second += size;
-        return;
-      }
-    }
-    free[off] = size;
-  }
-  void grow(VkDeviceSize ncap) {
-    if (ncap <= cap) return;
-    VkDeviceSize old = cap;
-    cap = ncap;
-    used += ncap - old;   // release() subtracts it again
-    release(old, ncap - old);
-  }
-};
+using as_chunks::RangeAlloc;
 
 // ---- acceleration structure storage: suballocated chunks ----
-struct AsChunk { Buf buf; RangeAlloc ra; };
+struct AsChunk { Buf buf; as_chunks::ChunkRanges ra; };
+uint64_t g_chunks_freed = 0, g_chunk_bytes_freed = 0;
 std::vector<AsChunk> g_chunks;
 struct AsAlloc {
   int chunk = -1;
@@ -237,18 +193,21 @@ std::vector<PendingFree> g_pending_free;
 // destroys AS objects at run time (compaction, new-range builds, the emissive
 // capture), while the legacy build, which never does, never faults. Kept handles
 // are destroyed at device destruction; above rt_as_keep_max the oldest go.
-std::deque<VkAccelerationStructureKHR> g_kept_as;
+struct KeptAs { VkAccelerationStructureKHR as; int chunk; };
+std::deque<KeptAs> g_kept_as;
 uint64_t g_kept_dropped = 0;
-void retire_as(VkAccelerationStructureKHR as) {
+void retire_as(VkAccelerationStructureKHR as, int chunk) {
   if (!as) return;
   if (!cfg_int("rt_as_keep", 0)) {
     defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(as));
     return;
   }
-  g_kept_as.push_back(as);
+  g_kept_as.push_back({as, chunk});
+  if (chunk >= 0) ++g_chunks[chunk].ra.kept;
   const size_t cap = size_t((std::max)(cfg_int("rt_as_keep_max", 200000), 1000));
   while (g_kept_as.size() > cap) {
-    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_kept_as.front()));
+    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_kept_as.front().as));
+    if (g_kept_as.front().chunk >= 0) --g_chunks[g_kept_as.front().chunk].ra.kept;
     g_kept_as.pop_front();
     if (g_kept_dropped++ == 0) log("[bvh] more than %zu released BLAS handles kept: the oldest are destroyed", cap);
   }
@@ -266,10 +225,8 @@ VkDeviceSize as_reserved() {
 bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr) {
   out = AsAlloc{};
   size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
-  int ci = -1;
   VkDeviceSize off = 0;
-  for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
-    if (g_chunks[i].buf.b && g_chunks[i].ra.alloc(size, kAsAlign, &off)) ci = int(i);
+  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off);
   if (ci < 0) {
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
     if (guard_what && vram_guard_on() &&
@@ -281,7 +238,7 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
       return false;
     c.ra.init(cs);
     c.ra.alloc(size, kAsAlign, &off);
-    // A slot freed by the guard (buf.b null, no range in it) is reused: chunk indices stay stable.
+    // A retired empty slot (buf.b null, no range in it) is reused: chunk indices stay stable.
     for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
       if (!g_chunks[i].buf.b) g_chunks[i] = std::move(c), ci = int(i);
     if (ci < 0) {
@@ -295,7 +252,7 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
   ci2.size = size;
   ci2.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
   if (g_dd->vk.CreateAccelerationStructureKHR(g_dd->device, &ci2, nullptr, &out.as) != VK_SUCCESS) {
-    g_chunks[ci].ra.release(off, size);
+    g_chunks[ci].ra.cancel(off, size);
     out = AsAlloc{};
     return false;
   }
@@ -309,7 +266,10 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
 }
 
 void as_destroy(AsAlloc& a) {
-  if (a.chunk >= 0) g_pending_free.push_back({frame_index(), a.chunk, a.off, a.size, a.as});
+  if (a.chunk >= 0) {
+    g_chunks[a.chunk].ra.mark_pending(a.size);
+    g_pending_free.push_back({frame_index(), a.chunk, a.off, a.size, a.as});
+  }
   else if (a.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.as));
   a = AsAlloc{};
 }
@@ -1005,7 +965,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (const PendingFree& p : g_pending_free)
     if (p.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(p.as));
   g_pending_free.clear();
-  for (VkAccelerationStructureKHR a : g_kept_as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a));
+  for (const KeptAs& a : g_kept_as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.as));
   g_kept_as.clear();
   g_meshes.clear();
   g_dyn.clear();
@@ -1018,6 +978,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
   g_chunks.clear();
+  g_chunks_freed = g_chunk_bytes_freed = 0;
   for (Buf* b : {&g_pool, &g_ring, &g_status, &g_scratch})
     if (b->b) free_buf(*b);
   for (TlasSlot& ts : g_tlas) {
@@ -1052,8 +1013,8 @@ void bvh_vram(BvhVram* out) {
   for (const AsChunk& c : g_chunks) {
     if (!c.buf.b) continue;
     out->as_reserved += c.buf.size;
-    out->as_live += c.ra.used;
-    out->as_empty += c.ra.used ? 0 : c.buf.size;
+    out->as_live += c.ra.live;
+    out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
     ++out->chunks;
   }
   for (const auto& [k, m] : g_meshes)
@@ -2607,11 +2568,11 @@ void bvh_on_present() {
     size_t w = 0;
     for (size_t i = 0; i < g_pending_free.size(); ++i) {
       const PendingFree& p = g_pending_free[i];
-      if (now < p.frame + 6 || (p.frame + 2 > gpu_done && now < p.frame + 240) || p.frame >= oldest_live) {
+      if (!as_chunks::retired(p.frame, now, gpu_done, oldest_live)) {
         g_pending_free[w++] = p;
         continue;
       }
-      retire_as(p.as);
+      retire_as(p.as, p.chunk);
       if (p.chunk < 0) g_pool_ra.release(p.off, p.size);
       else if (size_t(p.chunk) < g_chunks.size()) g_chunks[p.chunk].ra.release(p.off, p.size);
     }
@@ -2752,30 +2713,17 @@ void bvh_on_present() {
       ++g_st.evict_lru;
     }
   }
-  // rt_vram_guard yields (common/vram_guard.h plan_trim; asks are 0 unless VRAM is low). 1: empty BLAS chunks
-  // (no live or pending range: pending frees still count in ra.used), not with rt_as_keep (kept AS handles
-  // sit on released ranges). 3: cached meshes unused for 8 frames, least recently used first; their BLAS
-  // ranges go back to the chunks and a chunk they empty goes at the next ask.
-  // Over the budget's share of BLAS chunks (vram_guard::cap; a new chunk is then refused even with headroom):
-  // empty chunks above the cap go too, so the cap does not hold idle reserve while new BLAS are refused.
-  VkDeviceSize ask = vram_take_ask(vram_guard::kYieldEmptyChunks);
-  if (vram_guard_on()) {
-    const VkDeviceSize reserved = as_reserved(), cap = vram_cap(vram_guard::kAsChunks, UINT64_MAX);
-    if (reserved > cap) ask = (std::max)(ask, reserved - cap);
-  }
-  if (ask && !cfg_int("rt_as_keep", 0)) {
-    VkDeviceSize freed = 0;
-    uint32_t n = 0;
-    for (AsChunk& c : g_chunks) {
-      if (freed >= ask) break;
-      if (!c.buf.b || c.ra.used) continue;
-      freed += c.buf.size;
-      ++n;
-      free_buf(c.buf);
-      c.ra.init(0);
-    }
-    if (n) log("[vram] guard: freed %u empty BLAS chunks (%.0f MB; asked %.0f MB)", n, double(freed) / 1048576.0,
-               double(ask) / 1048576.0);
+  // Empty chunks always go, independent of guard state/cap. used still owns
+  // pending ranges until BOTH the fence and all old TLAS slots retire above.
+  // free_buf uses the existing deferred destruction queue, after retired AS
+  // handles. Retained diagnostic handles pin only their own backing chunks.
+  (void)vram_take_ask(vram_guard::kYieldEmptyChunks);
+  for (AsChunk& c : g_chunks) {
+    if (!c.buf.b || !c.ra.reclaimable()) continue;
+    ++g_chunks_freed;
+    g_chunk_bytes_freed += c.buf.size;
+    free_buf(c.buf);
+    c.ra = as_chunks::ChunkRanges{}; // keep the vector slot: AsAlloc indices stay stable
   }
   if (const VkDeviceSize ask = vram_take_ask(vram_guard::kYieldMeshLru)) {
     std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
@@ -2817,18 +2765,28 @@ void bvh_on_present() {
       (unsigned long long)s.builds, s.cached_draws / nb, s.static_inst / nb, s.static_tris / nb * 1e-6, s.dyn_draws / nb,
       s.dyn_tris / nb * 1e-6, s.dyn_refit / nb, s.dyn_rebuild / nb, s.dyn_new / nb, 100.0 * s.tlas_refit / nb, s.not_inst_pattern / nb,
       s.not_inst_stream / nb, s.not_inst_count / nb);
+  size_t chunks = 0;
+  VkDeviceSize live = 0;
+  for (const AsChunk& c : g_chunks) {
+    chunks += c.buf.b != VK_NULL_HANDLE;
+    live += c.ra.live;
+  }
   log("[bvh] mesh cache: %zu meshes (%zu ready, %.2fM triangles), pool %.1f / %.0f MB, AS %.1f MB in %zu chunks; this "
       "window: %llu new (%.2fM triangles, %llu deferred by the per-build budget), %llu verified, %llu checks ok, "
       "%llu audits ok, rejected %llu/%llu/%llu (%s/%s/%s), %llu results lost (%llu timed out), max accepted error %.3f x tolerance; "
-      "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB)",
+      "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB); "
+      "chunks reserved/live/pending %.1f/%.1f/%.1f MB, freed %llu (%.1f MB), relocated 0",
       g_meshes.size(), size_t(ready), double(mesh_tris) * 1e-6, double(g_pool_ra.used) / 1048576.0,
-      double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, g_chunks.size(), (unsigned long long)s.new_meshes,
+      double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, chunks, (unsigned long long)s.new_meshes,
       s.new_tris * 1e-6, (unsigned long long)s.budget_deferred, (unsigned long long)s.ready,
       (unsigned long long)s.checks_ok, (unsigned long long)s.audits_ok, (unsigned long long)s.rejected[0],
       (unsigned long long)s.rejected[1], (unsigned long long)s.rejected[2], kRejectName[0], kRejectName[1],
       kRejectName[2], (unsigned long long)s.lost, (unsigned long long)s.lost_timeout, s.err_max_ok, (unsigned long long)s.evict_destroy,
       (unsigned long long)s.evict_write, (unsigned long long)s.evict_lru, (unsigned long long)s.compactions,
-      double(s.compact_saved) / 1048576.0);
+      double(s.compact_saved) / 1048576.0, double(as_reserved()) / 1048576.0,
+      double(live) / 1048576.0, double(as_bytes() - live) / 1048576.0,
+      (unsigned long long)g_chunks_freed, double(g_chunk_bytes_freed) / 1048576.0);
+  g_chunks_freed = g_chunk_bytes_freed = 0;
   log("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,

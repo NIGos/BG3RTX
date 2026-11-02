@@ -873,3 +873,32 @@ Full rt_stats parity windows raise RT GPU cost from 1.03 to ~19.4 ms: never incl
 them in speed gates. Check: inn save, static view, toggle rt_alpha_stream live, compare
 [cpu] pre-draw/capture and rendered fps with all stats off. See PROGRESS_CODEX and
 docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
+
+### BLAS chunk reclamation (2026-11-02, codex-as-compact, offline candidate)
+
+- Each chunk tracks live bytes separately from occupied bytes. Occupied bytes include
+  pending frees until at least 6 presents, the frame + 2 GPU fence, and retirement of
+  every old scene slot. The 240-present timeout no longer releases these ranges.
+- Every wholly empty chunk goes through the existing deferred buffer/memory destruction
+  queue on present, regardless of `rt_vram_guard` or its low/cap state. Slots stay in the
+  vector and are reused in place; chunk indices never move. Diagnostic kept AS handles
+  pin their own chunk, including after `rt_as_keep` is switched off, until destroyed.
+- New BLAS ranges use first-fit within chunks tried from fullest to emptiest (occupied /
+  capacity; stable index tie break). Pending bytes count as occupied, but cannot be reused.
+  This concentrates future allocations and lets draining chunks empty without GPU copies.
+- General relocation is deferred: the existing COMPACT copy/swap completion path owns
+  cached meshes only. Dynamic refit BLAS, cascade and sun clone owners share this allocator;
+  moving them needs ownership and recorded-copy lifetime handling beyond the small fix.
+  No reserved/live trigger ratio is introduced for this permitted fallback.
+- TLAS instance records take current mesh/dynamic/cascade addresses each build. The BLAS
+  address enters the TLAS signature; a changed signature forces BUILD instead of UPDATE.
+  Older TLAS slots still need the retirement checks above. Existing one-time mesh
+  compaction remains unchanged and benefits from the new placement policy.
+- `[bvh] mesh cache` reports active chunk count, reserved/live/pending MB and window freed
+  chunk count/MB, plus `relocated 0` (general relocation). Existing compactions stay separate.
+  Freed means handed to deferred destruction; physical heap release follows that queue.
+  `[mem] ours` live now excludes pending ranges; diagnostic-pinned chunks are not yieldable.
+- No key, ABI, shader or variant changes (request delta 0). No added GPU commands. GPU ms
+  and actual reclaimed VRAM remain unmeasured: no game or GPU test was run. Restart the
+  game for the layer change, then compare these counters in a separately authorized run
+  of the S8 low long view, including a scene transition and a GPU backlog window.
