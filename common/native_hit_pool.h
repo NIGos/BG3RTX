@@ -8,6 +8,7 @@
 // bindings are kept in a record that outlives the frame.
 // Pure policy on plain numbers; the layer (hit_material.cpp, bvhsplit.cpp) keeps every
 // Vulkan object. tests/native_hit_pool_test.cpp pins it.
+#include "native_hit_generated.h"
 #include "native_hit_qualify.h"
 #include "native_hit_records.h"
 #include "native_vt_surface.h"
@@ -21,9 +22,13 @@ namespace bg3::native_hit::pool {
 // Today: VS 2d2ac3c3 with FS 14678345 (STI), 3df678c0 (reflectance 0.5) or 81657854
 // (reflectance mix(0.5, normal x, p)); VS 54df894a with FS 613ead9c; VS c32ce535 with FS 9064a6bd. Recipes without a capture path (native_vt::CaptureNone:
 // their VS is not class A, so they are never pooled) are not pool pairs.
-inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs) {
+// generated (rt_hit_material_generated): also the generated pool rows of common/native_hit_generated.h (their FSs are never
+// audited recipes, so an audited pair resolves exactly as with the key off).
+inline const native_vt::Recipe* pool_recipe(uint64_t vs, uint64_t fs, bool generated = false) {
   const auto* r = native_vt::recipe(fs);
-  return r && r->vs == vs && vs != 0x3812bc980438747full && r->capture == native_vt::CapturePool ? r : nullptr;
+  if (r && r->vs == vs && vs != 0x3812bc980438747full && r->capture == native_vt::CapturePool) return r;
+  const auto* g = generated && !r ? native_hit::generated::row(vs, fs) : nullptr;
+  return g && g->recipe.capture == native_vt::CapturePool ? &g->recipe : nullptr;
 }
 // An audited FS decode whose pair has no pool path (CaptureNone, or CaptureDraw while
 // rt_hit_material_instanced is off): counted in "[hit material families]", never pooled.

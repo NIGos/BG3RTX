@@ -9,6 +9,8 @@ bool enabled();
 // rt_hit_material_instanced at startup: the G-buffer VS of an instanced wind / 2S pair gets the
 // N/B/T XFB frame patch (common/native_hit_instanced.h).
 bool instanced_patch_vs(uint64_t vs);
+// Its N location (UV one below); rt_hit_material_generated at startup: also the generated VSs (native_hit_generated.h).
+uint32_t instanced_frame_location(uint64_t vs);
 void device_created(DeviceData*);
 void device_destroyed(DeviceData*);
 void prepass_begin(VkCommandBuffer);

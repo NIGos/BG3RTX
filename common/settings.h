@@ -444,7 +444,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 244 keys of bg3rtx.ini, in file order.
+// 245 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -574,6 +574,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
+    {"rt_hit_material_generated", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_omm_reference", "0"},
@@ -774,6 +775,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).
   if (key == "rt_hit_material_instanced") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
+  if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
                                          "rt_hit_material_wind_rgb"};
