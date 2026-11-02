@@ -87,6 +87,10 @@ foreach ($job in $jobs) {
   Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
     [bool]($er -match "phases=$($plan.Count)\\b") -and [bool]($er -match 'pointer centred in owned foreground game') -and
     -not @($traceLines | Where-Object { $t = $_; -not @($er | Where-Object { $t -match $_ }).Count }).Count)
+  # The runner prints "[motion-trace] phase=..." only for phases with trace_at (scripts/auto-run.ps1): an expect
+  # for a phase without one never matches (ef1-af-em-fg2 2026-11-02 was INVALID for that).
+  $orphan = @($er | Where-Object { $e = $_; $e -match 'motion-trace' -and -not @($traceLines | Where-Object { $_ -match $e }).Count })
+  Check "${n}: every expect_runner [motion-trace] line names a phase with trace_at$(if ($orphan.Count) { ': not ' + ($orphan -join ' | ') })" (-not $orphan.Count)
   Check "${n}: foreground single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
     -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' -and
     @($job.args) -contains '-Move' -and $job.set -match '(^|,)fg=2(,|$)' -and -not $job.session -and $job.hold -ge 90 -and
