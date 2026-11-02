@@ -10,7 +10,7 @@ Contents: 1 status, 2 native alpha predicate, 3 CPU groundwork, 4 EXT backend,
 ## 1. Status: isolated runtime candidate
 
 Default rt_omm=0, Experimental GUI off in all presets. Both DLLs must match
-(ABI 21 today, `BG3RTX_ABI_VERSION` in `common/host_api.h`). Main/user build is unchanged. No current game/GPU validation
+(ABI 25 on 2026-11-02, `BG3RTX_ABI_VERSION` in `common/host_api.h`; OMM needs no ABI change since 19). Main/user build is unchanged. No current game/GPU validation
 or measured acceleration/cost is claimed. Restart is required to request the extension.
 
 The isolated renderer now wires alpha bindings 10/11 (original micromap-free
@@ -45,10 +45,55 @@ byte-identical; 198 OMM wrappers compile/validate. Wrappers retain native DXC 16
 flags. Short owned baseline extraction fixes Windows MAX_PATH without changing
 the archived baseline source. No GPU execution follows from this shader gate.
 
+2026-11-02 re-check on main 566db3d (ABI 25): both DLLs build, 96/96 CTests, the
+OMM variants compile, the key-off shaders are byte-identical (section 1a). Nothing
+was broken. Observables added for the live qualification (section 1a).
+
 OPEN: actual renderer descriptor/GPU traversal validation; nonzero useful known
 coverage; same-ray reference violation counts; energy/movement/FG2 quality;
 capture/build/traversal GPU ms and real residency. All-UNKNOWN or missing RT never
 passes. Current code is an unqualified opt-in candidate, not a shipped speedup.
+READY_FOR_LIVE: tools/live_batches/omm_qual (S3 camp, 2 launches, about 7 min), not
+authorized, not run.
+
+**Expected outcome (offline, before the run).** Known coverage is about 0 at camp,
+so no speedup is expected. (1) Only one audited recipe can bake
+(`omm_native_plain_recipes.h` fs 16ac1391689391d0: a plain texture, no VT, 90-6340
+triangles per frame in the 2026-10-30 logs); VT foliage is not eligible. (2) A
+known state needs alpha exactly 1 under the triangle at EVERY mip down to 1x1,
+because the cone can reach any mip and the stochastic hull is [0,1]: a cutout
+texture's coarsest mip is fractional, so its triangles stay UNKNOWN; known
+transparent never occurs. (3) When any range is attached, `rt_omm_scene_current()`
+makes five per-lane atomics into the host-visible content-epoch buffer on every ray
+query (the host-atomics pattern, 7-15 ms in 2026-11). If the run confirms ~0
+coverage, reject rt_omm for Ultra; a useful version needs a VT provider, a
+footprint-bounded mip domain and a device-local guard first.
+
+### 1a. Live observables (2026-11-02)
+- `[omm] last N builds` (layer, every rt_timing_frames builds while the backend is
+  available): alpha draws / native plain captures; alpha-tested triangles per build
+  (static, per-draw), with a capture, with an attached micromap BLAS (and the % of
+  alpha-tested); variants baked / reused / declined; accelerated scenes recorded /
+  declined; micromap + BLAS bytes (requested), bake input bytes; cumulative baked
+  microtriangles: known opaque, known transparent, unknown with a complete proof,
+  unknown for a missing proof (omm_bake_plain.hlsl `bakeStats`, device-local,
+  wave-reduced, copied to a transfer-only readback after each bake).
+- `omm check (N frames)` (core, rt_stats=1, rtStats 435..442): the OMM variants'
+  `rt_visibility` and `rt_closest_hit` trace again in the reference scene when the
+  accelerated one was current; compared queries, queries without a current
+  accelerated scene, visibility / closest-hit violations (must be 0; closest hit
+  compares t exactly), unknown pairs excluded, candidates in each trace. The
+  reference trace counts nothing in the ordinary counters. `rt_closest` (t only) and
+  `rt_closest_debug` are not checked.
+- `rt_omm_reference` (live, ls_flags bit 28, logged as `gi: rt_omm_reference`):
+  the guard still runs but every OMM query traces the reference scene: the
+  in-launch A/B of the traversal saving.
+- Cost: the existing `rt passes: GPU cost`, `gi: GPU cost`, `[rt] scene build GPU`
+  (bake, micromap BLAS and clone TLAS sit in its TLAS part) and `[mem]` lines. The
+  content-epoch dispatches at image writes run in the game's command buffers and
+  are in no timed pass.
+- Key-off identity: with rt_omm=0 the ordinary shaders compile to the same SPIR-V
+  (the traced bodies keep their names through `RT_OMM_TRACED`).
 Only an explicitly authorized queue batch may test it, with automated A/B/settings,
 input/captures/restoration. No manual INI/toggles are requested.
 

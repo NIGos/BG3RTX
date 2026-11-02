@@ -13,6 +13,19 @@ struct BakePush {
 [[vk::binding(2, 0)]] RWByteAddressBuffer opacityData;
 [[vk::binding(3, 0)]] RWByteAddressBuffer audit;
 [[vk::binding(4, 0)]] globallycoherent RWByteAddressBuffer contentEpochs;
+// Diagnostics (layer/omm_bake.cpp, device-local, wave-reduced, cumulative over all bakes):
+// uint 0 primitives baked, 1 known opaque, 2 known transparent, 3 unknown with a complete
+// proof (the alpha domain crosses the cut). The rest of 0 stayed unknown for a missing proof.
+[[vk::binding(5, 0)]] RWByteAddressBuffer bakeStats;
+void count_states(uint state, bool proven) {
+  const uint o = WaveActiveCountBits(state == 1u), t = WaveActiveCountBits(state == 0u);
+  const uint u = WaveActiveCountBits(state == 3u && proven);
+  if (WaveIsFirstLane()) {
+    if (o) bakeStats.InterlockedAdd(4u, o);
+    if (t) bakeStats.InterlockedAdd(8u, t);
+    if (u) bakeStats.InterlockedAdd(12u, u);
+  }
+}
 static const uint kOpacityDataOffset = 256u;
 uint atomic_epoch(uint offset) { uint value; contentEpochs.InterlockedOr(offset, 0u, value); return value; }
 bool content_matches(uint4 stamp) {
@@ -63,6 +76,7 @@ int wrap(int x, uint extent) {
 void main(uint3 tid : SV_DispatchThreadID) {
   const uint primitive = tid.x;
   if (primitive >= pc.triangles) return;
+  { const uint n = WaveActiveCountBits(true); if (WaveIsFirstLane()) bakeStats.InterlockedAdd(0u, n); }
   uint state = 3u; // UnknownOpaque, NEVER a two-state opaque substitute.
   float lower = 0.0, upper = 1.0;
   uint visited = 0, reason = 1u;
@@ -127,7 +141,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // hash zero); one is opaque. Never shift a cutoff/hash for acceleration.
     state = lower == 1.0 && upper == 1.0 ? 1u :
             lower == 0.0 && upper == 0.0 && pc.threshold_lo > 0.0 ? 0u : 3u;
-    if (!content_matches(stamp)) { uint old; opacityData.InterlockedOr(8u, 1u, old); state = 3u; }
+    const bool stale = !content_matches(stamp);
+    if (stale) { uint old; opacityData.InterlockedOr(8u, 1u, old); state = 3u; }
+    count_states(state, !stale);
     opacityData.Store(kOpacityDataOffset + primitive * 4u, state);
     audit.Store4(primitive * 16u, uint4(asuint(lower), asuint(upper), visited, 0u));
     return;
@@ -143,7 +159,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
   }
   // Native >=: transparent requires STRICT upper<threshold_lo.
   state = lower >= pc.threshold_hi ? 1u : upper < pc.threshold_lo ? 0u : 3u;
-  if (!content_matches(stamp)) { uint old; opacityData.InterlockedOr(8u, 1u, old); state = 3u; }
+  const bool stale = !content_matches(stamp);
+  if (stale) { uint old; opacityData.InterlockedOr(8u, 1u, old); state = 3u; }
+  count_states(state, !stale);
   opacityData.Store(kOpacityDataOffset + primitive * 4u, state);
   audit.Store4(primitive * 16u, uint4(asuint(lower), asuint(upper), visited, 0u));
 }

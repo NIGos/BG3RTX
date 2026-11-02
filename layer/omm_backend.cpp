@@ -162,6 +162,7 @@ bool available() {if(!cfg_hot(CfgHot::rt_omm))return false;std::lock_guard lock(
 // rt_omm off (the default) answers before the lock: called per draw and per BLAS build.
 bool available_for(DeviceData* expected) {if(!expected || !cfg_hot(CfgHot::rt_omm))return false;std::lock_guard lock(mutex);return expected==device && enabled && !retained;}
 bool has_resources() {std::lock_guard lock(mutex);return !resources.empty();}
+VkDeviceSize live_bytes() {std::lock_guard lock(mutex);return bytesLive;}
 void retain_until_idle() {std::lock_guard lock(mutex);if(!retained)log("[omm] resource provenance/completion unavailable; retaining until device idle");retained=true;}
 void reserve_submissions(std::span<const uint64_t> tickets) {
   std::lock_guard lock(mutex);

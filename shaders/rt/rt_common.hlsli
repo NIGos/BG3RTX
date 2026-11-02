@@ -36,7 +36,16 @@ static const uint kGuardLightList = 118u, kGuardSet1 = 119u, kGuardRay = 120u, k
 // Such a query is aborted with nothing (or not the closest hit) committed: its answer
 // is UNKNOWN (kRtUnknown below), never "lit" or "miss".
 static const uint kMaxCandidates = 4096u;
-void guard_count(uint k) { rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
+#ifdef RT_OMM_SCENE
+// The OMM same-ray check (rt_stats=1, docs/P4_OMM.md 9.5): its second, reference trace
+// counts nothing in the ordinary counters (guards, unknown, alpha candidates).
+static bool g_omm_reference_pass = false;
+#endif
+void guard_count(uint k) {
+#ifdef RT_OMM_SCENE
+  if (g_omm_reference_pass) return;
+#endif
+  rtStats.InterlockedAdd((k * 64u) * 4u, 1u); }
 // QA (rt_max_candidates, Push::rt_max_cand): a lower cap, to force aborts in game and
 // check every pass's fallback. 0 (the default) means kMaxCandidates; never above it.
 uint rt_max_candidates() { return pc.rt_max_cand != 0u ? min(pc.rt_max_cand, kMaxCandidates) : kMaxCandidates; }
@@ -79,7 +88,11 @@ void stat_add(uint index, bool cond, uint bin) {
 
 // One query ended by the candidate cap with its answer unknown (wave-reduced: under a
 // forced low cap whole waves abort at once).
-void rt_count_unknown(uint bin) { stat_add(kStatUnknown + min(g_rt_pass, kRtPassGI), true, bin); }
+void rt_count_unknown(uint bin) {
+#ifdef RT_OMM_SCENE
+  if (g_omm_reference_pass) return;
+#endif
+  stat_add(kStatUnknown + min(g_rt_pass, kRtPassGI), true, bin); }
 
 // Per-draw records: 16-byte header (uint count), then 208 bytes per draw,
 // sorted by first_tri (layer/host.h AlphaRec).
@@ -116,6 +129,11 @@ static const float kOriginNoHit = 1000.0;
 #endif
 #ifdef RT_OMM_SCENE
 #include "omm_scene_guard.hlsli"
+// The traced bodies of rt_visibility / rt_closest_hit; in OMM variants a wrapper of the
+// ordinary name adds the same-ray reference check (below each body).
+#define RT_OMM_TRACED(name) name##_traced
+#else
+#define RT_OMM_TRACED(name) name
 #endif
 #ifdef RT_SCENE_REBASE
 // No runtime variant defines RT_SCENE_REBASE since rt_scene_rebase was removed (2026-10-31,
@@ -292,6 +310,9 @@ static uint g_rt_class = 0u;
 //   log2 mip-0 texels); 14 stochastic (level > 1); 15 vt page from a coarser level
 //   than requested (not resident at the cone's mip).
 void alpha_stat(uint k, bool cond, uint bin) {
+#ifdef RT_OMM_SCENE
+  if (g_omm_reference_pass) return;
+#endif
   if (pc.rt_stats != 0u) stat_add(80u + 16u * g_rt_class + k, cond, bin);
 }
 
@@ -910,7 +931,7 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 // if the candidate cap aborted the query first (a hit committed before the abort is a
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
-uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
+uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
@@ -946,7 +967,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_scene_current())
+  if (rt_omm_use_accelerated())
   q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
   else q.TraceRayInline(gOmmReferenceScene, 0, RT_VIS_MASK, r);
 #else
@@ -995,6 +1016,9 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_OMM_SCENE
+  g_omm_cand = cand_n;
+#endif
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
@@ -1005,6 +1029,26 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   }
   return kRtLit;
 }
+
+#ifdef RT_OMM_SCENE
+// rt_stats=1: the same ray once more against the reference scene (no micromaps) when the
+// accelerated scene was used; the answer returned is always the first one.
+uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
+  g_omm_traced = false; g_omm_current = false;
+  const uint a = rt_visibility_traced(o, d, tmax, cone);
+  if (pc.rt_stats != 0u && g_omm_traced) {
+    const bool current = g_omm_current; const uint ca = g_omm_cand;
+    uint b = a, cb = ca;
+    if (current) {
+      g_omm_reference_pass = true;
+      b = rt_visibility_traced(o, d, tmax, cone);
+      g_omm_reference_pass = false; cb = g_omm_cand;
+    }
+    rt_omm_check(current, false, a == kRtUnknown || b == kRtUnknown, a != b, ca, cb, asuint(o.x) ^ asuint(o.z));
+  }
+  return a;
+}
+#endif
 
 // Any alpha-tested hit within [0, tmax]. An unknown (aborted) query counts as occluded,
 // never as a light leak; callers that have the game's own visibility use rt_visibility.
@@ -1115,7 +1159,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_scene_current())
+  if (rt_omm_use_accelerated())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
 #else
@@ -1176,7 +1220,7 @@ struct RtHit { float t; uint geom; uint prim; uint inst; float3x4 o2w; bool abor
 #endif
 #endif
 };
-RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
+RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
 #if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
                      ,bool camera_primary=false
 #endif
@@ -1213,7 +1257,7 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_scene_current())
+  if (rt_omm_use_accelerated())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
 #else
@@ -1243,6 +1287,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
 #endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_OMM_SCENE
+  g_omm_cand = cand_n;
+#endif
 #ifdef RT_NATIVE_TILESET
   aborted=aborted||gTilesetUnknown;
 #endif
@@ -1273,6 +1320,38 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
 #endif
   return h;
 }
+#ifdef RT_OMM_SCENE
+RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
+                     ,bool camera_primary=false
+#endif
+                     ) {
+  g_omm_traced = false; g_omm_current = false;
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
+  const RtHit a = rt_closest_hit_traced(o, d, tmax, cone, camera_primary);
+#else
+  const RtHit a = rt_closest_hit_traced(o, d, tmax, cone);
+#endif
+  if (pc.rt_stats != 0u && g_omm_traced) {
+    const bool current = g_omm_current; const uint ca = g_omm_cand;
+    RtHit b = a; uint cb = ca;
+    if (current) {
+      g_omm_reference_pass = true;
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_SCALP)
+      b = rt_closest_hit_traced(o, d, tmax, cone, camera_primary);
+#else
+      b = rt_closest_hit_traced(o, d, tmax, cone);
+#endif
+      g_omm_reference_pass = false; cb = g_omm_cand;
+    }
+    // Exact: the same triangles in both scenes, so the same closest t (a tie between two
+    // triangles at one t may pick either; t is compared, not the triangle).
+    rt_omm_check(current, true, a.aborted || b.aborted, (a.t < 0.0) != (b.t < 0.0) || a.t != b.t, ca, cb,
+                 asuint(o.x) ^ asuint(o.z));
+  }
+  return a;
+}
+#endif
 
 // Legacy: unnormalised geometric normal of a triangle of the soup BLAS (the soups
 // are camera-relative, the lighting space).
@@ -1432,7 +1511,7 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.TMin = 0.0;
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
-  if (rt_omm_scene_current())
+  if (rt_omm_use_accelerated())
   q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
   else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
 #else

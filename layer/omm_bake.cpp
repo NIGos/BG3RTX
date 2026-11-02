@@ -42,6 +42,12 @@ std::mutex bake_mutex;
 std::shared_ptr<Pipeline> pipeline;
 std::vector<std::shared_ptr<Inputs>> failed_recordings;
 bool producer_failed{};
+// Diagnostic state counters (omm_bake_plain.hlsl bakeStats): device-local, zeroed by the first
+// recording that allocates them, copied after every bake into a mapped readback (transfer only).
+// A first recording the game drops leaves them as the allocation found them (WDDM zeroes VRAM).
+std::unique_ptr<Buffer> stats_device, stats_host;
+constexpr VkDeviceSize kStatsBytes = 16;
+bool stats_zero_pending{};
 
 bool allocate(DeviceData* dd, Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) {
   out.dd=dd; out.bytes=size;
@@ -76,11 +82,11 @@ bool ensure_pipeline(DeviceData* dd) {
       !shader_get("rt/omm_bake_plain.hlsl","init_stamp","cs_6_6",&stamp)) return false;
   if (pipeline && pipeline->dd==dd && pipeline->generation==blob.generation && pipeline->stamp_generation==stamp.generation) return true;
   auto fresh=std::make_shared<Pipeline>(); fresh->dd=dd;
-  VkDescriptorSetLayoutBinding b[5]{};
-  for (uint32_t i=0;i<5;++i) b[i]={i,i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+  VkDescriptorSetLayoutBinding b[6]{};
+  for (uint32_t i=0;i<6;++i) b[i]={i,i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                    1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; dci.bindingCount=5; dci.pBindings=b;
+  dci.flags=VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; dci.bindingCount=6; dci.pBindings=b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device,&dci,nullptr,&fresh->descriptors)!=VK_SUCCESS) return false;
   VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(PlainBakePush)};
   VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -157,6 +163,13 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
       !allocate(dd,inputs->audit,VkDeviceSize(in.push.triangles)*16,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT,false)) return 0;
   std::memcpy(inputs->triangles.mapped,triangles.data(),triangles.size()*sizeof(Triangle));
+  if(!stats_device) {
+    auto device=std::make_unique<Buffer>(),host=std::make_unique<Buffer>();
+    if(!allocate(dd,*device,kStatsBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,false) ||
+       !allocate(dd,*host,kStatsBytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT,true)) return 0;
+    std::memset(host->mapped,0,size_t(kStatsBytes));
+    stats_device=std::move(device);stats_host=std::move(host);stats_zero_pending=true;
+  }
   // Native Submit2 signal stages must include these additional texture reads,
   // even if the later EXT build fails and leaves an orphan recording.
   if (!mark_content_dispatch(cmd)) return 0;
@@ -171,21 +184,23 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
     dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
                              0,1,&copied,0,nullptr,0,nullptr);
   }
+  if(stats_zero_pending){dd->vk.CmdFillBuffer(cmd,stats_device->handle,0,kStatsBytes,0);stats_zero_pending=false;}
   VkMemoryBarrier producer{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  producer.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;producer.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  producer.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;producer.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;
   dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                            0,1,&producer,0,nullptr,0,nullptr);
-  VkDescriptorBufferInfo buffers[4]{{in.vertices,0,in.push.source_bytes},{inputs->data.handle,0,inputs->data.bytes},
-                                  {inputs->audit.handle,0,inputs->audit.bytes},{source.buffer,0,source.bytes}};
+  VkDescriptorBufferInfo buffers[5]{{in.vertices,0,in.push.source_bytes},{inputs->data.handle,0,inputs->data.bytes},
+                                  {inputs->audit.handle,0,inputs->audit.bytes},{source.buffer,0,source.bytes},
+                                  {stats_device->handle,0,kStatsBytes}};
   VkDescriptorImageInfo image{};image.imageView=in.mask;image.imageLayout=in.layout;
-  VkWriteDescriptorSet writes[5]{};
-  for (uint32_t i=0;i<5;++i) {
+  VkWriteDescriptorSet writes[6]{};
+  for (uint32_t i=0;i<6;++i) {
     writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;writes[i].descriptorCount=1;
     writes[i].descriptorType=i==1?VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     if (i==1) writes[i].pImageInfo=&image; else writes[i].pBufferInfo=&buffers[i==0?0:i-1];
   }
   dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->stamp);
-  dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->layout,0,5,writes);
+  dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->layout,0,6,writes);
   dd->vk.CmdPushConstants(cmd,pipeline->layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),&push);
   dd->vk.CmdDispatch(cmd,1,1,1);
   VkMemoryBarrier stampBarrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -193,6 +208,13 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
   dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&stampBarrier,0,nullptr,0,nullptr);
   dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline->handle);
   dd->vk.CmdDispatch(cmd,(in.push.triangles+63)/64,1,1);
+  {
+    VkMemoryBarrier counted{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    counted.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;counted.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&counted,0,nullptr,0,nullptr);
+    const VkBufferCopy copy{0,0,kStatsBytes};
+    dd->vk.CmdCopyBuffer(cmd,stats_device->handle,stats_host->handle,1,&copy);
+  }
   Input build{};build.descriptors=triangles;build.data=inputs->data.address+256;build.triangles=inputs->triangles.address;
   build.dataBytes=inputs->data.bytes-256;build.triangleBytes=inputs->triangles.bytes;
   build.dataUsage=buildInput|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -209,11 +231,20 @@ Ticket record_plain(VkCommandBuffer cmd,const PlainInput& in,PlainOutput* output
                                 256,source.imageId,source.viewId,uint32_t(source.imageOffset)};
   return ticket;
 }
+uint64_t bake_input_bytes() {return input_bytes.load(std::memory_order_relaxed);}
+bool bake_state_totals(uint64_t out[4]) {
+  std::lock_guard lock(bake_mutex);
+  if(!stats_host || !stats_host->mapped)return false;
+  uint32_t v[4]{};std::memcpy(v,stats_host->mapped,sizeof v);
+  for(int i=0;i<4;++i)out[i]=v[i];
+  return true;
+}
 void bake_device_destroyed(DeviceData* dd) {
   std::lock_guard lock(bake_mutex);
-  if ((pipeline && pipeline->dd==dd) || !failed_recordings.empty()) {
+  if ((pipeline && pipeline->dd==dd) || !failed_recordings.empty() || (stats_device && stats_device->dd==dd)) {
     dd->vk.DeviceWaitIdle(dd->device);
     failed_recordings.clear();pipeline.reset();producer_failed=false;
+    stats_device.reset();stats_host.reset();stats_zero_pending=false;
   }
 }
 }

@@ -1224,6 +1224,12 @@ static_assert(kRfGiFirst == 419, "rt_reflections.hlsl rf_hit_gi counters copied 
 // over x256, rigid offset. Logged as "hit material instanced clip wind RGB 2S".
 constexpr uint32_t kHitClip3First = kRfGiFirst + kRfGiCount, kHitClip3Count = 8;
 static_assert(kHitClip3First == 427, "native_hit_material.hlsli hit_material_count family 3 base 427");
+// [435..442] OMM same-ray check (rt/omm_scene_guard.hlsli kOmmCheckFirst, RT_OMM_SCENE variants, rt_stats=1):
+// visibility / closest-hit queries traced in both the accelerated and the reference scene, queries whose
+// accelerated scene was not current, visibility / closest-hit violations, pairs with an unknown answer,
+// candidates of the compared queries in the accelerated / reference trace. Logged as "omm check".
+constexpr uint32_t kOmmCheckFirst = kHitClip3First + kHitClip3Count, kOmmCheckCount = 8;
+static_assert(kOmmCheckFirst == 435, "omm_scene_guard.hlsli kOmmCheckFirst 435");
 // rtStats counter map (64 bins x uint each; a new range starts at the previous kStatsCounters and moves it):
 //   0..15 core RT/GI (pixels, primary check, hybrid GI tiers)  16..38 D-LS      39..47 rt_shadow materials
 //   48..63 D-RF                 64..75 RT audit fixes          80..111 alpha candidates   112..117 ls_check
@@ -1234,8 +1240,9 @@ static_assert(kHitClip3First == 427, "native_hit_material.hlsli hit_material_cou
 //   331..349 hit emission       350..355 ls exact-k            356..371 instanced clip      372..382 gi_far
 //   383..384 rf box part        385..416 ls box (device-local) 417..418 GI hit non-finite
 //   419..426 rf hit gi (device-local)          427..434 instanced clip wind RGB 2S
+//   435..442 omm same-ray check
 //   (448..511: frame_replay HM_BLOCKERS only, never in game)
-constexpr uint32_t kStatsCounters = kHitClip3First + kHitClip3Count;
+constexpr uint32_t kStatsCounters = kOmmCheckFirst + kOmmCheckCount;
 static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kStatsCounters <= 448, "frame_replay's HM_BLOCKERS slots start at counter 448");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
@@ -1554,6 +1561,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
               "rejected %llu = %.4f%% of all lookups",g_stats_n,w[0],w[1],w[2],w[3],w[4],w[5],w[6],w[7],a[0],a[1],a[3],a[4]+a[5]+a[6],a[7],
               rejected,100.0*double(rejected)/double(material_total));
   }
+  // OMM same-ray check: violations must be 0; the candidate ratio is the traversal work the micromaps removed.
+  if(t[kOmmCheckFirst]|t[kOmmCheckFirst+1]|t[kOmmCheckFirst+2]){const uint64_t* o=t+kOmmCheckFirst;
+    host->log("omm check (%u frames): compared visibility %llu, closest hit %llu; accelerated scene not current %llu; "
+              "violations visibility %llu, closest hit %llu; unknown pairs excluded %llu; candidates accelerated %llu, reference %llu (%.4f%% fewer); rt_omm_reference %d",
+              g_stats_n,o[0],o[1],o[2],o[3],o[4],o[5],o[6],o[7],o[7]?100.0*(double(o[7])-double(o[6]))/double(o[7]):0.0,host->cfg_int("rt_omm_reference",0));}
   if(material_total && t[kHitClip3First]){
     const uint64_t* r=t+kHitClip3First;const uint64_t rejected=r[3]+r[4]+r[5]+r[6];
     host->log("hit material instanced clip wind RGB 2S (%u frames): checked %llu, bit-exact %llu, UV differs %llu, beyond x1-16 %llu, x16-256 %llu, over x256 %llu, "
@@ -1906,6 +1918,16 @@ Push make_push() {
   // are traced too (to the end of their light-side fade-in), and the shadow-mapped ones only over the
   // segment their game shadow view covers. Only the LS_BOX variants read it.
   pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 ? (1u << 27) : 0u;
+  // Bit 28: rt_omm_reference (live A/B, rt/omm_scene_guard.hlsli): RT_OMM_SCENE variants keep the scene
+  // guard but trace the reference scene (no micromaps). Only those variants read it.
+  {
+    static int last_omm_reference = -1;
+    const int omm_reference = host->cfg_int("rt_omm_reference", 0) ? 1 : 0;
+    if (omm_reference != last_omm_reference && (last_omm_reference >= 0 || omm_reference))
+      host->log("gi: rt_omm_reference %d (OMM variants trace the %s scene)", omm_reference, omm_reference ? "reference" : "accelerated");
+    last_omm_reference = omm_reference;
+    pc.ls_flags |= omm_reference ? (1u << 28) : 0u;
+  }
   // hit_ao_rays: AO rays at those hits (native_hit_ao; 0 = AO 1, the old L_b).
   pc.rt_ao_rays = uint32_t((std::min)((std::max)(host->cfg_int("hit_ao_rays", 2), 0), 8));
   pc.rt_backlit = host->cfg_int("rt_backlit", 1) ? 1u : 0u;

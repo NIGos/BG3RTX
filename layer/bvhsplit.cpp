@@ -606,6 +606,12 @@ struct Stats {
   // against the same frame's raster capture of that draw (docs/INN_ROTATION_MATCH.md).
   uint64_t audits_moving_ok = 0, audits_moving_failed = 0;
   float err_max_moving = 0;
+  // rt_omm (docs/P4_OMM.md 1): alpha draws seen at classify / with an audited native plain capture;
+  // alpha-tested triangles per build (static pool instances, per-draw BLAS), of the static ones with a
+  // capture, and the ones whose instance range got an attached micromap BLAS; variants baked / reused /
+  // declined, accelerated scene builds recorded / declined.
+  uint64_t omm_draws = 0, omm_captured = 0, omm_alpha_static_tris = 0, omm_alpha_dyn_tris = 0, omm_capture_tris = 0;
+  uint64_t omm_range_tris = 0, omm_baked = 0, omm_reused = 0, omm_declined = 0, omm_scenes = 0, omm_scene_declined = 0;
 };
 Stats g_st;
 std::mutex g_st_mu;   // fixup counters (submit thread)
@@ -1103,9 +1109,11 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   // pipeline and cannot recover this material's sampler/descriptor identity.
   if(d.alpha && ip.uv_ok && cfg_hot(CfgHot::rt_omm) && omm::available_for(g_dd)) {
     AlphaFs fs{};AlphaSnapshot source{};omm::NativePlainCapture captured{};
+    ++g_st.omm_draws;
     if(alpha_lookup(s->fs,&fs) && alpha_capture_source(cmd,fs,0,fd.tris_per_instance,&source) &&
-       omm::capture_native_plain(cmd,fs,d.vs,source,&captured))
-      fd.omm_material=std::make_shared<omm::NativePlainCapture>(std::move(captured));
+       omm::capture_native_plain(cmd,fs,d.vs,source,&captured)) {
+      fd.omm_material=std::make_shared<omm::NativePlainCapture>(std::move(captured));++g_st.omm_captured;
+    }
   }
   if (g_capture_all_meshes) return BVH_CAPTURE;
   auto it = g_meshes.find(mk);
@@ -1178,13 +1186,15 @@ static NativeOmmVariant* native_omm_variant(VkCommandBuffer cmd,uint64_t record,
     if(producer_state<0 || producer_state==2) {
       omm::release_ticket(it->baked.ticket);mesh.omm->erase(it);break;
     }
-    if(!omm::cached_bake_ready(it->record,record,producer_state))return nullptr;
-    return omm::register_ticket_use(cmd,it->baked.ticket)?&*it:nullptr;
+    if(!omm::cached_bake_ready(it->record,record,producer_state)){++g_st.omm_declined;return nullptr;}
+    if(!omm::register_ticket_use(cmd,it->baked.ticket)){++g_st.omm_declined;return nullptr;}
+    ++g_st.omm_reused;return &*it;
   }
   // Own only this mesh's immutable post-VS range, not a whole historic pool.
   // The producer records the copy after validating/allocating all inputs, so a
   // rejected material cannot leave a command referring to a freed snapshot.
   omm::PlainVertices vertices{};omm::PlainInput input{};
+  ++g_st.omm_declined;   // undone below once the variant exists
   if(!omm::allocate_plain_vertices(cmd,mesh.pool_size,&vertices) ||
      !omm::make_native_plain_input(cmd,source,vertices.buffer,vertices.bytes,0,stride,mesh.tris,vertices.owner,&input))return nullptr;
   input.copy_source=g_pool.b;input.copy_source_bytes=g_pool.size;input.copy_offset=mesh.pool_off;
@@ -1196,6 +1206,7 @@ static NativeOmmVariant* native_omm_variant(VkCommandBuffer cmd,uint64_t record,
     omm::release_ticket(ticket);return nullptr;
   }
   if(!mesh.omm)mesh.omm=std::make_unique<std::vector<NativeOmmVariant>>();
+  --g_st.omm_declined;++g_st.omm_baked;
   mesh.omm->push_back(fresh);return &mesh.omm->back();
 }
 
@@ -1515,7 +1526,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     const FrameDraw& fd = g_draws[di];
     const Mesh& m = g_meshes[fd.mesh_key];
     const bool alpha = fd.alpha && fd.rec != kNone;
-    if(alpha && alpha_test && fd.omm_material)omm_draws.push_back({di,n,fd.instances});
+    if(alpha && alpha_test) {
+      g_st.omm_alpha_static_tris+=uint64_t(m.tris)*fd.instances;
+      if(fd.omm_material){omm_draws.push_back({di,n,fd.instances});g_st.omm_capture_tris+=uint64_t(m.tris)*fd.instances;}
+    }
     Fixup f{reinterpret_cast<uint8_t*>(inst_out + n), fd.instances, uint32_t(sizeof(VkAccelerationStructureInstanceKHR)),
             {fd.rows[0], fd.rows[1], fd.rows[2]}, {fd.row_stride[0], fd.row_stride[1], fd.row_stride[2]}, true, {}};
     for (int k = 0; k < 3; ++k) load_mapped16(reinterpret_cast<float*>(f.sample + 16 * k), fd.rows[k]);
@@ -1607,6 +1621,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     inst_flags.push_back(in.flags);
     ++n;
     dyn_tris += fd.prims;
+    if(alpha && alpha_test)g_st.omm_alpha_dyn_tris+=fd.prims;
     ++g_st.dyn_draws;
   }
   const uint32_t sun_base_instances = n;
@@ -1981,11 +1996,15 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   for(const auto& draw:omm_draws) {
     const auto& fd=g_draws[draw.draw];auto found=g_meshes.find(fd.mesh_key);
     if(found==g_meshes.end() || !fd.omm_material)continue;
-    if(auto* variant=native_omm_variant(cmd,rec,found->second,*fd.omm_material,stride))
+    if(auto* variant=native_omm_variant(cmd,rec,found->second,*fd.omm_material,stride)) {
       g_omm_ranges[slot].push_back({draw.first,draw.count,fd.mesh_key,found->second.gen,variant->baked,variant->blas,
                                    fd.omm_material->source.buffer,fd.omm_material->source.bytes});
+      g_st.omm_range_tris+=uint64_t(found->second.tris)*draw.count;
+    }
   }
-  if(!g_omm_ranges[slot].empty())build_omm_scene(cmd,slot,n,rbase,rec);
+  if(!g_omm_ranges[slot].empty()) {
+    if(build_omm_scene(cmd,slot,n,rbase,rec))++g_st.omm_scenes;else ++g_st.omm_scene_declined;
+  }
   // Ray queries in later command buffers of this frame (submission order).
   // Everything this build wrote (TLAS, BLAS, the converted soup and the pool the
   // ray queries read through set 1) -> the RT passes in later command buffers.
@@ -2731,6 +2750,25 @@ void bvh_on_present() {
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,
       (unsigned long long)s.fix_stale);
+  if (omm::available_for(g_dd)) {
+    // Coverage (docs/P4_OMM.md 9.3): only instance ranges with an attached micromap BLAS can skip
+    // any-hit work, and only for their known-opaque microtriangles (the bake's states below).
+    const double alpha_tris = double(s.omm_alpha_static_tris + s.omm_alpha_dyn_tris);
+    uint64_t st[4] = {};
+    const bool have_states = omm::bake_state_totals(st);
+    log("[omm] last %llu builds: alpha draws %llu, native plain captures %llu; alpha-tested triangles per build %.3fM "
+        "(static %.3fM, per-draw %.3fM), with a capture %.3fM, attached micromaps %.3fM (%.4f%% of alpha-tested); variants "
+        "baked %llu, reused %llu, declined %llu; accelerated scenes %llu, declined %llu; micromap+BLAS bytes %.2f MB, bake "
+        "inputs %.2f MB; baked microtriangles so far %llu: known opaque %llu, known transparent %llu, unknown %llu%s",
+        (unsigned long long)s.builds, (unsigned long long)s.omm_draws, (unsigned long long)s.omm_captured, alpha_tris / nb * 1e-6,
+        s.omm_alpha_static_tris / nb * 1e-6, s.omm_alpha_dyn_tris / nb * 1e-6, s.omm_capture_tris / nb * 1e-6,
+        s.omm_range_tris / nb * 1e-6, alpha_tris > 0 ? 100.0 * double(s.omm_range_tris) / alpha_tris : 0.0,
+        (unsigned long long)s.omm_baked, (unsigned long long)s.omm_reused, (unsigned long long)s.omm_declined,
+        (unsigned long long)s.omm_scenes, (unsigned long long)s.omm_scene_declined, double(omm::live_bytes()) / 1048576.0,
+        double(omm::bake_input_bytes()) / 1048576.0, (unsigned long long)st[0], (unsigned long long)st[1],
+        (unsigned long long)st[2], (unsigned long long)(st[0] - (std::min)(st[0], st[1] + st[2])),
+        have_states ? "" : " (bake counters not read back yet)");
+  }
   if (s.audits_moving_ok + s.audits_moving_failed)
     log("[bvh] audits while the camera moved: %llu ok, %llu failed, max error %.3f x tolerance "
         "(cached instance matrices at submit against the same frame's raster capture)",
