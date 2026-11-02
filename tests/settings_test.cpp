@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) left
+  CHECK(user_exp == 4);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) and gi_far left
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
@@ -468,9 +468,11 @@ static void test_gui_levels() {
     const Knob* k = find_knob(l.knob);
     CHECK(k != nullptr);
     if (!k) continue;
-    // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" and Emission "Hidden hits" (M4).
+    // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" and Emission "Hidden hits" (M4),
+    // Far-field sun bounce 6 m (gf2 031330).
     const std::string id = l.knob;
-    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission") && !k->dev_only);
+    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission" && id != "exp_gi_far") &&
+          !k->dev_only);
     CHECK(choice_count(*k) == int(l.values.size()));
     for (int c = 0; c < choice_count(*k); ++c) {
       Map m = on_map(*k, c);
@@ -623,7 +625,7 @@ static void test_user_ini_migration() {
   CHECK(v[knob_index("exp_hit_emission")] == 1);
   CHECK(v[knob_index("exp_water")] == 3);
   CHECK(v[knob_index("exp_native_coverage")] == 0);
-  CHECK(v[knob_index("exp_gi_far")] == 0);
+  CHECK(v[knob_index("exp_gi_far")] == 1);     // Ultra's own level since gi_far joined Ultra (6 m)
   CHECK(v[knob_index("roof_shadows")] == 1);   // Ultra
   // The file is already enforceable: nothing it selects lacks a dependency in Ultra.
   auto enforced = v;
