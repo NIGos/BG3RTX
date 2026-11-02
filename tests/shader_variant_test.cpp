@@ -72,13 +72,19 @@ int main(int argc, char** argv) {
     const std::string f(r, std::strchr(r, '?'));
     CHECK(std::filesystem::exists(root / "shaders" / f));
     want.insert(r);
-    want.insert(water_request(r, true));
+    for (int c = 0; c < 4; ++c)   // cascade x native hair (scalp)
+      if (c) want.insert(water_request(r, c & 1, (c & 2) != 0));
   }
   // rt_cascade_casters on the water passes (core/water.cpp): masks on every request, the sun ray with WATER_SHADOWS.
   CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl");
   CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
         "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
+  // Native hair: the scalp/hair defines before the cascade's; off the request is unchanged.
+  CHECK(water_request("rt/water_reflect.hlsl", false, false) == "rt/water_reflect.hlsl");
+  CHECK(water_request("rt/water_reflect.hlsl", false, true) == "rt/water_reflect.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1");
+  CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true, true) ==
+        "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
   // rt_water_rf_edge: every compose request the core makes has its WATER_RF_EDGE twin in kFixedRequests.
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
@@ -91,7 +97,7 @@ int main(int argc, char** argv) {
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
-    want.insert(water_request(b, true));
+    for (int c = 1; c < 4; ++c) want.insert(water_request(b, c & 1, (c & 2) != 0));
   }
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {

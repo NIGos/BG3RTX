@@ -114,9 +114,14 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 // (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the
 // compose's sun ray (WATER_SHADOWS) sees them too (RT_CASCADE_SUN_HIT: g_rt_cascade_ray around it),
 // as gi_hit_sun's sun ray at a GI hit. Off: the request unchanged.
+// Native hair (`scalp`: the layer's scalp capability, as kScalp for gi/): the scene's kind3 scalp and hair
+// records, read through the shared alpha set 1 (rt/rt_common.hlsli RT_NATIVE_SCALP;RT_NATIVE_HAIR), so the
+// water rays see hair as the gi/ passes do. The physical hair origin (RT_HAIR_PHYSICAL_ORIGIN) is a
+// launch-point image of the gi/ receivers (binding 50): water rays start on the water, so it adds nothing.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
-inline std::string water_request(const char* req, bool cascade) {
+inline std::string water_request(const char* req, bool cascade, bool scalp = false) {
   std::string out = req;
+  if (scalp) out += out.find('?') == std::string::npos ? "?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1" : ";RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1";
   if (!cascade) return out;
   out += out.find('?') == std::string::npos ? "?RT_CASCADE_MASKS=1" : ";RT_CASCADE_MASKS=1";
   if (out.find("WATER_SHADOWS=1") != std::string::npos) out += ";RT_CASCADE_SUN_HIT=1";
@@ -149,10 +154,8 @@ inline unsigned allowed(const char* file) {
 struct NoVariant { const char* key; const char* defines; };
 inline constexpr NoVariant kWaterNoVariant[] = {
     {"rt_omm", "RT_OMM_SCENE=1"},
-    {"rt_native_tileset", "RT_NATIVE_TILESET=1"},
-    {"rt_native_scalp", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
-    {"rt_native_hair", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
-    {"rt_hair_physical_origin", "RT_HAIR_PHYSICAL_ORIGIN=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"}};
+    {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
+// rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,

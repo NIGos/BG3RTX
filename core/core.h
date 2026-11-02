@@ -55,3 +55,10 @@ bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p);
 void water_release();
+
+// gi.cpp: background pipeline builds (common/pipeline_async.h), joined in gi_release. The compute
+// pipeline of `req`:`entry` for `layout`: 1 ready (*out, *generation: the caller owns the pipeline),
+// 0 building (logged once when it starts), -1 failed (retried after a cooldown).
+int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout layout, VkPipeline* out, uint64_t* generation);
+// A pipeline layout a background build may still read: destroyed (defer_destroy) once none does.
+void core_defer_layout_destroy(VkPipelineLayout layout);

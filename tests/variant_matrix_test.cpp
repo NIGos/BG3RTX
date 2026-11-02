@@ -40,10 +40,10 @@ static unsigned key_flags(const std::string& k) {
   return 0;
 }
 
-// The skips that exist today (2026-11-01). Water's compose/reflect requests have no OMM, tileset,
-// scalp/hair or hair-origin variant; the requests compile (see --requests), routing them is the fix.
-static const char* const kExpectedWaterSkips[] = {"rt_omm", "rt_native_tileset", "rt_native_scalp", "rt_native_hair",
-                                                  "rt_hair_physical_origin"};
+// The skips that exist today (2026-11-02). Water's compose/reflect requests have no OMM or tileset
+// variant; the requests compile (see --requests), routing them is the fix. Native scalp/hair (and the
+// hair origin, which only needs the scalp defines on water) are routed since 2026-11-02.
+static const char* const kExpectedWaterSkips[] = {"rt_omm", "rt_native_tileset"};
 
 int main(int argc, char** argv) {
   CHECK(argc >= 2);
@@ -123,7 +123,8 @@ int main(int argc, char** argv) {
         continue;
       }
       const bool cascade = (f & sv::kCascade) != 0;
-      for (const auto& r : water) need(sv::water_request(r.c_str(), cascade), r.substr(0, r.find('?')), a, b);
+      const bool scalp = (f & sv::kScalp) != 0;
+      for (const auto& r : water) need(sv::water_request(r.c_str(), cascade, scalp), r.substr(0, r.find('?')), a, b);
     }
   CHECK(missing == 0);
 

@@ -222,6 +222,8 @@ add_executable(native_hair_origin_test tests/native_hair_origin_test.cpp)
 add_test(NAME native_hair_origin_test COMMAND native_hair_origin_test)
 add_executable(shader_variant_test tests/shader_variant_test.cpp)
 add_test(NAME shader_variant_test COMMAND shader_variant_test ${CMAKE_SOURCE_DIR})
+add_executable(pipeline_async_test tests/pipeline_async_test.cpp)
+add_test(NAME pipeline_async_test COMMAND pipeline_async_test)
 add_executable(variant_matrix_test tests/variant_matrix_test.cpp)
 add_test(NAME variant_matrix_test COMMAND variant_matrix_test ${CMAKE_SOURCE_DIR})
 # The runtime SPIR-V cache (layer/shader_cache.cpp): keys against tests/shader_cache_key_golden.txt (Python's), the store.
