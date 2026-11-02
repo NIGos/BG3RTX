@@ -310,6 +310,8 @@ struct Capture {
   std::vector<VkBufferCopy> c_legacy_copies;
   VkDeviceSize c_legacy_bytes=0;
   uint64_t c_legacy_sig=1469598103934665603ull;
+  capture_budget::ElasticWindow elastic;
+  uint64_t elastic_target=0;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -412,6 +414,33 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreat
 }
 
 // ---- recording helpers ----
+uint64_t elastic_cap(bool cascade){
+  static_assert(capture_budget::ElasticWindow::samples==3*kSceneSlots);
+  const uint64_t start=uint64_t(cascade?cascade_mb():(std::max)(xfb_mb(),16))<<20;
+  return (std::min)(capture_budget::kMeshPoolHardCap,(std::max)(start,
+      vram_cap(vram_guard::kCascade,capture_budget::kMeshPoolHardCap)));
+}
+// Allocate transactionally: allocation failure retains the complete old soup.
+// Only retired producers are replaced; free_buf uses the existing deferred
+// destruction path as an additional safeguard for recorded descriptor users.
+void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
+  if(!c.xfb.b || wanted==c.xfb.size || !wanted || c.state==1 ||
+     !capture_budget::elastic_retired(c.record_frame,life_gpu_done(),cascade))return;
+  if(c.rec && bvh_rec_state(c.rec)!=1 && bvh_rec_state(c.rec)!=2)return;
+  // A budget sample may have lowered the card cap since demand was recorded.
+  wanted=(std::min)(wanted,elastic_cap(cascade));
+  if(wanted==c.xfb.size)return;
+  if(wanted>c.xfb.size && (!vram_guard_on() || !vram_allow(vram_guard::kCascade,wanted,
+                                      cascade?"elastic cascade capture":"elastic RT capture")))return;
+  Buf replacement;
+  if(!make_buf(replacement,wanted,VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage() |
+               (c.c_legacy_transfer?VK_BUFFER_USAGE_TRANSFER_DST_BIT:0),false))return;
+  log(cascade?"[cascade] capture capacity %llu -> %llu MB (elastic, retired slot)":
+              "[geo] RT capture capacity %llu -> %llu MB (elastic, retired slot)",
+      (unsigned long long)(c.xfb.size>>20),(unsigned long long)(wanted>>20));
+  free_buf(c.xfb);c.xfb=replacement;c.elastic.reset();c.elastic_target=0;
+}
+
 void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, VkPipelineStageFlags dst,
              VkAccessFlags da) {
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -450,6 +479,8 @@ bool copy_image(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, VkForm
 }
 
 bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
+  if(!readback && cfg_int("rt_capture_elastic",0))elastic_resize(c,c.elastic_target,false);
+  else {c.elastic.reset();c.elastic_target=0;}
   if (!c.xfb.b) {
     // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
     // in the test scene) and is read in place by the AS build.
@@ -1128,7 +1159,10 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
   const VkDeviceSize bytes = cascade_bytes();
-  if (c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
+  const bool elastic=cfg_int("rt_capture_elastic",0)!=0 && !all_current;
+  if(elastic)elastic_resize(c,c.elastic_target,true);
+  else {c.elastic.reset();c.elastic_target=0;}
+  if (!elastic && c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
   if (!c.xfb.b) {
     static int s_logged_mb = 0;
     if (s_logged_mb != int(bytes >> 20))
@@ -1420,7 +1454,17 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.bytes += c->cursor;
   st.bytes_max = (std::max)(st.bytes_max, uint64_t(c->cursor));
   st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
-  if (c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
+  if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current) && c->xfb.b){
+    const uint64_t cap=elastic_cap(true);
+    const uint64_t wanted=capture_budget::elastic_capacity(c->cursor+c->c_over,g_storage_range,cap);
+    const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
+    if(target!=c->elastic_target && target!=c->xfb.size)
+      log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; waiting for retired slot)",
+          double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
+          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::ElasticWindow::samples);
+    c->elastic_target=target;
+  }
+  if ((!cfg_int("rt_capture_elastic",0) || cfg_hot(CfgHot::rt_sun_cascade_current)) && c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
     const uint64_t demand = uint64_t(c->cursor) + c->c_over;
     // rt_vram_guard: capped by the device budget's share (vram_guard::cap; never below the current size), and
     // refused while VRAM is low. The step is the 3 frame buffers at the new size (each replaced one is freed
@@ -1466,6 +1510,7 @@ void cascade_on_present() {
   CcMat mats[kCcLayers];
   float ms = -1;
   int layer = -1;
+  uint64_t capacity=cascade_bytes();
   {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
@@ -1480,6 +1525,10 @@ void cascade_on_present() {
     }
     const uint64_t f = frame_index();
     layer = g_ccap[(f - 1) % 3].layer >= 0 ? g_ccap[(f - 1) % 3].layer : g_ccap[f % 3].layer;
+    if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current)){
+      capacity=0;
+      for(const auto& c:g_ccap)capacity=(std::max)(capacity,uint64_t(c.xfb.size));
+    }
   }
   const double n = double(st.frames), mb = 1.0 / (1 << 20);
   uint64_t builds = 0;
@@ -1494,7 +1543,7 @@ void cascade_on_present() {
       "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
-      int(cascade_bytes() >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
+      int(capacity >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
       (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
       (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);
@@ -2028,6 +2077,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     } else if (g_scratch.state != 1 && rt_src && rt_capture_wanted()) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
+        if(cfg_int("rt_capture_elastic",0))g_scratch.rec=bvh_rec_register(cmd);
         g_scratch.rt = rt_src && rt_capture_wanted();
         g_scratch.split = g_scratch.rt && bvh_split_wanted();
         g_scratch.cascade = false;
@@ -2093,6 +2143,23 @@ void rt_capture_stats(const Capture& c) {
   // Logs below retain the total physical opaque/fallback stream and all drops.
   g_opaque_demand_prev=capture_budget::opaque_partition_demand(c.cursor+c.opaque_overflow_bytes,
     c.alpha_overflow_bytes+c.alpha_spill_bytes,capture_budget::corrected_partition_feedback(g_stride) || c.alpha_spills!=0);
+  if(cfg_int("rt_capture_elastic",0)){
+    const uint64_t floor=uint64_t((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb",64),
+                                capture_budget::kAlphaDefaultMb,g_stride),1))*capture_budget::mib;
+    const uint64_t demand=g_alpha_mode?capture_budget::elastic_rt_demand(g_opaque_demand_prev.load(),c.alpha_demand,
+        floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60)):
+        uint64_t(c.cursor+c.opaque_overflow_bytes);
+    const uint64_t wanted=capture_budget::elastic_capacity(demand,g_storage_range,
+        elastic_cap(false));
+    // rt_capture_stats runs only for the main (non-minor) scene capture.
+    const uint64_t target=g_scratch.elastic.observe(c.xfb.size,wanted,demand);
+    if(target!=g_scratch.elastic_target && target!=c.xfb.size)
+      log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; waiting for retired slot)",
+          double(g_opaque_demand_prev.load())/1048576.0,double(c.alpha_demand)/1048576.0,
+          (unsigned long long)(target>>20),(unsigned long long)(c.xfb.size>>20),
+          g_scratch.elastic.count,capture_budget::ElasticWindow::samples);
+    g_scratch.elastic_target=target;
+  }
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
   ++l.frames;

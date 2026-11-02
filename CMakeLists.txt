@@ -235,6 +235,8 @@ add_executable(native_hair_test tests/native_hair_test.cpp)
 add_test(NAME native_hair_test COMMAND native_hair_test)
 add_executable(rt_capture_budget_test tests/rt_capture_budget_test.cpp)
 add_test(NAME rt_capture_budget_test COMMAND rt_capture_budget_test)
+add_executable(rt_capture_elastic_test tests/rt_capture_elastic_test.cpp)
+add_test(NAME rt_capture_elastic_test COMMAND rt_capture_elastic_test)
 add_executable(as_chunk_alloc_test tests/as_chunk_alloc_test.cpp)
 add_test(NAME as_chunk_alloc_test COMMAND as_chunk_alloc_test)
 
