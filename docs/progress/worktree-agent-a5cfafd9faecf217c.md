@@ -34,3 +34,7 @@
 - Product gap: enabling native hair freezes the game for minutes the first time (render-thread compiles).
 - Separate gap: `[water] reflections skipped: no variant for rt_native_scalp, rt_native_hair,
   rt_hair_physical_origin` (water reflections are off whenever native hair is on).
+- ds1 result (10:52, gates only failed): character darkening is mostly RT AO (gi_ao=0: ROI +35%, hair and face
+  under the hair visibly brighter; OFF ROI spread 12.9%); RT sun adds a smaller hair shadow (nosun +15%, rt_debug=2
+  red on hair); local/box/art/hold/native-hair toggles inside the noise. Gates fixed (box 0 expect removed, 12 s
+  view/motion windows, ds0 warms the ls_debug full-box variant, settle-cam phase); ds2/ds3 require only ds0.

@@ -52,7 +52,8 @@ def step(label, seconds, trace=False, **keys):
 SHOT = 8   # one PNG trace at 5 s; 8 s holds 3-4 lines of 60 frames at the unfocused 30 fps floor
 plan = [
     # Shader variants: warmed by the ds0 job (below), which every ds job requires.
-    step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles; the hold latches after it
+    step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles
+    step("settle-cam", 10, qa_exposure_hold="0"),                    # ds1 10:54: the dialogue camera still moved 41 s after load
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
     step("shot-nolocal-on", SHOT, True, rt_local_shadows="0"),               # the game's own local-light shadows
@@ -70,11 +71,11 @@ plan = [
     step("shot-off-e", SHOT, True),
     # H7 (moving shadows): two traces 0.5 s apart (the real gap is the frame numbers of the '[trace] frame N written'
     # lines), user config and the game's own sun map only. Moving with RT, still without = RT-only animated casters.
-    step("motion-base", SHOT, [4, 4.5]),
-    step("motion-nosun", SHOT, [4, 4.5], rt_shadows="0", contact_shadows="0"),
-    step("view-lsremoved", SHOT, True, ls_debug="2"),                # local light removed x4 (where D-LS darkens)
-    step("view-lsowners", SHOT, True, ls_debug="9"),                 # evaluated lights by owner (magenta character)
-    step("diag-view-sunmask", SHOT, True, rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
+    step("motion-base", 12, [6, 6.5]),
+    step("motion-nosun", 12, [6, 6.5], rt_shadows="0", contact_shadows="0"),
+    step("view-lsremoved", 12, [6], ls_debug="2"),                # local light removed x4 (where D-LS darkens)
+    step("view-lsowners", 12, [6], ls_debug="9"),                 # evaluated lights by owner (magenta character)
+    step("diag-view-sunmask", 12, [6], rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
     step("diag-ls-stats", 10, ls_stats="1"),                         # light removed % of the lit luminance
     step("diag-rt-hairoff-a", 10, rt_stats="1", rt_primary_check="1"),
     step("diag-rt-hairon", 10, rt_stats="1", rt_primary_check="1", **ORIGIN),
@@ -126,7 +127,6 @@ def job(name, save, first, hair):
         r"\[geo\] transform feedback enabled: .*\(stride %d\)" % (88 if hair else 64),
         r"ls box: active \(mode 2;",
         r"ls: local-light shadow pass GPU median .*box 2\)",
-        r"ls: local-light shadow pass GPU median .*box 0\)",
         r"ls stats \(\d+ frames\): [0-9.]+M px/frame",
         r"rt stats \(\d+ frames, alpha test on\): primary-ray check match",
         r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+",
@@ -180,7 +180,7 @@ def job(name, save, first, hair):
 WARM_PLAN = "ds_warm.json"
 STATS = dict(rt_stats="1", rt_primary_check="1", qa_exposure_hold="0")
 _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters="0", ls_box="0")),
-              ("views", dict(rt_debug="2", ls_debug="2", ls_box="0")),
+              ("views", dict(rt_debug="2", ls_debug="2")), ("owners", dict(ls_debug="9", ls_box="0")),
               ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
 warm_plan.append(step("restore", 5, qa_exposure_hold="0"))
@@ -225,7 +225,7 @@ def main():
                                                encoding="utf-8")
     for name, save in SAVES:
         j = job(name, save, SAVES[0][0], not a.no_hair)
-        j["requires_success_of"] = [WARM] + ([SAVES[0][0]] if name != SAVES[0][0] else [])
+        j["requires_success_of"] = [WARM]   # ds1 gate failures (not the run working) must not skip ds2-ds3
         if a.no_hair:   # the hair phases still toggle the keys; with the startup off they are inert (logged rejected)
             j["forbid"] = [f for f in j["forbid"] if "hair" not in f]
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")

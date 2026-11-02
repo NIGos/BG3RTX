@@ -213,6 +213,28 @@ scene wait 599/599 this frame's scene. Code reading per hypothesis, most plausib
    RT and lighting together. No key removes foliage casters only (none in common/settings.h): the batch
    uses PNG pairs 0.5 s apart with RT on and with the game's map only, rt_cascade_casters=0, and rt_debug=2.
 
+### ds1 result (Test Dialogue1, 2026-11-02 10:52, ran to the end, INVALID only on gates)
+
+Outdoor camp, daylight, two characters in close-up; the dialogue camera was static in every shot (it still moved
+until 41 s after the load: a settle-cam phase now precedes shot-off-a). Character ROI = G-buffer class skin or hair
+(5.2% of the frame); preview linearised; OFF shots a-e spread 1.9% whole frame, 12.9% ROI (dialogue animation).
+
+| shot | ROI vs OFF mean | whole frame | look (crops) |
+|---|---|---|---|
+| noao (gi_ao=0) | +35.1% (neighbours -5.5 / -2.8) | +4.9% | hair and the face under the hair clearly brighter: the only obvious change |
+| nosun | +15.1% (neighbours +7.4 / +2.1) | +3.0% | slight; rt_debug=2 shows RT-only sun shadow (red) on the hair |
+| nocascade | +10.3% (-5.5 / -2.8) | +1.2% | slight |
+| noart / nobox / nolocal | +8.6 / +7.8 / +7.5% | +1.7 / +0.9 / +2.1% | within the ROI spread |
+| charlights / nohold / hair / hairorigin | +1.0 / -4.1 / -7.7 / +4.5% | within spread | no visible change |
+
+Verdict for this save: the character darkening is mostly the RT AO (gi_ao, 1-ray ambient visibility; hair cards
+are opaque in it) on hair and the face under it, beyond the OFF spread. The RT sun adds a smaller hair shadow.
+Local, box, art-unshadowed, held-draw and native-hair toggles stay inside the ROI noise here (no rig light dominates:
+ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG pairs were taken 3 frames apart
+(the trace queue), too close to show motion. The R8 sun mask in the trace is the game's own, dumped before the RT
+fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
+next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
+
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).
 
