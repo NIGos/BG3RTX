@@ -354,6 +354,16 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}},
 
+  {"exp_vram_guard", "VRAM budget guard",
+   "Keeps the game's video memory below the driver's budget: when headroom is low, the ray-tracing caches stop "
+   "growing (new geometry may be left out of ray tracing, logged) and give back memory no frame uses; their "
+   "sizes also follow the card's memory. Aims to stop the stutter and flicker when a long view runs out of "
+   "VRAM. Experimental until its live gate holds.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_vram_guard", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_vram_guard", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -490,6 +500,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_budget_mb", "2048"},
     {"rt_mesh_audits", "2"},
     {"rt_mesh_audit_frames", "600"},
+    {"rt_vram_guard", "0"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},

@@ -8,6 +8,8 @@
 #include "omm_backend.h"
 #include "omm_content.h"
 #include "hit_material_submit.h"
+#include "hit_material.h"
+#include "../common/vram_guard.h"
 #include "../common/material_submit_stages.h"
 #include "assetdb.h"
 #include "sebridge.h"
@@ -532,9 +534,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 
 // VRAM of this process on the device-local heaps (VK_EXT_memory_budget), next to each [pace] line: the
 // long-session growth gate (tools/live_batches/long_session). Physical-device query only; nothing is enabled.
-static void log_memory_budget(DeviceData* dd) {
+static bool query_memory_budget(DeviceData* dd, uint64_t* used, uint64_t* avail, uint64_t* size) {
   InstanceData* id = dd ? dd->inst : nullptr;
-  if (!id || !dd->physical || !id->GetPhysicalDeviceMemoryProperties2 || !id->EnumerateDeviceExtensionProperties) return;
+  if (!id || !dd->physical || !id->GetPhysicalDeviceMemoryProperties2 || !id->EnumerateDeviceExtensionProperties) return false;
   static int supported = -1;
   if (supported < 0) {
     uint32_t n = 0;
@@ -545,19 +547,146 @@ static void log_memory_budget(DeviceData* dd) {
     for (const VkExtensionProperties& e : ext) supported |= strcmp(e.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0;
     if (!supported) log("[mem] VK_EXT_memory_budget not supported: no VRAM lines");
   }
-  if (!supported) return;
+  if (!supported) return false;
   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
   VkPhysicalDeviceMemoryProperties2 props{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, &budget};
   id->GetPhysicalDeviceMemoryProperties2(dd->physical, &props);
-  double used = 0, avail = 0, size = 0;
+  *used = *avail = *size = 0;
   for (uint32_t h = 0; h < props.memoryProperties.memoryHeapCount; ++h) {
     if (!(props.memoryProperties.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)) continue;
-    used += double(budget.heapUsage[h]);
-    avail += double(budget.heapBudget[h]);
-    size += double(props.memoryProperties.memoryHeaps[h].size);
+    *used += budget.heapUsage[h];
+    *avail += budget.heapBudget[h];
+    *size += props.memoryProperties.memoryHeaps[h].size;
   }
+  return true;
+}
+
+static void log_memory_budget(DeviceData* dd) {
+  uint64_t used = 0, avail = 0, size = 0;
+  if (!query_memory_budget(dd, &used, &avail, &size)) return;
   log("[mem] device-local VRAM of this process: used %.0f MB, budget %.0f MB, heaps %.0f MB", used / 1048576.0,
       avail / 1048576.0, size / 1048576.0);
+}
+
+// ---- rt_vram_guard (common/vram_guard.h): headroom state, refusals, yields, the [mem] ours line ----
+// Lock order: a module's own lock (bvhsplit g_mu, ...) -> g_vg_mu. The tick reads the modules' breakdown
+// before it takes g_vg_mu, never inside it.
+static std::mutex g_vg_mu;
+static vram_guard::Guard g_vg;                               // under g_vg_mu
+static std::atomic<bool> g_vg_on{false};
+static std::atomic<uint64_t> g_vg_budget{0};
+static std::atomic<uint64_t> g_vg_ask[vram_guard::kYieldCount];
+struct VgRefusal { uint64_t count = 0, bytes = 0; const char* first = nullptr; bool logged = false; };
+static VgRefusal g_vg_ref[vram_guard::kConsumerCount];      // this window, under g_vg_mu
+static std::atomic<bool> g_vg_refused_new{false};           // a first refusal this window: breakdown at the next tick
+
+bool vram_guard_on() { return g_vg_on.load(std::memory_order_relaxed); }
+
+uint64_t vram_cap(int consumer, uint64_t fallback) {
+  if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return fallback;
+  return vram_guard::cap(vram_guard::Consumer(consumer), g_vg_budget.load(std::memory_order_relaxed));
+}
+
+bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
+  if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return true;
+  std::lock_guard<std::mutex> lock(g_vg_mu);
+  if (!over_cap && g_vg.allow(bytes)) return true;
+  VgRefusal& r = g_vg_ref[consumer];
+  ++r.count;
+  r.bytes += bytes;
+  if (!r.first) r.first = what;
+  if (!r.logged) {   // once per window and consumer; the window line has the totals
+    r.logged = true;
+    g_vg_refused_new = true;
+    log("[vram] guard: refused %s, %.0f MB (%s): used %.0f MB, budget %.0f MB, margin %.0f MB%s",
+        vram_guard::kConsumerName[consumer], double(bytes) / 1048576.0, what ? what : "?", double(g_vg.used) / 1048576.0,
+        double(g_vg.budget) / 1048576.0, double(g_vg.margin_now()) / 1048576.0,
+        over_cap ? "; over this consumer's cap for the budget" : g_vg.low ? "; low headroom" : "; would not fit");
+  }
+  return false;
+}
+
+uint64_t vram_take_ask(int yield) {
+  if (yield < 0 || yield >= vram_guard::kYieldCount) return 0;
+  return g_vg_ask[yield].exchange(0, std::memory_order_relaxed);
+}
+
+static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint64_t rtcap, uint64_t alpha,
+                          uint64_t cascade, uint64_t recycled, uint64_t em, uint64_t water, bool low, const char* why) {
+  const double mb = 1.0 / 1048576.0;
+  const uint64_t ours = b.as_reserved + b.pool + rtcap + cascade + recycled + em + water;
+  log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty), mesh pool %.0f MB, "
+      "RT capture %.0f MB (alpha region %.0f), cascade capture %.0f MB, hit-material recycled %.0f MB, em soup %.0f MB, "
+      "water soup %.0f MB; tracked %.0f MB of used %.0f MB (rest: game, core GI/RR images, untracked %.0f MB), "
+      "budget %.0f MB (%s); guard %s",
+      why, double(b.as_reserved) * mb, b.chunks, double(b.as_live) * mb, double(b.as_empty) * mb, double(b.pool) * mb,
+      double(rtcap) * mb, double(alpha) * mb, double(cascade) * mb, double(recycled) * mb, double(em) * mb,
+      double(water) * mb, double(ours) * mb, double(used) * mb, double(used > ours ? used - ours : 0) * mb,
+      double(budget) * mb, used <= budget ? "within budget" : "OVER budget",
+      !vram_guard_on() ? "off" : low ? "LOW (growth refused, yielding)" : "normal");
+}
+
+// Present thread (g_main), every frame: sample every 16 frames (one physical-device query), the
+// breakdown line every rt_timing window, on a state change and after a window's first refusal. With the
+// key off only the window breakdown runs (our share vs the game's, for the guard-off A/B).
+static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
+  static uint64_t s_window_start = 0;
+  const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  const bool window_end = frame >= s_window_start + uint64_t(every);
+  if ((frame & 15) != 0 && !window_end) return;
+  const bool on = cfg_int("rt_vram_guard", 0) != 0;
+  const bool was_on = g_vg_on.exchange(on);
+  if (was_on != on) log("[vram] guard %s (rt_vram_guard=%d)", on ? "on" : "off", on ? 1 : 0);
+  if (!on) for (auto& a : g_vg_ask) a = 0;
+  if (!on && !window_end) return;
+  uint64_t used = 0, avail = 0, size = 0;
+  if (!query_memory_budget(dd, &used, &avail, &size)) {
+    if (window_end) s_window_start = frame;
+    return;
+  }
+  // Breakdown and yield sizes first (each module's own lock; not under g_vg_mu).
+  BvhVram b;
+  bvh_vram(&b);
+  const uint64_t recycled = native_hit::recycled_bytes();
+  bool changed = false, low = false;
+  uint64_t need = 0, margin = 0;
+  if (on) {
+    std::lock_guard<std::mutex> lock(g_vg_mu);
+    changed = g_vg.sample(used, avail);
+    low = g_vg.low;
+    need = g_vg.trim_need();
+    margin = g_vg.margin_now();
+    g_vg_budget = avail;
+    const uint64_t have[vram_guard::kYieldCount] = {b.as_empty, recycled, b.lru};
+    uint64_t ask[vram_guard::kYieldCount] = {};
+    vram_guard::plan_trim(need, have, ask);
+    for (int i = 0; i < vram_guard::kYieldCount; ++i) g_vg_ask[i] = ask[i];
+    if (changed)
+      log("[vram] guard: headroom %s: used %.0f MB, budget %.0f MB, margin %.0f MB; asking %.0f MB (%s %.0f, %s %.0f, "
+          "%s %.0f)",
+          low ? "LOW, growth refused" : "back, growth allowed", used / 1048576.0, avail / 1048576.0,
+          double(margin) / 1048576.0, double(need) / 1048576.0, vram_guard::kYieldName[0], ask[0] / 1048576.0,
+          vram_guard::kYieldName[1], ask[1] / 1048576.0, vram_guard::kYieldName[2], ask[2] / 1048576.0);
+  }
+  const bool refused = g_vg_refused_new.exchange(false);
+  if (changed || refused || window_end) {
+    uint64_t rtcap = 0, alpha = 0, cascade = 0;
+    geo_vram(&rtcap, &alpha, &cascade);
+    log_vram_ours(used, avail, b, rtcap, alpha, cascade, recycled, em_vram_bytes(), water_vram_bytes(), low,
+                  changed ? "guard state" : refused ? "refusal" : "window");
+  }
+  if (window_end) {
+    s_window_start = frame;
+    std::lock_guard<std::mutex> lock(g_vg_mu);
+    for (int c = 0; c < vram_guard::kConsumerCount; ++c) {
+      VgRefusal& r = g_vg_ref[c];
+      if (r.count)
+        log("[vram] guard window: %llu grows of %s refused (%.0f MB asked; first: %s)", (unsigned long long)r.count,
+            vram_guard::kConsumerName[c], double(r.bytes) / 1048576.0, r.first ? r.first : "?");
+      r = VgRefusal{};
+    }
+    g_vg.new_window();
+  }
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
@@ -578,6 +707,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   }
   cfg_poll();
   if (dd == g_main) {
+    vram_guard_tick(dd, frame);
     // Rendered-frame pacing (the game's own presents, before frame generation):
     // median and 99th-percentile frame time and the 1% low, every 600 frames.
     static LARGE_INTEGER freq{}, last{};

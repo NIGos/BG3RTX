@@ -38,6 +38,7 @@
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
 #include "../common/rt_capture_budget.h"
+#include "../common/vram_guard.h"
 #include "omm_native_plain.h"
 #include "omm_submit.h"
 #include "../common/omm_material_cache.h"
@@ -253,7 +254,16 @@ void retire_as(VkAccelerationStructureKHR as) {
   }
 }
 
-bool as_create(VkDeviceSize size, AsAlloc& out) {
+VkDeviceSize as_reserved() {
+  VkDeviceSize n = 0;
+  for (const AsChunk& c : g_chunks) n += c.buf.size;
+  return n;
+}
+
+// guard_what: a new chunk for this BLAS is a growth rt_vram_guard may refuse (new cached meshes, per-draw
+// BLAS: the geometry is then left out of the frame, logged by the guard). nullptr: never refused (compaction
+// copies, which give memory back, and the scene's own cascade/sun BLAS).
+bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr) {
   out = AsAlloc{};
   size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
   int ci = -1;
@@ -262,13 +272,22 @@ bool as_create(VkDeviceSize size, AsAlloc& out) {
     if (g_chunks[i].buf.b && g_chunks[i].ra.alloc(size, kAsAlign, &off)) ci = int(i);
   if (ci < 0) {
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
+    if (guard_what && vram_guard_on() &&
+        !vram_allow(vram_guard::kAsChunks, cs, guard_what,
+                    as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
+      return false;
     AsChunk c;
     if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
       return false;
     c.ra.init(cs);
     c.ra.alloc(size, kAsAlign, &off);
-    g_chunks.push_back(std::move(c));
-    ci = int(g_chunks.size() - 1);
+    // A slot freed by the guard (buf.b null, no range in it) is reused: chunk indices stay stable.
+    for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
+      if (!g_chunks[i].buf.b) g_chunks[i] = std::move(c), ci = int(i);
+    if (ci < 0) {
+      g_chunks.push_back(std::move(c));
+      ci = int(g_chunks.size() - 1);
+    }
   }
   VkAccelerationStructureCreateInfoKHR ci2{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
   ci2.buffer = g_chunks[ci].buf.b;
@@ -322,9 +341,11 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     g_dd->inst->GetPhysicalDeviceProperties(g_dd->physical, &p);
     s_range = p.limits.maxStorageBufferRange;
   }
+  // rt_vram_guard: the cap also follows the device budget (vram_guard::cap; 2047 MB on the 32 GB reference).
+  const VkDeviceSize cfg_max = (std::min)(VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20,
+                                          VkDeviceSize(vram_cap(vram_guard::kMeshPool, UINT64_MAX)));
   const VkDeviceSize cap = capture_budget::mesh_pool_capacity(
-      g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20,
-      VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20, s_range);
+      g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20, cfg_max, s_range);
   if (!cap) {
     if (s_full_logged != g_pool.size) {
       s_full_logged = g_pool.size;
@@ -333,6 +354,8 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     }
     return false;
   }
+  // The new pool is allocated while the old one is still alive (copied, freed deferred): the step is `cap`.
+  if (!vram_allow(vram_guard::kMeshPool, cap, "mesh pool grow (new meshes stay uncached)")) return false;
   Buf nb;
   if (!make_buf(nb, cap,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
@@ -1020,6 +1043,24 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_dd = nullptr;
 }
 
+// rt_vram_guard breakdown and yield sizes (present thread, under this module's lock).
+void bvh_vram(BvhVram* out) {
+  *out = BvhVram{};
+  if (!g_on) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const uint64_t now = frame_index();
+  for (const AsChunk& c : g_chunks) {
+    if (!c.buf.b) continue;
+    out->as_reserved += c.buf.size;
+    out->as_live += c.ra.used;
+    out->as_empty += c.ra.used ? 0 : c.buf.size;
+    ++out->chunks;
+  }
+  for (const auto& [k, m] : g_meshes)
+    if (m.last_used + 8 < now) out->lru += m.as.size;
+  out->pool = g_pool.size;
+}
+
 bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_split) != 0; }
 
 void bvh_begin_capture(VkCommandBuffer) {
@@ -1310,7 +1351,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
-      if (!as_create(sz.accelerationStructureSize, m.as)) {
+      if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
         continue;
       }
@@ -1451,7 +1492,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
-      if (!as_create(sz.accelerationStructureSize, s.as)) {
+      if (!as_create(sz.accelerationStructureSize, s.as, "BLAS chunk for a per-draw BLAS (draw left out this frame)")) {
         if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
         g_dyn.erase(key);
@@ -2710,6 +2751,48 @@ void bvh_on_present() {
       evict(k);
       ++g_st.evict_lru;
     }
+  }
+  // rt_vram_guard yields (common/vram_guard.h plan_trim; asks are 0 unless VRAM is low). 1: empty BLAS chunks
+  // (no live or pending range: pending frees still count in ra.used), not with rt_as_keep (kept AS handles
+  // sit on released ranges). 3: cached meshes unused for 8 frames, least recently used first; their BLAS
+  // ranges go back to the chunks and a chunk they empty goes at the next ask.
+  // Over the budget's share of BLAS chunks (vram_guard::cap; a new chunk is then refused even with headroom):
+  // empty chunks above the cap go too, so the cap does not hold idle reserve while new BLAS are refused.
+  VkDeviceSize ask = vram_take_ask(vram_guard::kYieldEmptyChunks);
+  if (vram_guard_on()) {
+    const VkDeviceSize reserved = as_reserved(), cap = vram_cap(vram_guard::kAsChunks, UINT64_MAX);
+    if (reserved > cap) ask = (std::max)(ask, reserved - cap);
+  }
+  if (ask && !cfg_int("rt_as_keep", 0)) {
+    VkDeviceSize freed = 0;
+    uint32_t n = 0;
+    for (AsChunk& c : g_chunks) {
+      if (freed >= ask) break;
+      if (!c.buf.b || c.ra.used) continue;
+      freed += c.buf.size;
+      ++n;
+      free_buf(c.buf);
+      c.ra.init(0);
+    }
+    if (n) log("[vram] guard: freed %u empty BLAS chunks (%.0f MB; asked %.0f MB)", n, double(freed) / 1048576.0,
+               double(ask) / 1048576.0);
+  }
+  if (const VkDeviceSize ask = vram_take_ask(vram_guard::kYieldMeshLru)) {
+    std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
+    for (auto& [k, m] : g_meshes)
+      if (m.last_used + 8 < now) old.push_back({m.last_used, k});
+    std::sort(old.begin(), old.end());
+    VkDeviceSize freed = 0;
+    uint32_t n = 0;
+    for (auto& [lu, k] : old) {
+      if (freed >= ask) break;
+      freed += g_meshes[k].as.size;
+      evict(k);
+      ++g_st.evict_lru;
+      ++n;
+    }
+    if (n) log("[vram] guard: evicted %u LRU meshes (%.0f MB of BLAS ranges; asked %.0f MB)", n,
+               double(freed) / 1048576.0, double(ask) / 1048576.0);
   }
   for (auto it = g_rejected.begin(); it != g_rejected.end();)
     it = now > it->second.until + 72000 ? g_rejected.erase(it) : std::next(it);

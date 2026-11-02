@@ -11,6 +11,7 @@
 #include "../common/native_hit_pool.h"
 #include "../common/native_hit_instanced.h"
 #include "../common/native_hit_recycle.h"
+#include "../common/vram_guard.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -350,7 +351,11 @@ void recycle_trim(bool from_service=false){
  static std::atomic<int> logged{-1};const int live=recycle_live()?1:0;
  if(logged.exchange(live)!=live)log("[hit material] buffer reuse %s (rt_hit_material_recycle=%d)",live?"on":"off",live);
  std::vector<Buffer> evict;
- {std::lock_guard lock(recycle_mutex);if(live)recycled.trim(now,evict);else recycled.clear(evict);}
+ // rt_vram_guard: the pool's cap follows the device budget (vram_guard::cap, 512 MB on the 32 GB reference),
+ // and while VRAM is low it is the second yielder (common/vram_guard.h plan_trim): every retained buffer goes.
+ const uint64_t cap=vram_cap(vram_guard::kHitRecycle,recycle::kCapBytes);
+ const bool yield=vram_take_ask(vram_guard::kYieldRecycled)!=0;
+ {std::lock_guard lock(recycle_mutex);recycled.set_cap(cap,evict);if(live && !yield)recycled.trim(now,evict);else recycled.clear(evict);}
  free_all(evict);
 }
 // Present thread, once per frame: the idle trim and the frees the recording threads deferred.
@@ -646,6 +651,7 @@ bool pool_current(PoolMaterial& m,uint64_t frame){
 }
 }
 bool enabled(){return on;}
+uint64_t recycled_bytes(){std::lock_guard lock(recycle_mutex);return recycled.retained();}
 void cpu_report(uint64_t frames){
  if(on)recycle_service();
  const bool want=on && cfg_int("cpu_timing",0)!=0;cpu_on.store(want,std::memory_order_relaxed);
