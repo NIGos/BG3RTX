@@ -67,7 +67,8 @@
     "diag-on"
    ],
    "min": 1,
-   "event": true
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "IP grass clip: checked > 0, rejected < 0.04% of all lookups, every diag-on stats window",
@@ -87,7 +88,8 @@
     "diag-off-b"
    ],
    "min": 1,
-   "event": true
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "the other instanced families keep rejected < 0.04% with IP grass on, every diag-on stats window",

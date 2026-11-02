@@ -68,7 +68,8 @@
     "diag-on"
    ],
    "min": 1,
-   "event": true
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "wind RGB 2S clip: checked > 0, rejected < 0.04% of all lookups, every diag-on stats window",
@@ -97,7 +98,8 @@
     "diag-off-b"
    ],
    "min": 1,
-   "event": true
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
