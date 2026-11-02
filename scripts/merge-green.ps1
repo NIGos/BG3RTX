@@ -79,7 +79,8 @@ try {
 
   # The shared compiler covers all entries (including multi-entry rr_post),
   # honors source DXC options, and fails when DXC is absent or any compile fails.
-  $shaders = Invoke-Gate 'shaders' { py -3 tools\compile_shaders.py }
+  # --pp-verify 4: four random requests compiled from scratch must match the cache (preprocessed-key self-check).
+  $shaders = Invoke-Gate 'shaders' { py -3 tools\compile_shaders.py --pp-verify 4 }
   if ($script:gateCode -ne 0) {
     $shaders | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" }
     Fail 'runtime shader compilation failed'

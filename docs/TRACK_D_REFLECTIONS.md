@@ -507,6 +507,27 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Offline: key off, the S8 replay is bit-identical (giRaw fnv1a a54c4dfd1cc9acb9, all 512 x 64 counters equal with
     HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
     rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
+- **Generated rows (2026-11-02; offline, READY_FOR_LIVE, not qualified; docs/GAME_DATA_AUDIT.md action 2).** Key
+  `rt_hit_material_generated=0` (startup VS frame patch, then live; ini only). `py -3 -m tools.material_families.recipe_rows`
+  writes `common/native_hit_generated.h` (`--check` in CTest `hit_material_generated_test`, about 8 s) from three sources
+  that must agree: the asset DB (StaticInstancedDeferred VS/FS, StaticInstancedDepth VS, engine UBO offsets of the UV
+  transform / tile-set index / light channel, the 1:1 Reflectance offset, the VT layer bindings), the FS classifier
+  against the audited recipes (identical, fields only, reflectance member moved, RT2.y = 0.5, or the RT2.w flag bit 3
+  dropped; the DB offsets must equal the classifier's field map) and the capture path (pool: VS 2d2ac3c3; instanced: an
+  audited bit-exact family whose depth VS it shares with an equal G-buffer gl_Position slice, or whose bindings it has
+  with its own depth and G-buffer slices equal). 8 rows of 830 pairs (rejects listed with `--rejected`):
+  IP_AlphaTest(_2S)_VT 0de1b186/641822a7 (= 35a18400, refl @8, LayoutBase per the DB, 2S family, N location 2),
+  wind bushes PBR translucency 27ef2b49/2e34c667 (= 83831811 fields only, LayoutVt4, IP grass family certificate),
+  wind RGB 2S 9cc7094f/4464f442 (= 923131c7) and its GM 9cc7094f/4f3ec0c7 (= 14678345, refl @20), BASE_AlphaTest_FX
+  1e9145e4/9d925bfd (= 14678345), GM_Pulse_AlphaTest 1e9145e4/e4ade329 (= 3da860be, constant: `stage` writes 0.5),
+  Base_GM/BGM 2d2ac3c3/651863a6 and HLOD_GM 2d2ac3c3/b0ecc292 pool (= 3df678c0). Generated instanced rows borrow their
+  family's key, pairing certificate and remap and are checked bit for bit at the hit; they are not gated by the wind
+  RGB / IP grass keys. Key off: every audited lookup unchanged (`native_hit_generated_test`), no shader changed
+  (2961/2961 requests byte-identical). Packs cannot show the share after (rows are captured live); camp pack 013545-2
+  (instanced off) blocks 20.2% of lookups on the bushes' depth FS f9ab595d and 5.4% on IP_AlphaTest's 2f1b0ffd. Live:
+  `tools/live_batches/m4_generated` (camp + inn), predicted camp +12 points (3-25), inn +1.5 (0.3-4), energy null.
+  Rejected and worth a recipe next: 3b346b42 HLOD two-sided (pool two-sided flip), 6561beef/ce81ffaa (DB channel @60
+  disagrees with the classifier's map), the ColorVar / SSS / translucency variants.
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

@@ -7,6 +7,12 @@ byte-identity gates) compiles through this module:
   as layer/shaders.cpp does at run time: DXC -spirv vulkan1.3, HLSL 2021, cs_6_6, -I shaders,
   -D BG3RTX=1, the SHaRC headers when found, the request's defines, the file's "// dxc:" line, -O3;
   one module per [numthreads] entry (else main).
+- Second key level (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 3): an entry whose closure key misses is preprocessed
+  (DXC -P with the compile's arguments; #line lines, CRLF and blank lines dropped) and looked up under
+  sha256(schema, toolchain id, entry, profile, first-line flags, preprocessed text). A hit reuses that SPIR-V
+  and links the closure key to it; a compile stores both keys. A comment, or an edit under an unset define,
+  in a common header then compiles nothing. BG3RTX_SHADER_PP=0 turns the level off; --pp-verify N compiles N
+  random requests from scratch and compares (soundness self-check).
 - Cache key of one entry = sha256 of (schema, toolchain id = the DXC binaries + `dxc --version` +
   the argument template, request string, entry, profile, and the git blob id of the source and of
   every file it can include, transitively, plus every include candidate that does not exist).
@@ -348,6 +354,8 @@ class Cache:
                         "request TEXT, entry TEXT, at REAL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS validated (sha TEXT, val TEXT, PRIMARY KEY (sha, val))")
         self.db.execute("CREATE TABLE IF NOT EXISTS baselines (rev TEXT PRIMARY KEY, at REAL)")
+        # Closure keys whose preprocessed key is indexed too (backfill marker; docs/BUILD_AND_PACKAGE_EFFICIENCY.md 3).
+        self.db.execute("CREATE TABLE IF NOT EXISTS pp_linked (key TEXT PRIMARY KEY)")
         self.db.commit()
         self._verified = set()
 
@@ -400,6 +408,23 @@ class Cache:
         except sqlite3.OperationalError:
             pass
         return sha
+
+    def link(self, key, sha, request, entry):
+        """Index `key` to an existing blob `sha` (a preprocessed-key hit: the closure key then hits directly)."""
+        try:
+            self.db.execute("INSERT OR REPLACE INTO compiled VALUES (?,?,?,?,?,?)",
+                            (key, sha, self.blob_path(sha).stat().st_size, request, entry, time.time()))
+        except (sqlite3.OperationalError, OSError):
+            pass
+
+    def pp_linked(self, key):
+        return self.db.execute("SELECT 1 FROM pp_linked WHERE key=?", (key,)).fetchone() is not None
+
+    def mark_pp(self, keys):
+        try:
+            self.db.executemany("INSERT OR IGNORE INTO pp_linked VALUES (?)", [(k,) for k in keys])
+        except sqlite3.OperationalError:
+            pass
 
     def is_valid(self, sha, val_id):
         return self.db.execute("SELECT 1 FROM validated WHERE sha=? AND val=?", (sha, val_id)).fetchone() is not None
@@ -463,17 +488,23 @@ def prune(cache, days=PRUNE_DAYS, cap=PRUNE_CAP, protect=None, tool=None, baseli
         protect = protected_keys(cache, tool or Toolchain(), baselines)
     now = time.time() if now is None else now
     rows = sorted(cache.db.execute("SELECT key, sha, size, at FROM compiled"), key=lambda r: r[3])
-    drop = {k for k, _, _, at in rows if at < now - days * 86400 and k not in protect}
+    # A row sharing a protected entry's blob (its preprocessed-key link) is kept with it: it costs no space.
+    keep_sha = {sha for k, sha, _, _ in rows if k in protect}
+    drop = {k for k, sha, _, at in rows if at < now - days * 86400 and k not in protect and sha not in keep_sha}
     refs, size_of = {}, {}
     for k, sha, size, _ in rows:
         size_of[sha] = size
         if k not in drop:
             refs[sha] = refs.get(sha, 0) + 1
     total = sum(size_of[x] for x in refs)
+    # The protected entries always stay, so a fixed cap below them only made every prune run over it (2.67 GB
+    # protected vs 2 GB, 2026-11-02): the cap is at least the protected SPIR-V plus 25% for other recent work.
+    protected = sum(size_of[x] for x in {sha for k, sha, _, _ in rows if k in protect})
+    cap = max(cap, int(protected * 1.25))
     for k, sha, size, _ in rows:                     # oldest first
         if total <= cap:
             break
-        if k in drop or k in protect:
+        if k in drop or k in protect or sha in keep_sha:
             continue
         drop.add(k)
         refs[sha] -= 1
@@ -498,7 +529,7 @@ def prune(cache, days=PRUNE_DAYS, cap=PRUNE_CAP, protect=None, tool=None, baseli
             pass
     kept = sum(size_of.get(x, 0) for x in keep)
     print(f"shader cache prune: {len(drop)} entries and {blobs} blobs removed, {freed / 2**20:.0f} MB freed; "
-          f"{len(keep)} blobs, {kept / 2**20:.0f} MB kept (cap {cap / 2**30:.1f} GB, {days:g} days, "
+          f"{len(keep)} blobs, {kept / 2**20:.0f} MB kept (cap {cap / 2**30:.1f} GB, protected {protected / 2**20:.0f} MB, {days:g} days, "
           f"{len(protect)} protected keys)", flush=True)
     return {"entries": len(drop), "blobs": blobs, "freed": freed, "kept": kept}
 
@@ -557,10 +588,16 @@ class Progress:
 # Compile
 # ---------------------------------------------------------------------------------------------
 class Entry:
-    __slots__ = ("name", "key", "sha", "cached")
+    __slots__ = ("name", "key", "sha", "cached", "pkey", "by_pp")
 
     def __init__(self, name, key, sha=None, cached=False):
         self.name, self.key, self.sha, self.cached = name, key, sha, cached
+        self.pkey, self.by_pp = None, False   # preprocessed-text key; True = found under it (no compile)
+
+    @property
+    def ckey(self):
+        """The key a compile is shared and locked under: the preprocessed key when known."""
+        return self.pkey or self.key
 
 
 class Result:
@@ -747,13 +784,21 @@ def default_jobs():
     return max(1, (os.cpu_count() or 2) // 2)
 
 
-def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", validate=False):
-    """Compile [(tree, request)] through the cache. Returns {(tree.label, request): Result}."""
+def pp_enabled():
+    """The preprocessed-text key level is on unless BG3RTX_SHADER_PP=0 (measurements, bisecting the cache)."""
+    return os.environ.get("BG3RTX_SHADER_PP", "1") != "0"
+
+
+def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", validate=False, pp=None, backfill=False):
+    """Compile [(tree, request)] through the cache. Returns {(tree.label, request): Result}.
+    pp: use the preprocessed-text key level (None: pp_enabled()). backfill: also index the preprocessed key of
+    entries found under their closure key that have none yet (once per entry; compile_shaders.py does it, so the
+    next header edit finds main's entries by their text)."""
     lower_priority()
     tool = tool or Toolchain()
     cache = cache or Cache()
     jobs = jobs or default_jobs()
-    results, todo, by_key, owners = {}, [], {}, {}
+    results, todo, by_key, owners, misses = {}, [], {}, {}, []
     for tree, request in jobs_list:
         _prep(tree, tool)
         keys = request_keys(tree, request, tool.id)
@@ -764,22 +809,59 @@ def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", v
         for name, key in keys:
             sha = cache.get(key)
             entries.append(Entry(name, key, sha, cached=sha is not None))
-            if sha is None:
-                if key not in by_key:   # the same input on both sides of an identity: compile once
-                    todo.append((tree, request, entries[-1]))
-                by_key.setdefault(key, []).append(entries[-1])
         results[(tree.label, request)] = Result(request, entries, cache)
+        if any(e.sha is None for e in entries):
+            misses.append((tree, request, entries))
+    # Second level (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 3): a request whose include closure changed is
+    # preprocessed; an entry whose preprocessed text was compiled before (any tree, any request spelling)
+    # reuses that SPIR-V and its closure key is linked to it. A preprocess failure falls back to compiling.
+    pp_hits = 0
+    use_pp = pp_enabled() if pp is None else pp
+    fill = []
+    if use_pp and backfill:
+        for tree, request in jobs_list:
+            res = results[(tree.label, request)]
+            if res.ok and all(e.sha for e in res.entries) and not all(cache.pp_linked(e.key) for e in res.entries):
+                fill.append((tree, request, res.entries))
+    if (misses or fill) and use_pp:
+        pk = pp_entry_keys([(t, r) for t, r, _ in misses + fill], tool, jobs, label + " preprocess")
+        for tree, request, entries in fill:
+            keys = pk.get((tree.label, request))
+            if keys:
+                for e in entries:
+                    cache.link(keys[e.name], e.sha, request, e.name)
+                cache.mark_pp([e.key for e in entries])
+        if fill:
+            print(f"[{label}] preprocessed keys indexed for {len(fill)} cached requests (once)", flush=True)
+        for tree, request, entries in misses:
+            keys = pk.get((tree.label, request))
+            for e in entries:
+                if e.sha is None and keys:
+                    e.pkey = keys[e.name]
+                    sha = cache.get(e.pkey)
+                    if sha is not None:
+                        e.sha, e.cached, e.by_pp = sha, True, True
+                        cache.link(e.key, sha, request, e.name)
+                        cache.mark_pp([e.key])
+                        pp_hits += 1
+        cache.commit()
+    for tree, request, entries in misses:
         for e in entries:
-            owners.setdefault(e.key, []).append((tree.label, request))
+            if e.sha is None:
+                if e.ckey not in by_key:   # the same input on both sides of an identity: compile once
+                    todo.append((tree, request, e))
+                by_key.setdefault(e.ckey, []).append(e)
+                owners.setdefault(e.ckey, []).append((tree.label, request))
     n_entries = sum(len(r.entries) for r in results.values() if r.ok)
-    print(f"[{label}] {len(results)} requests, {n_entries} entries: {n_entries - len(todo)} cached, "
+    print(f"[{label}] {len(results)} requests, {n_entries} entries: {n_entries - len(todo)} cached"
+          f"{f' ({pp_hits} by preprocessed text)' if pp_hits else ''}, "
           f"{len(todo)} to compile with {jobs} jobs (cache {cache.dir})", flush=True)
     failures = {}
     with tempfile.TemporaryDirectory(prefix="b3o-") as out_dir, \
             concurrent.futures.ThreadPoolExecutor(jobs) as pool:
         if todo:
             with Progress(label, len(todo), cached=n_entries - len(todo)) as prog:
-                futs = {pool.submit(_compile_entry, tool, tree, request, e.name, Path(out_dir) / f"{i}.spv", cache, e.key):
+                futs = {pool.submit(_compile_entry, tool, tree, request, e.name, Path(out_dir) / f"{i}.spv", cache, e.ckey):
                         (tree, request, e) for i, (tree, request, e) in enumerate(todo)}
                 shared = 0
                 for i, f in enumerate(concurrent.futures.as_completed(futs)):
@@ -790,12 +872,18 @@ def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", v
                     except Exception as ex:  # noqa: BLE001
                         data, err = None, f"[{e.name}] {ex!r}"
                     if data is None:
-                        for t2, r2 in owners[e.key]:
+                        for t2, r2 in owners[e.ckey]:
                             failures.setdefault((t2, r2), []).append(err)
                     else:
                         sha = cache.put(e.key, data, request, e.name)
-                        for same in by_key[e.key]:
+                        if e.pkey:
+                            cache.link(e.pkey, sha, request, e.name)
+                        for same in by_key[e.ckey]:
                             same.sha = sha
+                            if same.key != e.key:
+                                cache.link(same.key, sha, request, same.name)
+                            if same.pkey:
+                                cache.mark_pp([same.key])
                     prog.step(failed=data is None)
                     if i % 50 == 49:
                         cache.commit()
@@ -882,6 +970,116 @@ def identity(base, new, requests, tool=None, cache=None, jobs=None, label="ident
 
 def identical(state):
     return state in (IDENTICAL_INPUTS, SAME)
+
+
+# ---------------------------------------------------------------------------------------------
+# Preprocessed keys (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 3; measurement, not yet the cache key)
+# ---------------------------------------------------------------------------------------------
+PP_SCHEMA = 1
+PP_LINE_RE = re.compile(rb"^[ \t]*#[ \t]*line\b[^\n]*\n?", re.M)
+
+
+def pp_digest(text):
+    """sha256 of DXC -P output without its #line directives (they carry the tree's absolute paths
+    and the line numbers of comments; without -Zi neither reaches the SPIR-V) and blank lines."""
+    body = PP_LINE_RE.sub(b"", text.replace(b"\r\n", b"\n"))
+    return hashlib.sha256(b"\n".join(l.rstrip() for l in body.split(b"\n") if l.strip())).hexdigest()
+
+
+def _run_pp(tool, tree, request, out):
+    """DXC -P of a request with the compile's exact arguments (defines, include roots, -spirv: __spirv__)."""
+    file, defines = split_request(request)
+    disk = tree.materialize()
+    src = Path(disk) / SHADERS / file
+    cmd = tool.command(src, Path(disk) / SHADERS, "main", defines, first_line_args(tree.read(SHADERS + "/" + file)), out)
+    cmd = cmd[:-3] + ["-P", "-Fi", str(out)]   # drop "-O3 -Fo out"
+    r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
+    if r.returncode or not out.exists():
+        return None
+    data = out.read_bytes()
+    out.unlink()
+    return data
+
+
+def pp_entry_keys(pairs, tool, jobs=None, label="pp"):
+    """{(tree.label, request): {entry: key}} for [(tree, request)], key = sha256 of (schema, toolchain id = DXC
+    binaries + version + argument template, entry, profile, the file's first-line DXC flags, preprocessed
+    digest). The request string is not in it: the defines are in the text. A request whose preprocess
+    fails is left out (it compiles under its closure key). No DXC slot: -P takes ~50 MB and < 1 s."""
+    out = {}
+    if not pairs:
+        return out
+    for tree, _ in pairs:
+        _prep(tree, tool)
+    with tempfile.TemporaryDirectory(prefix="b3p-") as tmp, \
+            concurrent.futures.ThreadPoolExecutor(jobs or default_jobs()) as pool, \
+            Progress(label, len(pairs), verb="preprocessed") as prog:
+        futs = {pool.submit(_run_pp, tool, tree, r, Path(tmp) / f"{i}.i"): (tree, r) for i, (tree, r) in enumerate(pairs)}
+        for f in concurrent.futures.as_completed(futs):
+            tree, r = futs[f]
+            try:
+                data = f.result()
+            except Exception:  # noqa: BLE001  a missing or crashing DXC: compile under the closure key
+                data = None
+            if data is not None:
+                src = tree.read(SHADERS + "/" + split_request(r)[0])
+                digest = pp_digest(data)
+                out[(tree.label, r)] = {e: hashlib.sha256(json.dumps([PP_SCHEMA, tool.id, e, PROFILE, first_line_args(src),
+                                                                      digest]).encode()).hexdigest()
+                                        for e in entries_of(src)}
+            prog.step(failed=data is None)
+    return out
+
+
+def pp_keys(tree, requests, tool, jobs=None, label="pp"):
+    """{request: digest of its entries' preprocessed keys, or None on a preprocess failure}."""
+    k = pp_entry_keys([(tree, r) for r in requests], tool, jobs, label)
+    return {r: (hashlib.sha256(json.dumps(sorted(k[(tree.label, r)].items())).encode()).hexdigest()
+                if (tree.label, r) in k else None) for r in requests}
+
+
+def verify_pp(tree, requests, n, tool, cache, jobs=None, seed=None, label="pp-verify"):
+    """Soundness self-check of the preprocessed key: compile a random sample of `n` requests from scratch
+    (closure keys only, a memory cache) and compare their SPIR-V with what `cache` gives (preprocessed hits
+    included). Returns the requests that differ (an empty list = sound)."""
+    import random
+    pick = random.Random(seed).sample(list(requests), min(n, len(requests)))
+    if not pick:
+        return []
+    cached = compile_many([(tree, r) for r in pick], tool=tool, cache=cache, jobs=jobs, label=label + " cached")
+    fresh = compile_many([(tree, r) for r in pick], tool=tool, cache=MemoryCache(), jobs=jobs, label=label + " fresh",
+                         pp=False)
+    bad = [r for r in pick if cached[(tree.label, r)].ok and fresh[(tree.label, r)].ok
+           and cached[(tree.label, r)].digest != fresh[(tree.label, r)].digest]
+    print(f"[{label}] {len(pick) - len(bad)}/{len(pick)} sampled requests: cached SPIR-V identical to a fresh compile",
+          flush=True)
+    return bad
+
+
+def pp_diff(base, new, requests, tool, jobs=None):
+    """What a preprocessed-text key would skip: [(request, state)] with IDENTICAL_INPUTS (blob closure
+    equal: today's key already skips it), 'pp-same' (closure changed, preprocessed text equal: a
+    preprocessed key skips the compile and the identity), 'pp-different' (must compile), 'missing'
+    or 'pp-fail'."""
+    _prep(base, tool)
+    _prep(new, tool)
+    states, need = {}, []
+    for r in requests:
+        kb, kn = request_keys(base, r, tool.id), request_keys(new, r, tool.id)
+        if kb is None or kn is None:
+            states[r] = "missing"
+        elif kb == kn:
+            states[r] = IDENTICAL_INPUTS
+        else:
+            need.append(r)
+    print(f"[pp-diff] {len(requests)} requests: {len(requests) - len(need)} decided by input keys, "
+          f"{len(need)} to preprocess on both sides", flush=True)
+    if need:
+        a = pp_keys(base, need, tool, jobs, "pp-diff baseline")
+        b = pp_keys(new, need, tool, jobs, "pp-diff current")
+        for r in need:
+            states[r] = "pp-fail" if a[r] is None or b[r] is None else ("pp-same" if a[r] == b[r] else "pp-different")
+    return [(r, states[r]) for r in requests]
 
 
 def gate_setup(baseline, dxc=None, sharc="auto", spirv_val=None, no_cache=False):
@@ -984,6 +1182,11 @@ def main(argv=None):
     ap.add_argument("--no-cache", action="store_true")
     ap.add_argument("--stats", action="store_true", help="print the cache size and exit")
     ap.add_argument("--json", help="write {request: digest or state} here")
+    ap.add_argument("--pp-diff", metavar="REV", help="measure: requests whose preprocessed text differs from REV's "
+                    "(what a preprocessed-text cache key would still compile); no compile")
+    ap.add_argument("--pp-verify", type=int, default=0, metavar="N", help="soundness self-check: after the run, "
+                    "compile N random requests from scratch (closure keys only) and compare with the cached SPIR-V")
+    ap.add_argument("--pp-new", metavar="REV", help="with --pp-diff: compare against this commit instead of the working tree")
     ap.add_argument("--prune", action="store_true", help="prune the cache and exit (compile_shaders.py runs it too)")
     ap.add_argument("--prune-days", type=float, default=PRUNE_DAYS, help="keep entries used in the last N days")
     ap.add_argument("--prune-baselines", type=int, default=PRUNE_BASELINES, help="keep the entries of the last K baselines")
@@ -999,8 +1202,29 @@ def main(argv=None):
               baselines=args.prune_baselines)
         return 0
     tool = Toolchain(args.dxc)
-    new = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
+    new = SourceTree.commit(args.pp_new).with_sharc(tool.sharc) if args.pp_new else SourceTree.worktree(ROOT).with_sharc(tool.sharc)
     t0 = time.time()
+    if args.pp_diff:
+        base = SourceTree.commit(args.pp_diff).with_sharc(tool.sharc)
+        try:
+            reqs = args.requests or [r for r in base.requests() if r in set(new.requests())]
+            reqs = [r for r in reqs if not args.filter or re.search(args.filter, r)]
+            res = pp_diff(base, new, reqs, tool, args.jobs)
+        finally:
+            base.cleanup()
+            new.cleanup()
+        count = {}
+        for _, s in res:
+            count[s] = count.get(s, 0) + 1
+        for r, s in res:
+            if s in ("pp-fail", "missing"):
+                print(f"{s}: {r}")
+        print(f"pp-diff {base.rev[:12]} -> {new.label}: {len(res)} requests; {count} in {time.time() - t0:.1f} s; "
+              f"compiles needed with today's key {len(res) - count.get(IDENTICAL_INPUTS, 0)}, "
+              f"with a preprocessed key {count.get('pp-different', 0) + count.get('pp-fail', 0)}", flush=True)
+        if args.json:
+            Path(args.json).write_text(json.dumps(dict(res), indent=1))
+        return 0
     if args.baseline:
         base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
         try:
@@ -1024,6 +1248,12 @@ def main(argv=None):
     bad = [r for r in res.values() if not r.ok or r.valid is False]
     for r in bad:
         print(f"FAIL {r.request}\n{r.log}")
+    if args.pp_verify:
+        unsound = verify_pp(new, reqs, args.pp_verify, tool, cache, args.jobs)
+        for r in unsound:
+            print(f"PP-KEY UNSOUND: {r} (cached SPIR-V differs from a fresh compile)")
+        if unsound:
+            return 1
     print(f"{len(res) - len(bad)}/{len(res)} compiled{' and valid' if args.validate else ''} "
           f"in {time.time() - t0:.1f} s", flush=True)
     if args.json:

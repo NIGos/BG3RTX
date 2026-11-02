@@ -47,7 +47,7 @@
   "\\[cfg\\] settings read",
   "\\[trace\\] frame \\d+ written",
   "gi: GPU cost [0-9.]+ ms/frame",
-  "\\[vt alpha\\] 7 masks loaded from .*vt_alpha \\(1\\.65 MB BC4\\)",
+  "\\[vt alpha\\] [1-9][0-9]* masks loaded from .*vt_alpha \\([0-9.]+ MB BC4\\)",
   "\\[vt alpha\\] last \\d+ frames: [1-9][0-9.]* VT records per frame read an offline mask \\(rt_vt_alpha_masks 1",
   "\\[vt alpha\\] last \\d+ frames: 0\\.0 VT records per frame read an offline mask \\(rt_vt_alpha_masks 0",
   "rt stats \\(\\d+ frames\\): alpha candidates of shadow rays",

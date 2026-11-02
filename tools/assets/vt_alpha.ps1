@@ -6,8 +6,11 @@
 #          files every level of it needs (GTP names, to be placed next to the GTS before extract).
 # extract: every level of each texture, layer 0 (albedo; its .w is the alpha the RT test reads), as DDS
 #          <out>.<level>.dds via VirtualTileSet.ExtractTexture.
-param([Parameter(Mandatory)][string]$Tools, [Parameter(Mandatory)][string]$Request, [Parameter(Mandatory)][string]$Output)
+param([string]$Tools, [Parameter(Mandatory)][string]$Request, [Parameter(Mandatory)][string]$Output)
 $ErrorActionPreference = 'Stop'
+if (-not $Tools -or -not (Test-Path -LiteralPath (Join-Path $Tools 'LSLib.dll'))) {
+  throw "LSLib not found ('$Tools'): pass --lslib <LSLib Tools dir>, set BG3RTX_LSLIB, or unpack LSLib into external/lslib-<version>/ (tools/assets/locate.py)"
+}
 $Tools = (Resolve-Path -LiteralPath $Tools).Path
 $env:PATH = "$Tools;" + $env:PATH   # child process only
 [Reflection.Assembly]::LoadFrom((Join-Path $Tools 'LSLib.dll')) | Out-Null
@@ -38,6 +41,9 @@ try {
       }
       $out += @{ rect = $r; matches = 1; name = $p.Name; levels = $used; pages = @($pages) }
     }
+  } elseif ($req.mode -eq 'list') {
+    # Every texture of the tile set (name, level-0 rectangle): the catalogue (tools/assets/vt_alpha_catalogue.py).
+    foreach ($p in $meta) { $out += @{ name = $p.Name; x = $p.X; y = $p.Y; w = $p.Width; h = $p.Height } }
   } elseif ($req.mode -eq 'extract') {
     foreach ($t in $req.textures) {
       $p = @($meta | Where-Object Name -eq $t.name)[0]; $written = @()

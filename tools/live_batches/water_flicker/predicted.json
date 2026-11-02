@@ -10,6 +10,16 @@
    "written": "2026-11-02"
   }
  },
+ "wf4-s8-fg2": {
+  "shot-rrwater": {
+   "predicted": null,
+   "source": "rt_water_rr_mv changes only the motion vectors RR reads (our copy; FG and the core's passes keep the game's), not any radiance before post: the water-compose energy (5c3fdabc + the in-frame compose delta) is unchanged",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "one full-screen RG16F copy of the game's vectors (2.7 Mpx, ~11 MB read + 11 MB write: ~0.01-0.02 ms at the 5090's bandwidth) plus two projections per water pixel; inside the [water] reflections GPU line (0.12 ms in wf2/wf3)",
+   "flicker": "rot-rrwater: water-masked transient rate below both rot-off bursts by more than |off-a - off-b| if RR's reprojection of the water with the bed's motion is the flicker. rot-rroff (the game's DLSS SR instead of RR; the core's non-RR GI / D-LS / D-RF modes too): attribution only; clearly below both OFFs means the flicker is RR's handling of the water, within them means the game's water (its animated normals, probe) or the image whatever the upscaler. Not sized offline: the bed-vs-surface parallax per pixel during the turn is not measured",
+   "written": "2026-11-02"
+  }
+ },
  "wf3-s8-fg2": {
   "shot-nocompose": {
    "predicted": 0.126,

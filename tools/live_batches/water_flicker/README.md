@@ -1,6 +1,11 @@
 # S8 harbour water reflection flicker (live_batch water-flicker)
 
-Current job: `wf3-s8-fg2` (foreground, 161 s, 4 K16 bursts about 9.2 GB, deleted after the analysis):
+Current job: `wf4-s8-fg2` (foreground, 173 s, 5 K16 bursts about 11.5 GB, deleted after the analysis): RR's inputs on
+water. rot-off-a / rot-rrwater (`rt_water_rr_mv=1`: RR's motion vectors with the water surface's parallax, ABI 26) /
+rot-rroff (`rr=0`, the game's DLSS SR) / rot-off-b, the same turn protocol and masks as wf3 below (serials 941xx).
+Needs the layer and core of this branch (ABI 26: restart). predicted.json: energy null, cost +0.02 ms.
+
+Previous job: `wf3-s8-fg2` (done 141227: not the compose; its job removed) (foreground, 161 s, 4 K16 bursts about 9.2 GB, deleted after the analysis):
 attribution. rot-off-a / rot-nocompose / rot-off-b turn the same way from the same pose with every water image key
 (compose, sun / local shadows, refraction, game shadow) on / off / on, toggled at the start of each ret-* turn, 9 s
 before its burst; calibration burst, rt_debug 21 masks static and in the turn, energy (water-compose) and cost
