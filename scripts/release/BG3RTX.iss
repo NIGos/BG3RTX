@@ -1,6 +1,6 @@
 ; Targets Inno Setup 6.x. Release owner must pin and validate the compiler.
 ; ISCC.exe /DPayloadDir="C:\release\payload" /DProductVersion="0.1.0" BG3RTX.iss
-; Payload contract and integration handoff: SETUP.md. No branding dependencies.
+; Payload contract and integration handoff: SETUP.md. Uses B1 original branding.
 #ifndef PayloadDir
   #error PayloadDir must point to a verified release payload
 #endif
@@ -31,6 +31,7 @@ WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
+SetupIconFile=..\..\assets\branding\bg3rtx.ico
 ; Release owner must supply Authenticode signing before public distribution.
 ; SignTool and SignedUninstaller are intentionally not fabricated here.
 
@@ -41,7 +42,57 @@ Name: "desktop"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
 Source: "lifecycle.ps1"; DestDir: "{tmp}"; DestName: "bg3rtx-lifecycle.ps1"; Flags: dontcopy
 Source: "{#PayloadDir}\*"; DestDir: "{tmp}\bg3rtx-payload"; Flags: dontcopy recursesubdirs createallsubdirs
+; Recursive payload above includes bin\ui\{index.html,app.css,app.js}, fonts and
+; branding. Check these mandatory inputs at compile time instead of silently
+; producing an installer whose WebView UI cannot load. Lifecycle owns deployment.
+#if !FileExists(PayloadDir + "\bin\ui\index.html") || !FileExists(PayloadDir + "\bin\ui\app.css") || !FileExists(PayloadDir + "\bin\ui\app.js")
+  #error Missing bundled WebView UI in verified payload
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\fonts\LatoWeb-Regular.ttf") || !FileExists(PayloadDir + "\bin\ui\fonts\LatoWeb-Semibold.ttf") || !FileExists(PayloadDir + "\bin\ui\fonts\OFL.txt")
+  #error Missing bundled UI fonts or OFL licence in verified payload
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\bg3rtx.svg")
+  #error Missing original launcher emblem in verified payload
+#endif
 Source: "lifecycle.ps1"; DestDir: "{app}\setup-support"; Flags: ignoreversion
+
+; Approved original ornaments and provenance must accompany the local UI.
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\README.md")
+  #error Missing launcher ornament README.md
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\corner.svg")
+  #error Missing launcher ornament corner.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\dark-stone.svg")
+  #error Missing launcher ornament dark-stone.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\divider.svg")
+  #error Missing launcher ornament divider.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\frame.svg")
+  #error Missing launcher ornament frame.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-help.svg")
+  #error Missing launcher ornament glyph-help.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-light.svg")
+  #error Missing launcher ornament glyph-light.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-memory.svg")
+  #error Missing launcher ornament glyph-memory.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-performance.svg")
+  #error Missing launcher ornament glyph-performance.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-water.svg")
+  #error Missing launcher ornament glyph-water.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\hero-lantern.png")
+  #error Missing launcher ornament hero-lantern.png
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\parchment-panel.svg")
+  #error Missing launcher ornament parchment-panel.svg
+#endif
 
 [Icons]
 Name: "{autoprograms}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; Tasks: startmenu

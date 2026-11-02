@@ -3,9 +3,45 @@
 BG3RTX adds ray-traced lighting, DLSS Ray Reconstruction and DLSS Frame Generation to Baldur's
 Gate 3 (Vulkan renderer). You set it up with `bin\BG3RTX.exe`, the settings window and launcher.
 
+## Settings window and first run
+
+The preset selector and Save, Discard, Play and Close stay visible while the section scrolls.
+Overview contains game selection and hardware information. Graphics groups Lighting and Surfaces;
+Performance explains frame generation, the rendered cap and Reflex. Advanced contains qualified
+shading options. Experimental is closed by default: opening it also makes experimental choices
+available in the existing cards. No option is duplicated. Developer is absent unless the merged
+configuration explicitly has `dev=1`. Hidden custom values stay preserved without exposing their names.
+
+Preset changes preview every changed card before replacing edits. Reset entire preset uses the
+same preview. Hidden or hand-edited custom values are preserved. Discard returns to the last saved
+settings and game selection. Closing with unsaved changes offers Save, Discard or Cancel.
+Save previews dependency adjustments; you may enable required settings or lower dependent choices.
+Nothing is silently promoted to a qualified preset.
+
+First run has Welcome, game selection, compatibility review and a DLSS reminder. Continue setup
+resumes from the last completed page after interruption. Existing settings are previewed, never
+replaced automatically. You can finish without a game folder; Play stays disabled until a valid
+Vulkan game folder is selected. The launcher never changes the game's graphics configuration.
+
+The footer separates unsaved edits from saved settings. A restart warning survives Save and
+launcher reopen during the same game process, using an atomic `bg3rtx_ui.ini` beside the mod
+configuration. It clears for a different game process or when saved settings return to the process
+baseline. There is no runtime acknowledgement: Saved never means proven Active. Play is disabled
+when the game is running and never restarts it. A failed state write leaves edits available.
+Long errors have a Details / report button; saved settings remain saved if launch fails.
+
+Support offers Report a problem, View log, Open mod folder and overlay troubleshooting.
+**Report a problem is an integration hook in this candidate**: the B2 service implements local
+collection. If absent, the button clearly says nothing was collected. Restore is unavailable until
+setup provides a verified backup. No automatic upload or save-file access is part of this launcher.
+
+Tab and Shift+Tab traverse native controls; arrow keys operate tabs, choices and sliders. Focusing a
+scrolled control brings it into view. The launcher uses B1's split-lantern emblem, private Lato font,
+charcoal/parchment palette and system colours in high contrast. No font is installed system-wide.
+
 ## Starting the game
 
-- **From the settings window:** pick your settings, then **Save and launch**. The launcher
+- **From the settings window:** pick your settings, then **Play**. The launcher
   starts `bin\bg3.exe` (the Vulkan renderer) directly, with BG3RTX enabled for that process
   only. Nothing in the registry or the game folder is changed.
 - **From Steam:** set the game's launch options (Properties > General) to
@@ -36,19 +72,21 @@ The window opens on your GPU and suggests a preset:
 |---|---|---|
 | Low | RTX 2060-3060, 4060; AMD/Intel with ray tracing | No ray-traced scene, no Ray Reconstruction. Screen-space GI and contact shadows |
 | Medium | RTX 3070/3080, 4060 Ti/4070 | Ray-traced scene without alpha-tested objects, RT GI, fast local-light shadows, glossy reflections |
-| High | RTX 4080/4090, 5080 | Everything ray traced |
+| High | RTX 4080/4090, 5080 | Ray-traced lighting and full geometry; hardware suitability is estimated |
 | Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, roof sun shadows, rough reflections, RT water + Refraction, Hidden-surface shading + Bounce, Emission at ray hits (Hidden hits), Far-field sun bounce 6 m, frame cap 58 (116 shown with frame generation 2x) |
 
 The presets below RTX 5090 are estimates and have not been measured on those GPUs yet. Settings
 your GPU cannot run are marked "(not supported)" and the presets skip them. For example, an
 RTX 30 card gets no frame generation, and AMD/Intel get no Ray Reconstruction.
 
-Changing any setting makes the preset "Custom". **Reset to preset** brings the preset back.
+Changing any setting makes the preset "Custom". **Reset entire preset** brings the preset back.
 
 ## Settings
 
-The right-hand panel describes the selected setting. The marker next to each setting says how
-a change reaches a running game:
+Each feature card describes its visual effect. **Details and requirements** gives cost provenance
+and apply requirements. GPU and VRAM figures marked Estimate are reference costs, not a prediction
+for your GPU. Unknown means no qualified measurement is available. The card says how a change
+reaches a running game:
 
 | Setting | Choices | Applies |
 |---|---|---|
