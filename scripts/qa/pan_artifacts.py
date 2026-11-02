@@ -312,7 +312,7 @@ def analyze(directory, out):
         report['pose_offset_status'] = 'exact GPU conversion-camera origin match; instance-transform timing not yet proven'
     is_static = static_camera([frames[i]['camera'] for i in ids], movements)
     arrays = {key:np.stack(value) for key,value in stacks.items()}
-    report['static'] = is_static
+    report['static'] = bool(is_static)   # numpy bool: json.dumps refused it (wf1 093458)
     report['storage_quantum'] = {
         key:max(storage_quantum(frames[i]['formats'][source], float(np.max(frames[i][source]))) for i in ids)
         for key,source in (('luma','final'),('sun_mask','sun'),('local_mask','local'),('gi_luma','gi'))}
