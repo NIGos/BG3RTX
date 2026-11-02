@@ -290,10 +290,12 @@ VkDeviceSize g_basis_bytes = 0;     // pool ranges holding hit-material UV/basis
 uint64_t g_basis_over = 0, g_basis_over_logged = 0;
 VkDeviceSize g_basis_over_bytes = 0;
 struct PoolMove { uint64_t key, gen; VkDeviceSize position, basis, position_size, basis_size; };
+struct PoolHoldMove { uint64_t key; VkDeviceSize source, destination, bytes; };
 struct PoolCopy {
   Buf target;
   RangeAlloc ranges;
   std::vector<PoolMove> meshes;
+  std::vector<PoolHoldMove> holds;
   uint64_t frame = 0, rec = 0;
   uint32_t done_slot = 0;
 };
@@ -944,21 +946,32 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
   // and six-present range retirement. Demand must remain low for the full window.
   const bool quiet = g_pool_quiet.ready(now, cfg_int("rt_vram_compact", 0) && target,
                                          240 + kSceneSlots + 6);
-  if (!quiet || g_pool_copy.target.b || !g_old_pools.empty() || geo_native_hair_enabled()) return;
+  if (!cfg_int("rt_vram_compact",0) || !target) return;
+  static uint64_t next_log=0;
+  auto deferred=[&](const char* why){
+    if(now>=next_log){
+      next_log=now+240+kSceneSlots+6;
+      log("[bvh] mesh pool shrink deferred: %s (%.1f / %.0f MB, target %.1f MB)",why,
+          double(g_pool_ra.used)/1048576.0,double(g_pool.size)/1048576.0,double(target)/1048576.0);
+    }
+  };
+  if (!quiet) {deferred("low-demand window");return;}
+  if (g_pool_copy.target.b || !g_old_pools.empty()) {deferred("copy or old scene retirement");return;}
+  if (geo_native_hair_enabled()) {deferred("native hair ranges");return;}
   {
     std::lock_guard<std::mutex> fl(g_fix_mu);
-    if (!g_pool_uncertain.empty()) return;
+    if (!g_pool_uncertain.empty()) {deferred("uncertain pool recording");return;}
     // Never copy ahead of another command's registered but unsubmitted pool
     // work, including legacy batches whose watchdog already discarded results.
     for (const auto& [other, records] : g_rec_cmd)
-      if (other != cmd && !records.empty()) return;
+      if (other != cmd && !records.empty()) {deferred("unsubmitted pool work");return;}
   }
   // Never copy data an outstanding extraction/basis/hold job can still write.
-  if (!g_batches.empty()) return;
-  for (const auto& p : g_pending_free) if (p.chunk < 0) return;
-  for (const auto& [key, d] : g_dyn) if (d.hold_size || d.hair_bounds_size) return;
-  for (const auto& [key, m] : g_meshes) if (m.state != kReady) return;
-  if (!compact_status_ready() || !native_hit::pool_compact_freeze()) return;
+  if (!g_batches.empty()) {deferred("outstanding build results");return;}
+  for (const auto& p : g_pending_free) if (p.chunk < 0) {deferred("pending pool ranges");return;}
+  for (const auto& [key, d] : g_dyn) if (d.hair_bounds_size) {deferred("hair bounds ranges");return;}
+  for (const auto& [key, m] : g_meshes) if (m.state != kReady) {deferred("unverified mesh");return;}
+  if (!compact_status_ready() || !native_hit::pool_compact_freeze()) {deferred("material jobs or completion allocation");return;}
   PoolCopy copy;
   copy.ranges.init(target);
   std::vector<VkBufferCopy> regions;
@@ -971,11 +984,20 @@ void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
     if (m.pool_size) regions.push_back({m.pool_off, position, m.pool_size});
     if (m.basis_size) regions.push_back({m.basis_off, basis, m.basis_size});
   }
+  // Dynamic hold snapshots are live pool allocations too, even with no new
+  // meshes. Copy them rather than waiting forever for a static view to release them.
+  for (const auto& [key,d] : g_dyn) if(d.hold_size){
+    uint64_t destination=0;
+    if(!copy.ranges.alloc(d.hold_size,16,&destination)){fits=false;break;}
+    copy.holds.push_back({key,d.hold_off,destination,d.hold_size});
+    regions.push_back({d.hold_off,destination,d.hold_size});
+  }
   if (!fits || copy.ranges.used != g_pool_ra.used ||
-      !vram_allow(vram_guard::kMeshPool, target, "mesh pool shrink overlap") ||
+      !vram_compact::pool_shrink_overlap(target,g_pool.size) ||
       !make_buf(copy.target, target, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
           VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
           VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "mesh pool repack")) {
+    deferred("range accounting or replacement allocation failed");
     native_hit::pool_compact_thaw();g_pool_quiet = {};return;
   }
   copy.frame = now;copy.rec = rec;copy.done_slot = 0;
@@ -1011,6 +1033,12 @@ void pool_repack_poll(uint64_t now) {
           }
           auto& m = it->second;m.pool_off = move.position;m.basis_off = move.basis;
           native_hit::pool_compact_rebase(m.geo_key, m.gen, m.pool_off, m.basis_off, g_pool_epoch);
+        }
+        for(const auto& move:copy.holds){
+          auto it=g_dyn.find(move.key);
+          if(it!=g_dyn.end() && vram_compact::hold_move_matches(it->second.hold_off,it->second.hold_size,move.source,move.bytes))
+            it->second.hold_off=move.destination;
+          else copy.ranges.release(move.destination,move.bytes);
         }
         // Evictions during the copy belong to the old allocator. Its complete
         // buffer remains retained until every old scene and GPU fence retires.
@@ -1682,7 +1710,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     s.rec = rec;
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
-    if (hold_frames && !moving && fd.prims <= hold_max_prims) {
+    if (!g_pool_copy.target.b && hold_frames && !moving && fd.prims <= hold_max_prims) {
       const VkDeviceSize bytes = VkDeviceSize(fd.prims) * tri_bytes;
       if (s.hold_size && (s.hold_size != bytes || s.hold_stride != stride)) {
         g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
