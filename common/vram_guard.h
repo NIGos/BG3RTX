@@ -37,9 +37,9 @@ inline uint64_t margin(uint64_t budget, uint64_t largest_step, uint64_t observed
 // the evidence log) scaled by budget / reference, never below the size it starts at (the default, which
 // every card ran before the guard) and never above the reference cap (unchanged behaviour on 32 GB).
 inline constexpr uint64_t kRefBudget = 31419 * mib;
-enum Consumer : int { kAsChunks, kMeshPool, kCascade, kHitRecycle, kConsumerCount };
+enum Consumer : int { kAsChunks, kMeshPool, kCascade, kHitRecycle, kRtCapture, kConsumerCount };
 inline constexpr const char* kConsumerName[kConsumerCount] = {"BLAS chunks", "mesh pool", "cascade capture",
-                                                              "hit-material recycled buffers"};
+                                                              "hit-material recycled buffers", "RT capture"};
 struct CapRef { uint64_t ref, floor; };
 inline constexpr CapRef kCapRef[kConsumerCount] = {
     // BLAS chunks: 66 chunks (4224 MB) held the long-session test within budget; floor 22 chunks (1408 MB)
@@ -52,6 +52,14 @@ inline constexpr CapRef kCapRef[kConsumerCount] = {
     {2047 * mib, 427 * mib},
     // Hit-material recycled pool: native_hit::recycle::kCapBytes (512 MB); floor 0 (pure reuse cache).
     {512 * mib, 0},
+    {2047 * mib, 1024 * mib}, // RT capture: separate accounting from the cascade slots.
+};
+
+// Refusals are retries, not concurrent allocations. Report their peak allocation
+// footprint, not their sum (vg2: 25 x 960 MiB was misleadingly called 24000 MiB).
+struct RefusedRequests {
+  uint64_t count = 0, peak = 0;
+  void note(uint64_t bytes) { ++count; peak = (std::max)(peak, bytes); }
 };
 inline uint64_t cap(Consumer c, uint64_t budget) {
   const CapRef r = kCapRef[c];

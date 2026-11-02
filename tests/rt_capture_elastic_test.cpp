@@ -25,6 +25,18 @@ int main(){
  check(w.observe(560*mib,800*mib)==800*mib); // Overflow grows immediately and resets shrink.
  for(unsigned i=1;i<ElasticWindow::samples;++i)check(w.observe(560*mib,224*mib)==560*mib);
  check(w.observe(560*mib,224*mib)==224*mib);
+ // Reserve-only demand above current must not immediately undo a shrink.
+ w.reset();
+ for(unsigned i=0;i<ElasticWindow::samples;++i)w.observe(544*mib,352*mib,280*mib);
+ check(w.observe(352*mib,368*mib,290*mib)==352*mib);
+ check(w.observe(352*mib,448*mib,353*mib)==448*mib); // Real overflow still grows.
+ // A high sample must age out, not disappear on replacement or one low sample.
+ for(unsigned i=0;i<ElasticWindow::samples-1;++i)
+  check(w.observe(544*mib,272*mib,210*mib)==544*mib);
+ check(w.observe(544*mib,272*mib,210*mib)==272*mib);
+ w.reset();
+ for(unsigned i=0;i<ElasticWindow::samples+1;++i)
+  check(w.observe(352*mib,320*mib,250*mib)==352*mib); // Too little saving to shrink.
  w.observe(560*mib,224*mib);w.reset();check(w.count==0 && w.peak==0);
  for(unsigned i=0;i<ElasticWindow::samples+1;++i)
   check(w.observe(560*mib,427*mib,500*mib)==560*mib); // Card-cap drop must not shrink below demand.

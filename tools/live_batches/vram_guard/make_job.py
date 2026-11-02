@@ -56,7 +56,7 @@ expect_every = [
     # within budget after reserves shrink. Recovery has a separate 25 s settling phase; no over-budget
     # line is excused inside the measured recover-on window.
     {"name": "VRAM: process usage within the driver's budget in every guard-on window",
-     "select": r"\[mem\] ours \(window\):", "match": r"\(within budget\); guard (normal|LOW)", "min": 1, "windows": ON},
+     "select": r"\[mem\] ours \(window\):", "event": True, "settle_s": 1, "match": r"\(within budget\); guard (normal|LOW)", "min": 1, "windows": ON},
     {"name": "pacing: no Streamline 'Frame rate over 100 ms' in a guard-on window",
      "select": r"\[sl\] warn .*Frame rate over 100\.00ms", "match": r"(?!)", "min": 0, "event": True, "windows": ON},
     {"name": "pacing: no Streamline fence wait timeout in a guard-on window",
@@ -68,7 +68,7 @@ expect_every = [
 # and recovery must have retired it; a target announcement alone is not a release.
 expect_every += [
     {"name": "mesh reserve accounting in every ON window",
-     "select": r"\[mem\] ours \(window\):",
+     "select": r"\[mem\] ours \(window\):", "event": True, "settle_s": 1,
      "match": r"mesh pool \d+ MB \(\d+ used, \d+ copy/retirement, \d+ repacks; \d+ cached BLAS relocated\)",
      "min": 1, "windows": ON},
     {"name": "BLAS capacity accounting in every ON window",
@@ -76,7 +76,7 @@ expect_every += [
      "match": r"chunks reserved/live/pending [0-9.]+/[0-9.]+/[0-9.]+ MB, freed \d+ \([0-9.]+ MB\), relocated \d+ \([0-9.]+ MB\); pool repacks \d+ \(-[0-9.]+ MB\)",
      "min": 1, "windows": ON},
     {"name": "recovery has a published repack and no pool copy/retirement overlap",
-     "select": r"\[mem\] ours \(window\):",
+     "select": r"\[mem\] ours \(window\):", "event": True, "settle_s": 1,
      "match": r"0 copy/retirement, [1-9]\d* repacks;",
      "min": 3, "windows": ["recover-on"]},
 ]
@@ -114,10 +114,10 @@ job = {
         r"\[mem\] device-local VRAM of this process: used [1-9]\d* MB, budget [1-9]\d* MB",
         r"\[bvh\] mesh cache: \d+ meshes", r"\[trace\] frame \d+ written",
         r"\[bvh\] mesh pool capacity: repacked [0-9.]+ / [0-9.]+ -> [0-9.]+ MB, epoch \d+; old pool waits for scene retirement",
-        r"\[cascade\] capture capacity demand [0-9.]+ MB, target \d+ MB of \d+ MB \(elastic, \d+/24 low samples; waiting for retired slot\)",
-        r"\[cascade\] capture capacity \d+ -> \d+ MB \(elastic, retired slot\)",
-        r"\[geo\] RT capture capacity demand opaque [0-9.]+ MB alpha [0-9.]+ MB, target \d+ MB of \d+ MB \(elastic, \d+/24 low samples; waiting for retired slot\)",
-        r"\[geo\] RT capture capacity \d+ -> \d+ MB \(elastic, retired slot\)",
+        r"\[cascade\] capture capacity demand [0-9.]+ MB, target \d+ MB of \d+ MB \(elastic, \d+/24 low samples; pending producer boundary\)",
+        r"\[cascade\] capture capacity \d+ -> \d+ MB \(elastic, detached slot\)",
+        r"\[geo\] RT capture capacity demand opaque [0-9.]+ MB alpha [0-9.]+ MB, target \d+ MB of \d+ MB \(elastic, \d+/24 low samples; pending producer boundary\)",
+        r"\[geo\] RT capture capacity \d+ -> \d+ MB \(elastic, detached slot\)",
         r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+",
     ],
     "expect_every": expect_every,

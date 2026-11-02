@@ -576,7 +576,7 @@ static vram_guard::Guard g_vg;                               // under g_vg_mu
 static std::atomic<bool> g_vg_on{false};
 static std::atomic<uint64_t> g_vg_budget{0};
 static std::atomic<uint64_t> g_vg_ask[vram_guard::kYieldCount];
-struct VgRefusal { uint64_t count = 0, bytes = 0; const char* first = nullptr; bool logged = false; };
+struct VgRefusal : vram_guard::RefusedRequests { const char* first = nullptr; bool logged = false; };
 static VgRefusal g_vg_ref[vram_guard::kConsumerCount];      // this window, under g_vg_mu
 static std::atomic<bool> g_vg_refused_new{false};           // a first refusal this window: breakdown at the next tick
 
@@ -592,8 +592,7 @@ bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
   std::lock_guard<std::mutex> lock(g_vg_mu);
   if (!over_cap && g_vg.allow(bytes)) return true;
   VgRefusal& r = g_vg_ref[consumer];
-  ++r.count;
-  r.bytes += bytes;
+  r.note(bytes);
   if (!r.first) r.first = what;
   if (!r.logged) {   // once per window and consumer; the window line has the totals
     r.logged = true;
@@ -688,8 +687,8 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
     for (int c = 0; c < vram_guard::kConsumerCount; ++c) {
       VgRefusal& r = g_vg_ref[c];
       if (r.count)
-        log("[vram] guard window: %llu grows of %s refused (%.0f MB asked; first: %s)", (unsigned long long)r.count,
-            vram_guard::kConsumerName[c], double(r.bytes) / 1048576.0, r.first ? r.first : "?");
+        log("[vram] guard window: %llu growth attempts of %s refused (peak allocation %.0f MB; first: %s)", (unsigned long long)r.count,
+            vram_guard::kConsumerName[c], double(r.peak) / 1048576.0, r.first ? r.first : "?");
       r = VgRefusal{};
     }
     g_vg.new_window();

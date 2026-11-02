@@ -432,7 +432,7 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   if(!c.xfb.b || wanted==c.xfb.size || !wanted)return;
   auto deferred=[&](const char* why){
     if(c.elastic_log.due(now,capture_budget::ElasticWindow::samples*(cascade?3:1)))
-      log("%s capture shrink deferred: %s (target %llu MB, capacity %llu MB)",
+      log("%s capture resize deferred: %s (target %llu MB, capacity %llu MB)",
           cascade?"[cascade]":"[geo] RT",why,
           (unsigned long long)(wanted>>20),(unsigned long long)(c.xfb.size>>20));
   };
@@ -445,8 +445,8 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   // Shrinks already obey the sampled cap; a new cap only restricts growth.
   if(wanted>c.xfb.size)wanted=(std::min)(wanted,elastic_cap(cascade));
   if(wanted==c.xfb.size)return;
-  if(wanted>c.xfb.size && (!vram_guard_on() || !vram_allow(vram_guard::kCascade,wanted,
-                     cascade?"elastic cascade capture":"elastic RT capture"))){
+  if(wanted>c.xfb.size && !vram_allow(cascade?vram_guard::kCascade:vram_guard::kRtCapture,wanted,
+                     cascade?"elastic cascade capture":"elastic RT capture")){
     deferred("growth budget refused");return;
   }
   Buf replacement;
@@ -457,7 +457,7 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   log(cascade?"[cascade] capture capacity %llu -> %llu MB (elastic, detached slot)":
               "[geo] RT capture capacity %llu -> %llu MB (elastic, detached slot)",
       (unsigned long long)(c.xfb.size>>20),(unsigned long long)(wanted>>20));
-  c.elastic_old=c.xfb;c.elastic_detached=now;c.xfb=replacement;c.elastic.reset();c.elastic_target=0;
+  c.elastic_old=c.xfb;c.elastic_detached=now;c.xfb=replacement;c.elastic_target=0;
 }
 
 void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, VkPipelineStageFlags dst,

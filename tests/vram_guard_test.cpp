@@ -13,6 +13,12 @@ static void check(bool ok, int line) {
 #define CHECK(x) check((x), __LINE__)
 
 int main() {
+  RefusedRequests refused;
+  for(int i=0;i<25;++i)refused.note(960*mib);
+  CHECK(refused.count==25 && refused.peak==960*mib);
+  refused.note(976*mib);refused.note(944*mib);
+  CHECK(refused.count==27 && refused.peak==976*mib);
+  CHECK(kRtCapture!=kCascade);
   // ---- headroom math ----
   // Slack: 2.5% of the budget (the evidence's 789 MB drop of 31419 MB), or a larger observed drop.
   CHECK(slack(31419 * mib, 0) == 31419 * mib / 1000 * 25);
