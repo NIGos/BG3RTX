@@ -48,6 +48,31 @@ int main() {
   CHECK(pool_target(1, 1024, 16) == 16);
   CHECK(pool_target(1, 1024, 17) == 17);
   CHECK(pool_target(UINT64_MAX, UINT64_MAX, 16) == 0);
+  CHECK(pool_target(296 * MB,2047 * MB,256 * MB)==592 * MB);
+  CHECK(pool_shrink_overlap(592 * MB,2047 * MB));
+  CHECK(!pool_shrink_overlap(1024 * MB,2047 * MB));
+  CHECK(!pool_shrink_overlap(0,2047 * MB));
+  CHECK(hold_move_matches(16,32,16,32));
+  CHECK(!hold_move_matches(32,32,16,32));
+  CHECK(!hold_move_matches(16,0,16,32));
+  CHECK(!hold_move_matches(16,16,16,32));
+  // Repack a mixed pool with a high-offset live hold. Ignoring the hold
+  // fails accounting; copying it preserves its bytes and old-scene allocator.
+  as_chunks::RangeAlloc old_pool,new_pool;
+  old_pool.init(2047*MB);new_pool.init(592*MB);
+  uint64_t mesh=0,hole=0,hold=0,moved_mesh=0,moved_hold=0;
+  CHECK(old_pool.alloc(280*MB,16,&mesh));
+  CHECK(old_pool.alloc(1500*MB,16,&hole));
+  CHECK(old_pool.alloc(16*MB,16,&hold));
+  old_pool.release(hole,1500*MB);
+  CHECK(new_pool.alloc(280*MB,16,&moved_mesh));
+  CHECK(new_pool.used!=old_pool.used);
+  CHECK(new_pool.alloc(16*MB,16,&moved_hold));
+  CHECK(new_pool.used==old_pool.used && moved_hold<hold);
+  CHECK(old_pool.cap==2047*MB && old_pool.used==296*MB);
+  // A hold removed while copying must release its destination, never reappear.
+  if(!hold_move_matches(hold,0,hold,16*MB))new_pool.release(moved_hold,16*MB);
+  CHECK(new_pool.used==280*MB && old_pool.used==296*MB);
   QuietWindow quiet;
   CHECK(!quiet.ready(100, true, 254));
   CHECK(!quiet.ready(353, true, 254));

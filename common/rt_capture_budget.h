@@ -63,6 +63,24 @@ inline bool elastic_retired(uint64_t recorded,uint64_t gpu_done,bool cascade){
  return gpu_done>=recorded && gpu_done-recorded>=lag;
 }
 
+// Detach at the next producer boundary; the old allocation is retained separately.
+// Submission is required: a pending/unknown recording could execute much later.
+inline bool elastic_can_detach(bool recording,int record_state,bool old_pending){
+ return !recording && !old_pending && (record_state==1 || record_state==2);
+}
+// Start retirement at detachment, not the producer's constantly refreshed frame.
+// Four fence-covered frames include the two future cascade consumers.
+inline bool elastic_detached_retired(uint64_t detached,uint64_t gpu_done){
+ return gpu_done>=detached && gpu_done-detached>=4;
+}
+struct ShrinkLogWindow {
+ uint64_t next=0;
+ bool due(uint64_t frame,uint64_t window){
+  if(frame<next)return false;
+  next=frame+window;return true;
+ }
+};
+
 // Include the existing partition reserves, not just bytes physically captured.
 // Preserve room for the wide-layout 40% alpha floor and the alpha percent cap.
 inline uint64_t elastic_rt_demand(uint64_t opaque,uint64_t alpha,uint64_t floor,

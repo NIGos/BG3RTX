@@ -32,6 +32,25 @@ int main(){
  check(!elastic_retired(10,11,false));check(elastic_retired(10,12,false));
  check(!elastic_retired(10,13,true));check(elastic_retired(10,14,true));
  check(!elastic_retired(UINT64_MAX,0,true));check(!elastic_retired(10,9,false));
+ // Continuous producers never meet the old retirement predicate. Detaching
+ // starts an independent clock, so new captures cannot postpone reclamation.
+ for(uint64_t frame=100;frame<200;++frame){
+  check(!elastic_retired(frame-1,frame-2,false));
+  check(!elastic_retired(frame-3,frame-2,true));
+  check(elastic_can_detach(false,1,false));
+ }
+ check(!elastic_can_detach(true,1,false));
+ check(!elastic_can_detach(false,0,false));
+ check(!elastic_can_detach(false,-1,false));
+ check(!elastic_can_detach(false,1,true)); // One retained allocation per producer.
+ check(elastic_can_detach(false,2,false));
+ check(!elastic_detached_retired(100,99));
+ check(!elastic_detached_retired(100,103));
+ check(elastic_detached_retired(100,104));
+ check(!elastic_detached_retired(UINT64_MAX,0));
+ ShrinkLogWindow log;
+ check(log.due(100,24));check(!log.due(101,24));
+ check(!log.due(123,24));check(log.due(124,24));
  // 1182 MiB opaque plus alpha: exceed the old 1024 MiB cap without losing
  // opaque room to the wide-layout 40% alpha floor. Still obey the hard cap.
  const uint64_t demand=elastic_rt_demand(1182*mib,169*mib,171*mib,true,60);

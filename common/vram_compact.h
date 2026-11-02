@@ -45,6 +45,14 @@ inline uint64_t pool_target(uint64_t used, uint64_t reserved, uint64_t initial) 
   const uint64_t target = (std::max)(initial, (used * 2 + 15) / 16 * 16);
   return target <= reserved / 2 ? target : 0;
 }
+// Bounded replacement overlap is the operation that releases the old reserve.
+// Applying the growth guard here deadlocks shrink precisely when headroom is low.
+inline bool pool_shrink_overlap(uint64_t target,uint64_t reserved){
+ return target && target<=reserved/2;
+}
+inline bool hold_move_matches(uint64_t offset,uint64_t size,uint64_t source,uint64_t bytes){
+ return size && offset==source && size==bytes;
+}
 struct QuietWindow {
   uint64_t since = 0;
   bool active = false;

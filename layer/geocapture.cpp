@@ -312,6 +312,9 @@ struct Capture {
   uint64_t c_legacy_sig=1469598103934665603ull;
   capture_budget::ElasticWindow elastic;
   uint64_t elastic_target=0;
+  Buf elastic_old;
+  uint64_t elastic_detached=0;
+  capture_budget::ShrinkLogWindow elastic_log;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
@@ -420,25 +423,41 @@ uint64_t elastic_cap(bool cascade){
   return (std::min)(capture_budget::kMeshPoolHardCap,(std::max)(start,
       vram_cap(vram_guard::kCascade,capture_budget::kMeshPoolHardCap)));
 }
-// Allocate transactionally: allocation failure retains the complete old soup.
-// Only retired producers are replaced; free_buf uses the existing deferred
-// destruction path as an additional safeguard for recorded descriptor users.
+// Detach before recording the next producer. Existing descriptors retain the old
+// handle; keep it through the fence covering the last possible cascade consumer.
 void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
-  if(!c.xfb.b || wanted==c.xfb.size || !wanted || c.state==1 ||
-     !capture_budget::elastic_retired(c.record_frame,life_gpu_done(),cascade))return;
-  if(c.rec && bvh_rec_state(c.rec)!=1 && bvh_rec_state(c.rec)!=2)return;
-  // A budget sample may have lowered the card cap since demand was recorded.
-  wanted=(std::min)(wanted,elastic_cap(cascade));
+  const uint64_t now=frame_index();
+  if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))
+    free_buf(c.elastic_old); // Only now enter the ordinary deferred destruction path.
+  if(!c.xfb.b || wanted==c.xfb.size || !wanted)return;
+  auto deferred=[&](const char* why){
+    if(c.elastic_log.due(now,capture_budget::ElasticWindow::samples*(cascade?3:1)))
+      log("%s capture shrink deferred: %s (target %llu MB, capacity %llu MB)",
+          cascade?"[cascade]":"[geo] RT",why,
+          (unsigned long long)(wanted>>20),(unsigned long long)(c.xfb.size>>20));
+  };
+  const int state=c.rec?bvh_rec_state(c.rec):-1;
+  if(!capture_budget::elastic_can_detach(c.state==1,state,c.elastic_old.b!=VK_NULL_HANDLE)){
+    deferred(c.state==1?"producer recording":c.elastic_old.b?"previous allocation awaiting GPU fence":
+             "producer recording pending or unknown");return;
+  }
+  // Never lower a sampled target below its live need after a budget change.
+  // Shrinks already obey the sampled cap; a new cap only restricts growth.
+  if(wanted>c.xfb.size)wanted=(std::min)(wanted,elastic_cap(cascade));
   if(wanted==c.xfb.size)return;
   if(wanted>c.xfb.size && (!vram_guard_on() || !vram_allow(vram_guard::kCascade,wanted,
-                                      cascade?"elastic cascade capture":"elastic RT capture")))return;
+                     cascade?"elastic cascade capture":"elastic RT capture"))){
+    deferred("growth budget refused");return;
+  }
   Buf replacement;
   if(!make_buf(replacement,wanted,VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage() |
-               (c.c_legacy_transfer?VK_BUFFER_USAGE_TRANSFER_DST_BIT:0),false))return;
-  log(cascade?"[cascade] capture capacity %llu -> %llu MB (elastic, retired slot)":
-              "[geo] RT capture capacity %llu -> %llu MB (elastic, retired slot)",
+               (c.c_legacy_transfer?VK_BUFFER_USAGE_TRANSFER_DST_BIT:0),false)){
+    deferred("replacement allocation failed");return;
+  }
+  log(cascade?"[cascade] capture capacity %llu -> %llu MB (elastic, detached slot)":
+              "[geo] RT capture capacity %llu -> %llu MB (elastic, detached slot)",
       (unsigned long long)(c.xfb.size>>20),(unsigned long long)(wanted>>20));
-  free_buf(c.xfb);c.xfb=replacement;c.elastic.reset();c.elastic_target=0;
+  c.elastic_old=c.xfb;c.elastic_detached=now;c.xfb=replacement;c.elastic.reset();c.elastic_target=0;
 }
 
 void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, VkPipelineStageFlags dst,
@@ -480,7 +499,10 @@ bool copy_image(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, VkForm
 
 bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   if(!readback && cfg_int("rt_capture_elastic",0))elastic_resize(c,c.elastic_target,false);
-  else {c.elastic.reset();c.elastic_target=0;}
+  else {
+    if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))free_buf(c.elastic_old);
+    c.elastic.reset();c.elastic_target=0;
+  }
   if (!c.xfb.b) {
     // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
     // in the test scene) and is read in place by the AS build.
@@ -1051,7 +1073,7 @@ bool ubo_pipeline() {
 }
 
 void release(Capture& c) {
-  for (Buf* b : {&c.xfb, &c.counters, &c.depth, &c.normals, &c.ubo})
+  for (Buf* b : {&c.xfb, &c.elastic_old, &c.counters, &c.depth, &c.normals, &c.ubo})
     if (b->b) free_buf(*b);
   if (c.qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(c.qp));
   c.qp = VK_NULL_HANDLE;
@@ -1161,7 +1183,10 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   const VkDeviceSize bytes = cascade_bytes();
   const bool elastic=cfg_int("rt_capture_elastic",0)!=0 && !all_current;
   if(elastic)elastic_resize(c,c.elastic_target,true);
-  else {c.elastic.reset();c.elastic_target=0;}
+  else {
+    if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))free_buf(c.elastic_old);
+    c.elastic.reset();c.elastic_target=0;
+  }
   if (!elastic && c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
   if (!c.xfb.b) {
     static int s_logged_mb = 0;
@@ -1459,7 +1484,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     const uint64_t wanted=capture_budget::elastic_capacity(c->cursor+c->c_over,g_storage_range,cap);
     const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
     if(target!=c->elastic_target && target!=c->xfb.size)
-      log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; waiting for retired slot)",
+      log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
           double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
           (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::ElasticWindow::samples);
     c->elastic_target=target;
@@ -1585,12 +1610,12 @@ void cascade_on_present() {
 // rt_vram_guard breakdown (present thread; sizes only, the buffers change at scene/start or grow points):
 // the device RT capture (the alpha region is part of it), and every cascade frame buffer allocated.
 void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade) {
-  *rt_capture = g_scratch.xfb.size;
+  *rt_capture = g_scratch.xfb.size + g_scratch.elastic_old.size;
   *alpha_region = g_alpha_region.load();
   uint64_t cc = 0;
-  for (const Capture& c : g_ccap) cc += c.xfb.size;
+  for (const Capture& c : g_ccap) cc += c.xfb.size + c.elastic_old.size;
   for (const auto& layer : g_sun_ccap)
-    for (const Capture& c : layer) cc += c.xfb.size;
+    for (const Capture& c : layer) cc += c.xfb.size + c.elastic_old.size;
   *cascade = cc;
 }
 
@@ -2154,7 +2179,7 @@ void rt_capture_stats(const Capture& c) {
     // rt_capture_stats runs only for the main (non-minor) scene capture.
     const uint64_t target=g_scratch.elastic.observe(c.xfb.size,wanted,demand);
     if(target!=g_scratch.elastic_target && target!=c.xfb.size)
-      log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; waiting for retired slot)",
+      log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
           double(g_opaque_demand_prev.load())/1048576.0,double(c.alpha_demand)/1048576.0,
           (unsigned long long)(target>>20),(unsigned long long)(c.xfb.size>>20),
           g_scratch.elastic.count,capture_budget::ElasticWindow::samples);
