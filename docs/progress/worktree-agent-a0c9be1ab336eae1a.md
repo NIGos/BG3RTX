@@ -8,8 +8,9 @@
 - Sun/AO: own pass gi/rt_occ_stats.hlsl after the timed RT region (darkening from rtVis / giRaw, kinds from replica
   rays; sun replica mismatches counted). Local/box: RT_OCC_STATS twin of the every-mode box pass. Held: InstInfo
   meta bit 31 (layer, restart). Counters device-local (set 4 b1), group-reduced, host ring after D-LS.
-- Key off: ordinary SPIR-V byte-identical vs the baseline (tools/shader_identity.py); 36 new requests compile.
-  Build + 98 CTests pass (new: occ_stats_test, char_energy_test).
+- Key off: 2961/2961 requests byte-identical to 41bd576 (tools/shader_identity.py --baseline, 133 min uncached);
+  the 36 new requests compile. Build + 98 CTests pass (new: occ_stats_test, char_energy_test; shader_identity_test
+  failed once while the identity run held every DXC slot, passed on rerun).
 - dump_preview_f32=1: the 5c3fdabc scene colour as float32 at the preview grid (~10 MB/trace);
   char_energy.py gives the character-mask float mean per shot vs its OFF neighbours.
 - dialogue_shadows jobs: diag-occ-base/-nohold/-nocascade/-hair windows, shot-nogi-on, ds0 warms the occ variants;
