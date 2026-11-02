@@ -146,7 +146,7 @@ if ($WithSharc) {
 Copy-To (Join-Path $root "docs\release\README.md") "README.md"
 Copy-To (Join-Path $root "docs\release\THIRD_PARTY.md") "THIRD_PARTY.md"
 Copy-To (Join-Path $root "docs\USER_SETTINGS.md") "docs\USER_SETTINGS.md"
-foreach ($f in @("install.ps1", "uninstall.ps1", "Install.cmd", "Uninstall.cmd")) {
+foreach ($f in @("install.ps1", "uninstall.ps1", "Install.cmd", "Uninstall.cmd", "diagnostics.ps1", "Diagnostics.cmd")) {
   Copy-To (Join-Path $PSScriptRoot "release\$f") $f
 }
 $sha = (git -C $root rev-parse HEAD).Trim()
