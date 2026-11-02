@@ -66,7 +66,8 @@
    "windows": [
     "diag-on"
    ],
-   "min": 1
+   "min": 1,
+   "event": true
   },
   {
    "name": "IP grass clip: checked > 0, rejected < 0.04% of all lookups, every diag-on stats window",
@@ -85,7 +86,8 @@
     "diag-off-a",
     "diag-off-b"
    ],
-   "min": 1
+   "min": 1,
+   "event": true
   },
   {
    "name": "the other instanced families keep rejected < 0.04% with IP grass on, every diag-on stats window",
@@ -150,5 +152,5 @@
  ],
  "stop_on_dump": true,
  "purpose": "rt_hit_material_ip_grass at camp: per-draw instanced rows for IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT (depth 05d39f75/73849471, G-buffer 105e47e4/35a18400), camp's largest hit-material blocker (row reason 60% of lookups, m4p1 031746). Ultra (+ Bounce, Hidden hits) with startup rt_hit_material_ip_grass=1 (frame patch, RT_HIT_IP_GRASS variant), then live OFF/ON/OFF of its rows with the exposure held: diag windows (rows, pairing, the bit-exact clip check, hit material qualified), cost windows, PNGs.",
- "estimated_phase_seconds": 144
+ "estimated_phase_seconds": 164
 }

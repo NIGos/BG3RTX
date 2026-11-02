@@ -1,6 +1,6 @@
 # IP grass instanced rows at camp (live_batch m4-ip-grass), NOT authorized
 
-One lean job, `hig1-ip-grass-camp-fg2` (Campsite - 27h, 144 s, FG 2, foreground): Ultra (+ Bounce, Hidden hits) with
+One lean job, `hig1-ip-grass-camp-fg2` (Campsite - 27h, 164 s, FG 2, foreground; diag windows 20/25/20 s): Ultra (+ Bounce, Hidden hits) with
 startup `rt_hit_material_ip_grass=1` (the 105e47e4 frame patch and the RT_HIT_IP_GRASS variants), then its rows OFF / ON /
 OFF live, exposure held in every A/B window. Why: m4p1 031746 has camp's row reason at 60% of hit lookups; the IP
 grass pair (105e47e4/35a18400, depth 05d39f75/73849471) is most of it (docs/TRACK_D_REFLECTIONS.md 14 "Fourth family").

@@ -297,4 +297,14 @@ inline void remap_instances(const unsigned char* pre, const unsigned char* def, 
 // permutation words of each remapped row.
 inline constexpr uint32_t kRemapPermBase = 16 * kFamilies;   // 80 with the fifth counter block (IpGrass)
 static_assert(kRemapPermBase >= 16 * kFamilies, "remap counters (16 B per family) before the permutations");
+// The layer's "[hit material instanced]" lines (rt_stats): the first query that reaches the log in each 120-frame
+// window prints them, not only a query on frame % 120 == 0: that one query is often rejected (source epoch one frame
+// behind) and the window then had no line (hig1 camp 2026-11-02: frames 1800 and 1920 rejected, 1 line in 3 windows).
+inline constexpr uint64_t kStatsWindowFrames = 120;
+inline bool stats_window_due(uint64_t frame, uint64_t& logged_window) {
+  const uint64_t w = frame / kStatsWindowFrames;
+  if (logged_window != UINT64_MAX && w <= logged_window) return false;
+  logged_window = w;
+  return true;
+}
 }  // namespace bg3::native_hit::instanced
