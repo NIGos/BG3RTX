@@ -30,6 +30,51 @@ inline uint64_t cascade_grow(uint64_t current,uint64_t demand,uint64_t storage_l
  return (std::max)(want,current);
 }
 
+// Elastic capture uses the cascade's existing 25% reserve and 16 MiB allocation
+// quantum. Saturate before arithmetic: demand includes draws that did not fit.
+inline uint64_t elastic_capacity(uint64_t demand,uint64_t storage_limit,uint64_t card_cap){
+ const uint64_t step=16*mib;
+ uint64_t cap=(std::min)(kMeshPoolHardCap,card_cap);
+ if(storage_limit)cap=(std::min)(cap,storage_limit);
+ demand=(std::min)(demand,kMeshPoolHardCap);
+ return (std::min)((std::max)(step,(demand+demand/4+step-1)/step*step),cap);
+}
+// 24 samples cover three complete eight-slot scene rings for RT, nine for
+// a cascade slot sampled once per three builds, rather than a loading frame.
+// A new high demand invalidates the whole low-demand window immediately.
+struct ElasticWindow {
+ static constexpr unsigned samples=24;
+ unsigned count=0;
+ uint64_t peak=0;
+ uint64_t observe(uint64_t current,uint64_t wanted,uint64_t demand=0){
+  // A falling card cap can restrict future growth, never discard live need.
+  if(wanted<current && wanted<demand)wanted=current;
+  if(wanted>=current){count=0;peak=0;return wanted;}
+  peak=(std::max)(peak,wanted);
+  if(count<samples)++count;
+  return count<samples?current:peak;
+ }
+ void reset(){count=0;peak=0;}
+};
+// A producer can be consumed by the next two cascade builds. Their command
+// buffers may submit a frame later; use the same +2 fence coverage as scenes.
+inline bool elastic_retired(uint64_t recorded,uint64_t gpu_done,bool cascade){
+ const uint64_t lag=cascade?4:2;
+ return gpu_done>=recorded && gpu_done-recorded>=lag;
+}
+
+// Include the existing partition reserves, not just bytes physically captured.
+// Preserve room for the wide-layout 40% alpha floor and the alpha percent cap.
+inline uint64_t elastic_rt_demand(uint64_t opaque,uint64_t alpha,uint64_t floor,
+                                  bool wide_floor,int alpha_percent){
+ opaque=(std::min)(opaque,kMeshPoolHardCap);alpha=(std::min)(alpha,kMeshPoolHardCap);
+ const uint64_t o=opaque*11/10,a=(std::max)(floor,alpha*3/2);
+ uint64_t need=(std::max)(opaque+alpha,o+a);
+ if(wide_floor)need=(std::max)(need,(o*100+59)/60);
+ return (std::max)(need,(alpha*100+uint64_t((std::clamp)(alpha_percent,5,90))-1)/
+                                      uint64_t((std::clamp)(alpha_percent,5,90)));
+}
+
 // The default MB caps (rt_xfb_mb 384, rt_cascade_mb 160) hold one frame's soup at 24-byte
 // vertices. A wider capture layout, fixed at startup (rt_hit_material 64, native tileset 80,
 // native Hair 88), holds the same triangles in stride/24 times the bytes: a cap left at its

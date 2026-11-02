@@ -372,6 +372,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_vram_compact", "1"}}, {{"rt_geometry", 1}}}},
    {}, {0, 0, 0, 0}, true, {}},
 
+  {"exp_capture_elastic", "Demand-sized capture buffers",
+   "Returns unused geometry capture memory after sustained lower demand. Allows larger RT captures when "
+   "geometry would otherwise be dropped, subject to the VRAM guard. Experimental; resizing waits for GPU retirement.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_capture_elastic", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_capture_elastic", "1"}, {"rt_vram_guard", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -511,6 +519,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_vram_guard", "0"},
     {"rt_vram_guard_budget_mb", "0"},
     {"rt_vram_compact", "0"},
+    {"rt_capture_elastic", "0"},
     {"rt_shadows", "1"},
     {"contact_shadows", "1"},
     {"rt_strength", "1.0"},
