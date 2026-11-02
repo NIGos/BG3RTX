@@ -44,6 +44,10 @@ param(
   [switch]$SELightProbe,
   # Legacy window behavior only; never bypasses queue authorization.
   [switch]$UnfocusedFG,
+  # Real-present runs borderless at the desktop size instead of windowed: the swapchain is then
+  # larger than the game's output (3840x2160 vs 3840x1600), the case fg_letterbox=1 handles.
+  # Only for jobs that test that case (tools/live_batches/fg_letterbox); restored like the others.
+  [switch]$Borderless,
   # Hold a camera-pan key (default D) once gameplay is reached, so the
   # captured frame is in motion (tests reprojection, ghosting, DLSS/FG).
   [switch]$Move,
@@ -383,7 +387,7 @@ if ($Background) {
   # last background run (gamelock.ps1, Enter-/Exit-BackgroundDisplay).
   # Real-present runs stay windowed: a borderless desktop-sized swapchain (e.g. a 3840x2160 desktop with
 # a 3840x1600 game output) breaks the FG input size match (layer/streamline.cpp), 2026-11-01.
-Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:($UnfocusedFG -or $RealPresent)
+Enter-BackgroundDisplay $ensureHere $displayUser -Windowed:(($UnfocusedFG -or $RealPresent) -and -not $Borderless)
   if (-not $Foreground) { $env:BG3RTX_BACKGROUND = "1" }
 }
 
