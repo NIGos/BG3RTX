@@ -90,7 +90,9 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1",
+                                                 // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1"};
 
 // rt_cascade_casters for the water passes (core/water.cpp): the TLAS holds the cascade's casters
 // (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the

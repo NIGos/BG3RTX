@@ -541,6 +541,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_mb", "32"},
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
+    {"rt_water_rr_hitdist", "0"},
     {"rt_water_compose", "0"},
     {"rt_water_shadows", "0"},
     {"rt_water_ls_shadows", "0"},
