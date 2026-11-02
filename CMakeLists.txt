@@ -237,6 +237,8 @@ add_executable(rt_capture_budget_test tests/rt_capture_budget_test.cpp)
 add_test(NAME rt_capture_budget_test COMMAND rt_capture_budget_test)
 add_executable(as_chunk_alloc_test tests/as_chunk_alloc_test.cpp)
 add_test(NAME as_chunk_alloc_test COMMAND as_chunk_alloc_test)
+add_executable(vram_compact_test tests/vram_compact_test.cpp)
+add_test(NAME vram_compact_test COMMAND vram_compact_test)
 
 add_executable(vram_guard_test tests/vram_guard_test.cpp)
 add_test(NAME vram_guard_test COMMAND vram_guard_test)
