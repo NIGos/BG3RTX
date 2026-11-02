@@ -528,6 +528,9 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   `tools/live_batches/m4_generated` (camp + inn), predicted camp +12 points (3-25), inn +1.5 (0.3-4), energy null.
   Rejected and worth a recipe next: 3b346b42 HLOD two-sided (pool two-sided flip), 6561beef/ce81ffaa (DB channel @60
   disagrees with the classifier's map), the ColorVar / SSS / translucency variants.
+  Live (m4_generated 2026-11-02, hgn1 camp / hgn2 inn): qualified +2.3 / +0.12 points (predicted 12 / 1.5: below),
+  generated 2S rows bit-exact, energy -0.12% / -0.10% (null), GI trace +0.58 / +0.03 ms, no overflow; the wind bushes
+  rows captured 9 and mapped 0 (pairing to diagnose), 83 IP_Base_VT G-buffer draws captured and never mapped. Off.
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

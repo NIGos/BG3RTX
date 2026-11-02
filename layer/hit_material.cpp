@@ -1159,7 +1159,9 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
      (unsigned long long)r[instanced::PairWind],(unsigned long long)r[instanced::PairUnread],(unsigned long long)o[instanced::OrderRows],(unsigned long long)o[instanced::OrderSame],
      (unsigned long long)o[instanced::OrderPermuted],(unsigned long long)o[instanced::OrderUnmatched]);}
    // rt_hit_material_ip_grass: the fourth family's pairing and instance order (bit-exact check, no tolerance).
-   if(ip_grass_on){const auto& r=pair_window[instanced::IpGrass];const auto& o=order_window[instanced::IpGrass];
+   // rt_hit_material_generated: also its rows in the IP grass family (the wind bushes 27ef2b49/2e34c667; hgn1 camp 2026-11-02:
+   // 9 such draws captured, none mapped: the pairing outcome says why).
+   if(ip_grass_on || generated_on){const auto& r=pair_window[instanced::IpGrass];const auto& o=order_window[instanced::IpGrass];
     log("[hit material instanced] frame %llu IP grass since the last line: pairs same frame %llu, other frame (time) %llu, camera %llu, placement %llu, wind inputs %llu, unread %llu; "
         "instance order (retired queries): rows %llu, same order %llu, permuted %llu, unmatched %llu",
      (unsigned long long)slot.frame,(unsigned long long)r[instanced::PairSame],(unsigned long long)r[instanced::PairOtherFrame],(unsigned long long)r[instanced::PairCamera],
@@ -1175,7 +1177,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles);
   if(wind_rgb_on)log("[hit material instanced] frame %llu wind RGB 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
    (unsigned long long)slot.frame,c[3].prepass,c[3].seen,c[3].pipeline,c[3].bindings,c[3].stream,c[3].captured,c[3].mapped,(unsigned long long)c[3].triangles);
-  if(ip_grass_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
+  if(ip_grass_on || generated_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
    (unsigned long long)slot.frame,c[4].prepass,c[4].seen,c[4].pipeline,c[4].bindings,c[4].stream,c[4].captured,c[4].mapped,(unsigned long long)c[4].triangles);
   // rt_hit_material_generated: its instanced rows alone (they are also in their family's numbers above).
   if(generated_on){InstancedCount g=packet->generated;for(const auto& m:q.materials)if(m.generated){++g.mapped;g.triangles+=m.row.triangles;}
