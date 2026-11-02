@@ -27,10 +27,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tools.assets.lspk import PackageSet  # noqa: E402
+from tools.assets import locate  # noqa: E402
 
-GAME = r"D:\SteamLibrary\steamapps\common\Baldurs Gate 3\Data"
+GAME = locate.game_data()   # tools/assets/locate.py: $BG3_DATA or the Steam libraries; "" = not found
 VT_DIR = "Generated/Public/VirtualTextures/"
-LSLIB = r"C:\Users\quali\.codex\worktrees\m2-foundry-mesh\BG3RTX\captures\m2-foundry\deps\lslib-v1.20.4\Packed\Tools"
+LSLIB = locate.lslib_tools()   # $BG3RTX_LSLIB or external/lslib*/; "" = not found (vt_alpha.ps1 says so)
 REC_BYTES = 208
 MAGIC = b"BG3VTA1\0"
 
