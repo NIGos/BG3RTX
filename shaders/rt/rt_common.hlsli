@@ -875,6 +875,8 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
       gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
   }
   if(kind<1u || kind>5u)return kRtUnknown;
+  } else {
+    if(kind<1u || kind>4u)return kRtUnknown;
   }
 #else
 #ifdef RT_NATIVE_TILESET
@@ -1469,6 +1471,11 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   float near_t = 1e30;
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
+#ifdef RT_SPEC_NATIVE
+  // Keep procedural-only state and its loop merges inside the hair guard.
+  // Hair-off uses the original triangle loop; keep hair-on first for its dataflow.
+  if (RT_HAIR_ON) {
+#endif
   while (q.Proceed()) {
 #ifdef RT_SPEC_NATIVE
       if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
@@ -1510,6 +1517,25 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     }
     if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_SPEC_NATIVE
+  } else {
+    while (q.Proceed()) {
+      if (++cand_n > cap) {
+        guard_count(kGuardLoopCap);
+        h.aborted = true;
+        q.Abort();
+        break;
+      }
+      if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
+      float ct = q.CandidateTriangleRayT();
+      if (ct < near_t) {
+        near_t = ct;
+        h.near_kind = alpha_kind_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex());
+      }
+      if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
+    }
+  }
+#endif
 #ifdef RT_SPEC_NATIVE
   if (RT_TILESET_ON) {
   h.aborted=h.aborted||gTilesetUnknown;
