@@ -1,6 +1,6 @@
 # IP grass instanced rows at camp (live_batch m4-ip-grass), NOT authorized
 
-One lean job, `hig1-ip-grass-camp-fg2` (Campsite - 27h, 164 s, FG 2, foreground; diag windows 20/25/20 s): Ultra (+ Bounce, Hidden hits) with
+One lean job, `hig1-ip-grass-camp-fg2` (Campsite - 27h, 239 s, FG 2, foreground; diag windows 20/25/20 s): Ultra (+ Bounce, Hidden hits) with
 startup `rt_hit_material_ip_grass=1` (the 105e47e4 frame patch and the RT_HIT_IP_GRASS variants), then its rows OFF / ON /
 OFF live, exposure held in every A/B window. Why: m4p1 031746 has camp's row reason at 60% of hit lookups; the IP
 grass pair (105e47e4/35a18400, depth 05d39f75/73849471) is most of it (docs/TRACK_D_REFLECTIONS.md 14 "Fourth family").
@@ -9,3 +9,6 @@ and rejected < 0.04%; the other families keep < 0.04%; capacity, cascade full an
 Deciding: the `hit material` qualified share (predicted +30 points, range 10-40) and shot-on vs shot-off-a/b (null
 predicted, band about 3.5%); cost from the cost windows. Undo: `rt_hit_material_ip_grass=0` (live; startup to drop
 the patch). Offline check: `powershell -File tools\live_batches\m4_ip_grass\dryrun.ps1`.
+OMM upper bound (appended before restore): omm-ub-on / omm-ub-opaque / omm-ub-on2, 25 s static each, exposure held, rt_stats=0,
+`rt_alpha_test` 1/0/1 live (alpha-tested TLAS instances get FORCE_OPAQUE; the geometry stays). Saving = opaque minus the mean
+of the two ON windows (`rt passes: GPU cost`, `gi: trace pass ... GPU median`): >= ~3 ms pursue VT OMM, < 1 ms close it.

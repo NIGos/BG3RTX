@@ -33,3 +33,9 @@
   The pool records line needs 120 frames at ~10 fps: the diag-pool windows are 20 s (plan 41 min). Records stay 411-417.
 - Open: 66 x 64 MB chunks reserve 4.2 GB for 0.25-1.4 GB of AS (first-fit fragmentation, never freed). That is a
   separate VRAM item, not fixed here.
+
+## OMM upper bound windows in the hig1 camp rerun (branch worktree-agent-a2c38a4884e982692, READY_FOR_LIVE, 2026-11-02)
+- Existing hot key `rt_alpha_test=0`: alpha-tested camera TLAS instances get FORCE_OPAQUE (bvhsplit.cpp 1536/1598, rtscene.cpp 1211), geometry kept;
+  cascade casters already skip cutouts. No code change. Plan: omm-ub-on / -opaque / -on2, 25 s each before restore (300-frame gpu lines,
+  10 s cadence at 30 fps: 2 per window). Gates per window: rt passes GPU cost, gi trace pass median, scene wait 0 timeouts.
+  Predicted: unknown; >= ~3 ms saved pursue VT OMM, < 1 ms close it. Plan 239 s, about 6 min with the load.

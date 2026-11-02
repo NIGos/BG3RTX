@@ -12,6 +12,12 @@
     40
    ],
    "basis": "camp row reason 60% of lookups (m4p1 031746: row 35.3M of 59.1M), IP_Wind_GrassFlowers about 67% of camp's unsupported alpha by triangles (TRACK_D_REFLECTIONS 14) = 40 points; about 75% of them pass the bit-exact clip check and pair in a frame (the wind rows 100% bit-exact live)"
+  },
+  "omm_upper_bound_ms": {
+   "predicted": null,
+   "windows": "omm-ub-opaque minus the mean of omm-ub-on / omm-ub-on2, rt passes GPU cost and gi trace pass GPU median",
+   "basis": "unknown: no offline measure of the alpha candidate loop's share at camp (11.8M visibility + 3.7M shadow alpha candidates per frame, hig1 08:28). Committed before the run (2026-11-02).",
+   "decision": "saving >= about 3 ms total (rt passes): VT OMM worth pursuing; < 1 ms: close OMM; in between: weigh against the OMM work"
   }
  }
 }

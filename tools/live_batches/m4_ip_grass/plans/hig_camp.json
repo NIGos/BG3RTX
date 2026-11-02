@@ -159,6 +159,51 @@
   ]
  },
  {
+  "label": "omm-ub-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_hit_material_ip_grass=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1,rt_alpha_test=1"
+ },
+ {
+  "label": "omm-ub-opaque",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_hit_material_ip_grass=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1,rt_alpha_test=0"
+ },
+ {
+  "label": "omm-ub-on2",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_hit_material_ip_grass=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1,rt_alpha_test=1"
+ },
+ {
   "label": "restore",
   "kind": "static",
   "speed": "static",
@@ -171,6 +216,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_hit_material_ip_grass=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_hit_material_ip_grass=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0,rt_alpha_test=1"
  }
 ]
