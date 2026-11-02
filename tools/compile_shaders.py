@@ -1,6 +1,6 @@
 """Compile every compute shader offline, as layer/shaders.cpp does at run time (no game).
 
-    py -3 tools/compile_shaders.py [files relative to shaders/ ...]
+    py -3 tools/compile_shaders.py [--pp-verify N] [files relative to shaders/ ...]
 
 DXC from the Vulkan SDK, -spirv vulkan1.3, HLSL 2021, cs_6_6, -O3, the SHaRC headers (this
 checkout's external/, else the main checkout's) and a first line "// dxc: <arguments>".
@@ -8,7 +8,8 @@ A request "<file>?NAME=VALUE;NAME=VALUE" adds each pair as -D (common/shader_var
 Without arguments: every shaders/**/*.hlsl plus every GI variant request in shaders/variants.txt.
 Compiles through tools/shader_identity.py: a request whose DXC, flags, source and every
 transitively included file are unchanged reuses its cached (re-hashed) SPIR-V; any input change
-recompiles it. --no-cache compiles everything. Progress at least every 15 s. Prunes the
+recompiles it, unless its preprocessed text was compiled before (second key level). --no-cache compiles
+everything; --pp-verify N compiles N random requests from scratch and fails on any difference. Progress at least every 15 s. Prunes the
 cache at the end (tools/shader_identity.py --prune defaults: 14 days, 3 baselines, 2 GB).
 Exit code 1 if any fails.
 """
@@ -19,11 +20,17 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from tools.shader_identity import Cache, MemoryCache, SourceTree, Toolchain, compile_requests, lower_priority, prune  # noqa: E402
+from tools.shader_identity import Cache, MemoryCache, SourceTree, Toolchain, compile_requests, lower_priority, prune, verify_pp  # noqa: E402
 
 lower_priority()
 root = Path(__file__).resolve().parent.parent
-args = [a for a in sys.argv[1:] if a != "--no-cache"]
+argv = sys.argv[1:]
+verify = 0
+if "--pp-verify" in argv:   # soundness self-check of the preprocessed key (tools/shader_identity.py verify_pp)
+    i = argv.index("--pp-verify")
+    verify = int(argv[i + 1])
+    del argv[i:i + 2]
+args = [a for a in argv if a != "--no-cache"]
 tool = Toolchain()
 if not tool.dxc.exists():
     print(f"DXC not found: {tool.dxc}")
@@ -38,7 +45,7 @@ def defines(f):
     return [d for d in f.partition("?")[2].split(";") if d]
 
 
-compiled = compile_requests(tree, files, tool=tool, cache=cache, label="compile_shaders")
+compiled = compile_requests(tree, files, tool=tool, cache=cache, label="compile_shaders", backfill=True)
 res = [(f, 0 if compiled[f].ok else 1, compiled[f].log) for f in files]
 
 
@@ -118,6 +125,9 @@ if rf_hit and rf_checker.exists():
         print(f"rf hit shade descriptor interface checked: {len(rf_hit)} SPIR-V modules")
 elif rf_hit:
     print("SKIP rf hit shade descriptor interface: build native_hit_rf_bindings_test first")
+if verify:
+    for r in verify_pp(tree, files, verify, tool, cache):
+        res.append(("preprocessed cache key self-check " + r, 1, "cached SPIR-V differs from a fresh compile"))
 bad = [r for r in res if r[1]]
 for f, rc, msg in bad:
     print(f"FAIL {f}")

@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include "native_hit_generated.h"
 #include "native_hit_join.h"
 #include "native_hit_qualify.h"
 #include "native_vt_surface.h"
@@ -47,28 +48,64 @@ inline constexpr const char* kFamilyName[] = {"none", "wind", "alpha-test 2S", "
 inline Family gate(Family f, bool wind_rgb, bool ip_grass = false) {
   return (f == WindRgb && !wind_rgb) || (f == IpGrass && !ip_grass) ? None : f;
 }
+// Generated rows (rt_hit_material_generated, common/native_hit_generated.h): instanced pairs proven offline to compute the
+// same positions as an audited bit-exact family (same depth VS + the same G-buffer gl_Position statements, or depth and
+// G-buffer VS equal to each other with the family's bindings), so they take that family's pairing certificate, key and
+// remap; their rows are checked bit for bit at the hit like the family's. Only with `generated` (the key): with it off
+// every lookup below is exactly the audited one. They are not gated by the wind RGB / IP grass keys: those gate the
+// audited pairs of their families, while a generated row only borrows the family's certificate.
+inline const generated::Row* generated_draw(uint64_t vs, uint64_t fs) {
+  const auto* g = generated::row(vs, fs);
+  return g && g->recipe.capture == native_vt::CaptureDraw && g->family > uint32_t(None) && g->family < kFamilies ? g : nullptr;
+}
+inline const generated::Row* generated_depth(uint64_t depth_vs) {
+  for (uint32_t i = 0; i < generated::kRowCount; ++i) {
+    const auto& g = generated::kRows[i];
+    if (g.recipe.capture == native_vt::CaptureDraw && g.depth_vs == depth_vs && g.family > uint32_t(None) && g.family < kFamilies) return &g;
+  }
+  return nullptr;
+}
+inline const generated::Row* generated_vs(uint64_t vs) {
+  for (uint32_t i = 0; i < generated::kRowCount; ++i)
+    if (generated::kRows[i].recipe.capture == native_vt::CaptureDraw && generated::kRows[i].recipe.vs == vs) return &generated::kRows[i];
+  return nullptr;
+}
 // The family of a depth-prepass draw (by its VS: the depth FS is any alpha-table VT FS).
-inline Family depth_family(uint64_t vs, bool wind_rgb = false, bool ip_grass = false) {
-  for (const auto& p : kPairs) if (p.depth_vs == vs) return gate(p.family, wind_rgb, ip_grass);
+inline Family depth_family(uint64_t vs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
+  for (const auto& p : kPairs) if (p.depth_vs == vs) {
+    const Family f = gate(p.family, wind_rgb, ip_grass);
+    // An audited depth VS whose family is off still pairs with that family's generated G-buffer pairs.
+    if (f != None || !generated || !generated_depth(vs)) return f;
+    return p.family;
+  }
+  if (const auto* g = generated ? generated_depth(vs) : nullptr) return Family(g->family);
   return None;
 }
 // The family of a G-buffer draw (the exact audited pair).
-inline Family deferred_family(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false) {
+inline Family deferred_family(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
   for (const auto& p : kPairs) if (p.vs == vs && p.fs == fs) return gate(p.family, wind_rgb, ip_grass);
+  if (const auto* g = generated ? generated_draw(vs, fs) : nullptr) return Family(g->family);
   return None;
 }
 // The G-buffer VSs whose UV/N/B/T outputs get the XFB frame patch (locations 0/1/2/3 as 2d2ac3c3; IpGrass 1/2/3/4:
-// frame_location below).
-inline bool frame_vs(uint64_t vs, bool wind_rgb = false, bool ip_grass = false) {
-  for (const auto& p : kPairs) if (p.vs == vs) return gate(p.family, wind_rgb, ip_grass) != None;
-  return false;
+// frame_location below). generated: the startup value of rt_hit_material_generated (the patch is made at pipeline creation).
+inline bool frame_vs(uint64_t vs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
+  for (const auto& p : kPairs) if (p.vs == vs && gate(p.family, wind_rgb, ip_grass) != None) return true;
+  return generated && generated_vs(vs);
 }
 // The N location of an instanced G-buffer VS (spirv_xfb.h native_vt_location; UV one below; the frame lands at 24/36/48).
-inline uint32_t frame_location(uint64_t vs) { return vs == 0x105e47e448736d89ull ? 2u : 1u; }
-// The recipe of an instanced pair (native_vt_surface.h CaptureDraw rows).
-inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false) {
+// A generated VS: the location the generator read from its interface (0de1b186: 2, as 105e47e4).
+inline uint32_t frame_location(uint64_t vs, bool generated = false) {
+  if (vs == 0x105e47e448736d89ull) return 2u;
+  const auto* g = generated ? generated_vs(vs) : nullptr;
+  return g ? g->frame_location : 1u;
+}
+// The recipe of an instanced pair (native_vt_surface.h CaptureDraw rows; generated: common/native_hit_generated.h).
+inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
   const auto* r = native_vt::recipe(fs);
-  return deferred_family(vs, fs, wind_rgb, ip_grass) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw ? r : nullptr;
+  if (deferred_family(vs, fs, wind_rgb, ip_grass) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw) return r;
+  const auto* g = generated && !r ? generated_draw(vs, fs) : nullptr;
+  return g ? &g->recipe : nullptr;
 }
 // Draw key shared by the depth and the G-buffer draw: the draw words (kind, count, instances, first,
 // vertex offset) and the index binding of the ordinary key, the family; no vertex-buffer words (the two
@@ -106,13 +143,18 @@ inline bool stage(const native_vt::Recipe& r, const uint32_t* engine, uint32_t e
   std::memset(out, 0, sizeof out);
   const uint32_t t = r.transform_offset / 4u, index = r.tileset_index_offset / 4u, channel = r.channel_offset / 4u,
                  refl = r.reflectance_offset / 4u;
-  if (r.reflectance != native_vt::ReflectanceUbo || (r.layout != native_vt::LayoutBase && r.layout != native_vt::LayoutVt4) || t + 8u > engine_words ||
-      index >= engine_words || channel >= engine_words || refl >= material_words)
+  // ReflectanceConstant of a per-draw row (generated rows only, e.g. e4ade329 = 3da860be: RT2.y is 0.5 and there is no
+  // 1:1 UBO): the gather's 1:1 float is staged as 0.5. No audited CaptureDraw recipe is constant and pool recipes are
+  // never staged, so every audited staging is unchanged (a constant pool recipe is still refused).
+  const bool constant = r.reflectance == native_vt::ReflectanceConstant && r.capture == native_vt::CaptureDraw;
+  if ((r.reflectance != native_vt::ReflectanceUbo && !constant) || (r.layout != native_vt::LayoutBase && r.layout != native_vt::LayoutVt4) ||
+      t + 8u > engine_words || index >= engine_words || channel >= engine_words || (!constant && refl >= material_words))
     return false;
   std::memcpy(out + 64, engine + t, 32);
   std::memcpy(out + 100, engine + index, 4);
   std::memcpy(out + 104, engine + channel, 4);
-  std::memcpy(out + kStagePhysical, material + refl, 4);
+  const float half = 0.5f;
+  std::memcpy(out + kStagePhysical, constant ? static_cast<const void*>(&half) : static_cast<const void*>(material + refl), 4);
   return true;
 }
 // Row word 220 of a per-draw row: flags, bit 0 = two-sided (the consumer scales the N column by
