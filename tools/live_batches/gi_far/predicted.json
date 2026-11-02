@@ -4,6 +4,6 @@
   "shot-on": {"predicted": null, "source": "none written before 141602", "written": null}
  },
  "gf2-s8-fg2": {
-  "shot-on": {"predicted": -0.02, "source": "coordinator's pre-run expectation for gi_far at S8 (native ambient replaced under roofs), recorded post hoc by the gate audit 2026-11-01; measured 141905: +2.87%", "written": "2026-11-01"}
+  "shot-on": {"predicted": -0.02, "source": "offline model on pack replay-20261101-142819-1 (TRACK_C_GI 'Go / no-go on the full pack': 6 m -2.0%, ambient -2.83%, bounce +0.88%). Rewritten before the rerun with the trace-frame fix (layer/geocapture.cpp: traced frames keep the hit-material capture); the 2026-11-02 015729 run's traces held the key-off GI in both states (view vis ON/OFF 0.9998). Stage expectation: view vis ON/OFF 0.947 (replay giRaw.a 0.8320 / 0.8790, rt_stats 0 and 1 alike)", "written": "2026-11-02"}
  }
 }
