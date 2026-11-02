@@ -38,6 +38,9 @@ try {
       }
       $out += @{ rect = $r; matches = 1; name = $p.Name; levels = $used; pages = @($pages) }
     }
+  } elseif ($req.mode -eq 'list') {
+    # Every texture of the tile set (name, level-0 rectangle): the catalogue (tools/assets/vt_alpha_catalogue.py).
+    foreach ($p in $meta) { $out += @{ name = $p.Name; x = $p.X; y = $p.Y; w = $p.Width; h = $p.Height } }
   } elseif ($req.mode -eq 'extract') {
     foreach ($t in $req.textures) {
       $p = @($meta | Where-Object Name -eq $t.name)[0]; $written = @()

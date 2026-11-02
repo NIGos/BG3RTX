@@ -53,6 +53,20 @@ def vt_records(pack, shaders):
     return out
 
 
+def miss_records(path, top=0):
+    """{(tileset, p0): triangle-frames} from the layer's captures/vt_alpha_misses.tsv (rt_vt_alpha_miss_log)."""
+    out = {}
+    for line in Path(path).read_text().splitlines():
+        if not line or line[0] == "#":
+            continue
+        f = line.split()
+        p0 = tuple(struct.unpack("<f", struct.pack("<I", int(x, 16)))[0] for x in f[2:6])
+        key = (int(f[1]), p0)
+        out[key] = out.get(key, 0) + int(f[6])
+    ranked = sorted(out.items(), key=lambda kv: -kv[1])
+    return dict(ranked[:top] if top else ranked)
+
+
 def bridge(lslib, work, request):
     req = Path(work) / "request.json"
     res = Path(work) / "result.json"
@@ -86,18 +100,24 @@ def dds_bc3_alpha(path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--pack", required=True)
-    ap.add_argument("--fs", nargs="+", required=True, help="fragment shader hashes (hex)")
+    ap.add_argument("--pack", help="a replay pack: its VT records of --fs")
+    ap.add_argument("--fs", nargs="+", default=[], help="fragment shader hashes (hex)")
+    ap.add_argument("--misses", help="instead of --pack: the layer's captures/vt_alpha_misses.tsv (ranked)")
+    ap.add_argument("--top", type=int, default=0, help="with --misses: only the N highest triangle-frame textures")
     ap.add_argument("--work", required=True)
     ap.add_argument("--out", default=None)
     ap.add_argument("--lslib", default=LSLIB)
+    ap.add_argument("--set", default="", help="suffix of the index/manifest names: vt_alpha_index<set>.txt (a new set never "
+                    "rewrites an older one; the layer reads every vt_alpha_index*.txt)")
     a = ap.parse_args()
     work = Path(a.work)
     work.mkdir(parents=True, exist_ok=True)
-    recs = vt_records(a.pack, {int(h, 16) for h in a.fs})
+    if bool(a.pack) == bool(a.misses):
+        ap.error("give exactly one of --pack (with --fs) or --misses")
+    recs = miss_records(a.misses, a.top) if a.misses else vt_records(a.pack, {int(h, 16) for h in a.fs})
     print(f"[vt alpha] {len(recs)} distinct (tile set, texture) records, {sum(recs.values())} triangles", flush=True)
     ps = PackageSet(GAME, only=["VirtualTextures.pak"] + [f"VirtualTextures_{i}.pak" for i in range(1, 64)])
-    masks, total = [], 0
+    masks, total, unsupported = [], 0, []
     for ts in sorted({k[0] for k in recs}):
         gts_name = f"Albedo_Normal_Physical_{ts:x}.gts"
         gts = work / gts_name
@@ -128,28 +148,35 @@ def main():
                 if i == 0:
                     w0, h0 = w, h
                 levels.append(bc4)
-            body = MAGIC + struct.pack("<3I", w0, h0, len(levels)) + b"".join(levels)
             name = f"{ts:x}_{t['name']}.vtalpha"
+            if not levels:
+                # LSLib extracts no level of a texture smaller than one tile: such records keep the page cache.
+                unsupported.append({"tileset": ts, "texture": t["name"], "p0": t["p0"], "triangles": t["tris"],
+                                    "reason": "no level extracted (texture smaller than a tile)"})
+                print(f"[vt alpha] {name}: no level extracted (smaller than a tile), {t['tris']} triangles keep the page cache", flush=True)
+                continue
+            body = MAGIC + struct.pack("<3I", w0, h0, len(levels)) + b"".join(levels)
             masks.append({"tileset": ts, "texture": t["name"], "p0": t["p0"], "triangles": t["tris"], "width": w0,
                           "height": h0, "levels": len(levels), "bytes": len(body), "file": name, "gtp_files": t["pages"]})
             total += len(body)
             (work / name).write_bytes(body)
             print(f"[vt alpha] {name}: {w0}x{h0}, {len(levels)} levels, {len(body)} bytes, {t['tris']} triangles", flush=True)
     print(f"[vt alpha] {len(masks)} masks, {total} bytes ({total / 1048576:.2f} MB)", flush=True)
-    manifest = {"source_pack": str(a.pack), "fs": a.fs, "format": "BG3VTA1: BC4 blocks per level (BC3 alpha halves)",
-                "masks": masks, "bytes": total}
-    (work / "vt_alpha_manifest.json").write_text(json.dumps(manifest, indent=1))
+    manifest = {"source_pack": str(a.pack or a.misses), "fs": a.fs, "format": "BG3VTA1: BC4 blocks per level (BC3 alpha halves)",
+                "masks": masks, "bytes": total, "unsupported": unsupported}
+    man_name, idx_name = f"vt_alpha_manifest{a.set}.json", f"vt_alpha_index{a.set}.txt"
+    (work / man_name).write_text(json.dumps(manifest, indent=1))
     # The layer's index (layer/alphatest.cpp vt_masks_load): "<tileset> <p0 as 4 float32 bit patterns> <file>"; the
     # p0 bits are the records' own, so a match is exact.
     lines = ["# tools/assets/vt_alpha_masks.py: tile set, record uv transform p0 (float32 bits, hex), mask file"]
     for m in masks:
         bits = " ".join(f"{struct.unpack('<I', struct.pack('<f', x))[0]:08x}" for x in m["p0"])
         lines.append(f"{m['tileset']} {bits} {m['file']}")
-    (work / "vt_alpha_index.txt").write_text("\n".join(lines) + "\n")
+    (work / idx_name).write_text("\n".join(lines) + "\n")
     if a.out:
         out = Path(a.out)
         out.mkdir(parents=True, exist_ok=True)
-        for m in masks + [{"file": "vt_alpha_manifest.json"}, {"file": "vt_alpha_index.txt"}]:
+        for m in masks + [{"file": man_name}, {"file": idx_name}]:
             dst = out / m["file"]
             if dst.exists():
                 print(f"[vt alpha] {dst} exists: kept, not overwritten", flush=True)

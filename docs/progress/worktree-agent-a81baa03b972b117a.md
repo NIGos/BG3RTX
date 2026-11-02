@@ -19,4 +19,15 @@
   scene-image dump minus the water pass's own dump, frame.json order). OFF-OFF 0.01%. Frame deltas: reflections
   -0.12% / -0.19%, sun shadows -9.7%, local shadows -2.0%, refraction -0.7%. Verdict: physically right, no
   bug (analysis: PLAN_M5_WATER M5.3c). `--energy-fs` re-reads old runs; wf2 uses it.
+- wf2-s8-fg2 110212 (VALID, unfocused 30 fps bursts, ~21 px/frame turn). pan_artifacts transient pixel-frames per
+  calibrated pixel-frame, water mask (rt_debug 21 in the turn, 105k px) / whole frame: off-a 2.25% / 1.63%, rr 2.33% /
+  1.76%, edge 3.29% / 1.87%, off-b 2.32% / 1.42%. rt_water_rr_hitdist: null (wf1's -25% was the confound).
+  rt_water_rf_edge: WORSE on water (+42%, OFF spread 0.07 points): rejected, stays off. Energy (water-compose):
+  rr +1.9%, edge +1.1%, band 2.03% (OFF spread 0.36%; with the sun shadows on, the in-frame delta carries glint
+  noise too: -9.5..-11.4% per shot). GPU: rf 0.570 vs 0.568/0.569 ms, compose 0.41 ms in every window.
+  Rays here: screen hit 15.0%, hidden 6.5%, off screen 2.1%, miss 76.4%: the screen border is the smallest switch.
+  Bursts deleted (11.9 GB); report: scratchpad wf2_110212/report.json.
+- Next: a rotation burst with rt_water_compose=0 (live) in the same run, to learn whether the compose causes the water
+  flicker at all; then the hit/miss and hidden switches (76% miss, 6.5% hidden, A L / B below 0.5 for most composed
+  pixels: every flip is a large step), driven by the FS's animated normal.
 - Open: the hidden-tier switch (tier 2) is still binary; BG3's orbit camera moves the eye, so it can flicker too.
