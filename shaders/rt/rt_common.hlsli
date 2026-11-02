@@ -10,6 +10,7 @@
 // instance per draw instance instead, each BLAS with one geometry; InstInfo
 // (below) says where each instance's vertices and alpha record are.
 #pragma once
+#include "spec_native.hlsli"
 
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_tileset_coverage.h"
@@ -427,6 +428,7 @@ AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex,float3 positio
   float2 material = asfloat(gAlphaRec.Load2(a + 48)); // AlphaRec p0.xy
   float hi = clamp(material.x + 0.7, 0.0, 1.0);
   AlphaRead r = (AlphaRead)0;
+  r.coarser = false;
   r.lvl = lod;
   r.ok = all(isfinite(mask.zw)) && all(isfinite(material)) && material.x < hi;
   if (r.ok) r.a = smoothstep(material.x, hi, mask.w) * mad(mask.z - 1.0, material.y, 1.0);
@@ -480,7 +482,7 @@ HairMaterialSample hair_material(uint a,float2 uv,float g,uint mask_tex,uint noi
   r.ok=all(isfinite(r.mask)) && isfinite(r.height);return r;
 }
 AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_tex) {
-  AlphaRead r=(AlphaRead)0;
+  AlphaRead r=(AlphaRead)0;r.coarser=false;
   if(!gNativeHair.valid)return r;
   bool physical=g_rt_class==1u || gNativeHair.physical;
   HairMaterialSample sample=hair_material(a,uv,g,mask_tex,noise_tex,!physical);
@@ -628,8 +630,12 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   float area_w = length(cross(p1 - p0, p2 - p0));
   float g = footprint * sqrt(area_uv / max(area_w, 1e-12));   // uv change across the footprint
   if (!all(isfinite(uv)) || !isfinite(g)) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_TILESET_ON && (h0.z==5u))gTilesetUnknown=true;
+#else
 #ifdef RT_NATIVE_TILESET
     if(h0.z==5u)gTilesetUnknown=true;
+#endif
 #endif
     alpha_stat(4, true, prim);
 #ifdef RT_SUN_CURRENT
@@ -638,6 +644,44 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
     return alpha_unknown(flags);
   }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(h0.z==5u){
+    uint status=uint(asfloat(gAlphaRec.Load(a+52u)));
+    float subtype=asfloat(gAlphaRec.Load(a+56u));
+    if(subtype==1.f){
+      float4 m0=asfloat(gAlphaRec.Load4(a+80u)),m1=asfloat(gAlphaRec.Load4(a+96u));
+      bool sampled=false;float baseAlpha=0,maskR=0,maskG=0;
+      float2 scale=m0.xy*m0.z;
+      float2 scaled=(uv*m0.xy)*m0.z;
+      float2 gradient=g*abs(scale);
+      if(status==NtcKnown && h0.w>0u && h0.w<4096u && h1.y>0u && h1.y<4096u && h1.x>0u && h1.x<16u && all(isfinite(scaled)) && all(isfinite(gradient))){
+        baseAlpha=gAlphaTex[NonUniformResourceIndex(h0.w)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],scaled,float2(gradient.x,0),float2(0,gradient.y)).a;
+        float2 mask=gAlphaTex[NonUniformResourceIndex(h1.y)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],uv,float2(g,0),float2(0,g)).rg;
+        maskR=mask.r;maskG=mask.g;sampled=true;
+      }
+      NtcResult result=ntb_evaluate(status,sampled,baseAlpha,maskR,maskG,m0.w,m1.x,m1.y,m1.z);
+      if(result.status!=NtcKnown){gTilesetUnknown=true;return false;}
+      alpha_stat(8,result.solid,prim);alpha_stat(9,!result.solid,prim);return result.solid;
+    }
+    if(subtype!=0.f){gTilesetUnknown=true;return false;}
+    float tiling=asfloat(gAlphaRec.Load(a+32u));
+    bool sampled=false;float alpha=0.0;
+    if(status==NtcKnown && gTilesetColorKnown && isfinite(gTilesetGreen) && gTilesetGreen>0.0){
+      if(h0.w>0u && h0.w<4096u && h1.x>0u && h1.x<16u && isfinite(tiling)){
+        float2 scaled=uv*tiling;float gradient=g*abs(tiling);
+        if(all(isfinite(scaled)) && isfinite(gradient)){
+          alpha=gAlphaTex[NonUniformResourceIndex(h0.w)].SampleGrad(gNativeTilesetSampler[NonUniformResourceIndex(h1.x)],scaled,float2(gradient,0),float2(0,gradient)).a;
+          sampled=true;
+        }
+      }
+    }
+    NtcResult result=ntc_evaluate(status,gTilesetColorKnown,gTilesetGreen,sampled,alpha);
+    if(result.status!=NtcKnown){gTilesetUnknown=true;return false;}
+    alpha_stat(8,result.solid,prim);alpha_stat(9,!result.solid,prim);return result.solid;
+  }
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(h0.z==5u){
     uint status=uint(asfloat(gAlphaRec.Load(a+52u)));
@@ -674,14 +718,27 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
     alpha_stat(8,result.solid,prim);alpha_stat(9,!result.solid,prim);return result.solid;
   }
 #endif
+#endif
   const bool vt = h0.z == 1;
+#ifdef RT_SPEC_NATIVE
+  AlphaRead r;
+#else
   AlphaRead r = (AlphaRead)0;
+#endif
   if (vt) r = vt_alpha(a, uv, g, tex, cache, min(h1.y, 3u));
+#ifdef RT_SPEC_NATIVE
+  else if (RT_SCALP_ON && h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex,p0+(p1-p0)*bary.x+(p2-p0)*bary.y);
+#else
 #ifdef RT_NATIVE_SCALP
   else if (h0.z == 3u) r = native_scalp_alpha(a, uv, g, tex,p0+(p1-p0)*bary.x+(p2-p0)*bary.y);
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  else if (RT_HAIR_ON && h0.z == 4u) r = native_hair_alpha(a,uv,g,tex,min(h1.x,4095u));
+#else
 #ifdef RT_NATIVE_HAIR
   else if (h0.z == 4u) r = native_hair_alpha(a,uv,g,tex,min(h1.x,4095u));
+#endif
 #endif
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
@@ -695,10 +752,14 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   const float cut = (flags & kAlphaCutEff) != 0u ? asfloat(h1.z) : cut_first;
   // Hard cut-off where the read is as sharp as the game's (levels 0-1); towards
   // a hashed threshold over the next level, where it is a blurred coverage.
+#ifdef RT_SPEC_NATIVE
+  const float k = RT_SCALP_ON && (h0.z == 3u || h0.z == 4u) ? 0.0 : ((flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0);
+#else
 #ifdef RT_NATIVE_SCALP
   const float k = h0.z == 3u || h0.z == 4u ? 0.0 : ((flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0);
 #else
   const float k = (flags & kAlphaStochastic) != 0u ? saturate(r.lvl - 1.0) : 0.0;
+#endif
 #endif
   const float thr = k > 0.0 ? lerp(cut, alpha_hash(uv, prim), k) : cut;
   const bool solid = r.a >= thr;
@@ -752,9 +813,38 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
   float2 u0=asfloat(sun_load2(layer,offset+16u)),u1=asfloat(sun_load2(layer,offset+stride+16u)),
          u2=asfloat(sun_load2(layer,offset+2u*stride+16u));
   uint kind=gAlphaRec.Load(record.z+8u);
+#ifdef RT_SPEC_NATIVE
+  if (!RT_SCALP_ON) {
+  if(kind==3u || kind==4u)return kRtUnknown;
+  }
+#else
 #ifndef RT_NATIVE_SCALP
   if(kind==3u || kind==4u)return kRtUnknown;
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  if (!RT_HAIR_ON) {
+  if(kind==4u)return kRtUnknown;
+  } else {
+  if(kind==4u) {
+    if(stride<88u)return kRtUnknown;
+    gNativeHair=(NativeHairData)0;
+    float3 weights=float3(1.0-bary.x-bary.y,bary);
+    [unroll]for(uint i=0u;i<3u;++i) {
+      uint v=offset+i*stride;
+      gNativeHair.n+=asfloat(sun_load3(layer,v+24u))*weights[i];
+      gNativeHair.t+=asfloat(sun_load3(layer,v+36u))*weights[i];
+      gNativeHair.b+=asfloat(sun_load3(layer,v+48u))*weights[i];
+      gNativeHair.p+=asfloat(sun_load3(layer,v+60u))*weights[i];
+    }
+    gNativeHair.n=mul((float3x3)o2w,gNativeHair.n);
+    gNativeHair.t=mul((float3x3)o2w,gNativeHair.t);gNativeHair.b=mul((float3x3)o2w,gNativeHair.b);
+    gNativeHair.ray=ray;gNativeHair.physical=true;
+    gNativeHair.valid=all(isfinite(gNativeHair.n)) && all(isfinite(gNativeHair.t)) &&
+      all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
+  }
+  }
+#else
 #ifndef RT_NATIVE_HAIR
   if(kind==4u)return kRtUnknown;
 #else
@@ -776,6 +866,17 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
       all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
   }
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(kind==5u){
+    gTilesetColorKnown=stride>=40u && asfloat(gAlphaRec.Load(record.z+56u))==0.f;
+    if(gTilesetColorKnown){float c0=asfloat(sun_load2(layer,offset+28u).x),c1=asfloat(sun_load2(layer,offset+stride+28u).x),c2=asfloat(sun_load2(layer,offset+2u*stride+28u).x);
+      gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+  }
+  if(kind<1u || kind>5u)return kRtUnknown;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(kind==5u){
     gTilesetColorKnown=stride>=40u && asfloat(gAlphaRec.Load(record.z+56u))==0.f;
@@ -786,10 +887,15 @@ uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,floa
 #else
   if(kind<1u || kind>4u)return kRtUnknown;
 #endif
+#endif
   gSunAlphaKnown=true;
   bool solid=alpha_eval(record.z,p0,p1,p2,u0,u1,u2,bary,footprint,prim);
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && (gTilesetUnknown))return kRtUnknown;
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown)return kRtUnknown;
+#endif
 #endif
   return !gSunAlphaKnown?kRtUnknown:solid?kRtOccluded:kRtLit;
 }
@@ -805,46 +911,99 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
   }
   uint4 h0 = gAlphaRec.Load4(a);
   if (prim < h0.x || prim - h0.x >= h0.y) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_TILESET_ON && (h0.z==5u))gTilesetUnknown=true;
+#else
 #ifdef RT_NATIVE_TILESET
     if(h0.z==5u)gTilesetUnknown=true;
+#endif
 #endif
     alpha_stat(1, true, prim);
     return alpha_unknown(alpha_flags());
   }
+#ifdef RT_SPEC_NATIVE
+  uint stride=(RT_HAIR_ON || RT_TILESET_ON)?gAlphaRec.Load(4):24u,vb=prim*3u*stride,sbytes;
+#else
 #if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
   uint stride=gAlphaRec.Load(4),vb=prim*3u*stride,sbytes;
 #else
   uint vb = prim * 72, sbytes;
 #endif
+#endif
   gAlphaSoup.GetDimensions(sbytes);
+#ifdef RT_SPEC_NATIVE
+  if ((RT_HAIR_ON || RT_TILESET_ON)?!tri_in_range(0,prim,stride,sbytes):(vb+72u>sbytes)) {
+#else
 #if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
   if (!tri_in_range(0,prim,stride,sbytes)) {
 #else
   if (vb + 72u > sbytes) {
 #endif
+#endif
     alpha_stat(3, true, prim);
+#ifdef RT_SPEC_NATIVE
+      if(RT_TILESET_ON && (h0.z==5u))gTilesetUnknown=true;
+#else
 #ifdef RT_NATIVE_TILESET
     if(h0.z==5u)gTilesetUnknown=true;
 #endif
+#endif
     return alpha_unknown(alpha_flags());
   }
-#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
+#ifdef RT_SPEC_NATIVE
   float3 p0=asfloat(gAlphaSoup.Load3(vb)),p1=asfloat(gAlphaSoup.Load3(vb+stride)),p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
   float2 u0=asfloat(gAlphaSoup.Load2(vb+16)),u1=asfloat(gAlphaSoup.Load2(vb+stride+16)),u2=asfloat(gAlphaSoup.Load2(vb+2u*stride+16));
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+  if(h0.z==4u) {
+    float3 ray=gNativeHair.ray;
+    hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
+  }
+  }
+#else
   #ifdef RT_NATIVE_HAIR
   if(h0.z==4u) {
     float3 ray=gNativeHair.ray;
     hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
   }
   #endif
+#endif
+#else
+#if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
+  float3 p0=asfloat(gAlphaSoup.Load3(vb)),p1=asfloat(gAlphaSoup.Load3(vb+stride)),p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
+  float2 u0=asfloat(gAlphaSoup.Load2(vb+16)),u1=asfloat(gAlphaSoup.Load2(vb+stride+16)),u2=asfloat(gAlphaSoup.Load2(vb+2u*stride+16));
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+  if(h0.z==4u) {
+    float3 ray=gNativeHair.ray;
+    hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
+  }
+  }
+#else
+  #ifdef RT_NATIVE_HAIR
+  if(h0.z==4u) {
+    float3 ray=gNativeHair.ray;
+    hair_inputs(0,stride,prim,bary,ray,true,gAlphaRec.Load(a+20u)!=0u);
+  }
+  #endif
+#endif
 #else
   float3 p0 = asfloat(gAlphaSoup.Load3(vb)), p1 = asfloat(gAlphaSoup.Load3(vb + 24)), p2 = asfloat(gAlphaSoup.Load3(vb + 48));
   float2 u0 = asfloat(gAlphaSoup.Load2(vb + 16)), u1 = asfloat(gAlphaSoup.Load2(vb + 40)), u2 = asfloat(gAlphaSoup.Load2(vb + 64));
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetColorKnown=h0.z==5u && stride>=40u && asfloat(gAlphaRec.Load(a+56u))==0.f;
+  if(gTilesetColorKnown){float c0=asfloat(gAlphaSoup.Load(vb+28u)),c1=asfloat(gAlphaSoup.Load(vb+stride+28u)),c2=asfloat(gAlphaSoup.Load(vb+2u*stride+28u));
+    gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetColorKnown=h0.z==5u && stride>=40u && asfloat(gAlphaRec.Load(a+56u))==0.f;
   if(gTilesetColorKnown){float c0=asfloat(gAlphaSoup.Load(vb+28u)),c1=asfloat(gAlphaSoup.Load(vb+stride+28u)),c2=asfloat(gAlphaSoup.Load(vb+2u*stride+28u));
     gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+#endif
 #endif
   return alpha_eval(a, p0, p1, p2, u0, u1, u2, bary, footprint, prim);
 }
@@ -855,15 +1014,23 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
                     ,float3 hair_ray
 #endif
                     ) {
+#ifdef RT_SPEC_NATIVE
+  gNativeHair.ray=hair_ray;
+#else
 #ifdef RT_NATIVE_HAIR
   gNativeHair.ray=hair_ray;
+#endif
 #endif
   InstInfo ii = inst_info(inst);
   if ((ii.meta & kInfoLegacy) != 0u) return geom == 1u ? alpha_pass(prim, bary, footprint) : true;
   alpha_stat(0, true, prim);
   if ((ii.meta & kInfoAlpha) == 0u || ii.rec == 0u || prim >= ii.tris || (ii.meta & 0xffu) < 24u) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_TILESET_ON && (ii.rec && rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u))gTilesetUnknown=true;
+#else
 #ifdef RT_NATIVE_TILESET
     if(ii.rec && rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u)gTilesetUnknown=true;
+#endif
 #endif
     if (pc.rt_stats != 0u) {
       const bool norec = (ii.meta & kInfoAlpha) == 0u || ii.rec == 0u;
@@ -878,8 +1045,12 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
   if ((ii.meta & kInfoPool) != 0u) gMeshPool.GetDimensions(vbytes);
   else gOpaqueSoup.GetDimensions(vbytes);
   if (!tri_in_range(ii.base, prim, ii.meta & 0xffu, vbytes) || !rec_in_range(ii.rec)) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_TILESET_ON && (rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u))gTilesetUnknown=true;
+#else
 #ifdef RT_NATIVE_TILESET
     if(rec_in_range(ii.rec) && gAlphaRec.Load(ii.rec+8u)==5u)gTilesetUnknown=true;
+#endif
 #endif
     guard_count(kGuardSet1);
     alpha_stat(3, true, prim);
@@ -891,10 +1062,27 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
     p1 = mul(o2w, float4(p1, 1.0));
     p2 = mul(o2w, float4(p2, 1.0));
   }
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+  if(gAlphaRec.Load(ii.rec+8u)==4u)
+    hair_inputs(ii.base,ii.meta,prim,bary,hair_ray,false,gAlphaRec.Load(ii.rec+20u)!=0u);
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   if(gAlphaRec.Load(ii.rec+8u)==4u)
     hair_inputs(ii.base,ii.meta,prim,bary,hair_ray,false,gAlphaRec.Load(ii.rec+20u)!=0u);
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetColorKnown=gAlphaRec.Load(ii.rec+8u)==5u && (ii.meta&255u)>=40u && asfloat(gAlphaRec.Load(ii.rec+56u))==0.f;
+  if(gTilesetColorKnown){uint stride=ii.meta&255u,at=ii.base+prim*3u*stride+28u;
+    float c0,c1,c2;
+    if((ii.meta&kInfoPool)!=0u){c0=asfloat(gMeshPool.Load(at));c1=asfloat(gMeshPool.Load(at+stride));c2=asfloat(gMeshPool.Load(at+2u*stride));}
+    else{c0=asfloat(gOpaqueSoup.Load(at));c1=asfloat(gOpaqueSoup.Load(at+stride));c2=asfloat(gOpaqueSoup.Load(at+2u*stride));}
+    gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetColorKnown=gAlphaRec.Load(ii.rec+8u)==5u && (ii.meta&255u)>=40u && asfloat(gAlphaRec.Load(ii.rec+56u))==0.f;
   if(gTilesetColorKnown){uint stride=ii.meta&255u,at=ii.base+prim*3u*stride+28u;
@@ -902,6 +1090,7 @@ bool alpha_pass_hit(uint inst, uint geom, uint prim, float2 bary, float footprin
     if((ii.meta&kInfoPool)!=0u){c0=asfloat(gMeshPool.Load(at));c1=asfloat(gMeshPool.Load(at+stride));c2=asfloat(gMeshPool.Load(at+2u*stride));}
     else{c0=asfloat(gOpaqueSoup.Load(at));c1=asfloat(gOpaqueSoup.Load(at+stride));c2=asfloat(gOpaqueSoup.Load(at+2u*stride));}
     gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
+#endif
 #endif
   return alpha_eval(ii.rec, p0, p1, p2, inst_uv(ii, prim, 0), inst_uv(ii, prim, 1), inst_uv(ii, prim, 2), bary, footprint,
                     prim);
@@ -923,6 +1112,10 @@ bool alpha_instance(uint inst, uint geom) {
 }
 
 // The candidate test every ray query loop runs.
+#ifdef RT_SPEC_NATIVE
+#define RT_ALPHA_CANDIDATE(q, cone) alpha_pass_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), cone.f0 + cone.spread * q.CandidateTriangleRayT(), q.CandidateObjectToWorld3x4(), RT_HAIR_ON ? q.WorldRayDirection() : 0.0.xxx)
+#else
+// The candidate test every ray query loop runs.
 #ifdef RT_NATIVE_HAIR
 #define RT_ALPHA_CANDIDATE(q, cone)                                                                         \
   alpha_pass_hit(q.CandidateInstanceIndex(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),        \
@@ -935,8 +1128,16 @@ bool alpha_instance(uint inst, uint geom) {
                  q.CandidateObjectToWorld3x4())
 #endif
 
+#endif
+
 // Ray footprint: width f0 at the origin, growing by `spread` per unit length.
 struct RtCone { float f0, spread; };
+#ifdef RT_SPEC_NATIVE
+#include "native_hair_procedural.hlsli"
+#define RT_SKIP_PROCEDURAL (RT_HAIR_ON ? 0u : RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES)
+#define RT_HAS_COMMITTED(q) (RT_HAIR_ON ? (q.CommittedStatus()!=COMMITTED_NOTHING) : (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT))
+bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
+#else
 #ifdef RT_NATIVE_HAIR
 #include "native_hair_procedural.hlsli"
 #define RT_SKIP_PROCEDURAL 0u
@@ -947,17 +1148,34 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 #define RT_HAS_COMMITTED(q) (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)
 #endif
 
+#endif
+#ifdef RT_SPEC_NATIVE
+#define RT_QUERY_FLAGS RT_SKIP_PROCEDURAL
+#else
+#define RT_QUERY_FLAGS 0
+#endif
+
 // Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
 // alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
 // if the candidate cap aborted the query first (a hit committed before the abort is a
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetUnknown=!tileset_scene_complete();
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  gNativeCameraQuery=false;
+#else
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=false;
+#endif
 #endif
   g_rt_class = 1u;
 #ifdef RT_SUN_CURRENT
@@ -965,15 +1183,30 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
     rt_count_unknown(0u);return kRtUnknown;
   }
 #endif
+#ifdef RT_SPEC_NATIVE
+  gHairCameraQuery=false;
+  if (RT_HAIR_ON) {
+  if(!hair_bounds_ok()){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=false;
   if(!hair_bounds_ok()){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
+  #ifdef RT_SPEC_NATIVE
+  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+#else
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL> q;
+#endif
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -989,17 +1222,21 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, 0, RT_VIS_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
 #else
-  q.TraceRayInline(gScene, 0, RT_VIS_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
   while (q.Proceed()) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
 #endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
@@ -1007,6 +1244,14 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
       q.Abort();
       break;
     }
+#ifdef RT_SPEC_NATIVE
+    if(RT_HAIR_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,tmax,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
       HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,tmax,cone);
@@ -1014,6 +1259,7 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
       if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
       continue;
     }
+#endif
 #endif
 #if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)) || \
     (defined(RT_SPEC_CASCADE) && (defined(RT_SPEC_CASCADE_SUN) || defined(RT_CASCADE_SUN_HIT)))
@@ -1045,8 +1291,12 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_OMM_SCENE
   g_omm_cand = cand_n;
 #endif
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#endif
 #endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
   if (aborted) {
@@ -1152,22 +1402,43 @@ NativeSunResult sun_native_visibility(float3 P,float depth,float3 origin,float3 
 // aborted: the candidate cap ended the query; t, alpha and hit_kind are then unreliable.
 struct RtDebugHit { float t; bool alpha; uint near_kind; uint hit_kind; bool aborted; };
 RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetUnknown=!tileset_scene_complete();
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  gNativeCameraQuery=true;
+#else
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=true;
+#endif
 #endif
   g_rt_class = 0u;
   RtDebugHit h = (RtDebugHit)0;
   h.near_kind = 0;
   h.aborted = false;
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && gTilesetUnknown){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  gHairCameraQuery=true;
+  if (RT_HAIR_ON) {
+  if(!hair_bounds_ok()){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=true;
   if(!hair_bounds_ok()){h.t=-1;h.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return h;}
+#endif
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     h.t = -1.0;
@@ -1175,7 +1446,11 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     h.hit_kind = 0u;
     return h;
   }
+  #ifdef RT_SPEC_NATIVE
+  RayQuery<0> q;
+#else
   RayQuery<RT_SKIP_PROCEDURAL> q;
+#endif
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -1186,17 +1461,21 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   float near_t = 1e30;
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
 #endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
@@ -1204,6 +1483,15 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
       q.Abort();
       break;
     }
+#ifdef RT_SPEC_NATIVE
+    if(RT_HAIR_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){h.aborted=true;q.Abort();break;}
+      if(ph.t>=0.0){if(ph.t<near_t){near_t=ph.t;h.near_kind=4;}q.CommitProceduralPrimitiveHit(ph.t);}
+      continue;
+    }
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
       float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
@@ -1213,6 +1501,7 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
       continue;
     }
 #endif
+#endif
     if (q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) continue;
     float ct = q.CandidateTriangleRayT();
     if (ct < near_t) {
@@ -1221,8 +1510,14 @@ RtDebugHit rt_closest_debug(float3 o, float3 d, float tmax, RtCone cone) {
     }
     if (RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  h.aborted=h.aborted||gTilesetUnknown;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   h.aborted=h.aborted||gTilesetUnknown;
+#endif
 #endif
   bool hit = RT_HAS_COMMITTED(q);
   h.t = hit ? q.CommittedRayT() : -1.0;
@@ -1251,19 +1546,40 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
                      ,bool camera_primary=false
 #endif
                      ) {
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetUnknown=!tileset_scene_complete();
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  gNativeCameraQuery=camera_primary;
+#else
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=camera_primary;
 #endif
+#endif
   g_rt_class = 0u;
+#ifdef RT_SPEC_NATIVE
+  gHairCameraQuery=camera_primary;
+  if (RT_HAIR_ON) {
+  if(!hair_bounds_ok()){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=camera_primary;
   if(!hair_bounds_ok()){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && gTilesetUnknown){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){RtHit bad=(RtHit)0;bad.t=-1;bad.aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return bad;}
+#endif
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) {
     RtHit m = (RtHit)0;
@@ -1273,7 +1589,11 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
     m.aborted = false;
     return m;
   }
+  #ifdef RT_SPEC_NATIVE
+  RayQuery<0> q;
+#else
   RayQuery<RT_SKIP_PROCEDURAL> q;
+#endif
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -1284,17 +1604,21 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   bool aborted = false;
   while (q.Proceed()) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
 #endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
@@ -1302,6 +1626,15 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
       q.Abort();
       break;
     }
+#ifdef RT_SPEC_NATIVE
+    if(RT_HAIR_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
       float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
@@ -1311,13 +1644,20 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
       continue;
     }
 #endif
+#endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
 #ifdef RT_OMM_SCENE
   g_omm_cand = cand_n;
 #endif
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  aborted=aborted||gTilesetUnknown;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   aborted=aborted||gTilesetUnknown;
+#endif
 #endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   RtHit h = (RtHit)0;
@@ -1389,10 +1729,18 @@ float3 rt_tri_normal(uint geom, uint prim) {
   if (geom == 0u) {
     uint stride = gAlphaRec.Load(4);
     gOpaqueSoup.GetDimensions(bytes);
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+    if (stride == 0u || stride > 128u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+  } else {
+    if (stride == 0u || stride > 64u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+  }
+#else
 #ifdef RT_NATIVE_HAIR
     if (stride == 0u || stride > 128u || prim >= bytes / (3u * stride)) return 0.0.xxx;
 #else
     if (stride == 0u || stride > 64u || prim >= bytes / (3u * stride)) return 0.0.xxx;
+#endif
 #endif
     uint vb = prim * 3u * stride;
     p0 = asfloat(gOpaqueSoup.Load3(vb));
@@ -1400,6 +1748,20 @@ float3 rt_tri_normal(uint geom, uint prim) {
     p2 = asfloat(gOpaqueSoup.Load3(vb + 2u * stride));
   } else {
     gAlphaSoup.GetDimensions(bytes);
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+    uint stride=gAlphaRec.Load(4);
+    if(!tri_in_range(0,prim,stride,bytes))return 0.0.xxx;
+    uint vb=prim*3u*stride;
+    p0=asfloat(gAlphaSoup.Load3(vb));p1=asfloat(gAlphaSoup.Load3(vb+stride));p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
+  } else {
+    if (prim >= bytes / 72u) return 0.0.xxx;
+    uint vb = prim * 72u;
+    p0 = asfloat(gAlphaSoup.Load3(vb));
+    p1 = asfloat(gAlphaSoup.Load3(vb + 24u));
+    p2 = asfloat(gAlphaSoup.Load3(vb + 48u));
+  }
+#else
 #ifdef RT_NATIVE_HAIR
     uint stride=gAlphaRec.Load(4);
     if(!tri_in_range(0,prim,stride,bytes))return 0.0.xxx;
@@ -1411,6 +1773,7 @@ float3 rt_tri_normal(uint geom, uint prim) {
     p0 = asfloat(gAlphaSoup.Load3(vb));
     p1 = asfloat(gAlphaSoup.Load3(vb + 24u));
     p2 = asfloat(gAlphaSoup.Load3(vb + 48u));
+#endif
 #endif
   }
   float3 n = cross(p1 - p0, p2 - p0);
@@ -1431,12 +1794,22 @@ float3 rt_hit_normal(RtHit h) {
     return 0.0.xxx;
   }
   float3 p0 = inst_pos(ii, h.prim, 0), p1 = inst_pos(ii, h.prim, 1), p2 = inst_pos(ii, h.prim, 2);
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+  if((ii.meta&kInfoHairProcedural)!=0u){
+    p0=hair_vertex(ii.base,ii.meta,h.prim,0,60,3,false).xyz;
+    p1=hair_vertex(ii.base,ii.meta,h.prim,1,60,3,false).xyz;
+    p2=hair_vertex(ii.base,ii.meta,h.prim,2,60,3,false).xyz;
+  }
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   if((ii.meta&kInfoHairProcedural)!=0u){
     p0=hair_vertex(ii.base,ii.meta,h.prim,0,60,3,false).xyz;
     p1=hair_vertex(ii.base,ii.meta,h.prim,1,60,3,false).xyz;
     p2=hair_vertex(ii.base,ii.meta,h.prim,2,60,3,false).xyz;
   }
+#endif
 #endif
   if ((ii.meta & kInfoPool) != 0u) {
     p0 = mul(h.o2w, float4(p0, 1.0));
@@ -1480,6 +1853,28 @@ float3 rt_ray_origin_o(float4 o, float3 P, float3 Ns, float foot, float3 dir) {
   // A non-finite ray origin is undefined behaviour for ray queries.
   return all(isfinite(r)) ? r : P + Ns * (2.0 * foot * ss);
 }
+#ifdef RT_SPEC_HAIR_ORIGIN
+bool rt_hair_receiver(uint2 fp,float3 P,out float3 receiver) {
+  receiver=P;
+  if(!RT_HAIR_ORIGIN_ON || pc.rt_origin==0u)return false;
+  float4 physical=rtHairOrigin[fp];
+  if(physical.w<=0.0 || !all(isfinite(physical)) || !hpo_unit_normal(physical.xyz))return false;
+  receiver=hpo_reconstruct(P,physical.w);return all(isfinite(receiver));
+}
+float3 rt_secondary_ray_origin_o(uint2 fp,float4 virtual_origin,float3 P,float3 Ns,float foot,float3 dir) {
+  if(RT_HAIR_ORIGIN_ON && pc.rt_origin!=0u) {
+    float4 physical=rtHairOrigin[fp];
+    if(physical.w>0.0 && all(isfinite(physical)) && hpo_unit_normal(physical.xyz)) {
+      // Direct float32 distance: error scales with physical position, not the
+      // possibly much larger virtual point. No offset-ratio cancellation.
+      float3 base=hpo_reconstruct(P,physical.w);
+      if(all(isfinite(base)))return rt_ray_origin_o(float4(physical.xyz,0.0),base,Ns,foot,dir);
+    }
+  }
+  return rt_ray_origin_o(virtual_origin,P,Ns,foot,dir);
+}
+#define RT_SECONDARY_ORIGIN(fp,o,P,N,f,d) rt_secondary_ray_origin_o(fp,o,P,N,f,d)
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
 bool rt_hair_receiver(uint2 fp,float3 P,out float3 receiver) {
   receiver=P;
@@ -1504,6 +1899,7 @@ float3 rt_secondary_ray_origin_o(uint2 fp,float4 virtual_origin,float3 P,float3 
 #else
 #define RT_SECONDARY_ORIGIN(fp,o,P,N,f,d) rt_ray_origin_o(o,P,N,f,d)
 #endif
+#endif
 float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
   return RT_SECONDARY_ORIGIN(fp,rt_origin_at(fp), P, Ns, foot, dir);
 }
@@ -1511,23 +1907,48 @@ float3 rt_ray_origin(uint2 fp, float3 P, float3 Ns, float foot, float3 dir) {
 // Closest alpha-tested hit distance, or -1. `aborted`: the candidate cap ended the
 // query; the distance is then unknown (-1, or a hit farther than the closest one).
 float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) {
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  gTilesetUnknown=!tileset_scene_complete();
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+  gNativeCameraQuery=false;
+#else
 #ifdef RT_NATIVE_SCALP
   gNativeCameraQuery=false;
 #endif
+#endif
   g_rt_class = 0u;
   aborted = false;
+#ifdef RT_SPEC_NATIVE
+  gHairCameraQuery=false;
+  if (RT_HAIR_ON) {
+  if(!hair_bounds_ok()){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
+  }
+#else
 #ifdef RT_NATIVE_HAIR
   gHairCameraQuery=false;
   if(!hair_bounds_ok()){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
 #endif
+#endif
+#ifdef RT_SPEC_NATIVE
+    if(RT_TILESET_ON && gTilesetUnknown){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
+#else
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){aborted=true;rt_count_unknown(asuint(o.x)^asuint(o.z));return -1.0;}
 #endif
+#endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return -1.0;
+  #ifdef RT_SPEC_NATIVE
+  RayQuery<0> q;
+#else
   RayQuery<RT_SKIP_PROCEDURAL> q;
+#endif
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -1538,16 +1959,20 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, 0, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
   while (q.Proceed()) {
+#ifdef RT_SPEC_NATIVE
+      if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
+#endif
 #endif
     if (++cand_n > cap) {
       guard_count(kGuardLoopCap);
@@ -1555,6 +1980,15 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
       q.Abort();
       break;
     }
+#ifdef RT_SPEC_NATIVE
+    if(RT_HAIR_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
+      float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
+      HairProceduralHit ph=hair_intersect(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex(),r.Origin,d,maximum,cone);
+      if(ph.unknown){aborted=true;q.Abort();break;}
+      if(ph.t>=0.0)q.CommitProceduralPrimitiveHit(ph.t);
+      continue;
+    }
+#else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE){
       float maximum=RT_HAS_COMMITTED(q)?min(tmax,q.CommittedRayT()):tmax;
@@ -1564,10 +1998,17 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
       continue;
     }
 #endif
+#endif
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && RT_ALPHA_CANDIDATE(q, cone)) q.CommitNonOpaqueTriangleHit();
   }
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  aborted=aborted||gTilesetUnknown;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   aborted=aborted||gTilesetUnknown;
+#endif
 #endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
   return RT_HAS_COMMITTED(q) ? q.CommittedRayT() : -1.0;

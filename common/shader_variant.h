@@ -1,5 +1,5 @@
 #pragma once
-// GI shader variants as compile-time defines (replaces the per-flag wrapper trees that were
+// GI shader requests and specialization constants (replaces the per-flag wrapper trees that were
 // shaders/{native_tileset,hair_origin,omm,sun_current,native_scalp}/.../gi/{cascade/}).
 // A request is "<file>?NAME=VALUE;NAME=VALUE": Bg3HostApi::get_shader (ABI 23) passes each
 // pair to DXC as -D after BG3RTX/SHaRC, the cache key is the whole string, and hot reload
@@ -221,7 +221,7 @@ inline constexpr NoVariant kWaterNoVariant[] = {
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
-// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, gi_far, then rf_hit_gi.
+// each name once: native markers, OMM, current sun, instanced, cascade, gi_far, then rf_hit_gi.
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
@@ -242,8 +242,8 @@ inline std::string request(const char* file, unsigned flags) {
     out += def;
     sep = ';';
   };
-  if (flags & kTileset) add("RT_NATIVE_TILESET=1");
-  if (flags & kHairOrigin) add("RT_HAIR_PHYSICAL_ORIGIN=1");
+  if (std::strncmp(file, "gi/", 3) == 0) add("RT_SPEC_NATIVE=1");
+  if (hair_origin::alternate_entry(file)) add("RT_SPEC_HAIR_ORIGIN=1");
   if (flags & kOmm) add("RT_OMM_SCENE=1");
   if (flags & kSunCurrent) {
     add("RT_SUN_CURRENT=1");
@@ -251,10 +251,6 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_CASCADE_MASKS=1");
     add("RT_CASCADE_TMIN=0.0");
     add("RT_CASCADE_TMIN_REL=0.0");
-  }
-  if (flags & kScalp) {
-    add("RT_NATIVE_SCALP=1");
-    add("RT_NATIVE_HAIR=1");
   }
   // Steps S2a + S2c: rt_hit_material_instanced (1003), wind RGB (1004) and IP grass (1005) are constants of one module
   // per hit-material file (core/gi.cpp refresh): RT_SPEC_HIT_INST=1 always, never RT_HIT_INSTANCED or its sub-defines.

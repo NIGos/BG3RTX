@@ -123,7 +123,7 @@ RT_HAIR_PHYSICAL_ORIGIN at S3, the water hair variants of worktree-agent-a78f480
 Offline verification per step, cheap (no full compile): `tools/spec_cascade_check.py` generalized to every key of
 the registry (`--key <name>`): sample = each file once + 24 random requests; for each old request, the new module
 specialized with the constants its defines imply, frozen, folded and -O, must be the same program (canonical
-compare with reference-order blocks) as the old request's module; a control pair must differ; the old modules are
+compare with reference-order blocks and parallel phi declarations grouped by type) as the old request's module; a control pair must differ; the old modules are
 mostly cached already (~60-100 DXC compiles per step: the new modules of the sample). Plus one replay per touched
 family (gi_hit_direct S8 pack; the rf / ls packs once they exist) bit-identical per value, and `pp-diff` against the
 step's base: every request that keeps its spelling preprocesses to the same text (default path byte-identical).

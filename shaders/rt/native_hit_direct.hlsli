@@ -124,8 +124,14 @@ bool hd_light_policy(uint index,Bg3Light light,out float R,out bool slot_r){
 float3 native_hit_position(RtHit hit,float3 ray_point){
  InstInfo ii=inst_info(hit.inst);uint stride=ii.meta&0xffu,bytes;
  if((ii.meta&kInfoLegacy)!=0u || hit.prim>=ii.tris || stride<16u || hit.aborted || !(hit.t>=0))return ray_point;
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+ if((ii.meta&kInfoHairProcedural)!=0u)return ray_point;
+  }
+#else
 #ifdef RT_NATIVE_HAIR
  if((ii.meta&kInfoHairProcedural)!=0u)return ray_point;
+#endif
 #endif
  if((ii.meta&kInfoPool)!=0u)gMeshPool.GetDimensions(bytes);else gOpaqueSoup.GetDimensions(bytes);
  if(!tri_in_range(ii.base,hit.prim,stride,bytes))return ray_point;

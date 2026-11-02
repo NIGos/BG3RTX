@@ -249,8 +249,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if((ii.meta&(kInfoLegacy|kInfoPool))!=0 || hit.prim>=ii.tris)return result;
  if(opaque){if((ii.meta&kInfoAlpha)!=0 || ii.rec<nh_alpha_rows || ii.rec>=nh_material_rows)return result;}
  else if((ii.meta&kInfoAlpha)==0 || !rec_in_range(ii.rec) || (ii.rec-16u)%208u!=0)return result;
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+ if((ii.meta&kInfoHairProcedural)!=0)return result;
+  }
+#else
 #ifdef RT_NATIVE_HAIR
  if((ii.meta&kInfoHairProcedural)!=0)return result;
+#endif
 #endif
  uint record=opaque?ii.rec:(ii.rec-16u)/208u,bytes;gHitRecords.GetDimensions(bytes);
  if(record>=nh_material_rows || bytes<16u+256u || record>=(bytes-16u)/256u)return result;
@@ -258,8 +264,12 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint row=16u+record*256u;uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
  if(h0.x!=record+1u || hit.prim>=h0.y || h1.w!=pc.frame || h1.x<64 || h1.x!=(ii.meta&255u))return hit_material_unknown(3);
+#ifdef RT_SPEC_NATIVE
+ bool tileset=RT_TILESET_ON && h2.w==2u;if(tileset && h1.x<NtsMinimumStride)return result;
+#else
  #ifdef RT_NATIVE_TILESET
  bool tileset=h2.w==2u;if(tileset && h1.x<NtsMinimumStride)return result;
+#endif
 #endif
  uint bbytes;gHitBasis.GetDimensions(bbytes);uint size=h0.y*3u*h1.x;
  if(h0.y>0xffffffffu/(3u*h1.x) || h0.z>bbytes || size>bbytes-h0.z || h0.w>bbytes || size>bbytes-h0.w)return result;
@@ -294,8 +304,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  [unroll]for(uint v=0;v<3;++v){
   uint pre=h0.z+(hit.prim*3u+v)*h1.x,def=h0.w+(hit.prim*3u+v)*h1.x;
   if(any(gHitBasis.Load4(pre)!=gHitBasis.Load4(def)) || any(gHitBasis.Load2(pre+16)!=gHitBasis.Load2(def+16)))return hit_material_unknown(4);
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(tileset && any(gHitBasis.Load4(pre+NtsColorOffset)!=gHitBasis.Load4(def+NtsColorOffset)))return hit_material_unknown(4);
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(tileset && any(gHitBasis.Load4(pre+NtsColorOffset)!=gHitBasis.Load4(def+NtsColorOffset)))return hit_material_unknown(4);
+#endif
 #endif
  }
  float2 uv[3];float3 position[3];float3 basis[3];
@@ -330,8 +346,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(fields.status!=0)return hit_material_unknown(7);
  [unroll]for(uint component=0;component<3;++component){
   uint start=h0.w+hit.prim*3u*h1.x+24u+12u*component;
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(tileset)start=h0.w+hit.prim*3u*h1.x+NtsBasisOffset+12u*component;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(tileset)start=h0.w+hit.prim*3u*h1.x+NtsBasisOffset+12u*component;
+#endif
 #endif
   float3 b0=asfloat(gHitBasis.Load3(start)),b1=asfloat(gHitBasis.Load3(start+h1.x)),b2=asfloat(gHitBasis.Load3(start+2u*h1.x));
   basis[component]=b0+(b1-b0)*hit.bary.x+(b2-b0)*hit.bary.y;

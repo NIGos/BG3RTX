@@ -319,7 +319,7 @@ void rf_gi_drop() {
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
-Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F, startup opt-in only.
+Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resolution at startup opt-in, otherwise 1x1.
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
@@ -564,9 +564,9 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
-  if(ok && g_hair_origin_cap) {
-    ok=host->alloc_image(w,h,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
-    if(ok)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
+  if(ok) {
+    ok=host->alloc_image(g_hair_origin_cap?w:1u,g_hair_origin_cap?h:1u,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
+    if(ok && g_hair_origin_cap)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
   }
   if (!ok) {
     host->log("gi: image allocation failed");
@@ -601,7 +601,7 @@ bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLa
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) b[n++] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   for (const ExtraBinding& x : kExtras)
     if (x.layouts & mask) b[n++] = {x.binding, x.type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-  if(g_hair_origin_cap && mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+  if(mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   sci.bindingCount = n;
@@ -1020,8 +1020,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                nullptr};
   pci.layout = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
-  uint32_t spec_data[8];
-  VkSpecializationMapEntry spec_entries[8];
+  uint32_t spec_data[12];
+  VkSpecializationMapEntry spec_entries[12];
   uint32_t n_spec = 0;
   auto spec_add = [&](uint32_t id, uint32_t v) {
     spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
@@ -1038,6 +1038,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
   if (sv::gi_far_entry(file)) spec_add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (std::strncmp(file, "gi/", 3) == 0) {
+    spec_add(sv::kSpecIdTileset, tileset ? 1u : 0u);
+    spec_add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
+    if (bg3::hair_origin::alternate_entry(file)) spec_add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
+  }
   const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
   if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;
@@ -1110,7 +1115,7 @@ bool gather_hit_gi_writes(const Bound&,VkWriteDescriptorSet*,uint32_t&,bool refe
 // The extras' descriptors, with fallbacks when the game did not bind a source
 // (the shaders are told through Push::mat_classes bits 1-3).
 void bind_extras(Bound& b, const Snapshot& s) {
-  if(g_hair_origin_cap){
+  {
     b.hair_origin_image={VK_NULL_HANDLE,g_hair_origin.view,VK_IMAGE_LAYOUT_GENERAL};
     b.hair_origin_write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};b.hair_origin_write.dstBinding=50;
     b.hair_origin_write.descriptorCount=1;b.hair_origin_write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -1169,7 +1174,7 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) out[n++] = b.w[i];
   for (uint32_t i = 0; i < kNumExtras; ++i)
     if (kExtras[i].layouts & mask) out[n++] = b.xw[i];
-  if(g_hair_origin_cap && mask!=1u)out[n++]=b.hair_origin_write;
+  if(mask!=1u)out[n++]=b.hair_origin_write;
   return n;
 }
 
@@ -2666,7 +2671,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     VkClearColorValue zero{};
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     for (Bg3Image* im : all_images) host->vk->CmdClearColorImage(cmd, im->image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &range);
-    if(g_hair_origin_cap){
+    {
       image_layout(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
       VkClearColorValue invalid{};invalid.float32[3]=0.0f;
       host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);

@@ -105,6 +105,28 @@ def old_requests_inst(spec_request):
     return out
 
 
+def old_requests_native(spec_request):
+    """S3: both tileset values crossed with plain, native hair/scalp, physical hair origins."""
+    file, defs = split_request(spec_request)
+    physical = "RT_SPEC_HAIR_ORIGIN=1" in defs
+    out = []
+    for t in (0, 1):
+        for h, p in ((0, 0), (1, 0), (1, 1)) if physical else ((0, 0), (1, 0)):
+            ds = []
+            for d in defs:
+                if d == "RT_SPEC_NATIVE=1":
+                    ds += (["RT_NATIVE_TILESET=1"] if t else [])
+                    ds += (["RT_HAIR_PHYSICAL_ORIGIN=1"] if p else [])
+                    ds += (["RT_NATIVE_SCALP=1", "RT_NATIVE_HAIR=1"] if h else [])
+                elif d != "RT_SPEC_HAIR_ORIGIN=1":
+                    ds.append(d)
+            assign = {1008: t, 1010: h}
+            if physical:
+                assign[1009] = p
+            out.append((assign, file + ("?" + ";".join(ds) if ds else "")))
+    return out
+
+
 def old_requests_swap(spec_request, marker, define):
     """(without the marker, with the old define in its place): a key whose spec build replaces one define."""
     file, defs = split_request(spec_request)
@@ -118,9 +140,10 @@ def two(olds, id_of):
 
 
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
-KEYS = {"cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
+KEYS = {"native": ("RT_SPEC_NATIVE=1", old_requests_native),
+        "cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
         "guards": (GUARDS, two(old_requests_guards, guard_id)),
-        "hitfam": (FAMILY, old_requests_family),   # S2a alone (superseded by hitinst once S2c lands)
+        "hitfam": (INST, lambda r: old_requests_inst(r)[1:]),   # S2a regression on the S2c union, instanced = 1
         "hitinst": (INST, old_requests_inst),
         "gifar": ("RT_SPEC_GI_FAR=1", two(lambda r: old_requests_swap(r, "RT_SPEC_GI_FAR=1", "RT_GI_FAR=1"),
                                           lambda f: 1007))}
@@ -168,6 +191,9 @@ def block_order(body):
                 continue
             seen.append(b)
             for l in blocks[b][1:]:
+                # Phi predecessors are dataflow inputs, not successor/control references.
+                if " OpPhi " in l:
+                    continue
                 for x in RX.findall(l):
                     if x in blocks and x not in seen and x not in queue:
                         queue.append(x)
@@ -178,6 +204,40 @@ def block_order(body):
         fn.append(l)
         if "OpFunctionEnd" in l:
             flush()
+    flush()
+    return out
+
+
+def phi_order(body, global_names):
+    """Order parallel phi declarations and their intact predecessor/value pairs.
+
+    SPIR-V phis at the start of a block execute simultaneously. DXC's SROA can
+    emit their types in a different order after specialization. Like global
+    declaration order, that order is not dataflow. Equal-type phis retain their
+    order; no operation, operand, incoming edge or result ID is discarded.
+    Incoming pairs follow the control-flow block order, never raw ID numbering.
+    """
+    out, phis = [], []
+    labels = {m.group(1): i for i, line in enumerate(body) if (m := LABEL.match(line))}
+
+    def flush():
+        out.extend(sorted(phis, key=lambda line: global_names.get(DEF.match(line).group(3).split()[0],
+                                                            DEF.match(line).group(3).split()[0])))
+        phis.clear()
+    for line in body:
+        match = DEF.match(line)
+        if match and match.group(2) == "OpPhi":
+            args = match.group(3).split()
+            # A phi chooses a value by predecessor identity. Permute complete pairs,
+            # never values or predecessor edges independently.
+            pairs = list(zip(args[1::2], args[2::2]))
+            assert len(args) == 1 + 2 * len(pairs), "malformed phi"
+            pairs.sort(key=lambda pair: labels.get(pair[1], len(body)))
+            line = line[:match.start(3)] + " " + " ".join([args[0], *[x for pair in pairs for x in pair]])
+            phis.append(line)
+        else:
+            flush()
+            out.append(line)
     flush()
     return out
 
@@ -204,7 +264,7 @@ def canonical(tool, spv):
         return canon[x]
     for x in defs:
         name(x)
-    body = block_order(body)
+    body = phi_order(block_order(body), canon)
     ren = {}
     b = [RX.sub(lambda m: canon.get(m.group(0)) or ren.setdefault(m.group(0), f"%v{len(ren)}"), l).strip() for l in body]
     g = sorted(RX.sub(lambda m: canon.get(m.group(0)) or ren.get(m.group(0), m.group(0)), l).strip() for l in glob)
@@ -286,7 +346,7 @@ def main():
     known = set(tree.requests())
     spec = sorted(r for r in known if marker in split_request(r)[1])
     if not spec:
-        say("no RT_SPEC_CASCADE request in shaders/variants.txt")
+        say(f"no {marker} request in shaders/variants.txt")
         return 1
     by_file = {}
     for r in spec:
@@ -307,7 +367,7 @@ def main():
     unlisted = sorted({o for r in pick for _, o in pairs[r] if o not in known})
     if unlisted:
         say(f"[spec cascade] {len(unlisted)} old reference requests not in shaders/variants.txt: compiled on demand")
-    say(f"[spec cascade] {len(spec)} RT_SPEC_CASCADE requests over {len(by_file)} files; checking {len(pick)} "
+    say(f"[spec {args.key}] {len(spec)} {marker} requests over {len(by_file)} files; checking {len(pick)} "
         f"({'all' if args.all else f'each file once + {len(pick) - len(by_file)} random, seed {args.seed}'})")
     need = sorted(set(pick) | {o for r in pick for _, o in pairs[r]})
     compiled = compile_requests(tree, need, tool=tool, cache=Cache(), jobs=args.jobs, label="spec cascade")
@@ -337,13 +397,16 @@ def main():
                     dst.write_bytes(again[r].blob(e.name))
                     local[(r, e.name)] = dst
         P = lambda r, e="main": local[(r, e)]  # noqa: E731
-        (_, c0), (_, c1) = pairs[pick[0]][:2]
+        control_request = (next((r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"), pick[0])
+                           if args.key == "native" else pick[0])
+        control_pairs = pairs[control_request]
+        (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
         ctrl = differ(canonical(tool, opt(tool, P(c0), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1), Path(tmp) / "c1.spv", "-O")))
-        say(f"control: {c0} vs its cascade variant differ in {ctrl} lines (must be > 0)")
+        say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
         jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in range(len(pairs[r]))]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \
-                concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+                concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
             futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v][1], e), pairs[r][v][0]):
                     (r, e, v) for i, r, e, v in jobs}
             for f in concurrent.futures.as_completed(futs):
@@ -355,12 +418,13 @@ def main():
                 if n:
                     with lock:
                         fails.append((r, e, v, n))
+                    say(f"DIFFERENT: {r} [{e}] {pairs[r][v][0]} vs {pairs[r][v][1]}: {n}")
                 prog.step(failed=bool(n))
         ok_replay = replay(tool, P, args.replay, tmp, replay_spec, olds) if args.replay else True
     for r, e, v, n in sorted(fails):
         say(f"DIFFERENT: {r} [{e}] {pairs[r][v][0]} vs {pairs[r][v][1]}: {n}")
-    say(f"spec cascade: {len(pick) - len({r for r, _, _, _ in fails})}/{len(pick)} RT_SPEC_CASCADE requests are, "
-        f"specialized to 0 and 1, the same program as their plain and RT_CASCADE_MASKS variants"
+    say(f"spec {args.key}: {len(pick) - len({r for r, _, _, _ in fails})}/{len(pick)} {marker} requests are, "
+        f"specialized to every checked assignment, the same program as their define variants"
         f"{'' if ctrl else '; CONTROL BLIND'}{'' if ok_replay else '; REPLAY DIFFERS'}")
     return 1 if fails or not ctrl or not ok_replay else 0
 

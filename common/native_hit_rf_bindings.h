@@ -25,7 +25,7 @@ inline constexpr uint32_t kSetEmissive=5;
 inline constexpr uint32_t kSetRfGi=6;
 inline constexpr Binding rf_gi_stats{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1};
 // D-RF's push set: core/gi.cpp kRfBindings (0-30, binding_type()) + rtOrigin 40. With the
-// physical Hair origin, 12 (gAO) leaves and 50 joins (native_hair_origin.h binding_enabled).
+// S3 stable layout, unused 12 (gAO) leaves and 50 is always present (native_hair_origin.h binding_enabled).
 inline constexpr std::array<Binding,33> push={{
  {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
  {2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},{3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,1},
@@ -45,7 +45,8 @@ inline constexpr std::array<Binding,33> push={{
  {30,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},{40,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1},
  {50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1}
 }};
-inline constexpr bool push_enabled(const Binding& b,bool hair){return hair?b.binding!=12u:b.binding!=50u;}
+// S3: the stable union swaps unused AO12 for Hair50 even with physical origins off.
+inline constexpr bool push_enabled(const Binding& b,bool /*hair*/){return b.binding!=12u;}
 // The lighting's set 1 (f469db78) as the variant reads it: b6 AO, b16/b32 samplers, b29 box
 // (projector) lights (rt/bg3_boxes.hlsli; core/gi.cpp checks it is a bound storage buffer),
 // b33 probes, b34/b36 sky irradiance (the diffuse ambient at the hit, verified in the dumped
