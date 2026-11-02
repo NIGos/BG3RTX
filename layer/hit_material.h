@@ -43,4 +43,11 @@ struct PoolMesh {uint64_t gen{};VkDeviceSize pool_off{};uint32_t tris{},stride{}
 struct PoolUse {uint32_t status{};uint32_t slot{UINT32_MAX};bool wants_basis{};};
 PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh&);
 void pool_evicted(uint64_t geometry);
+// BVH owns the outer lock. Freeze prevents new basis jobs while an immutable
+// pool copy is pending; it succeeds only after all prior jobs are retired.
+bool pool_compact_freeze();
+void pool_compact_thaw();
+void pool_compact_scene(uint32_t slot);
+void pool_compact_rebase(uint64_t geometry, uint64_t gen, VkDeviceSize position,
+                         VkDeviceSize basis, uint64_t epoch);
 }

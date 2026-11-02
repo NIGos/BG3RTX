@@ -12,7 +12,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "lower-on",
@@ -27,7 +27,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0",
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0",
   "wheel": 10
  },
  {
@@ -43,7 +43,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "turn-on-r",
@@ -58,7 +58,7 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": 1,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "turn-on-l",
@@ -73,7 +73,7 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": -1,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  },
  {
   "label": "settle-off",
@@ -88,7 +88,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "shot-off-a",
@@ -103,7 +103,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -121,7 +121,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -139,7 +139,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1",
   "trace_at": [
    4
   ]
@@ -157,7 +157,7 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": 1,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "turn-off-l",
@@ -172,10 +172,10 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": -1,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
-  "label": "recover-on",
+  "label": "recover-settle-on",
   "kind": "static",
   "speed": "static",
   "seconds": 25,
@@ -187,7 +187,22 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
+ },
+ {
+  "label": "recover-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_vram_guard=1,rt_vram_compact=1,rt_capture_elastic=1,rt_debug=0,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "restore",
@@ -202,6 +217,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_vram_guard=0,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
+  "set": "rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,rt_debug=0,rt_stats=0,qa_exposure_hold=0"
  }
 ]

@@ -238,6 +238,26 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_vram_guard": "0"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_vram_guard": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
      ]},
+    {"id": "exp_vram_compact", "label": "Compact ray-tracing caches",
+     "description": "Returns unused video memory by packing cached mesh vertices into a smaller pool and moving cached acceleration structures out of sparse chunks. Live geometry stays intact. Experimental until live validation.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_vram_compact": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_vram_compact": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
+     ]},
+    {"id": "exp_capture_elastic", "label": "Demand-sized capture buffers",
+     "description": "Returns unused geometry capture memory after sustained lower demand. Allows larger RT captures when geometry would otherwise be dropped, subject to the VRAM guard. Experimental; resizing waits for GPU retirement.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_capture_elastic": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_capture_elastic": "1", "rt_vram_guard": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false}
+     ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Hidden-surface shading at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
      "apply": "live", "apply_note": "live; native materials need startup", "advanced": false, "experimental": true, "developer": true,
