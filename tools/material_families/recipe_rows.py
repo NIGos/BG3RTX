@@ -180,8 +180,13 @@ def _accept(v: glsl.Verdict, bases: dict, x: glsl.Forms | None = None) -> tuple[
         return base, "constant", v
     if REFL_TERM.match(term):
         return base, "reflectance", v
-    # Only RT2 differs from the base: its decode may still be another audited recipe's (e.g. 3b346b42 = 83831811 with
-    # 81657854's normal-mix reflectance): the reflectance mode of the recipe whose RT2 has the same canon.
+    # Only RT2 differs from the base: accept another audited recipe's reflectance
+    # mode only if the entire RT2 canon agrees, including sample provenance.
+    # HLOD_TwoSided 3b346b4241d44152 is NOT 83831811 with 81657854's
+    # normal-mix mode: its mix input uses another page decode (TRACK_D_REFLECTIONS
+    # section 14, HLOD audit). Recipe has no independent reflectance page selector;
+    # ReflectanceNormalMix always reads the shading normal sample's x. Do not
+    # erase page/sample differences here to make that pair qualify.
     if x is not None and term.startswith("out2:"):
         mine = out2_canon(x)
         for h, b in sorted(bases.items()):

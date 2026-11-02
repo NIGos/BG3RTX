@@ -536,6 +536,34 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   rows. The generator also accepts an RT2-only difference equal to an audited recipe's RT2 (members erased, temporaries
   renamed, RT2.w folded): 11 rows (+ Base_2S_VT, Base_AlphaTest_2s_Translucency, ATM_Wind_Vertex_R_AlphaTest). HLOD
   two-sided 3b346b42 stays rejected (another page decode in its normal-mix sample).
+
+  HLOD audit (2026-11-02, code only, unverified: build pending):
+  `db_templates` / `db_fields` identify `Engine_Default_HLOD_TwoSided_VT` as pool VS
+  `2d2ac3c38992b7f0`, FS `3b346b4241d44152`, engine transform/index/channel offsets
+  0/32/36, table/normal/albedo/physical at 1:3/4/5/6 (LayoutBase), material CB 16 B.
+  There is no parameter with the `reflectance` role. The one-sided HLOD FS
+  `8165785442a20e57` has the same bindings, offsets and missing role; those facts
+  alone cannot prove equal reflectance sampling. ASSET_DB section (b) records named
+  bindings and offsets, drops unrecognized roles and samplers, and stores shader
+  hashes, not shader instructions or VT page-decode expressions.
+
+  Existing row fields cannot express the documented differing page decode of the
+  two-sided FS's reflectance-mix input. `ReflectanceNormalMix` evaluates
+  `clamp(0.5 + (nl.x - 0.5) * ubo)` with the SAME `nl` used for the shading normal:
+  `rt_hit_material_pool` calls `hit_material_layer(..., col=1)` once for both.
+  That sampler fixes `e=page[col]`, scale `exp2(e & 15)`, page x/y bits 14/4,
+  layer bits 24..30 and the tile-set matrix column `col`. `Recipe` can select a
+  binding layout, UBO offsets, reflectance arithmetic and N flip, but has no
+  independent reflectance sample, table column or page-decode selector. Changing
+  the normal binding/layout would also change the shading normal; changing the
+  reflectance offset changes only the mix weight. Neither preserves the material.
+  A row `{3b346b42, 2d2ac3c3, 0, 32, 36, ReflectanceNormalMix, ..., CapturePool,
+  LayoutBase, true}` would therefore silently use the wrong sample and is rejected.
+  A new sampler/row contract is required before adding it. The exact alternative
+  page expression and material-CB weight offset were not re-established here:
+  shader dumps are outside this task's allowed capture reads. No generated header
+  change; no fabricated offset or page selector. The native generated-row test
+  pins rejection. This is a schema limitation audit, not a new qualified recipe.
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has

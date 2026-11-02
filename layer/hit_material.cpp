@@ -146,7 +146,7 @@ instanced::WindInputs read_inputs(VkCommandBuffer cmd,instanced::Family family){
 // Pairing and instance-order counters since the last "[hit material instanced]" window lines (all
 // queries; order: retired queries' GPU counters), per family (native_hit_instanced.h Pair / Order).
 uint64_t pair_window[instanced::kFamilies][instanced::kPairOutcomes]{},order_window[instanced::kFamilies][instanced::kOrderCounters]{},tolerant_window{};
-struct Pending {uint64_t command{},recording{};uint32_t candidate_draws{},opaque_count{},opaque_overflow{};DrawJoin join;std::vector<Pre> pre;uint32_t instanced_prepass[instanced::kFamilies]{};};
+struct Pending {uint64_t command{},recording{},frame{};uint32_t candidate_draws{},opaque_count{},opaque_overflow{};DrawJoin join;std::vector<Pre> pre;uint32_t instanced_prepass[instanced::kFamilies]{};};
 std::unordered_map<uint64_t,Pending> pending;
 std::unordered_map<uint64_t,RecordingOwner> owners;
 std::unordered_map<uint64_t,VkQueue> submitted_queues;
@@ -693,7 +693,7 @@ size_t pre_hint=0; // under mutex: the prepass candidates of the last prepared s
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;CpuTimer timer(CpuPrepass);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
  for(auto i=pending.begin();i!=pending.end();)if(current_recording(i->second.command)!=i->second.recording)i=pending.erase(i);else ++i;
  if(pending.size()>=128 && !pending.contains(s->recording))return;
- auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.join.begin(p.command,p.recording);
+ auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.frame=frame_index();p.join.begin(p.command,p.recording);
  if(lean_hooks())p.pre.reserve(pre_hint); // last frame's candidates: no regrowth per draw
 }
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
@@ -832,6 +832,21 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  auto* gen=generated_recipe(irecipe)?&p.generated:nullptr;if(gen)++gen->seen;
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;if(counts)++counts->pipeline;if(gen)++gen->pipeline;return false;}
  if(!keyed)draw=key(cmd,*state,args); // unreachable when lean (declined above); kept exact
+ // A generated pair can also be used by opaque IP_Base_VT draws, which never
+ // map: no alpha depth record exists. Decline before bindings, staging or XFB
+ // allocation. Accept only an already noted source in this frame (deferred-first
+ // recording conservatively skips these experimental rows).
+ if(irecipe && !instanced::capture_source_ok(family,gen!=nullptr,nullptr,draw)){
+  bool source=false;
+  for(const auto& s:slots)if(s.prepared && s.frame==p.frame && s.camera==p.camera && s.camera_offset==p.camera_offset &&
+      instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
+      std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}
+  if(!source){std::lock_guard pl(pending_mutex);
+   for(const auto& [id,s]:pending)if(s.frame==p.frame && current_recording(s.command)==s.recording &&
+       instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
+       std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
+  if(!source)return false;
+ }
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated

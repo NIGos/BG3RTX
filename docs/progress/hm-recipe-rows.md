@@ -48,3 +48,35 @@
   (2) skip capturing G-buffer draws of a generated pair that never pair (IP_Base_VT, 83 per camp frame): e.g. capture
   only when a depth draw of the same key was noted this frame; (3) audit 3b346b42 by hand (RT2 decode) as a new
   recipe; (4) promote only if the share gain is worth its GI ms (run 1: +2.3 points for +0.58 ms at camp).
+
+## Item 3: skip unpairable IP draws (branch hm-recipe-rows, unverified: build pending, 2026-11-02)
+- `deferred_begin` now requires an already noted, unique alpha source key for generated instanced and IP grass
+  draws before bindings, staging and XFB allocation. It searches prepared slots and pending prepasses in the
+  current frame; pending recordings must still be current. Opaque sources cannot qualify. The final pairing
+  certificate and GPU checks remain unchanged. Deferred-first recording conservatively skips these rows.
+- Target: the 83 unmapped camp IP_Base_VT draws (deferred stream 57 -> 93 MB in hgn1); expected to remove their
+  stream cost, not a measured result. Generated / IP grass off: other audited capture decisions are unchanged.
+- Extended `native_hit_generated_test`: missing, unassigned, unrelated, duplicate and reset source keys,
+  a valid alpha key, IP grass gating and the unchanged audited wind / 2S policy. Not compiled or run.
+- Later, after the compiler is free, from this checkout in PowerShell:
+  `.\scripts\build.ps1 -Test`
+  `ctest --test-dir build -R '^native_hit_generated_test$' --output-on-failure --no-tests=error`
+- No build, CMake, CTest, DXC, shader tool or live run executed. A future authorized camp A/B must confirm
+  fewer captured unmapped draws / deferred bytes without losing mapped alpha rows; GPU cost is unmeasured.
+
+## Item 4: HLOD two-sided audit (branch hm-recipe-rows, unverified: build pending, 2026-11-02)
+- Read-only DB audit: `Engine_Default_HLOD_TwoSided_VT` = 2d2ac3c38992b7f0 / 3b346b4241d44152;
+  engine offsets 0/32/36, LayoutBase bindings 1:3/4/5/6, material CB 16 B, no Reflectance role.
+- Cannot express its documented separate reflectance page decode with existing fields. NormalMix consumes
+  shading normal `nl.x`; no independent mix-sample page selector exists. TRACK_D_REFLECTIONS section 14
+  records the exact schema limitation and evidence limits. Exact alternative page bits / weight offset
+  require a future shader-source audit; shader dumps were not read under this task's capture restriction.
+- Corrected the misleading generator comment; native test pins rejection of this pair. Header unchanged.
+  No feature added, no GPU cost measured. The 19 inn draws remain unsupported.
+- Later verification (after compiler availability and permission to read shader dumps):
+  `python -m tools.material_families.recipe_rows --check`
+  `python tests/hit_material_generated_test.py`
+  `.\scripts\build.ps1 -Test`
+- Commit creation blocked: Windows ACL denies writes to this worktree's Git metadata, including index.lock.
+  Both requested commit subjects must include `(unverified: build pending)` and the final trailer
+  `Co-Authored-By: Codex <noreply@openai.com>`. No commit, push, game launch or capture write occurred.
