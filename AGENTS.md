@@ -75,6 +75,8 @@ These rules come from mistakes already made in this repo. They apply on every br
     unchanged costs no compile. Only requests that really change are compiled and identity-checked.
   - DXC slots are machine-wide: parallel compile runs do not add throughput, they only delay each other.
     Run heavy compiles (identity, merge-green with new variants) one at a time, highest priority first.
+  - Don't spend compile time that a merged or planned improvement makes unnecessary (user rule, 2026-11-02):
+    finish the improvement first (e.g. the spec-constant migration), then compile and check once.
   - merge-green updates the test tree, so no live can run during it: queue a long merge-green after the lives
     that are ready, not before them. merge-green merges in the main checkout: if one is stopped, check
     `.git/MERGE_HEAD` and run `git merge --abort` before anything else.
