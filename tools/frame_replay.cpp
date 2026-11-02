@@ -555,6 +555,19 @@ fs::path g_sun_trust;
 // --no-casters: leave a pack's rt_cascade_casters instance out of the TLAS (mask 0, as packs before the
 // "casters" directive), for an A/B against the replay with the cut-away roofs.
 bool g_no_casters = false;
+// --push FIELD=VALUE (repeatable): overwrite one Push field of the pack's push before the dispatch, as the live
+// core sets it per pass (e.g. radius=6: core/gi.cpp hit_gi_dispatch's gi_far ray length; rt_stats=0 / 1).
+// Fields: radius (float, offset 24), rt_stats (uint, offset 124), gi_rt_radius (float, offset 112).
+std::vector<std::pair<std::string, std::string>> g_push_set;
+void apply_push_set(std::vector<uint8_t>& push) {
+  for (const auto& [k, v] : g_push_set) {
+    const bool f = k == "radius" || k == "gi_rt_radius";
+    const size_t off = k == "radius" ? 24 : k == "gi_rt_radius" ? 112 : k == "rt_stats" ? 124 : 0;
+    check(off && off + 4 <= push.size(), "--push: unknown field " + k + " (radius, gi_rt_radius, rt_stats)");
+    if (f) { const float x = std::stof(v); std::memcpy(push.data() + off, &x, 4); }
+    else { const uint32_t x = uint32_t(std::stoul(v)); std::memcpy(push.data() + off, &x, 4); }
+  }
+}
 
 Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const fs::path& hlsl_override,
               const std::vector<std::string>& extra_defines, const fs::path& out, uint32_t repeat, bool quiet,
@@ -916,6 +929,7 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
     std::memset(stats.map, 0, size_t(stats.size));
     push = push_pack;
     if (hooks && hooks->patch) hooks->patch(run, push);
+    apply_push_set(push);
     if (!g_sun_trust.empty()) {   // Push::ls_flags (offset 188, static_assert below) bit 25: a sun trust slot exists
       uint32_t lf; std::memcpy(&lf, push.data() + 188, 4); lf |= 1u << 25; std::memcpy(push.data() + 188, &lf, 4);
     }
@@ -1027,6 +1041,7 @@ struct Push {
 static_assert(sizeof(Push) == 256 && offsetof(Push, rt_tmax) == 84 && offsetof(Push, rt_ao_rays) == 100 &&
               offsetof(Push, gi_rt_radius) == 112 && offsetof(Push, sun_radius) == 128 && offsetof(Push, ls_source_radius) == 144 &&
               offsetof(Push, ls_flags) == 188, "Push must match gi_common.hlsli");
+static_assert(offsetof(Push, radius) == 24 && offsetof(Push, rt_stats) == 124, "--push offsets (apply_push_set)");
 
 // box (the PT furnace, tools/pt_reference.hlsl): the camera inside a closed cube |x|, |y|, |z| <= 2 of
 // 12 inward triangles without a material record (instance 0 only); every pixel sees the face y = 2.
@@ -1998,6 +2013,11 @@ int main(int argc, char** argv) {
     else if (args[i] == "--native-ambient") native = true;
     else if (args[i] == "--sun-trust") g_sun_trust = next();
     else if (args[i] == "--no-casters") g_no_casters = true;
+    else if (args[i] == "--push") {
+      const std::string kv = next(); const size_t eq = kv.find('=');
+      check(eq != std::string::npos, "--push FIELD=VALUE");
+      g_push_set.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
+    }
     else die("unknown argument " + args[i] + " (see tools/frame_replay.md)");
   }
   if (!test.empty()) return self_test(test);

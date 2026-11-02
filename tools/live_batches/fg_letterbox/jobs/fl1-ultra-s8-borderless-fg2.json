@@ -1,0 +1,135 @@
+{
+ "name": "fl1-ultra-s8-borderless-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 480,
+ "repeat": 1,
+ "live_batch": "fg-letterbox",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Borderless",
+  "-GameResolution",
+  "2560x1440",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/fg_letterbox/plans/fl1_s8.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|probe)",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "\\[hit material\\] buffer reuse",
+  "\\[sl\\] fg_letterbox",
+  "sun stats",
+  "^\\S+\\s+\\[core\\] sun:",
+  "\\[core\\] guard:",
+  "skipped: no variant for",
+  "\\[bvh\\] mesh pool",
+  "\\[hit material pool basis\\]",
+  "\\[cascade\\] buffer full",
+  "\\[sl\\] game output",
+  "\\[sl\\] FG decision",
+  "\\[sl\\] hudless =",
+  "\\[sl\\] UI color\\+alpha ="
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[cfg\\] settings read",
+  "\\[sl\\] fg_letterbox=1: UI composite pass 3840x1600",
+  "\\[sl\\] game output \\d+x\\d+ in a 3840x1600 swapchain pass \\(fg_letterbox\\): backbuffer subrect \\d+,\\d+ \\d+x\\d+",
+  "\\[sl\\] fg_letterbox=0: UI composite pass 3840x1600",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00 .*api errors 0 \\(last 0\\)",
+  "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+  "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts"
+ ],
+ "expect_every": [
+  {
+   "name": "FG 2x with the game output inside a larger swapchain: displayed/rendered 2.00, status 0x0, api errors 0, every ON window",
+   "select": "\\[sl\\] DLSS-G frame \\d+: ",
+   "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00 \\(batch-of-2 presents \\d+\\), api errors 0 \\(last 0\\)",
+   "windows": [
+    "on-a",
+    "on-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "on-a",
+    "off",
+    "on-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every window",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "on-a",
+    "off",
+    "on-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "scene wait: 0 timeouts in every window",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "on-a",
+    "off",
+    "on-b"
+   ]
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[rrpost\\] exposure hold REFUSED",
+  "\\[cascade\\] could not allocate",
+  "skipped: no variant for",
+  "sun: WARNING \\d+ roof volumes within",
+  "over kSunMaxVolumes on [1-9]",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hit material pool basis\\] over kBasisCapBytes",
+  "\\[bvh\\] mesh pool full at"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-plan\\] complete phases=5\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "FG letterbox live check at S8: the game borderless (-Borderless) at the 3840x1600 desktop with its own resolution 2560x1440 for this run (-GameResolution, restored after), so the swapchain is larger than the output (the gf1 141602 class: 3840x1600 game on the 3840x2160 desktop of 11-01). Ultra with the smoke_ultra keys, fg=2. fg_letterbox=1 at launch, 0 in 'off', 1 again from 'settle'. Gates: the 'game output WxH in a 3840x1600 swapchain pass' subrect line; DLSS-G displayed/rendered 2.00, status 0x0, api errors 0 in every ON window; capacity and scene-wait gates in every window. 'off' is not gated on FG (bindings found in on-a may persist); 'settle' absorbs the FG cooldown after the toggle.",
+ "estimated_phase_seconds": 75
+}

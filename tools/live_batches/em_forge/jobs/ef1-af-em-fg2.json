@@ -76,9 +76,9 @@
   "\\[motion-plan\\] pointer centred in owned foreground game",
   "\\[motion-trace\\] phase=4 label=diag-view-19 repeat=0",
   "\\[motion-trace\\] phase=5 label=diag-view-20 repeat=0",
-  "\\[motion-trace\\] phase=7 label=check-off repeat=0",
-  "\\[motion-trace\\] phase=8 label=check-full repeat=0",
-  "\\[motion-trace\\] phase=9 label=check-sliced repeat=0",
+  "\\[pan-plan\\] window 7 .* set=rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=0,rt_em_check_slices=16 ",
+  "\\[pan-plan\\] window 8 .* set=rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=16,rt_em_check_slices=1 ",
+  "\\[pan-plan\\] window 9 .* set=rt_em_fx_pulse=0,rt_debug=0,qa_exposure_hold=1,rt_em_check_frames=16,rt_em_check_slices=16 ",
   "\\[motion-plan\\] complete phases=11\\b",
   "^Run ended: done"
  ],

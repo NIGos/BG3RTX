@@ -1,0 +1,24 @@
+{
+ "_rule": "Predicted observables per window, written and committed BEFORE the run. null: no prediction.",
+ "fl1-ultra-s8-borderless-fg2": {
+  "on-a": {
+   "fg_displayed_per_rendered": 2.0,
+   "api_errors": 0,
+   "composite_pass": "3840x1600",
+   "game_output": "2560x1440",
+   "written": "2026-11-02"
+  },
+  "off": {
+   "fg_displayed_per_rendered": null,
+   "note": "fg_letterbox=0: no input has the pass size; bindings found in on-a may persist, so no FG prediction",
+   "written": "2026-11-02"
+  },
+  "on-b": {
+   "fg_displayed_per_rendered": 2.0,
+   "api_errors": 0,
+   "composite_pass": "3840x1600",
+   "game_output": "2560x1440",
+   "written": "2026-11-02"
+  }
+ }
+}

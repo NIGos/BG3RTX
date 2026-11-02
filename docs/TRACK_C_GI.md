@@ -346,6 +346,18 @@ the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and f
   m4_promotion_gate_test); the gi_far plans hold the exposure. The m4_promotion runs moved little (camp shot-on
   exposure 0.9963: -0.12% raw, +0.25% normalised).
 
+### The traced frames held the key-off GI (2026-11-02, gf2 015729 + offline replay)
+- Held run: S8 scene colour ON -0.10% (band 1.38%), view vis ON / OFF 0.9998 (expected 0.948), while the same run's
+  `GI far` line (0.840 vs 0.887) and the ls give-back (x2.4, 120-frame stats) moved. Replay of the hit_sun RT_GI_FAR
+  pass on pack 142819-1 with the live push (`--push radius=6`): giRaw.a 0.8320 vs 0.8790 off, with rt_stats 0 and 1:
+  the pass is correct.
+- Cause: in a trace frame the G-buffer pass was not taken as the hit-material capture (layer/geocapture.cpp, the
+  `!trace_recording()` condition), so the frame had no deferred packet, `rt_hit_material_use` failed and the hit GI
+  fell back to the base pass (1 m, no hit lighting) in exactly the frames the gates measure. Every trace-based energy
+  of a hit-material consumer (gi_hit_direct, gi_hit_sun, gi_far, rf_hit_shade, hit emission) showed the key-off GI.
+- Fix: the trace frame keeps the hit-material capture unless the trace takes the G-buffer pass itself (geo_capture=1).
+  Rerun gf2 only; predicted: view vis 0.947, scene colour -2.0% (predicted.json).
+
 ## `gi_bounce_spec`: not re-added (review 2026-11-01)
 
 What it did (removed dbbe0fc, 2026-10-31): `prev_bounce_at` returned last frame's full radiance

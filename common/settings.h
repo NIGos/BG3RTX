@@ -410,14 +410,13 @@ inline constexpr KnobAlias kKnobAliases[] = {
     {"exp_native_tileset", "exp_native_coverage", 2},
 };
 
-// Keys of retired GUI entries that have no knob now: still read by the layer, set by hand in
-// bg3rtx_user.ini (kept as written). fg_letterbox: the layer has no automatic mode yet.
-inline constexpr const char* kIniOnlyKeys[] = {"fg_letterbox"};
 // Fixes that passed their gates and are on by default without a GUI entry (keys kept for A/B):
 // the hit-material provider's buffer reuse, unlocked captures and lean per-draw hooks (scene_wait sw3
-// 2026-11-01 22:13: 0 scene-wait timeouts in every pan and rotation, hooks ~2 ms instead of 5-6).
+// 2026-11-01 22:13: 0 scene-wait timeouts in every pan and rotation, hooks ~2 ms instead of 5-6);
+// fg_letterbox, a no-op unless the swapchain is larger than the game's output (common/fg_extent.h;
+// smoke_ultra su1 2026-11-02 01:08 with it on: every-window gates ok, FG 2.00).
 inline constexpr const char* kAutomaticKeys[] = {"rt_hit_material_recycle", "rt_hit_material_capture_unlocked",
-                                                 "rt_hit_material_lean_hooks"};
+                                                 "rt_hit_material_lean_hooks", "fg_letterbox"};
 
 // Internal keys a preset sets besides its knobs (never shown in a UI).
 // Ultra: rare forced BVH rebuilds (SETTINGS_DESIGN 5.4 #4). With the BVH split
@@ -672,7 +671,7 @@ inline constexpr KV kDefaults[] = {
     {"fg_current_destroy_only", "1"},
     {"fg_tag_hudless", "1"},
     {"fg_tag_ui", "1"},
-    {"fg_letterbox", "0"},
+    {"fg_letterbox", "1"},
     {"fg_ui_pq", "0"},
 };
 // 44 keys of data/release.ini, in file order.

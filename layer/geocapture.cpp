@@ -1984,7 +1984,10 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   // Minor passes are still captured and dropped at their end.
   const bool prepass = is_prepass(s->pass) && g_scene_frame1.load() != frame_index() + 1;
   const bool rt_src = g_alpha_mode ? prepass : gbuf;
-  if(g_on && gbuf && !rt_src && native_hit::enabled() && !trace_recording()) {
+  // A trace frame keeps the hit-material capture unless the trace takes the G-buffer pass for its own geometry
+  // capture below (geo_capture=1): without it the frame has no hit-material slot, the hit GI falls back to the
+  // base pass, and every traced image showed the key-off GI (gf2 2026-11-02: view vis ON/OFF 0.9998).
+  if(g_on && gbuf && !rt_src && native_hit::enabled() && !(trace_recording() && cfg_hot(CfgHot::geo_capture))) {
     s->geo={GeoKind::Material,nullptr};s->geo_material_no_writes=true;return;
   }
   if (!gbuf && !rt_src) return;
