@@ -39,11 +39,12 @@ int main(int argc, char** argv) {
   CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/rt_reflections_hit_shade.hlsl", 0) == request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi));
   // rf_hit_gi: the four rf_hit_shade files only, last; never the ordinary D-RF or the GI files.
   CHECK(request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi | kCascade) ==
-        "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_HIT_GI=1;GI_SPEC_GUARDS=1");
+        "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_reflections_sharc_hit_shade_em.hlsl", kRfHitGi | kHitInstanced) ==
-        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_HIT_GI=1;GI_SPEC_GUARDS=1");
+        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_reflections.hlsl", kRfHitGi) == "gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_hit_material.hlsl", kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");   // needs the instanced key
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");
@@ -89,12 +90,11 @@ int main(int argc, char** argv) {
   CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
         "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
-  // rt_water_rf_edge: every compose request the core makes has its WATER_RF_EDGE twin in kFixedRequests.
-  CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
-  CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
+  // rt_water_rf_edge: both values use the same module, including every record layout.
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   for (const char* r : kFixedRequests) {
-    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE") ||
-        std::strstr(r, "WATER_GLINT_AA"))
+    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_GLINT_AA"))
       continue;
     const std::string e = water_rf_edge_request(r, true);
     bool listed = false;

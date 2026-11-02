@@ -108,8 +108,34 @@ S1 merges), each step its own commit. Constant ids come from the one registry `b
 | G | GI_TEMPORAL_MV_SAMPLE (1001), GI_PREV_RADIANCE_GUARD (1002): pure switches | none; gi-reproj-guards must land as constants, never as defines (+2192 requests as defines) | 1674 (no growth) |
 | S2 | RT_HIT_INSTANCED (1003), RT_HIT_WIND_RGB (1004), RT_HIT_IP_GRASS (1005), RT_HIT_POOL_2S (1006, hm-recipe-rows), RT_GI_FAR (1007) | none: private struct fields, counters, gs_far_stat stays declared | ~660 |
 | S3 | RT_NATIVE_TILESET (1008), RT_HAIR_PHYSICAL_ORIGIN (1009), RT_NATIVE_SCALP + RT_NATIVE_HAIR (1010, incl. the water passes the native hair branch adds), RT_OCC_STATS (1011) | layer: set 1 b19 tileset samplers always in the alpha layout (alphatest.cpp:614/1518, dummy samplers); core: set 0 b50 rtHairOrigin always in g_layout (gi.cpp:603, dummy image); the occ statistics set always bound (dummy buffer); RayQuery<RT_SKIP_PROCEDURAL> template flag -> TraceRayInline flags | ~180 |
-| S4 | RT_OMM_SCENE (1012) | gSceneStamp declared twice (read-only and globallycoherent RW) on set 1 b9, the RW one used under the constant; the OMM bake reads both: check its SPIR-V and the bake identity test | ~120 |
-| S5 | RF_HIT_GI (1013), WATER_RF_EDGE (1014) | set 6 (rfGiStats) always in the rf hit-shade layouts | ~100 |
+| S4 | RT_OMM_SCENE (1012 reserved; define retained) | aliased stamp candidate rejected by full equivalence; stamp and optional OMM layouts unchanged (review below) | 170 (53 bases) |
+| S5 | RF_HIT_GI (1013), WATER_RF_EDGE (1014) | set 6 (rfGiStats) always in all rf hit-shade layouts, including GI off | 150 (53 bases; actual, -20 from S3) |
+
+S4 review (2026-11-02, offline): the RO/coherent RW stamp aliases compile and validate for Vulkan 1.3.
+The minimal probe specializes to the exact old program for both values (0 differing lines).
+There is a second interface constraint: `layer/alphatest.cpp` creates and writes set 1 bindings 10/11
+only with `g_omm_layout`; `layer/omm_backend.cpp::available_for` requires `rt_omm` on. A union module
+retains the reference AS and epoch buffer in its interface even when constant 1012 defaults to 0.
+Shipping that union requires permanent extra descriptors and writes when OMM is off. It cannot simply
+reuse today's ordinary layout. Under the requested zero-cost condition, keep `RT_OMM_SCENE` as a define.
+`tools/spec_omm_alias_probe.py` preserves the alias experiment without changing runtime layouts.
+The first control chose the non-tracing gi_ao_apply and was blind; the rerun selected gi_hit_direct.
+The full candidate failed the unchanged equivalence checker: 18/54 requests passed, 63/108
+assignments differed, control 78,906 lines. For example gi_hit_direct differed by 19,899 lines at 0
+and 2 lines at 1. No extra canonicalization was added; the candidate was reverted. Log: `s4-omm-control.log`.
+Aliasing itself is permitted by the [Vulkan shader resource interface rules](https://docs.vulkan.org/spec/latest/chapters/interfaces.html#interfaces-resources);
+the minimal probe's success is not a proof about the full scene consumer.
+
+S5 uses one `RF_SPEC_HIT_GI` module per hit-shade file and remaining define set; constant 1013 and the
+pipeline key carry `rf_hit_gi > 0`. All four emission/SHaRC layout combinations always include set 6,
+with the existing 2 KB device-local stats buffer bound even when GI is off. Both shader barriers and
+stats work are guarded by 1013, around one shared pixel call (duplicating the ray body caused a DXC ICE).
+Material colour is copied outside the composition branch to avoid a
+redundant float3 shuffle in the specialized on program. No ABI or preset changes.
+Water's seven record layouts use `WATER_SPEC_RF_EDGE`, constant 1014 and one request for both key values.
+The key stays off; glint-filter requests keep their existing path. The whole unfaded sum preserves
+`C + A * L - B` (left-associative), including the clipping statistic; `C + (A * L - B)` was rejected by
+equivalence. Control comparisons use the water_compose entry, and equivalence still checks water_copy too.
 
 Defines that stay (they change layouts, record strides or descriptor sets, and are few): RT_SUN_CURRENT with
 RT_CASCADE_TMIN(_REL) (its own pipe and sets b12-b16; 12 requests), WATER_SHADOWS / WATER_LS / WATER_REFR /

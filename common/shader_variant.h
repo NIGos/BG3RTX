@@ -74,8 +74,8 @@ inline bool gi_far_entry(const char* file) {
 }
 
 // rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the rf_hit_shade files get
-// RF_HIT_GI=1 (the screen's indirect diffuse and ls_box=2 box visibility at hits). Like kSunCurrent it
-// selects other Pipes (core/gi.cpp g_rf_shade_gi), not a slot.
+// RF_SPEC_HIT_GI=1 (constant 1013: indirect diffuse and ls_box=2 box visibility at hits).
+// Both values use the always-present set 6 and core/gi.cpp g_rf_shade_gi; the value joins the pipeline key.
 inline bool rf_hit_gi_entry(const char* file) {
   static const char* const names[] = {"gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
                                       "gi/rt_reflections_hit_shade_em.hlsl", "gi/rt_reflections_sharc_hit_shade_em.hlsl"};
@@ -111,23 +111,18 @@ inline bool cascade_entry(const char* file) {
 // with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
-inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SHADOWS=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1",
+inline constexpr const char* kFixedRequests[] = {
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
                                                  "rt/water_reflect.hlsl?WATER_RR_HIT=1",
                                                  // rt_water_rf_edge (core/water.cpp water_rf_edge_request): each compose
-                                                 // request above with the screen-edge fade of the traced term
-                                                 "rt/water_compose.hlsl?WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_RF_EDGE=1",
+                                                 // record layout with constant 1014 selecting the screen-edge fade
+                                                 "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
                                                  // rt_water_glint_aa (core/water.cpp water_glint_request): each compose
                                                  // request with the sun records, with the sun glint footprint filter
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GLINT_AA=1",
@@ -148,7 +143,11 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
 // has the sun records (WATER_SHADOWS); else `req` unchanged.
 inline std::string water_glint_request(const char* req, bool on) {
   std::string out = req;
-  if (on && out.find("WATER_SHADOWS=1") != std::string::npos) out += ";WATER_GLINT_AA=1";
+  if (on && out.find("WATER_SHADOWS=1") != std::string::npos) {
+    const size_t edge = out.find(";WATER_SPEC_RF_EDGE=1");
+    if(edge != std::string::npos) out.erase(edge, std::strlen(";WATER_SPEC_RF_EDGE=1"));
+    out += ";WATER_GLINT_AA=1";
+  }
   return out;
 }
 // The pre-pass request of a WATER_GLINT_AA compose request: the same defines on rt/water_glint.hlsl.
@@ -157,10 +156,12 @@ inline std::string water_glint_prepass(const std::string& compose_req) {
   return compose_req.compare(0, base.size(), base) == 0 ? "rt/water_glint.hlsl" + compose_req.substr(base.size()) : compose_req;
 }
 
-// rt_water_rf_edge: the compose request `req` with the screen-edge fade (WATER_RF_EDGE) when `on`.
+// rt_water_rf_edge: both values share WATER_SPEC_RF_EDGE; core/water.cpp supplies constant 1014.
 inline std::string water_rf_edge_request(const char* req, bool on) {
   std::string out = req;
-  if (on) out += out.find('?') == std::string::npos ? "?WATER_RF_EDGE=1" : ";WATER_RF_EDGE=1";
+  (void)on;
+  if(out.find("WATER_SPEC_RF_EDGE=1") == std::string::npos)
+    out += out.find('?') == std::string::npos ? "?WATER_SPEC_RF_EDGE=1" : ";WATER_SPEC_RF_EDGE=1";
   return out;
 }
 
@@ -265,7 +266,7 @@ inline std::string request(const char* file, unsigned flags) {
   }
   // Step S2b: gi_far is constant 1007 of the gi_hit_sun files (core/gi.cpp refresh), never RT_GI_FAR.
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
-  if (flags & kRfHitGi) add("RF_HIT_GI=1");
+  if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
