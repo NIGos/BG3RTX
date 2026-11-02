@@ -1091,7 +1091,9 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  const uint32_t table_free=alpha_hit_table_free(slot.set);
  // Rows used vs capacity and every overflow, one line per 120-frame window (live check).
  auto log_capacity=[&](const char* outcome){
-  if(!cfg_hot(CfgHot::rt_stats) || slot.frame%120!=0 || slot.capacity_logged)return;slot.capacity_logged=true;const double mb=1.0/1048576.0;
+  // The first query to get here in each 120-frame window (not only frame % 120 == 0: often rejected, hmm2 inn 11-02).
+  static uint64_t capacity_window=UINT64_MAX;
+  if(!cfg_hot(CfgHot::rt_stats) || !instanced::stats_window_due(slot.frame,capacity_window))return;slot.capacity_logged=true;const double mb=1.0/1048576.0;
   log("[hit material capacity] frame %llu %s; opaque rows %u/%u overflow %u; deferred rows %zu/%u overflow %u; samplers %u/%u overflow %u; cache views %u/%u overflow %u; "
       "source stream %.1f/%.0f MB overflow %u; deferred stream %.1f MB in %zu/%u chunks overflow %u; query mapped %zu basis %.1f/%.0f MB overflow %u; tables %u/%u overflow %u",
    (unsigned long long)slot.frame,outcome,slot.opaque_used,nh_opaque_rows,slot.opaque_overflow,packet->materials.size(),material_slots,packet->slot_overflow,

@@ -6,8 +6,12 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-CYCLES = 22            # 22 x 100 s + 20 s warmup = 37 min of plan
+CYCLES = 22            # 22 x 110 s + 20 s warmup = 41 min of plan
 BASE, TAIL = (2, 3, 4), (CYCLES - 2, CYCLES - 1, CYCLES)   # cycle 1 fills the caches; compare 2-4 with the last 3
+# Process VRAM also holds the BLAS chunks' high water (64 MB chunks, never freed): the pan / rotate windows' transient
+# BLAS (AS 0.25 GB static, 0.8-1.4 GB moving) raised it from 58 to 66 chunks until cycle 14 of ls1 2026-11-02 0845,
+# then flat for 8 cycles. A leak keeps growing in the second half: VRAM compares the middle cycles with the last 3.
+MID = (CYCLES // 2 + 1, CYCLES // 2 + 2, CYCLES // 2 + 3)
 OFF = "rt_debug=0,rt_stats=0,qa_exposure_hold=0"
 DIAG = "rt_debug=0,rt_stats=1,qa_exposure_hold=0"
 
@@ -28,7 +32,7 @@ for c in range(1, CYCLES + 1):
            step(f"cost-{p}-pan-e", "pan", "fast", 15, 1, repeat_ms=33),
            step(f"cost-{p}-rot-r", "rotate", "slow", 20, 1, 60),
            step(f"cost-{p}-rot-l", "rotate", "slow", 20, -1, 60),
-           step(f"diag-{p}-pool", "static", "static", 10, set_=DIAG)]
+           step(f"diag-{p}-pool", "static", "static", 20, set_=DIAG)]   # >= 120 frames at ~10 fps with rt_stats
     plan += cyc
     cost[c] = [s["label"] for s in cyc[:5]]
     diag[c] = [cyc[5]["label"]]
@@ -39,9 +43,9 @@ def side(d, cycles):
     return [l for c in cycles for l in d[c]]
 
 
-def trend(name, select, value, abs_, src=cost):
-    return {"name": f"trend: {name} does not grow from cycles {BASE[0]}-{BASE[-1]} to {TAIL[0]}-{TAIL[-1]}", "trend": True,
-            "select": select, "value": value, "baseline": side(src, BASE), "tail": side(src, TAIL), "abs": abs_, "min": 3}
+def trend(name, select, value, abs_, src=cost, base=BASE):
+    return {"name": f"trend: {name} does not grow from cycles {base[0]}-{base[-1]} to {TAIL[0]}-{TAIL[-1]}", "trend": True,
+            "select": select, "value": value, "baseline": side(src, base), "tail": side(src, TAIL), "abs": abs_, "min": 3}
 
 
 expect_every = [
@@ -54,7 +58,7 @@ expect_every = [
      "select": r"\[cascade\] casters: cascade \d+, \d+ frames;", "match": r", buffer full 0\.0, added ", "min": 1,
      "windows": all_cost, "when_present": True},
     # Print precision is the allowance (%.0f MB, %.1f MB, %.2f ms); the noise is the baseline's own spread.
-    trend("process VRAM (device-local heaps)", r"\[mem\] device-local VRAM of this process:", r"used ([0-9.]+) MB", 1),
+    trend("process VRAM (device-local heaps)", r"\[mem\] device-local VRAM of this process:", r"used ([0-9.]+) MB", 1, base=MID),
     trend("mesh pool use", r"\[bvh\] mesh cache:", r"pool ([0-9.]+) / ", 0.1),
     trend("acceleration structure memory", r"\[bvh\] mesh cache:", r"AS ([0-9.]+) MB", 0.1),
     trend("rendered frame time (median)", r"\[pace\] rendered frame time over 600 frames:", r"median ([0-9.]+) ms", 0.01),
@@ -100,7 +104,7 @@ job = {
                       rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"],
     "stop_on_dump": True,
     "purpose": (f"Long session (stage 6): Ultra + FG 2 at the camp for {plan_s / 60:.0f} min in one launch, {CYCLES} cycles of "
-                "static / pan Q / pan E / rotate R / rotate L cost windows and a 10 s rt_stats pool window. Gates: scene wait 0 "
+                "static / pan Q / pan E / rotate R / rotate L cost windows and a 20 s rt_stats pool window. Gates: scene wait 0 "
                 "timeouts and capacity 0 drops in every cost window; trend gates (queue_gates.py) that VRAM, mesh pool, AS memory, "
                 f"frame time median/p99 and pool records of cycles {TAIL[0]}-{TAIL[-1]} stay within cycles {BASE[0]}-{BASE[-1]} "
                 "plus their own spread; no log rotation, no device lost, no pool-full lines."),

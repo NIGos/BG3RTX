@@ -16,3 +16,20 @@
 - The dryrun's static checks pass. Its fake queue runs fail on main too (`-Force`): foreign expired jobs get recorded in the
   fake root.
 - Rerun: rebuild the layer (game restart), rerun hig1-ip-grass-camp-fg2 as is.
+
+## Wind RGB, mask and long-session reads; capacity line per window, snapshot gates as events (branch worktree-agent-a2c38a4884e982692, 2026-11-02)
+- m4w-wind-rgb-s8-fg2 08:32 VALID, every gate holds: wind RGB clip checked 7.9M, bit-exact all, rejected 0.0000%;
+  qualified 45.0% -> 63.5% (+18.4 points, all three instanced families: the A/B toggles rt_hit_material_instanced);
+  energy -0.00% (band 1.30%); cost +0.67 ms (gi trace pass 2.41 -> 3.08 ms). Kept on in Ultra (no change).
+- hmm1-mask-s8-fg2 VALID: qualified +0.65 points (predicted 1.1, range 0.3-3.0), energy +0.04% (band 1.30%), cost +0.006 ms.
+  hmm2-mask-inn-fg2 INVALID for the gate only: the `[hit material capacity]` line printed only on a frame % 120 query, and
+  2040/2280/2400/2760 were rejected (source epoch), 1 line per diag window, while the gate wanted 2. Now the first query of
+  each 120-frame window logs it (instanced::stats_window_due), and every snapshot gate (`hit material capacity`,
+  `hit material instanced ... prepass`) is `"event": true` (m4_hit_mask, m4_wind_rgb, m4_pool_alpha). Re-gated, hmm2 passes:
+  qualified 18.0% -> 30.1% (+12.1 points, above the 0.5-6 range), energy -0.80% (band 1.20%), cost +0.92 ms trace pass.
+- ls1-long-session-camp-fg2 08:45: no unbounded leak. AS is 0.25 GB static and 0.8-1.4 GB in pan/rotate windows
+  (transient BLAS). The 64 MB chunks are never freed: 58 -> 66 chunks (+512 MB) until cycle 14, then flat for 8 cycles,
+  and VRAM is flat from cycle 13 (18.2-18.7 GB). VRAM trend now compares cycles 12-14 with 20-22 (passes on this log).
+  The pool records line needs 120 frames at ~10 fps: the diag-pool windows are 20 s (plan 41 min). Records stay 411-417.
+- Open: 66 x 64 MB chunks reserve 4.2 GB for 0.25-1.4 GB of AS (first-fit fragmentation, never freed). That is a
+  separate VRAM item, not fixed here.
