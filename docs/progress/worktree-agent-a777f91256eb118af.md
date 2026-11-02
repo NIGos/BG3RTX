@@ -3,13 +3,16 @@
   camp ON +0.17% (band 2.81%, no prediction); S8 ON -0.10% vs predicted -2.0% (band 1.38%): gap persists, gate
   fails. Cost (GPU trace pass, ON - mean OFF): S8 1.09 -> 4.35 ms (+3.26, OFF spread 0.003), camp 3.43 -> 6.90 ms
   (+3.47). The S8 frame time is confounded by the 01:57-01:59 build; GPU ms only.
-- S8 stages: folded visibility (gi_debug=3, d1669194) ON / OFF 0.9998 (0.17643 -> 0.17640; predicted 0.948).
-  The same run's `GI far` line says 0.840 vs old rule 0.887 per ray. The far rule changes the counted rays but
-  not the visibility the fold reads: the gap is between giRaw and the fold, not in the AO x E lighting model.
-  The only ON evidence of the rule is from rt_stats=1 frames (diag-on); every image window has rt_stats=0.
-  The offline emulation that matched the line used `--define GI_FAR_M=6` (gi_trace_rt.hlsl:181-183), not the live
-  Push::radius path (gi_trace_rt.hlsl:185, core/gi.cpp:2408-2411). Next (offline, game closed): replay the
-  hit_sun RT_GI_FAR variant with push radius 6 and rt_stats 0 vs 1, compare giRaw.a.
+- S8 stages: view vis (gi_debug=3) ON / OFF 0.9998 (predicted 0.948) while the run's `GI far` line (0.840 vs
+  0.887) and the ls give-back (x2.4, 120-frame stats) moved. Replay (new `frame_replay --push radius=6`,
+  `rt_stats=0|1`), S8 pack 142819-1, hit_sun + RT_GI_FAR + live defines: giRaw.a 0.8320 vs 0.8790 off, rt_stats
+  0 and 1 identical: the pass is correct.
+- Cause (fixed, READY_FOR_LIVE): layer/geocapture.cpp skipped the hit-material capture in every trace frame
+  (`!trace_recording()`): no deferred packet, `rt_hit_material_use` fails, the hit GI falls back to the base pass in
+  the traced frames only. Every trace-based energy of gi_hit_direct / gi_hit_sun / gi_far / rf_hit_shade / hit
+  emission measured key off. Now skipped only when the trace takes the G-buffer itself (geo_capture=1, default 0).
+  Layer change (relaunch). gi_far stays off; predicted.json rewritten before the rerun (gf2 -2.0%, view vis 0.947).
+  Live: queue gf2-s8-fg2 alone, test tree on this commit.
 - The `view bounce` stage (gi_debug=2) is not usable: d1669194 max R = 65024 (R11G11B10 saturated), mean
   (2.49, 2e-5, 7e-6): a few overflowed red pixels set the mean. Its 0.870 ratio means nothing.
 - box_lights ls_box=2 (bx1 S6 02:01, bx2 S7 02:05; valid). Cost, ls pass ON - mean OFF: S6 0.449 -> 0.772 ms
