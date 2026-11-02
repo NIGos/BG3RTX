@@ -493,6 +493,34 @@ omm_qual batch. Prerequisite either way: 11.1 A or B for the LOD domain.
   mip 2 with a stochastic threshold: option A is not worth building; only B (a fine-LOD policy) can give OMM a
   share.
 
+**11.2b Option B chosen (2026-11-02, coordinator for the user): `rt_alpha_fine_lod` (live, off).**
+- Implementation without a shader change: a masked record (rt_vt_alpha_masks) binds a mip-0-only view of its
+  mask; tex_alpha clamps its LOD to the view's last level (0), so every ray reads mip 0 bilinearly and
+  k = saturate(lvl - 1) = 0 gives the hard cut. Logged as `[vt alpha] ... X at mip 0 with the hard cut`.
+- Energy, derived offline from the masks: the triangle-weighted grass alpha coverage is 0.2622 with B off
+  (camp distances reach the clamped mip 2 with a stochastic threshold, P(solid) = E[a2]) and 0.2951 with B
+  (fraction of mip-0 texels >= cut 0.2): x1.125 occluder area for grass. B is NOT energy-neutral by
+  construction; the scene-level change is measured by omm_qual om3 (B OFF/ON/OFF, masks on, camp, 123 s).
+- Micromap coverage at mip 0 (`tools/assets/omm_mask_coverage.py`, camp pack, 35,047 of the 1.30M grass
+  triangles, uniform subdivision, bilinear support = uv box + 1 texel, margin 1/255 for BC4 decode):
+  level 0 2.5% known; 1 9.3%; 2 20.4%; 3 34.3% (19.0% opaque, 15.3% transparent); 4 48.7% (22.9 / 25.8);
+  5 61.9% (27.8 / 34.1). Per-triangle micromaps would be 19.8 / 79.3 / 317 MB at levels 3 / 4 / 5 for 1.30M
+  triangles; the 179 grass instances are instances of few meshes, so micromaps shared per mesh (index
+  buffer per triangle) are far smaller. Level 4 is the first candidate.
+
+**11.2c Bake for VT foliage (not implemented yet).** Camp grass is 179 per-draw BLAS (wind VS, refit every
+frame), 0 pool meshes: the static-variant path (bvhsplit native_omm_variant, clone TLAS, guard) does not
+reach it. Needed: (1) a subdivision-level producer entry in omm_bake_plain.hlsl reading the immutable mask
+mip 0 per micro-triangle (EXT barycentric order, uv box + 1-texel bilinear support, the cut from the record,
+certificate: exact BC4 decode bounds), no content epochs (the mask never changes after upload); (2) the
+per-draw BLAS build in bvhsplit attaching the triangle-opacity pNext for masked records, a micromap per
+(mesh identity, UV hash, mask, cut) reused across frames and instances, rebuilt when the UVs change (wind
+moves positions only, UVs must be checked, not assumed); refits keep the same micromap; (3) with B on the
+known states agree with the test for every ray, so the micromaps can sit in the ordinary BLAS; the violation
+check traces a reference TLAS whose instances carry VK_GEOMETRY_INSTANCE_DISABLE_OPACITY_MICROMAPS_EXT;
+(4) omm_qual windows B-on/OMM-off vs B-on/OMM-on in one launch via a live key that switches the instance
+flag (no rebuild). Estimate about 2 days.
+
 **11.3 Order.** (1) Decide A (exact, small share) vs B (image change, full
 share). (2) Offline VT masks with the RT test switched to them, gated alone
 (energy, `coarser` counter to 0), useful without OMM. (3) OMM on top, measured

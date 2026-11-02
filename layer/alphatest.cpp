@@ -240,7 +240,10 @@ bool make_image(bool array, Img& out) {
 // resident at the requested level no longer falls back to a coarser one. Loaded and uploaded once, at the first
 // alpha_commit with the key on (outside any render pass); records are rewritten from the next capture on.
 uint32_t slot_of(std::vector<std::pair<VkImageView, VkImageLayout>>& list, uint32_t cap, VkImageView v, VkImageLayout l);
-struct VtMask { bg3::vt_alpha::IndexEntry entry; uint32_t width = 0, height = 0, levels = 0; Img img; };
+// fine: a mip-0-only view (rt_alpha_fine_lod, option B of docs/P4_OMM.md 11.1): tex_alpha clamps its LOD to the
+// view's last level, so every ray reads mip 0 with the hard cut (k = saturate(lvl - 1) = 0); a micromap baked at
+// mip 0 then agrees with the test for every ray. No shader change.
+struct VtMask { bg3::vt_alpha::IndexEntry entry; uint32_t width = 0, height = 0, levels = 0; Img img; VkImageView fine = VK_NULL_HANDLE; };
 std::vector<VtMask> g_vt_masks;
 int g_vt_state = 0;   // 0 not loaded, 1 loaded (upload owed), 2 uploaded, -1 failed (logged once)
 VkBuffer g_vt_staging = VK_NULL_HANDLE;
@@ -248,10 +251,11 @@ VkDeviceMemory g_vt_staging_mem = VK_NULL_HANDLE;
 std::vector<VkBufferImageCopy> g_vt_regions;
 std::vector<uint32_t> g_vt_region_mask;   // mask index per region
 uint32_t g_vt_substituted = 0;            // records rewritten since the last [alpha] line
+uint32_t g_vt_fine = 0;                   // of them with the mip-0 view (rt_alpha_fine_lod)
 
 bool vt_mask_view(VkImageView v) {
   if (!v) return false;
-  for (const VtMask& m : g_vt_masks) if (m.img.view == v) return true;
+  for (const VtMask& m : g_vt_masks) if (m.img.view == v || m.fine == v) return true;
   return false;
 }
 
@@ -290,6 +294,8 @@ bool vt_masks_load() {
     vci.image = m.img.image; vci.viewType = VK_IMAGE_VIEW_TYPE_2D; vci.format = ci.format;
     vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, m.levels, 0, 1};
     if (dd->vk.CreateImageView(dd->device, &vci, nullptr, &m.img.view) != VK_SUCCESS) { g_vt_masks.push_back(m); return false; }
+    vci.subresourceRange.levelCount = 1;
+    if (dd->vk.CreateImageView(dd->device, &vci, nullptr, &m.fine) != VK_SUCCESS) { g_vt_masks.push_back(m); return false; }
     for (uint32_t l = 0; l < m.levels; ++l) {
       const auto& lv = mask.levels[l];
       VkBufferImageCopy r{};
@@ -339,8 +345,10 @@ void vt_mask_substitute(AlphaRec& r) {
   if (r.kind != 1 || g_vt_state != 2 || !cfg_int("rt_vt_alpha_masks", 0)) return;
   for (const VtMask& m : g_vt_masks) {
     if (!bg3::vt_alpha::matches(m.entry, r.kind, r.p0, r.t[15])) continue;
-    const uint32_t slot = slot_of(g_tex, kTextures, m.img.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    const bool fine = cfg_int("rt_alpha_fine_lod", 0) != 0;
+    const uint32_t slot = slot_of(g_tex, kTextures, fine ? m.fine : m.img.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     if (!slot) return;
+    if (fine) ++g_vt_fine;
     r.kind = 2; r.tex = slot; r.cache = 0; r.channel = 0; r.scale[0] = r.scale[1] = 1.0f;
     ++g_vt_substituted;
     return;
@@ -583,6 +591,7 @@ void alpha_device_destroyed(DeviceData* dd) {
   }
   for (VtMask& m : g_vt_masks) {
     if (m.img.view) vk.DestroyImageView(dd->device, m.img.view, nullptr);
+    if (m.fine) vk.DestroyImageView(dd->device, m.fine, nullptr);
     if (m.img.image) vk.DestroyImage(dd->device, m.img.image, nullptr);
     if (m.img.mem) vk.FreeMemory(dd->device, m.img.mem, nullptr);
   }
@@ -1250,9 +1259,11 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5], g_stale_views.load());
     if (g_vt_state != 0)
-      log("[vt alpha] last %llu frames: %.1f VT records per frame read an offline mask (rt_vt_alpha_masks %d, %zu masks, state %d)",
-          (unsigned long long)g_frames, double(g_vt_substituted) / g_frames, cfg_int("rt_vt_alpha_masks", 0), g_vt_masks.size(), g_vt_state);
-    g_vt_substituted = 0;
+      log("[vt alpha] last %llu frames: %.1f VT records per frame read an offline mask (rt_vt_alpha_masks %d, %zu masks, state %d); "
+          "%.1f at mip 0 with the hard cut (rt_alpha_fine_lod %d)",
+          (unsigned long long)g_frames, double(g_vt_substituted) / g_frames, cfg_int("rt_vt_alpha_masks", 0), g_vt_masks.size(), g_vt_state,
+          double(g_vt_fine) / g_frames, cfg_int("rt_alpha_fine_lod", 0));
+    g_vt_substituted = 0; g_vt_fine = 0;
     if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
       log("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",
