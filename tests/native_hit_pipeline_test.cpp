@@ -113,6 +113,9 @@ int main(){
  {const uint64_t g=32ull<<20,cap=128ull<<20;check(source_stream_bytes(0,g,cap)==g && source_stream_bytes(1,g,cap)==g && source_stream_bytes(g,g,cap)==g);
   check(source_stream_bytes(g+1,g,cap)==2*g && source_stream_bytes(cap,g,cap)==cap && source_stream_bytes(cap+1,g,cap)==0 && source_stream_bytes(5,0,cap)==0);
   check(source_stream_bytes(100ull<<20,g,cap)==cap);}
+ // source_releasable: only after the slot's frame and once its owners retired; never an empty slot.
+ check(source_releasable(true,10,11,true) && !source_releasable(true,11,11,true) && !source_releasable(true,10,11,false));
+ check(!source_releasable(false,10,11,true) && !source_releasable(true,12,11,true));
  // stream_caps: from the RT capture (40% in whole granules), deferred one chunk per source granule + 1, basis 2 x source.
  {const uint64_t g=32ull<<20,mb=1ull<<20;
   auto c=stream_caps(1024*mb,g);   // camp / Ultra at 64 B: rt_xfb_mb 384 -> 1024
