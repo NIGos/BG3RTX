@@ -106,7 +106,35 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_RF_EDGE=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_RF_EDGE=1",
+                                                 // rt_water_glint_aa (core/water.cpp water_glint_request): each compose
+                                                 // request with the sun records, with the sun glint footprint filter
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GLINT_AA=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GLINT_AA=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GLINT_AA=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 // its pre-pass (rt/water_glint.hlsl, the compose request's defines)
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_GLINT_AA=1",
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GLINT_AA=1",
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GLINT_AA=1",
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1"};
+
+// rt_water_glint_aa: the compose request `req` with the sun glint filter (WATER_GLINT_AA) when `on` and the request
+// has the sun records (WATER_SHADOWS); else `req` unchanged.
+inline std::string water_glint_request(const char* req, bool on) {
+  std::string out = req;
+  if (on && out.find("WATER_SHADOWS=1") != std::string::npos) out += ";WATER_GLINT_AA=1";
+  return out;
+}
+// The pre-pass request of a WATER_GLINT_AA compose request: the same defines on rt/water_glint.hlsl.
+inline std::string water_glint_prepass(const std::string& compose_req) {
+  const std::string base = "rt/water_compose.hlsl";
+  return compose_req.compare(0, base.size(), base) == 0 ? "rt/water_glint.hlsl" + compose_req.substr(base.size()) : compose_req;
+}
 
 // rt_water_rf_edge: the compose request `req` with the screen-edge fade (WATER_RF_EDGE) when `on`.
 inline std::string water_rf_edge_request(const char* req, bool on) {

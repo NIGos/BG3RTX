@@ -417,6 +417,15 @@ void ngx_set_rr_motion_vectors(VkImage image, VkImageView view, VkFormat format,
   g_rmv_frame = frame_index();
 }
 
+// rt_water_fg_mv (layer/streamline.cpp): the same core vectors for DLSS-G, while fresh.
+bool ngx_core_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, uint32_t* w, uint32_t* h) {
+  std::lock_guard<std::mutex> lock(g_rmv_mu);
+  if (!g_rmv_frame || g_rmv_frame + 1 < frame_index()) return false;
+  const auto& im = g_rmv_res.Resource.ImageViewInfo;
+  *image = im.Image, *view = im.ImageView, *format = VkFormat(im.Format), *w = im.Width, *h = im.Height;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // G-buffer discovery (called at every render pass end, on recording threads)
 // ---------------------------------------------------------------------------
@@ -1370,7 +1379,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   bool rmv_ok = false;
   {
     std::lock_guard<std::mutex> lock(g_rmv_mu);
-    rmv_ok = game_mv && g_rmv_frame && g_rmv_frame + 2 >= frame_index() &&
+    rmv_ok = game_mv && cfg_int("rt_water_rr_mv", 0) && g_rmv_frame && g_rmv_frame + 2 >= frame_index() &&
              g_rmv_res.Resource.ImageViewInfo.Width == game_mv->Resource.ImageViewInfo.Width &&
              g_rmv_res.Resource.ImageViewInfo.Height == game_mv->Resource.ImageViewInfo.Height &&
              g_rmv_res.Resource.ImageViewInfo.Format == game_mv->Resource.ImageViewInfo.Format;

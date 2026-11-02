@@ -216,6 +216,12 @@ with quiet:
 left = {k for (k,) in pc.db.execute("SELECT key FROM compiled")}
 check(left == {"old-protected", "new"} and r["kept"] == 300 and not pc.blob_path(sha["mid"]).exists(),
       f"cap evicts the oldest unprotected entries until under the cap ({left}, {r})")
+# A cap below the protected SPIR-V is raised to 1.25x it (protected 300 B -> 375 B: a recent 50 B entry still fits).
+pc.put("small", b"F" * 50, "small", "main")
+with quiet:
+    r = si.prune(pc, days=14, cap=10, protect={"old-protected", "new"}, now=now)
+left = {k for (k,) in pc.db.execute("SELECT key FROM compiled")}
+check(left == {"old-protected", "new", "small"}, f"derived cap keeps the protected set and fits recent work ({left}, {r})")
 
 # Progress prints while running.
 buf = io.StringIO()
@@ -227,6 +233,71 @@ with contextlib.redirect_stdout(buf):
         p.step(failed=True)
 out = buf.getvalue()
 check(out.count("[p]") >= 2 and "2/3 compiled" in out and "1 failed" in out and "ETA" in out, "progress lines")
+
+# Preprocessed digest (--pp-diff): #line directives (tree paths, comment line shifts), CRLF, trailing
+# spaces and blank lines do not count; any token does.
+pp = b'#line 1 "C:\\\\a\\\\x.hlsl"\nfloat f;\n\n#line 9 "C:\\\\a\\\\x.hlsl"\nvoid main() { f = 1; }\n'
+check(si.pp_digest(pp) == si.pp_digest(b'#line 1 "D:\\\\tmp\\\\b3s-1\\\\x.hlsl"\r\nfloat f;  \r\n#line 40 "y"\r\n\r\n'
+                                       b'void main() { f = 1; }'), "pp digest ignores #line, CRLF, blank lines")
+check(si.pp_digest(pp) != si.pp_digest(pp.replace(b"f = 1", b"f = 2")), "pp digest sees a token change")
+check(si.pp_digest(pp) != si.pp_digest(pp.replace(b"float f;", b"float  f;")), "pp digest keeps inner spacing")
+
+# Preprocessed-text key level with a fake preprocessor (the closure's text without // comment lines, plus
+# the defines): a comment edit in a header compiles nothing, a code edit compiles its dependents, the
+# self-check sees a preprocessor that hides a change.
+def fake_pp(tool, tree, request, out):
+    file, defines = si.split_request(request)
+    text = b"".join(tree.read(p) for p, bid in tree.closure("shaders/" + file) if bid)
+    return b"\n".join(l for l in text.split(b"\n") if not l.lstrip().startswith(b"//")) + ";".join(defines).encode()
+
+
+si._run_pp = fake_pp
+pc2 = si.MemoryCache()
+tp0 = si.SourceTree.memory(FILES, "tp0")
+with quiet:
+    rp0 = si.compile_requests(tp0, REQUESTS, tool=tool, cache=pc2, jobs=2)
+calls.clear()
+tp1 = si.SourceTree.memory({**FILES, "common/h.h": FILES["common/h.h"] + "// comment only\n"}, "tp1")
+with quiet:
+    rp1 = si.compile_requests(tp1, REQUESTS, tool=tool, cache=pc2, jobs=2)
+check(not calls and all(rp1[r].digest == rp0[r].digest for r in REQUESTS)
+      and sum(e.by_pp for r in REQUESTS for e in rp1[r].entries) == 3, "a comment-only header edit compiles nothing")
+calls.clear()
+with quiet:
+    si.compile_requests(si.SourceTree.memory({**FILES, "common/h.h": FILES["common/h.h"] + "// again\n"}, "tp1b"),
+                        REQUESTS, tool=tool, cache=pc2, jobs=2)
+    si.compile_requests(tp1, REQUESTS, tool=tool, cache=pc2, jobs=2)
+check(not calls, "linked closure keys hit directly next time")
+tp2 = si.SourceTree.memory({**FILES, "common/h.h": FILES["common/h.h"] + "float g;\n"}, "tp2")
+with quiet:
+    si.compile_requests(tp2, REQUESTS, tool=tool, cache=pc2, jobs=2)
+check(sorted(c[1:] for c in calls) == [("a.hlsl", "main"), ("c.hlsl", "one"), ("c.hlsl", "two")],
+      "a code edit in a header compiles exactly its dependents")
+with quiet:
+    check(si.verify_pp(tp2, REQUESTS, 5, tool, pc2, jobs=2, seed=1) == [], "self-check passes on a sound key")
+si._run_pp = lambda tool, tree, request, out: b"blind"   # hides every change
+pc3 = si.MemoryCache()
+with quiet:
+    si.compile_requests(tp0, ["d.hlsl"], tool=tool, cache=pc3, jobs=2)
+    tp3 = si.SourceTree.memory({**FILES, "shaders/d.hlsl": "[numthreads(4,1,1)] void main() {}\n"}, "tp3")
+    bad = si.verify_pp(tp3, ["d.hlsl"], 1, tool, pc3, jobs=2, seed=1)
+check(bad == ["d.hlsl"], "self-check catches a key that hides a change")
+si._run_pp = lambda tool, tree, request, out: None        # preprocess failure: compile under the closure key
+calls.clear()
+with quiet:
+    si.compile_requests(si.SourceTree.memory({**FILES, "common/h.h": "// x\n"}, "tp4"), REQUESTS, tool=tool,
+                        cache=si.MemoryCache(), jobs=2)
+check(len(calls) == 6, "a failed preprocess falls back to compiling")
+# Backfill: a cache filled before the second level (closure keys only) learns the preprocessed keys once.
+si._run_pp = fake_pp
+pc4 = si.MemoryCache()
+with quiet:
+    si.compile_requests(tp0, REQUESTS, tool=tool, cache=pc4, jobs=2, pp=False)
+    si.compile_requests(tp0, REQUESTS, tool=tool, cache=pc4, jobs=2, backfill=True)
+calls.clear()
+with quiet:
+    si.compile_requests(tp1, REQUESTS, tool=tool, cache=pc4, jobs=2)
+check(not calls, "after a backfill a comment-only header edit compiles nothing")
 
 # A commit's blob ids equal the working tree's for unmodified files (cache shared across trees).
 dirty = subprocess.run(["git", "status", "--porcelain", "--", "shaders", "common"], cwd=ROOT, capture_output=True,

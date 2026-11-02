@@ -419,14 +419,24 @@ def main():
                     'threshold_method':'same-world static repeat maximum plus native storage quantum',
                     'threshold_range':([float(local_bound[usable].min()),float(local_bound[usable].max())]
                                        if usable.any() else None)}
+            # Flashes UP (1-3-frame peaks bracketed by recovery, the same rule on -luma): "transient" scores dips
+            # only, so a glint switching on for a frame was invisible to it (wf2-wf4). Reported, not in `masks`.
+            bound, known = thresholds['luma']
+            usable = calibrated & known[iy,ix]
+            peaks, peak_count = transient(-arrays['luma'], valid & usable[None], bound[iy,ix])
+            report['effects']['luma_peak'] = {'pixel_events':peak_count,'pixel_frames':int(peaks.sum()),
+                                              'unique_area_pixels':int(peaks.any(axis=0).sum())}
             cover = masks_by_serial.get(str(report['serial']), masks_by_serial.get(''))
             if cover is not None:
                 water = coverage_mask(cover, valid.shape[1:])
                 cal = valid & (calibrated & thresholds['luma'][1][iy,ix] & water)[None]
                 frames_in = int((masks['luma'] & water[None]).sum())
+                peaks_in = int((peaks & water[None]).sum())
                 report['water_mask'] = {'pixels':int(water.sum()), 'calibrated_pixel_frames':int(cal.sum()),
                                         'luma_pixel_frames':frames_in,
-                                        'luma_rate':frames_in/int(cal.sum()) if cal.any() else None}
+                                        'luma_rate':frames_in/int(cal.sum()) if cal.any() else None,
+                                        'peak_pixel_frames':peaks_in,
+                                        'peak_rate':peaks_in/int(cal.sum()) if cal.any() else None}
             report['attribution_pixel_frames'] = {
                 key:int((masks['luma'] & masks[key]).sum()) for key in ('sun_mask','local_mask','gi_luma')}
             flagged = np.any(np.stack(list(masks.values())),axis=0)
