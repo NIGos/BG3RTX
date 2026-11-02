@@ -366,7 +366,7 @@ static const char* const kOldKnobKeys[] = {
     "gi_hit_direct", "gi_hit_sun", "gi_far", "gi_far_m", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission",
     "rt_hit_reference", "rt_omm", "rt_water_geometry", "rt_water_reflections", "rt_water_compose",
     "rt_water_shadows", "rt_water_ls_shadows", "rt_water_refraction", "rt_water_game_shadow",
-    "rt_sun_cascade_current"};
+    "rt_sun_cascade_current", "rt_vram_guard", "rt_vram_compact", "rt_capture_elastic"};
 
 // The old knob ids, each with the one key its "On" wrote.
 static const char* const kOldOn[][2] = {
@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // 7 user-facing experimental entries (RT water left for Ultra); developer-only: the lighting reference, exact-k, current cascade sun.
+  // Qualified memory management is automatic; five user-facing experimental entries remain.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 8);   // Includes exp_vram_guard, exp_vram_compact, and exp_capture_elastic.
+  CHECK(user_exp == 5);   // VRAM guard, compaction and elastic captures passed vg3.
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
@@ -505,6 +505,9 @@ static void test_gui_levels() {
     CHECK(code_default(key) != nullptr);
   }
   CHECK(find_knob("exp_fg_letterbox") == nullptr);
+  for (const char* id : {"exp_vram_guard", "exp_vram_compact", "exp_capture_elastic"})
+    CHECK(find_knob(id) == nullptr);
+  CHECK_EQ(code_default("rt_vram_guard_budget_mb"), "0");
   // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
   for (const char* k : kAutomaticKeys) {
     CHECK(!is_knob_key(k));
