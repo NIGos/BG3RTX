@@ -114,6 +114,21 @@
   ]
  },
  {
+  "label": "cal-static",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 20,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 8,
+  "serial": 91100,
+  "motion_start": 20,
+  "motion_end": 20,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_water_rr_hitdist=0,qa_exposure_hold=1,rt_stats=0,rt_debug=0,pan_prepare=1"
+ },
+ {
   "label": "rot-off-a",
   "kind": "rotate",
   "speed": "slow",
