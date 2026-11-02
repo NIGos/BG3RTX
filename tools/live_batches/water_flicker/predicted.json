@@ -21,7 +21,7 @@
   },
   "shot-edge": {
    "predicted": null,
-   "source": "rt_water_rf_edge changes the composed term only where its hit lies within rf_edge (0.05 uv) of the screen border (w < 1); everywhere else the image is the key-off image. There it moves toward the probe value by (1 - w)(A L - B): the frame mean moves by the border-band share of the composed water only, below the shot band. Measured on the dump after the water compose (job energy_fs 423e0548): the whole compose is -1.96% there (m5w3 093518, pooled S8 band 1.76%), the edge key undoes a fraction of it (the hits within 5% of the border), so |d| well under 1%",
+   "source": "rt_water_rf_edge changes the composed term only where its hit lies within rf_edge (0.05 uv) of the screen border (w < 1); everywhere else the image is the key-off image. There it moves toward the probe value by (1 - w)(A L - B): the frame mean moves by the border-band share of the composed water only, below the shot band. Measured in-frame (job energy_fs water-compose): the whole reflection compose is -0.12% / -0.19% of the frame there (m5w3 121606, m5p1 213849 step), the edge key undoes a fraction of it (hits within 5% of the border), so |d| under 0.2%",
    "cost_gpu_ms": 0.0,
    "cost_source": "a few ALU per composed pixel in water_compose (no ray, no memory access): within the OFF spread",
    "flicker": "rot-edge burst: inside the water mask, pan_artifacts final-luma transient pixel-frames below both rot-off bursts by more than |off-a - off-b|; whole frame at most the water share (may stay within noise). Not sized offline: the share of composed hits within 5% of the border during the turn is not measured. A null here says the screen-border switch is not the flicker (next: the hidden / same-surface switch, tier 2)",

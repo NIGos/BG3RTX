@@ -18,7 +18,7 @@ is before the next phase starts. Nothing is tuned: the data says which lines cou
 
 Gates:
 - Energy: scene colour before post (dump of pass 5c3fdabc, slot 0, in each trace's dumps.json, or the job's
-  "energy_fs": 423e0548 for water jobs, the first dump after the water compose; the
+  "energy_fs": "water-compose" for water jobs, 5c3fdabc plus the in-frame compose delta (WATER_COMPOSE); the
   float mean, not a PNG preview and not the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). Each ON shot is
   compared with the mean of the nearest OFF shot before and after it (shot-off-* family; S6 also the
   shot-em-off-* family for shot-on). d = (ON - OFF mean) / OFF mean. Two-sided, against a PREDICTED
@@ -69,9 +69,68 @@ REPO = Path(__file__).resolve().parents[1]
 SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents and post (RR's input)
 # The first pass after the forward water / transparents pass on the same HDR scene image (frame.json order:
 # 5c3fdabc, the water pass, a copy, then this pass): the first dump that holds the water compose's writes, before
-# post. m5w3 S8 (121606, 093518): rt_water_compose ON -1.9% / -1.7% here (OFF-OFF 0.5% / 0.9%), 5c3fdabc
-# +0.02% / -0.40%; m5p1 213849 water sun shadows -10% here, 5c3fdabc unchanged. Jobs select it with "energy_fs".
+# post. It sees the compose (m5p1 213849 water sun shadows -10% here, 5c3fdabc unchanged), but its mean also carries
+# the water FS's sun glints (below): prefer WATER_COMPOSE for water jobs. Jobs select a dump with "energy_fs".
 WATER_AFTER_FS = "423e0548"
+# "energy_fs": "water-compose": the scene colour before the water (SCENE_FS) plus what the water compose changed
+# IN THE SAME FRAME: for each pass with an audited water FS (common/water_policy.h), the mean of the next dump of the
+# scene image (after core on_pass_end's compose) minus the water pass's own dump (taken before it: layer/cmd.cpp
+# end_pass dumps, then calls the core). The water FS's own output cancels: its sun glints (dump max 640..1584 on S8,
+# one 1000 px moves the frame mean ~0.8%) made the plain after-water mean swing 2.5% between keys that change no
+# water pixel (m5p1 off -> rt_water_reflections measured: +2.5%), and m5w3's "compose -2%" was that noise.
+WATER_COMPOSE = "water-compose"
+_WATER_FS = None
+
+
+def water_fs_prefixes():
+    """The audited water FS (first 8 hex digits) from common/water_policy.h."""
+    global _WATER_FS
+    if _WATER_FS is None:
+        src = (REPO / "common" / "water_policy.h").read_text(encoding="utf-8")
+        _WATER_FS = {m.group(1) for m in re.finditer(r"\{0x([0-9a-f]{8})[0-9a-f]{8}ull, 0x[0-9a-f]{16}ull, \"FLUID", src)}
+    return _WATER_FS
+
+
+def water_compose_colour(cap: Path, dumps: dict):
+    """(luminance of SCENE_FS + sum over water passes of (next scene-image dump - the water pass's dump), nonfinite of
+    those dumps) or (reason, path). Pass order from frame.json (pass, draws, end with its dump ids)."""
+    lum = lambda d: 0.2126 * d["mean"][0] + 0.7152 * d["mean"][1] + 0.0722 * d["mean"][2]  # noqa: E731
+    scene = [(int(k[1:]), d) for k, d in dumps.items()
+             if str(d.get("pass_fs", "")).startswith(SCENE_FS) and d.get("slot") == 0 and d.get("mean")]
+    fj = cap / "frame.json"
+    if not scene or not fj.exists():
+        return ("no scene-colour dump or frame.json", str(cap))
+    s = max(scene, key=lambda c: c[0])[1]
+    img = s["image"]
+    water = water_fs_prefixes()
+    frame = json.loads(fj.read_text(encoding="utf-8"))
+    ends = []   # (water pass?, the scene image's slot-0 dump of the pass or None), in order
+    fs_seen = set()
+    for sub in frame.get("submits", []):
+        for c in sub.get("cmds", []):
+            for e in c.get("events", []):
+                op = e.get("op")
+                if op == "pass":
+                    fs_seen = set()
+                elif op == "draw" and e.get("fs"):
+                    fs_seen.add(e["fs"][:8])
+                elif op == "end":
+                    hit = [dumps[k] for k in e.get("dumps", []) if k in dumps and dumps[k].get("image") == img and
+                           dumps[k].get("slot") == 0 and dumps[k].get("mean")]
+                    ends.append((bool(fs_seen & water), hit[0] if hit else None))
+    delta, nf, n = 0.0, int(s.get("nonfinite", 0) or 0), 0
+    for i, (is_w, d) in enumerate(ends):
+        if not is_w or d is None:
+            continue
+        nxt = next((x for x in ends[i + 1:] if x[1] is not None), None)
+        if nxt is None or nxt[0]:
+            return ("water pass without a non-water scene dump after it", str(cap))
+        delta += lum(nxt[1]) - lum(d)
+        nf += int(nxt[1].get("nonfinite", 0) or 0)
+        n += 1
+    if not n:
+        return ("no water pass on the scene image", str(cap))
+    return (lum(s) + delta, nf)
 ALPHA_FW = 0.05         # scripts/qa/thresholds.py: 5% family-wise false alarm, Bonferroni per family
 
 TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})\s+(.*)$")
@@ -370,6 +429,13 @@ class Run:
                     if not f.exists():
                         return ("missing", str(f))
                     dumps = json.loads(f.read_text(encoding="utf-8"))
+                    if fs == WATER_COMPOSE:
+                        v = water_compose_colour(cap, dumps)
+                        if isinstance(v[0], str):
+                            return v
+                        other_nf = {f"{x.get('pass_fs', '?')[:8]} {x.get('fmt', '?')}": int(x.get("nonfinite", 0) or 0)
+                                    for x in dumps.values() if int(x.get("nonfinite", 0) or 0)}
+                        return (v[0], v[1], self.pre_exposure(frame), other_nf)
                     cand = [(int(k[1:]), d) for k, d in dumps.items()
                             if str(d.get("pass_fs", "")).startswith(fs) and d.get("slot") == 0 and d.get("mean")]
                     if not cand:

@@ -278,6 +278,30 @@ terms carry E, so w blends two estimates of one reflection (no double count). Ke
 Live test: tools/live_batches/water_flicker (wf2-s8-fg2, NOT run). Open: the hidden-tier switch (tier 2) is still
 hard and moves under BG3's orbit camera (the eye moves, not only the view direction).
 
+M5.3c water energy audit (2026-11-02, offline on the kept S8 traces of m5w3 121606 / 093518 and m5p1 213849):
+- The energy gates of M5 read 5c3fdabc, which runs BEFORE the forward water pass (frame.json order): blind to all of
+  M5. The water pass's own dump is taken before the core's on_pass_end (layer/cmd.cpp end_pass), so the compose's
+  writes first appear in the next dump of the scene image (423e0548 on S8).
+- The plain after-water mean is not usable: the water FS's sun glints reach 640..1584 (dump max) and one such pixel
+  moves the frame mean ~0.8%. rt_water_reflections (measured only, no water pixel changes) moved it +2.5% (m5p1), and
+  the "-2%" of rt_water_compose in m5w3 is in the water pass's own dump too (before the compose ran): glint noise.
+- In-frame measure (m4_promotion_gate `energy_fs` "water-compose"): 5c3fdabc + sum over water passes of (next
+  scene-image dump - the water pass's dump). OFF-OFF spread 0.01% (m5p1). Results, frame relative:
+  reflections compose -0.12% (121606), -0.19% (m5p1 step; 093518 -0.61% within its 1.5% OFF spread); its own log
+  says -0.65% of the water's C over 8% of the frame: -0.085%. Sun shadows -9.7%, local-light shadows -2.0%,
+  refraction -0.7% (m5p1 steps).
+- Reflections: physically right, no bug found. Composed pixels are only tier 1 (10-15% of the rays; 77-89% miss
+  to the sky and keep the probe). A L / B: 56.6% below 0.5, 34.5% in 0.5..2, 8.9% above 2, ratio of the means 0.78:
+  a spread, not one factor (a unit error in E, k = _3799 or the pre-exposure would move every pixel by the same
+  factor). The probe is sky-dominated, the resolved hits are walls and cliffs. A and B are the FS's own terms
+  (its DFG LUT E, not water_reflect's Schlick stand-in; B subtracted once: water_compose_test).
+- Sun shadows: physically right. The S8 FS (c4e92ccd NoCaustics_Waves) light the water with sun visibility 1. The
+  rt_debug 26 trace (214156) shades the sea on the far side of the platform from a low sun (pillar shadows on the
+  floor point the same way), the sunken courtyard pool inside its walls, and keeps the sea towards the sun lit.
+  Occluded 69.7% of traced sun records, removed 94% of their D (R = C - D keeps sky and probe). The darkening is
+  the removed glints (dump max 904 -> 222). Not yet checked: the traced visibility against the game's cascade on the
+  opaque pixels next to the water (the M5.4c comparison).
+
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 
 #### Design (2026-11-01, from the three S8/S1 FS dumps, spirv-dis --raw-id)

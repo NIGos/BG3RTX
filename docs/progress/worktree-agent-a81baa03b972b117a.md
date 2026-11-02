@@ -12,9 +12,11 @@
   and in the turn as masks (new `pan_artifacts --mask`, coverage_mask unit test). 199 s, 5 bursts (about 11.5 GB,
   deleted after the analysis). Dryrun + lints pass. predicted.json: shot-rr and shot-edge energy null, cost 0;
   rot-edge masked transient rate below both rot-off by more than the OFF-OFF spread.
-- Water energy: the gate's dump 5c3fdabc runs BEFORE the forward water pass (frame.json order), so every water energy
-  gate so far was blind to the compose. New job key `energy_fs` (tools/m4_promotion_gate.py WATER_AFTER_FS 423e0548:
-  the first dump of the scene image after the water pass, before post; `--energy-fs` re-reads old runs). Offline on
-  m5w3 S8: compose ON -2.19% (121606) and -1.96% (093518, pooled band 1.76%) there, 5c3fdabc -0.26%; m5p1 water sun
-  shadows -10% there, 5c3fdabc unchanged. wf2 uses it.
+- Water energy: the gate's dump 5c3fdabc runs BEFORE the forward water pass, so every M5 energy gate was blind.
+  The plain after-water dump (423e0548) is dominated by the water FS's sun glints (max up to 1584; a measured-only
+  key moved it +2.5%): m5w3's "compose -2%" was that noise, in the water pass's dump before the compose ran.
+  New `energy_fs` "water-compose" (tools/m4_promotion_gate.py): 5c3fdabc + the in-frame compose delta (next
+  scene-image dump minus the water pass's own dump, frame.json order). OFF-OFF 0.01%. Frame deltas: reflections
+  -0.12% / -0.19%, sun shadows -9.7%, local shadows -2.0%, refraction -0.7%. Verdict: physically right, no
+  bug (analysis: PLAN_M5_WATER M5.3c). `--energy-fs` re-reads old runs; wf2 uses it.
 - Open: the hidden-tier switch (tier 2) is still binary; BG3's orbit camera moves the eye, so it can flicker too.
