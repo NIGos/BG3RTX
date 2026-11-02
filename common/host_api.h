@@ -22,8 +22,9 @@
 // 24: D-EM policy in the core (TRACK_D 13.21): Bg3HostApi::read_bound, Bg3CoreApi::em_record /
 //     em_calib_update / em_calib_apply (appended).
 // 25: Bg3HostApi::replay_pack (appended; diagnostics, tools/frame_replay.md "Live writer").
+// 26: Bg3HostApi::set_rr_motion_vectors (appended; rt_water_rr_mv, RR's motion vectors on water).
 // Both VkLayer_bg3rtx.dll and bg3rtx_core.dll MUST be rebuilt together.
-#define BG3RTX_ABI_VERSION 25
+#define BG3RTX_ABI_VERSION 26
 // D-EM is in this host: Bg3HostApi::rt_emissive (ABI 18) and Bg3EmissiveInfo exist. The core's
 // SHaRC emission injection (core/gi.cpp, CMake BG3RTX_SHARC_EM=AUTO) compiles on this.
 #define BG3RTX_HOST_HAS_RT_EMISSIVE 1
@@ -346,6 +347,11 @@ struct Bg3HostApi {
   // no trace recording), < 0 failed (logged; do not ask again for this serial). Null in a layer
   // built without BG3RTX_DIAGNOSTICS.
   int (*replay_pack)(VkCommandBuffer cmd, const Bg3ReplayDispatch* dispatch);
+  // ABI 26 (rt_water_rr_mv): the image Ray Reconstruction gets as its motion vectors instead of the
+  // game's (render resolution, the game's MV format and units, GENERAL layout, written this frame):
+  // the game's vectors with the water surface's on the water pixels. Called every frame the core
+  // writes it, and with VK_NULL_HANDLE when it stops (the game's vectors again).
+  void (*set_rr_motion_vectors)(VkImage image, VkImageView view, VkFormat format, uint32_t width, uint32_t height);
 };
 
 struct Bg3CoreApi {
