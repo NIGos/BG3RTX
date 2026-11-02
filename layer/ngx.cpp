@@ -1514,8 +1514,14 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
     g_mv_image = mv->Resource.ImageViewInfo.Image;
     g_mv_view = mv->Resource.ImageViewInfo.ImageView;
     g_mv_format = mv->Resource.ImageViewInfo.Format;
-    get_f(p, NVSDK_NGX_Parameter_MV_Scale_X, g_mv_scale[0]);
-    get_f(p, NVSDK_NGX_Parameter_MV_Scale_Y, g_mv_scale[1]);
+    // Keep the last valid scale unless both parameters are read and finite: a NaN/Inf scale
+    // turns every reprojection of the core's temporal passes non-finite.
+    float sx = g_mv_scale[0], sy = g_mv_scale[1];
+    if (get_f(p, NVSDK_NGX_Parameter_MV_Scale_X, sx) && get_f(p, NVSDK_NGX_Parameter_MV_Scale_Y, sy) &&
+        std::isfinite(sx) && std::isfinite(sy)) {
+      g_mv_scale[0] = sx;
+      g_mv_scale[1] = sy;
+    }
   }
   if (!g_logged_eval_contract) {
     g_logged_eval_contract = true;
