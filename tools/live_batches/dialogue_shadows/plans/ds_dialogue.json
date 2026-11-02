@@ -1,35 +1,5 @@
 [
  {
-  "label": "diag-warm-a",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 25,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 25,
-  "motion_end": 25,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=2,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=0"
- },
- {
-  "label": "diag-warm-b",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 15,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 15,
-  "motion_end": 15,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=1,rt_stats=1,rt_primary_check=1,qa_exposure_hold=0"
- },
- {
   "label": "warmup",
   "kind": "static",
   "speed": "static",
