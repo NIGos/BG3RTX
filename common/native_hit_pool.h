@@ -109,7 +109,10 @@ struct Totals { uint64_t stored = 0, refreshed = 0, conflicts = 0, evicted = 0, 
 // mesh_extract_basis.hlsl): a hit on instance i then uses normalize(A_i * A_0^-1 * w_0), which is the
 // native normalize(A_i * b). The extraction compares the G-buffer positions with M_0 * P (P: the pool
 // vertex) under the mesh cache tolerance, so the XFB triangle order and matrix are those of the mesh.
-inline constexpr uint64_t kBasisCapBytes = 256ull << 20;   // all basis ranges in the mesh pool
+// All basis ranges in the mesh pool. smoke_ultra S8 2026-11-01 at 256 MB: 256 MB used and 128 to 255 meshes
+// (154.4 MB at 128, so < ~310 MB at 255) waiting, a demand of 410 to ~565 MB; 768 MB is that + 35% or more,
+// inside the 2047 MB mesh pool (rt_capture_budget.h kMeshPoolHardCap) beside ~200-400 MB of vertices.
+inline constexpr uint64_t kBasisCapBytes = 768ull << 20;
 inline constexpr uint32_t kJobsPerFrame = 8;               // G-buffer captures per frame
 inline constexpr uint64_t kJobXfbBytes = 16ull << 20;      // one capture (instance 0)
 inline uint64_t basis_bytes(uint32_t tris) { return nh_pool_basis_header + uint64_t(tris) * 3u * nh_pool_basis_vertex; }

@@ -159,6 +159,13 @@ int main(){
   check(cascade_grow(427*M,3000*M,0xFFFFFFFFull)==kMeshPoolHardCap);
   check(cascade_grow(427*M,457*M,512*M)==512*M);
   check(cascade_grow(800*M,457*M,0xFFFFFFFFull)==800*M);
+  // Alpha floor at 64 B: 171 MB -> 409 MB of a 1024 MB buffer (S8 load frame wanted 223.8 MB); 24 B and a set
+  // rt_alpha_mb unchanged; the region still yields to the opaque demand above the floor.
+  check(alpha_floor(171*M,G,true,64)==409*M);
+  check(alpha_floor(64*M,G,true,24)==64*M);
+  check(alpha_floor(100*M,G,false,64)==100*M);
+  check(alpha_region(G,409*M,0,0,0,true,60)==409*M);
+  check(alpha_region(G,409*M,409*M,2*M,100*M,true,60)==409*M);   // loading: no shrink below the floor
  }
  std::printf("RT capture budget: %u CPU checks; explicit MB limits unchanged; no GPU claim\n",checks);
 }
