@@ -1,0 +1,126 @@
+{
+ "name": "va1-camp-vt-masks-fg2",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 423,
+ "repeat": 1,
+ "live_batch": "vt-alpha",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_vt_alpha_masks=0",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/vt_alpha/plans/va1_camp.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "\\[rt\\] scene wait",
+  "\\[alpha\\]",
+  "\\[vt alpha\\]",
+  "rt stats",
+  "\\[mem\\]",
+  "\\[rrpost\\] exposure (held|hold|probe)"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "gi: GPU cost [0-9.]+ ms/frame",
+  "\\[vt alpha\\] 7 masks loaded from .*vt_alpha \\(1\\.65 MB BC4\\)",
+  "\\[vt alpha\\] last \\d+ frames: [1-9][0-9.]* VT records per frame read an offline mask \\(rt_vt_alpha_masks 1",
+  "\\[vt alpha\\] last \\d+ frames: 0\\.0 VT records per frame read an offline mask \\(rt_vt_alpha_masks 0",
+  "rt stats \\(\\d+ frames\\): alpha candidates of shadow rays",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate",
+  "\\[vt alpha\\] .* invalid: skipped",
+  "\\[vt alpha\\] no index",
+  "held records dropped \\(view destroyed/reused\\) [1-9]"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=4 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=10\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_vt_alpha_masks OFF/ON/OFF at S3 camp (live key; masks of the grass shader 738494714d50b4c7, 1.30M of its triangles in the camp pack). diag-on/diag-off (rt_stats): the shadow/visibility alpha-candidate line, 'vt page from a coarser level' must drop and the vt share move to tex. Cost OFF/ON/OFF diag-off, one PNG per state, exposure held from cost-off-a. Smoke-ultra startup.",
+ "estimated_phase_seconds": 123,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "masks used in the ON cost window",
+   "select": "\\[vt alpha\\] last \\d+ frames:",
+   "match": "[1-9][0-9.]* VT records per frame read an offline mask \\(rt_vt_alpha_masks 1",
+   "windows": [
+    "cost-on"
+   ],
+   "min": 1
+  }
+ ]
+}

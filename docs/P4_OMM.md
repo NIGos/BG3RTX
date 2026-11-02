@@ -467,6 +467,32 @@ Estimated work: offline extractor + db format about 1 day; runtime binding and
 record about 1 day; OMM provider from immutable masks about 0.5 day; then the
 omm_qual batch. Prerequisite either way: 11.1 A or B for the LOD domain.
 
+**11.2a Done offline (2026-11-02): camp grass masks, key `rt_vt_alpha_masks` (live, off).**
+- Source: the camp pack 013545-2 has 7 distinct (tile set, texture) VT records of shader 738494714d50b4c7
+  (1.30M triangles, one texture 1.155M). Tile set = record m0 row 3 column 3, texture rectangle = p0 x the
+  tile set's level-0 size (65536). `tools/assets/vt_alpha_masks.py` extracts the 7 GTS and the needed GTP from
+  VirtualTextures*.pak, LSLib (`tools/assets/vt_alpha.ps1`, pwsh 7) decodes levels 0..P1.x (LSLib gives no
+  level below one tile; the RT test never reads past the record's mip clamp P1.x = 2, 3 for one texture), and
+  the BC3 alpha halves are the BC4 masks, bit-exact. Size: 7 masks, 1.65 MB (512 x 512 x 3 levels = 168 KB
+  each). Files ADDED to data/assetdb/vt_alpha/ (index, manifest, 7 .vtalpha); nothing there was changed.
+- Agreement (`tools/assets/vt_alpha_agree.py`, the pack's indirection + BC3 tile cache, vt_alpha() with the
+  mip forced, every mask texel of every requestable level): where the page is resident at the requested level
+  the read equals the mask bit for bit (100.00%); triangle-weighted the alpha test agrees on 98.51%, differs on
+  1.49%: 1.48% on coarser pages, 0.01% elsewhere (bilinear at page borders).
+- Runtime (layer/alphatest.cpp, common/vt_alpha_masks.h + unit test): at the first alpha_commit with the key
+  on, the masks are loaded and uploaded (BC4 images, once); from the next capture a matched VT record (same
+  tile set, same p0 bits) becomes a plain-texture record (kind 2: tex_alpha with the mask, channel 0, scale 1).
+  No shader change, so key-off SPIR-V is untouched. Differences of the kind-2 path from the VT rule: trilinear
+  LOD log2(N g) instead of the VT's rounded mip of log2(N g) - 0.5, and a continuous stochastic weight. Held
+  records keep mask views (no tracker id). GUI: Experimental "Offline cutout masks".
+- Live job (not run): tools/live_batches/vt_alpha (camp, OFF/ON/OFF, 4.1 min, 0.19 GB).
+- Option A share (`tools/assets/vt_alpha_gate_share.py`, same pack): foliage texel world size median 1.08 mm
+  (p10 0.69, p90 2.03); receiver distance median 22.2 m (p10 14.6, p90 50.6), pixel angle 1.04 mrad. The gate
+  (footprint < 4 texels, VT mip <= 1) holds for 1.15% of shadow-ray (pixel, foliage triangle) pairs at t = 0
+  (an upper bound; 0.39% at t = 5 m) and 0.005% for GI rays. At camp distances the RT test reads the clamped
+  mip 2 with a stochastic threshold: option A is not worth building; only B (a fine-LOD policy) can give OMM a
+  share.
+
 **11.3 Order.** (1) Decide A (exact, small share) vs B (image change, full
 share). (2) Offline VT masks with the RT test switched to them, gated alone
 (energy, `coarser` counter to 0), useful without OMM. (3) OMM on top, measured

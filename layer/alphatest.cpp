@@ -33,6 +33,8 @@
 #include "../common/omm_scene_capability.h"
 #include "omm_backend.h"
 #include "omm_content.h"
+#include "assetdb.h"
+#include "../common/vt_alpha_masks.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -230,6 +232,119 @@ bool make_image(bool array, Img& out) {
   vci.format = ci.format;
   vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
   return dd->vk.CreateImageView(dd->device, &vci, nullptr, &out.view) == VK_SUCCESS;
+}
+
+// ---- rt_vt_alpha_masks (live, default 0; docs/P4_OMM.md 11.2) ----
+// Offline BC4 alpha masks (common/vt_alpha_masks.h) for matched VT records: the record becomes a plain texture
+// record (kind 2, tex_alpha) that reads the mask instead of the game's streaming tile cache, so a page that is not
+// resident at the requested level no longer falls back to a coarser one. Loaded and uploaded once, at the first
+// alpha_commit with the key on (outside any render pass); records are rewritten from the next capture on.
+uint32_t slot_of(std::vector<std::pair<VkImageView, VkImageLayout>>& list, uint32_t cap, VkImageView v, VkImageLayout l);
+struct VtMask { bg3::vt_alpha::IndexEntry entry; uint32_t width = 0, height = 0, levels = 0; Img img; };
+std::vector<VtMask> g_vt_masks;
+int g_vt_state = 0;   // 0 not loaded, 1 loaded (upload owed), 2 uploaded, -1 failed (logged once)
+VkBuffer g_vt_staging = VK_NULL_HANDLE;
+VkDeviceMemory g_vt_staging_mem = VK_NULL_HANDLE;
+std::vector<VkBufferImageCopy> g_vt_regions;
+std::vector<uint32_t> g_vt_region_mask;   // mask index per region
+uint32_t g_vt_substituted = 0;            // records rewritten since the last [alpha] line
+
+bool vt_mask_view(VkImageView v) {
+  if (!v) return false;
+  for (const VtMask& m : g_vt_masks) if (m.img.view == v) return true;
+  return false;
+}
+
+bool vt_masks_load() {
+  std::string dir = assetdb_file();
+  const size_t cut = dir.find_last_of("\\/");
+  dir = (cut == std::string::npos ? std::string(".") : dir.substr(0, cut)) + "\\vt_alpha";
+  std::ifstream index(dir + "\\vt_alpha_index.txt");
+  if (!index) { log("[vt alpha] no index in %s: masks off", dir.c_str()); return false; }
+  DeviceData* dd = g_dd;
+  std::vector<uint8_t> staging;
+  std::string line;
+  while (std::getline(index, line)) {
+    bg3::vt_alpha::IndexEntry e;
+    if (!bg3::vt_alpha::parse_index_line(line, &e)) continue;
+    std::ifstream f(dir + "\\" + e.file, std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    bg3::vt_alpha::Mask mask;
+    if (!bg3::vt_alpha::parse_mask(bytes.data(), bytes.size(), &mask)) { log("[vt alpha] %s invalid: skipped", e.file.c_str()); continue; }
+    VtMask m; m.entry = e; m.width = mask.width; m.height = mask.height; m.levels = uint32_t(mask.levels.size());
+    VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    ci.imageType = VK_IMAGE_TYPE_2D; ci.format = VK_FORMAT_BC4_UNORM_BLOCK; ci.extent = {m.width, m.height, 1};
+    ci.mipLevels = m.levels; ci.arrayLayers = 1; ci.samples = VK_SAMPLE_COUNT_1_BIT; ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ci.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkMemoryRequirements req{};
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    if (dd->vk.CreateImage(dd->device, &ci, nullptr, &m.img.image) != VK_SUCCESS) return false;
+    dd->vk.GetImageMemoryRequirements(dd->device, m.img.image, &req);
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &m.img.mem) != VK_SUCCESS ||
+        dd->vk.BindImageMemory(dd->device, m.img.image, m.img.mem, 0) != VK_SUCCESS) {
+      g_vt_masks.push_back(m); return false;
+    }
+    VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    vci.image = m.img.image; vci.viewType = VK_IMAGE_VIEW_TYPE_2D; vci.format = ci.format;
+    vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, m.levels, 0, 1};
+    if (dd->vk.CreateImageView(dd->device, &vci, nullptr, &m.img.view) != VK_SUCCESS) { g_vt_masks.push_back(m); return false; }
+    for (uint32_t l = 0; l < m.levels; ++l) {
+      const auto& lv = mask.levels[l];
+      VkBufferImageCopy r{};
+      r.bufferOffset = staging.size();
+      r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, l, 0, 1};
+      r.imageExtent = {lv.width, lv.height, 1};
+      staging.insert(staging.end(), bytes.begin() + lv.offset, bytes.begin() + lv.offset + lv.bytes);
+      while (staging.size() % 16) staging.push_back(0);
+      g_vt_regions.push_back(r);
+      g_vt_region_mask.push_back(uint32_t(g_vt_masks.size()));
+    }
+    g_vt_masks.push_back(m);
+  }
+  if (g_vt_masks.empty() || staging.empty()) { log("[vt alpha] index in %s lists no valid mask: masks off", dir.c_str()); return false; }
+  void* map = nullptr;
+  if (!alloc_host_buffer(staging.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &g_vt_staging, &g_vt_staging_mem, &map) || !map) return false;
+  std::memcpy(map, staging.data(), staging.size());
+  log("[vt alpha] %zu masks loaded from %s (%.2f MB BC4)", g_vt_masks.size(), dir.c_str(), double(staging.size()) / 1048576.0);
+  return true;
+}
+
+void vt_masks_upload(VkCommandBuffer cmd) {
+  const VkDeviceFuncs& vk = g_dd->vk;
+  std::vector<VkImageMemoryBarrier> b(g_vt_masks.size(), VkImageMemoryBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER});
+  for (size_t i = 0; i < b.size(); ++i) {
+    b[i].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    b[i].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; b[i].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b[i].srcQueueFamilyIndex = b[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b[i].image = g_vt_masks[i].img.image;
+    b[i].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, g_vt_masks[i].levels, 0, 1};
+  }
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                        uint32_t(b.size()), b.data());
+  for (size_t r = 0; r < g_vt_regions.size(); ++r)
+    vk.CmdCopyBufferToImage(cmd, g_vt_staging, g_vt_masks[g_vt_region_mask[r]].img.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                            &g_vt_regions[r]);
+  for (auto& x : b) {
+    x.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; x.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    x.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; x.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        0, 0, nullptr, 0, nullptr, uint32_t(b.size()), b.data());
+}
+
+// A matched VT record reads its offline mask through the plain-texture path (kind 2, channel 0 = BC4's R).
+void vt_mask_substitute(AlphaRec& r) {
+  if (r.kind != 1 || g_vt_state != 2 || !cfg_int("rt_vt_alpha_masks", 0)) return;
+  for (const VtMask& m : g_vt_masks) {
+    if (!bg3::vt_alpha::matches(m.entry, r.kind, r.p0, r.t[15])) continue;
+    const uint32_t slot = slot_of(g_tex, kTextures, m.img.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (!slot) return;
+    r.kind = 2; r.tex = slot; r.cache = 0; r.channel = 0; r.scale[0] = r.scale[1] = 1.0f;
+    ++g_vt_substituted;
+    return;
+  }
 }
 
 // "<hash> flag=1.1 off=12" (scripts/camera_fade_table.py)
@@ -466,6 +581,15 @@ void alpha_device_destroyed(DeviceData* dd) {
     }
     s = SunAlphaSlot{};
   }
+  for (VtMask& m : g_vt_masks) {
+    if (m.img.view) vk.DestroyImageView(dd->device, m.img.view, nullptr);
+    if (m.img.image) vk.DestroyImage(dd->device, m.img.image, nullptr);
+    if (m.img.mem) vk.FreeMemory(dd->device, m.img.mem, nullptr);
+  }
+  g_vt_masks.clear(); g_vt_regions.clear(); g_vt_region_mask.clear(); g_vt_state = 0;
+  if (g_vt_staging) vk.DestroyBuffer(dd->device, g_vt_staging, nullptr);
+  if (g_vt_staging_mem) vk.FreeMemory(dd->device, g_vt_staging_mem, nullptr);
+  g_vt_staging = VK_NULL_HANDLE; g_vt_staging_mem = VK_NULL_HANDLE;
   if(g_sun_dsl) vk.DestroyDescriptorSetLayout(dd->device,g_sun_dsl,nullptr);
   g_sun_dsl=VK_NULL_HANDLE;
   if (g_pool) vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
@@ -800,6 +924,7 @@ bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint
     }
     return false;
   }
+  vt_mask_substitute(r);
   if (rec_index) *rec_index = uint32_t(g_recs.size());
   g_recs.push_back(r);
   if (r.kind == 3) {if(r.p0[2]!=0.0f) ++g_scalp_dither; else ++g_scalp_hard;}
@@ -890,7 +1015,7 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
   }
   // A view destroyed during the hold (its handle possibly reused for another image,
   // e.g. a glyph or UI texture) must not be bound: the held draw is dropped instead.
-  if (view_image_id(saved.tex) != saved.tex_id || !saved.tex_id ||
+  if ((!vt_mask_view(saved.tex) && (view_image_id(saved.tex) != saved.tex_id || !saved.tex_id)) ||
       ((saved.rec.kind == 1 || saved.rec.kind == 4) && (view_image_id(saved.cache) != saved.cache_id || !saved.cache_id))) {
     ++g_stale_views;
     return UINT32_MAX;
@@ -946,6 +1071,8 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                           nullptr, 2, ib);
     g_dummy_ready = true;
   }
+  if (g_vt_state == 0 && cfg_int("rt_vt_alpha_masks", 0)) g_vt_state = vt_masks_load() ? 1 : -1;
+  if (g_vt_state == 1) { vt_masks_upload(cmd); g_vt_state = 2; }
   // Records: a 16-byte header (count) and the records, in this slot's region.
   // The scene slot is retired: the GPU finished every frame that read it
   // (rtscene.cpp). The update is still ordered after earlier reads.
@@ -1122,6 +1249,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
         (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5], g_stale_views.load());
+    if (g_vt_state != 0)
+      log("[vt alpha] last %llu frames: %.1f VT records per frame read an offline mask (rt_vt_alpha_masks %d, %zu masks, state %d)",
+          (unsigned long long)g_frames, double(g_vt_substituted) / g_frames, cfg_int("rt_vt_alpha_masks", 0), g_vt_masks.size(), g_vt_state);
+    g_vt_substituted = 0;
     if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
       log("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",

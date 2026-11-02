@@ -1,0 +1,19 @@
+{
+ "_rule": "Written and committed BEFORE the run. Relative change of the pre-post scene colour (5c3fdabc float mean / trace exposure) of shot-on vs the shot-off-a/b mean, judged against |off-b - off-a|; null = no change.",
+ "va1-camp-vt-masks-fg2": {
+  "shot-on": {
+   "predicted": null,
+   "source": "offline camp pack 013545-2 (tools/assets/vt_alpha_agree.py): masks equal the page-cache read bit for bit where the page is resident; the alpha test differs on 1.49% of triangle-weighted texel reads, 1.48% of them coarser pages (sign not derived: a coarser page blurs both ways)",
+   "written": "2026-11-02"
+  },
+  "coarser": {
+   "predicted": "the shadow-ray 'vt page from a coarser level' share drops by the masked records' share of VT candidates",
+   "source": "the masked records read kind 2 (tex) and never a page",
+   "written": "2026-11-02"
+  },
+  "cost": {
+   "predicted": null,
+   "reason": "a BC4 SampleLevel replaces an indirection load plus a BC3 cache sample: expected equal or cheaper within noise; not derived"
+  }
+ }
+}

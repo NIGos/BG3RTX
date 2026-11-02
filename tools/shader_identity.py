@@ -334,7 +334,16 @@ class Cache:
         (self.dir / "spv").mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(str(self.dir / "index.sqlite3"), timeout=120, check_same_thread=False,
                                   isolation_level=None)  # autocommit: no write lock held across a run (parallel runs hit "database is locked")
-        self.db.execute("PRAGMA journal_mode=WAL")
+        # Switching a fresh database to WAL ignores the busy timeout: two runs opening it at once got "database is
+        # locked" (shader_identity_test's in-flight lock case, 21 of 60 in a repro). Retry for up to the timeout.
+        for attempt in range(2400):
+            try:
+                self.db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError:
+                if attempt == 2399:
+                    raise
+                time.sleep(0.05)
         self.db.execute("CREATE TABLE IF NOT EXISTS compiled (key TEXT PRIMARY KEY, sha TEXT, size INTEGER, "
                         "request TEXT, entry TEXT, at REAL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS validated (sha TEXT, val TEXT, PRIMARY KEY (sha, val))")

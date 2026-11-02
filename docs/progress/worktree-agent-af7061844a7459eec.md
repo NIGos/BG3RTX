@@ -23,3 +23,13 @@
 - Not done (not small): classification at the any-hit LOD. The LOD is per ray, so a static state agrees only
   under a footprint gate (option A, exact) or a fixed fine-LOD policy for baked materials (option B, image
   change). Plan with costs, and the offline VT mask plan, in docs/P4_OMM.md section 11.
+
+## Offline VT alpha masks for camp grass (branch worktree-agent-af7061844a7459eec, READY_FOR_LIVE, 2026-11-02)
+- Key `rt_vt_alpha_masks` (live, off; GUI Experimental "Offline cutout masks"): matched VT records of the camp
+  grass shader 738494714d50b4c7 read offline BC4 masks (data/assetdb/vt_alpha, ADDED only) instead of the tile cache.
+- Masks: 7 textures, 1.65 MB, extracted with LSLib from the game's tile sets (tools/assets/vt_alpha_masks.py).
+- Offline check on the camp pack: bit-exact where the page is resident; alpha test agrees 98.51% (1.48% coarser pages).
+- Option A share: 1.15% of shadow-ray pairs at best, ~0% of GI rays at camp distances: not worth building.
+- shader_identity_test flake fixed (sqlite WAL switch ignored the busy timeout; retried). 97/97 CTests.
+- Live job tools/live_batches/vt_alpha (camp OFF/ON/OFF, 4.1 min); not run.
+
