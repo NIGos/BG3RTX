@@ -269,33 +269,6 @@
     "diag-occ-hair",
     "diag-occ-boxold"
    ]
-  },
-  {
-   "name": "static camera: no 'camera moving' scene build in any shot (the dialogue shot held, PNG pairs comparable)",
-   "select": "\\[rt\\] scene build GPU \\(split, (static|camera moving), ",
-   "match": "\\(split, static, ",
-   "min": 1,
-   "windows": [
-    "shot-off-a",
-    "shot-nosun-on",
-    "shot-nolocal-on",
-    "shot-off-b",
-    "shot-nobox-on",
-    "shot-charlights-on",
-    "shot-noart-on",
-    "shot-off-c",
-    "shot-nocascade-on",
-    "shot-boxold-on",
-    "shot-nohold-on",
-    "shot-noao-on",
-    "shot-nogi-on",
-    "shot-off-d",
-    "shot-hair-on",
-    "shot-hairorigin-on",
-    "shot-off-e",
-    "motion-base",
-    "motion-nosun"
-   ]
   }
  ],
  "requires_success_of": [

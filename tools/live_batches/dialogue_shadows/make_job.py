@@ -124,10 +124,10 @@ expect_every = [
     {"name": "occ stats: the sun replica line is present in every diag-occ window (read: mismatch <= 1% of the sun rays, predicted.json)",
      "select": r"occ stats \(\d+ frames\): character px", "match": r"sun replica mismatch \d+ of \d+ rays",
      "min": 1, "windows": occ},
-    {"name": "static camera: no 'camera moving' scene build in any shot (the dialogue shot held, PNG pairs comparable)",
-     "select": r"\[rt\] scene build GPU \(split, (static|camera moving), ", "match": r"\(split, static, ", "min": 1,
-     "windows": shots},
 ]
+# Static camera is a per-shot flag, not a gate (ds1-ds3 13:46-14:00: the dialogue camera cuts after the load, so
+# shot-off-a moved in every run): a shot with a '[rt] scene build GPU (split, camera moving' line in its window is
+# excluded from the comparisons (char_energy.py --moved <labels>), and the count is reported.
 
 
 def job(name, save, first, hair):

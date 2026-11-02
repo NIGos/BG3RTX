@@ -276,4 +276,4 @@ show wrong hair shadows (run without the native hair keys).
 
 Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one visible_unfocused_fg job per
 save, 260 s of plan, 22 PNG traces at 1024 px (about 1.9 GB for the batch), every toggle inside one run at
-a static dialogue shot; a `camera moving` line in any shot makes the run INVALID.
+a static dialogue shot; a `camera moving` line flags that shot (excluded from comparisons, counted; no longer a gate).

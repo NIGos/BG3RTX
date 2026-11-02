@@ -83,8 +83,14 @@ def main() -> int:
     a.add_argument("--root", type=Path, required=True, help="the captures directory holding the trace folders")
     a.add_argument("shots", nargs="+", metavar="LABEL=STAMP")
     a.add_argument("--json", type=Path, help="also write the numbers here")
+    a.add_argument("--moved", default="", help="comma-separated shot labels whose window logged a 'camera moving' "
+                   "scene build: excluded from every comparison (as ON and as OFF neighbour), counted")
     args = a.parse_args()
-    shots = [(lab, shot_energy(args.root / st)) for lab, st in (x.split("=", 1) for x in args.shots)]
+    moved = {m for m in args.moved.split(",") if m}
+    pairs = [x.split("=", 1) for x in args.shots]
+    print(f"camera moved in {sum(lab in moved for lab, _ in pairs)} of {len(pairs)} shots (excluded): "
+          f"{', '.join(lab for lab, _ in pairs if lab in moved) or 'none'}")
+    shots = [(lab, shot_energy(args.root / st)) for lab, st in pairs if lab not in moved]
     print(f"{'shot':22s} {'mask mean':>10s} {'frame':>10s} {'mask %':>7s} {'float frame':>11s}")
     for n, e in shots:
         print(f"{n:22s} {e['mask']:10.5g} {e['frame']:10.5g} {100 * e['share']:6.2f}% {e['float_frame']:11.5g}")
