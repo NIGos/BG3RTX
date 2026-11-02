@@ -171,7 +171,7 @@ const char* const kScenePhaseName[kScenePhases] = {"no capture yet", "prepass re
                                                    "hit material prepare", "BVH build", "alpha commit"};
 std::atomic<int> g_scene_phase{0};
 std::atomic<uint64_t> g_scene_phase_frame{0};
-struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; uint64_t at[kScenePhases] = {}; };
+struct WaitStats { uint64_t calls = 0, waited = 0, got = 0, timeouts = 0, skipped = 0; double ms = 0, ms_max = 0; uint64_t at[kScenePhases] = {}, traced = 0; };
 void scene_phase(int p) { g_scene_phase.store(p, std::memory_order_relaxed); g_scene_phase_frame.store(frame_index(), std::memory_order_relaxed); }
 WaitStats g_wait;
 uint32_t g_wait_misses = 0;   // consecutive timeouts: stop waiting after a few (no capture this frame)
@@ -1339,8 +1339,14 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
     if (g_wait_misses >= 8 && now % 64 != 0) {
       ++g_wait.skipped;   // no capture lately (menus, loading): probe once every 64 frames
     } else {
+      // A frame the tracer records (a PNG/dump "trace", tests only) records every pass through the tracer:
+      // its scene commits 13-16 ms after the lighting starts (su1 23:48: both trace frames, the only
+      // in-plan waits past 12 ms). It waits up to 4x the cap, so the traced image shows its own frame.
+      const bool traced = trace_recording();
+      g_wait.traced += traced;
+      const int cap = traced ? 4 * (ms > 0 ? ms : 1) : (ms > 0 ? ms : 1);
       const auto t0 = std::chrono::steady_clock::now();
-      const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(ms > 0 ? ms : 1), current);
+      const bool ok = g_scene_cv.wait_for(lock, std::chrono::milliseconds(cap), current);
       const double dt = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
       ++g_wait.waited;
       g_wait.ms += dt;
@@ -1360,6 +1366,8 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
         (unsigned long long)g_wait.timeouts, (unsigned long long)g_wait.skipped,
         g_wait.waited ? g_wait.ms / double(g_wait.waited) : 0.0, g_wait.ms_max);
+    if (g_wait.traced) log("[rt] scene wait: %llu traced frame(s) in the last %llu waited up to %d ms (4x rt_scene_wait_ms)",
+                           (unsigned long long)g_wait.traced, (unsigned long long)g_wait.calls, 4 * ms);
     if (g_wait.timeouts) {
       std::string at;
       for (int i = 0; i < kScenePhases; ++i) { char b[64]; snprintf(b, sizeof b, "%s%s %llu", i ? ", " : "", kScenePhaseName[i], (unsigned long long)g_wait.at[i]); at += b; }
