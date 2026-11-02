@@ -823,9 +823,15 @@ while ((Get-Date) -lt $deadline) {
   # for 30 s). Seen in background runs, mostly with no foreground window
   # (display off or session locked). End the run early instead of waiting
   # for the timeout, and log the session state for diagnosis.
+  # Not a stall: the render thread blocked on a first-time shader compile ("[shaders] ... compiled in N ms" inside
+  # the silent window; ds1-dialogue1 2026-11-02 10:03: new hair variants, 7-17 s each, 53 s without a present, then
+  # frames again). The job timeout still bounds it.
   if ((Test-Path $log) -and ((Get-Date) - $start).TotalSeconds -gt 60) {
-    $w = @(Get-Content $log -Tail 30 | Select-String '\[watch\] presents (\d+)' | Select-Object -Last 6)
-    if ($w.Count -ge 6 -and -not ($w | Where-Object { [int]$_.Matches[0].Groups[1].Value -gt 0 })) {
+    $stallTail = @(Get-Content $log -Tail 30)
+    $w = @($stallTail | Select-String '\[watch\] presents (\d+)' | Select-Object -Last 6)
+    $compiling = $w.Count -ge 6 -and [bool](@($stallTail[($w[0].LineNumber - 1)..($stallTail.Count - 1)]) -match '\[shaders\] .* compiled in \d+ ms')
+    if ($compiling -and -not $stallCompileNoted) { $stallCompileNoted = $true; Write-Host "no presents for 30 s while shaders compile: not a stall (timeout still applies)" }
+    if ($w.Count -ge 6 -and -not $compiling -and -not ($w | Where-Object { [int]$_.Matches[0].Groups[1].Value -gt 0 })) {
       $fgw = [BG3RTX.Win]::GetForegroundWindow()
       $locked = [bool](Get-Process LogonUI -ErrorAction SilentlyContinue)
       Write-Host "STALL: no presents for 30 s (foreground window $fgw, LogonUI running: $locked)"

@@ -22,3 +22,9 @@
   foliage-only key exists): PNG pairs 0.5 s apart with RT on and the game's map only, rt_debug=2 view.
   Jobs now visible_unfocused_fg (user at the PC), stats every 60 frames, 1024 px: 260 s of plan, 22 traces,
   about 19 min and 1.9 GB. lean_dryrun.ps1 gained `-Unfocused` (foreground path unchanged, box_lights passes).
+- ds1 run 1 (dsh-20261102b, 10:03, unfocused) "stalled" before the plan: first-time native-hair shader compiles on
+  the render thread (up to 17 s each), 53 s without a present; the 30 s stall rule closed the game as frames
+  resumed. Not focus or dialogue. Fix: auto-run.ps1 does not call it a stall while `[shaders] ... compiled in`
+  lines appear; plan gains diag-warm-a/b (toggle-only variants first); jobs foreground again (user: PC free), 300 s.
+- Separate gap: `[water] reflections skipped: no variant for rt_native_scalp, rt_native_hair,
+  rt_hair_physical_origin` (water reflections are off whenever native hair is on).
