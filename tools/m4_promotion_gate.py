@@ -17,7 +17,8 @@ phase: the previous line of the same kind is after the phase's `[cfg] settings r
 is before the next phase starts. Nothing is tuned: the data says which lines count.
 
 Gates:
-- Energy: scene colour before post (dump of pass 5c3fdabc, slot 0, in each trace's dumps.json; the
+- Energy: scene colour before post (dump of pass 5c3fdabc, slot 0, in each trace's dumps.json, or the job's
+  "energy_fs": "water-compose" for water jobs, 5c3fdabc plus the in-frame compose delta (WATER_COMPOSE); the
   float mean, not a PNG preview and not the bloom chain: TRACK_D_LOCAL_LIGHTS 9.11). Each ON shot is
   compared with the mean of the nearest OFF shot before and after it (shot-off-* family; S6 also the
   shot-em-off-* family for shot-on). d = (ON - OFF mean) / OFF mean. Two-sided, against a PREDICTED
@@ -66,6 +67,70 @@ except ImportError:   # run as a script from tools/
 
 REPO = Path(__file__).resolve().parents[1]
 SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents and post (RR's input)
+# The first pass after the forward water / transparents pass on the same HDR scene image (frame.json order:
+# 5c3fdabc, the water pass, a copy, then this pass): the first dump that holds the water compose's writes, before
+# post. It sees the compose (m5p1 213849 water sun shadows -10% here, 5c3fdabc unchanged), but its mean also carries
+# the water FS's sun glints (below): prefer WATER_COMPOSE for water jobs. Jobs select a dump with "energy_fs".
+WATER_AFTER_FS = "423e0548"
+# "energy_fs": "water-compose": the scene colour before the water (SCENE_FS) plus what the water compose changed
+# IN THE SAME FRAME: for each pass with an audited water FS (common/water_policy.h), the mean of the next dump of the
+# scene image (after core on_pass_end's compose) minus the water pass's own dump (taken before it: layer/cmd.cpp
+# end_pass dumps, then calls the core). The water FS's own output cancels: its sun glints (dump max 640..1584 on S8,
+# one 1000 px moves the frame mean ~0.8%) made the plain after-water mean swing 2.5% between keys that change no
+# water pixel (m5p1 off -> rt_water_reflections measured: +2.5%), and m5w3's "compose -2%" was that noise.
+WATER_COMPOSE = "water-compose"
+_WATER_FS = None
+
+
+def water_fs_prefixes():
+    """The audited water FS (first 8 hex digits) from common/water_policy.h."""
+    global _WATER_FS
+    if _WATER_FS is None:
+        src = (REPO / "common" / "water_policy.h").read_text(encoding="utf-8")
+        _WATER_FS = {m.group(1) for m in re.finditer(r"\{0x([0-9a-f]{8})[0-9a-f]{8}ull, 0x[0-9a-f]{16}ull, \"FLUID", src)}
+    return _WATER_FS
+
+
+def water_compose_colour(cap: Path, dumps: dict):
+    """(luminance of SCENE_FS + sum over water passes of (next scene-image dump - the water pass's dump), nonfinite of
+    those dumps) or (reason, path). Pass order from frame.json (pass, draws, end with its dump ids)."""
+    lum = lambda d: 0.2126 * d["mean"][0] + 0.7152 * d["mean"][1] + 0.0722 * d["mean"][2]  # noqa: E731
+    scene = [(int(k[1:]), d) for k, d in dumps.items()
+             if str(d.get("pass_fs", "")).startswith(SCENE_FS) and d.get("slot") == 0 and d.get("mean")]
+    fj = cap / "frame.json"
+    if not scene or not fj.exists():
+        return ("no scene-colour dump or frame.json", str(cap))
+    s = max(scene, key=lambda c: c[0])[1]
+    img = s["image"]
+    water = water_fs_prefixes()
+    frame = json.loads(fj.read_text(encoding="utf-8"))
+    ends = []   # (water pass?, the scene image's slot-0 dump of the pass or None), in order
+    fs_seen = set()
+    for sub in frame.get("submits", []):
+        for c in sub.get("cmds", []):
+            for e in c.get("events", []):
+                op = e.get("op")
+                if op == "pass":
+                    fs_seen = set()
+                elif op == "draw" and e.get("fs"):
+                    fs_seen.add(e["fs"][:8])
+                elif op == "end":
+                    hit = [dumps[k] for k in e.get("dumps", []) if k in dumps and dumps[k].get("image") == img and
+                           dumps[k].get("slot") == 0 and dumps[k].get("mean")]
+                    ends.append((bool(fs_seen & water), hit[0] if hit else None))
+    delta, nf, n = 0.0, int(s.get("nonfinite", 0) or 0), 0
+    for i, (is_w, d) in enumerate(ends):
+        if not is_w or d is None:
+            continue
+        nxt = next((x for x in ends[i + 1:] if x[1] is not None), None)
+        if nxt is None or nxt[0]:
+            return ("water pass without a non-water scene dump after it", str(cap))
+        delta += lum(nxt[1]) - lum(d)
+        nf += int(nxt[1].get("nonfinite", 0) or 0)
+        n += 1
+    if not n:
+        return ("no water pass on the scene image", str(cap))
+    return (lum(s) + delta, nf)
 ALPHA_FW = 0.05         # scripts/qa/thresholds.py: 5% family-wise false alarm, Bonferroni per family
 
 TS = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3})\s+(.*)$")
@@ -272,6 +337,9 @@ class Run:
         if self.drift is None and plan and not plan_matches(self.plan, sets):
             self.drift = "PLAN DRIFT: the runner's window keys differ from the given plan"
         self.labels = [p["label"] for p in self.plan]
+        # The energy dump: the job's "energy_fs" (a pass FS prefix) or SCENE_FS. Water jobs need the scene colour
+        # AFTER the forward water pass (WATER_AFTER_FS): SCENE_FS runs before it and does not see the water compose.
+        self.energy_fs = str(self.job.get("energy_fs") or SCENE_FS)
         if len(starts) != len(self.plan):
             print(f"warning: {log.name}: {len(starts)} of {len(self.plan)} phases started (incomplete run?)")
         raw = []
@@ -342,9 +410,10 @@ class Run:
                 best = (df, v)
         return best[1] if best and best[1] > 0 else None
 
-    def scene_colour(self, label, fs=SCENE_FS):
+    def scene_colour(self, label, fs=None):
         """(luminance, nonfinite px of that same dump, pre-exposure s1b13[0] or None) of the phase's trace,
-        or (reason, path), or None."""
+        or (reason, path), or None. fs: the dump's pass FS prefix (default the run's energy_fs)."""
+        fs = fs or self.energy_fs
         p = self.phase_of(label)
         if not p:
             return None
@@ -360,6 +429,13 @@ class Run:
                     if not f.exists():
                         return ("missing", str(f))
                     dumps = json.loads(f.read_text(encoding="utf-8"))
+                    if fs == WATER_COMPOSE:
+                        v = water_compose_colour(cap, dumps)
+                        if isinstance(v[0], str):
+                            return v
+                        other_nf = {f"{x.get('pass_fs', '?')[:8]} {x.get('fmt', '?')}": int(x.get("nonfinite", 0) or 0)
+                                    for x in dumps.values() if int(x.get("nonfinite", 0) or 0)}
+                        return (v[0], v[1], self.pre_exposure(frame), other_nf)
                     cand = [(int(k[1:]), d) for k, d in dumps.items()
                             if str(d.get("pass_fs", "")).startswith(fs) and d.get("slot") == 0 and d.get("mean")]
                     if not cand:
@@ -486,10 +562,11 @@ def off_pairs(run):
 _POOL = {}
 
 
-def pooled_noise(save, queue_logs: Path | None, own_log: str = "", own_pairs=(), captures_root=None):
+def pooled_noise(save, queue_logs: Path | None, own_log: str = "", own_pairs=(), captures_root=None, fs=SCENE_FS):
     """(sigma, dof, runs) of the relative shot noise: OFF-OFF pairs of every lean run on this save in the
-    queue logs (runs with plan drift excluded), plus the evaluated run's own pairs."""
-    key = (save, str(queue_logs))
+    queue logs (runs with plan drift excluded), plus the evaluated run's own pairs. Every run's pairs are read
+    from the same dump `fs` as the evaluated run (the water-after buffer is noisier: its waves animate)."""
+    key = (save, str(queue_logs), fs)
     if key not in _POOL:
         pairs = {}
         if queue_logs and queue_logs.exists() and save not in (None, "?"):
@@ -511,6 +588,7 @@ def pooled_noise(save, queue_logs: Path | None, own_log: str = "", own_pairs=(),
                     continue
                 prog.tick()
                 if not r.failed_drift():
+                    r.energy_fs = fs
                     p = off_pairs(r)
                     if p:
                         pairs[str(log.resolve())] = p
@@ -560,7 +638,8 @@ def energy(run, queue_logs: Path | None = None, pool="save"):
         n = len(own)
         sigma, dof, nruns = (math.sqrt(sum(d * d for d in own) / (2 * n)), n, 1) if n else (None, 0, 0)
     else:
-        sigma, dof, nruns = pooled_noise(run.job.get("save"), queue_logs, str(run.log.resolve()), own, run.captures_root)
+        sigma, dof, nruns = pooled_noise(run.job.get("save"), queue_logs, str(run.log.resolve()), own, run.captures_root,
+                                         run.energy_fs)
     m = max(len(trip), 1)
     band = t_quantile(1 - ALPHA_FW / (2 * m), dof) * sigma * math.sqrt(1.5) if sigma is not None and dof >= 1 else None
     pred, committed = predictions(run)
@@ -642,7 +721,7 @@ def report(run: Run, queue_logs: Path | None = None, pool="save"):
         return ["plan drift"]
     print(f"phases {len(run.phases)}/{len(run.plan)}: " + ", ".join(p[0] for p in run.phases))
 
-    print("\n### Energy: scene colour before post (5c3fdabc float mean luminance) / pre-exposure s1b13[0], two-sided against the prediction")
+    print(f"\n### Energy: scene colour before post ({run.energy_fs} float mean luminance) / pre-exposure s1b13[0], two-sided against the prediction")
     rows = energy(run, queue_logs, pool)
     if rows and rows[0].get("sigma") is not None:
         r0 = next((r for r in rows if "band" in r), rows[0])
@@ -769,6 +848,8 @@ def main(argv=None):
     ap.add_argument("--captures-root", type=Path, default=None)
     ap.add_argument("--plan", type=Path, default=None, help="plan json (default: from the job of the log's name)")
     ap.add_argument("--pool", choices=("save", "run"), default="save", help="OFF noise from every lean run of the save, or this run only")
+    ap.add_argument("--energy-fs", default=None, help="energy dump pass FS prefix instead of the job's energy_fs "
+                    f"(e.g. {WATER_AFTER_FS}: re-read an old water run after its compose)")
     a = ap.parse_args(argv)
     logs = list(a.logs)
     if not logs:
@@ -783,7 +864,10 @@ def main(argv=None):
         return 1
     failed = 0
     for log in logs:
-        failed += bool(report(Run(log, a.captures_root, a.plan), a.queue_logs, a.pool))
+        run = Run(log, a.captures_root, a.plan)
+        if a.energy_fs:
+            run.energy_fs = a.energy_fs
+        failed += bool(report(run, a.queue_logs, a.pool))
     return 1 if failed else 0
 
 

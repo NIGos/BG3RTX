@@ -83,6 +83,13 @@
 // / Vg, the sun light the game's shadow removed, and Vg (the other FS Dg = 0, Vg = 1). The traced sun ray
 // replaces Vg: lit gives C + Dg (kFlagGsh), occluded R (as M5.4: the FS at sun visibility 0), unknown C.
 // rt_debug 26: a restored record is cyan. Statistics: words 44..53 of the slot (kCsGsh*).
+//
+// rt_water_rf_edge (WATER_RF_EDGE=1 on top of any variant, core/water.cpp): the screen-resolved reflection
+// replaces the probe by a weight w instead of all or nothing: C' = C + w (A L - B), w = the screen-edge fade
+// of D-RF (gi/rt_reflections.hlsl, rf_edge of the border in uv). Without it a pixel switches between the
+// traced image and the probe the frame its hit leaves the screen; under a camera turn that boundary moves
+// every frame (the hidden / same-surface test does not move under a pure turn, the screen border does).
+// Both terms carry the same env-BRDF weight E, so w blends two estimates of one reflection (no double count).
 #include "../gi/gi_common.hlsli"
 #include "rt_common.hlsli"
 #ifdef WATER_LS
@@ -336,6 +343,12 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   uint tier = 0u;
   bool skin = false;
   float3 L = 0.0.xxx;
+#ifdef WATER_RF_EDGE
+  float rf_w = 1.0;   // the screen-edge fade of the traced term (D-RF's rf_edge)
+#define WATER_RF_TERM rf_w * (A * L - B)
+#else
+#define WATER_RF_TERM A * L - B
+#endif
   if (trace) {
     const float3 R = reflect(-V, N);
     const float pa = pixel_angle(uv);
@@ -368,6 +381,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
             if (depth_same_surface(qp, qd, sd, ngq, false, 0.0, 1.0) && dot(ngq, R) < 0.0 && !skin) {
               L = rq.rgb;
               tier = 1u;
+#ifdef WATER_RF_EDGE
+              const float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
+              rf_w = saturate(min(e.x, e.y));
+#endif
             }
           }
         }
@@ -582,18 +599,18 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   }
   const bool rr_hit = rtier == 1u && all(isfinite(Lc));
   const float3 Rr = rr_hit ? Rw * (max(Lc, 0.0) - Refr) : 0.0.xxx;   // (1 - a) (Copy(hit) - Refr)
-  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls + Rr;
+  const float3 Cu = Cs + (composed ? WATER_RF_TERM : 0.0.xxx) - Rls + Rr;
   const bool chg = composed || sunchg || lsocc || rr_hit;
 #else
-  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx) - Rls;
+  const float3 Cu = Cs + (composed ? WATER_RF_TERM : 0.0.xxx) - Rls;
   const bool chg = composed || sunchg || lsocc;
 #endif
 #else
-  const float3 Cu = Cs + (composed ? A * L - B : 0.0.xxx);
+  const float3 Cu = Cs + (composed ? WATER_RF_TERM : 0.0.xxx);
   const bool chg = composed || sunchg;
 #endif
 #else
-  const float3 Cu = Ct + A * L - B;
+  const float3 Cu = Ct + WATER_RF_TERM;
   const bool chg = composed;
 #endif
   // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
@@ -613,7 +630,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
   cstat(14, trace && tier == 2u && skin);
 #ifdef WATER_SHADOWS
-  cstat(15, composed && any(Ct + A * L - B < 0.0));
+  cstat(15, composed && any(Ct + WATER_RF_TERM < 0.0));
 #else
   cstat(15, composed && any(Cu < 0.0));
 #endif

@@ -155,6 +155,19 @@ def transient(sequence, valid, threshold):
     return flags, events
 
 
+def coverage_mask(rgb8, shape):
+    """Traced-water pixels of an rt_debug 21 view (shaders/rt/water_view.hlsl: exact codes, green = water in
+    front of the bed, blue = water over an empty G-buffer pixel), resized (nearest) to `shape` (h, w).
+
+    A code pixel has its other two channels at 0: at most one UNORM8 step (the PNG's rounding) is allowed, and the
+    code channel at least half the range (1.0 written; a darker pixel is the game's colour, not a code).
+    """
+    a = np.asarray(Image.fromarray(np.asarray(rgb8, dtype='u1')).resize((shape[1], shape[0]),
+                                                                           Image.Resampling.NEAREST)).astype('i4')
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    return ((g >= 128) & (r <= 1) & (b <= 1)) | ((b >= 128) & (r <= 1) & (g <= 1))
+
+
 def calibration_noise(sequence, valid, quantum):
     """Observed static change at each world sample, never a scene-wide maximum."""
     good = valid[1:] & valid[:-1]
@@ -356,7 +369,14 @@ def main():
     ap.add_argument('bursts',nargs='*',type=Path)
     ap.add_argument('--log',type=Path,help='Optional same-run log; also resolves exact burst paths when none are supplied')
     ap.add_argument('--out',required=True,type=Path)
+    ap.add_argument('--mask',action='append',default=[],
+                    help='rt_debug 21 water-coverage PNG (coverage_mask), PATH for every burst or SERIAL=PATH for one; '
+                         'applied in the burst anchor\'s pixels (frame 7): exact for a static burst at the mask\'s pose')
     args = ap.parse_args()
+    masks_by_serial = {}
+    for item in args.mask:
+        serial, _, path = item.rpartition('=') if '=' in item else ('', '', item)
+        masks_by_serial[serial] = np.asarray(Image.open(path).convert('RGB'))
     log = args.log.read_text(errors='replace') if args.log else ''
     if not args.bursts and args.log:
         args.bursts = [Path(m[1].strip()) for line in log.splitlines()
@@ -399,6 +419,14 @@ def main():
                     'threshold_method':'same-world static repeat maximum plus native storage quantum',
                     'threshold_range':([float(local_bound[usable].min()),float(local_bound[usable].max())]
                                        if usable.any() else None)}
+            cover = masks_by_serial.get(str(report['serial']), masks_by_serial.get(''))
+            if cover is not None:
+                water = coverage_mask(cover, valid.shape[1:])
+                cal = valid & (calibrated & thresholds['luma'][1][iy,ix] & water)[None]
+                frames_in = int((masks['luma'] & water[None]).sum())
+                report['water_mask'] = {'pixels':int(water.sum()), 'calibrated_pixel_frames':int(cal.sum()),
+                                        'luma_pixel_frames':frames_in,
+                                        'luma_rate':frames_in/int(cal.sum()) if cal.any() else None}
             report['attribution_pixel_frames'] = {
                 key:int((masks['luma'] & masks[key]).sum()) for key in ('sun_mask','local_mask','gi_luma')}
             flagged = np.any(np.stack(list(masks.values())),axis=0)

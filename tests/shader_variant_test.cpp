@@ -79,6 +79,16 @@ int main(int argc, char** argv) {
   CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
         "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
+  // rt_water_rf_edge: every compose request the core makes has its WATER_RF_EDGE twin in kFixedRequests.
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
+  for (const char* r : kFixedRequests) {
+    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE")) continue;
+    const std::string e = water_rf_edge_request(r, true);
+    bool listed = false;
+    for (const char* q : kFixedRequests) listed = listed || e == q;
+    CHECK(listed);
+  }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
     want.insert(water_request(b, true));

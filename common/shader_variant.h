@@ -92,7 +92,23 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1",
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
-                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1"};
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1",
+                                                 // rt_water_rf_edge (core/water.cpp water_rf_edge_request): each compose
+                                                 // request above with the screen-edge fade of the traced term
+                                                 "rt/water_compose.hlsl?WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_RF_EDGE=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_RF_EDGE=1"};
+
+// rt_water_rf_edge: the compose request `req` with the screen-edge fade (WATER_RF_EDGE) when `on`.
+inline std::string water_rf_edge_request(const char* req, bool on) {
+  std::string out = req;
+  if (on) out += out.find('?') == std::string::npos ? "?WATER_RF_EDGE=1" : ";WATER_RF_EDGE=1";
+  return out;
+}
 
 // rt_cascade_casters for the water passes (core/water.cpp): the TLAS holds the cascade's casters
 // (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the
