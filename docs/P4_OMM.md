@@ -508,6 +508,20 @@ omm_qual batch. Prerequisite either way: 11.1 A or B for the LOD domain.
   triangles; the 179 grass instances are instances of few meshes, so micromaps shared per mesh (index
   buffer per triangle) are far smaller. Level 4 is the first candidate.
 
+**11.2d All camp VT alpha shaders masked (2026-11-02, set `_camp2`).** The camp pack has 17 VT alpha shaders
+(2.09M triangles); all use the same recipe (albedo layer, column 0; cuts 0.2 to 0.5), so the same pipeline
+covers them. The 16 besides the grass: 67 (tile set, texture) records, 65 masks, 79.2 MB (a few large
+textures dominate: one 4096 x 4096 mask is 10.7 MB for 1,038 triangles). Two textures smaller than one tile
+cannot be extracted by LSLib (3c090656, 12,938 triangles of 84d5df19; f6c74ea5, the 154 of e3b1d7c2): they keep
+the page cache. Added as data/assetdb/vt_alpha/vt_alpha_index_camp2.txt + manifest + 64 new masks (one texture
+is shared with the grass set; the layer reads every vt_alpha_index*.txt, first entry wins). Agreement on the camp
+pack, triangle-weighted: alpha test 99.05% (bit-exact 93.60%), differs 0.95% (0.94% on coarser pages); per
+shader from 92.99% (e62cdef4, 581 triangles) to 100.00% (4bed5db2); b2d72ea7 99.05%, 0d91554d 97.18%, f9ab595d
+99.26%. Masked share of the camp VT triangles: 2.08M of 2.09M (99.4%). Candidate share, estimated from the om3
+counters (the vt bucket split by triangles, the tex bucket mostly the grass masks: plain textures are about 26k
+triangles at camp): about 97% of shadow-ray and 98% of visibility-ray alpha candidates would read a mask, up from
+18% / 37%. Total masks 80.9 MB (VRAM when the key is on).
+
 **11.2c Bake for VT foliage (not implemented yet).** Camp grass is 179 per-draw BLAS (wind VS, refit every
 frame), 0 pool meshes: the static-variant path (bvhsplit native_omm_variant, clone TLAS, guard) does not
 reach it. Needed: (1) a subdivision-level producer entry in omm_bake_plain.hlsl reading the immutable mask

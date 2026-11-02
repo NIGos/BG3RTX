@@ -263,14 +263,26 @@ bool vt_masks_load() {
   std::string dir = assetdb_file();
   const size_t cut = dir.find_last_of("\\/");
   dir = (cut == std::string::npos ? std::string(".") : dir.substr(0, cut)) + "\\vt_alpha";
-  std::ifstream index(dir + "\\vt_alpha_index.txt");
-  if (!index) { log("[vt alpha] no index in %s: masks off", dir.c_str()); return false; }
+  // Every vt_alpha_index*.txt (sets are only ever added, data/assetdb is shared): one entry per (tile set, p0).
+  std::vector<std::string> lines;
+  WIN32_FIND_DATAA fd{};
+  HANDLE find = FindFirstFileA((dir + "\\vt_alpha_index*.txt").c_str(), &fd);
+  if (find != INVALID_HANDLE_VALUE) {
+    do {
+      std::ifstream index(dir + "\\" + fd.cFileName);
+      for (std::string l; std::getline(index, l);) lines.push_back(l);
+    } while (FindNextFileA(find, &fd));
+    FindClose(find);
+  }
+  if (lines.empty()) { log("[vt alpha] no index in %s: masks off", dir.c_str()); return false; }
   DeviceData* dd = g_dd;
   std::vector<uint8_t> staging;
-  std::string line;
-  while (std::getline(index, line)) {
+  for (const std::string& line : lines) {
     bg3::vt_alpha::IndexEntry e;
     if (!bg3::vt_alpha::parse_index_line(line, &e)) continue;
+    bool dup = false;
+    for (const VtMask& o : g_vt_masks) dup |= o.entry.tileset == e.tileset && std::memcmp(o.entry.p0, e.p0, 16) == 0;
+    if (dup) continue;
     std::ifstream f(dir + "\\" + e.file, std::ios::binary);
     std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     bg3::vt_alpha::Mask mask;
