@@ -1,7 +1,45 @@
 {
- "_rule": "Committed BEFORE the run (tools/m4_promotion_gate.py; a prediction committed after the run started does not pass). Relative change of the scene colour before post (5c3fdabc float mean) of each emission-ON shot against its em-off neighbours, bundle ON (+ Bounce) in both. The m4p5 diagnostic shots (shot-gi-*, shot-vis-*, shot-add-*) keep no prediction (null: within the band), as in its README.",
+ "_rule": "Committed BEFORE the rerun (after 385efd1: the hit-material capture skipped every traced frame, so every earlier traced energy measured the features OFF and the earlier nulls are void). Relative change of the scene colour before post (5c3fdabc float mean) against the OFF neighbours of the same view. Derivation (2026-11-02, offline): S6 GI share of the scene 18.4% (m4p5 021511 gi_debug=2 OFF shots, a base-path view: 4 x GI added 0.0504 vs scene 0.0685); gi_hit_direct raises the GI term +2.0% albedo-weighted (+1.59% raw giRaw, tools/gi_hit_invariant on the S6 pack 021627) -> +0.37%; emission at GI hidden hits adds 7.9x the direct term per frame (021511: hit emission 358397 / 300 frames vs GI hit direct 18139 / 120 frames, the same luminance-x-weight units) -> +2.9%; gi_hit_sun adds 1.17 vs 18126 at S6 (underground) -> 0. S8 pack 142819: gi_hit_direct +0.06% of the GI term -> null; its sun 26.5x the direct (m4p4 012459 counters) -> at most +0.3% at a GI share <= 20% -> null (band 1.85%). Camp, inn: no pack -> null (no derivation).",
  "m4p5-s6-gidiag": {
-  "shot-em-on-1@em-off": {"predicted": 0.014, "basis": "not derivable offline (no S6 pack with the emission inputs): the measured m4p3 012015 shot-on vs its own emission-off pair (+1.40%), taken as the expected value; the earlier runs with rf_hit_shade on gave +0.16% (112657) and -1.98% (161852) with 0.8% OFF spread (lava)"},
-  "shot-em-on-2@em-off": {"predicted": 0.014, "basis": "as shot-em-on-1"}
+  "shot-gi-1": {
+   "predicted": 0.0037,
+   "basis": "the S6 pack's own pass (base variant): 18.4% x 2.0%"
+  },
+  "shot-gi-2": {
+   "predicted": 0.0037,
+   "basis": "the S6 pack's own pass (base variant): 18.4% x 2.0%"
+  },
+  "shot-gi-3": {
+   "predicted": 0.0037,
+   "basis": "the S6 pack's own pass (base variant): 18.4% x 2.0%"
+  },
+  "shot-gi-4": {
+   "predicted": 0.0037,
+   "basis": "the S6 pack's own pass (base variant): 18.4% x 2.0%"
+  },
+  "shot-vis-gi-1": {
+   "predicted": null,
+   "basis": "giRaw.a bit-equal on the pack (visibility unchanged)"
+  },
+  "shot-vis-gi-2": {
+   "predicted": null,
+   "basis": "giRaw.a bit-equal on the pack (visibility unchanged)"
+  },
+  "shot-add-gi-1": {
+   "predicted": 0.02,
+   "basis": "the GI added diffuse alone: +2.0% albedo-weighted on the pack"
+  },
+  "shot-add-gi-2": {
+   "predicted": 0.02,
+   "basis": "the GI added diffuse alone: +2.0% albedo-weighted on the pack"
+  },
+  "shot-em-on-1@em-off": {
+   "predicted": 0.029,
+   "basis": "emission alone (7.9 x the direct term, 021511 counters)"
+  },
+  "shot-em-on-2@em-off": {
+   "predicted": 0.029,
+   "basis": "emission alone (7.9 x the direct term, 021511 counters)"
+  }
  }
 }
