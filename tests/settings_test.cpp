@@ -767,6 +767,97 @@ static void test_ultra_water() {
   CHECK(iw < first_exp);
 }
 
+static void test_product_policy() {
+  const auto& emission = *find_knob("exp_hit_emission");
+  Map legacy = code_defaults();
+  apply_layer(legacy, parse_ini("preset=ultra\ndev=0\nrt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n"));
+  CHECK(knob_value(emission, legacy) == 2);
+  CHECK(!choice_visible(emission, 2, false));
+  CHECK(choice_visible(emission, 2, true));
+  auto presented = presentation_values(legacy, false);
+  CHECK(presented[knob_index(emission.id)] == -1);
+  Map saved = parse_ini(render_user_ini("rt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n", kUltra, presented));
+  CHECK_EQ(get(saved, "rt_hit_emission"), "2");
+  CHECK_EQ(get(saved, "unknown_future_key"), "kept");
+  Map reloaded = code_defaults(); apply_layer(reloaded, saved);
+  CHECK(knob_value(emission, reloaded) == 2);
+  CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 3), "experimental");
+  CHECK(!choice_available(*find_knob("exp_hidden_surface"), 3, false, false, ~0u));
+  CHECK(choice_available(*find_knob("exp_hidden_surface"), 3, false, true, ~0u));
+  CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 2), "qualified");
+  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "awaiting_qualification");
+  CHECK_EQ(find_knob("exp_water")->category, "Surfaces");
+  CHECK_EQ(find_knob("reflex")->category, "Performance");
+  CHECK_EQ(find_knob("exp_water")->cost.status, "Estimate");
+  CHECK_EQ(find_knob("exp_omm")->cost.gpu, "Unknown");
+  CHECK_EQ(find_knob("exp_water")->choices[3].label, "Reflections + shadows + refraction");
+
+  auto edited = preset_values(kMedium);
+  edited[knob_index("rr")] = 0;
+  edited[knob_index("reflex")] = 0;
+  const auto original = edited;
+  auto lowered = preview_dependencies(edited, code_defaults(), ~0u, false);
+  CHECK(edited == original); // Preview has no side effects.
+  CHECK(lowered.values[knob_index("local_shadows")] == 0);
+  CHECK(lowered.values[knob_index("frame_generation")] == 0);
+  auto enabled = preview_dependencies(edited, code_defaults(), ~0u, true);
+  CHECK(enabled.blocked.empty());
+  CHECK(enabled.values[knob_index("rr")] == 1);
+  CHECK(enabled.values[knob_index("reflex")] == 1);
+  CHECK(enabled.changed.size() == 2);
+  CHECK(enabled.required_keys.empty());
+  edited[knob_index("local_shadows")] = 2;
+  CHECK(unmet_need(*find_knob("local_shadows"), 2, edited).empty()); // Full does not require RR.
+  edited[knob_index("rr")] = -1;
+  edited[knob_index("local_shadows")] = 1;
+  CHECK(!preview_dependencies(edited, code_defaults(), ~0u, true).blocked.empty());
+  CHECK(!preview_dependencies(original, code_defaults(), kCapRayQuery, true).blocked.empty());
+
+  // Startup preview lists raw adjustments, but does not duplicate geometry's own keys.
+  auto water = preset_values(kHigh);
+  water[knob_index("exp_water")] = 3;
+  Map startup = code_defaults(); startup["rt"] = "0"; startup["sharc_device"] = "0";
+  auto preview = preview_dependencies(water, startup, ~0u, true);
+  CHECK(preview.required_keys.size() == 2);
+  CHECK_EQ(startup["rt"], "0");
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (unsigned caps : {0u, unsigned(kCapRayQuery), unsigned(kCapRayQuery | kCapDlss), ~0u}) {
+      auto values = preset_values_for(p, caps);
+      for (int i = 0; i < kKnobCount; ++i) {
+        CHECK(unmet_need(kKnobs[i], values[i], values).empty());
+        CHECK(choice_supported(kKnobs[i], values[i], caps));
+        if (kKnobs[i].kind == Kind::Choice)
+          CHECK_EQ(choice_maturity(kKnobs[i], values[i]), kKnobs[i].dev_only ? "developer" : "qualified");
+      }
+    }
+  }
+  auto chain = preset_values(kLow);
+  chain[knob_index("exp_gi_far")] = 1;
+  Map raw = code_defaults(); raw["gi_rt_fallback"] = "1";
+  auto transitive = preview_dependencies(chain, raw, ~0u, true);
+  CHECK(transitive.blocked.empty());
+  CHECK(transitive.values[knob_index("exp_hidden_surface")] == 2);
+  CHECK(transitive.values[knob_index("rt_geometry")] == 2);
+  CHECK(transitive.values[knob_index("gi")] == 2);
+  CHECK(transitive.changed.size() == 3);
+  CHECK(transitive.required_keys.size() == 1);
+  CHECK_EQ(transitive.required_keys[0].first, "gi_rt_fallback");
+  CHECK_EQ(transitive.required_keys[0].second, "0");
+  CHECK_EQ(choice_maturity(emission, -1), "custom");
+  CHECK(!choice_visible(emission, -1, false));
+  CHECK(!choice_visible(emission, 99, true));
+  CHECK(!preview_dependencies({}, raw, ~0u, true).blocked.empty());
+  // Old partial water files migrate to a complete level; unmatched custom sliders survive saving.
+  Map old = code_defaults(); apply_layer(old, parse_ini("preset=high\nrt_water_refraction=1\ngi_strength=0.63\nls_strength=0.71\n"));
+  CHECK(knob_value(*find_knob("exp_water"), old) == 3);
+  auto custom = presentation_values(old, false);
+  CHECK(custom[knob_index("rt_intensity")] == -1);
+  auto retained = parse_ini(render_user_ini("gi_strength=0.63\nls_strength=0.71\n", kHigh, custom));
+  CHECK_EQ(get(retained, "gi_strength"), "0.63");
+  CHECK_EQ(get(retained, "ls_strength"), "0.71");
+  CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -774,6 +865,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_product_policy();
   test_parse();
   test_preset_expansion();
   test_layering();
