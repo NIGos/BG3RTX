@@ -51,11 +51,7 @@ def step(label, seconds, trace=False, **keys):
 
 SHOT = 8   # one PNG trace at 5 s; 8 s holds 3-4 lines of 60 frames at the unfocused 30 fps floor
 plan = [
-    # Variant warm-up: the hair startup makes every pipeline a new variant; a first compile blocks the render thread
-    # 7-17 s (ds1 2026-11-02 10:03, 53 s without a present). Request the toggle-only variants (casters off, primary
-    # check, debug view, stats) here, before any judged window, so they come from the shader cache later.
-    step("diag-warm-a", 25, qa_exposure_hold="0", rt_cascade_casters="0", rt_stats="1", rt_primary_check="1", rt_debug="2"),
-    step("diag-warm-b", 15, qa_exposure_hold="0", rt_stats="1", rt_primary_check="1", ls_stats="1"),
+    # Shader variants: warmed by the ds0 job (below), which every ds job requires.
     step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles; the hold latches after it
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
@@ -174,6 +170,47 @@ def job(name, save, first, hair):
     return j
 
 
+# ---- ds0: shader warm-up job (no measurement) ----
+# Every key set the ds plan uses is a separate variant family (the hot keys pick the defines: RT_HAIR_PHYSICAL_ORIGIN
+# from rt_hair_physical_origin, RT_CASCADE_MASKS/RT_CASCADE_SUN from rt_cascade_casters, pan_primary from
+# rt_primary_check, the box pass from ls_box, ...). Their first compile blocks the render thread for 0.6-20 s each
+# (ds1 reruns 2026-11-02 10:03 and 10:19: 53 s and 2.5 min without a present). This job requests each family twice
+# (a family requested while the render thread was blocked on another is caught by the second pass); afterwards the
+# runtime cache (%LOCALAPPDATA%\BG3RTX\shader_cache) holds them for ds1-ds3 as long as test-main's shaders are unchanged.
+WARM_PLAN = "ds_warm.json"
+STATS = dict(rt_stats="1", rt_primary_check="1", qa_exposure_hold="0")
+_warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters="0", ls_box="0")),
+              ("views", dict(rt_debug="2", ls_debug="2", ls_box="0")),
+              ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0"))]
+warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
+warm_plan.append(step("restore", 5, qa_exposure_hold="0"))
+warm_seconds = sum(p["seconds"] for p in warm_plan)
+
+
+def warm_job(save, hair):
+    start = HAIR_START if hair else NOHAIR_START
+    return {
+        "name": WARM, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": warm_seconds + 300,
+        "repeat": 1, "live_batch": "dialogue-shadows", "set": f"{BASE_SET},{USER},{start}",
+        "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/{WARM_PLAN}"],
+        "patterns": [r"\[hot\]", r"\[watch\]", r"\[shaders\]", r"\[core\] gi: ", r"\[crash\]", "FAILED", r"\[fault\] presents"],
+        "expect": [r"\[auto\] scene ready", r"\[hot\] core generation \d+ loaded", r"\[cfg\] settings read",
+                   r"\[shaders\] cache: prefetched \d+ requests",
+                   r"\[geo\] transform feedback enabled: .*\(stride %d\)" % (88 if hair else 64)],
+        "forbid": [r"\[crash\] exception 0x", "VK_ERROR_DEVICE_LOST", r"\[hot\] core (rejected|faulted)",
+                   "FAILED, keeping previous", "compile call failed"],
+        "expect_runner": [r"\[motion-plan\] pointer centred in owned foreground game",
+                          rf"\[motion-plan\] complete phases={len(warm_plan)}\b", "^Run ended: done"],
+        "stop_on_dump": True,
+        "purpose": ("Shader warm-up for ds1-ds3 (no measurement): requests every variant family of the ds plan's key "
+                    "sets twice so the measured runs never compile on the render thread."),
+        "estimated_phase_seconds": warm_seconds,
+    }
+
+
+WARM = "ds0-warm-dialogue1-fg2"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-hair", action="store_true", help="stride-64 fallback (no native-hair startup)")
@@ -183,8 +220,12 @@ def main():
     (out / "jobs").mkdir(parents=True, exist_ok=True)
     (out / "plans").mkdir(parents=True, exist_ok=True)
     (out / "plans" / PLAN).write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
+    (out / "plans" / WARM_PLAN).write_text(json.dumps(warm_plan, indent=1) + "\n", encoding="utf-8")
+    (out / "jobs" / f"{WARM}.json").write_text(json.dumps(warm_job(SAVES[0][1], not a.no_hair), indent=1) + "\n",
+                                               encoding="utf-8")
     for name, save in SAVES:
         j = job(name, save, SAVES[0][0], not a.no_hair)
+        j["requires_success_of"] = [WARM] + ([SAVES[0][0]] if name != SAVES[0][0] else [])
         if a.no_hair:   # the hair phases still toggle the keys; with the startup off they are inert (logged rejected)
             j["forbid"] = [f for f in j["forbid"] if "hair" not in f]
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")

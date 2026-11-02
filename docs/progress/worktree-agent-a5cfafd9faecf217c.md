@@ -26,5 +26,11 @@
   the render thread (up to 17 s each), 53 s without a present; the 30 s stall rule closed the game as frames
   resumed. Not focus or dialogue. Fix: auto-run.ps1 does not call it a stall while `[shaders] ... compiled in`
   lines appear; plan gains diag-warm-a/b (toggle-only variants first); jobs foreground again (user: PC free), 300 s.
+- ds1 run 2 (10:19, foreground) stalled in phase 4: each hot key set is its own variant family (the base set,
+  origin 0, compiled again: 10-20 s compiles + 10-12 s pipeline creation, 2.5 min without a present; a 31 s gap
+  between `compiled in` lines escaped the rule). Fix: the rule also counts `[core] gi: ... generation N` lines
+  (0 of 15 silent windows of that log would stall); new ds0-warm-dialogue1-fg2 job (255 s) requests every family
+  twice, every ds job requires it; diag-warm-a/b removed (ds plan 260 s). Batch: 4 launches, about 25 min, 1.9 GB.
+- Product gap: enabling native hair freezes the game for minutes the first time (render-thread compiles).
 - Separate gap: `[water] reflections skipped: no variant for rt_native_scalp, rt_native_hair,
   rt_hair_physical_origin` (water reflections are off whenever native hair is on).
