@@ -20,7 +20,8 @@
 #   .\scripts\package.ps1 -Diagnostics     ship the developer layer of bin\ instead
 #   .\scripts\package.ps1 -Version 0.1.0-beta1 -NoZip
 #   .\scripts\package.ps1 -ListOnly        validate/list notice files only; no build or output writes
-param([switch]$ListOnly, [switch]$NoBuild, [switch]$Diagnostics, [switch]$WithSharc, [switch]$NoZip,
+#   .\scripts\package.ps1 -DryRun          validate/list notices and launcher UI assets; no build or output writes
+param([switch]$ListOnly, [switch]$DryRun, [switch]$NoBuild, [switch]$Diagnostics, [switch]$WithSharc, [switch]$NoZip,
       [string]$Version = "", [string]$OutDir = "")
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
@@ -47,6 +48,27 @@ $noticeFiles += @(Get-ChildItem -LiteralPath $noticeDir -Recurse -File -Force | 
 if ($ListOnly) {
   # This mode lists only the notice payload, independent of binaries, SDKs and build products.
   $noticeFiles | ConvertTo-Json
+  return
+}
+
+# The same explicit static payload is used in portable and Inno packages. Runtime
+# discovery falls back to native controls; never fetch or bundle a browser runtime.
+$launcherFiles = @()
+foreach ($f in @("index.html", "app.css", "app.js")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "tools\launcher\ui\$f"); Destination = "bin\ui\$f" }
+}
+foreach ($f in @("LatoWeb-Regular.ttf", "LatoWeb-Semibold.ttf", "OFL.txt", "README.md", "manifest.json")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\fonts\$f"); Destination = "bin\ui\fonts\$f" }
+}
+foreach ($f in @("bg3rtx.svg", "bg3rtx-small.svg", "bg3rtx-small-contrast.svg", "bg3rtx.ico")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\$f"); Destination = "bin\ui\branding\$f" }
+}
+foreach ($entry in $launcherFiles) {
+  if (-not (Test-Path -LiteralPath $entry.Source -PathType Leaf)) { throw "missing launcher asset: $($entry.Source)" }
+  if ((Get-Item -LiteralPath $entry.Source).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "linked launcher asset: $($entry.Source)" }
+}
+if ($DryRun) {
+  @($noticeFiles) + @($launcherFiles) | ConvertTo-Json
   return
 }
 . (Join-Path $PSScriptRoot "low-priority.ps1")
@@ -108,6 +130,7 @@ function Copy-To([string]$src, [string]$rel) {
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
 foreach ($f in @("VkLayer_bg3rtx.json", "bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
+foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 foreach ($f in @("sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll",
                  "nvngx_dlssg.dll", "NvLowLatencyVk.dll", "nvngx_dlss.dll", "nvngx_dlssd.dll")) {
   Copy-To (Join-Path $bin "sl\$f") "bin\sl\$f"

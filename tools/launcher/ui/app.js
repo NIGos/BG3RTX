@@ -1,0 +1,109 @@
+/* UI is a renderer. The native bridge owns policy, dependencies, edits and persistence. */
+'use strict';
+const $ = id => document.getElementById(id);
+const query = new URLSearchParams(location.search);
+const sample = query.has('sample');
+const localFiles = location.protocol==='file:';
+const assetBase = localFiles?'../../../assets/':'';
+const fontBase = localFiles?assetBase+'fonts/':'https://fonts.bg3rtx.local/';
+const fontStyle=document.createElement('style');
+fontStyle.textContent='@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Regular.ttf")}@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Semibold.ttf");font-weight:600 900}';
+document.head.append(fontStyle);
+document.querySelector('.emblem').src=localFiles?assetBase+'branding/bg3rtx.svg':'https://branding.bg3rtx.local/bg3rtx.svg';
+let state = null;
+const sampleView=query.get('view')||'';
+let section = query.get('section') || (sampleView==='missing'?'Support':'Lighting');
+let experimentalOpen = query.has('experimental')||sampleView==='experimental';
+const sections = [['Lighting','M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'],['Surfaces','M3 15c3-2 6 2 9 0s6-2 9 0M3 19c3-2 6 2 9 0s6-2 9 0M12 3v8'],['Performance','M3 17l5-6 4 4 4-7 5 9M3 21h18'],['Memory','M4 4h16v16H4zM9 9h6v6H9z'],['Advanced','M4 8h16M8 4v16M16 4v16M4 16h16'],['Support','M12 4v8M12 17v1']];
+const labels = {Surfaces:'Water & reflections',Advanced:'Advanced',Support:'Help & support'};
+function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
+function send(type, extra={}) { if(sample) { $('status').textContent='Sample preview — actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
+function pill(text,kind) {return el('span','pill '+(kind||''),text);}
+function showDialog(d) {if(!d.open)d.showModal();}
+function card(s) {
+ const c=el('article','card'),r=el('div','row');r.append(el('h3','',s.title||s.label));c.append(r);
+ c.append(el('p','description',s.description||s.summary||''));
+ const control=el('div','control row');
+ const choices=s.choices||[];
+ if(s.custom)control.append(el('span','help-copy','Custom value preserved. Select a level only to replace it.')); 
+ if(choices.length===2&&choices[0].label==='Off'&&choices[1].label==='On') {
+  const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=choices[i.checked?0:1].reason||'';i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','help-copy',i.checked?'On':'Off'));
+ } else if(choices.length) {
+  const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);
+  choices.forEach(ch=>{const b=el('button',ch.value===s.value?'on':'',ch.label);b.disabled=ch.enabled===false;b.title=ch.reason||'';b.setAttribute('aria-pressed',ch.value===s.value?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});control.append(seg);
+ } else if(s.min!==undefined) {
+  if(s.hasOff){const off=el('button','btn'+(s.value===0?' on':''),'Off');off.onclick=()=>send('set',{id:s.id,value:0});control.append(off);}
+  const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=s.value;i.setAttribute('aria-label',s.title||s.label);const out=el('span','help-copy',s.value+' '+(s.unit||''));i.oninput=()=>out.textContent=i.value+' '+(s.unit||'');i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.append(i,out);
+ } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
+ c.append(control);
+ const badges=el('div','row');badges.append(pill(s.cost||'GPU cost: Unknown','cost'),pill(s.vram||'VRAM: Unknown','vram'));
+ if(s.apply)badges.append(pill(s.apply,/restart/i.test(s.apply)?'restart':''));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));c.append(badges);
+ if(s.details||s.reason||s.provenance){const d=el('details'),sum=el('summary','','Details & requirements');d.append(sum,el('p','detail-copy',[s.details,s.reason,s.provenance].filter(Boolean).join('\n')));c.append(d);}
+ return c;
+}
+function renderSettings() {
+ const root=$('section-content');root.replaceChildren();
+ root.append(el('h2','section-title',labels[section]||section));
+ if(section==='Memory') {
+  const memory=state.compatibility||{},grid=el('div','grid');
+  const capacity=el('article','card');capacity.append(el('h3','','Video memory capacity'),el('p','memory-capacity',memory.vram||'Unknown'));
+  const suitability=el('article','card');suitability.append(el('h3','','Memory suitability'),el('p','help-copy',memory.memory||'Unknown'));
+  grid.append(capacity,suitability);root.append(grid);return;
+ }
+ if(section==='Support') {
+  const c=el('article','card');c.append(el('h3','','Your settings, your PC'),el('p','','Create a local diagnostic package to help investigate a problem. Review the exact contents before sharing. Nothing is uploaded.'));const b=el('button','btn','Report a problem');b.onclick=()=>send('report');c.append(b);root.append(c);
+  const info=el('article','card');info.style.marginTop='16px';info.append(el('h3','','Compatibility'),el('p','help-copy',[state.compatibility?.gpu,state.compatibility?.driver,...(state.compatibility?.details||state.compatibility?.warnings||[])].filter(Boolean).join('\n')));root.append(info);
+  const setup=el('article','card');setup.style.marginTop='16px';setup.append(el('h3','','Game & graphics setup'),el('p','detail-copy',state.gamePath||'Choose the game folder containing bin\\bg3.exe (Vulkan).'));
+  const actions=el('div','row');const browse=el('button','btn','Choose game folder...');browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.onclick=()=>send('recheck');actions.append(browse,recheck);setup.append(actions);
+  if((state.compatibility?.adapters||[]).length>1){const label=el('label','help-copy','Graphics adapter '),select=el('select','btn');select.setAttribute('aria-label','Graphics adapter');const unknown=el('option','','Choose adapter');unknown.value='-1';select.append(unknown);state.compatibility.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===state.compatibility.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});label.append(select);setup.append(label);}root.append(setup);return;
+ }
+ const all=(state.settings||[]).filter(s=>section==='Developer'?s.developer:s.category===section&&!s.developer);
+ const isExperimental=s=>s.experimental===true||(s.experimental===undefined&&s.maturity==='experimental');
+ const regular=all.filter(s=>!isExperimental(s)),experimental=all.filter(isExperimental);
+ const grid=el('div','grid');regular.forEach(s=>grid.append(card(s)));root.append(grid);
+ // One disclosure authorizes experimental choices; policy remains in the bridge.
+ if(experimental.length||section==='Advanced') {
+  const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.append(pill('Experimental','exp'),el('span','','Features still being tested. They may cost more or change the look.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
+ }
+}
+function renderSummary() {
+ const c=state.compatibility||{},root=$('summary');root.replaceChildren();
+ const stats=[['GPU cost','Unknown','No timings from this session'],['Video memory',c.vram||'Unknown',c.memorySummary||'Hardware capacity; not mod usage'],[state.frameGeneration?'Frame generation':'Preset',state.frameGeneration||state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom',state.frameGenerationNote||'Saved and active state shown below']];
+ stats.forEach(([k,v,n])=>{const s=el('div','stat');s.append(el('div','k',k));const val=el('div','v',v);val.append(el('small','',n));s.append(val);const bar=el('div','bar');s.append(bar);root.append(s);});
+}
+function render(next) {
+ state=next;$('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
+ const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const b=el('button',!state.custom&&state.preset===index?'on':'',name);b.setAttribute('aria-pressed',!state.custom&&state.preset===index?'true':'false');b.title=index===state.recommendedPreset?'Recommended hardware estimate; not a quality qualification':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
+ $('gpu-name').textContent=state.compatibility?.gpu||'Graphics unknown';$('gpu-info').textContent=[state.compatibility?.vram,state.compatibility?.driver].filter(Boolean).join(' · ')||'Compatibility not confirmed';
+ const nav=$('navigation');nav.replaceChildren();const list=[...sections];if((state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,['Developer','M4 4h16v16H4z']);
+ list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.setAttribute('aria-current',id===section?'page':'false');b.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="'+path+'"/></svg>';b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');foot.append(el('div','','BG3RTX · independent fan mod'),el('div','','Not affiliated with the game’s developers.'));if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
+ renderSummary();const warnings=$('warnings');warnings.replaceChildren();(state.compatibility?.warnings||[]).filter(Boolean).forEach(w=>warnings.append(el('div','notice',w)));if(state.error)warnings.append(el('div','notice error',state.error));
+ const count=state.unsavedCount??state.dirty??0;let status=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved for next launch');if(state.restartNeeded)status+=' · Restart required';$('status').textContent=status;$('discard').disabled=!count;$('save').disabled=!count;$('play').disabled=!state.canPlay;
+ renderSettings();renderPreview();renderReport();
+}
+function renderPreview() {
+ const p=state.preview,d=$('confirmation');if(!p?.kind){if(d.open)d.close();return;}const root=$('confirmation-copy');root.replaceChildren();$('confirmation-title').textContent=p.kind==='preset'?'Review preset changes':'Review required settings';const ul=el('ul','help-copy');(p.changes||[]).forEach(c=>ul.append(el('li','',c)));root.append(ul);(p.blocked||[]).forEach(c=>root.append(el('p','notice',c)));$('confirm-preview').disabled=!!p.blocked?.length;showDialog(d);
+}
+function renderReport() {
+ const r=state.report,d=$('report-dialog');if(!r?.visible){if(d.open)d.close();return;}$('privacy').textContent=r.privacy||'Creates a ZIP on your PC. Review sanitized files before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded.';
+ const root=$('report-preview');root.replaceChildren();if(r.message)root.append(el('p','help-copy',r.message));if(state.status&&/report|package/i.test(state.status))root.append(el('p','notice',state.status));const files=r.files||[];if(files.length){root.append(el('h3','','Preview · '+files.length+' files · '+(r.bytes||0).toLocaleString()+' bytes'));const ul=el('ul','report-list');files.forEach(f=>{const li=el('li');li.append(el('b','',f.name+' · '+f.size.toLocaleString()+' bytes'));if(f.note)li.append(el('p','',f.note));const details=el('details');details.append(el('summary','','Review sanitized text'),el('pre','',f.text||''));li.append(details);ul.append(li);});root.append(ul);}$('export-report').hidden=!files.length;$('prepare-report').textContent=files.length?'Refresh preview':'Preview contents';showDialog(d);
+}
+$('report').onclick=()=>send('report');$('discard').onclick=()=>send('discard');$('save').onclick=()=>send('save',{policy:'enable'});$('play').onclick=()=>send('play');$('cancel-preview').onclick=()=>send('cancel');$('confirm-preview').onclick=()=>send('confirm');$('confirmation').addEventListener('cancel',e=>{e.preventDefault();send('cancel');});
+$('close-report').onclick=()=>{$('report-dialog').close();send('closeReport');};$('report-dialog').addEventListener('cancel',()=>send('closeReport'));$('prepare-report').onclick=()=>{if(!sample){$('report-progress').hidden=false;$('report-progress').textContent='Preparing a bounded local snapshot...';$('cancel-report').hidden=false;$('prepare-report').disabled=true;}send('prepareReport',{issue:$('issue').value,logs:$('include-logs').checked,settings:$('include-settings').checked,system:$('include-system').checked});};$('cancel-report').onclick=()=>send('cancelReport');$('export-report').onclick=()=>send('exportReport');
+window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state')render(data);else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
+if(sample) {
+
+ const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true}));
+ const settings=[
+ {id:'sun',title:'Ray-traced sun shadows',description:'Accurate shadows from the sun, including foliage and grates.',category:'Lighting',value:1,choices:choices(['Off','On']),cost:'GPU cost: Unknown',vram:'VRAM: Unknown',apply:'Restart to apply'},
+ {id:'gi',title:'Global illumination',description:'Light bounces off walls and floors, giving interiors and shade natural depth.',category:'Lighting',value:2,choices:choices(['Off','Screen','Ray traced']),apply:'Live setting'},
+ {id:'local',title:'Local light shadows',description:'Torches, braziers and spells cast shadows on nearby surfaces.',category:'Lighting',value:1,choices:choices(['Off','On']),apply:'Live setting'},
+ {id:'bounce',title:'Far-field sun bounce',description:'Sunlight bouncing from distant scenery reaches covered areas.',category:'Lighting',value:1,choices:choices(['Off','6 m']),cost:'Estimate: +3.2–3.7 ms',vram:'VRAM: Unknown',apply:'Restart to apply',provenance:'RTX 5090; Water Queens House and camp; 4K-class output; 2026-11-02; 6 m; incremental GI trace cost. Reference only.'},
+ {id:'hair',title:'Native hair in ray tracing',description:'Improves hair and cutout surfaces in ray-traced lighting. Quality remains unqualified.',category:'Lighting',maturity:'experimental',value:0,choices:choices(['Off','On']),apply:'Restart to apply'},
+ {id:'water',title:'Water lighting',description:'Adds reflections, shadows and a refracted view of the water bed.',category:'Surfaces',value:3,choices:choices(['Off','Reflections','+ Shadows','+ Refraction']),cost:'Estimate: 0.5–0.7 ms',vram:'Up to 520 MB',apply:'Restart to apply'}];
+ render({type:'state',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
+ if(['error','missing','probe'].includes(sampleView)){if(sampleView==='error')state.error='Settings could not be saved. The destination could not be replaced because another application is using it. Your edits are preserved. Close the application and try again. Windows error 32: the process cannot access the file because it is being used by another process.';if(sampleView==='missing'){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe (Vulkan). Settings browsing remains available.'];}if(sampleView==='probe'){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
+ if(sampleView==='experimental')$('main').scrollTop=$('main').scrollHeight;
+ if(sampleView==='missing')$('main').scrollTop=90;
+ if(query.has('report')||sampleView==='report'){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
+} else send('init');

@@ -20,8 +20,8 @@ Prepare a complete release payload separately, including required dependency not
 Output: `scripts/release/output/BG3RTX-0.1.0-Setup.exe`. Do not run it against a real game
 or existing user install for qualification. Use a disposable Windows VM/account and directories.
 Configure timestamped Authenticode for setup, uninstaller and our launcher before public release.
-No signing identity, branded icon or trusted-publisher claim is fabricated here. C2 owns wiring
-the B1 assets and package integration. This branch does not edit package.ps1 or CMakeLists.txt.
+No signing identity or trusted-publisher claim is fabricated here. C2 wires the B1 original
+icon into setup and the launcher, and packages its local WebView2 UI as described below.
 
 ### Payload contract
 
@@ -33,6 +33,14 @@ Add UTF-8 `payload.sha256.json` **after** assembling the final payload:
 
 List every deployed payload file once, with its SHA256; the example is not a usable package.
 Include VERSION.txt, runtime data, licences, release defaults and helpers as required by C2.
+The launcher payload includes `bin/ui/{index.html,app.css,app.js}`, `bin/ui/fonts/`
+(both Lato files, full OFL, README and identity manifest), and `bin/ui/branding/`.
+Inno's recursive payload entry includes these files; preprocessor checks reject a missing
+UI entrypoint, stylesheet, script, font, OFL or emblem. The same files are in the portable
+package. No WebView2 runtime installer is bundled or invoked: the launcher detects the
+installed runtime and falls back to its native controls when it is absent.
+`scripts/package.ps1 -DryRun` validates and lists notices and this static launcher payload
+without a build or output writes; existing missing release notices still stop validation.
 Do not list the hash manifest itself. Hashes verify integrity, not publisher authenticity.
 The .iss embeds the payload and extracts it into a private Inno temporary directory. Its
 PowerShell helper stages and verifies every listed file again before destination mutation.

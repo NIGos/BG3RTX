@@ -1,0 +1,32 @@
+#include <windows.h>
+
+// B1 original split-lantern mark; first icon is used by Windows shortcuts.
+1 ICON "../../assets/branding/bg3rtx.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,9,0,0
+ PRODUCTVERSION 0,9,0,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "BG3RTX contributors\0"
+      VALUE "FileDescription", "BG3RTX settings and launcher\0"
+      VALUE "FileVersion", "0.9.0.0\0"
+      VALUE "InternalName", "BG3RTX\0"
+      VALUE "OriginalFilename", "BG3RTX.exe\0"
+      VALUE "ProductName", "BG3RTX independent fan mod\0"
+      VALUE "ProductVersion", "0.9.0.0\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

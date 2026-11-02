@@ -67,6 +67,36 @@ class PackageLicencesTest(unittest.TestCase):
         self.assertIn(name, result.stderr)
         self.assertIn("missing required notices", result.stderr)
 
+    def test_launcher_dry_run_lists_runtime_assets_without_output(self):
+        # Disposable source fixture only: never assemble a player package.
+        shutil.copytree(ROOT / "assets/fonts", self.root / "assets/fonts")
+        shutil.copytree(ROOT / "assets/branding", self.root / "assets/branding")
+        ui = self.root / "tools/launcher/ui"
+        ui.mkdir(parents=True)
+        for name in ("index.html", "app.css", "app.js"):
+            (ui / name).write_text("Fixture UI only\n", encoding="utf-8")
+        command = [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                   "-File", str(self.root / "scripts/package.ps1"), "-DryRun"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        by_destination = {entry["Destination"].replace("\\", "/"): Path(entry["Source"])
+                          for entry in payload}
+        for name in ("index.html", "app.css", "app.js"):
+            self.assertEqual(by_destination["bin/ui/" + name], ui / name)
+        self.assertEqual(by_destination["bin/ui/fonts/OFL.txt"].read_bytes(),
+                         (ROOT / "assets/fonts/OFL.txt").read_bytes())
+        self.assertIn("bin/ui/fonts/LatoWeb-Regular.ttf", by_destination)
+        self.assertIn("bin/ui/fonts/LatoWeb-Semibold.ttf", by_destination)
+        self.assertIn("bin/ui/branding/bg3rtx.svg", by_destination)
+        self.assertFalse((self.root / "dist").exists())
+        self.assertFalse((self.root / "bin").exists())
+        (ui / "app.js").unlink()
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing launcher asset", result.stderr)
+        self.assertFalse((self.root / "dist").exists())
+
     def test_missing_dxc_and_vulkan_fail_together(self):
         names = ["DirectXShaderCompiler-LICENSE.txt", "Vulkan-Headers-LICENSE.txt"]
         for name in names:

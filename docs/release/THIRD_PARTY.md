@@ -42,6 +42,22 @@ path, version and hash and obtain its matching distribution notices, including a
 Microsoft binary redistribution terms. Current DXC findings do not establish the licence of
 those other `dxil.dll` copies.
 
+## Launcher WebView2 and fonts
+
+The launcher statically links Microsoft WebView2 SDK **1.0.4258.31** loader and
+compiles its API headers from the local NuGet package; no SDK or browser runtime
+is copied into `external/` or the player payload. The installed Evergreen runtime
+is detected at startup; absent runtime uses native controls. Collected SDK
+`LICENSE.txt` and `NOTICE.txt` are redistributed as the two WebView2 files below.
+Source: `C:/Users/quali/.nuget/packages/microsoft.web.webview2/1.0.4258.31/`.
+Their bytes are unchanged except LF normalization. This does not distribute the
+Evergreen runtime or grant an automatic download/install action.
+
+Bundled Lato fonts and full SIL OFL travel together in `bin/ui/fonts/`; their
+version, authors, reserved name and SHA-256 identities are in its README/manifest.
+No local OFL display serif was supplied: headings use the installed Georgia/serif
+fallback, which is not redistributed. No Google Fonts or network font loading.
+
 ## Exact text provenance
 
 Source paths are audit evidence on this machine, not player installation requirements.
@@ -70,6 +86,9 @@ not the original source bytes.
 | `NVIDIA-Image-Scaling-MIT.txt` | `6efb198d6d184a4c80ab66641463b708339d7e00098e7c92caf12e9f178b53c9` |
 | `NVIDIA-Aftermath.txt` | `4f35875cfab9eab4725f70b7b2355de5b5310d5f956319450ba3dcb50f2f65d6` |
 | `NVIDIA-Nsight-Graphics-Apache-2.0.txt` | `8517178e5aab9335ca0c88d02efcba2f5d42bd894a5c4bedfdf8b99693110e88` |
+| `WebView2-LICENSE.txt` | `0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55` |
+| `WebView2-NOTICE.txt` | `106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90` |
+
 
 ## Required notice files
 
@@ -88,6 +107,8 @@ Retain all subordinate notices as additional files in this directory.
 - `NVIDIA-Reflex.txt`
 - `Streamline-3rd-party-licenses.md`
 - `Streamline-MIT.txt`
+- `WebView2-LICENSE.txt`
+- `WebView2-NOTICE.txt`
 - `DirectXShaderCompiler-LICENSE.txt`
 - `Vulkan-Headers-LICENSE.txt`
 

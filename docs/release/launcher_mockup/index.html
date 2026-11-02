@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BG3RTX Launcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* Design mockup for the WebView2 launcher. Original art only: no game logos, fonts or assets. */
+  :root {
+    --bg: #121316;
+    --bg-2: #17191d;
+    --panel: #1d2025;
+    --panel-hi: #23272d;
+    --line: #353a42;
+    --line-soft: #2a2e35;
+    --text: #f1e7d2;
+    --text-2: #beb5a4;
+    --text-3: #8d8676;
+    --gold: #d6aa62;
+    --gold-hi: #f0c983;
+    --ember: #c4693a;
+    --teal: #8bcbdd;
+    --ok: #9bc6a4;
+    --warn: #f2c078;
+    --err: #f1948a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Lato", "Segoe UI", sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(214,170,98,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(196,105,58,.08), transparent 60%),
+      var(--bg);
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+  }
+  .window {
+    width: min(1180px, 100vw);
+    height: min(760px, 100vh);
+    display: grid;
+    grid-template-columns: 232px 1fr;
+    grid-template-rows: auto 1fr auto;
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+
+  /* Header */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line-soft);
+    background:
+      linear-gradient(180deg, rgba(214,170,98,.06), transparent),
+      var(--bg-2);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand h1 {
+    font-family: "Cinzel", Georgia, serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: .08em;
+    margin: 0;
+  }
+  .brand small { display: block; color: var(--text-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .emblem { width: 40px; height: 40px; filter: drop-shadow(0 0 10px rgba(240,201,131,.35)); }
+  .spacer { flex: 1; }
+
+  .presets {
+    display: flex;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px;
+  }
+  .presets button {
+    font: inherit;
+    color: var(--text-2);
+    background: none;
+    border: 0;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .presets button:hover { color: var(--text); }
+  .presets button.on {
+    color: #1a1610;
+    background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+    box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 4px 14px rgba(214,170,98,.25);
+    font-weight: 700;
+  }
+
+  .gpu {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .gpu b { font-weight: 700; }
+  .gpu span { color: var(--text-3); font-size: 12px; }
+
+  /* Sidebar */
+  nav {
+    padding: 18px 12px;
+    border-right: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, rgba(255,255,255,.015), transparent);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--text-2);
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+  nav a:hover { background: var(--panel); color: var(--text); }
+  nav a.on {
+    background: var(--panel-hi);
+    color: var(--text);
+    border-color: var(--line);
+    box-shadow: inset 3px 0 0 var(--gold);
+  }
+  nav svg { width: 18px; height: 18px; flex: none; opacity: .85; }
+  nav .sep { height: 1px; background: var(--line-soft); margin: 10px 6px; }
+  nav .foot { margin-top: auto; color: var(--text-3); font-size: 11px; padding: 8px 12px; line-height: 1.5; }
+
+  /* Content */
+  main { overflow: auto; padding: 22px 26px 30px; }
+  .section-title {
+    display: flex; align-items: center; gap: 12px;
+    font-family: "Cinzel", Georgia, serif;
+    font-size: 15px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--gold);
+    margin: 4px 0 14px;
+  }
+  .section-title::after {
+    content: ""; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(214,170,98,.5), transparent);
+  }
+  .summary {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 26px;
+  }
+  .stat {
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+  }
+  .stat .k { color: var(--text-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .stat .v { font-size: 22px; margin-top: 6px; font-weight: 700; }
+  .stat .v small { font-size: 12px; color: var(--text-3); font-weight: 400; }
+  .bar { height: 6px; border-radius: 6px; background: #0f1013; margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--ember)); }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 26px; }
+  .card {
+    position: relative;
+    padding: 16px 16px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line-soft);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.025), transparent 40%),
+      var(--panel);
+    transition: border-color .15s, background .15s;
+  }
+  .card:hover { border-color: var(--line); background-color: var(--panel-hi); }
+  .card h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .card p { margin: 6px 0 12px; color: var(--text-2); line-height: 1.45; font-size: 13px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row .spacer { flex: 1; }
+
+  .pill {
+    font-size: 11px; padding: 3px 8px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--text-2); background: #15171a;
+    white-space: nowrap;
+  }
+  .pill.cost { color: var(--gold-hi); border-color: rgba(214,170,98,.35); }
+  .pill.vram { color: var(--teal); border-color: rgba(139,203,221,.3); }
+  .pill.restart { color: var(--warn); border-color: rgba(242,192,120,.35); }
+  .pill.exp { color: var(--ember); border-color: rgba(196,105,58,.45); }
+
+  /* Toggle */
+  .toggle { position: relative; width: 42px; height: 24px; flex: none; }
+  .toggle input { display: none; }
+  .toggle span {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: #0f1013; border: 1px solid var(--line);
+    transition: background .15s;
+  }
+  .toggle span::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--text-3); transition: transform .15s, background .15s;
+  }
+  .toggle input:checked + span { background: rgba(214,170,98,.25); border-color: rgba(214,170,98,.6); }
+  .toggle input:checked + span::after { transform: translateX(18px); background: var(--gold-hi); box-shadow: 0 0 10px rgba(240,201,131,.6); }
+
+  /* Segmented select */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 12px; color: var(--text-2);
+    background: #15171a; border: 0; padding: 6px 10px; cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: rgba(214,170,98,.18); color: var(--gold-hi); }
+
+  details.exp {
+    border: 1px dashed rgba(196,105,58,.45);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    background: rgba(196,105,58,.04);
+  }
+  details.exp summary { cursor: pointer; color: var(--text-2); list-style: none; display: flex; align-items: center; gap: 10px; }
+  details.exp summary::before { content: "▸"; color: var(--ember); transition: transform .15s; }
+  details.exp[open] summary::before { transform: rotate(90deg); }
+  details.exp .grid { margin: 14px 0 4px; }
+
+  /* Footer */
+  footer {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-2);
+  }
+  .status { color: var(--text-3); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .status .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .btn {
+    font: inherit; cursor: pointer;
+    padding: 9px 16px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .btn:hover { background: var(--panel-hi); }
+  .btn.ghost { background: none; color: var(--text-2); }
+  .btn.primary {
+    border: 0; color: #1a1610; font-weight: 700;
+    background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+    box-shadow: 0 6px 18px rgba(214,170,98,.25);
+  }
+  .btn.play {
+    border: 0; color: #fff3df; font-weight: 700; letter-spacing: .06em;
+    padding: 10px 26px;
+    font-family: "Cinzel", Georgia, serif;
+    background: linear-gradient(180deg, #d77a45, #a8512a);
+    box-shadow: 0 6px 22px rgba(196,105,58,.35);
+  }
+  .btn:focus-visible, .presets button:focus-visible, nav a:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (max-width: 860px) {
+    .window { grid-template-columns: 1fr; }
+    nav { display: none; }
+    .grid, .summary { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="window" role="application" aria-label="BG3RTX settings">
+
+  <header>
+    <div class="brand">
+      <!-- Original emblem: a lantern split by a beam of light. -->
+      <svg class="emblem" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="55%" r="50%">
+            <stop offset="0" stop-color="#ffe2a8"/>
+            <stop offset=".45" stop-color="#d6aa62"/>
+            <stop offset="1" stop-color="#d6aa62" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#e3d7bf"/>
+            <stop offset="1" stop-color="#8f8672"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="36" r="20" fill="url(#glow)" opacity=".55"/>
+        <path d="M24 6h16l-2 5H26z" fill="url(#metal)"/>
+        <path d="M30 2a4 4 0 0 1 4 0v4h-4z" fill="url(#metal)"/>
+        <path d="M20 13h10v38H22l-6-6V19z" fill="none" stroke="url(#metal)" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M34 13h10l4 6v26l-6 6H34z" fill="none" stroke="url(#metal)" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M29 24h6v10h-6z" fill="#ffe2a8"/>
+        <path d="M29 36h6l3 12H26z" fill="#d6aa62"/>
+        <path d="M24 55h16l-2 5H26z" fill="url(#metal)"/>
+      </svg>
+      <div>
+        <h1>BG3RTX</h1>
+        <small>Ray-traced lighting · fan mod</small>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="presets" role="radiogroup" aria-label="Preset">
+      <button>Low</button><button>Medium</button><button>High</button><button class="on" aria-checked="true">Ultra</button><button>Custom</button>
+    </div>
+    <div class="gpu" title="Detected adapter">
+      <div class="dot"></div>
+      <div><b>RTX 5090</b> <span>32 GB · driver 621.01</span></div>
+    </div>
+  </header>
+
+  <nav aria-label="Sections">
+    <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Lighting</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c3-2 6 2 9 0s6-2 9 0M3 19c3-2 6 2 9 0s6-2 9 0M12 3v8"/></svg>Water &amp; reflections</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 4 4-7 5 9"/><path d="M3 21h18"/></svg>Performance</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>Memory</a>
+    <div class="sep"></div>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></svg>Help &amp; support</a>
+    <div class="foot">Version 0.9 beta<br>Not affiliated with the game's developers.</div>
+  </nav>
+
+  <main>
+    <div class="section-title">Your setup</div>
+    <div class="summary">
+      <div class="stat"><div class="k">Estimated GPU cost</div><div class="v">11.4 ms <small>at 4K output</small></div><div class="bar"><i style="width:58%"></i></div></div>
+      <div class="stat"><div class="k">Video memory</div><div class="v">18.6 <small>of 31.4 GB budget</small></div><div class="bar"><i style="width:59%"></i></div></div>
+      <div class="stat"><div class="k">Frame generation</div><div class="v">On <small>2x · Reflex on</small></div><div class="bar"><i style="width:100%"></i></div></div>
+    </div>
+
+    <div class="section-title">Lighting</div>
+    <div class="grid">
+      <div class="card">
+        <div class="row"><h3>Ray-traced sun shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <p>Sharp, accurate shadows from the sun, including foliage and grates.</p>
+        <div class="row"><span class="pill cost">≈ 1.1 ms</span><span class="pill vram">+0.3 GB</span></div>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Global illumination</h3><div class="spacer"></div>
+          <div class="seg"><button>Off</button><button>Screen</button><button class="on">Ray traced</button></div></div>
+        <p>Light bounces off walls and floors, so interiors and shade feel lit, not flat.</p>
+        <div class="row"><span class="pill cost">≈ 7.2 ms</span><span class="pill vram">+1.1 GB</span></div>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Local light shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <p>Torches, braziers and spells cast real shadows.</p>
+        <div class="row"><span class="pill cost">≈ 1.0 ms</span></div>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Far-field sun bounce</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <p>Sunlight bouncing from distant scenery reaches covered areas.</p>
+        <div class="row"><span class="pill cost">≈ 3.4 ms</span><span class="pill restart">Restart to apply</span></div>
+      </div>
+    </div>
+
+    <details class="exp">
+      <summary><span class="pill exp">Experimental</span> Features still being tested. They may cost more or change the look.</summary>
+      <div class="grid">
+        <div class="card">
+          <div class="row"><h3>Native hair in ray tracing</h3><div class="spacer"></div><label class="toggle"><input type="checkbox"><span></span></label></div>
+          <p>Hair strands let light through instead of acting as solid cards. First enable compiles shaders.</p>
+          <div class="row"><span class="pill cost">≈ 3.4 ms</span></div>
+        </div>
+        <div class="card">
+          <div class="row"><h3>Hit reflections</h3><div class="spacer"></div><label class="toggle"><input type="checkbox"><span></span></label></div>
+          <p>Reflections show objects that are off screen.</p>
+          <div class="row"><span class="pill cost">≈ 2.3 ms</span></div>
+        </div>
+      </div>
+    </details>
+  </main>
+
+  <footer>
+    <div class="status"><div class="dot"></div>1 unsaved change</div>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn ghost">Report a problem</button>
+    <button class="btn">Discard</button>
+    <button class="btn primary">Save</button>
+    <button class="btn play">Play</button>
+  </footer>
+</div>
+</body>
+</html>

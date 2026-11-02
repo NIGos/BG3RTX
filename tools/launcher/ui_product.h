@@ -174,14 +174,7 @@ static void browse() {
   DWORD opts=0;d->GetOptions(&opts);d->SetOptions(opts|FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM);d->SetTitle(L"Choose game folder containing bin\\bg3.exe");
   if(SUCCEEDED(d->Show(g.wnd))){IShellItem* it=nullptr;if(SUCCEEDED(d->GetResult(&it))){PWSTR p=nullptr;if(SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH,&p))){auto dir=game_dir_from_path(p);g.dir=dir.empty()?p:dir;CoTaskMemFree(p);rebuild();}it->Release();}}d->Release();
 }
-// B2 SERVICE HOOK: launcher::diagnostics::show_report(HWND owner).
-// B2 owns diagnostics.h/.cpp; C2 adds the source to the build. No collector lives here.
-#if __has_include("diagnostics.h")
-#include "diagnostics.h"
-static void report_problem() { launcher::diagnostics::show_report(g.wnd); }
-#else
-static void report_problem() { MessageBoxW(g.wnd,L"The local report service is not included in this build.\nNothing was collected or uploaded.",L"Report a problem",MB_OK|MB_ICONINFORMATION); }
-#endif
+static void report_problem() { launcher::web::native_report(g.wnd); }
 static bool save(bool) {
   auto preview=st::preview_dependencies(g.st.values,effective_settings(),g.st.caps,false,g.dev,g.experimental);
   if(!preview.changed.empty()){
@@ -312,8 +305,10 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);INITCOMMONCONTROLSEX icc{sizeof icc,ICC_STANDARD_CLASSES|ICC_BAR_CLASSES|ICC_TAB_CLASSES};InitCommonControlsEx(&icc);
   g.scale=g_screenshot_scale>0?g_screenshot_scale:float(GetDpiForSystem())/96;
   HIGHCONTRASTW hc{sizeof hc};SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof hc,&hc,0);g.high_contrast=(hc.dwFlags&HCF_HIGHCONTRASTON)!=0||g_review==L"contrast";
-  std::wstring font_path=root_dir()+L"\\assets\\fonts\\LatoWeb-Regular.ttf";bool have_font=AddFontResourceExW(font_path.c_str(),FR_PRIVATE,nullptr)>0;
-  std::wstring semibold_path=root_dir()+L"\\assets\\fonts\\LatoWeb-Semibold.ttf";AddFontResourceExW(semibold_path.c_str(),FR_PRIVATE,nullptr);
+  std::wstring font_dir=exe_dir()+L"\\ui\\fonts";
+  if(!file_exists(font_dir+L"\\LatoWeb-Regular.ttf"))font_dir=root_dir()+L"\\assets\\fonts";
+  std::wstring font_path=font_dir+L"\\LatoWeb-Regular.ttf";bool have_font=AddFontResourceExW(font_path.c_str(),FR_PRIVATE,nullptr)>0;
+  std::wstring semibold_path=font_dir+L"\\LatoWeb-Semibold.ttf";AddFontResourceExW(semibold_path.c_str(),FR_PRIVATE,nullptr);
   g.font=CreateFontW(-S(15),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");
   g.bold=CreateFontW(-S(21),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");g.bg=CreateSolidBrush(background());
   load_state(g.st);g.st.caps=0;detect_gpu(g.st,&g.gpu_err);g.dev=st::dev_mode(st::lookup(saved_settings(),"dev"));
@@ -336,7 +331,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   if(g_review==L"probe"){g.st.have_gpu=false;g.st.caps=0;g.gpu_err=L"The graphics probe returned no adapter. Recheck or report a problem";}
   if(g_review==L"error")g.message=L"Settings saved; game could not start. The selected folder is unavailable or access was denied. Choose a folder in Overview, retry, or use Support > Report a problem. Windows error: access denied (5). Your saved settings are kept.";
   WNDCLASSEXW wc{sizeof wc};wc.lpfnWndProc=wndproc;wc.hInstance=inst;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hbrBackground=g.bg;wc.lpszClassName=L"BG3RTXLauncher";
-  wc.hIcon=(HICON)LoadImageW(nullptr,(root_dir()+L"\\assets\\branding\\bg3rtx.ico").c_str(),IMAGE_ICON,S(32),S(32),LR_LOADFROMFILE);wc.hIconSm=wc.hIcon;RegisterClassExW(&wc);
+  wc.hIcon=(HICON)LoadImageW(inst,MAKEINTRESOURCEW(1),IMAGE_ICON,S(32),S(32),0);wc.hIconSm=wc.hIcon;RegisterClassExW(&wc);
   wc.lpfnWndProc=bodyproc;wc.lpszClassName=L"BG3RTXBody";RegisterClassExW(&wc);
   g.wnd=CreateWindowExW(WS_EX_CONTROLPARENT,L"BG3RTXLauncher",L"BG3RTX settings",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,S(g_review_width?g_review_width+16:960),S(900),nullptr,nullptr,inst,nullptr);
   auto emblem=add(g.wnd,L"STATIC",L"",SS_ICON,0);SendMessageW(emblem,STM_SETICON,WPARAM(wc.hIcon),0);SetWindowSubclass(emblem,emblemproc,1,0);place(emblem,16,8,32,32);

@@ -12,6 +12,7 @@
 // The window is plain Win32 + common controls, generated from the shared
 // table in common/settings.h (the phase-2 overlay draws the same table).
 #include "launcher.h"
+#include "web_host.h"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -84,7 +85,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
   int argc = 0;
   wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  bool do_launch = false, dry = false, detect = false, dump = false, clean = false, clamp = true;
+  bool do_launch = false, dry = false, detect = false, dump = false, clean = false, clamp = true, report = false, native = false;
   std::wstring game_dir, exe, preset;
   std::vector<std::wstring> game_args;
   for (int i = 1; i < argc; ++i) {
@@ -95,6 +96,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     } else if (a == L"--launch") do_launch = true;
     else if (a == L"--dry-run") dry = true;
     else if (a == L"--detect") detect = true;
+    else if (a == L"--report") report = true;
+    else if (a == L"--native-ui") native = true;
     else if (a == L"--dump-schema") dump = true;
     else if (a == L"--clean") clean = true;
     else if (a == L"--no-clamp") clamp = false;
@@ -110,6 +113,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     else if (a == L"--screenshot-scale") g_screenshot_scale=float(_wtof(next().c_str()));
     else if (a == L"--help" || a == L"-h" || a == L"/?") {
       emit(L"BG3RTX.exe [--launch [--dry-run]] [--preset low|medium|high|ultra [--no-clamp]] [--detect]\n"
+           L"           [--report] [--native-ui] [--no-game --screenshot <PNG> [--screenshot-view <sample view>]]\n"
            L"           [--dump-schema] [--game <folder>] [--exe <program>] [--clean] [--out <file>] [-- <game args>]\n"
            L"Steam launch option: \"<path>\\bin\\BG3RTX.exe\" %command%\n");
       flush_output();
@@ -132,7 +136,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   if (g_review_width && (g_review_width<720 || g_review_width>1920)) return 2;
   if((g_screenshot_bottom || g_screenshot_scale!=0) && (g_screenshot.empty() || do_launch || detect || dump || !preset.empty() || g_screenshot_scale<0 || g_screenshot_scale>3))return 2;
 
-  if (!do_launch && !detect && !dump && preset.empty()) return run_window(inst, game_dir);
+  if (report && (do_launch || detect || dump || !preset.empty() || !g_screenshot.empty())) return 2;
+  if (!do_launch && !detect && !dump && preset.empty()) {
+    if (!native) {
+      int result = launcher::web::run(inst, game_dir, report, g_no_game, g_screenshot,
+                                     g_review_width ? g_review_width : 1180, g_review);
+      if (result != -1) return result;
+    }
+    if (report) { CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);int rc=launcher::web::native_report(nullptr);CoUninitialize();return rc; }
+    return run_window(inst, game_dir);
+  }
 
   int rc = 0;
   if (dump) emit(widen(st::schema_json()));
