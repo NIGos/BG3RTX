@@ -203,7 +203,7 @@ function Repair-DisplaySettings([string]$ensure, [string]$legacyPrev) {
   }
 }
 
-function Enter-BackgroundDisplay([string]$ensure, [string]$userFile, [switch]$Windowed) {
+function Enter-BackgroundDisplay([string]$ensure, [string]$userFile, [switch]$Windowed, [string[]]$Extra = @()) {
   Invoke-DisplayLocked {
     New-Item -ItemType Directory -Force $script:DisplayDir | Out-Null
     $live = @(Get-LiveDisplayUsers)
@@ -216,6 +216,10 @@ function Enter-BackgroundDisplay([string]$ensure, [string]$userFile, [switch]$Wi
     # the swapchain 3840x2160 while native UI/hudless stay 3840x1600. Windowed
     # keeps the game's requested output extent; both settings still restore.
     $displayArgs=@('Fullscreen=0',"FakeFullscreenEnabled=$(if($Windowed){0}else{1})")
+    # Extra entries (auto-run -GameResolution: ScreenWidth/ScreenHeight) are restored only through
+    # this run's own prev file: refuse them while another run's prev holds the player's values.
+    if ($Extra.Count -and (Test-Path $script:DisplayPrev)) { throw "extra display entries ($($Extra -join ' ')) need the only display user: another run is active" }
+    $displayArgs += $Extra
     if (Test-Path $script:DisplayPrev) { py -3 -I $ensure --set @displayArgs }
     else { py -3 -I $ensure --set @displayArgs --prev $script:DisplayPrev }
     $me = Get-Process -Id $PID
