@@ -14,6 +14,9 @@ param([string]$InstallDir = $PSScriptRoot, [string]$GameDir = '', [switch]$NoSho
 $ErrorActionPreference = "Stop"
 try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { }
 $dir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
+if (Test-Path -LiteralPath (Join-Path $dir '.bg3rtx-state.json')) {
+  throw "This installation uses the transactional lifecycle. For Windows Setup ownership, use Windows Settings > Apps > BG3RTX > Uninstall ($dir\setup-support\unins000.exe). Do not remove its files with the legacy script."
+}
 if ($GameDir) {
   $game = [IO.Path]::GetFullPath($GameDir).TrimEnd('\')
   if (-not (Test-Path -LiteralPath (Join-Path $game 'bin\bg3.exe') -PathType Leaf)) { throw 'GameDir must contain bin\bg3.exe.' }

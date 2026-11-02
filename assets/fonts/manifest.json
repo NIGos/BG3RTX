@@ -1,0 +1,11 @@
+{
+  "family": "Lato Web",
+  "version": "2.015; 2015-08-06",
+  "license": "SIL OFL 1.1",
+  "source": "Unmodified local C:/Windows/Fonts files; embedded upstream http://www.latofonts.com/; no network",
+  "sha256": {
+    "LatoWeb-Regular.ttf": "089ab6d4a57e0e6c4dd3b681b6fd50a5184f1b902429d35e1227e52d6ccad1bd",
+    "LatoWeb-Semibold.ttf": "ec99896795389d4288aa0dc8657f77f19d0832c3b714b67bc61ce8695e05b1d9",
+    "OFL.txt": "146e254c5f49e27213e65623e3875d5dc7aca85592d960ccfbf05e19204f103b"
+  }
+}
