@@ -12,5 +12,9 @@
   and in the turn as masks (new `pan_artifacts --mask`, coverage_mask unit test). 199 s, 5 bursts (about 11.5 GB,
   deleted after the analysis). Dryrun + lints pass. predicted.json: shot-rr and shot-edge energy null, cost 0;
   rot-edge masked transient rate below both rot-off by more than the OFF-OFF spread.
+- Water energy: the gate's dump 5c3fdabc runs BEFORE the forward water pass (frame.json order), so every water energy
+  gate so far was blind to the compose. New job key `energy_fs` (tools/m4_promotion_gate.py WATER_AFTER_FS 423e0548:
+  the first dump of the scene image after the water pass, before post; `--energy-fs` re-reads old runs). Offline on
+  m5w3 S8: compose ON -2.19% (121606) and -1.96% (093518, pooled band 1.76%) there, 5c3fdabc -0.26%; m5p1 water sun
+  shadows -10% there, 5c3fdabc unchanged. wf2 uses it.
 - Open: the hidden-tier switch (tier 2) is still binary; BG3's orbit camera moves the eye, so it can flicker too.
-  The energy dump 5c3fdabc is before transparents: check that it sees the water compose.

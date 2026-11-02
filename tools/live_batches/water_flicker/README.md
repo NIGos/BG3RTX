@@ -25,7 +25,9 @@ start of the ret-* phase, 9 s before the burst.
 - Validity: every expect line, among them the `WATER_RR_HIT=1 ... water_reflect: built` and
   `WATER_RF_EDGE=1 ... water_compose: built` lines and the five `[pan] burst 9210x complete` lines.
 - Energy: `py -3 -m tools.m4_promotion_gate <log>`: shot-rr and shot-edge within the band of the OFF shots (predicted
-  null). Note: the scene-colour dump (5c3fdabc) is before transparents; check whether it sees the water compose at all.
+  null), read on the job's `energy_fs` 423e0548: the first dump of the HDR scene image after the forward water pass,
+  before post. The default 5c3fdabc runs before the water and is blind to it (m5w3 093518: compose ON -1.96% on
+  423e0548, -0.4% on 5c3fdabc; pooled S8 band 1.76%).
 - Cost: `gi: GPU cost` / `[water] compose GPU` ON against the OFF mean: no change expected.
 - Flicker: `py -3 -m scripts.qa.pan_artifacts <the 5 burst dirs> --out <dir> --mask 92100=<diag-view-mask PNG>
   --mask 92101=<diag-view-mask-rot PNG> ...` (the scene-colour PNG of each mask trace, after the water pass):
