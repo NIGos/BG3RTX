@@ -178,6 +178,7 @@ std::unordered_map<VkQueue, uint32_t> g_queue_family;   // queues Streamline too
 bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
                   VkSemaphore& wait);
 void snap_finish(DeviceData* dd);
+bool snap_last();   // the capture's last present is in flight
 bool g_fg_running_flag();
 
 // Every present Streamline makes (real and generated frames) passes here.
@@ -207,7 +208,10 @@ VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentI
   VkSemaphore wait = VK_NULL_HANDLE;
   if (snap_present(dd, queue, info, copy, wait)) {
     VkResult r = dd->vk.QueuePresentKHR(queue, &copy);
-    snap_finish(dd);
+    // The readback is finished at the NEXT present (snap_present), when the GPU is usually done with it: waiting
+    // here stalled every captured present (wf5-s8-fg2 160335: one present per ~180 ms, 16-19 of 32 captured).
+    // The last one of a capture is finished here.
+    if (snap_last()) snap_finish(dd);
     return r;
   }
   return dd->vk.QueuePresentKHR(queue, info);
@@ -264,6 +268,11 @@ bool fg_running_now();
 uint32_t snap_memory_type(DeviceData* dd, uint32_t bits) {
   VkPhysicalDeviceMemoryProperties props{};
   dd->inst->GetPhysicalDeviceMemoryProperties(dd->physical, &props);
+  // Host-cached first: the CPU reads the readback (uncached write-combined reads made each capture ~180 ms).
+  const VkMemoryPropertyFlags cached =
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+  for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
+    if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & cached) == cached) return i;
   for (uint32_t i = 0; i < props.memoryTypeCount; ++i)
     if ((bits & (1u << i)) && (props.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ==
                                   (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
@@ -273,6 +282,8 @@ uint32_t snap_memory_type(DeviceData* dd, uint32_t bits) {
 
 bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
                   VkSemaphore& wait) {
+  // The previous present's readback (deferred from w_QueuePresentKHR) before anything else.
+  snap_finish(dd);
   // Allow separate off/on snapshot windows in one live A/B session.
   const int requested = cfg_int("fg_snap", 0);
   static uint64_t s_requested_at = 0;   // fg_snap_delay: the frame the request was first seen
@@ -384,6 +395,8 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
   S.pending = true;
   return true;
 }
+
+bool snap_last() { return g_snaps_left == 1; }
 
 void snap_finish(DeviceData* dd) {
   Snap& S = g_snap;
