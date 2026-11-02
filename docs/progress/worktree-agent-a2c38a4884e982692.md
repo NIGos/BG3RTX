@@ -31,8 +31,7 @@
   (transient BLAS). The 64 MB chunks are never freed: 58 -> 66 chunks (+512 MB) until cycle 14, then flat for 8 cycles,
   and VRAM is flat from cycle 13 (18.2-18.7 GB). VRAM trend now compares cycles 12-14 with 20-22 (passes on this log).
   The pool records line needs 120 frames at ~10 fps: the diag-pool windows are 20 s (plan 41 min). Records stay 411-417.
-- Open: 66 x 64 MB chunks reserve 4.2 GB for 0.25-1.4 GB of AS (first-fit fragmentation, never freed). That is a
-  separate VRAM item, not fixed here.
+- Open (separate VRAM item): 66 x 64 MB chunks reserve 4.2 GB for 0.25-1.4 GB of AS (fragmentation, never freed).
 
 ## OMM upper bound windows in the hig1 camp rerun (branch worktree-agent-a2c38a4884e982692, READY_FOR_LIVE, 2026-11-02)
 - Existing hot key `rt_alpha_test=0`: alpha-tested camera TLAS instances get FORCE_OPAQUE (bvhsplit.cpp 1536/1598, rtscene.cpp 1211), geometry kept;
