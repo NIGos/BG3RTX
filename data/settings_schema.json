@@ -208,6 +208,16 @@
        {"id": "off", "label": "Off", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "on", "label": "On", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false}
      ]},
+    {"id": "exp_vt_alpha_masks", "label": "Offline cutout masks",
+     "description": "Matched virtual-texture cutouts (foliage) read alpha masks extracted offline from the game's tile sets instead of the streaming page cache, so the ray-traced alpha test no longer uses a coarser page where the requested one is not resident. Camp grass only for now. Experimental until its brightness gate holds.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "required_on": {"rt": "1", "rt_alpha": "1"},
+     "required_from_choice": {"rt": 1, "rt_alpha": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false},
+       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false}
+     ]},
     {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
      "description": "Uses free space in the existing capture buffer when its cutout partition fills. Retains native coverage and hair geometry for exact split draws. Does not increase memory limits or fix missing material inputs. Experimental until the capacity gates hold (0 drops); then it becomes automatic.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,

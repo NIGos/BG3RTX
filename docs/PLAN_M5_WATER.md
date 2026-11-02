@@ -275,8 +275,11 @@ hidden / same-surface test is fixed to the view origin, but the screen border mo
 the pixel to the probe in one frame (S8 harbour flicker). The key applies D-RF's own fade
 (gi/rt_reflections.hlsl, `rf_edge` 0.05 uv): C' = C + w (A L - B), w = saturate(min(quv, 1 - quv) / rf_edge). Both
 terms carry E, so w blends two estimates of one reflection (no double count). Key off: every request byte-identical.
-Live test: tools/live_batches/water_flicker (wf2-s8-fg2, NOT run). Open: the hidden-tier switch (tier 2) is still
-hard and moves under BG3's orbit camera (the eye moves, not only the view direction).
+Live test wf2-s8-fg2 110212: REJECTED. Water-masked transient rate in the turn 3.29% with the key vs 2.25 / 2.32%
+off (whole frame 1.87% vs 1.63 / 1.42%); cost +0.002 ms. The border is the rarest switch here (off screen 2.1% of
+rays vs hidden 6.5%, miss 76.4%), and the 0.05 uv band modulates many hits by a weight that moves with the animated
+normal. rt_water_rr_hitdist in the same run: null (2.33%). Next: a turn with rt_water_compose=0 (does the compose
+cause the water flicker?), then the hit/miss and hidden switches.
 
 M5.3c water energy audit (2026-11-02, offline on the kept S8 traces of m5w3 121606 / 093518 and m5p1 213849):
 - The energy gates of M5 read 5c3fdabc, which runs BEFORE the forward water pass (frame.json order): blind to all of

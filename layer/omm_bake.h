@@ -40,5 +40,9 @@ struct PlainOutput {
 // never a successful quality/acceleration gate.
 // Optional diagnostic buffers live exactly as long as the returned ticket.
 Ticket record_plain(VkCommandBuffer,const PlainInput&,PlainOutput* = nullptr);
+// Diagnostics ([omm] line): producer input bytes; cumulative baked microtriangle states
+// (total, known opaque, known transparent, unknown by value) as last copied back.
+uint64_t bake_input_bytes();
+bool bake_state_totals(uint64_t out[4]);
 void bake_device_destroyed(DeviceData*);
 }

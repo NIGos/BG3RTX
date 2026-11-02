@@ -79,6 +79,9 @@ ATOMIC_TARGETS = {
     "shaders/rt/omm_bake_plain.hlsl:opacityData": [
         ("layer/omm_bake.cpp", "VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|buildInput,false) ||",
          D, "inputs->data")],
+    "shaders/rt/omm_bake_plain.hlsl:bakeStats": [
+        ("layer/omm_bake.cpp", "if(!allocate(dd,*device,kStatsBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,false) ||",
+         D, "stats_device (wave-reduced bake state counters, copied to the transfer-only stats_host readback)")],
     "shaders/rt/omm_bake_plain.hlsl:contentEpochs": [
         ("layer/omm_content.cpp", "(mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}",
          H, "omm content counters")],
@@ -93,7 +96,7 @@ ATOMIC_TARGETS = {
          H, "omm content counters (bvhsplit source.epochs)")],
     "shaders/rt/omm_scene_guard.hlsli:gOmmContentEpochs": [
         ("layer/omm_content.cpp", "(mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}",
-         H, "alpha set binding 11: omm content counters when present"),
+         H, "alpha set binding 11: omm content counters when present (BAR VRAM preferred, system memory fallback; guard atomics once per wave and invocation)"),
         ("layer/alphatest.cpp", "ok = ok && make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dummy_buf,",
          D, "g_dummy_buf fallback and the Sun clone set")],
     "shaders/rt/rt_common.hlsli:gSceneStamp": [
