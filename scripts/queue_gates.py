@@ -25,7 +25,10 @@ not tuned.
 
 An entry with "event": true judges one-off lines instead (e.g. "[trace] frame N written" in each
 shot-* window): every selected line from the window's applied settings to its end counts, with
-no straddle rule, and "min" is the number of events the window must hold.
+no straddle rule, and "min" is the number of events the window must hold. A snapshot line printed by a query
+recorded before the settings read still shows the old settings: "settle_s" (default 0) skips event lines
+earlier than that after the read. Derive it as the frames in flight x the window's frame time (hig1 09:54: frame
+1679 printed key-on values 28 ms after the key-off read; 8 scene slots x 0.11 s at rt_stats = 0.9 s -> 1 s).
 
 An entry with "when_present": true judges a line that only a pass which ran prints: a window
 without any selected line (not even a straddling one) passes, as the pass did not run there;
@@ -230,6 +233,7 @@ def check(gates, game_text, runner_text="", plan=None):
         if drift:
             continue
         event = bool(g.get("event"))
+        settle = float(g.get("settle_s", 0.0))   # event lines this soon after the settings read are skipped (docstring)
         for label in labels:
             hits = [w for w in wins if w["label"] == label]
             if not hits:
@@ -244,7 +248,7 @@ def check(gates, game_text, runner_text="", plan=None):
                     if t >= w["end"]:
                         break
                     if event:
-                        if t >= w["applied"]:
+                        if t >= w["applied"] + settle:
                             judged.append(l)
                     elif prev is not None and prev >= w["applied"]:
                         judged.append(l)

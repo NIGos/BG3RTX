@@ -119,6 +119,16 @@ def main():
           len(f) == 1 and "'shot-on'" in f[0] and "0 event line(s)" in f[0])
     f = queue_gates.check([dict(tr, event=False)], ev_log, ev_runner, ev_plan)
     check("without event, the straddle rule drops a window's only line (why trace gates need event)", len(f) == 3)
+    # settle_s: a snapshot printed 28 ms after the read (hig1 09:54 frame 1679, a query recorded before it) is skipped.
+    sn_log = "\n".join(["10:00:00.020  [cfg] settings read", "10:00:00.048  snap rows 5", "10:00:04.100  snap rows 0",
+                        "10:00:06.020  [cfg] settings read", "10:00:06.050  snap rows 0", "10:00:12.020  [cfg] settings read",
+                        "10:00:15.000  snap rows 0"])
+    sn = {"select": r"snap rows", "match": r"rows 0", "event": True, "windows": ["shot-off-a", "shot-on", "shot-off-b"]}
+    f = queue_gates.check([sn], sn_log, ev_runner, ev_plan)
+    check("event gate without settle_s judges the stale snapshot (fails)", any("'shot-off-a'" in x and "fail" in x for x in f))
+    f = queue_gates.check([dict(sn, settle_s=1.0)], sn_log, ev_runner, ev_plan)
+    check("settle_s skips the snapshots within 1 s of the read: shot-on keeps none, the others pass",
+          len(f) == 1 and "'shot-on'" in f[0] and "0 event line(s)" in f[0])
 
     # Plan drift: the runner says which keys each window applied; a plan edited after the run fails.
     drift_plan = [{"label": "shot-off-a", "set": "k=0"}, {"label": "shot-on", "set": "k=1,hit_ao_rays=2"}, {"label": "shot-off-b", "set": "k=0"}]

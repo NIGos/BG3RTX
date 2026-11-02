@@ -77,7 +77,8 @@
     "diag-off-b"
    ],
    "min": 1,
-   "event": true
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
