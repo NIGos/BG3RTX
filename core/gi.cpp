@@ -3217,7 +3217,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
     if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
-    if (host->cfg_int("rt_water_rr_mv", 0) && g_mv_view)   // g_mv_image: RG16F, written this frame (frame start)
+    if ((host->cfg_int("rt_water_rr_mv", 0) || host->cfg_int("rt_water_fg_mv", 0)) && g_mv_view)   // g_mv_image: RG16F, written this frame (frame start)
       win.mv_image = g_mv_image, win.mv_view = g_mv_view, win.mv_format = VK_FORMAT_R16G16_SFLOAT, win.mv_layout = g_mv_layout;
     water_rf(cmd, win);
   }

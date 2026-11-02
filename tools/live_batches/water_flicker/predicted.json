@@ -10,6 +10,24 @@
    "written": "2026-11-02"
   }
  },
+ "wf5-s8-fg2": {
+  "shot-glint": {
+   "predicted": null,
+   "source": "rt_water_glint_aa replaces each lit sun record's sun term by the tent-weighted mean of its valid neighbours' (weights renormalised): the mean over the water is kept, only spread; the energy measure (water-compose or the plain after-water dump) moves by edge effects at the water's border and shadow edges only, below the band",
+   "cost_gpu_ms": 0.05,
+   "cost_source": "one more full-screen 8x8 dispatch per water pass reading two record words and the target (water_glint) plus nine RGBA16F loads per composed pixel: about 0.03-0.05 ms, inside [water] compose GPU (0.41 ms)",
+   "flicker": "rendered bursts (pan_artifacts, water mask): peak rate (luma_peak, new) of rot-glint below both OFFs by more than |off-a - off-b|; presented (fg_present_flicker): snap-glint water mean |second difference| below both OFFs. Not sized offline",
+   "written": "2026-11-02"
+  },
+  "shot-fgmv": {
+   "predicted": null,
+   "source": "rt_water_fg_mv changes only the motion vectors DLSS-G reads (generated frames, after the scene colour is dumped): the pre-post energy is unchanged",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "the water_mv copy (wf4: inside [water] reflections GPU, no measurable change)",
+   "flicker": "attribution of the display-rate switch: if DLSS-G misplaces the water with the bed's vectors, snap-off-a / snap-off-b show a water parity asymmetry (water_parity_ratio well above rest_parity_ratio) and a water/rest ratio above snap-fgoff's; snap-fgmv then brings both towards snap-fgoff. snap-noshadow and rot-noshadow (rt_water_shadows=0): if the 1-spp sun-disc ray toggles glints per frame at shadow edges, its water residual and peak rate fall below both OFFs. Compose lines per window (uncomposed 0 and flips 0 in wf4; lighting of this frame 0-12 of 120 frames in static and turn windows alike) are reported, not gated",
+   "written": "2026-11-02"
+  }
+ },
  "wf4-s8-fg2": {
   "shot-rrwater": {
    "predicted": null,

@@ -83,11 +83,19 @@ int main(int argc, char** argv) {
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
   for (const char* r : kFixedRequests) {
-    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE")) continue;
+    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE") ||
+        std::strstr(r, "WATER_GLINT_AA"))
+      continue;
     const std::string e = water_rf_edge_request(r, true);
     bool listed = false;
     for (const char* q : kFixedRequests) listed = listed || e == q;
     CHECK(listed);
+    // rt_water_glint_aa: the sun forms have their WATER_GLINT_AA twin (the plain form has no sun records).
+    const std::string g = water_glint_request(r, true);
+    bool glisted = g == r, plisted = g == r;
+    for (const char* q : kFixedRequests) glisted = glisted || g == q, plisted = plisted || water_glint_prepass(g) == q;
+    CHECK(glisted);
+    CHECK(plisted);
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
