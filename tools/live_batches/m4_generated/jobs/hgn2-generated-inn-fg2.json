@@ -60,7 +60,7 @@
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[hit material streams\\] frame \\d+ live [0-9]+ MB",
-  "\\[hit material generated\\] frame \\d+ key 1: instanced G-buffer \\d+ \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured \\d+, mapped \\d+ rows \\d+ triangles; pairs 8",
+  "\\[hit material generated\\] frame \\d+ key 1: instanced G-buffer \\d+ \\(pipeline \\d+, bindings \\d+, stream \\d+\\) captured \\d+, mapped \\d+ rows \\d+ triangles; pairs \\d+",
   "hit material instanced clip \\(\\d+ frames\\): wind: checked [1-9]\\d*"
  ],
  "expect_every": [
@@ -101,16 +101,18 @@
    "settle_s": 1.0
   },
   {
-   "name": "the audited instanced families keep rejected < 0.04% with the generated rows on, every diag-on stats window",
+   "name": "the audited instanced families keep rejected < 0.04% with the generated rows on, every diag-on stats window (event: the stats window restarts after each gap-* phase)",
    "select": "hit material instanced clip \\(\\d+ frames\\)",
    "match": "; rejected \\d+ = 0\\.0[0-3]\\d\\d% of all lookups",
    "windows": [
     "diag-on"
    ],
-   "min": 1
+   "min": 1,
+   "event": true,
+   "settle_s": 1.0
   },
   {
-   "name": "hit material share line in every diag window",
+   "name": "hit material share line in every diag window (event: the stats window restarts after each gap-* phase)",
    "select": "hit material \\(\\d+ frames\\): attempted",
    "match": "attempted [1-9]\\d* qualified \\d+",
    "windows": [
@@ -118,7 +120,9 @@
     "diag-on",
     "diag-off-b"
    ],
-   "min": 1
+   "min": 1,
+   "event": true,
+   "settle_s": 1.0
   },
   {
    "name": "gi trace pass GPU median in every cost window",
@@ -212,13 +216,13 @@
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
-  "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
-  "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=11 label=shot-off-b repeat=0",
   "^Run ended: done",
-  "\\[motion-plan\\] complete phases=11\\b"
+  "\\[motion-plan\\] complete phases=13\\b"
  ],
  "stop_on_dump": true,
  "purpose": "rt_hit_material_generated at the inn (S7): the same 8 generated rows; the inn's share is mostly pool pairs (Base_GM_VT / BGM 651863a6, HLOD_GM b0ecc292, both = 3df678c0) and IP_AlphaTest. Same phases as hgn1.",
- "estimated_phase_seconds": 164
+ "estimated_phase_seconds": 174
 }

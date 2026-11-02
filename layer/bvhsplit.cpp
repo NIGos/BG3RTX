@@ -1,3 +1,4 @@
+#include "../common/perf_hook_state.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
@@ -2572,46 +2573,52 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   if (g_fixups.empty()) return;
   const double t_fix0 = now_ms();
   uint64_t applied = 0, late = 0, bad = 0;
+  const bool reuse = cfg_hot(CfgHot::perf_hook_state) != 0;
+  perf::SubmitMatrices matrices; // destroyed before return; never reused across submits
+  uint64_t unique = 0, build_count = 0;
   for (VkCommandBuffer c : cmds) {
     auto it = g_fixups.find(c);
     if (it == g_fixups.end()) continue;
+    if (!it->second.empty()) ++build_count;
     for (const Fixup& f : it->second) {
       for (uint32_t i = 0; i < f.count; ++i) {
         uint8_t* d = f.dst + VkDeviceSize(i) * f.dst_stride;
         float m[12];
-        for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
+        bool ok;
+        if (reuse) {
+          perf::MatrixSource source;
+          for (int k = 0; k < 3; ++k) source.rows[k] = f.src[k] + VkDeviceSize(i) * f.src_stride[k];
+          const auto& value = matrices.get(source, load_mapped16);
+          std::memcpy(m, value.rows.data(), sizeof m); ok = value.valid;
+        } else {
+          for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
+          ok = perf::valid_matrix(m);
+          ++unique;
+        }
         if (i == 0 && f.instance && std::memcmp(f.sample, m, 48)) ++late;
         if (i == 0 && f.log_key)
           log("[bvh-draw] frame %llu mesh %016llx VS %016llx tris %u firstInstance %u instanceCount %u translation %.6f %.6f %.6f instance %u",
               (unsigned long long)f.log_frame, (unsigned long long)f.log_key, (unsigned long long)f.log_vs, f.log_tris, f.log_first, f.count,
               m[3], m[7], m[11], f.log_instance);
-        bool ok = true;
-        for (float v : m) ok = ok && v > -1e7f && v < 1e7f;
-        if (ok) {
-          float det = m[0] * (m[5] * m[10] - m[6] * m[9]) - m[1] * (m[4] * m[10] - m[6] * m[8]) +
-                      m[2] * (m[4] * m[9] - m[5] * m[8]);
-          ok = std::fabs(det) > 1e-12f;
-        }
         if (!ok) ++bad;
-        if (f.instance) {
-          std::memcpy(d, m, 48);
-          d[51] = ok ? 0xFF : 0;   // mask (the high byte of instanceCustomIndex:24 | mask:8)
-        } else {
-          if (!ok) m[0] = std::numeric_limits<float>::quiet_NaN();   // the job sees an invalid matrix
-          std::memcpy(d, m, 48);
-        }
+        perf::scatter_matrix(d, m, ok, f.instance);
       }
       applied += f.count;
     }
     g_fixups.erase(it);
   }
-  if (applied) {   // cpu_timing: the submit-time matrix copies read the game's mapped instance stream
-    static double ms = 0; static uint64_t calls = 0, mats = 0;
-    ms += now_ms() - t_fix0; mats += applied;
-    if (++calls >= 300) {
+  { // cpu_timing: fresh samples after each mode/timing transition
+    static double ms = 0; static uint64_t calls = 0, mats = 0, sources = 0, builds = 0;
+    static int mode = -1;
+    const bool timing = cfg_int("cpu_timing", 0) != 0;
+    if (!timing || mode != int(reuse)) { ms = 0; calls = mats = sources = builds = 0; mode = int(reuse); }
+    if (applied && timing) {
+      ms += now_ms() - t_fix0; builds += build_count; mats += applied; sources += reuse ? matrices.size() : unique;
+    }
+    if (applied && timing && ++calls >= 300) {
       if (cfg_int("cpu_timing", 0))
-        log("[cpu] submit-time instance matrix copies: %.3f ms per build (%.0f matrices)", ms / calls, double(mats) / calls);
-      ms = 0; calls = mats = 0;
+        log("[cpu] submit-time instance matrix copies: %.3f ms per build (%.0f matrices); unique %.0f; builds %llu; submits %llu; perf_hook_state %d", ms / builds, double(mats) / builds, double(sources) / builds, (unsigned long long)builds, (unsigned long long)calls, int(reuse));
+      ms = 0; calls = mats = sources = builds = 0;
     }
   }
   std::lock_guard<std::mutex> sl(g_st_mu);

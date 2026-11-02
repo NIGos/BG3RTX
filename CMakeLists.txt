@@ -156,6 +156,11 @@ target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 us
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(perf_hook_state_test tests/perf_hook_state_test.cpp)
+add_test(NAME perf_hook_state_test COMMAND perf_hook_state_test)
+add_executable(submit_batch_test tests/submit_batch_test.cpp)
+target_include_directories(submit_batch_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME submit_batch_test COMMAND submit_batch_test)
 add_executable(native_hit_gi_bindings_test tests/native_hit_gi_bindings_test.cpp)
 target_include_directories(native_hit_gi_bindings_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME native_hit_gi_bindings_test COMMAND native_hit_gi_bindings_test)
@@ -172,6 +177,8 @@ add_executable(native_hit_order_test tests/native_hit_order_test.cpp)
 add_test(NAME native_hit_order_test COMMAND native_hit_order_test)
 add_executable(native_hit_join_test tests/native_hit_join_test.cpp)
 add_test(NAME native_hit_join_test COMMAND native_hit_join_test)
+add_executable(native_hit_batch_test tests/native_hit_batch_test.cpp)
+add_test(NAME native_hit_batch_test COMMAND native_hit_batch_test)
 add_executable(native_hit_recycle_test tests/native_hit_recycle_test.cpp)
 add_test(NAME native_hit_recycle_test COMMAND native_hit_recycle_test)
 add_executable(native_hit_abi_test tests/native_hit_abi_test.cpp)
@@ -474,3 +481,6 @@ elseif(BG3RTX_SHARC_EM STREQUAL "ON")
 endif()
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")
+
+add_executable(native_hit_recording_test tests/native_hit_recording_test.cpp)
+add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)

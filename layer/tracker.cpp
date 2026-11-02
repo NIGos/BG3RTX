@@ -2,6 +2,8 @@
 // shader modules (by SPIR-V hash), pipelines, images, views, framebuffers,
 // render passes and descriptor set contents.
 #include "host.h"
+#include "perf_submit.h"
+#include "../common/submit_batch.h"
 #include "omm_content.h"
 #include "omm_sampler.h"
 #include "native_light_validation.h"
@@ -322,7 +324,7 @@ static void decode_write(const VkWriteDescriptorSet& w, std::vector<DescEntry>& 
 }
 
 // Caller holds tracker().mu exclusively.
-static void merge(VkDescriptorSet set, const std::vector<DescEntry>& src) {
+static void merge(VkDescriptorSet set, std::span<const DescEntry> src) {
   auto& dst = tracker().sets[set];
   for (const auto& e : src) {
     auto saved=e;
@@ -770,7 +772,27 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
   device_of(device)->vk.UpdateDescriptorSets(device, wc, w, cc, c);
   t_game_descriptor_update = false;
   diag(DIAG_DESC_WRITES, wc + cc);
-  for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
+  SubmitCpuTimer timer(DIAG_DESCRIPTOR_US);
+  const bool batch = cfg_int("perf_submit_batch",0) != 0;
+  // Decode before taking tracker.mu: sampler identity has its own registry lock.
+  // Retain write order, then copy order, exactly as Vulkan does. OMM callbacks
+  // remain outside tracker.mu (they may query the tracker themselves).
+  std::unique_lock<std::shared_mutex> batchLock;
+  struct Decoded {std::vector<DescEntry> entries;std::vector<size_t> ends;};
+  static thread_local submit_batch::Scratch<Decoded> retained;
+  submit_batch::Scratch<Decoded>::Lease scratch(retained,batch);
+  auto& entries=scratch.get().entries;entries.clear();
+  auto& ends=scratch.get().ends;ends.clear();
+  if (batch && wc) {
+    for (uint32_t i=0;i<wc;++i) { decode_write(w[i],entries); ends.push_back(entries.size()); }
+    batchLock = std::unique_lock<std::shared_mutex>(tracker().mu);
+    size_t begin=0;
+    for (uint32_t i=0;i<wc;++i) {
+      if (ends[i]>begin) merge(w[i].dstSet,std::span<const DescEntry>(entries).subspan(begin,ends[i]-begin));
+      begin=ends[i];
+    }
+    batchLock.unlock();
+  } else for (uint32_t i = 0; i < wc; ++i) track_set_write(w[i]);
   omm::sampler_descriptor_ranges(device_of(device),wc,w,cc,c);
   if (cc) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);

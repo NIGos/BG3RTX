@@ -15,7 +15,11 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096 };
+// rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
+// compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
+// instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
+// small (+45): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -161,7 +165,7 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass | kHitPool2s;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   return f;
@@ -189,6 +193,8 @@ inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
   if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb | kHitIpGrass);
+  if (!(flags & kHitInstanced) || !(flags & kHitWindRgb) || (flags & (kHitIpGrass | kOmm | kTileset | kScalp | kHairOrigin)))
+    flags &= ~unsigned(kHitPool2s);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -218,6 +224,7 @@ inline std::string request(const char* file, unsigned flags) {
   if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
   if (flags & kHitWindRgb) add("RT_HIT_WIND_RGB=1");
   if (flags & kHitIpGrass) add("RT_HIT_IP_GRASS=1");
+  if (flags & kHitPool2s) add("RT_HIT_POOL_2S=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

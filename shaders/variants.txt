@@ -87,6 +87,8 @@ gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -206,6 +208,8 @@ gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -315,6 +319,10 @@ gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS
 gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
 gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_GI_FAR=1
+gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
+gi/gi_trace_rt_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_GI_FAR=1
 gi/gi_trace_rt_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
@@ -474,6 +482,10 @@ gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GR
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_GI_FAR=1
+gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
+gi/gi_trace_rt_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_GI_FAR=1
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
@@ -666,6 +678,8 @@ gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -785,6 +799,8 @@ gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -894,6 +910,10 @@ gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_GI_FAR=1
+gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
+gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_GI_FAR=1
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
@@ -1053,6 +1073,10 @@ gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_GI_FAR=1
+gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
+gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_GI_FAR=1
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1;RT_GI_FAR=1
@@ -1292,6 +1316,8 @@ gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_hit_direct.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/rt_hit_direct.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -1371,6 +1397,8 @@ gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_CASCADE_MASKS=1
 gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
 gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
+gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
 gi/rt_hit_material.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_hit_material.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
 gi/rt_hit_material.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
@@ -1445,6 +1473,7 @@ gi/rt_hit_two_bounce.hlsl?RT_HIT_INSTANCED=1
 gi/rt_hit_two_bounce.hlsl?RT_HIT_INSTANCED=1;RT_HIT_IP_GRASS=1
 gi/rt_hit_two_bounce.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1
 gi/rt_hit_two_bounce.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1
+gi/rt_hit_two_bounce.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
 gi/rt_hit_two_bounce.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_hit_two_bounce.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1
 gi/rt_hit_two_bounce.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_HIT_INSTANCED=1;RT_HIT_IP_GRASS=1
@@ -1826,6 +1855,10 @@ gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_
 gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
+gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RF_HIT_GI=1
+gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/rt_reflections_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_reflections_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
@@ -2065,6 +2098,10 @@ gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_
 gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
+gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RF_HIT_GI=1
+gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/rt_reflections_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_reflections_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RF_HIT_GI=1
 gi/rt_reflections_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
@@ -2327,6 +2364,10 @@ gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_H
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
+gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RF_HIT_GI=1
+gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/rt_reflections_sharc_hit_shade.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
@@ -2566,6 +2607,10 @@ gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;R
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
+gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1
+gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RF_HIT_GI=1
+gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1
+gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_POOL_2S=1;RT_CASCADE_MASKS=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RF_HIT_GI=1
 gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1
