@@ -114,13 +114,13 @@
    "min": 1
   },
   {
-   "name": "one trace written in each static window",
+   "name": "one trace written in each shot window",
    "select": "\\[trace\\] frame \\d+ written: ",
    "match": "\\[trace\\] frame \\d+ written: ",
    "windows": [
-    "cost-off-a",
-    "cost-on",
-    "cost-off-b"
+    "shot-off-a",
+    "shot-on",
+    "shot-off-b"
    ],
    "min": 1,
    "event": true
