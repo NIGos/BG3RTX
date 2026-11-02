@@ -1,4 +1,4 @@
-# BG3RTX progress - 2026-11-02 morning (main fe8f75d, ABI 25)
+# BG3RTX progress - 2026-11-02 evening (main 7929040, ABI 26)
 
 One current summary per area, no history. Everything older, verbatim: [archive/PROGRESS_20261102_morning.md](archive/PROGRESS_20261102_morning.md)
 (the 19 folded fragments of 11-01 / 11-02 and the summary before this rewrite), [archive/PROGRESS_20261101_evening.md](archive/PROGRESS_20261101_evening.md),
@@ -6,6 +6,16 @@ One current summary per area, no history. Everything older, verbatim: [archive/P
 [archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md).
 Branches write `docs/progress/<branch>.md`; `py -3 scripts/fold_progress.py` folds them here. Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
 Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
+
+## Report 2026-11-02 19:30 (main 7929040, ABI 26) - consolidation paused, PC freed for the user
+- Merged: stream caps + source trim (-0.4 GB VRAM), NaN GI history fix, OMM option B + VT alpha masks (game-wide catalogue 1,677 materials, generated on the user's PC), recipe rows from the asset DB, water RR/FG motion vectors, preprocessed-text shader cache (header-only edit: 2892 compiles to 0, 35 s), AGENTS.md compile rules. All new keys off.
+- Rejected / stays off: IP grass (+1.9 ms, +1.5 GB, +3 points share), generated recipe rows (+2.3 points camp), every water flicker key. rf_hit_gi off (hit AO matches the screen offline; gap is in instanced hits, needs a pack with instanced rows).
+- Water flicker at the port: closed, it is the game's own water (wf3-wf7: our compose, RR, sun-shadow ray, glints and FG all excluded; with RT the water is calmer, 0.54 vs 0.77-0.86).
+- Dialogue shadows: RT AO darkens characters most (AO off +18..42%); at the port opaque hair cards add to it (native hair +27%). Hair cards are not alpha-tested in RT at all (no CHAR_Hair shader in alpha_fs.txt).
+- OMM: live upper bound camp ~5.7-6.3 ms (forced opaque). Masks cover ~97% of camp alpha candidates. Dynamic micromap bake built (rt_omm_dyn, worktree-agent-a53f0b584fa39317b), not yet run: om4 waits.
+- In progress (user rule: finish the build improvement before more big compiles): spec-constant migration on `variant-migration` (G guards + S2a done; 2986 requests on main to ~980; target ~100-180). Then one merge-green, live scc1, then rebase and run: occ diagnostic + dialogue batch, native hair (async compile, water hair) + hair_qual, om4, m4_generated rerun.
+- Try in game: S8 port courtyard pool is darker with RT (our sun shadow removes glints in shade): say if you prefer a softer water shadow edge. Native hair at the port dialogue should brighten characters (first enable still compiles until the hair branch lands).
+- Questions: see below (ls_box=2 visual check, GUI_AUDIT_20261102 five yes/no, project licence, NVIDIA notification).
 
 ## Report 2026-11-02 04:10 (main fe8f75d)
 - Done: stage 1 live (smoke_ultra valid with every Ultra key; scene wait 0 timeouts in gated windows; water 120/120 composed; shader cache 2nd launch 44 read 0 compiled; FG letterbox 2560x1440 in 3840x1600 swapchain FG 2.00 -> fg_letterbox automatic). Stage 2 GUI: Experimental 28 -> 5 entries, levels for water/materials.
@@ -21,6 +31,11 @@ Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 ## User questions and decisions
 
 - Open: **ls_box=2 in Ultra?** (question above). Until you answer, Box light shadows stay Off in every preset.
+- Open: **GUI_AUDIT_20261102** five yes/no decisions; **project licence**; **NVIDIA notification** (Streamline/NGX).
+- Open (look): water sun-shadow edge: soften (more rays / temporal visibility) or keep game glint in shade?
+- Decided 11-02: OMM path delegated (option B); assetdb and VT masks generated on the user's PC, not shipped;
+  gi_reproj guards live approved (now as spec constants); dropped Codex refs may be deleted; packaging paused;
+  no compile time on work a planned build improvement makes unnecessary.
 - Open (not blocking): **`rt_hit_emission` 1 or 2** (1 = hidden hits only, 2 = also screen hits). Ultra uses 1;
   2 is developer only.
 - Decided: **`rf_hit_shade` stays Experimental until its bias is within the game's own spread** (tier (a)
