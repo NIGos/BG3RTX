@@ -559,7 +559,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_lean_hooks", "1"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_mask", "0"},
-    {"rt_hit_material_pool_alpha", "0"},
+    {"rt_hit_material_pool_alpha", "1"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_native_hair", "0"},
