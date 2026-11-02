@@ -1,0 +1,167 @@
+{
+ "name": "hrg1-rf-gi-s6-fg2",
+ "save": "Adamantine Forge",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 550,
+ "repeat": 1,
+ "live_batch": "rf-hit-gi-ab",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,qa_exposure_hold=0,rf_hit_gi=0,rt_scene_wait_log_frames=120",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/rf_hit_gi_ab/plans/hrg_ab.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] transform feedback",
+  "\\[geo\\] RT capture",
+  "\\[geo\\] WARNING",
+  "\\[cascade\\] casters",
+  "\\[em\\] emissive capture",
+  "\\[em\\] soup",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "rf: reflection pass",
+  "ls: local-light shadow pass",
+  "GI hit direct",
+  "GI hit sun",
+  "hit material",
+  "rf hit shade",
+  "hit emission",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "rf hit gi",
+  "ls box: "
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[geo\\] transform feedback enabled: vertex shaders get Position \\+ UV XFB decorations \\(stride 64\\)",
+  "\\[geo\\] RT capture, last \\d+ frames: .* MB of a 1024 MB buffer",
+  "\\[cascade\\] casters: cascade \\d+, .*of 427 MB",
+  "\\[em\\] emissive capture available \\(rt_emissive=1\\)",
+  "\\[hit material instanced\\] frame \\d+ key 1; wind: ",
+  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}",
+  "GI hit direct \\(\\d+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d* direct supported \\d+ nonzero \\d+",
+  "gi: GPU cost [0-9.]+ ms/frame",
+  "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded \\d+ \\([0-9.]+%\\), .*tier a check: [1-9]\\d* hits",
+  "rf hit shade terms \\(300 frames, \\d+ tier a hits\\): .*ratio L_b / L_a [0-9.]+",
+  "rf hit gi \\(\\d+ frames, [1-9]\\d* tier a hits, \\d+ of them from the screen's GI\\): tier a GI term [0-9.]+ vs the screen's GI term there [0-9.]+; ratio L_b / L_a [0-9.]+",
+  "rf: reflection pass GPU median [0-9.]+ ms"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=8 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=12 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=14\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rf_hit_shade + rf_hit_gi tier (a) bias at Adamantine Forge on main with the trace fix and the game's lobes at hits (RF_HIT_GI -> NATIVE_HIT_GAME_BRDF): diag-rf (rf_hit_gi 0), diag-gi1 (1), diag-gi2 (2, the screen's GI), diag-gi1-box2 (ls_box=2); then cost and shots rf off / rf + gi on / off, Ultra (+ Bounce, Hidden hits) throughout.",
+ "estimated_phase_seconds": 190,
+ "expect_every": [
+  {
+   "name": "one trace written in every shot-* window (each energy comparison needs it; m4p1 111854 lost shot-step-sun/-rf)",
+   "select": "\\[trace\\] frame \\d+ written: ",
+   "match": "\\[trace\\] frame \\d+ written: ",
+   "windows": [
+    "shot-off-a",
+    "shot-on",
+    "shot-off-b"
+   ],
+   "min": 1,
+   "event": true
+  },
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "rf hit shade tier (a) ratio in every diag window",
+   "select": "rf hit shade terms \\(300 frames",
+   "match": "ratio L_b / L_a [0-9.]+",
+   "windows": [
+    "diag-rf",
+    "diag-gi1",
+    "diag-gi2",
+    "diag-gi1-box2"
+   ],
+   "min": 1
+  },
+  {
+   "name": "rf hit gi in every rf_hit_gi diag window",
+   "select": "rf hit gi \\(\\d+ frames",
+   "match": "ratio L_b / L_a [0-9.]+",
+   "windows": [
+    "diag-gi1",
+    "diag-gi2",
+    "diag-gi1-box2"
+   ],
+   "min": 1
+  }
+ ]
+}
