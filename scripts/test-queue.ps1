@@ -442,7 +442,7 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   # analysis. The ordinary pattern summary keeps only the last matching line.
   $out | Set-Content -LiteralPath (Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt")
   $runnerLog = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).runner.txt"
-  $outcome = if($cancelled){"Run ended: cancelled: $cancelled"}else{($out | Select-String 'Run ended|STALL' | Select-Object -First 1).Line}
+  $outcome = if($cancelled){"Run ended: cancelled: $cancelled"}else{($out | Select-String -CaseSensitive '^Run ended|^STALL:' | Select-Object -First 1).Line}
   $runnerMissing = @()
   foreach ($pattern in @($job.expect_runner | Where-Object { $_ })) {
     if (-not ($out | Select-String -Pattern $pattern -Quiet)) { $runnerMissing += $pattern }
