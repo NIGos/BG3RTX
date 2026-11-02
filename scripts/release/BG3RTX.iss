@@ -56,6 +56,44 @@ Source: "{#PayloadDir}\*"; DestDir: "{tmp}\bg3rtx-payload"; Flags: dontcopy recu
 #endif
 Source: "lifecycle.ps1"; DestDir: "{app}\setup-support"; Flags: ignoreversion
 
+; Approved original ornaments and provenance must accompany the local UI.
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\README.md")
+  #error Missing launcher ornament README.md
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\corner.svg")
+  #error Missing launcher ornament corner.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\dark-stone.svg")
+  #error Missing launcher ornament dark-stone.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\divider.svg")
+  #error Missing launcher ornament divider.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\frame.svg")
+  #error Missing launcher ornament frame.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-help.svg")
+  #error Missing launcher ornament glyph-help.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-light.svg")
+  #error Missing launcher ornament glyph-light.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-memory.svg")
+  #error Missing launcher ornament glyph-memory.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-performance.svg")
+  #error Missing launcher ornament glyph-performance.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\glyph-water.svg")
+  #error Missing launcher ornament glyph-water.svg
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\hero-lantern.png")
+  #error Missing launcher ornament hero-lantern.png
+#endif
+#if !FileExists(PayloadDir + "\bin\ui\branding\ornaments\parchment-panel.svg")
+  #error Missing launcher ornament parchment-panel.svg
+#endif
+
 [Icons]
 Name: "{autoprograms}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; Tasks: startmenu
 Name: "{autodesktop}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; Tasks: desktop

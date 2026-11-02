@@ -63,6 +63,9 @@ foreach ($f in @("LatoWeb-Regular.ttf", "LatoWeb-Semibold.ttf", "OFL.txt", "READ
 foreach ($f in @("bg3rtx.svg", "bg3rtx-small.svg", "bg3rtx-small-contrast.svg", "bg3rtx.ico")) {
   $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\$f"); Destination = "bin\ui\branding\$f" }
 }
+foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "frame.svg", "glyph-help.svg", "glyph-light.svg", "glyph-memory.svg", "glyph-performance.svg", "glyph-water.svg", "hero-lantern.png", "parchment-panel.svg")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
+}
 foreach ($entry in $launcherFiles) {
   if (-not (Test-Path -LiteralPath $entry.Source -PathType Leaf)) { throw "missing launcher asset: $($entry.Source)" }
   if ((Get-Item -LiteralPath $entry.Source).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "linked launcher asset: $($entry.Source)" }
@@ -130,6 +133,9 @@ function Copy-To([string]$src, [string]$rel) {
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
 foreach ($f in @("VkLayer_bg3rtx.json", "bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
+foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "frame.svg", "glyph-help.svg", "glyph-light.svg", "glyph-memory.svg", "glyph-performance.svg", "glyph-water.svg", "hero-lantern.png", "parchment-panel.svg")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
+}
 foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 foreach ($f in @("sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll",
                  "nvngx_dlssg.dll", "NvLowLatencyVk.dll", "nvngx_dlss.dll", "nvngx_dlssd.dll")) {

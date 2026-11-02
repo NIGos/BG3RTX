@@ -9,6 +9,7 @@ const fontBase = localFiles?assetBase+'fonts/':'https://fonts.bg3rtx.local/';
 const fontStyle=document.createElement('style');
 fontStyle.textContent='@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Regular.ttf")}@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Semibold.ttf");font-weight:600 900}';
 document.head.append(fontStyle);
+if(localFiles)['dark-stone.svg','frame.svg','corner.svg','divider.svg','hero-lantern.png','parchment-panel.svg'].forEach(name=>document.documentElement.style.setProperty('--art-'+name.split('.')[0], 'url("'+assetBase+'branding/ornaments/'+name+'")'));
 document.querySelector('.emblem').src=localFiles?assetBase+'branding/bg3rtx.svg':'https://branding.bg3rtx.local/bg3rtx.svg';
 let state = null;
 const sampleView=query.get('view')||'';
@@ -18,6 +19,7 @@ const sections = [['Lighting','M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M
 const labels = {Surfaces:'Water & reflections',Advanced:'Advanced',Support:'Help & support'};
 function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
 function send(type, extra={}) { if(sample) { $('status').textContent='Sample preview — actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
+function measured(text) {return !!text && !/unknown|not measured|unavailable/i.test(text);}
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function showDialog(d) {if(!d.open)d.showModal();}
 function card(s) {
@@ -36,7 +38,7 @@ function card(s) {
   const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=s.value;i.setAttribute('aria-label',s.title||s.label);const out=el('span','help-copy',s.value+' '+(s.unit||''));i.oninput=()=>out.textContent=i.value+' '+(s.unit||'');i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.append(i,out);
  } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
  c.append(control);
- const badges=el('div','row');badges.append(pill(s.cost||'GPU cost: Unknown','cost'),pill(s.vram||'VRAM: Unknown','vram'));
+ const badges=el('div','row');if(measured(s.cost))badges.append(pill(s.cost,'cost'));if(measured(s.vram))badges.append(pill(s.vram,'vram'));
  if(s.apply)badges.append(pill(s.apply,/restart/i.test(s.apply)?'restart':''));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));c.append(badges);
  if(s.details||s.reason||s.provenance){const d=el('details'),sum=el('summary','','Details & requirements');d.append(sum,el('p','detail-copy',[s.details,s.reason,s.provenance].filter(Boolean).join('\n')));c.append(d);}
  return c;
@@ -46,12 +48,12 @@ function renderSettings() {
  root.append(el('h2','section-title',labels[section]||section));
  if(section==='Memory') {
   const memory=state.compatibility||{},grid=el('div','grid');
-  const capacity=el('article','card');capacity.append(el('h3','','Video memory capacity'),el('p','memory-capacity',memory.vram||'Unknown'));
-  const suitability=el('article','card');suitability.append(el('h3','','Memory suitability'),el('p','help-copy',memory.memory||'Unknown'));
+  const capacity=el('article','card');capacity.append(el('h3','','Video memory capacity'),el('p','memory-capacity',measured(memory.vram)?memory.vram:'Not detected'));
+  const suitability=el('article','card');suitability.append(el('h3','','Memory suitability'),el('p','help-copy',memory.memory||'Compatibility not checked'));
   grid.append(capacity,suitability);root.append(grid);return;
  }
  if(section==='Support') {
-  const c=el('article','card');c.append(el('h3','','Your settings, your PC'),el('p','','Create a local diagnostic package to help investigate a problem. Review the exact contents before sharing. Nothing is uploaded.'));const b=el('button','btn','Report a problem');b.onclick=()=>send('report');c.append(b);root.append(c);
+  const c=el('article','card');c.append(el('h3','','Diagnostic package'),el('p','','Create a local diagnostic package to help investigate a problem. Review the exact contents before sharing. Nothing is uploaded.'));const b=el('button','btn','Report a problem');b.onclick=()=>send('report');c.append(b);root.append(c);
   const info=el('article','card');info.style.marginTop='16px';info.append(el('h3','','Compatibility'),el('p','help-copy',[state.compatibility?.gpu,state.compatibility?.driver,...(state.compatibility?.details||state.compatibility?.warnings||[])].filter(Boolean).join('\n')));root.append(info);
   const setup=el('article','card');setup.style.marginTop='16px';setup.append(el('h3','','Game & graphics setup'),el('p','detail-copy',state.gamePath||'Choose the game folder containing bin\\bg3.exe (Vulkan).'));
   const actions=el('div','row');const browse=el('button','btn','Choose game folder...');browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.onclick=()=>send('recheck');actions.append(browse,recheck);setup.append(actions);
@@ -63,20 +65,24 @@ function renderSettings() {
  const grid=el('div','grid');regular.forEach(s=>grid.append(card(s)));root.append(grid);
  // One disclosure authorizes experimental choices; policy remains in the bridge.
  if(experimental.length||section==='Advanced') {
-  const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.append(pill('Experimental','exp'),el('span','','Features still being tested. They may cost more or change the look.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
+  const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
  }
 }
 function renderSummary() {
  const c=state.compatibility||{},root=$('summary');root.replaceChildren();
- const stats=[['GPU cost','Unknown','No timings from this session'],['Video memory',c.vram||'Unknown',c.memorySummary||'Hardware capacity; not mod usage'],[state.frameGeneration?'Frame generation':'Preset',state.frameGeneration||state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom',state.frameGenerationNote||'Saved and active state shown below']];
- stats.forEach(([k,v,n])=>{const s=el('div','stat');s.append(el('div','k',k));const val=el('div','v',v);val.append(el('small','',n));s.append(val);const bar=el('div','bar');s.append(bar);root.append(s);});
+ const stats=[['GPU / mod VRAM cost','Not measured yet','Per-option estimates appear where available'],['Video memory',measured(c.vram)?c.vram:'Not detected',c.memorySummary||'Hardware capacity; not mod usage'],[state.frameGeneration?'Frame generation':'Preset',state.frameGeneration||state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom',state.frameGenerationNote||'Saved and active state shown below']];
+ stats.forEach(([k,v,n])=>{const s=el('div','stat');s.append(el('div','k',k));const val=el('div','v',v);val.append(el('small','',n));s.append(val);root.append(s);});
 }
 function render(next) {
  state=next;$('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
  const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const b=el('button',!state.custom&&state.preset===index?'on':'',name);b.setAttribute('aria-pressed',!state.custom&&state.preset===index?'true':'false');b.title=index===state.recommendedPreset?'Recommended hardware estimate; not a quality qualification':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
  $('gpu-name').textContent=state.compatibility?.gpu||'Graphics unknown';$('gpu-info').textContent=[state.compatibility?.vram,state.compatibility?.driver].filter(Boolean).join(' · ')||'Compatibility not confirmed';
  const nav=$('navigation');nav.replaceChildren();const list=[...sections];if((state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,['Developer','M4 4h16v16H4z']);
- list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.setAttribute('aria-current',id===section?'page':'false');b.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="'+path+'"/></svg>';b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');foot.append(el('div','','BG3RTX · independent fan mod'),el('div','','Not affiliated with the game’s developers.'));if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
+ list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.setAttribute('aria-current',id===section?'page':'false');const glyph=el('img','glyph');glyph.alt='';glyph.src=(localFiles?assetBase+'branding/':'https://branding.bg3rtx.local/')+'ornaments/glyph-'+({Lighting:'light',Surfaces:'water',Performance:'performance',Memory:'memory',Advanced:'performance',Developer:'memory',Support:'help'}[id])+'.svg';b.append(glyph);b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');foot.append(el('div','','BG3RTX · independent fan mod'),el('div','','Not affiliated with the game’s developers.'));if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
+ $('hero-version').textContent=state.version||'Version unavailable';
+ $('hero-preset').textContent=(state.custom?'Custom':state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom')+(state.unsavedCount?' (unsaved changes)':'');
+ $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' / ')||'Not detected';
+ $('hero-status').textContent=state.modStatus||'Not checked';
  renderSummary();const warnings=$('warnings');warnings.replaceChildren();(state.compatibility?.warnings||[]).filter(Boolean).forEach(w=>warnings.append(el('div','notice',w)));if(state.error)warnings.append(el('div','notice error',state.error));
  const count=state.unsavedCount??state.dirty??0;let status=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved for next launch');if(state.restartNeeded)status+=' · Restart required';$('status').textContent=status;$('discard').disabled=!count;$('save').disabled=!count;$('play').disabled=!state.canPlay;
  renderSettings();renderPreview();renderReport();
@@ -95,13 +101,13 @@ if(sample) {
 
  const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true}));
  const settings=[
- {id:'sun',title:'Ray-traced sun shadows',description:'Accurate shadows from the sun, including foliage and grates.',category:'Lighting',value:1,choices:choices(['Off','On']),cost:'GPU cost: Unknown',vram:'VRAM: Unknown',apply:'Restart to apply'},
- {id:'gi',title:'Global illumination',description:'Light bounces off walls and floors, giving interiors and shade natural depth.',category:'Lighting',value:2,choices:choices(['Off','Screen','Ray traced']),apply:'Live setting'},
+ {id:'sun',title:'Ray-traced sun shadows',description:'Traces sunlight shadows, including foliage and grates.',category:'Lighting',value:1,choices:choices(['Off','On']),apply:'Restart to apply'},
+ {id:'gi',title:'Global illumination',description:'Adds screen-space or ray-traced indirect lighting.',category:'Lighting',value:2,choices:choices(['Off','Screen','Ray traced']),apply:'Live setting'},
  {id:'local',title:'Local light shadows',description:'Torches, braziers and spells cast shadows on nearby surfaces.',category:'Lighting',value:1,choices:choices(['Off','On']),apply:'Live setting'},
- {id:'bounce',title:'Far-field sun bounce',description:'Sunlight bouncing from distant scenery reaches covered areas.',category:'Lighting',value:1,choices:choices(['Off','6 m']),cost:'Estimate: +3.2–3.7 ms',vram:'VRAM: Unknown',apply:'Restart to apply',provenance:'RTX 5090; Water Queens House and camp; 4K-class output; 2026-11-02; 6 m; incremental GI trace cost. Reference only.'},
+ {id:'bounce',title:'Far-field sun bounce',description:'Sunlight bouncing from distant scenery reaches covered areas.',category:'Lighting',value:1,choices:choices(['Off','6 m']),cost:'Estimate: +3.2–3.7 ms',apply:'Restart to apply',provenance:'RTX 5090; Water Queens House and camp; 4K-class output; 2026-11-02; 6 m; incremental GI trace cost. Reference only.'},
  {id:'hair',title:'Native hair in ray tracing',description:'Improves hair and cutout surfaces in ray-traced lighting. Quality remains unqualified.',category:'Lighting',maturity:'experimental',value:0,choices:choices(['Off','On']),apply:'Restart to apply'},
- {id:'water',title:'Water lighting',description:'Adds reflections, shadows and a refracted view of the water bed.',category:'Surfaces',value:3,choices:choices(['Off','Reflections','+ Shadows','+ Refraction']),cost:'Estimate: 0.5–0.7 ms',vram:'Up to 520 MB',apply:'Restart to apply'}];
- render({type:'state',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
+ {id:'water',title:'Water lighting',description:'Adds reflections, shadows and a refracted view of the water bed.',category:'Surfaces',value:3,choices:choices(['Off','Reflections','+ Shadows','+ Refraction']),cost:'Estimate: 0.5–0.7 ms',vram:'Up to 520 MB',provenance:'RTX 5090; Water Queens House; 4K-class output; 2026-11-02; all water levels; total water chain. Reference only.',apply:'Restart to apply'}];
+ render({type:'state',version:'0.9.0.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
  if(['error','missing','probe'].includes(sampleView)){if(sampleView==='error')state.error='Settings could not be saved. The destination could not be replaced because another application is using it. Your edits are preserved. Close the application and try again. Windows error 32: the process cannot access the file because it is being used by another process.';if(sampleView==='missing'){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe (Vulkan). Settings browsing remains available.'];}if(sampleView==='probe'){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
  if(sampleView==='experimental')$('main').scrollTop=$('main').scrollHeight;
  if(sampleView==='missing')$('main').scrollTop=90;

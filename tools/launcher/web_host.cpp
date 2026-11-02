@@ -65,6 +65,7 @@ void refresh(Host& h) {
   if(h.busy||!h.bridge)return;
   auto session=session_token();
   if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart_needed(false);}
+  h.bridge->set_mod_status(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?"Mod files present":"Mod files missing");
   h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!game_running());
   send(h,h.bridge->state_json());
 }

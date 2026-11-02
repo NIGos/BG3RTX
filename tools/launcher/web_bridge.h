@@ -26,6 +26,7 @@ class Bridge {
   void set_status(std::string text) { status_ = std::move(text); }
   void set_restart_needed(bool value) { restart_needed = value; }
   void set_game_path(std::string value) { game_path_ = std::move(value); }
+  void set_mod_status(std::string value) { mod_status_ = std::move(value); }
   int dirty() const;
   bool dev = false, experimental = false, restart_needed = false;
  private:
@@ -37,7 +38,7 @@ class Bridge {
   int saved_preset_, preview_preset_ = -1;
   bg3::settings::KVList preview_keys_;
   std::vector<std::string> changes_, blocked_;
-  std::string preview_kind_, status_, game_path_;
+  std::string preview_kind_, status_, game_path_, mod_status_ = "Not checked";
   bool can_play_ = false, report_visible_ = false;
   GraphicsInspection inspection_;
   Compatibility compatibility_;

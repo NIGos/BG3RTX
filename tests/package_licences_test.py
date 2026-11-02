@@ -89,6 +89,9 @@ class PackageLicencesTest(unittest.TestCase):
         self.assertIn("bin/ui/fonts/LatoWeb-Regular.ttf", by_destination)
         self.assertIn("bin/ui/fonts/LatoWeb-Semibold.ttf", by_destination)
         self.assertIn("bin/ui/branding/bg3rtx.svg", by_destination)
+        for asset in (ROOT / "assets/branding/ornaments").iterdir():
+            if asset.is_file():
+                self.assertIn("bin/ui/branding/ornaments/" + asset.name, by_destination)
         self.assertFalse((self.root / "dist").exists())
         self.assertFalse((self.root / "bin").exists())
         (ui / "app.js").unlink()

@@ -1,4 +1,5 @@
 ﻿#include "web_bridge.h"
+#include "version.h"
 #include "ui_state.h"
 #include <charconv>
 #include <variant>
@@ -124,7 +125,7 @@ std::string Bridge::state_json() const {
   std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_needed)+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
   bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q(std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q(std::string(k.cost.gpu)=="Unknown"?"":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
     bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable":!available?"Enable Experimental to select":need;
       out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
@@ -136,6 +137,7 @@ std::string Bridge::state_json() const {
   if(compatibility_.driver!=CheckState::Supported&&!compatibility_.driver_text.empty())warnings.push_back(compatibility_.driver_text);
   out+="],\"gamePath\":"+q(game_path_)+",\"compatibility\":{\"gpu\":"+q(gpu)+",\"vram\":"+q(vram)+",\"memory\":"+q(compatibility_.memory_text)+",\"driver\":"+q(driver)+",\"warnings\":"+strings(warnings)+",\"details\":"+strings({compatibility_.hardware_text,compatibility_.driver_text,compatibility_.memory_text,compatibility_.adapter_text})+",\"selected\":"+std::to_string(selected_)+",\"adapters\":[";
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
+  out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Displayed frames include generated frames; this is not measured rendering performance.\"";
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
