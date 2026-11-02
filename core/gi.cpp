@@ -3180,7 +3180,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   if (s.tlas && s.alpha && water_rf_wanted()) {
     Push wpc = pc;
     wpc.rt_stats = 0;
-    water_rf(cmd, WaterRfIn{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h});
+    WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
+    if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
+    water_rf(cmd, win);
   }
   timestamp(cmd, 3);
   g_slot_written[g_slot] = true;
