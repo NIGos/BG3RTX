@@ -1047,3 +1047,20 @@ ms, both per frame across the reported window. Query record starts at row upload
 and includes join, remap and pool gather recording. See
 [progress/codex-perf-hitmat.md](progress/codex-perf-hitmat.md) for the unqueued camp
 A/B plan. No live performance or energy claim is qualified by offline tests.
+### CPU hook state and submit matrix reuse (2026-11-02, codex-perf-hooks, READY_FOR_LIVE)
+- `perf_hook_state=0` controls CPU audit ranks 2 and 3 together; Experimental GUI control, off in presets.
+  Internal queries accept the resolved recording state but always re-read current descriptors/offsets and
+  retain lifetime validation. No command pointer cache, host ABI change, shader edit or request delta.
+- Immutable pipeline snapshots/eligibility are cached per thread by handle and registry generation;
+  create/destroy invalidates all entries, including recycled handles. Classification also keys on shader
+  hashes, capture stride and tileset capture mode. Runtime material enable and diagnostics stay live.
+- Submit-local matrix keys are the three exact 16-byte source row addresses after stride/index resolution.
+  Load and validate each triple once, then scatter raw rows to instances (invalid mask 0) and jobs (invalid
+  first float NaN). Preserve per-destination late-write logging and invalid counts. Never reuse next submit.
+- Existing hook CPU line reports draw bookkeeping and key state over 300 frames; matrix line reports
+  ms/build, matrices, unique sources, builds and submits over 300 submit samples. Toggle changes discard
+  partial samples. A nonempty submitted fixup list is one build, matching its replacement at record time.
+- Explicit C++ build passed; 100/100 permitted CTests passed. No live performance, GPU cost or visual gate
+  measured. Conditional estimates only: 0.1-0.3 ms/frame hooks, 0.1-0.3 ms/build with repeated matrices.
+  A/B: S3 camp and S8 Water Queens House, OFF/ON/OFF/ON in one session per save, qualified Ultra keys on.
+  Plan and gate details: [codex-perf-hooks](progress/codex-perf-hooks.md); nothing queued.

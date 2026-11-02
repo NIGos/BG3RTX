@@ -361,6 +361,13 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"perf_hitmat_lists", "0"}}, {}},
     {"on", "On", kCapRayQuery, {{"perf_hitmat_lists", "1"}}, {{"exp_hidden_surface", 1}}}},
    {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"}}, true},
+  {"perf_hook_state", "Reuse capture hook state",
+   "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. "
+   "Experimental CPU optimization; geometry and material coverage stay the same.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}},
+    {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}},
 
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
@@ -588,6 +595,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_capture_unlocked", "1"},
     {"rt_hit_material_lean_hooks", "1"},
     {"perf_hitmat_lists", "0"},
+    {"perf_hook_state", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},

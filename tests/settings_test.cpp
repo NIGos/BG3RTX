@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // VRAM guard, compaction and elastic captures passed vg3.
+  CHECK(user_exp == 6);   // Qualified VRAM controls retired; includes perf_hook_state.
   CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));

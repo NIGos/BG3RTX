@@ -73,7 +73,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, Count
+  perf_hitmat_lists, perf_hook_state, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -444,6 +444,9 @@ bool em_core_calib_update(Bg3EmCalib* cal, bool first, double ratio, uint32_t fl
 bool em_core_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
+// Internal hook path; state belongs to the current Vulkan recording only.
+bool query_binding_resolved(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                            Bg3Binding* out, const CmdState* resolved);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
 bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
                        void** mapped);
