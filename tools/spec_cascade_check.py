@@ -88,6 +88,23 @@ def old_requests_family(spec_request):
     return out
 
 
+INST = "RT_SPEC_HIT_INST=1"
+
+
+def old_requests_inst(spec_request):
+    """Step S2c: [({1003: i, 1004: w, 1005: g}, old request)]: off, and instanced with each wind / IP grass pair."""
+    file, defs = split_request(spec_request)
+    out = []
+    for i, w, g in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 0, 1), (1, 1, 1)):
+        add = (["RT_HIT_INSTANCED=1"] if i else []) + (["RT_HIT_WIND_RGB=1"] if w else []) + \
+              (["RT_HIT_IP_GRASS=1"] if g else [])
+        ds = []
+        for d in defs:
+            ds += add if d == INST else [d]
+        out.append(({1003: i, 1004: w, 1005: g}, file + ("?" + ";".join(ds) if ds else "")))
+    return out
+
+
 def old_requests_swap(spec_request, marker, define):
     """(without the marker, with the old define in its place): a key whose spec build replaces one define."""
     file, defs = split_request(spec_request)
@@ -103,7 +120,8 @@ def two(olds, id_of):
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
 KEYS = {"cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
         "guards": (GUARDS, two(old_requests_guards, guard_id)),
-        "hitfam": (FAMILY, old_requests_family),
+        "hitfam": (FAMILY, old_requests_family),   # S2a alone (superseded by hitinst once S2c lands)
+        "hitinst": (INST, old_requests_inst),
         "gifar": ("RT_SPEC_GI_FAR=1", two(lambda r: old_requests_swap(r, "RT_SPEC_GI_FAR=1", "RT_GI_FAR=1"),
                                           lambda f: 1007))}
 

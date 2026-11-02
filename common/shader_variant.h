@@ -256,9 +256,9 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_NATIVE_SCALP=1");
     add("RT_NATIVE_HAIR=1");
   }
-  if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
-  // Step S2a: wind RGB / IP grass are constants 1004 / 1005 of the instanced module (core/gi.cpp refresh).
-  if (flags & kHitInstanced) add("RT_SPEC_HIT_FAMILY=1");
+  // Steps S2a + S2c: rt_hit_material_instanced (1003), wind RGB (1004) and IP grass (1005) are constants of one module
+  // per hit-material file (core/gi.cpp refresh): RT_SPEC_HIT_INST=1 always, never RT_HIT_INSTANCED or its sub-defines.
+  if (hit_material_entry(file)) add("RT_SPEC_HIT_INST=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

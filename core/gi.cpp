@@ -994,7 +994,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
   std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
   // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
-  const bool hit_family = instanced && sv::hit_material_entry(file);
+  const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
   if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
@@ -1031,6 +1031,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
   if (sv::prev_radiance_entry(file)) spec_add(sv::kSpecIdPrevRadiance, prev_guard);
   if (hit_family) {
+    spec_add(sv::kSpecIdHitInstanced, instanced ? 1u : 0u);
     spec_add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
     spec_add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
   }
