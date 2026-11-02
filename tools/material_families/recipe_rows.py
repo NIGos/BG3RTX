@@ -139,14 +139,31 @@ def classify(fs: str, src, bases: dict) -> tuple[dict | None, str, glsl.Verdict 
                       key=lambda v: (glsl.CLASS_ORDER[v.cls], v.diff_stmts, v.recipe))
     first = None
     for v in verdicts:
-        base, kind, _ = _accept(v, bases)
+        base, kind, _ = _accept(v, bases, x)
         if base is not None:
             return base, kind, v
         first = first or (kind, v)
     return None, first[0] if first else "no base", first[1] if first else None
 
 
-def _accept(v: glsl.Verdict, bases: dict) -> tuple[dict | None, str, glsl.Verdict]:
+# RT2.w = class | flag bit 3 | channel << 4: no hit row decodes the class (rows are class 0, front lobe) or the flag.
+_RT2W = re.compile(r"float\(\(\(?\d+u(?: \| uint\(int\(ubo1_0\._m\? != 0u\) << 3\)\))?\)? \| \(\(ubo1_0\._m\? & 7u\) << 4u\)\) \| 0u\)")
+
+
+def out2_canon(forms: glsl.Forms) -> str | None:
+    """RT2 (out2) of a shader with UBO members erased and the RT2.w class / flag word folded: two shaders with the same
+    canon write the same roughness, reflectance and metalness from the same samples, whatever their UBO offsets."""
+    st = [s for s in forms.erased.stmts if glsl._lhs(s) == "out2"]
+    if not st:
+        return None
+    # Temporaries renamed by first appearance: their value-numbered names hash their whole definition chain, which
+    # differs between bases that differ elsewhere (two-sided N, translucency) while RT2 reads the same layers.
+    names = {}
+    out = re.sub(r"\b[tmu][0-9a-f]{10}(?:#\d+)?\b", lambda m: names.setdefault(m.group(0), f"v{len(names)}"), st[-1])  # noqa: W605
+    return _RT2W.sub("W", out)
+
+
+def _accept(v: glsl.Verdict, bases: dict, x: glsl.Forms | None = None) -> tuple[dict | None, str, glsl.Verdict]:
     if v.cls not in ("COPY", "VARIANT"):
         return None, f"FS {v.cls}: {v.term}"[:120], v
     base = bases[v.recipe]
@@ -163,6 +180,18 @@ def _accept(v: glsl.Verdict, bases: dict) -> tuple[dict | None, str, glsl.Verdic
         return base, "constant", v
     if REFL_TERM.match(term):
         return base, "reflectance", v
+    # Only RT2 differs from the base: accept another audited recipe's reflectance
+    # mode only if the entire RT2 canon agrees, including sample provenance.
+    # HLOD_TwoSided 3b346b4241d44152 is NOT 83831811 with 81657854's
+    # normal-mix mode: its mix input uses another page decode (TRACK_D_REFLECTIONS
+    # section 14, HLOD audit). Recipe has no independent reflectance page selector;
+    # ReflectanceNormalMix always reads the shading normal sample's x. Do not
+    # erase page/sample differences here to make that pair qualify.
+    if x is not None and term.startswith("out2:"):
+        mine = out2_canon(x)
+        for h, b in sorted(bases.items()):
+            if mine is not None and out2_canon(b.setdefault("forms", glsl.Forms.of(b["glsl"]))) == mine:
+                return base, "out2 as " + h, v
     return None, f"term not expressible as a row: {term}"[:120], v
 
 
@@ -219,7 +248,8 @@ def build(log=print) -> tuple[list[dict], list[tuple]]:
                 else:
                     why = "not a pool VS, not an alpha-tested instanced draw"
             if why is None:
-                mode = "ReflectanceConstant" if kind == "constant" else base["mode"]
+                mode = ("ReflectanceConstant" if kind == "constant" else
+                        bases[kind[8:]]["mode"] if kind.startswith("out2 as ") else base["mode"])
                 # The base's offsets in its own engine layout, moved by the classifier's field map: the DB must agree.
                 mv = {(b, f): x for b, f, x in (v.fields if v else ())}
                 exp = [mv.get(("ubo1_0", o), o) for o in base["offsets"]]
@@ -233,6 +263,13 @@ def build(log=print) -> tuple[list[dict], list[tuple]]:
                 elif why is None:
                     base_off = int(base["extra"][0]) if base["extra"] and base["extra"][0].isdigit() else 0
                     want = mv.get(("ubo1_1", base_off), base_off)
+                    if kind.startswith("out2 as ") and mode != "ReflectanceConstant":
+                        # The 1:1 member this FS's own RT2 reads (exactly one), at its std140 offset.
+                        sh = glsl.normalize(src.glsl(t["fs"]))
+                        o2 = [x for x in sh.stmts if glsl._lhs(x) == "out2"][-1]
+                        ks = sorted(set(re.findall(r"ubo1_1\._m(\d+)", o2)))
+                        offs = glsl.std140_offsets(sh.blocks.get("ubo1_1", []))
+                        want = offs[int(ks[0])] if len(ks) == 1 and int(ks[0]) < len(offs) else None
                     if kind == "reflectance":
                         # RT2.y reads another 1:1 member: its std140 offset in this FS's own block.
                         m = REFL_TERM.match(v.term.split("; plus ", 1)[-1])
@@ -248,9 +285,9 @@ def build(log=print) -> tuple[list[dict], list[tuple]]:
                         refl_off = want
                 two_sided = base["two_sided"]
                 if why is None and capture == "CapturePool":
-                    if two_sided:
-                        why = "two-sided FS on a pool VS (the pool consumer has no two-sided flip)"
-                    elif fields["layout"] != "LayoutBase":
+                    # Two-sided pool rows: the RT_HIT_POOL_2S consumers flip N (row h2.w = 5; every other consumer
+                    # rejects the row, fail closed).
+                    if fields["layout"] != "LayoutBase":
                         why = "pool rows: LayoutBase only"
                 if why is None and capture == "CaptureDraw" and mode not in ("ReflectanceUbo", "ReflectanceConstant"):
                     why = f"{mode} on the per-draw path (one 1:1 float only)"

@@ -312,6 +312,28 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}, false, "Advanced", {}},
 
+  {"perf_hitmat_lists", "Hit material CPU batching",
+   "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. "
+   "Preserves material validation and shading. Requires Hidden-surface shading at startup.",
+   Kind::Choice, Apply::Live, "live; native materials need startup", false,
+   {{"off", "Off", 0, {{"perf_hitmat_lists", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"perf_hitmat_lists", "1"}}, {{"exp_hidden_surface", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"}}, true},
+  {"perf_hook_state", "Reuse capture hook state",
+   "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. "
+   "Experimental CPU optimization; geometry and material coverage stay the same.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}},
+    {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}, true},
+
+  {"perf_submit_batch", "Batch descriptor and submit bookkeeping",
+   "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Unqualified CPU experiment.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"perf_submit_batch", "0"}}, {}},
+    {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}}},
+   {}, {0, 0, 0, 0}, false, {}, true},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -537,6 +559,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_recycle", "1"},
     {"rt_hit_material_capture_unlocked", "1"},
     {"rt_hit_material_lean_hooks", "1"},
+    {"perf_hitmat_lists", "0"},
+    {"perf_hook_state", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},
@@ -639,6 +663,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_order_trace", "0"},
     {"rt_scene_wait", "1"},
     {"cpu_timing", "0"},
+    {"perf_submit_batch", "0"},
     {"rt_alpha_stream", "1"},
     {"rt_stability_log", "0"},
     {"rt_capture_state_log", "0"},

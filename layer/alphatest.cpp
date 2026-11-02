@@ -20,6 +20,9 @@
 // textures, one for tile caches, the captured UV soup, and two samplers.
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
+#include "perf_submit.h"
+#include <optional>
+#include "../common/submit_batch.h"
 #include "hit_material.h"
 #include "../common/native_hit_capability.h"
 #include "../common/mapped_copy.h"
@@ -1414,6 +1417,12 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
 // The set layout is fixed for the device's lifetime; the set is the one of the
 // latest scene build (VK_NULL_HANDLE before the first), from the same scene
 // slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
+static void clone_descriptor_update(uint32_t wc,const VkWriteDescriptorSet* writes,uint32_t cc,const VkCopyDescriptorSet* copies) {
+  SubmitCpuTimer timer(DIAG_ALPHA_DESC_US);
+  diag(DIAG_ALPHA_DESC_CALLS);
+  g_dd->vk.UpdateDescriptorSets(g_dd->device,wc,writes,cc,copies);
+}
+
 bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set,std::span<const VkDescriptorImageInfo> tables,uint32_t* firstTable) {
   if(!native_hit::enabled() || !g_dd || !g_dsl || !source || !pool || !set)return false;
   uint32_t first=0;
@@ -1444,8 +1453,20 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
     copy.srcSet=source;copy.dstSet=*set;copy.srcBinding=copy.dstBinding=binding;
     copy.descriptorCount=binding==19?kNativeSamplers:binding==2?kTextures:binding==3?kCaches:1u;
   }
-  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);
-  if(!tables.empty()){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);}
+  VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;
+  write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();
+  if(cfg_int("perf_submit_batch",0) && !tables.empty()) {
+    std::vector<VkCopyDescriptorSet> compatible;
+    for(uint32_t i=0;i<count;++i) {
+      if(copies[i].dstBinding==2) submit_batch::copy_except(compatible,copies[i],first,uint32_t(tables.size()));
+      else compatible.push_back(copies[i]);
+    }
+    clone_descriptor_update(1,&write,uint32_t(compatible.size()),compatible.data());
+  } else {
+    clone_descriptor_update(0,nullptr,count,copies);
+    if(!tables.empty()) clone_descriptor_update(1,&write,0,nullptr);
+  }
   if(firstTable)*firstTable=first;return true;
 }
 
@@ -1614,13 +1635,17 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
     copies[i].descriptorCount=bindings[i]==2?kTextures:bindings[i]==3?kCaches:1u;
   }
   // Copy first: Vulkan applies descriptor copies AFTER writes in one call.
-  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,6,copies);
+  clone_descriptor_update(0,nullptr,6,copies);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  std::optional<submit_batch::DescriptorWrites> pending;
+  if(batch) pending.emplace();
   if(g_tileset_layout){
     s.native_samplers=native_samplers;VkDescriptorImageInfo samplers[kNativeSamplers]{};
     for(uint32_t i=0;i<kNativeSamplers;++i)samplers[i].sampler=i && i<=native_samplers.size()?native_samplers[i-1]->handle:g_wrap;
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=19;
     write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.descriptorCount=kNativeSamplers;write.pImageInfo=samplers;
-    vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+    if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
+    else clone_descriptor_update(1,&write,0,nullptr);
   }
   VkDescriptorBufferInfo buffers[9]={{s.stamp,0,kStampStride},{s.records,0,record_bytes},{s.dispatch,0,dispatch.size()*4ull}};
   for(unsigned layer=0;layer<4;++layer) {
@@ -1634,16 +1659,19 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
     writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=s.set;writes[i].dstBinding=bindings_out[i];
     writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];
   }
-  vk.UpdateDescriptorSets(g_dd->device,9,writes,0,nullptr);
+  if(batch) pending->writes.insert(pending->writes.end(),writes,writes+9);
+  else clone_descriptor_update(9,writes,0,nullptr);
   auto images=[&](uint32_t binding,uint32_t base,const auto& views) {
     std::vector<VkDescriptorImageInfo> info;
     for(auto [view,layout]:views) info.push_back({VK_NULL_HANDLE,view,layout});
     if(info.empty()) return;
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=binding;
     write.dstArrayElement=base+1;write.descriptorCount=uint32_t(info.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    write.pImageInfo=info.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+    write.pImageInfo=info.data();if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
+    else clone_descriptor_update(1,&write,0,nullptr);
   };
   images(2,g_set_tex[slot],textures);images(3,g_set_cache[slot],caches);
+  if(batch) clone_descriptor_update(uint32_t(pending->writes.size()),pending->writes.data(),0,nullptr);
   VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT;
   barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;

@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BG3RTX Launcher</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="dark">
 <style>
   /* Design mockup for the WebView2 launcher. Original art only: no game logos, fonts or assets. */
   :root {
@@ -68,7 +67,7 @@
   }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand h1 {
-    font-family: "Cinzel", Georgia, serif;
+    font-family: "Palatino Linotype", Palatino, Georgia, serif;
     font-weight: 700;
     font-size: 22px;
     letter-spacing: .08em;
@@ -143,7 +142,7 @@
   main { overflow: auto; padding: 22px 26px 30px; }
   .section-title {
     display: flex; align-items: center; gap: 12px;
-    font-family: "Cinzel", Georgia, serif;
+    font-family: "Palatino Linotype", Palatino, Georgia, serif;
     font-size: 15px; letter-spacing: .1em; text-transform: uppercase;
     color: var(--gold);
     margin: 4px 0 14px;
@@ -256,7 +255,7 @@
   .btn.play {
     border: 0; color: #fff3df; font-weight: 700; letter-spacing: .06em;
     padding: 10px 26px;
-    font-family: "Cinzel", Georgia, serif;
+    font-family: "Palatino Linotype", Palatino, Georgia, serif;
     background: linear-gradient(180deg, #d77a45, #a8512a);
     box-shadow: 0 6px 22px rgba(196,105,58,.35);
   }
@@ -268,43 +267,86 @@
     nav { display: none; }
     .grid, .summary { grid-template-columns: 1fr; }
   }
+
+  /* Original ornament study. Display serif is a local fallback; see ornament README. */
+  @font-face { font-family: Lato; src: url('../../../assets/fonts/LatoWeb-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: Lato; src: url('../../../assets/fonts/LatoWeb-Semibold.ttf') format('truetype'); font-weight: 600 900; font-display: swap; }
+  :root { --text-3: #b7ae9b; --line: #766449; --line-soft: #4c4439; --radius: 5px; }
+  body { background: #0d1014 url('../../../assets/branding/ornaments/dark-stone.svg') center / cover; padding: 10px; }
+  .window { position: relative; width: min(1180px,100%); height: min(880px,calc(100dvh - 20px)); min-height: 580px; grid-template-columns: 218px minmax(0,1fr); border: 6px solid #8b7048; border-image: url('../../../assets/branding/ornaments/frame.svg') 24 / 12px / 0 stretch; border-radius: 0; background: #191c20 url('../../../assets/branding/ornaments/dark-stone.svg') center / cover; }
+  .window-corner { position: absolute; width: 88px; height: 88px; background: url('../../../assets/branding/ornaments/corner.svg') center / contain; z-index: 5; pointer-events: none; }
+  .tl { top: 0; left: 0; }.tr { top: 0; right: 0; transform: rotate(90deg); }.br { bottom: 0; right: 0; transform: rotate(180deg); }.bl { bottom: 0; left: 0; transform: rotate(270deg); }
+  header { padding: 18px 24px; background: linear-gradient(#d6aa6210,transparent),#191b1e; gap: 12px; }
+  .brand h1 { font-family: Lato,'Segoe UI',sans-serif; font-size: 23px; letter-spacing: .08em; }
+  .brand small { font-size: 10px; letter-spacing: .04em; }
+  .emblem { filter: none; }
+  .presets { border-radius: 5px; background: #11151a; border-color: #766449; }
+  .presets button { min-height: 32px; border-radius: 3px; padding: 6px 11px; }
+  .gpu { padding: 8px 10px; border-radius: 4px; }
+  .gpu span { display: block; font-size: 11px; margin-top: 2px; }
+  nav { padding: 28px 12px 12px; background: linear-gradient(90deg,#090b0f70,transparent); }
+  nav a { padding: 12px 9px; border-radius: 3px; font-size: 13px; gap: 9px; }
+  nav a.on { background: linear-gradient(90deg,#b1874930,#25272a); border-color: #7f6844; }
+  nav .glyph { width: 24px; height: 24px; flex: none; }
+  nav .sep { background: url('../../../assets/branding/ornaments/divider.svg') center / 190px 20px no-repeat; height: 24px; margin: 7px 0; }
+  nav .foot { line-height: 1.65; }
+  main { min-width: 0; padding: 16px 24px 16px; scrollbar-color: #8b7048 #17191d; }
+  .hero { position: relative; min-height: 156px; margin-bottom: 14px; overflow: hidden; border: 1px solid #8e744c; border-radius: 3px; background: linear-gradient(90deg,#171b20 0%,#171b20 60%,#171b20cc 67%,#171b2000 82%) 0 0 / 100% 100% no-repeat,url('../../../assets/branding/ornaments/hero-lantern.png') right 53% / auto 240px no-repeat,#171b20; box-shadow: inset 0 0 0 4px #11151a60,0 8px 20px #0003; }
+  .hero-copy { position: relative; padding: 18px 24px; width: 64%; }
+  .eyebrow { color: #e4bf83; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; margin-bottom: 6px; }
+  .hero h2 { font: 400 30px/1.15 'Palatino Linotype',Palatino,Georgia,serif; margin: 0 0 6px; color: #f7e9ca; }
+  .initial { display: inline-block; color: #f0cd8f; font-size: 43px; line-height: .8; text-shadow: 1px 1px #45321e; }
+  .hero p { font-size: 13px; line-height: 1.5; color: #e2d6c1; margin: 0; }
+  .hero-note { position: absolute; right: -42%; bottom: 16px; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #f1e7d2; background: #10141bd9; padding: 4px 8px; }
+  .section-title { margin: 0 0 10px; font-size: 14px; letter-spacing: .12em; font-weight: 400; gap: 16px; }
+  .section-title span::first-letter { font-size: 1.55em; color: #f0cd8f; }
+  .section-title::after { min-width: 48px; height: 24px; background: url('../../../assets/branding/ornaments/divider.svg') center / 100% 24px no-repeat; }
+  .summary { gap: 10px; margin-bottom: 12px; }
+  .stat { position: relative; padding: 12px 14px; border-color: #60543f; background: linear-gradient(#202328f5,#202328f5),url('../../../assets/branding/ornaments/parchment-panel.svg'); }
+  .stat .k { font-size: 10px; letter-spacing: .06em; }.stat .v { font-size: 21px; margin-top: 4px; }.stat .v small { font-size: 11px; }
+  .bar { height: 4px; margin-top: 8px; }
+  .grid { gap: 12px; margin-bottom: 12px; }
+  .card { padding: 14px 18px 12px; background: linear-gradient(#22252af8,#22252af8),url('../../../assets/branding/ornaments/parchment-panel.svg'); border-color: #66583f; }
+  .card::before,.card::after { content: ''; pointer-events: none; position: absolute; width: 34px; height: 34px; background: url('../../../assets/branding/ornaments/corner.svg') center / contain; opacity: .88; }
+  .card::before { top: 2px; left: 2px; }.card::after { bottom: 2px; right: 2px; transform: rotate(180deg); }
+  .card h3 { font-size: 14px; line-height: 1.3; }.card p { font-size: 13px; margin-top: 7px; }
+  .card > .row:first-child { flex-wrap: wrap; min-height: 32px; }.card .seg { margin-left: auto; }
+  .row { gap: 7px; }.pill { font-size: 10px; border-radius: 3px; padding: 3px 7px; }.pill.exp { color: #efb888; }
+  .toggle { width: 46px; height: 32px; cursor: pointer; }
+  .toggle input { display: block; position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; z-index: 1; cursor: pointer; }
+  .toggle span { inset: 4px 0; border-radius: 4px; border-color: #958468; background: linear-gradient(#0b0f13,#26282a); }
+  .toggle span::after { top: 3px; left: 4px; width: 16px; height: 16px; border-radius: 2px; clip-path: polygon(50% 0,100% 35%,82% 100%,18% 100%,0 35%); background: conic-gradient(from 20deg,#dad6cf,#7c8c93,#bec7cb,#788085,#dad6cf); }
+  .toggle input:checked + span { background: #554326; border-color: #d4b177; }
+  .toggle input:checked + span::after { transform: translateX(20px); background: conic-gradient(from 20deg,#fff1c2,#a26b22,#e4b55c,#f8dc99,#fff1c2); box-shadow: none; }
+  .seg { border-radius: 3px; border-color: #958468; }.seg button { min-height: 32px; padding: 5px 8px; font-size: 11px; }
+  details.exp { border: 1px solid #76563b; padding: 10px 14px; border-radius: 4px; }details.exp summary { font-size: 12px; min-height: 32px; }details.exp summary::before { color: #f1c28d; }
+  footer { padding: 14px 24px; background: linear-gradient(#d6aa620a,transparent),#171a1e; border-color: #6d593b; }
+  .btn { min-height: 38px; border-radius: 4px; border-color: #9b896b; }
+  .btn.play { min-width: 124px; border: 1px solid #e4ba77; border-radius: 3px; color: #fff1d8; background: linear-gradient(90deg,#0003,transparent 30% 70%,#0003),linear-gradient(#92502e,#61321f); box-shadow: inset 0 0 0 3px #37291e,inset 0 0 0 4px #bd8d50,inset 0 8px 14px #ffb56d20,0 3px 14px #d26b2920; text-shadow: 0 1px 1px #160c07; letter-spacing: .14em; }
+  .btn.play::before,.btn.play::after { content: ''; display: inline-block; width: 5px; height: 5px; transform: rotate(45deg); background: #e7c083; border: 1px solid #f8e4b9; margin: 0 9px 2px; }
+  :is(button,a,summary):focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }.toggle input:focus-visible + span { outline: 3px solid var(--teal); outline-offset: 3px; }
+  @media (max-width: 1000px) { header { flex-wrap: wrap; }.gpu { margin-left: auto; }.window { grid-template-columns: 190px minmax(0,1fr); }.hero-copy { width: 75%; }.hero-note { display: none; }.card .row { flex-wrap: wrap; } }
+  @media (max-width: 860px) { body { padding: 0; }.window { width: 100%; height: 100dvh; min-height: 0; grid-template-columns: minmax(0,1fr); grid-template-rows: auto auto minmax(0,1fr) auto; }nav { display: flex; flex-direction: row; flex-wrap: wrap; padding: 6px 14px; gap: 2px; border-bottom: 1px solid #6d593b; border-right: 0; }nav a { min-height: 36px; padding: 4px 7px; }nav .foot,nav .sep { display: none; }.summary { grid-template-columns: repeat(3,minmax(0,1fr)); }.grid { grid-template-columns: 1fr; }.hero { min-height: 160px; }.hero-copy { width: 75%; }.presets { order: 3; }.gpu { margin-left: 0; }.window-corner { width: 54px; height: 54px; }footer { flex-wrap: wrap; gap: 8px; } }
+  @media (max-width: 520px) { .gpu { display: none; }header { padding: 12px 16px; }.presets { width: 100%; justify-content: space-between; }.presets button { padding: 5px 7px; }.summary { grid-template-columns: 1fr; }.hero { background-position: center,right center; }.hero h2 { font-size: 25px; }.hero-copy { width: 100%; background: #171b2088; padding: 18px; }main { padding: 16px; }footer { padding: 12px 16px; }.status { width: 100%; } }
+  @media (forced-colors: active) { body,.window,header,nav,.card,.stat,.hero,footer,details.exp { background: Canvas; color: CanvasText; border-color: CanvasText; border-image: none; }.window-corner,.card::before,.card::after,.section-title::after,.glyph,.emblem { display: none; }.hero-copy { width: 100%; background: Canvas; }.hero h2,.initial,.hero p,.eyebrow,.hero-note,.section-title { color: CanvasText; }.toggle input { opacity: 1; appearance: auto; }.toggle span { display: none; }.btn,.btn.play,.presets button.on,.seg button.on { background: ButtonFace; color: ButtonText; border: 1px solid ButtonText; box-shadow: none; }.toggle input:focus-visible { outline: 3px solid Highlight; } }
+
 </style>
 </head>
 <body>
-<div class="window" role="application" aria-label="BG3RTX settings">
+<div class="window" aria-label="BG3RTX settings">
+  <i class="window-corner tl" aria-hidden="true"></i><i class="window-corner tr" aria-hidden="true"></i><i class="window-corner bl" aria-hidden="true"></i><i class="window-corner br" aria-hidden="true"></i>
 
   <header>
     <div class="brand">
-      <!-- Original emblem: a lantern split by a beam of light. -->
-      <svg class="emblem" viewBox="0 0 64 64" aria-hidden="true">
-        <defs>
-          <radialGradient id="glow" cx="50%" cy="55%" r="50%">
-            <stop offset="0" stop-color="#ffe2a8"/>
-            <stop offset=".45" stop-color="#d6aa62"/>
-            <stop offset="1" stop-color="#d6aa62" stop-opacity="0"/>
-          </radialGradient>
-          <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#e3d7bf"/>
-            <stop offset="1" stop-color="#8f8672"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="36" r="20" fill="url(#glow)" opacity=".55"/>
-        <path d="M24 6h16l-2 5H26z" fill="url(#metal)"/>
-        <path d="M30 2a4 4 0 0 1 4 0v4h-4z" fill="url(#metal)"/>
-        <path d="M20 13h10v38H22l-6-6V19z" fill="none" stroke="url(#metal)" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M34 13h10l4 6v26l-6 6H34z" fill="none" stroke="url(#metal)" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M29 24h6v10h-6z" fill="#ffe2a8"/>
-        <path d="M29 36h6l3 12H26z" fill="#d6aa62"/>
-        <path d="M24 55h16l-2 5H26z" fill="url(#metal)"/>
-      </svg>
+      <img class="emblem" src="../../../assets/branding/bg3rtx.svg" alt="" width="40" height="40">
       <div>
         <h1>BG3RTX</h1>
         <small>Ray-traced lighting · fan mod</small>
       </div>
     </div>
     <div class="spacer"></div>
-    <div class="presets" role="radiogroup" aria-label="Preset">
-      <button>Low</button><button>Medium</button><button>High</button><button class="on" aria-checked="true">Ultra</button><button>Custom</button>
+    <div class="presets" role="group" aria-label="Preset preview">
+      <button>Low</button><button>Medium</button><button>High</button><button class="on" aria-pressed="true">Ultra</button><button>Custom</button>
     </div>
     <div class="gpu" title="Detected adapter">
       <div class="dot"></div>
@@ -313,43 +355,46 @@
   </header>
 
   <nav aria-label="Sections">
-    <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Lighting</a>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c3-2 6 2 9 0s6-2 9 0M3 19c3-2 6 2 9 0s6-2 9 0M12 3v8"/></svg>Water &amp; reflections</a>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 4 4-7 5 9"/><path d="M3 21h18"/></svg>Performance</a>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>Memory</a>
+    <a href="#lighting" class="on" aria-current="page"><img class="glyph" src="../../../assets/branding/ornaments/glyph-light.svg" alt="" width="24" height="24">Lighting</a>
+    <a href="#"><img class="glyph" src="../../../assets/branding/ornaments/glyph-water.svg" alt="" width="24" height="24">Water &amp; reflections</a>
+    <a href="#"><img class="glyph" src="../../../assets/branding/ornaments/glyph-performance.svg" alt="" width="24" height="24">Performance</a>
+    <a href="#"><img class="glyph" src="../../../assets/branding/ornaments/glyph-memory.svg" alt="" width="24" height="24">Memory</a>
     <div class="sep"></div>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></svg>Help &amp; support</a>
+    <a href="#"><img class="glyph" src="../../../assets/branding/ornaments/glyph-help.svg" alt="" width="24" height="24">Help &amp; support</a>
     <div class="foot">Version 0.9 beta<br>Not affiliated with the game's developers.</div>
   </nav>
 
-  <main>
-    <div class="section-title">Your setup</div>
+  <main id="lighting">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy"><div class="eyebrow">The art of light</div><h2 id="hero-title"><span class="initial">L</span>ight the unseen.</h2><p>Warmth in every shadow.<br>A world illuminated, one ray at a time.</p><span class="hero-note">Lighting &amp; atmosphere</span></div>
+    </section>
+    <h2 class="section-title"><span>Your setup</span></h2>
     <div class="summary">
       <div class="stat"><div class="k">Estimated GPU cost</div><div class="v">11.4 ms <small>at 4K output</small></div><div class="bar"><i style="width:58%"></i></div></div>
       <div class="stat"><div class="k">Video memory</div><div class="v">18.6 <small>of 31.4 GB budget</small></div><div class="bar"><i style="width:59%"></i></div></div>
       <div class="stat"><div class="k">Frame generation</div><div class="v">On <small>2x · Reflex on</small></div><div class="bar"><i style="width:100%"></i></div></div>
     </div>
 
-    <div class="section-title">Lighting</div>
+    <h2 class="section-title"><span>Lighting</span></h2>
     <div class="grid">
       <div class="card">
-        <div class="row"><h3>Ray-traced sun shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <div class="row"><h3>Ray-traced sun shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" aria-label="Ray-traced sun shadows" checked><span></span></label></div>
         <p>Sharp, accurate shadows from the sun, including foliage and grates.</p>
         <div class="row"><span class="pill cost">≈ 1.1 ms</span><span class="pill vram">+0.3 GB</span></div>
       </div>
       <div class="card">
         <div class="row"><h3>Global illumination</h3><div class="spacer"></div>
-          <div class="seg"><button>Off</button><button>Screen</button><button class="on">Ray traced</button></div></div>
+          <div class="seg" role="group" aria-label="Global illumination preview"><button>Off</button><button>Screen</button><button class="on" aria-pressed="true">Ray traced</button></div></div>
         <p>Light bounces off walls and floors, so interiors and shade feel lit, not flat.</p>
         <div class="row"><span class="pill cost">≈ 7.2 ms</span><span class="pill vram">+1.1 GB</span></div>
       </div>
       <div class="card">
-        <div class="row"><h3>Local light shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <div class="row"><h3>Local light shadows</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" aria-label="Local light shadows" checked><span></span></label></div>
         <p>Torches, braziers and spells cast real shadows.</p>
         <div class="row"><span class="pill cost">≈ 1.0 ms</span></div>
       </div>
       <div class="card">
-        <div class="row"><h3>Far-field sun bounce</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" checked><span></span></label></div>
+        <div class="row"><h3>Far-field sun bounce</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" aria-label="Far-field sun bounce" checked><span></span></label></div>
         <p>Sunlight bouncing from distant scenery reaches covered areas.</p>
         <div class="row"><span class="pill cost">≈ 3.4 ms</span><span class="pill restart">Restart to apply</span></div>
       </div>
@@ -359,12 +404,12 @@
       <summary><span class="pill exp">Experimental</span> Features still being tested. They may cost more or change the look.</summary>
       <div class="grid">
         <div class="card">
-          <div class="row"><h3>Native hair in ray tracing</h3><div class="spacer"></div><label class="toggle"><input type="checkbox"><span></span></label></div>
+          <div class="row"><h3>Native hair in ray tracing</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" aria-label="Native hair in ray tracing"><span></span></label></div>
           <p>Hair strands let light through instead of acting as solid cards. First enable compiles shaders.</p>
           <div class="row"><span class="pill cost">≈ 3.4 ms</span></div>
         </div>
         <div class="card">
-          <div class="row"><h3>Hit reflections</h3><div class="spacer"></div><label class="toggle"><input type="checkbox"><span></span></label></div>
+          <div class="row"><h3>Hit reflections</h3><div class="spacer"></div><label class="toggle"><input type="checkbox" aria-label="Hit reflections"><span></span></label></div>
           <p>Reflections show objects that are off screen.</p>
           <div class="row"><span class="pill cost">≈ 2.3 ms</span></div>
         </div>

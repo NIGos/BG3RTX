@@ -4,6 +4,8 @@
 #include <cstring>
 #include <vector>
 #include "host.h"
+#include "perf_submit.h"
+#include "../common/submit_batch.h"
 #include "omm_submit.h"
 #include "omm_backend.h"
 #include "omm_content.h"
@@ -451,33 +453,52 @@ static VKAPI_ATTR VkResult VKAPI_CALL WaitForPresentKHR(VkDevice device, VkSwapc
   return device_of(device)->vk.WaitForPresentKHR(device, sc, id, timeout);
 }
 
+struct SubmitScratch {
+  std::vector<VkCommandBuffer> commands, entry;
+  std::vector<VkSubmitInfo> legacy;
+  std::vector<VkSubmitInfo2> modern;
+};
+static thread_local submit_batch::Scratch<SubmitScratch> t_submit_scratch;
+
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits,
                                                   VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  std::vector<VkCommandBuffer> cmds;
+  SubmitCpuTimer timer(DIAG_SUBMIT_US);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  submit_batch::Scratch<SubmitScratch>::Lease scratch(t_submit_scratch,batch);
+  auto& work=scratch.get();
+  auto& cmds=work.commands;cmds.clear();
   for (uint32_t i = 0; i < count; ++i)
-    cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
+    if(submits[i].commandBufferCount) cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
   SunSubmitBatch sun;
   sun_prepare_submit(dd,queue,count,submits,&sun);
   if(sun.modified) {submits=sun.legacy.data();cmds=sun.commands;}
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
-  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
-  pan_on_submit(cmds);
-  sl_note_submit(cmds);
+  if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  if(!batch || !cmds.empty()) pan_on_submit(cmds);
+  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
   const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
+  omm::CompletionBatch completion;
+  if(batch && submit_batch::appendable(submits,count)) completion=omm::prepare_completion(dd,queue,ommWork);
+  submit_batch::PrivateSignal signal(completion.semaphore,completion.value);
+  if(completion.attached) {
+    signal.append(work.legacy,submits,count);submits=work.legacy.data();++count;
+  }
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
+  omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
+  if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
   if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1: the water scene of this batch's forward passes
-  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS, completion.attached);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
@@ -487,7 +508,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
                                                    VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  std::vector<VkCommandBuffer> cmds;
+  SubmitCpuTimer timer(DIAG_SUBMIT_US);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  submit_batch::Scratch<SubmitScratch>::Lease scratch(t_submit_scratch,batch);
+  auto& work=scratch.get();
+  auto& cmds=work.commands;cmds.clear();
   for (uint32_t i = 0; i < count; ++i)
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
@@ -499,7 +524,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   // must cover those reads, and signals must not release resources before they
   // finish. Keep the existing OMM signal-only policy for entries without them.
   native_hit::SubmitStages content;
-  std::vector<VkCommandBuffer> entry;
+  auto& entry=work.entry;entry.clear();
   for(uint32_t i=0;i<count;++i) {
     const auto& s=submits[i];entry.clear();bool material=false,terrain=false;
     for(uint32_t j=0;j<s.commandBufferInfoCount;++j){
@@ -513,20 +538,28 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   submits=content.data_or(submits);
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
-  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
-  pan_on_submit(cmds);
-  sl_note_submit(cmds);
+  if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  if(!batch || !cmds.empty()) pan_on_submit(cmds);
+  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
   const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
+  omm::CompletionBatch completion;
+  if(batch && submit_batch::appendable(submits,count)) completion=omm::prepare_completion(dd,queue,ommWork);
+  submit_batch::PrivateSignal signal(completion.semaphore,completion.value);
+  if(completion.attached) {
+    signal.append(work.modern,submits,count);submits=work.modern.data();++count;
+  }
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
+  omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
+  if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
   if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1 (likewise)
-  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS, completion.attached);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
