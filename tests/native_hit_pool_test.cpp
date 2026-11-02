@@ -77,6 +77,33 @@ int main(int argc, char** argv) {
   CHECK(nv_reflectance(vt::ReflectanceNormalMix, 0.f, 0.9f) == 0.5f);
   CHECK(nv_reflectance(vt::ReflectanceNormalMix, 1.f, 0.9f) == 0.9f);
   CHECK(std::fabs(nv_reflectance(vt::ReflectanceNormalMix, 0.25f, 0.9f) - 0.6f) < 1e-6f);
+  // Base_MSK_VT (rt_hit_material_mask; FS a5f44c48 audit, tests/material_families_test.py BaseMask): a pool pair of
+  // VS 2d2ac3c3 with the 14678345 engine UBO, reflectance at 1:1 byte 12, the 1:1 colours up to byte 44.
+  const auto* msk = pool_recipe(0x2d2ac3c38992b7f0ull, 0xa5f44c487527d272ull);
+  CHECK(msk && msk->layout == vt::LayoutMask && msk->capture == vt::CapturePool && msk->reflectance == vt::ReflectanceUbo);
+  CHECK(msk->transform_offset == 0 && msk->tileset_index_offset == 32 && msk->channel_offset == 36 && engine_bytes(*msk) == 40);
+  CHECK(msk->reflectance_offset == 12 && vt::material_bytes(*msk) == 44 && vt::material_class(*msk) == 0);
+  CHECK(pool_recipe(0x3812bc980438747full, 0xa5f44c487527d272ull) == nullptr);
+  // nv_mask_albedo = the FS's mix(A, (((c0 * m.x) + (c1 * m.y)) + (c2 * m.z)) * A, (m.x + m.y) + m.z) before
+  // the clamp (nv_fields clamps). GLSL mix(x, y, s) = x * (1 - s) + y * s, per component.
+  {
+    using bg3::transport::nv_mask_albedo;using bg3::transport::tb_vec;
+    const auto a = tb_vec(0.5f, 0.25f, 0.8f), c0 = tb_vec(1.2f, 0.4f, 0.1f), c1 = tb_vec(0.3f, 0.9f, 0.6f), c2 = tb_vec(0.f, 0.5f, 2.f);
+    // No mask: the albedo layer unchanged.
+    const auto none = nv_mask_albedo(a, tb_vec(0, 0, 0), c0, c1, c2);
+    CHECK(none.x == a.x && none.y == a.y && none.z == a.z);
+    // One full channel: A * c (s = 1).
+    const auto red = nv_mask_albedo(a, tb_vec(1, 0, 0), c0, c1, c2);
+    CHECK(std::fabs(red.x - 0.6f) < 1e-6f && std::fabs(red.y - 0.1f) < 1e-6f && std::fabs(red.z - 0.08f) < 1e-6f);
+    // Mixed mask (s = 0.9): reference by the GLSL formula in double.
+    const float m[3] = {0.2f, 0.3f, 0.4f};const float av[3] = {a.x, a.y, a.z};
+    const float k0[3] = {c0.x, c0.y, c0.z}, k1[3] = {c1.x, c1.y, c1.z}, k2[3] = {c2.x, c2.y, c2.z};
+    const auto got = nv_mask_albedo(a, tb_vec(m[0], m[1], m[2]), c0, c1, c2);const float gv[3] = {got.x, got.y, got.z};
+    for (int i = 0; i < 3; ++i) {
+      const double s = double(m[0]) + m[1] + m[2], t = double(k0[i]) * m[0] + double(k1[i]) * m[1] + double(k2[i]) * m[2];
+      CHECK(std::fabs(gv[i] - (av[i] * (1.0 - s) + t * av[i] * s)) < 1e-6);
+    }
+  }
   // Pipeline rule: exact_material_pipeline without the XFB/basis/UV terms.
   MaterialPipelineFacts f;f.material_state=true;f.depth_test=1;f.color_mask=0xf73u;f.triangle_list=true;
   CHECK(pool_material_pipeline(f));

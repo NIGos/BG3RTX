@@ -184,5 +184,54 @@ class WindRgbTranslucency(unittest.TestCase):
         self.assertEqual(glsl.std140_offsets(blk)[5], 20)
 
 
+BASE_MASK = ["14678345c10aefbc", "a5f44c487527d272"]
+
+
+@unittest.skipUnless(all((CACHE / f"{h}.glsl").exists() for h in BASE_MASK), "no dumped GLSL in captures/alpha_cache")
+class BaseMask(unittest.TestCase):
+    """native_vt_surface.h recipe a5f44c48 (Base_MSK_VT, LayoutMask, rt_hit_material_mask): against 14678345 only
+    RT1 (out1) differs (the colour-mask tint of the albedo layer, native_vt_fields.h nv_mask_albedo) and RT2.y reads
+    the 1:1 float at byte 12; the VT sampling of the normal/albedo/physical layers is 14678345's."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = {h: (CACHE / f"{h}.glsl").read_text(encoding="utf-8", errors="ignore") for h in BASE_MASK}
+        cls.forms = {h: glsl.Forms.of(t) for h, t in cls.src.items()}
+
+    def _only(self, kind):
+        x, y = getattr(self.forms[BASE_MASK[0]], kind), getattr(self.forms[BASE_MASK[1]], kind)
+        return Counter(y.stmts) - Counter(x.stmts), Counter(x.stmts) - Counter(y.stmts)
+
+    def test_only_rt1_differs(self):
+        added, removed = self._only("erased")
+        self.assertEqual((sum(added.values()), sum(removed.values())), (9, 4))
+        # every changed statement feeds out1; no other output is touched
+        self.assertFalse([s for s in list(added) + list(removed) if s.startswith(("out0", "out2", "out3", "out4"))])
+        add = "\n".join(added)
+        # the 2D mask: texture2D 1:6 (second texture2D) with the set 0 sampler at the VS UV (in0)
+        self.assertIn("texture(sampler2D(texture2D1_1, sampler0_0), in0)", add)
+        tint = [s for s in added if "clamp(mix(" in s]
+        self.assertEqual(len(tint), 1)
+        # clamp(mix(A, (((c0 * m.x) + (c1 * m.y)) + (c2 * m.z)) * A, (m.x + m.y) + m.z)): A is the albedo VT layer
+        self.assertRegex(tint[0], r"clamp\(mix\((t\w+), \(\(\(ubo1_1\._m\? \* (t\w+)\) \+ \(ubo1_1\._m\? \* (t\w+)\)\) \+ "
+                                  r"\(ubo1_1\._m\? \* (t\w+)\)\) \* \1, vec3\(\(\2 \+ \3\) \+ \4\)\), vec3\(0\.0\), vec3\(1\.0\)\)")
+        layer = [s for s in added if s.startswith("vec3 ") and "textureGrad(sampler2DArray(texture2DArray1_1" in s]
+        self.assertEqual(len(layer), 1)
+
+    def test_colours_and_reflectance_bytes(self):
+        plain = self.forms[BASE_MASK[1]].plain
+        blk = plain.blocks.get("ubo1_1", [])
+        self.assertEqual(blk, ["vec3 _m0", "float _m1", "vec3 _m2", "float _m3", "vec3 _m4", "float _m5"])
+        self.assertEqual(glsl.std140_offsets(blk), [0, 12, 16, 28, 32, 44])
+        tint = [s for s in plain.stmts if "ubo1_1._m0 *" in s][0]
+        self.assertIn("(((ubo1_1._m0 * ", tint)
+        self.assertIn("(ubo1_1._m2 * ", tint)
+        self.assertIn("(ubo1_1._m4 * ", tint)
+        out2 = [s for s in plain.stmts if s.startswith("out2 =")]
+        base2 = [s for s in self.forms[BASE_MASK[0]].plain.stmts if s.startswith("out2 =")]
+        self.assertIn("clamp(ubo1_1._m1, 0.0, 1.0)", out2[0])
+        self.assertIn("clamp(ubo1_1._m0, 0.0, 1.0)", base2[0])
+
+
 if __name__ == "__main__":
     unittest.main()

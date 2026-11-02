@@ -74,6 +74,48 @@ inline HdDirect hd_scatter(NtFresnelBlendResult material,HdVec3 normal,HdVec3 ge
  r.radiance=tb_vec(value.f.x*incident.radiance.x*factor,value.f.y*incident.radiance.y*factor,value.f.z*incident.radiance.z*factor);
  if(tb_finite3(r.radiance))r.status=HdOk;return r;
 }
+// The game's own standard-class direct lobes instead of FresnelBlend (rf_hit_gi: NATIVE_HIT_GAME_BRDF), so a light
+// at a hit gets the value the screen's deferred pass gives the same light at the same surface (f469db78 point/spot
+// and box loops; bg3_lights.hlsli bg3_light_eval, common/box_light.h bl_std_lobes):
+//   radiance x N.L x (diffuse colour x Burley x 1/pi x mix(1, 0.6622, a) + F_schlick(F0, L.H) x Vis_smith_joint x D_ggx)
+// with a = the native roughness without the screen-quad AA term (max(0.09, r); a ray hit has no quad derivatives),
+// N.V >= 1e-5 as the game. Same domain checks and status codes as hd_scatter, so the supported set is unchanged.
+inline float hd_pow5(float x){return hd_pow(tb_max(tb_abs(x),9.9999997e-05f),5.0f);}
+inline HdDirect hd_game_scatter(NtResult material,HdVec3 normal,HdVec3 geometric_normal,
+                                HdVec3 outgoing,HdIncident incident,bool visibility_known,float visibility){
+ HdDirect r;r.radiance=tb_vec(0,0,0);r.status=HdUnknownMaterial;
+ if(material.status!=NtOk)return r;
+ r.status=incident.status;if(incident.status!=HdOk)return r;
+ r.status=HdUnknownVisibility;if(!visibility_known)return r;
+ r.status=HdInvalid;if(!tb_finite(visibility) || visibility<0 || visibility>1)return r;
+ if(incident.radiance.x==0 && incident.radiance.y==0 && incident.radiance.z==0){r.status=HdOk;return r;}
+ TfFrame frame=tf_frame(normal);TbDirection ng=tb_direction(geometric_normal),wo=tb_direction(outgoing),wi=tb_direction(incident.direction);
+ if(frame.status!=TbOk || ng.status!=TbOk || wo.status!=TbOk || wi.status!=TbOk)return r;
+ HdVec3 local_o=tf_to_local(frame,wo.v),local_i=tf_to_local(frame,wi.v);
+ r.status=HdNormalDomain;
+ if(!(local_o.z>0) || !(tb_dot(ng.v,wo.v)>0) || tb_dot(ng.v,wi.v)*local_i.z<0)return r;
+ if(local_i.z<=0){r.status=HdOk;return r;}
+ r.status=HdInvalid;
+ const NtParameters p=material.value;const float a=p.base_roughness;
+ if(!tb_finite(a) || !(a>0) || a>1 || !tb_finite3(p.diffuse_color) || !tb_finite3(p.F0))return r;
+ HdVec3 h0=tb_vec(wo.v.x+wi.v.x,wo.v.y+wi.v.y,wo.v.z+wi.v.z);const float hl=tb_dot(h0,h0);
+ if(!(hl>1.0000000e-10f))return r;
+ const HdVec3 H=hd_mul(h0,1/tb_sqrt(hl));
+ const float nol=tb_min(1,local_i.z),nov=tb_max(tb_min(1,local_o.z),9.9999997e-06f);
+ const float loh=tb_min(1,tb_max(0,tb_dot(wi.v,H))),noh=tb_min(1,tb_max(0,tb_dot(frame.n,H)));
+ const float fd=(2*loh*loh*a+0.5f*a)-1;
+ const float burley=(1+fd*hd_pow5(1-nol))*(1+fd*hd_pow5(1-nov));
+ const float diff=0.31830987f*(burley*(1+(0.66225165f-1)*a));
+ float k2=(a+1)*0.5f;k2*=k2;
+ const float vis=0.5f/(nol*tb_sqrt((nov-nov*k2)*nov+k2)+nov*tb_sqrt((nol-nol*k2)*nol+k2));
+ float a4=a*a;a4*=a4;const float dn=(noh*a4-noh)*noh+1;
+ const float spec=vis*(a4*(0.31830987f/(dn*dn))),f5=hd_pow5(1-loh);
+ const float factor=nol*visibility;
+ const HdVec3 F=tb_vec(p.F0.x+(1-p.F0.x)*f5,p.F0.y+(1-p.F0.y)*f5,p.F0.z+(1-p.F0.z)*f5);
+ r.radiance=tb_vec(incident.radiance.x*factor*(p.diffuse_color.x*diff+F.x*spec),incident.radiance.y*factor*(p.diffuse_color.y*diff+F.y*spec),
+                   incident.radiance.z*factor*(p.diffuse_color.z*diff+F.z*spec));
+ if(tb_finite3(r.radiance))r.status=HdOk;return r;
+}
 #ifdef __cplusplus
 }
 #else

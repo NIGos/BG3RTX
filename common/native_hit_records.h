@@ -35,6 +35,9 @@ NH_UINT nh_pool_basis_magic=0x53414250u; // "PBAS"
 // LayoutIridescent rows (224 = 2): 228..244 the five 2D views 1:2..1:6 (texture-table indices),
 // sampled with the row sampler (word 24); the 1:1 floats at 48..60 (strength, tiling, iridescence,
 // reflectance lo) and 64 (hi) in place of p0/p1 (no VT; native_vt_fields.h nv_iridescent_fields).
+// LayoutMask rows (224 = 3 | mask sampler slot << 8; Base_MSK_VT, rt_hit_material_mask): 228 the 2D colour
+// mask view (texture-table index), 232..252 the 1:1 colours c0 and c1 (floats), c2 in p1.yzw (68..79: the VT
+// layers read only p1.x, the mip clamp); native_vt_fields.h nv_mask_albedo.
 NH_UINT nh_pool_row_detail=224u;
 #undef NH_UINT
 #ifdef __cplusplus

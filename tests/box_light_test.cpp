@@ -10,6 +10,7 @@
 // difference (a missing factor, a wrong curve) is orders of magnitude larger. The GGX peak adds its own
 // conditioning, 8 x 2^-24 / dn (section 3).
 #include "../common/box_light.h"
+#include "../common/native_hit_direct.h"
 
 #include <cmath>
 #include <cstdio>
@@ -270,6 +271,77 @@ int main() {
   // 7. Energy (the ls_box=2 rule): an unshadowed box light's game term is s = 1 and our visibility t is
   //    1 (lit), 0 (occluded) or s (unknown, the game's own), so the delta c (t - s) is never positive.
   for (float t : {0.0f, 1.0f}) check(1.0f * (t - 1.0f) <= 0.0f, "unshadowed delta <= 0");
+
+  // 8. Hit == screen for a box light (rf_hit_gi, NATIVE_HIT_GAME_BRDF): rf_hit_shade's box term at a hit,
+  //    hd_game_scatter(material from the G-buffer fields, N, V, incident = colour x falloff x b13 along
+  //    normalize(_m9)) with the hit's own visibility 1, equals the game's loop g_box (diffuse + specular) for
+  //    the same record and surface. The declared FresnelBlend (hd_scatter, without the key) does not: its
+  //    ratio to the game is reported (energy-weighted over the same random cases) to size the S6/S8 bias.
+  {
+    namespace tr = bg3::transport;
+    double fb_sum = 0, game_sum = 0, fb_diff = 0, game_diff = 0;
+    int n_ok = 0;
+    for (int i = 0; i < 200000; ++i) {
+      const float3 N = dir(), m9 = dir();
+      float3 V = dir();
+      if (dot3(N, V) < 0.02f) V = mul3(V, -1.0f);
+      if (!(dot3(N, V) > 0.02f) || !(dot3(N, m9) > 0.0f)) continue;
+      const float rough = u(0.0f, 1.0f), refl = u(0.0f, 1.0f), metal = U(rng) < 0.8f ? 0.0f : u(0.0f, 1.0f);
+      const tr::TbVec3 albedo{u(0.02f, 0.95f), u(0.02f, 0.95f), u(0.02f, 0.95f)};
+      tr::NtInput in{albedo, rough, refl, metal, 0,
+                     tr::NtSamplesKnown | tr::NtLinearColorKnown | tr::NtOpaqueCoverageKnown | tr::NtLobesKnown};
+      const tr::NtResult p = tr::nt_class0_parameters(in);
+      check(p.status == tr::NtOk, "hit material parameters");
+      const float g = u(0.05f, 1.0f), sc = u(0.0005f, 0.01f);
+      const float3 col{u(10, 20000), u(10, 20000), u(10, 20000)};
+      tr::HdIncident inc;
+      inc.direction = {m9.x, m9.y, m9.z};
+      inc.distance = 0;
+      inc.status = tr::HdOk;
+      inc.radiance = {col.x * (g * sc), col.y * (g * sc), col.z * (g * sc)};
+      const tr::TbVec3 n{N.x, N.y, N.z}, o{V.x, V.y, V.z};
+      const tr::HdDirect hit = tr::hd_game_scatter(p, n, n, o, inc, true, 1.0f);
+      const tr::HdDirect fb = tr::hd_scatter(tr::nt_to_fresnel_blend(p), n, n, o, inc, true, 1.0f);
+      check(hit.status == tr::HdOk && fb.status == tr::HdOk, "hit terms supported");
+      const float a = p.value.base_roughness;   // the game's _515 with no quad AA term
+      const Out sc_ = g_box(m9, V, N, a, {p.value.F0.x, p.value.F0.y, p.value.F0.z},
+                            {p.value.diffuse_color.x, p.value.diffuse_color.y, p.value.diffuse_color.z}, col, g, sc);
+      const float want[3] = {sc_.d.x + sc_.s.x, sc_.d.y + sc_.s.y, sc_.d.z + sc_.s.z};
+      const float got[3] = {hit.radiance.x, hit.radiance.y, hit.radiance.z};
+      // The GGX peak bound of section 3 on the specular part, x4: the hit renormalises L and V and takes N.H and
+      // N.L in its tangent frame (tf_frame), up to 4x the roundings of the game's dot products before dn.
+      const double noh_d = std::clamp(double(dot3(N, norm3(add3(V, m9)))), 0.0, 1.0), a4_d = double(a) * a * a * a;
+      const double tol_peak = 32.0 * 5.9604644775390625e-08 / (1.0 - noh_d * noh_d * (1.0 - a4_d));
+      // Grazing light: N.L is a difference of unit-vector products, its absolute rounding a few 2^-24, so the
+      // whole term's relative bound grows as 8 x 2^-24 / N.L.
+      const double tol_nol = 8.0 * 5.9604644775390625e-08 / std::max(double(dot3(N, m9)), 1e-30);
+      const float sp[3] = {sc_.s.x, sc_.s.y, sc_.s.z};
+      for (int c = 0; c < 3; ++c) {
+        const bool ok = std::abs(double(got[c]) - want[c]) <= (kTol + tol_nol) * std::abs(double(want[c])) + tol_peak * sp[c] + 1e-30;
+        if (!ok && g_fail < 5)
+          std::fprintf(stderr, "  hit case: a %.4f nov %.5f nol %.5f got %g want %g (s %g)\n", a, dot3(N, V), dot3(N, m9), got[c], want[c], sp[c]);
+        check(ok, "hit box term == the game's box loop");
+      }
+      game_sum += double(want[0]) + want[1] + want[2];
+      fb_sum += double(fb.radiance.x) + fb.radiance.y + fb.radiance.z;
+      if (metal == 0.0f) { game_diff += double(want[0]) + want[1] + want[2]; fb_diff += double(fb.radiance.x) + fb.radiance.y + fb.radiance.z; }
+      ++n_ok;
+    }
+    check(n_ok > 50000, "enough hit cases");
+    std::printf("box_light_test: hit == screen over %d box cases; FresnelBlend / game energy %.3f (dielectrics %.3f)\n",
+                n_ok, fb_sum / game_sum, fb_diff / game_diff);
+    // A back-facing light or view keeps hd_scatter's domain status (the supported set is unchanged).
+    tr::NtInput in{{0.5f, 0.5f, 0.5f}, 0.5f, 0.5f, 0, 0,
+                   tr::NtSamplesKnown | tr::NtLinearColorKnown | tr::NtOpaqueCoverageKnown | tr::NtLobesKnown};
+    const tr::NtResult p = tr::nt_class0_parameters(in);
+    tr::HdIncident inc;inc.direction = {0, 0, 1};inc.distance = 0;inc.status = tr::HdOk;inc.radiance = {1, 1, 1};
+    check(tr::hd_game_scatter(p, {0, 0, 1}, {0, 0, 1}, {0, 0, -1}, inc, true, 1).status == tr::HdNormalDomain, "view below");
+    inc.direction = {0, 0, -1};
+    const tr::HdDirect below = tr::hd_game_scatter(p, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, inc, true, 1);
+    check(below.status == tr::HdOk && below.radiance.x == 0, "light below: known zero");
+    inc.direction = {0, 0, 1};
+    check(tr::hd_game_scatter(p, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, inc, true, 0).radiance.x == 0, "occluded");
+  }
 
   std::printf("box_light_test: %u checks, %u failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
