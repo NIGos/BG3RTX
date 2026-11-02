@@ -336,7 +336,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_cascade_casters=1,rf_stats=0,hit_ao_rays=2,rf_hit_gi=0,ls_box=0,gi_debug=0,replay_pack=0,rt_hit_material_pool_alpha=1,rt_stats=0,qa_exposure_hold=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,rt_cascade_casters=1,rf_stats=0,hit_ao_rays=2,rf_hit_gi=0,ls_box=0,gi_debug=0,replay_pack=0,rt_hit_material_pool_alpha=1,rt_stats=0,qa_exposure_hold=1"
  },
  {
   "label": "diag-pa-off",
@@ -516,7 +516,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=1,gi_debug=0,rt_stats=0,replay_pack=0,qa_exposure_hold=0,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
+  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=1,gi_debug=0,rt_stats=0,replay_pack=0,qa_exposure_hold=1,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
  },
  {
   "label": "warmup-off",
@@ -531,7 +531,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=0,gi_debug=0,rt_stats=0,replay_pack=0,qa_exposure_hold=0,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
+  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=0,gi_debug=0,rt_stats=0,replay_pack=0,qa_exposure_hold=1,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
  },
  {
   "label": "diag-pack",
@@ -546,7 +546,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=1,gi_debug=0,rt_stats=1,replay_pack=1,qa_exposure_hold=0,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
+  "set": "rt_hit_material_instanced=0,rt_cascade_casters=0,rt_emissive=0,gi_hit_sun=0,rt_hit_emission=0,gi_hit_direct=1,gi_debug=0,rt_stats=1,replay_pack=1,qa_exposure_hold=1,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
  },
  {
   "label": "settle-off",
@@ -882,7 +882,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=0,replay_pack=0,rt_hit_emission=1,qa_exposure_hold=0,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=0,replay_pack=0,rt_hit_emission=1,qa_exposure_hold=1,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
  },
  {
   "label": "diag-em2",
@@ -912,7 +912,7 @@
   "motion_end": 6,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=0,replay_pack=0,rt_hit_emission=0,qa_exposure_hold=0,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
+  "set": "gi_hit_direct=1,gi_hit_sun=1,rt_hit_material_instanced=1,rt_cascade_casters=1,rt_emissive=1,gi_debug=0,rt_stats=0,replay_pack=0,rt_hit_emission=0,qa_exposure_hold=1,rt_hit_material_pool_alpha=0,rf_hit_shade=0"
  },
  {
   "label": "cost-em2-off-a",
