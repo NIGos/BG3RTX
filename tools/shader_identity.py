@@ -811,11 +811,13 @@ def unchanged_since(tree):
 # ---------------------------------------------------------------------------------------------
 # The common feature gate of the *_shader_test.py wrappers
 # ---------------------------------------------------------------------------------------------
-def feature_gate(doc, feature_files, label, contract=None, argv=None, foreign=None):
+def feature_gate(doc, feature_files, label, contract=None, argv=None, foreign=None, base_overlay=None):
     """Key off: every baseline request byte-identical here; key on: every request of
     `feature_files` (file names, or a predicate on the request) compiles, passes spirv-val and
     `contract(request, paths)` ('' ok, None not checked, text = failure). `foreign(request)`: a new
     request another feature's gate owns (a tree with several features merged), not unexpected here.
+    `base_overlay(base, new)`: logical paths whose working-tree copy replaces the baseline's before the
+    comparison (another, separately proven change merged into this tree: its files are not this gate's).
     Exit code 1 on any failure, a missing or unexpected request."""
     ap = argparse.ArgumentParser(description=doc)
     ap.add_argument("--baseline", default=default_baseline())
@@ -829,6 +831,10 @@ def feature_gate(doc, feature_files, label, contract=None, argv=None, foreign=No
     cache = MemoryCache() if args.no_cache else Cache()
     base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
     new = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
+    for path in (base_overlay(base, new) if base_overlay else []):
+        base._data[path] = new.read(path)
+        base.ids[path] = new.ids[path]
+        print(f"baseline overlay: {path} from the working tree", flush=True)
     try:
         old_list, new_list = base.requests(), new.requests()
         missing = [r for r in old_list if r not in new_list]

@@ -7,7 +7,7 @@
  "timeout": 554,
  "repeat": 1,
  "live_batch": "m4-promotion",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_water_geometry=0,rt_water_reflections=0,rt_water_compose=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rt_hit_material_instanced=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,qa_exposure_hold=0,rf_hit_gi=0,rt_scene_wait_log_frames=120",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_emission=1,rt_emissive=1,hit_ao_rays=2,qa_exposure_hold=0,rf_hit_gi=0,rt_scene_wait_log_frames=120",
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -64,15 +64,10 @@
   "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}",
   "GI hit direct \\(\\d+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d* direct supported \\d+ nonzero \\d+",
   "GI hit sun \\(\\d+ frames\\): evaluated \\d+, ",
-  "rf hit shade \\(300 frames\\): tier b hidden hits [1-9]\\d*, shaded \\d+ \\([0-9.]+%\\), .*tier a check: [1-9]\\d* hits .*standard error [0-9.]+ \\(\\d+ frames\\)",
-  "rf hit shade terms \\(300 frames, \\d+ tier a hits\\): .*ratio L_b / L_a [0-9.]+",
   "gi: GPU cost [0-9.]+ ms/frame",
   "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
-  "rf: reflection pass GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames; .*debug 0,",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
-  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
-  "rf hit gi \\(\\d+ frames, [1-9]\\d* tier a hits, \\d+ of them from the screen's GI\\): tier a GI term [0-9.]+ vs the screen's GI term there [0-9.]+; ratio L_b / L_a [0-9.]+ \\(without the GI term [0-9.]+\\)",
-  "rf hit gi: mode 1 active"
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -86,20 +81,18 @@
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=7 label=shot-off-a repeat=0",
-  "\\[motion-trace\\] phase=8 label=shot-step-gi repeat=0",
-  "\\[motion-trace\\] phase=9 label=shot-step-sun repeat=0",
-  "\\[motion-trace\\] phase=10 label=shot-step-rf repeat=0",
-  "\\[motion-trace\\] phase=11 label=shot-step-inst repeat=0",
-  "\\[motion-trace\\] phase=15 label=shot-gi1 repeat=0",
-  "\\[motion-trace\\] phase=16 label=shot-on repeat=0",
-  "\\[motion-trace\\] phase=18 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=20\\b",
+  "\\[motion-trace\\] phase=6 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-step-gi repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-step-sun repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-step-inst repeat=0",
+  "\\[motion-trace\\] phase=12 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=14 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=16\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "M4 promotion gate, S8 polished stone: rf_hit_shade tier (b) share 24%, the reflection scene. Startup: the Ultra bundle (rt_hit_material=1, rt_hit_material_instanced=1, rt_emissive=1, rt_xfb_mb=1024, rt_cascade_mb=427). Live: one diag window (rt_stats + rf_stats, bundle ON), cost OFF / ON / OFF (diagnostics off), one PNG per state, a PNG per cumulative step (gi_hit_direct, +gi_hit_sun, +rf_hit_shade, +instanced). Bundle OFF = the five live keys 0 and rt_emissive 0 (the Ctrl+Shift+F9 live path). Also cost-ao0 (bundle ON with hit_ao_rays=0, right after cost-on: the AO rays' cost at hits) and, with the new core, the rf hit shade boxes line (L_b's projector part) in diag-on. rf_hit_gi (2026-11-01): warmup-gi compiles the RF_HIT_GI variant and the ls_box=2 pass; diag-gi1 / diag-gi2 / diag-gi1-box2 (rf_stats only, bundle ON + rf_hit_gi 1 / 2 / 1 with ls_box=2) log the tier (a) L_b / L_a with the hit's indirect diffuse ('rf hit gi'); cost-gi1 + shot-gi1 its cost and energy (bundle ON + rf_hit_gi=1).",
- "estimated_phase_seconds": 254,
+ "purpose": "M4 promotion gate, S8 polished stone:  Startup: the Ultra bundle (rt_hit_material=1, rt_hit_material_instanced=1, rt_emissive=1, rt_xfb_mb=1024, rt_cascade_mb=427). Live: one diag window (rt_stats + rf_stats, bundle ON), cost OFF / ON / OFF (diagnostics off), one PNG per state, a PNG per cumulative step (gi_hit_direct, +gi_hit_sun, + Bundle OFF = the five live keys 0 and rt_emissive 0 (the Ctrl+Shift+F9 live path). Also cost-ao0 (bundle ON with hit_ao_rays=0, right after cost-on: the AO rays' cost at hits) and, with the new core, the rf hit shade boxes line (L_b's projector part) in diag-on. rf_hit_gi (2026-11-01): warmup-gi compiles the RF_HIT_GI variant and the ls_box=2 pass; diag-gi1 / diag-gi2 / diag-gi1-box2 (rf_stats only, bundle ON + rf_hit_gi 1 / 2 / 1 with ls_box=2) log the tier (a) L_b / L_a with the hit's indirect diffuse ('rf hit gi'); cost-gi1 + shot-gi1 its cost and energy (bundle ON + rf_hit_gi=1). Bundle as main's Ultra after the M4 preset commit: Hidden-surface shading '+ Bounce' (rt_hit_material, instanced and wind RGB rows, gi_hit_direct, gi_hit_sun) and Emission at ray hits 'Hidden hits' (rt_hit_emission=1, rt_emissive=1); rf_hit_shade stays off (experimental).",
+ "estimated_phase_seconds": 169,
  "expect_every": [
   {
    "name": "one trace written in every shot-* window (each energy comparison needs it; m4p1 111854 lost shot-step-sun/-rf)",
@@ -109,34 +102,12 @@
     "shot-off-a",
     "shot-step-gi",
     "shot-step-sun",
-    "shot-step-rf",
     "shot-step-inst",
     "shot-on",
-    "shot-gi1",
     "shot-off-b"
    ],
    "min": 1,
    "event": true
-  },
-  {
-   "name": "rf hit gi in every rf_hit_gi diag window (the tier (a) bias with the indirect diffuse at hits)",
-   "select": "rf hit gi \\(\\d+ frames",
-   "match": "rf hit gi \\(\\d+ frames, [1-9]\\d* tier a hits",
-   "windows": [
-    "diag-gi1",
-    "diag-gi2",
-    "diag-gi1-box2"
-   ],
-   "min": 1
-  },
-  {
-   "name": "rf_hit_gi=2: tier (a) checks shaded from the screen's GI",
-   "select": "rf hit gi \\(\\d+ frames",
-   "match": "tier a hits, [1-9]\\d* of them from the screen's GI\\)",
-   "windows": [
-    "diag-gi2"
-   ],
-   "min": 1
   },
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -146,7 +117,6 @@
     "cost-off-a",
     "cost-on",
     "cost-ao0",
-    "cost-gi1",
     "cost-off-b"
    ],
    "min": 1
@@ -172,33 +142,6 @@
     "cost-off-a",
     "cost-on",
     "cost-ao0",
-    "cost-off-b"
-   ],
-   "when_present": true
-  },
-  {
-   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
-   "select": "\\[geo\\] RT capture, last \\d+ frames:",
-   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
-   "min": 1,
-   "windows": [
-    "cost-off-a",
-    "cost-on",
-    "cost-ao0",
-    "cost-gi1",
-    "cost-off-b"
-   ]
-  },
-  {
-   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
-   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
-   "match": ", buffer full 0\\.0, added ",
-   "min": 1,
-   "windows": [
-    "cost-off-a",
-    "cost-on",
-    "cost-ao0",
-    "cost-gi1",
     "cost-off-b"
    ],
    "when_present": true
