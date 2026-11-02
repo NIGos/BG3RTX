@@ -415,8 +415,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 6);   // Qualified VRAM controls retired; includes perf_hook_state.
-  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -775,6 +775,19 @@ static void test_ultra_water() {
 }
 
 static void test_product_policy() {
+  // CPU perf experiments remain hidden from players, including their Off choices.
+  for (const char* id : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+    const Knob& k = *find_knob(id);
+    CHECK(k.dev_only);
+    CHECK(!knob_visible(k, false));
+    CHECK(knob_visible(k, true));
+    CHECK_EQ(code_default(id), "0");
+    for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
+    for (int c = 0; c < choice_count(k); ++c) {
+      CHECK(!choice_visible(k, c, false));
+      CHECK_EQ(choice_maturity(k, c), "developer");
+    }
+  }
   const auto& emission = *find_knob("exp_hit_emission");
   Map legacy = code_defaults();
   apply_layer(legacy, parse_ini("preset=ultra\ndev=0\nrt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n"));

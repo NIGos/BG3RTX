@@ -325,7 +325,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}},
     {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}}},
-   {}, {0, 0, 0, 0}, true, {}},
+   {}, {0, 0, 0, 0}, true, {}, true},
 
   {"perf_submit_batch", "Batch descriptor and submit bookkeeping",
    "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Unqualified CPU experiment.",
