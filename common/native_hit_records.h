@@ -24,6 +24,9 @@ NH_UINT nh_opaque_meta=1u<<13;
 // triangles, 1} and per vertex UV (8 B) + object-space N/B/T (VS locations 1/2/3, 36 B).
 NH_UINT nh_pool_meta=1u<<15;
 NH_UINT nh_pool_rec_flag=1u<<31;
+// An alpha-tested pool instance with a row (rt_hit_material_pool_alpha): rec stays its alpha record (the coverage
+// test), nh_pool_meta is set and meta bits 16..31 hold slot + 1 (bits 0..15: stride and the kInfo flags).
+NH_UINT nh_pool_alpha_slot_shift=16u;
 NH_UINT nh_pool_rows=4096u;
 NH_UINT nh_pool_row_base=32u+nh_material_rows*256u;
 NH_UINT nh_pool_basis_header=16u;

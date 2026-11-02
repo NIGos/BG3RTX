@@ -41,6 +41,8 @@ def capture_class(meta, rec, alpha_rows, hit, frame):
     if meta & LEGACY:
         return "legacy soup", ""
     pool = bool(meta & POOL)
+    if meta & ALPHA and meta & POOL and meta & POOL_ROW:
+        return "pool alpha, pool row", f"slot {(meta >> 16) - 1}"   # rt_hit_material_pool_alpha
     if meta & ALPHA:
         fs = ""
         if rec >= 16 and (rec - 16) % 208 == 0 and alpha_rows is not None:
