@@ -15,7 +15,11 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kOccStats = 4096 };
+// rt_occ_stats (common/occ_stats.h): RT_OCC_STATS=1 on the every-mode D-LS box pass only (its occluder
+// counters; core/gi.cpp g_ls_full_box_occ, its own Pipe like kSunCurrent). The sun/AO part is its own
+// file (gi/rt_occ_stats.hlsl), so no other request changes.
+inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -74,7 +78,7 @@ inline bool cascade_entry(const char* file) {
       "gi/rt_local_shadows_full_check.hlsl", "gi/rt_local_shadows_k.hlsl", "gi/rt_local_shadows_full_k.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
-      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
+      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl", "gi/rt_occ_stats.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;
@@ -136,6 +140,7 @@ inline unsigned allowed(const char* file) {
   if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
+  if (occ_stats_entry(file)) f |= kOccStats;
   return f;
 }
 
@@ -156,7 +161,7 @@ inline constexpr NoVariant kWaterNoVariant[] = {
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
-// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, gi_far, then rf_hit_gi.
+// each name once: tileset, Hair origin, OMM, current sun, scalp, instanced, cascade, gi_far, rf_hit_gi, then rt_occ_stats.
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
@@ -196,6 +201,7 @@ inline std::string request(const char* file, unsigned flags) {
   }
   if (flags & kGiFar) add("RT_GI_FAR=1");
   if (flags & kRfHitGi) add("RF_HIT_GI=1");
+  if (flags & kOccStats) add("RT_OCC_STATS=1");
   return out;
 }
 

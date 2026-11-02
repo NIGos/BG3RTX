@@ -53,6 +53,9 @@ ATOMIC_TARGETS = {
     "shaders/gi/rt_local_shadows.hlsl:lsBoxStats": [
         ("core/gi.cpp", "bci.size = kLsBoxXBytes;", D,
          "g_bx_buf (ensure_bx: DEVICE_LOCAL memory type; set 4 b0 of the box layout, group-reduced, copied to rtStats 385..416)")],
+    "shaders/rt/occ_stats.hlsli:occStats": [
+        ("core/gi.cpp", "bci.size = kOccBytes;", D,
+         "g_occ_buf (ensure_bx: DEVICE_LOCAL memory type; set 4 b1 of the box and occ layouts, group-reduced, copied to the g_occ_host ring)")],
     "shaders/gi/rt_reflections.hlsl:rfGiStats": [
         ("core/gi.cpp", "bci.size = kRfGiBytes;", D,
          "g_rg_buf (ensure_rg: DEVICE_LOCAL memory type; set 6 b0 of the rf_hit_gi layouts, group-reduced, copied to rtStats 419..426)")],

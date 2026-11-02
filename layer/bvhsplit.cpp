@@ -81,6 +81,9 @@ constexpr uint32_t kInfoHairProcedural = 1u << 12;
 // rt_primary_fade_class (diagnostics): the draw's camera-occlusion fade cut is enabled
 // (gi/pan_primary.hlsl RT_PRIMARY_FADE). Set only with the key on; no ray reads it otherwise.
 constexpr uint32_t kInfoCameraFade = 1u << 14;
+// A dynamic instance held by rt_dyn_hold (rt_occ_stats' occluder kind "held", common/occ_stats.h
+// kOccInfoHeld). Bits 16..31 are the pool alpha slot only with nh_pool_meta, never set on a held one.
+constexpr uint32_t kInfoHeld = 1u << 31;
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
 constexpr uint32_t kRingSlots = kSceneSlots;       // per-build regions of the host ring (= scene slots, rtscene.cpp)
 constexpr uint32_t kStatusSlots = 16384;           // validation results (16 B each)
@@ -1598,7 +1601,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
     in.accelerationStructureReference = s.as.addr;
     const bool opaque_material=!alpha && !fd.held && fd.material_record>=native_hit::nh_alpha_rows && fd.material_record<native_hit::nh_material_rows;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);

@@ -235,26 +235,38 @@ ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG 
 fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
 next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
 
-### Occluder-kind diagnostic (requested 2026-11-02, designed, not built)
+### Occluder-kind diagnostic `rt_occ_stats` (built 2026-11-02, READY_FOR_LIVE)
 
-No existing view names the occluder: rt_debug 1/2 give visibility and game-vs-traced mask, ls_debug 2/9 the removed
-light and the light owner, rt_stats has no free index range. Smallest design, key `rt_occ_stats` (0 default, diag
-windows only), its own device-local buffer, variant define `RT_OCC_STATS` so the ordinary SPIR-V stays identical:
-- At the commit points of rt_visibility (rt_common.hlsli: procedural hair commit, cascade commit, alpha commit,
-  RT_HAS_COMMITTED) store the committed instance index / id and hit t in statics.
-- Kind from what InstInfo already holds (rt_common.hlsli:497-516): cascade copy (id kRtCascadeId), cached static mesh
-  (kInfoPool), dynamic opaque (per-draw BLAS: characters, wind foliage, other skinned), dynamic alpha by AlphaRec kind
-  (table cutout / scalp 3 / hair 4), native hair procedural (kInfoHair); "near" = hit t < 0.5 m as the stand-in for
-  self-shadowing (no per-object identity exists in the TLAS). Held (rt_dyn_hold) needs one InstInfo meta bit set in
-  layer/bvhsplit.cpp for fd.held (layer change: restart, no ABI change).
-- Receivers: character px (G-buffer class 3 skin / 5 hair). Sources: sun (rt_shadow.hlsl), each D-LS light
-  (point/spot vs box) in rt_local_shadows*.hlsl, AO (gi_trace_rt). Counters [source][kind], per-workgroup
-  groupshared reduce, one atomic per group into the device-local buffer, copied after the timed region (host
-  atomics lint); log per window: "occ (60 frames): character px darkened by sun x%, local y%, box z%, AO w%;
-  occluder kinds sun [...] local [...] AO [...]".
-- Float energy of the character mask per shot: the trace dumps are PNG previews (dump_raw=1 writes every target);
-  a core-side reduce of the pre-post colour over the class mask in the same diag window gives it without disk.
-Scope: about 6 shaders + core buffer/log + one layer bit, shader identity and GPU gates: its own work item.
+Key `rt_occ_stats` (0, live, diag windows only). Layout and log line: common/occ_stats.h (unit test
+tests/occ_stats_test.cpp). Receivers: character px (G-buffer class 3 skin / 5 hair). One "occ stats (N frames)" line
+per 60 frames read back: per source (sun, local point/spot, box, AO) the px evaluated per frame, darkened %, mean
+darkening %, rays / occluded / unknown, on-screen hair/skin share of the occluded rays (the hit is the visible surface
+at its pixel), per kind `rays % [near %] dark %`, and the occluder distance histogram (<0.05 ... >=5 m, dark % and rays).
+- Kinds: unknown (aborted), cascade copy (id 0xFFFFFC..), static (pool, opaque), moving (soup, opaque: characters,
+  skinned, wind-animated opaque), cutout-static (pool + alpha record), cutout-moving (soup + alpha record: wind foliage),
+  scalp (alpha kind 3), hair (alpha kind 4 or native procedural), held (rt_dyn_hold copy: InstInfo meta bit 31,
+  layer/bvhsplit.cpp kInfoHeld; layer change, restart, no ABI change). "near" = t <= 0.5 m (self-shadow proxy).
+- Under RT_OCC_STATS the shadow rays find the CLOSEST occluder (no accept-first; same visibility).
+- Sun and AO: gi/rt_occ_stats.hlsl, its own pass after the timed RT region (so no rt_shadow/GI variant doubles). Sun:
+  the darkening is the real pass's (rtVis g x (1 - r)), the kind from a replica of rt_shadow's ray (same seed, disc
+  sample, origin; mismatches counted); not valid with rt_sun_cascade_current=1. AO: the darkening is the real
+  1 - giRaw.a, the kinds from replica rays (same seed, directions, origin, gi_rt_radius fade; after the first ray the
+  hit-material passes draw other random numbers, so same distribution, not the same rays; gi_far not replicated).
+- Local/box: the every-mode box pass with RT_OCC_STATS (variant flag kOccStats, its own Pipe g_ls_full_box_occ);
+  ls_box=0 gives no local numbers. Per ray darkening = removed light / the pixel's lit diffuse + specular.
+- Counters: device-local g_occ_buf at set 4 binding 1 (the box statistics set), groupshared reduce, one atomic per
+  counter and group, copied into a host ring after the D-LS pass; read 7 frames later (host atomics lint classified).
+- Key off: the ordinary requests are byte-identical (tools/shader_identity.py --baseline); 36 new requests.
+- Found while wiring it: the box D-LS variants (rt_local_shadows*_box*.hlsl) are not in shader_variant.h
+  cascade_entry, so with rt_cascade_casters=1 they trace 0xFF and the F-1/F-2 cascade copy shadows local and box
+  lights (rt_visibility g_rt_class 1: its unknown alpha is solid). The 'cascade' kind under local/box measures it.
+- Float energy of the character mask per shot: dump_preview_f32=1 (layer/dump.cpp) writes the 5c3fdabc scene colour
+  as float32 at the preview grid (~10 MB per trace); tools/live_batches/dialogue_shadows/char_energy.py takes its mean
+  over the RT2 class mask (tests/char_energy_test.py).
+- Cost: an extra full-res pass (1 sun ray + gi rays per character px) and the every-mode D-LS box pass; GPU ms not
+  measured yet (diag windows only, never in cost windows).
+- Scenes (save_index.py, read-only): Dialogue1/2 WLD_Main_A (camp, moving shadow), Dialogue3 CTY_Main_A (port, very
+  dark under a roof). Predictions per save: tools/live_batches/dialogue_shadows/predicted.json ("occ").
 
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).

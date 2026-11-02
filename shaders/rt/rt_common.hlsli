@@ -905,12 +905,50 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 #define RT_HAS_COMMITTED(q) (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)
 #endif
 
+#ifdef RT_OCC_STATS
+// rt_occ_stats (common/occ_stats.h): the occluder of the last rt_visibility / rt_closest_hit query
+// of this lane. Shadow rays then find the CLOSEST occluder (no accept-first: same visibility,
+// more traversal), so the kind and the near test describe the nearest blocker.
+#include "../../common/occ_stats.h"
+static uint g_occ_kind = kOccKindUnknown;
+static float g_occ_t = -1.0;   // -1: no committed hit
+static bool g_occ_hit = false;
+static float3 g_occ_p = float3(0, 0, 0);   // the hit point (the ray's origin + t direction)
+uint occ_kind_of(bool procedural, uint inst, uint id, uint geom, uint prim) {
+  if (procedural) return kOccKindHair;
+  if (id >= 0xFFFFFCu) return kOccKindCascade;   // common/cascade_casters.h kCustomIndex - layer
+  InstInfo ii = inst_info(inst);
+  if ((ii.meta & kOccInfoHeld) != 0u && (ii.meta & kInfoLegacy) == 0u) return kOccKindHeld;
+  const bool alpha = (ii.meta & kInfoLegacy) != 0u ? geom == 1u : (ii.meta & kInfoAlpha) != 0u;
+  if (alpha) {
+    const uint k = alpha_kind_hit(inst, geom, prim);
+    return k == 3u ? kOccKindScalp : k == 4u ? kOccKindHair
+         : (ii.meta & kInfoPool) != 0u ? kOccKindCutoutStatic : kOccKindCutoutMoving;
+  }
+  return (ii.meta & kInfoPool) != 0u ? kOccKindStatic : kOccKindMoving;
+}
+#define RT_OCC_RECORD(q, aborted)                                                                              \
+  g_occ_hit = RT_HAS_COMMITTED(q);                                                                             \
+  g_occ_t = g_occ_hit ? q.CommittedRayT() : -1.0;                                                                g_occ_p = q.WorldRayOrigin() + q.WorldRayDirection() * max(g_occ_t, 0.0);                                    \
+  g_occ_kind = g_occ_hit ? occ_kind_of(q.CommittedStatus() != COMMITTED_TRIANGLE_HIT, q.CommittedInstanceIndex(), \
+                                       q.CommittedInstanceID(), q.CommittedGeometryIndex(),                    \
+                                       q.CommittedPrimitiveIndex())                                            \
+                         : kOccKindUnknown;
+#define RT_OCC_RESET() g_occ_hit = false; g_occ_t = -1.0; g_occ_kind = kOccKindUnknown;
+#define RT_VIS_FLAGS RT_SKIP_PROCEDURAL
+#else
+#define RT_VIS_FLAGS (RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL)
+#endif
+
 // Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
 // alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
 // if the candidate cap aborted the query first (a hit committed before the abort is a
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
+#ifdef RT_OCC_STATS
+  RT_OCC_RESET()
+#endif
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
@@ -931,7 +969,7 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
-  RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL> q;
+  RayQuery<RT_VIS_FLAGS> q;
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
@@ -997,6 +1035,9 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
   }
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
+#endif
+#ifdef RT_OCC_STATS
+  RT_OCC_RECORD(q, aborted)
 #endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
   if (aborted) {
@@ -1181,6 +1222,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
                      ,bool camera_primary=false
 #endif
                      ) {
+#ifdef RT_OCC_STATS
+  RT_OCC_RESET()
+#endif
 #ifdef RT_NATIVE_TILESET
   gTilesetUnknown=!tileset_scene_complete();
 #endif
@@ -1247,6 +1291,9 @@ RtHit rt_closest_hit(float3 o, float3 d, float tmax, RtCone cone
   aborted=aborted||gTilesetUnknown;
 #endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
+#ifdef RT_OCC_STATS
+  RT_OCC_RECORD(q, aborted)
+#endif
   RtHit h = (RtHit)0;
   h.aborted = aborted;
   bool hit = RT_HAS_COMMITTED(q);

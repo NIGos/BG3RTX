@@ -53,6 +53,13 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
         "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1");
   CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
+  // rt_occ_stats: the every-mode box pass only, last; never the ordinary or other D-LS files.
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats) == "gi/rt_local_shadows_full_box.hlsl?RT_OCC_STATS=1");
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats | kScalp) ==
+        "gi/rt_local_shadows_full_box.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_OCC_STATS=1");
+  CHECK(request("gi/rt_local_shadows_box.hlsl", kOccStats) == "gi/rt_local_shadows_box.hlsl");
+  CHECK(request("gi/rt_shadow.hlsl", kOccStats) == "gi/rt_shadow.hlsl");
+  CHECK(request("gi/rt_occ_stats.hlsl", kCascade) == "gi/rt_occ_stats.hlsl?RT_CASCADE_MASKS=1");
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -61,7 +68,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 4096; ++m)
+    for (unsigned m = 0; m < 8192; ++m)
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);

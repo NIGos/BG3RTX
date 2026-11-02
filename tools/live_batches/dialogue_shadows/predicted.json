@@ -9,29 +9,201 @@
   "H6": "alpha-tested lashes/beards made opaque by a full alpha region: user session 0.00 per frame (rt_alpha_spill=1); gated in every judged window, so if the run is valid H6 is excluded for these shots",
   "H7": "wind-animated foliage (added 2026-11-02 after the user saw MOVING shadows in dialogue and none at the same spot in the isometric view): every camera-prepass draw is captured from its own VS output each frame, wind included (geocapture.cpp:5-11; wind VS never match the instancing pattern, spirv_xfb.h:312-320, so they are never cached: bvhsplit.cpp:29), so the RT sun sees the current wind pose of every tree the dialogue camera draws. The game's sun shadow comes from its own cascade passes (caster set, LOD and whether their VS applies wind not verified in code). The ground-level dialogue camera draws canopies the isometric camera does not, which would explain 'moving only in dialogue'. Off-screen trees come only from the cascade soup (F-1/F-2). The RT sun direction is the game's lighting direction from the camera UBO (rt_shadow.hlsl:80), so a dialogue light rig that changes the sun moves RT and lighting together; rt_debug=2 shows a mismatch with the game's own map. No key removes foliage casters only (no foliage/wind capture key in common/settings.h): the closest are rt_cascade_casters=0 (off-screen part) and rt_shadows=0 (all RT sun)"
  },
- "ds1-dialogue1-fg2": {"same_as": "_all"},
- "ds2-dialogue2-fg2": {"same_as": "_all"},
- "ds3-dialogue3-fg2": {"same_as": "_all"},
- "_all": {
-  "shot-nosun-on":      {"H1": "removes if the shadow is sun-lit (part of it)", "H2": "keeps", "H3": "removes if via cascade/sun", "H4": "keeps", "H5": "removes", "energy": null, "note": "the game's mask only; also drops rt_sun_replace brightening (user log 1.61% of traced px): whole-frame sign not predicted"},
-  "shot-nolocal-on":    {"H1": "removes the local-light part", "H2": "removes", "H3": "removes the dyn-hold part under local lights", "H4": "keeps", "H5": "keeps", "energy": ">= 0"},
-  "shot-nobox-on":      {"H2": "removes if the rig light is a box (projector) light", "others": "keeps", "energy": ">= 0"},
-  "shot-charlights-on": {"H2": "removes if the rig light is owned by a character (ls_debug=9 magenta)", "others": "keeps", "energy": ">= 0"},
-  "shot-noart-on":      {"H2": "removes if the rig light sets neither Shadow nor CastShadow (expected for most dialogue fill/rim lights)", "others": "keeps", "energy": ">= 0"},
-  "shot-nocascade-on":  {"H5": "removes", "H3": "removes the cascade-lag part", "others": "keeps", "energy": ">= 0"},
-  "shot-nohold-on":     {"H3": "removes the dyn-hold part (and its frame-to-frame flicker)", "others": "keeps", "energy": null},
-  "shot-noao-on":       {"H4": "removes (soft darkening only, not a hard-edged shape)", "others": "keeps", "energy": ">= 0"},
-  "shot-hair-on":       {"H1": "removes (hair-card shapes become strand coverage; ROI brighter on faces under hair)", "others": "keeps", "energy": ">= 0", "participation": "[alpha hair] native coverage records > 0 and [alpha scalp] records > 0 in this window, invalid/missing 0"},
-  "shot-hairorigin-on": {"H1": "as shot-hair-on; hair pixels themselves may change (physical origin)", "others": "keeps", "energy": "within the OFF spread of shot-hair-on", "prior": "live 2026-10-31: Hair sun visibility 0.150 -> 0.355 -> 0.164 off/on/off, RT 3.44 / 3.41 ms (CODEX_BRANCH_TRIAGE.md)"},
-  "motion-base":        {"H7": "the shadow on the characters differs between the two traces (0.5 s apart; frame gap from the trace lines) beyond the static parts' difference", "H3": "differs (held poses) and differs again in shot-nohold-on", "others": "still"},
-  "motion-nosun":       {"H7": "still (the game's map does not move there, as in the user's isometric view) while motion-base moves: RT-only animated casters", "if_both_move": "the game's own casters move too: not an RT defect"},
-  "shot-nocascade-on (H7)": {"H7": "removes the moving shadow only if its casters are off screen (cascade soup); keeps it if the trees are in the dialogue view"},
-  "diag-view-sunmask":  {"H7": "red (game shadowed, traced lit) and green (traced shadowed, game lit) patches on the characters shaped like foliage; a whole-character offset means another sun direction or caster set"},
-  "view-lsremoved":     {"H2": "the face shadow region is bright (light removed by D-LS) in this view", "H1": "removed light outlines hair-card shapes on the face", "others": "no removed light on the face"},
-  "diag-ls-stats":      {"report": "light removed % of the lit luminance, per-light data matched %, owners; no pass/fail"},
-  "diag-rt-hair":       {"report": "primary-ray check match off-a / on / off-b; [hair origin] matched, available, unresolved (counters 188-190) in diag-rt-hairon; on within the off-a/off-b spread or higher"},
-  "cost-hair":          {"report": "rt passes GPU cost cost-hair minus mean(cost-off-a, cost-off-b), with that spread; prior +0 to +0.1 ms (3.44 / 3.41 ms on 2026-10-31)"}
+ "ds1-dialogue1-fg2": {
+  "scene": "camp (WLD_Main_A), the moving shadow",
+  "same_as": "_all",
+  "occ": {
+   "diag-occ-base": {
+    "H4": "AO: darkened >= 90% of character px (every px with a hit within gi_rt_radius); near [<= 0.5 m] share >= 70% of the AO occluded rays and >= 70% of the AO darkening in the '< 0.5m' bins: self-occlusion (hair over face, chin/neck, arms) from 'moving' (opaque character soup, hair cards included without native hair); on-screen hair+skin >= 50% of the occluded AO rays. Refuted if the far bins (>= 1 m) hold most of the AO darkening (then other geometry: walls, roofs, props)",
+    "H1": "sun and local: 'moving' kind with near share >= 50% and on-screen hair >= 30% of the occluded rays (opaque hair cards over faces); the same rays become 'hair'/'scalp' in diag-occ-hair",
+    "H7": "sun: 'cutout-moving' (wind foliage, this frame's VS) >= 50% of the sun darkening with its distance bins >= 2 m (trees metres away); H3 instead: 'held' >= 50%; H5: 'cascade' >= 50%",
+    "H2": "local/box: darkened character px > 20% with near share >= 50% (rig lights shadowed by the head/hair)"
+   },
+   "diag-occ-nohold": {
+    "check": "held kind 0 for every source",
+    "H3": "sun/local darkening drops by the base window's 'held' dark share (beyond the base lines' spread); else held draws are not the shadow"
+   },
+   "diag-occ-nocascade": {
+    "check": "cascade kind 0 for the sun",
+    "H5": "sun darkening drops by the base cascade dark share; local/box unchanged (the box pass traces the cascade copy too: 0xFF without RT_CASCADE_MASKS, a 'cascade' kind under local/box in diag-occ-base is that defect)"
+   },
+   "diag-occ-hair": {
+    "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
+   },
+   "camp-moving": "H7 predicted first (user: it moves; ds1 nosun +15% with an RT-only red shadow on the hair): sun darkening led by 'cutout-moving' at >= 2 m; if 'held' leads instead it is a stale pose (H3), if 'moving' near <= 0.5 m it is the hair cards (H1); motion-base differs between its two traces while motion-nosun does not"
+  }
  },
- "_ranking_before_the_run": ["H2", "H1", "H7", "H5", "H3", "H4", "H6"],
- "_user_2026-11-02": "saves load already in dialogue; the shadow is on ALL characters, sometimes moving (trees?), none moving at the same spot in the isometric view; other dialogues show wrong hair shadows (user ran without the native hair keys)"
+ "ds2-dialogue2-fg2": {
+  "scene": "Act 1 (WLD_Main_A), near ds1's camp",
+  "same_as": "_all",
+  "occ": {
+   "diag-occ-base": {
+    "H4": "AO: darkened >= 90% of character px (every px with a hit within gi_rt_radius); near [<= 0.5 m] share >= 70% of the AO occluded rays and >= 70% of the AO darkening in the '< 0.5m' bins: self-occlusion (hair over face, chin/neck, arms) from 'moving' (opaque character soup, hair cards included without native hair); on-screen hair+skin >= 50% of the occluded AO rays. Refuted if the far bins (>= 1 m) hold most of the AO darkening (then other geometry: walls, roofs, props)",
+    "H1": "sun and local: 'moving' kind with near share >= 50% and on-screen hair >= 30% of the occluded rays (opaque hair cards over faces); the same rays become 'hair'/'scalp' in diag-occ-hair",
+    "H7": "sun: 'cutout-moving' (wind foliage, this frame's VS) >= 50% of the sun darkening with its distance bins >= 2 m (trees metres away); H3 instead: 'held' >= 50%; H5: 'cascade' >= 50%",
+    "H2": "local/box: darkened character px > 20% with near share >= 50% (rig lights shadowed by the head/hair)"
+   },
+   "diag-occ-nohold": {
+    "check": "held kind 0 for every source",
+    "H3": "sun/local darkening drops by the base window's 'held' dark share (beyond the base lines' spread); else held draws are not the shadow"
+   },
+   "diag-occ-nocascade": {
+    "check": "cascade kind 0 for the sun",
+    "H5": "sun darkening drops by the base cascade dark share; local/box unchanged (the box pass traces the cascade copy too: 0xFF without RT_CASCADE_MASKS, a 'cascade' kind under local/box in diag-occ-base is that defect)"
+   },
+   "diag-occ-hair": {
+    "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
+   }
+  }
+ },
+ "ds3-dialogue3-fg2": {
+  "scene": "port (CTY_Main_A), characters very dark under a roof",
+  "same_as": "_all",
+  "occ": {
+   "diag-occ-base": {
+    "H4": "AO: darkened >= 90% of character px (every px with a hit within gi_rt_radius); near [<= 0.5 m] share >= 70% of the AO occluded rays and >= 70% of the AO darkening in the '< 0.5m' bins: self-occlusion (hair over face, chin/neck, arms) from 'moving' (opaque character soup, hair cards included without native hair); on-screen hair+skin >= 50% of the occluded AO rays. Refuted if the far bins (>= 1 m) hold most of the AO darkening (then other geometry: walls, roofs, props)",
+    "H1": "sun and local: 'moving' kind with near share >= 50% and on-screen hair >= 30% of the occluded rays (opaque hair cards over faces); the same rays become 'hair'/'scalp' in diag-occ-hair",
+    "H7": "sun: 'cutout-moving' (wind foliage, this frame's VS) >= 50% of the sun darkening with its distance bins >= 2 m (trees metres away); H3 instead: 'held' >= 50%; H5: 'cascade' >= 50%",
+    "H2": "local/box: darkened character px > 20% with near share >= 50% (rig lights shadowed by the head/hair)"
+   },
+   "diag-occ-nohold": {
+    "check": "held kind 0 for every source",
+    "H3": "sun/local darkening drops by the base window's 'held' dark share (beyond the base lines' spread); else held draws are not the shadow"
+   },
+   "diag-occ-nocascade": {
+    "check": "cascade kind 0 for the sun",
+    "H5": "sun darkening drops by the base cascade dark share; local/box unchanged (the box pass traces the cascade copy too: 0xFF without RT_CASCADE_MASKS, a 'cascade' kind under local/box in diag-occ-base is that defect)"
+   },
+   "diag-occ-hair": {
+    "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
+   },
+   "port-dark": "double darkening predicted: AO darkened >= 90% of character px with mean darkening >= 30% (ambient visibility <= 0.7) on top of the game's own occluded ambient; the AO distance bins >= 1 m hold a larger share than in ds1 (the roof and walls within gi_rt_radius); sun: darkened >= 80% of the character px with 'static' (roof) >= 2 m dominating",
+   "energy (char_energy.py, float mask mean vs the OFF neighbours)": "shot-noao-on > +25% (beyond the OFF spread; ds1 camp +35% by PNG); shot-nogi-on minus shot-noao-on within the OFF spread = the RT bounce adds almost nothing under the roof (little bounce); shot-nogi-on clearly below shot-noao-on = the bounce lights them and only the AO over-darkens"
+  }
+ },
+ "_all": {
+  "shot-nosun-on": {
+   "H1": "removes if the shadow is sun-lit (part of it)",
+   "H2": "keeps",
+   "H3": "removes if via cascade/sun",
+   "H4": "keeps",
+   "H5": "removes",
+   "energy": null,
+   "note": "the game's mask only; also drops rt_sun_replace brightening (user log 1.61% of traced px): whole-frame sign not predicted"
+  },
+  "shot-nolocal-on": {
+   "H1": "removes the local-light part",
+   "H2": "removes",
+   "H3": "removes the dyn-hold part under local lights",
+   "H4": "keeps",
+   "H5": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-nobox-on": {
+   "H2": "removes if the rig light is a box (projector) light",
+   "others": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-charlights-on": {
+   "H2": "removes if the rig light is owned by a character (ls_debug=9 magenta)",
+   "others": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-noart-on": {
+   "H2": "removes if the rig light sets neither Shadow nor CastShadow (expected for most dialogue fill/rim lights)",
+   "others": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-nocascade-on": {
+   "H5": "removes",
+   "H3": "removes the cascade-lag part",
+   "others": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-nohold-on": {
+   "H3": "removes the dyn-hold part (and its frame-to-frame flicker)",
+   "others": "keeps",
+   "energy": null
+  },
+  "shot-noao-on": {
+   "H4": "removes (soft darkening only, not a hard-edged shape)",
+   "others": "keeps",
+   "energy": ">= 0"
+  },
+  "shot-hair-on": {
+   "H1": "removes (hair-card shapes become strand coverage; ROI brighter on faces under hair)",
+   "others": "keeps",
+   "energy": ">= 0",
+   "participation": "[alpha hair] native coverage records > 0 and [alpha scalp] records > 0 in this window, invalid/missing 0"
+  },
+  "shot-hairorigin-on": {
+   "H1": "as shot-hair-on; hair pixels themselves may change (physical origin)",
+   "others": "keeps",
+   "energy": "within the OFF spread of shot-hair-on",
+   "prior": "live 2026-10-31: Hair sun visibility 0.150 -> 0.355 -> 0.164 off/on/off, RT 3.44 / 3.41 ms (CODEX_BRANCH_TRIAGE.md)"
+  },
+  "motion-base": {
+   "H7": "the shadow on the characters differs between the two traces (0.5 s apart; frame gap from the trace lines) beyond the static parts' difference",
+   "H3": "differs (held poses) and differs again in shot-nohold-on",
+   "others": "still"
+  },
+  "motion-nosun": {
+   "H7": "still (the game's map does not move there, as in the user's isometric view) while motion-base moves: RT-only animated casters",
+   "if_both_move": "the game's own casters move too: not an RT defect"
+  },
+  "shot-nocascade-on (H7)": {
+   "H7": "removes the moving shadow only if its casters are off screen (cascade soup); keeps it if the trees are in the dialogue view"
+  },
+  "diag-view-sunmask": {
+   "H7": "red (game shadowed, traced lit) and green (traced shadowed, game lit) patches on the characters shaped like foliage; a whole-character offset means another sun direction or caster set"
+  },
+  "view-lsremoved": {
+   "H2": "the face shadow region is bright (light removed by D-LS) in this view",
+   "H1": "removed light outlines hair-card shapes on the face",
+   "others": "no removed light on the face"
+  },
+  "diag-ls-stats": {
+   "report": "light removed % of the lit luminance, per-light data matched %, owners; no pass/fail"
+  },
+  "diag-rt-hair": {
+   "report": "primary-ray check match off-a / on / off-b; [hair origin] matched, available, unresolved (counters 188-190) in diag-rt-hairon; on within the off-a/off-b spread or higher"
+  },
+  "cost-hair": {
+   "report": "rt passes GPU cost cost-hair minus mean(cost-off-a, cost-off-b), with that spread; prior +0 to +0.1 ms (3.44 / 3.41 ms on 2026-10-31)"
+  },
+  "shot-nogi-on": {
+   "H4": "as shot-noao-on plus the RT bounce removed: the difference to shot-noao-on is the bounce's share of the character light",
+   "energy": "below shot-noao-on by the bounce share"
+  }
+ },
+ "_ranking_before_the_run": {
+  "camp (ds1, ds2)": [
+   "H7",
+   "H4",
+   "H1",
+   "H3",
+   "H5",
+   "H2",
+   "H6"
+  ],
+  "port (ds3)": [
+   "H4 (AO double darkening)",
+   "sun blocked by the roof (static)",
+   "H1",
+   "H2"
+  ],
+  "before 2026-11-02 ds1": [
+   "H2",
+   "H1",
+   "H7",
+   "H5",
+   "H3",
+   "H4",
+   "H6"
+  ]
+ },
+ "_user_2026-11-02": "saves load already in dialogue; the shadow is on ALL characters, sometimes moving (trees?), none moving at the same spot in the isometric view; other dialogues show wrong hair shadows (user ran without the native hair keys)",
+ "_scenes_2026-11-02": "From the saves' SaveInfo.json (scripts/save_index.py, read-only): Test Dialogue1 and Test Dialogue2 are WLD_Main_A (Act 1 wilderness; ds1 showed the outdoor camp, daylight; Dialogue2 is 16 m from Dialogue1's party position), Test Dialogue3 is CTY_Main_A (the lower city: the PORT dialogue). User 2026-11-02: camp = the intrusive shadow on the characters MOVES; port = the characters look very dark under a roof.",
+ "_occ_rule": "rt_occ_stats windows (diag-occ-*): read the 'occ stats (N frames)' lines (common/occ_stats.h occ_format). Per source (sun, local, box, AO): 'darkened %' (character px the source darkens), 'mean darkening %' (over the evaluated character px), kinds 'rays % [near %] dark %' (share of the occluded rays, the share of those within 0.5 m, the share of the darkening) and the occluder distance histogram. Thresholds: a kind 'dominates' with >= 50% of a source's darkening; the near/far split from the histogram (< 0.5 m self-shadowing, >= 2 m trees/roofs). Validity per window: sun replica mismatch <= 1% of the sun rays (else the sun kinds are not the real ray's: the derived bound is the pixel-seed replica being exact, so any mismatch beyond rounding at rtVis 8-bit means another scene or pass), and the kind the window removes must vanish (nohold: held 0; nocascade: cascade 0). The rest of the window's numbers within the spread of the diag-occ-base lines (two or more per window) count as unchanged.",
+ "_energy_rule": "Character-mask energy per shot: tools/live_batches/dialogue_shadows/char_energy.py (float preview of the 5c3fdabc dump, dump_preview_f32=1, over the RT2 class mask 3/5), never PNG decodes."
 }
