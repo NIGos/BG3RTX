@@ -522,7 +522,39 @@ counters (the vt bucket split by triangles, the tex bucket mostly the grass mask
 triangles at camp): about 97% of shadow-ray and 98% of visibility-ray alpha candidates would read a mask, up from
 18% / 37%. Total masks 80.9 MB (VRAM when the key is on).
 
-**11.2c Bake for VT foliage (not implemented yet).** Camp grass is 179 per-draw BLAS (wind VS, refit every
+**11.2e Implemented (2026-11-02, offline): `rt_omm_dyn` (live, off; needs rt_omm=1 at startup, masks + B on).**
+- Bake (`common/omm_mask_bake.h`, shared by the CPU tests and `shaders/rt/omm_bake_mask.hlsl` bake): subdivision 4,
+  four-state, one workgroup per triangle of the draw's soup range, one thread per micro-triangle (EXT order, the
+  spec's index -> barycentric "bird" curve). Known opaque: every texel a bilinear read inside the micro-triangle's
+  uv box can touch is >= max(cut, cut_first) + 1/255; known transparent: every such texel 0 or < min(cuts) - 1/255;
+  else UNKNOWN_OPAQUE. Margins derived: 1/255 BC4 endpoint precision (bounds the 8-bit filter rounding), 1/256
+  texel sub-texel quantisation, uv slack = 32 ulp of the magnitudes + 1e-5 barycentric; > 1024 texels: unknown.
+- Order and bound verified offline against the NVIDIA OMM SDK 1.10 CPU baker (`tools/omm_mask_bake_sdk_probe.cpp`,
+  BG3RTX_OMM_CPU_PROBE): 0 contradictions on 1,183 known SDK states over 3 uv layouts x levels 1..5 (a wrong
+  order contradicts about half); our known states are a subset of the SDK's linear bake (2,248 of 2,679, 0
+  contradictions). `tests/omm_mask_bake_test` (CTest): bijection levels 0..6, the level-2 table, 0 violations in
+  3.2M dense bilinear samples of known micro-triangles. Evidence `docs/evidence/omm-mask-bake-sdk-20261102.txt`.
+- Cache: one micro-map per (draw identity without the per-frame occurrence, mask view, both cuts, uv scale,
+  triangle count), baked from the frame's converted soup (<= rt_omm_dyn_bake_tris = 131072 triangles per build),
+  built through the existing backend (`omm::record`, tickets), usable once the bake's command buffer was submitted;
+  inputs freed then (24 B per triangle of uv snapshot stay). Micro-maps live until teardown (backend cap 256 MB).
+- UV validation (bake entry `check`, every frame before the build or refit): index = triangle while its 6 uv words
+  equal the snapshot, else FULLY_UNKNOWN_OPAQUE: exact per triangle and per frame. BLAS flags
+  ALLOW_DISABLE_OPACITY_MICROMAPS + ALLOW_OPACITY_MICROMAP_UPDATE (indices may change on refit); refit only with
+  the same micro-map; sizes queried with the attachment.
+- Scenes: in the ordinary TLAS (the reference, binding 10) these instances carry DISABLE_OPACITY_MICROMAPS; a copy
+  of the instance array with the flag cleared (after the submit-time matrix fix-ups) is the accelerated TLAS
+  (g_omm_tlas). Proof 'OMM3' (generation only, no content epochs; omm_scene_guard.hlsli). The existing omm check
+  (rtStats 443..447) compares the two; rt_omm_reference=1 is the in-launch A/B. With the key on the static
+  pool-variant path is skipped. Non-OMM consumers of the accelerated scene (water) are not in the check.
+- Log `[omm dyn]` (every rt_timing_frames builds): masked per-draw draws/triangles, with a micro-map (%), baked /
+  deferred / failed, accelerated scenes, cache size and bytes, cumulative micro-triangle states, uv checks per window.
+- No ABI change (layer only; host_api.h untouched). Key-off SPIR-V: the guard is only in OMM variants.
+- READY_FOR_LIVE: `tools/live_batches/omm_qual` job om4 (camp, 123 s, one launch: REF / ON / REF via
+  rt_omm_reference, diag-check with rt_stats=1); predictions in predicted.json (violations 0, micro-map share >= 90%
+  of masked per-draw triangles, ~40-49% known, candidates 30-50% fewer, rt passes 1.5-3 ms lower, energy equal).
+
+**11.2c Bake for VT foliage (plan; implemented as 11.2e).** Camp grass is 179 per-draw BLAS (wind VS, refit every
 frame), 0 pool meshes: the static-variant path (bvhsplit native_omm_variant, clone TLAS, guard) does not
 reach it. Needed: (1) a subdivision-level producer entry in omm_bake_plain.hlsl reading the immutable mask
 mip 0 per micro-triangle (EXT barycentric order, uv box + 1-texel bilinear support, the cut from the record,
