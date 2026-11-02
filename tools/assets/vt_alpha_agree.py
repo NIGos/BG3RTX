@@ -143,14 +143,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pack", required=True)
     ap.add_argument("--masks", required=True)
+    ap.add_argument("--manifest", default="vt_alpha_manifest.json")
     a = ap.parse_args()
     imgs = manifest_images(a.pack)
-    man = json.loads((Path(a.masks) / "vt_alpha_manifest.json").read_text())
+    man = json.loads((Path(a.masks) / a.manifest).read_text())
     recs = records(a.pack)
-    tot = {"n": 0.0, "exact": 0.0, "test": 0.0, "diff_coarser": 0.0, "diff_same": 0.0}
+    fs_set = {int(h, 16) for h in man["fs"]}
+    keys = ("n", "exact", "test", "diff_coarser", "diff_same")
+    tot = {k: 0.0 for k in keys}
+    per_fs = {}
     for mk in man["masks"]:
         rs = [r for r in recs if r["kind"] == 1 and int(r["t"][15]) == mk["tileset"] and
-              np.allclose(r["p0"], mk["p0"], 0, 0) and r["fs"] in {int(h, 16) for h in man["fs"]}]
+              np.allclose(r["p0"], mk["p0"], 0, 0) and r["fs"] in fs_set]
         if not rs:
             print(f"{mk['file']}: no record"); continue
         r = rs[0]
@@ -158,31 +162,44 @@ def main():
         cfmt, cw, ch, cl, cm, cpath = imgs[(1, 3, r["cache"])]
         cache = Cache(cfmt, cw, ch, cl, cpath)
         levels = mask_levels(Path(a.masks) / mk["file"])
-        top = min(int(r["p1"][0]), len(levels) - 1)
-        line = []
-        acc = {k: 0.0 for k in tot}
-        for m in range(top + 1):
-            ref = levels[m]
-            hh, ww = ref.shape
-            ys, xs = np.mgrid[0:hh, 0:ww]
-            uv = np.stack([(xs.ravel() + 0.5) / ww, (ys.ravel() + 0.5) / hh], 1)
-            got, coarser = vt_reads(r, ind, cache, uv, m)
-            want = ref.ravel()
-            exact = np.abs(got - want) <= 0.5 / 255
-            test = (got >= r["cut"]) == (want >= r["cut"])
-            w = 1.0 / (top + 1) / len(want)   # every requested level weighs the same
-            acc["n"] += w * len(want); acc["exact"] += w * exact.sum(); acc["test"] += w * test.sum()
-            acc["diff_coarser"] += w * (~test & coarser).sum(); acc["diff_same"] += w * (~test & ~coarser).sum()
-            line.append(f"mip {m}: exact {100 * exact.mean():.2f}%, test {100 * test.mean():.2f}%, coarser pages "
-                        f"{100 * coarser.mean():.1f}% (test differs there {100 * (~test & coarser).sum() / max(coarser.sum(), 1):.1f}%)")
-        print(f"{mk['file']} ({mk['triangles']} tris, cut {r['cut']}): " + "; ".join(line), flush=True)
-        for k in tot:
-            tot[k] += acc[k] * mk["triangles"]
-    n = tot["n"]
-    print(f"triangle-weighted: exact {100 * tot['exact'] / n:.2f}%, alpha test agrees {100 * tot['test'] / n:.2f}%; "
-          f"differs {100 * (n - tot['test']) / n:.2f}% (on coarser pages {100 * tot['diff_coarser'] / n:.2f}%, "
-          f"same level {100 * tot['diff_same'] / n:.2f}%)")
+        # One group per (shader, cut, mip clamp) among the records using this texture, weighted by their triangles.
+        groups = {}
+        for x in rs:
+            g = groups.setdefault((x["fs"], x["cut"], min(int(x["p1"][0]), len(levels) - 1)), [0])
+            g[0] += x["tris"]
+        reads = {}
+        for (fs, cut, top), (tris,) in groups.items():
+            if top < 0:
+                continue
+            acc = {k: 0.0 for k in keys}
+            for m in range(top + 1):
+                if m not in reads:
+                    ref = levels[m]
+                    hh, ww = ref.shape
+                    ys, xs = np.mgrid[0:hh, 0:ww]
+                    uv = np.stack([(xs.ravel() + 0.5) / ww, (ys.ravel() + 0.5) / hh], 1)
+                    got, coarser = vt_reads(r, ind, cache, uv, m)
+                    reads[m] = (got, coarser, ref.ravel())
+                got, coarser, want = reads[m]
+                exact = np.abs(got - want) <= 0.5 / 255
+                test = (got >= cut) == (want >= cut)
+                w = 1.0 / (top + 1) / len(want)   # every requestable level weighs the same
+                acc["n"] += w * len(want); acc["exact"] += w * exact.sum(); acc["test"] += w * test.sum()
+                acc["diff_coarser"] += w * (~test & coarser).sum(); acc["diff_same"] += w * (~test & ~coarser).sum()
+            f = per_fs.setdefault(fs, {k: 0.0 for k in keys})
+            for k in keys:
+                f[k] += acc[k] * tris
+                tot[k] += acc[k] * tris
+            print(f"{mk['file']} fs {fs:016x} ({tris} tris, cut {cut:.4f}, mips 0..{top}): exact {100 * acc['exact']:.2f}%, "
+                  f"test {100 * acc['test']:.2f}%, differs on coarser pages {100 * acc['diff_coarser']:.2f}%", flush=True)
 
+    def line(t):
+        n = t["n"]
+        return (f"exact {100 * t['exact'] / n:.2f}%, alpha test agrees {100 * t['test'] / n:.2f}%; differs {100 * (n - t['test']) / n:.2f}% "
+                f"(on coarser pages {100 * t['diff_coarser'] / n:.2f}%, same level {100 * t['diff_same'] / n:.2f}%)")
+    for fs, t in sorted(per_fs.items(), key=lambda kv: -kv[1]["n"]):
+        print(f"shader {fs:016x} ({t['n']:.0f} tris): {line(t)}")
+    print(f"triangle-weighted, all: {line(tot)}")
 
 if __name__ == "__main__":
     main()

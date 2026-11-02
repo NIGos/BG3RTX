@@ -68,12 +68,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pack", required=True)
     ap.add_argument("--masks", required=True)
+    ap.add_argument("--manifest", default="vt_alpha_manifest.json")
     ap.add_argument("--fs", nargs="+", required=True)
     ap.add_argument("--samples", type=int, default=400, help="triangles sampled per instance")
     ap.add_argument("--levels", type=int, nargs="+", default=[0, 1, 2, 3, 4, 5])
     a = ap.parse_args()
     fs = {int(h, 16) for h in a.fs}
-    man = json.loads((Path(a.masks) / "vt_alpha_manifest.json").read_text())
+    man = json.loads((Path(a.masks) / a.manifest).read_text())
     masks = {}
     for m in man["masks"]:
         mip0 = mask_levels(Path(a.masks) / m["file"])[0]
