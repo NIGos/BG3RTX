@@ -72,6 +72,9 @@
 #if RF_HIT_GI
 // rf_hit_gi (rt_reflections*_hit_shade*.hlsl?RF_HIT_GI=1): the screen's ls_box=2 box visibility at hits.
 #define NATIVE_HIT_BOX_LS2 1
+// and the game's own direct lobes at hits (point/spot, box, sun: rt/native_hit_direct.hlsli HD_SCATTER), the
+// BRDF the screen's lighting gives the same lights (tests/box_light_test.cpp section 6: hit == screen).
+#define NATIVE_HIT_GAME_BRDF 1
 #endif
 #include "../rt/native_hit_direct.hlsli"
 // The sun at the hit follows the R0 roof rule (rt/native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF; roof

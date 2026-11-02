@@ -3,6 +3,14 @@
 // environment/probe, emission, AO multiplier or multiple-bounce energy implied.
 #include "bg3_lights.hlsli"
 #include "../../common/native_hit_direct.h"
+// NATIVE_HIT_GAME_BRDF (rf_hit_gi, rt_reflections.hlsl): the direct terms at a hit (point/spot, box, sun) use the
+// game's own lobes (hd_game_scatter) instead of the declared FresnelBlend, so a light gives the hit what the
+// screen's lighting gives it. Without it the call is hd_scatter exactly as before.
+#ifdef NATIVE_HIT_GAME_BRDF
+#define HD_SCATTER(m,n,ng,o,i,known,vis) hd_game_scatter((m).parameters,n,ng,o,i,known,vis)
+#else
+#define HD_SCATTER(m,n,ng,o,i,known,vis) hd_scatter((m).scattering,n,ng,o,i,known,vis)
+#endif
 #ifdef NATIVE_HIT_DLS_POLICY
 // native: the part of radiance from lights the screen leaves at the game's own visibility (the
 // D-LS policy below); the caller applies the game's AO-on-direct factor to it (native_hit_ao_direct).
@@ -183,7 +191,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   HdIncident incident=hd_native_incident(source,item>=points,surface_position,material.channel,global_scale);
   if(incident.status!=HdOk){result.status=incident.status;return result;}
   // Validate material/normal domain before spending a visibility ray.
-  HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
+  HdDirect term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,1);
   if(term.status!=HdOk){result.status=term.status;return result;}
   const bool incident_zero=!any(incident.radiance>0);
   hd_stat(6u,true);hd_stat(7u,incident_zero);hd_stat(8u,!incident_zero && !any(term.radiance>0));
@@ -229,7 +237,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
    hd_stat(2u,near);hd_stat(3u,self);
   }
   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
-  term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
+  term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
  }
@@ -255,7 +263,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   // mip 0 (zero gradients: the game's own rule for invalid quad differences).
   incident.radiance=bg3_box_colour(box,uvw.xy,0.0.xx,0.0.xx)*(g*((box.m1&1u)!=0u?global_scale:1.0));
   if(!all(isfinite(incident.radiance)) || any(incident.radiance<0)){result.status=HdInvalid;return result;}
-  HdDirect term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,1);
+  HdDirect term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,1);
   if(term.status!=HdOk){result.status=term.status;return result;}
   if(!any(term.radiance>0))continue;
   float3 normal=normalize(geometric_normal);
@@ -284,7 +292,7 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   }
 #endif
   if(visibility==kRtUnknown){result.status=HdUnknownVisibility;return result;}
-  term=hd_scatter(material.scattering,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
+  term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,visibility==kRtLit?1.0:0.0);
   if(term.status!=HdOk){result.status=term.status;return result;}
   result.radiance+=term.radiance;++result.lights;
 #ifdef NATIVE_HIT_BOX_TERM

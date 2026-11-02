@@ -1,0 +1,11 @@
+{
+ "_rule": "Fill BEFORE queuing the batch and commit: predicted relative change of the scene colour before post (5c3fdabc float mean) of shot-on against the OFF neighbours, and the predicted hit-material qualified share change (diag-on minus the diag-off mean, points of all lookups). null = no change predicted: the gate then passes only within the derived noise band.",
+ "hmm1-mask-s8-fg2": {
+  "shot-on": {"predicted": null, "basis": "gi_hit_direct only adds light at newly qualified hits; Base_MSK_VT is 5 of the 67 'other pair' pool draws per S8 frame (traces), so at most ~1 point of lookups (14.9% x 5/67): below the S8 OFF-OFF noise (2026-11-01, before any run)"},
+  "qualified_share_points": {"predicted": 1.1, "range": [0.3, 3.0], "basis": "14.9% 'pool without row' x 5/67 Base_MSK_VT draws of the class A 'other pair' draws (S8 traces); the instance share per draw is unknown offline (the pack has no VS/FS per pool instance)"}
+ },
+ "hmm2-mask-inn-fg2": {
+  "shot-on": {"predicted": null, "basis": "same mechanism; inn has 15.5 Base_MSK_VT draws per frame of ~1049 G-buffer draws (traces); no replay pack of the inn to bound the lookup share"},
+  "qualified_share_points": {"predicted": null, "range": [0.5, 6.0], "basis": "no inn pack: participation (records/ready > 0) is the gate, the share is measured"}
+ }
+}

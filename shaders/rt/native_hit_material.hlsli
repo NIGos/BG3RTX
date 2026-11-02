@@ -144,7 +144,17 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  // Row word 220: the record pair's reflectance mode (native_vt_fields.h nv_reflectance; 81657854
  // mixes 0.5 with the normal layer's x by the UBO value; 3df678c0's 0.5 is already in word 208).
  const float reflectance=nv_reflectance(gHitRecords.Load(row+220u),asfloat(gHitRecords.Load(row+208u)),nl.value.x);
- fields=nv_fields(al.value.rgb,nl.value.wzy,pl.value.xyz,reflectance);
+ float3 albedo=al.value.rgb;
+ // Base_MSK_VT (word 224 = 3 | mask sampler slot << 8, rt_hit_material_mask; native_vt_fields.h nv_mask_albedo):
+ // the 2D colour mask (word 228, sampler 0:7) at the UV tints the albedo with c0/c1 (words 232..252) and c2
+ // (p1.yzw, bytes 68..79).
+ if((detail.x&255u)==3u){
+  NativeLayer mk=hit_material_2d(detail.y,detail.x>>8,u,g);
+  if(!mk.known)return hit_material_unknown(6);
+  albedo=nv_mask_albedo(albedo,mk.value.rgb,asfloat(gHitRecords.Load3(row+nh_pool_row_detail+8u)),
+                        asfloat(gHitRecords.Load3(row+nh_pool_row_detail+20u)),asfloat(gHitRecords.Load3(row+68u)));
+ }
+ fields=nv_fields(albedo,nl.value.wzy,pl.value.xyz,reflectance);
  if(fields.status!=0)return hit_material_unknown(7);
  // ENV_DetailMap_VT (word 224 = 1): detail UV = (UV * |A P| / |P|) * tiling at the interpolated
  // object position (the FS's interpolated W - T and P), footprint scaled alike.

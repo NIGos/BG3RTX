@@ -480,6 +480,24 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Live: batch `m4_wind_rgb` (S8, 144 s). Expected: up to +13 points of qualified share at S8, about +3 to +7 at
     camp (0d91554d is 6.6% of camp's unsupported alpha triangles; hits per triangle are higher for these trees than
     for grass), 0 at S6 (not in that scene).
+- **Pool family: Base_MSK_VT (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Live key
+  `rt_hit_material_mask=0` (ini only: the GUI knob "Hidden-surface shading" is at its 8-key limit).
+  - Why "pool without row" (14.9% of S8 replay lookups, 133 instances): every one is a class A G-buffer pair with no
+    recipe (layer log `without record: other pair 67/172`; basis ready 99/100, no slot shortage). The pack has no
+    VS/FS per pool instance, so the split is from the S8 traces (class A pairs without a recipe, draws per frame):
+    54df894a/7a07134e ENV_DetailMap_HeightGradient_VT 17.9, 6044c8cf/02807a68 ENV_Tileset_MultipleTextures 13
+    (TileConstruction; the house has 170 tile objects), 2aff0bdc/d54ed410 9, 66602480/fc32acdc 8, 2d2ac3c3/a5f44c48
+    Base_MSK_VT 5, f474891e/cebfa2f6 5, 2d2ac3c3/fa18b37c 4.
+  - Built: the smallest, Base_MSK_VT (`LayoutMask`, native_vt_surface.h). Classifier vs 14678345 (pinned in
+    `tests/material_families_test.py` BaseMask): only RT1 differs (albedo x colour mask 1:6 at the UV with sampler 0:7
+    and the 1:1 colours at 0/16/32: `nv_mask_albedo`), RT2.y reads 1:1 byte 12, physical moves to 1:7. Row: word 224
+    = 3 | mask sampler slot << 8, 228 mask view, 232..252 c0/c1, c2 in p1.yzw (68..79; the VT layers read only p1.x).
+  - Not built: Tileset 02807a68 needs per-vertex COLOR (the blend weights) in the pool basis (44 B/vertex, UV + N/B/T)
+    and a 6044c8cf XFB map (COLOR at location 1 shifts N/B/T); HeightGradient 7a07134e needs the absolute world
+    position (camera _m6) at the hit, 3 more 2D views and 20 floats: more than the 256 B row holds.
+  - Offline: key off, the S8 replay is bit-identical (giRaw fnv1a a54c4dfd1cc9acb9, all 512 x 64 counters equal with
+    HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
+    rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has
@@ -553,6 +571,16 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     expected +0.02 to 0.1 ms on `rf: reflection pass`; with ls_box=2 the unshadowed boxes' rays (S8 up to ~0.7M
     short rays/frame) up to +0.3 ms. Live: m4_promotion m4p3/m4p4 `diag-gi1`, `diag-gi2`, `diag-gi1-box2`,
     `cost-gi1`, `shot-gi1`.
+  - **The S6 direct excess is the BRDF, not the boxes (2026-11-01, branch rf-hit-box; offline).** Live m4p3 161852
+    (`rf hit shade boxes`): the box part of tier (a) L_b is 0.00508 of 0.0764 (6.6%), all of it already at the game's
+    visibility with the AO factor; point/spot give 0.0606 of the 0.0657 direct. Box record math, channel, falloff,
+    cookie, shadow strength and AO factors match f469db78 (box_light_test). What differs for every light is the lobe:
+    the hit used the declared FresnelBlend, the screen the game's Burley x mix(1, 0.6622, a) + GGX/Smith-joint/Schlick
+    (f469db78 _1597/_1598, the same for point, spot and box). `RF_HIT_GI` now also defines NATIVE_HIT_GAME_BRDF:
+    `HD_SCATTER` -> `hd_game_scatter` (common/native_hit_direct.h) for point/spot, box and sun at hits, same domain
+    checks and status codes (the supported set is unchanged). Not reproduced: the screen-quad AA roughness term
+    (a hit has no derivatives; a = max(0.09, r)). Test: `box_light_test` section 8, hit == the game's box loop on
+    random records and surfaces (2^-14 relative), and the FresnelBlend / game energy ratio over the same cases.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
