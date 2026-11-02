@@ -30,7 +30,8 @@
    "diag-occ-hair": {
     "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
    },
-   "camp-moving": "H7 predicted first (user: it moves; ds1 nosun +15% with an RT-only red shadow on the hair): sun darkening led by 'cutout-moving' at >= 2 m; if 'held' leads instead it is a stale pose (H3), if 'moving' near <= 0.5 m it is the hair cards (H1); motion-base differs between its two traces while motion-nosun does not"
+   "camp-moving": "H7 predicted first (user: it moves; ds1 nosun +15% with an RT-only red shadow on the hair): sun darkening led by 'cutout-moving' at >= 2 m; if 'held' leads instead it is a stale pose (H3), if 'moving' near <= 0.5 m it is the hair cards (H1); motion-base differs between its two traces while motion-nosun does not",
+   "diag-occ-boxold": "before the box cascade-mask fix (ls_box_cascade_old=1): a 'cascade' kind appears under local and/or box (> 0 rays); in diag-occ-base (fixed) it is 0 under local/box. The local+box darkening of character px rises by that cascade dark share; the sun and AO lines unchanged within the base spread"
   }
  },
  "ds2-dialogue2-fg2": {
@@ -53,7 +54,8 @@
    },
    "diag-occ-hair": {
     "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
-   }
+   },
+   "diag-occ-boxold": "before the box cascade-mask fix (ls_box_cascade_old=1): a 'cascade' kind appears under local and/or box (> 0 rays); in diag-occ-base (fixed) it is 0 under local/box. The local+box darkening of character px rises by that cascade dark share; the sun and AO lines unchanged within the base spread"
   }
  },
  "ds3-dialogue3-fg2": {
@@ -78,7 +80,8 @@
     "H1": "the base window's near 'moving' share under hair pixels moves to 'hair'/'scalp' and the sun and AO darkening of character px drop beyond the base spread"
    },
    "port-dark": "double darkening predicted: AO darkened >= 90% of character px with mean darkening >= 30% (ambient visibility <= 0.7) on top of the game's own occluded ambient; the AO distance bins >= 1 m hold a larger share than in ds1 (the roof and walls within gi_rt_radius); sun: darkened >= 80% of the character px with 'static' (roof) >= 2 m dominating",
-   "energy (char_energy.py, float mask mean vs the OFF neighbours)": "shot-noao-on > +25% (beyond the OFF spread; ds1 camp +35% by PNG); shot-nogi-on minus shot-noao-on within the OFF spread = the RT bounce adds almost nothing under the roof (little bounce); shot-nogi-on clearly below shot-noao-on = the bounce lights them and only the AO over-darkens"
+   "energy (char_energy.py, float mask mean vs the OFF neighbours)": "shot-noao-on > +25% (beyond the OFF spread; ds1 camp +35% by PNG); shot-nogi-on minus shot-noao-on within the OFF spread = the RT bounce adds almost nothing under the roof (little bounce); shot-nogi-on clearly below shot-noao-on = the bounce lights them and only the AO over-darkens",
+   "diag-occ-boxold": "before the box cascade-mask fix (ls_box_cascade_old=1): a 'cascade' kind appears under local and/or box (> 0 rays); in diag-occ-base (fixed) it is 0 under local/box. The local+box darkening of character px rises by that cascade dark share; the sun and AO lines unchanged within the base spread"
   }
  },
  "_all": {
@@ -174,6 +177,10 @@
   "shot-nogi-on": {
    "H4": "as shot-noao-on plus the RT bounce removed: the difference to shot-noao-on is the bounce's share of the character light",
    "energy": "below shot-noao-on by the bounce share"
+  },
+  "shot-boxold-on": {
+   "fix": "the old box passes: local/box rays also hit the F-1/F-2 cascade copy (stale, coarser LOD); character mask energy <= the OFF neighbours (only adds occluders); a visible change only where a rig light is shadowed by a copy",
+   "energy": "<= 0"
   }
  },
  "_ranking_before_the_run": {

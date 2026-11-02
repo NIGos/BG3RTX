@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "gi": "1"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "gi": "1", "ls_box_cascade_old": "0"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -63,7 +63,8 @@ plan = [
     step("shot-noart-on", SHOT, True, ls_noshadow="2"),              # lights the art leaves unshadowed untraced
     step("shot-off-c", SHOT, True),
     step("shot-nocascade-on", SHOT, True, rt_cascade_casters="0"),   # last frame's cascade soup out of the sun TLAS
-    step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),             # no held (absent) draws while static
+    step("shot-boxold-on", SHOT, True, ls_box_cascade_old="1"),      # the old box passes: the cascade copy shadows local/box lights
+    step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),            # no held (absent) draws while static
     step("shot-noao-on", SHOT, True, gi_ao="0"),                     # RT AO off
     step("shot-nogi-on", SHOT, True, gi="0"),                        # no GI at all: no RT AO and no RT bounce (port: bounce share)
     step("shot-off-d", SHOT, True),
@@ -85,6 +86,7 @@ plan = [
     step("diag-occ-nohold", 10, rt_occ_stats="1", rt_dyn_hold="0"),         # 'held' share -> 0
     step("diag-occ-nocascade", 10, rt_occ_stats="1", rt_cascade_casters="0"),   # 'cascade' share -> 0
     step("diag-occ-hair", 10, rt_occ_stats="1", **ORIGIN),                    # hair/scalp kinds replace opaque cards
+    step("diag-occ-boxold", 10, rt_occ_stats="1", ls_box_cascade_old="1"),    # before the box cascade-mask fix: local/box 'cascade' > 0
     step("diag-rt-hairoff-a", 10, rt_stats="1", rt_primary_check="1"),
     step("diag-rt-hairon", 10, rt_stats="1", rt_primary_check="1", **ORIGIN),
     step("diag-rt-hairoff-b", 10, rt_stats="1", rt_primary_check="1"),
@@ -201,7 +203,8 @@ _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters
               ("views", dict(rt_debug="2", ls_debug="2")), ("owners", dict(ls_debug="9", ls_box="0")),
               ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0")),
               ("occ", dict(rt_occ_stats="1")), ("occhair", dict(ORIGIN, rt_occ_stats="1")),
-              ("occnocasc", dict(rt_occ_stats="1", rt_cascade_casters="0"))]
+              ("occnocasc", dict(rt_occ_stats="1", rt_cascade_casters="0")),
+              ("boxold", dict(rt_occ_stats="1", ls_box_cascade_old="1"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
 warm_plan.append(step("restore", 5, qa_exposure_hold="0"))
 warm_seconds = sum(p["seconds"] for p in warm_plan)

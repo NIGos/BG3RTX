@@ -259,7 +259,10 @@ at its pixel), per kind `rays % [near %] dark %`, and the occluder distance hist
 - Key off: the ordinary requests are byte-identical (tools/shader_identity.py --baseline); 36 new requests.
 - Found while wiring it: the box D-LS variants (rt_local_shadows*_box*.hlsl) are not in shader_variant.h
   cascade_entry, so with rt_cascade_casters=1 they trace 0xFF and the F-1/F-2 cascade copy shadows local and box
-  lights (rt_visibility g_rt_class 1: its unknown alpha is solid). The 'cascade' kind under local/box measures it.
+  lights (rt_visibility g_rt_class 1: its unknown alpha is solid). FIXED 2026-11-02: the five box files are cascade
+  entries (RT_CASCADE_MASKS: trace 0x01). Only new requests (72, box files + RT_CASCADE_MASKS); every existing request
+  byte-identical. Live A/B: ls_box_cascade_old=1 restores the old 0xFF box passes (diag-occ-boxold, shot-boxold-on);
+  the 'cascade' kind under local/box must be > 0 there and 0 in diag-occ-base.
 - Float energy of the character mask per shot: dump_preview_f32=1 (layer/dump.cpp) writes the 5c3fdabc scene colour
   as float32 at the preview grid (~10 MB per trace); tools/live_batches/dialogue_shadows/char_energy.py takes its mean
   over the RT2 class mask (tests/char_energy_test.py).

@@ -15,6 +15,7 @@
   char_energy.py gives the character-mask float mean per shot vs its OFF neighbours.
 - dialogue_shadows jobs: diag-occ-base/-nohold/-nocascade/-hair windows, shot-nogi-on, ds0 warms the occ variants;
   predicted.json "occ" per save (ds1/ds2 camp WLD_Main_A, ds3 port CTY_Main_A) committed before any run.
-- Found: the box D-LS variants are not cascade entries, so with rt_cascade_casters=1 local/box rays hit the F-1/F-2
-  cascade copy (traced 0xFF). Not fixed here; the 'cascade' kind under local/box measures it.
+- Fixed: the box D-LS variants were not cascade entries, so with rt_cascade_casters=1 local/box rays hit the F-1/F-2
+  cascade copy (traced 0xFF). Now cascade entries (0x01): 72 new requests, 2997/2997 existing byte-identical, 98
+  CTests pass. Live A/B key ls_box_cascade_old=1 (old behaviour): diag-occ-boxold window and shot-boxold-on.
 - Not measured: GPU ms of the occ pass (diag only). Live batch not run (needs user steering).

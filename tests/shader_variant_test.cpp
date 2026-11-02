@@ -53,6 +53,15 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
         "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1");
   CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
+  // The box passes trace 0x01 under rt_cascade_casters like the other D-LS passes (the cascade copy is the sun's only).
+  for (const char* f : {"gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
+                        "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl"}) {
+    CHECK(cascade_entry(f));
+    CHECK(request(f, kCascade) == std::string(f) + "?RT_CASCADE_MASKS=1");
+    CHECK(request(f, 0) == f);
+  }
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kCascade | kOccStats) ==
+        "gi/rt_local_shadows_full_box.hlsl?RT_CASCADE_MASKS=1;RT_OCC_STATS=1");
   // rt_occ_stats: the every-mode box pass only, last; never the ordinary or other D-LS files.
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats) == "gi/rt_local_shadows_full_box.hlsl?RT_OCC_STATS=1");
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats | kScalp) ==

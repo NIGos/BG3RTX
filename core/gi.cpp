@@ -1027,7 +1027,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
   // (RT_CASCADE_MASKS, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
-  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0;
+  // ls_box_cascade_old=1 (diagnostic A/B, live): the box passes trace 0xFF again, as before the 2026-11-02 fix, so
+  // the stale cascade copy shadows local/box lights (rt_occ_stats "cascade" kind under local/box shows it).
+  const bool box_old = std::strncmp(file, "gi/rt_local_shadows", 19) == 0 && std::strstr(file, "_box") &&
+                       host->cfg_int("ls_box_cascade_old", 0) != 0;
+  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0 && !box_old;
   // Include box/native/check helpers too: each may reach rt_common through
   // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
