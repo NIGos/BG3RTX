@@ -98,6 +98,13 @@ bool instanced_live(){return instanced_on && cfg_hot(CfgHot::rt_hit_material_ins
 // rt_hit_material_wind_rgb (startup, needs rt_hit_material_instanced): the third instanced family (wind RGB 2S
 // translucency, native_hit_instanced.h WindRgb). Off: every instanced:: lookup below sees only wind and 2S.
 bool wind_rgb_on{};
+// rt_hit_material_ip_grass (startup, needs rt_hit_material_instanced): the fourth instanced family (IP_Wind_GrassFlowers,
+// native_hit_instanced.h IpGrass). Off: every instanced:: lookup below sees it as None.
+bool ip_grass_on{};
+// Then live: the key's current value (read once per frame in pool_rollover) turns its rows on and off; the frame patch
+// and the shader variant stay as started.
+std::atomic<bool> ip_grass_key{true};
+bool ip_grass_rows(){return ip_grass_on && ip_grass_key.load(std::memory_order_relaxed);}
 // rt_hit_material_mask (live, read once per frame in pool_rollover): the Base_MSK_VT pool pair (native_vt_surface.h
 // LayoutMask). Off: pool_recipe_on never returns it, so its draws stay "other pair" exactly as before.
 std::atomic<bool> pool_mask_on{false};
@@ -115,7 +122,9 @@ instanced::WindInputs read_inputs(VkCommandBuffer cmd,instanced::Family family){
  bool ok=read_mapped(frame.buffer,frame.offset,&w.time,4) &&
   read_mapped(camera.buffer,camera.offset+instanced::kCameraViewProjOffset,w.viewproj,64) &&
   read_mapped(camera.buffer,camera.offset+instanced::kCameraPositionOffset,w.camera,12);
- if(family==instanced::Wind || family==instanced::WindRgb){
+ // IP grass: the wind words (scene 0:1, material 1:1 _m0.._m3) and the 1:0 translation, both VSs read them.
+ if(family==instanced::IpGrass)ok=ok && bound(1,0,engine) && read_mapped(engine.buffer,engine.offset+instanced::kTranslationOffset,w.translation,12);
+ if(family==instanced::Wind || family==instanced::WindRgb || family==instanced::IpGrass){
   ok=ok && bound(0,1,scene) && bound(1,1,material) && read_mapped(material.buffer,material.offset,w.material,16);
   // Wind RGB: also 1:1 _m4 (the flutter amplitude both VSs read).
   if(family==instanced::WindRgb)ok=ok && read_mapped(material.buffer,material.offset+16,&w.flutter,4);
@@ -217,7 +226,7 @@ DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  }
  // rt_hit_material_instanced: the depth draw (by VS) and the G-buffer draw (exact pair) of one
  // instanced wind / 2S mesh share the draw-word + index-range key (native_hit_instanced.h).
- if(instanced_live()){const auto f=instanced::deferred_family(s.vs,s.fs,wind_rgb_on),d=instanced::depth_family(s.vs,wind_rgb_on);
+ if(instanced_live()){const auto f=instanced::deferred_family(s.vs,s.fs,wind_rgb_on,ip_grass_rows()),d=instanced::depth_family(s.vs,wind_rgb_on,ip_grass_rows());
   if(f!=instanced::None || d!=instanced::None)return instanced::key(k,f!=instanced::None?f:d);}
  const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
  if(!depth && !deferred)return k;
@@ -401,7 +410,7 @@ bool capture_tileset(VkCommandBuffer cmd,Material& material){
 // recipe of an instanced pair (native_hit_instanced.h): the same LayoutBase bindings, per-draw row.
 bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
  auto* state=cmd_state(cmd);
- if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on)==recipe):audited_static_family(state->vs,state->fs)))return false;
+ if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows())==recipe):audited_static_family(state->vs,state->fs)))return false;
  omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
  auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
   queried[n]=query_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out);
@@ -419,7 +428,7 @@ bool capture(VkCommandBuffer cmd,Material& material,const native_vt::Recipe* rec
  if(material.reflectance!=native_vt::ReflectanceConstant)buffer(1,1,1,ubo_bytes,material.physical_ubo);else material.physical_ubo={};
  // LayoutDetail: the VT table/normal/albedo/physical move to 1:4..7; 1:3 and 1:8 are the 2D detail
  // normal and mask, sampled with the set 0 binding 7 sampler (FS 613ead9c).
- const bool detail=vt && vt->layout==native_vt::LayoutDetail;const uint32_t first=detail?4u:3u;
+ const bool detail=vt && vt->layout==native_vt::LayoutDetail;const uint32_t first=detail || (vt && vt->layout==native_vt::LayoutVt4)?4u:3u;
  // LayoutMask (FS a5f44c48): table/normal/albedo at 1:3..5 as LayoutBase, physical at 1:7, the 2D colour mask
  // at 1:6 with the set 0 binding 7 sampler (kept in detail_mask/detail_sampler).
  const bool mask=vt && vt->layout==native_vt::LayoutMask;
@@ -606,6 +615,7 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  if(pool_counter_frame && pool_counter_frame%120==0 && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
  pool_table.end_frame();pool_counter_frame=frame;pool_basis.rows=pool_basis.row_instances=0;
  pool_mask_on.store(cfg_int("rt_hit_material_mask",0)!=0,std::memory_order_relaxed);
+ ip_grass_key.store(cfg_int("rt_hit_material_ip_grass",0)!=0,std::memory_order_relaxed);
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
@@ -630,13 +640,15 @@ void cpu_report(uint64_t frames){
   double(cpu_alloc_mb.exchange(0))/double(n),ms[CpuFree],double(cpu_frees.exchange(0))/double(n),double(cpu_reuses.exchange(0))/double(n),
   double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle),cfg_hot(CfgHot::rt_hit_material_lean_hooks));
 }
-bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on);}
+bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on,ip_grass_on);}
 void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return;dd=device;on=cfg_hot(CfgHot::rt_hit_material)!=0 && cfg_int("rt_alpha",1)!=0 && cfg_int("rt_bvh_split",1)!=0;
  instanced_on=on && cfg_int("rt_hit_material_instanced",0)!=0;
  wind_rgb_on=instanced_on && cfg_int("rt_hit_material_wind_rgb",0)!=0;
+ ip_grass_on=instanced_on && cfg_int("rt_hit_material_ip_grass",0)!=0;
  capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
+ capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),ip_grass_on);
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
-void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
+void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
  for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
@@ -666,7 +678,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
  if(!on || !state || args.kind>1 || record>=max_records)return;CpuTimer timer(CpuPrepass);
  const bool tileset=tileset_depth(state->vs,state->fs);if(tileset && !tileset_active())return;uint32_t vertices=0;
  // rt_hit_material_instanced: an instanced wind / 2S depth draw keeps all its instances' rows.
- const auto family=!tileset && instanced_live()?instanced::depth_family(state->vs,wind_rgb_on):instanced::None;
+ const auto family=!tileset && instanced_live()?instanced::depth_family(state->vs,wind_rgb_on,ip_grass_rows()):instanced::None;
  if(!tileset_vertex_count(args.count,args.instances,vertices) ||
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
@@ -764,8 +776,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // rt_hit_material_lean_hooks: the key (bindings, mapped reads, buffer sizes) only for a draw that qualifies.
  const bool lean_key=lean_hooks();bool keyed=false;DrawKey draw{};
  {const bool ts=tileset_deferred(state->vs,state->fs);
-  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
-  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
+  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on,ip_grass_rows()):instanced::None;
+  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows()):nullptr;
   const auto q=ir?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):
    deferred_qualify(audited_static_family(state->vs,state->fs)||ts||ir,ts,exactPipeline,args.kind,args.instances,stride);
   if(!lean_key || (q!=DeferredQualify::FamilyDeclined && q!=DeferredQualify::PipelineDeclined)){draw=key(cmd,*state,args);keyed=true;}}
@@ -786,8 +798,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);
  // rt_hit_material_instanced: the instanced wind / 2S pairs take the per-draw path, any instance count.
- const auto family=!tileset && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
- const auto* irecipe=family!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
+ const auto family=!tileset && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on,ip_grass_rows()):instanced::None;
+ const auto* irecipe=family!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows()):nullptr;
  const bool audited=audited_static_family(state->vs,state->fs)||tileset||irecipe;
  const auto qualify=irecipe?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
  if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
@@ -1113,6 +1125,13 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
      (unsigned long long)slot.frame,(unsigned long long)r[instanced::PairSame],(unsigned long long)r[instanced::PairOtherFrame],(unsigned long long)r[instanced::PairCamera],
      (unsigned long long)r[instanced::PairWind],(unsigned long long)r[instanced::PairUnread],(unsigned long long)o[instanced::OrderRows],(unsigned long long)o[instanced::OrderSame],
      (unsigned long long)o[instanced::OrderPermuted],(unsigned long long)o[instanced::OrderUnmatched]);}
+   // rt_hit_material_ip_grass: the fourth family's pairing and instance order (bit-exact check, no tolerance).
+   if(ip_grass_on){const auto& r=pair_window[instanced::IpGrass];const auto& o=order_window[instanced::IpGrass];
+    log("[hit material instanced] frame %llu IP grass since the last line: pairs same frame %llu, other frame (time) %llu, camera %llu, placement %llu, wind inputs %llu, unread %llu; "
+        "instance order (retired queries): rows %llu, same order %llu, permuted %llu, unmatched %llu",
+     (unsigned long long)slot.frame,(unsigned long long)r[instanced::PairSame],(unsigned long long)r[instanced::PairOtherFrame],(unsigned long long)r[instanced::PairCamera],
+     (unsigned long long)r[instanced::PairPlacement],(unsigned long long)r[instanced::PairWind],(unsigned long long)r[instanced::PairUnread],(unsigned long long)o[instanced::OrderRows],
+     (unsigned long long)o[instanced::OrderSame],(unsigned long long)o[instanced::OrderPermuted],(unsigned long long)o[instanced::OrderUnmatched]);}
    for(auto& f:pair_window)for(auto& c:f)c=0;for(auto& f:order_window)for(auto& c:f)c=0;tolerant_window=0;
   }
   if(!instanced_on || !cfg_hot(CfgHot::rt_stats) || slot.frame%120!=0)return;
@@ -1124,6 +1143,8 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles);
   if(wind_rgb_on)log("[hit material instanced] frame %llu wind RGB 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
    (unsigned long long)slot.frame,c[3].prepass,c[3].seen,c[3].pipeline,c[3].bindings,c[3].stream,c[3].captured,c[3].mapped,(unsigned long long)c[3].triangles);
+  if(ip_grass_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
+   (unsigned long long)slot.frame,c[4].prepass,c[4].seen,c[4].pipeline,c[4].bindings,c[4].stream,c[4].captured,c[4].mapped,(unsigned long long)c[4].triangles);
  };
  for(const auto& deferred:packet->materials){
   uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;

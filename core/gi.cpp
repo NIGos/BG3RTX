@@ -972,11 +972,14 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hit_material_wind_rgb at startup: its clip counters (RT_HIT_WIND_RGB). Constant for the session,
   // so it shares the instanced variant slot (the request string is compared below).
   const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
+  // rt_hit_material_ip_grass at startup: the fourth family's field and counters (RT_HIT_IP_GRASS), as wind RGB.
+  const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
-                                                 (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u));
+                                                 (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
+                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u));
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
@@ -1224,6 +1227,11 @@ static_assert(kRfGiFirst == 419, "rt_reflections.hlsl rf_hit_gi counters copied 
 // over x256, rigid offset. Logged as "hit material instanced clip wind RGB 2S".
 constexpr uint32_t kHitClip3First = kRfGiFirst + kRfGiCount, kHitClip3Count = 8;
 static_assert(kHitClip3First == 427, "native_hit_material.hlsli hit_material_count family 3 base 427");
+// [435..442] rt_hit_material_ip_grass: the clip check of the fourth instanced family (IP_Wind_GrassFlowers, family 4,
+// RT_HIT_IP_GRASS variants), as wind RGB: checked, bit-exact, within a tolerance (0), UV differs, beyond x1-16, x16-256,
+// over x256, rigid offset. Logged as "hit material instanced clip IP grass".
+constexpr uint32_t kHitClip4First = kHitClip3First + kHitClip3Count, kHitClip4Count = 8;
+static_assert(kHitClip4First == 435, "native_hit_material.hlsli hit_material_count family 4 base 435");
 // rtStats counter map (64 bins x uint each; a new range starts at the previous kStatsCounters and moves it):
 //   0..15 core RT/GI (pixels, primary check, hybrid GI tiers)  16..38 D-LS      39..47 rt_shadow materials
 //   48..63 D-RF                 64..75 RT audit fixes          80..111 alpha candidates   112..117 ls_check
@@ -1233,9 +1241,9 @@ static_assert(kHitClip3First == 427, "native_hit_material.hlsli hit_material_cou
 //   287..288 tileset            289..311 rf hit shade          312..319 hit policy / AO     320..330 GI hit sun, rf sun roof
 //   331..349 hit emission       350..355 ls exact-k            356..371 instanced clip      372..382 gi_far
 //   383..384 rf box part        385..416 ls box (device-local) 417..418 GI hit non-finite
-//   419..426 rf hit gi (device-local)          427..434 instanced clip wind RGB 2S
+//   419..426 rf hit gi (device-local)          427..434 instanced clip wind RGB 2S   435..442 instanced clip IP grass
 //   (448..511: frame_replay HM_BLOCKERS only, never in game)
-constexpr uint32_t kStatsCounters = kHitClip3First + kHitClip3Count;
+constexpr uint32_t kStatsCounters = kHitClip4First + kHitClip4Count;
 static_assert(kStatsCounters <= 512, "frame_replay reserves 512 stats counters");
 static_assert(kStatsCounters <= 448, "frame_replay's HM_BLOCKERS slots start at counter 448");
 static_assert(kHitPolicyFirst == 312, "native_hit_direct.hlsli g_hd_pbase 312 (GI) / 316 (rf_hit_shade)");
@@ -1557,6 +1565,11 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   if(material_total && t[kHitClip3First]){
     const uint64_t* r=t+kHitClip3First;const uint64_t rejected=r[3]+r[4]+r[5]+r[6];
     host->log("hit material instanced clip wind RGB 2S (%u frames): checked %llu, bit-exact %llu, UV differs %llu, beyond x1-16 %llu, x16-256 %llu, over x256 %llu, "
+              "rigid offset %llu; rejected %llu = %.4f%% of all lookups",g_stats_n,r[0],r[1],r[3],r[4],r[5],r[6],r[7],rejected,100.0*double(rejected)/double(material_total));
+  }
+  if(material_total && t[kHitClip4First]){
+    const uint64_t* r=t+kHitClip4First;const uint64_t rejected=r[3]+r[4]+r[5]+r[6];
+    host->log("hit material instanced clip IP grass (%u frames): checked %llu, bit-exact %llu, UV differs %llu, beyond x1-16 %llu, x16-256 %llu, over x256 %llu, "
               "rigid offset %llu; rejected %llu = %.4f%% of all lookups",g_stats_n,r[0],r[1],r[3],r[4],r[5],r[6],r[7],rejected,100.0*double(rejected)/double(material_total));
   }
   if(t[263])host->log("hit material native compare (%u frames): matched class0 %llu; mean raw albedo/normal/roughness/reflectance/metalness %.7f/%.7f/%.7f/%.7f/%.7f; sum quantization1/256; cone vs raster footprint, NOT equality gate",

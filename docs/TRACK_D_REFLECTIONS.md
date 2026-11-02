@@ -480,6 +480,15 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Live: batch `m4_wind_rgb` (S8, 144 s). Expected: up to +13 points of qualified share at S8, about +3 to +7 at
     camp (0d91554d is 6.6% of camp's unsupported alpha triangles; hits per triangle are higher for these trees than
     for grass), 0 at S6 (not in that scene).
+- **Fourth family: IP grass (2026-11-02; offline, READY_FOR_LIVE, not qualified).** Key `rt_hit_material_ip_grass=0`
+  (startup frame patch and RT_HIT_IP_GRASS variants, then live rows; needs the instanced rows). IP_Wind_GrassFlowers
+  _AlphaTest_2S_VT / _PBR_VT: depth 05d39f75/73849471, G-buffer 105e47e4/35a18400, camp's largest blocker (row reason
+  60% of lookups, m4p1 031746). FS: the Base_VT decode with its VT layers at 1:4..1:7 (`LayoutVt4`; the VS samples its
+  wind noise at 1:3), engine UBO as the 2S family, reflectance 1:1 byte 16, a camera-distance dither discard (coverage).
+  VS 105e47e4: W at 0, UV at 1, N/B/T at 2..4 (frame patch N location 2). Both VSs: the same wind arithmetic, so the
+  rows are checked bit for bit. Family 4 needs word 220 bit 10: without the define it reads 0 and the row gets the plain
+  bit-exact check; with it the 3-bit field and counters 435..442. Pair check: time, camera, 2S translation, wind words.
+  Live: `tools/live_batches/m4_ip_grass` (camp). Predicted +30 points qualified (10-40), brightness null.
 - **Pool family: Base_MSK_VT (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Live key
   `rt_hit_material_mask=0` (ini only: the GUI knob "Hidden-surface shading" is at its 8-key limit).
   - Why "pool without row" (14.9% of S8 replay lookups, 133 instances): every one is a class A G-buffer pair with no
