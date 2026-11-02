@@ -168,11 +168,11 @@
        {"id": "all", "label": "All hits (developer)", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": true}
      ]},
     {"id": "exp_gi_far", "label": "Far-field sun bounce",
-     "description": "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond 1 m keep the game's ambient. Needs Hidden-surface shading + Bounce. Experimental: the live energy check (-0.3% exposure-normalised) disagrees in size with the reference, so it stays off.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": false, "experimental": true, "developer": false,
+     "description": "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond 1 m keep the game's ambient. Needs Hidden-surface shading + Bounce. 6 m in Ultra (gf2 S8 031330: -2.01% against the committed -2.0%; camp 033251 -2.42%; about +3.2 to +3.7 ms on the GI trace).",
+     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": false, "developer": false,
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}, "migrate_from": [], "developer": false},
        {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": ["gi_far"], "developer": false}

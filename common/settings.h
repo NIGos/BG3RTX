@@ -289,18 +289,18 @@ inline constexpr Knob kKnobs[] = {
     {"all", "All hits (developer)", kCapRayQuery, {{"rt_hit_emission", "2"}, {"rt_emissive", "1"}}, {{"exp_hidden_surface", 1}}, {"rt_hit_emission"}, true}},
    {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"}}},
 
-  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
-  // became these 8, 5 since RT water and the M4 bundle left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_gi_far", "Far-field sun bounce",
    "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a "
    "verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond "
-   "1 m keep the game's ambient. Needs Hidden-surface shading + Bounce. Experimental: the live energy check "
-   "(-0.3% exposure-normalised) disagrees in size with the reference, so it stays off.",
-   Kind::Choice, Apply::Live, "live; first enable compiles shaders", false,
+   "1 m keep the game's ambient. Needs Hidden-surface shading + Bounce. 6 m in Ultra (gf2 S8 031330: -2.01% "
+   "against the committed -2.0%; camp 033251 -2.42%; about +3.2 to +3.7 ms on the GI trace).",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
    {{"off", "Off", 0, {{"gi_far", "0"}}, {}},
     {"m6", "6 m", kCapRayQuery, {{"gi_far", "1"}, {"gi_far_m", "6"}}, {{"exp_hidden_surface", 2}}, {"gi_far"}}},
-   {}, {0, 0, 0, 0}, true, {}},
+   {}, {0, 0, 0, 1}, false, {}},
 
+  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
+  // became these 8, 4 since RT water, the M4 bundle and gi_far left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_native_coverage", "Native coverage",
    "Uses the game's own coverage for ray queries where the audit verified it. Hair + scalp: the CHAR_Hair strand "
    "coverage and depth, and the scalp coverage (other hair families remain gaps). + Tilesets: also the instanced "
