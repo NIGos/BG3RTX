@@ -10,12 +10,9 @@
 #    every job runs and every one is INVALID.
 # 3. Run B (expect/expect_every/forbid/post stripped): every job runs in order and is valid.
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
-# -Unfocused: the jobs are "window_mode": "visible_unfocused_fg" (user at the PC, AGENTS.md "Lean live tests") instead
-# of a foreground launch: args -Move -MovePlan only, expect_runner names the [window-mode] line, not the pointer line.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force,
-      [switch]$Unfocused)
+      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
 # Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
 # but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
 # queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
@@ -31,7 +28,7 @@ $scripts = Join-Path $repo 'scripts'
 . (Join-Path $scripts 'longrun.ps1')
 $inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
   @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
-$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB|$Unfocused")
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
 $reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
 if ($reuse) {
   foreach ($l in @($reuse.lines)) { Write-Host $l }
@@ -54,7 +51,7 @@ $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFro
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }
 Check "$($jobs.Count) job files, all one live_batch ($($jobs[0].live_batch))" ($jobs.Count -ge 1 -and @($jobs.live_batch | Select-Object -Unique).Count -eq 1)
-$totalSec = 0; $totalTraces = 0
+$totalSec = 0; $totalTraces = 0; $totalBursts = 0
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
@@ -62,12 +59,16 @@ foreach ($job in $jobs) {
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
   $sec = ($plan | Measure-Object seconds -Sum).Sum; $totalSec += $sec
   $state = @{}; $ok = Apply-Set $state $job.set
-  $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $traceLines = @(); $traceAll = @(); $roleNote = ''
+  $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
     $step = $plan[$i]
     if (-not (Apply-Set $state $step.set)) { $ok = $false }
     try { foreach ($t in 0, 1, ($step.seconds / 2), ($step.seconds - 0.5)) { [void](Get-CameraPlanSample $step $t 2560 1067) } } catch { $sampled = $false }
-    if ($step.serial -or $step.capture_at -or ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0')) { $bursts = $false }
+    # -MaxBursts N: a flicker analysis that needs K16 float bursts (scripts/qa/pan_artifacts.py) may take up to N
+    # (capture_at and serial both set, counted at BurstMB each in the disk estimate); else none.
+    if ($step.serial -and $step.capture_at) { $burstCount++ }
+    elseif ($step.serial -or $step.capture_at) { $bursts = $false }
+    if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
     if ($step.seconds -lt 5 -or $step.seconds -gt 25) { $sizes = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
     if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
@@ -84,26 +85,29 @@ foreach ($job in $jobs) {
   Check "${n}: plan $(Split-Path $planRel -Leaf) ($($plan.Count) phases, $sec s) parses, sets are key=value, traces inside phases" $ok
   Check "${n}: every phase samples" $sampled
   Check "${n}: diagnostics on exactly in diag-* phases, never in cost windows or with a trace$roleNote" $roles
-  Check "${n}: no float bursts (serial/capture_at 0, pan_prepare 0)" $bursts
+  if ($burstCount -gt $MaxBursts) { $bursts = $false }
+  $totalBursts += $burstCount
+  Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts
   Check "${n}: phases 5-25 s" $sizes
   Check "${n}: timeout $($job.timeout) >= plan + 240 s load" ($job.timeout -ge $sec + 240)
   $er = @($job.expect_runner)
-  $modeLine = if ($Unfocused) { 'window-mode\\\] visible_unfocused' } else { 'pointer centred in owned foreground game' }
-  Check "${n}: expect_runner names phases=$($plan.Count), the $(if ($Unfocused) { 'window-mode' } else { 'foreground pointer' }) line and $($traceLines.Count) traces" (
-    [bool]($er -match "phases=$($plan.Count)\\b") -and [bool]($er -match $modeLine) -and
+  Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
+    [bool]($er -match "phases=$($plan.Count)\\b") -and
+    [bool]($er -match $(if ($Unfocused) { 'window-mode.*visible_unfocused' } else { 'pointer centred in owned foreground game' })) -and
     -not @($traceLines | Where-Object { $t = $_; -not @($er | Where-Object { $t -match $_ }).Count }).Count)
   # The runner prints "[motion-trace] phase=..." only for phases with trace_at (scripts/auto-run.ps1): an expect
   # for a phase without one never matches (ef1-af-em-fg2 2026-11-02 was INVALID for that).
   $orphan = @($er | Where-Object { $e = $_; $e -match 'motion-trace' -and -not @($traceAll | Where-Object { $_ -match $e }).Count })
   Check "${n}: every expect_runner [motion-trace] line names a phase with trace_at$(if ($orphan.Count) { ': not ' + ($orphan -join ' | ') })" (-not $orphan.Count)
-  $launchOk = if ($Unfocused) { $job.window_mode -eq 'visible_unfocused_fg' -and @($job.args) -notcontains '-Foreground' }
-              else { -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' }
-  Check "${n}: $(if ($Unfocused) { 'visible_unfocused_fg' } else { 'foreground' }) single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
-    $launchOk -and
+  # -Unfocused: the user is at the PC (AGENTS.md "Lean live tests"): window_mode visible_unfocused_fg, no -Foreground.
+  $modeOk = if ($Unfocused) { $job.window_mode -eq 'visible_unfocused_fg' -and @($job.args) -notcontains '-Foreground' }
+            else { -not $job.window_mode -and @($job.args) -contains '-RealPresent' -and @($job.args) -contains '-Foreground' }
+  Check "${n}: $(if ($Unfocused) { 'unfocused' } else { 'foreground' }) single launch, fg=2, hold >= 90, patterns/expect/forbid present" (
+    $modeOk -and
     @($job.args) -contains '-Move' -and $job.set -match '(^|,)fg=2(,|$)' -and -not $job.session -and $job.hold -ge 90 -and
     @($job.patterns).Count -and @($job.expect).Count -and @($job.forbid).Count)
   $norm = ConvertTo-QueueWindowJob $job
-  if ($Unfocused) { Check "${n}: queue makes it unfocused with FG kept (-NoActivate -UnfocusedFG, no fg=0)" (@($norm.args) -contains '-NoActivate' -and @($norm.args) -contains '-UnfocusedFG' -and $norm.set -notmatch '(^|,)fg=0(,|$)') }
+  if ($Unfocused) { Check "${n}: queue normalises the unfocused job (window_mode kept)" ([bool]$norm) }
   else { Check "${n}: queue keeps the foreground args (no -NoActivate)" (@($norm.args) -notcontains '-NoActivate' -and (@($norm.args) -join ' ') -eq (@($job.args) -join ' ')) }
   if ($Independent) { Check "${n}: independent (no requires_success_of)" (-not $job.requires_success_of) }
   else { Check "${n}: stop-on-failure dependency" ($n -eq $first -or @($job.requires_success_of) -contains $first) }
@@ -121,7 +125,7 @@ $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
 $min = ($totalSec + $jobs.Count * $LoadSec) / 60.0
-$mb = $totalTraces * $TraceMB + $jobs.Count * $LogMB
+$mb = $totalTraces * $TraceMB + $totalBursts * $BurstMB + $jobs.Count * $LogMB
 Say ("estimate: plans {0} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
@@ -182,8 +186,7 @@ Check "run A: the $($jobs.Count - 1) dependent job(s) stayed in pending, not run
 $b = New-Root (Join-Path $Out 'b-structural') -Strip
 $recs = @(Invoke-Queue $b 'run B')
 Check "run B: $($jobs.Count) runs recorded, job 1 first" ($recs.Count -eq $jobs.Count -and $recs[0].job -eq $first)
-if ($Unfocused) { Check "run B: every run valid, done, single (not session), visible_unfocused_fg" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode -ne 'visible_unfocused_fg' })) }
-else { Check "run B: every run valid, done, single (not session), foreground (no window_mode)" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or $_.window_mode })) }
+Check "run B: every run valid, done, single (not session), $(if ($Unfocused) { 'unfocused' } else { 'foreground (no window_mode)' })" (-not ($recs | Where-Object { -not $_.valid -or $_.outcome -notmatch '^Run ended: done' -or $_.session -or ($Unfocused -ne [bool]$_.window_mode) }))
 Check "run B: pending empty" (@(Get-ChildItem (Join-Path $b 'captures\queue\pending') -Filter '*.json').Count -eq 0)
 Write-Host "scratch: $Out"
 if ($fail) { Write-Host "$fail check(s) failed"; exit 1 }

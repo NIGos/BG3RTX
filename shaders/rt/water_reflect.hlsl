@@ -65,6 +65,14 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 [[vk::binding(63, 0)]] [[vk::image_format("rg32f")]] RWTexture2D<float2> wT;
 [[vk::binding(64, 0)]] RaytracingAccelerationStructure waterTlas;
 [[vk::binding(65, 0)]] ConstantBuffer<Camera2> cam2;
+#ifdef WATER_RR_HIT
+// rt_water_rr_hitdist (core/water.cpp): RR's specular hit distance (core/gi.cpp g_rf_hit, DLSSD.SpecularHitDistance)
+// is D-RF's at the G-buffer surface, which under water is the BED (the water writes no depth), so RR reprojects
+// the water's reflection with the bed's (or no-hit) virtual depth. Written here for water pixels (classes 1, 2):
+// the mirror ray's hit distance from the water surface where it resolves (tier 1, the image the compose
+// replaces), else no hit (the probe stays: a distant reflection), as D-RF writes it (kNoHit 65504).
+[[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
+#endif
 
 static const float kNoHit = -1.0;
 
@@ -182,7 +190,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool water = inside && water_pos(int2(fp), P, t);
   uint tier = 0u;
   bool fallback = false, skin = false;
-  float E = 0.0;
+  float E = 0.0, hit_t = -1.0;
   float3 L = 0.0.xxx;
   if (water) {
     // Geometric normal: per axis the neighbour whose water hit continues the surface best.
@@ -218,6 +226,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
       if (aborted) tier = 5u;
       else if (th < 0.0) tier = 4u;
       else {
+        hit_t = th;
         const float3 H = o + R * th;
         float2 quv;
         float qd;
@@ -255,4 +264,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   wsum64(20, lum(E * L), 4096.0, tier == 1u);
   // wT is only read here (the neighbours' hits): the tier goes into wOut.a.
   if (inside) wOut[fp] = tier == 1u ? float4(L, E) : float4(0, 0, 0, -float(tier));
+#ifdef WATER_RR_HIT
+  if (water) rfHitDist[fp] = tier == 1u ? min(hit_t, 65504.0) : 65504.0;
+#endif
 }

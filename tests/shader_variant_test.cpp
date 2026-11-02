@@ -49,6 +49,9 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_hit_material.hlsl", kHitWindRgb) == "gi/rt_hit_material.hlsl");   // needs the instanced key
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1");
   CHECK(request("gi/rt_shadow.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_shadow.hlsl");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitIpGrass) == "gi/rt_hit_material.hlsl");   // needs the instanced key
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
+        "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1");
   CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
 
   std::set<std::string> want;
@@ -58,7 +61,7 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 2048; ++m)
+    for (unsigned m = 0; m < 4096; ++m)
       if ((m & a) == m && m) {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);

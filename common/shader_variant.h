@@ -15,7 +15,9 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048 };
+// rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
+// 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
 // instanced family's clip counters (rtStats 427..434); without it the instanced variants are unchanged.
 
@@ -88,7 +90,9 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1",
+                                                 // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1"};
 
 // rt_cascade_casters for the water passes (core/water.cpp): the TLAS holds the cascade's casters
 // (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the
@@ -113,7 +117,7 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   return f;
@@ -140,7 +144,7 @@ inline constexpr NoVariant kWaterNoVariant[] = {
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
-  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);
+  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb | kHitIpGrass);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -169,6 +173,7 @@ inline std::string request(const char* file, unsigned flags) {
   }
   if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
   if (flags & kHitWindRgb) add("RT_HIT_WIND_RGB=1");
+  if (flags & kHitIpGrass) add("RT_HIT_IP_GRASS=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

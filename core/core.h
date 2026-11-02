@@ -47,6 +47,9 @@ struct WaterRfIn {
   const void* push;                               // core/gi.cpp Push (gi_common.hlsli), rt_stats 0
   uint32_t push_bytes;
   uint32_t w, h;
+  // rt_water_rr_hitdist: RR's specular hit distance image (core/gi.cpp g_rf_hit, R16F) when D-RF wrote it
+  // this frame and the key is on, else null (the variant is then not selected).
+  VkImageView rf_hit = VK_NULL_HANDLE;
 };
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);

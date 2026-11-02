@@ -31,7 +31,9 @@ enum Capture : uint32_t {CapturePool=0,CaptureNone=1,CaptureDraw=2};
 // LayoutMask = Base_MSK_VT (native_vt_fields.h nv_mask_albedo): the LayoutBase VT layers with the
 // physical layer at 1:7, plus a 2D colour mask 1:6 sampled at the UV with sampler 0:7 that tints the albedo
 // with the three 1:1 colours (rt_hit_material_mask; layer/hit_material.cpp pool_mask_on).
-enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2,LayoutMask=3};
+// LayoutVt4 = the LayoutBase VT layers one binding up: table/normal/albedo/physical at 1:4..1:7 (IP_Wind_GrassFlowers, whose
+// VS reads its wind noise texture at 1:3); no other view.
+enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2,LayoutMask=3,LayoutVt4=4};
 // reflectance_offset: byte of the reflectance float in the material UBO 1:1 (FS 8e49cde8: 16).
 // two_sided: the FS multiplies the N column by (gl_FrontFacing ? 1 : -1) (nv_two_sided_sign).
 struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;
@@ -82,7 +84,13 @@ inline constexpr Recipe recipes[]={
  // 1:0 and the table/normal/albedo VT layers at 1:3/1:4/1:5 as 14678345; physical at 1:7; 2D colour mask 1:6
  // at the VS UV with sampler 0:7; 1:1 {vec3 c0 @0, reflectance @12, vec3 c1 @16, vec3 c2 @32}.
  // RT1.rgb = clamp(mix(A, (c0 m.x + c1 m.y + c2 m.z) A, m.x + m.y + m.z)) (nv_mask_albedo). VS 2d2ac3c3.
- {0xa5f44c487527d272ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceUbo,12,CapturePool,LayoutMask}};
+ {0xa5f44c487527d272ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceUbo,12,CapturePool,LayoutMask},
+ // IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT STI (rt_hit_material_ip_grass, startup; per-draw instanced rows, family 4 of
+ // native_hit_instanced.h): classifier vs 14678345 (tests/material_families_test.py IpGrass) "same sampling"; the FS adds a
+ // camera-distance dither discard (coverage, not material) and reads the 14678345 VT layers at 1:4..1:7 (LayoutVt4), the engine
+ // UBO 1:0 {p @0, offset @32, tile-set index @44, channel @48, flag @52} as 923131c7, the reflectance at 1:1 byte 16. Not
+ // two-sided. VS 105e47e4: W at 0, UV at 1, N/B/T at 2..4 (the frame patch at N location 2); wind: not class A.
+ {0x35a18400f9654d9dull,0x105e47e448736d89ull,0,44,48,ReflectanceUbo,16,CaptureDraw,LayoutVt4}};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
 // LayoutIridescent: _m0.._m5 (24; the thickness _m5 is the class 4 RT3.z term, not decoded yet).

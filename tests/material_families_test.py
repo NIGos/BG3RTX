@@ -233,5 +233,42 @@ class BaseMask(unittest.TestCase):
         self.assertIn("clamp(ubo1_1._m0, 0.0, 1.0)", base2[0])
 
 
+
+IP_GRASS = ["14678345c10aefbc", "35a18400f9654d9d"]
+
+
+@unittest.skipUnless(all((CACHE / f"{h}.glsl").exists() for h in IP_GRASS), "no dumped GLSL in captures/alpha_cache")
+class IpGrass(unittest.TestCase):
+    """native_vt_surface.h recipe 35a18400 (IP_Wind_GrassFlowers, LayoutVt4, rt_hit_material_ip_grass): the 14678345 VT
+    sampling with its layers one binding up (1:4..1:7), a camera-distance dither discard, engine UBO tile-set index @44 /
+    channel @48 / flag @52, reflectance at 1:1 byte 16, not two-sided."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = {h: (CACHE / f"{h}.glsl").read_text(encoding="utf-8", errors="ignore") for h in IP_GRASS}
+        cls.forms = {h: glsl.Forms.of(t) for h, t in cls.src.items()}
+
+    def test_same_sampling(self):
+        v = glsl.compare(self.forms[IP_GRASS[0]], self.forms[IP_GRASS[1]], IP_GRASS[0])
+        self.assertEqual(v.cls, "VARIANT")
+        self.assertIn("same sampling", v.term)
+
+    def test_bindings_and_fields(self):
+        t = self.src[IP_GRASS[1]]
+        for b, kind in ((2, "sampler"), (4, "texture2D"), (5, "texture2DArray"), (6, "texture2DArray"), (7, "texture2DArray")):
+            self.assertRegex(t, rf"layout\(set = 1, binding = {b}\) uniform {kind} _\d+;")
+        plain = self.forms[IP_GRASS[1]].plain
+        eng = plain.blocks.get("ubo1_0", [])
+        self.assertEqual(glsl.std140_offsets(eng)[:5], [0, 32, 44, 48, 52])
+        mat = plain.blocks.get("ubo1_1", [])
+        self.assertEqual(glsl.std140_offsets(mat)[:4], [0, 8, 12, 16])
+        out2 = [s for s in plain.stmts if s.startswith("out2 =")][0]
+        self.assertIn("clamp(ubo1_1._m3, 0.0, 1.0)", out2)          # byte 16
+        self.assertIn("(ubo1_0._m3 & 7u) << 4u", out2)                 # channel @48
+        self.assertIn("ubo1_0._m4 != 0u", out2)                        # flag @52
+        self.assertNotIn("gl_FrontFacing", t)
+        self.assertIn("discard", t)                                    # the dither, before any material term
+
+
 if __name__ == "__main__":
     unittest.main()

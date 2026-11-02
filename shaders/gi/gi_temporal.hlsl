@@ -39,7 +39,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float2 fpix = float2(min(id * (pc.res_shift ? 2u : 1u) + pc.res_shift, pc.full - 1)) + 0.5;
     float2 mv = gVelocity.Load(int3(int2(fpix), 0)) * pc.mv_scale;
     float2 prev = (fpix + mv) / scale;
-    hp = int2(floor(prev));
+    // A non-finite motion vector is no position: float-to-int of NaN/Inf is undefined.
+    hp = all(isfinite(prev)) ? int2(floor(prev)) : int2(-1, -1);
     prev_px = cur_px + mv;
   }
   bool inside = all(hp >= 0) && all(hp < int2(pc.half));
@@ -58,7 +59,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     const float tol = depth_tol(rc, pixel_angle(cur_px * inv_full), ndv, lat, 2.0) + kCamStepRel * rc;
     valid = abs(rh - rc) < tol;
   }
-  float a = valid ? pc.history : 1.0;
-  giHistOut[id] = lerp(hist, cur, a);
+  // Rejected history falls back to the fresh sample. lerp(hist, cur, 1) is hist * 0 + cur, which
+  // is NaN for a NaN/Inf history texel, and that texel would then never recover: select instead
+  // (the same value for finite history).
+  giHistOut[id] = valid ? lerp(hist, cur, pc.history) : cur;
   giHistDepthOut[id] = cd;
 }

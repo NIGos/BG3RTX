@@ -10,4 +10,6 @@ inline bool capable(uint32_t* word){return word && std::atomic_ref<uint32_t>(*wo
 inline constexpr const char* instanced_capability_key="native-hit-instanced-v1";
 // rt_hit_material_wind_rgb at startup: the instanced consumers also get RT_HIT_WIND_RGB=1 (kHitWindRgb).
 inline constexpr const char* wind_rgb_capability_key="native-hit-wind-rgb-v1";
+// rt_hit_material_ip_grass at startup: the instanced consumers also get RT_HIT_IP_GRASS=1 (kHitIpGrass).
+inline constexpr const char* ip_grass_capability_key="native-hit-ip-grass-v1";
 }
