@@ -435,7 +435,10 @@ def energy_triples(labels):
         if len(offs) < 2:
             continue
         for i, l in enumerate(shots):
-            if is_off(l) or (fam == "em" and l != "shot-on"):
+            # shot-em-on-* (the S6 emission rerun, m4p5): emission ON with the bundle ON, compared only with the
+            # em-off family (the base OFF shots around it have other keys).
+            em_on = l.startswith("shot-em-on")
+            if is_off(l) or (fam == "em" and l != "shot-on" and not em_on) or (fam == "base" and em_on):
                 continue
             before = [j for j in offs if j < i]
             after = [j for j in offs if j > i]
