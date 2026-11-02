@@ -354,6 +354,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}},
 
+  {"perf_hitmat_lists", "Hit material CPU batching",
+   "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. "
+   "Preserves material validation and shading. Requires Hidden-surface shading at startup.",
+   Kind::Choice, Apply::Live, "live; native materials need startup", false,
+   {{"off", "Off", 0, {{"perf_hitmat_lists", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"perf_hitmat_lists", "1"}}, {{"exp_hidden_surface", 1}}}},
+   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"}}, true},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -444,7 +452,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // neither table, and the layer logs once when a literal disagrees with the table.
 // clang-format off
 // BEGIN GENERATED DEFAULTS (scripts/gen_settings_defaults.py; edit the ini files, then run it)
-// 245 keys of bg3rtx.ini, in file order.
+// 248 keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
@@ -571,6 +579,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_recycle", "1"},
     {"rt_hit_material_capture_unlocked", "1"},
     {"rt_hit_material_lean_hooks", "1"},
+    {"perf_hitmat_lists", "0"},
     {"rt_hit_material_wind_rgb", "0"},
     {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},

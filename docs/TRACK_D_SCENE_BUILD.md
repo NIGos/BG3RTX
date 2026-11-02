@@ -873,3 +873,24 @@ Full rt_stats parity windows raise RT GPU cost from 1.03 to ~19.4 ms: never incl
 them in speed gates. Check: inn save, static view, toggle rt_alpha_stream live, compare
 [cpu] pre-draw/capture and rendered fps with all stats off. See PROGRESS_CODEX and
 docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
+
+### CPU hit-material lists candidate (2026-11-02, codex-perf-hitmat)
+
+`perf_hitmat_lists=0` preserves the existing path. On: prepass writers use a
+command-recording-owned candidate list with a recording-local leaf mutex. Other
+recordings no longer share the pending mutex on each candidate. Scene preparation
+seals an immutable list and releases the pending registry mutex before allocation
+and copy recording. The mode is latched at prepass begin, so a live toggle cannot
+split one recording between registries. Duplicate keys and opaque limits are kept.
+
+Queries pin finalized packet metadata and an immutable source snapshot under the
+provider mutex, add the query recording to source owners, and do CPU pairing without
+the provider mutex. Relocking revalidates command/source recording, frame,
+generation, descriptor set, attached/prepared state, packet uniqueness/validity,
+query capacity, and material resource currency before GPU recording. Allocation,
+mutable counters, remap and submit-order publication remain under their old locks.
+The existing CPU hit-material window line includes mutex wait ms and query record
+ms, both per frame across the reported window. Query record starts at row upload
+and includes join, remap and pool gather recording. See
+[progress/codex-perf-hitmat.md](progress/codex-perf-hitmat.md) for the unqueued camp
+A/B plan. No live performance or energy claim is qualified by offline tests.

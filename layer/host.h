@@ -73,7 +73,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  Count
+  perf_hitmat_lists, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -233,6 +233,8 @@ struct CmdState {
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
+  // native_hit::RecordingList<Pending>, latched at prepass_begin.
+  std::shared_ptr<void> hit_material_candidates;
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
   VkCommandBufferUsageFlags begin_flags = 0; // exact native recording contract
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY; // unknown stays unsupported

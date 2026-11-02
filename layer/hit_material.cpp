@@ -2,6 +2,7 @@
 #include "omm_sampler.h"
 #include "../common/native_hit_capability.h"
 #include "../common/native_hit_join.h"
+#include "../common/native_hit_batch.h"
 #include "../common/native_hit_order.h"
 #include "../common/native_hit_inputs.h"
 #include "../common/native_hit_tileset_inputs.h"
@@ -11,6 +12,7 @@
 #include "../common/native_hit_pool.h"
 #include "../common/native_hit_instanced.h"
 #include "../common/native_hit_recycle.h"
+#include "../common/native_hit_recording.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -76,7 +78,9 @@ struct Deferred {
  Buffer staged;InstancedCount instanced[instanced::kFamilies]; // rt_hit_material_instanced: staged gather inputs (host, 512 B per row)
  InstancedCount generated; // rt_hit_material_generated: its instanced G-buffer draws (also counted in their family)
 };
+struct SourceSnapshot {DrawJoin join;std::vector<Pre> pre;};
 struct Slot {
+ std::shared_ptr<const SourceSnapshot> snapshot;
  Buffer data;VkDeviceSize data_bytes{};VkDescriptorSet set{};uint64_t command{},recording{},frame{};uint32_t generation{};
  uint32_t opaque_used{},opaque_overflow{},source_overflow{};bool capacity_logged{};uint32_t instanced_prepass[instanced::kFamilies]{};
  VkBuffer camera{};VkDeviceSize camera_offset{},cursor{};VkImageView dummy_array{};VkSampler dummy_sampler{};DrawJoin join;std::vector<Pre> pre;
@@ -148,6 +152,8 @@ instanced::WindInputs read_inputs(VkCommandBuffer cmd,instanced::Family family){
 uint64_t pair_window[instanced::kFamilies][instanced::kPairOutcomes]{},order_window[instanced::kFamilies][instanced::kOrderCounters]{},tolerant_window{};
 struct Pending {uint64_t command{},recording{},frame{};uint32_t candidate_draws{},opaque_count{},opaque_overflow{};DrawJoin join;std::vector<Pre> pre;uint32_t instanced_prepass[instanced::kFamilies]{};};
 std::unordered_map<uint64_t,Pending> pending;
+using CandidateList=RecordingList<Pending>;
+std::unordered_map<uint64_t,std::shared_ptr<CandidateList>> recording_pending;
 std::unordered_map<uint64_t,RecordingOwner> owners;
 std::unordered_map<uint64_t,VkQueue> submitted_queues;
 std::unordered_map<VkCommandBuffer,uint64_t> marked;
@@ -277,7 +283,7 @@ DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
 }
 // cpu_timing=1: CPU split of the provider's recording work ("[cpu] hit material" line, cpu_report).
 // Phases are summed over all threads; alloc/free/collect are inside the phase that called them.
-enum CpuPhase {CpuPrepass,CpuScenePrepare,CpuMaterial,CpuQuery,CpuCollect,CpuAlloc,CpuFree,CpuKey,CpuLockWait,CpuPhases};
+enum CpuPhase {CpuPrepass,CpuScenePrepare,CpuMaterial,CpuQuery,CpuCollect,CpuAlloc,CpuFree,CpuKey,CpuLockWait,CpuQueryRecord,CpuPhases};
 std::atomic<bool> cpu_on{false};
 std::atomic<uint64_t> cpu_ns[CpuPhases],cpu_allocs{},cpu_frees{},cpu_reuses{},cpu_alloc_mb{};
 struct CpuTimer {
@@ -305,6 +311,7 @@ std::mutex capture_log_mutex;
 // (evicted buffers wait in deferred_free for service() at present), best-fit reuse (take_fit), collect() once per
 // frame (again only when a capacity bound is hit), and the G-buffer draw key only for draws that qualify.
 bool lean_hooks(){return cfg_hot(CfgHot::rt_hit_material_lean_hooks)!=0;}
+bool perf_lists(){return cfg_hot(CfgHot::perf_hitmat_lists)!=0;}
 std::vector<Buffer> deferred_free; // under recycle_mutex
 void free_now(Buffer& b){
  CpuTimer t(CpuFree);if(cpu_on.load(std::memory_order_relaxed))cpu_frees.fetch_add(1,std::memory_order_relaxed);
@@ -653,10 +660,10 @@ void cpu_report(uint64_t frames){
  double ms[CpuPhases];for(int i=0;i<CpuPhases;++i)ms[i]=double(cpu_ns[i].exchange(0))*1e-6/double(n);
  uint64_t retained=0;size_t count=0;{std::lock_guard lock(recycle_mutex);retained=recycled.retained();count=recycled.size();}
  log("[cpu] hit material over %llu frames, ms/frame (all threads): prepass hooks %.3f, scene_prepare %.3f, G-buffer material hooks %.3f, query (lighting thread) %.3f; "
-     "inside them: draw keys %.3f, mutex waits %.3f, collect %.3f, buffer allocations %.3f (%.2f/frame, %.1f MB/frame), frees %.3f (%.2f/frame); reused %.2f/frame, retained %.1f MB in %zu buffers (rt_hit_material_recycle %d, lean_hooks %d)",
+     "inside them: draw keys %.3f, mutex waits %.3f, collect %.3f, buffer allocations %.3f (%.2f/frame, %.1f MB/frame), frees %.3f (%.2f/frame); reused %.2f/frame, retained %.1f MB in %zu buffers (rt_hit_material_recycle %d, lean_hooks %d); mutex wait ms %.3f, query record ms %.3f, perf_hitmat_lists %d",
   (unsigned long long)n,ms[CpuPrepass],ms[CpuScenePrepare],ms[CpuMaterial],ms[CpuQuery],ms[CpuKey],ms[CpuLockWait],ms[CpuCollect],ms[CpuAlloc],double(cpu_allocs.exchange(0))/double(n),
   double(cpu_alloc_mb.exchange(0))/double(n),ms[CpuFree],double(cpu_frees.exchange(0))/double(n),double(cpu_reuses.exchange(0))/double(n),
-  double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle),cfg_hot(CfgHot::rt_hit_material_lean_hooks));
+  double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle),cfg_hot(CfgHot::rt_hit_material_lean_hooks),ms[CpuLockWait],ms[CpuQueryRecord],int(perf_lists()));
 }
 bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on,ip_grass_on,generated_on);}
 uint32_t instanced_frame_location(uint64_t vs){return instanced::frame_location(vs,instanced_on && generated_on);}
@@ -682,7 +689,7 @@ void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_
  {std::lock_guard pool(pool_mutex);pool_table.clear();pool_slots.clear();for(auto& j:pool_jobs){destroy(j.xfb);destroy(j.host);}pool_jobs.clear();
   pool_basis={};pool_tilesets={};for(auto& o:pool_obs)o={};pool_counter_frame=0;}
  {std::vector<Buffer> all;{std::lock_guard lock(recycle_mutex);recycled.clear(all);all.insert(all.end(),deferred_free.begin(),deferred_free.end());deferred_free.clear();}free_all(all);}
- gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
+ gather_pipeline={};join_pipeline={};tileset_gather_pipeline={};gather_layout={};join_layout={};gather_dsl={};join_dsl={};pending.clear();recording_pending.clear();owners.clear();submitted_queues.clear();marked.clear();dd=nullptr;on=false;
 }
 size_t pre_hint=0; // under mutex: the prepass candidates of the last prepared scene
 // `pending` (the prepass candidates per recording) has its own leaf lock: writers of the map and of a
@@ -691,10 +698,17 @@ size_t pre_hint=0; // under mutex: the prepass candidates of the last prepared s
 // they no longer wait behind the G-buffer material hooks on mutex (sw3 22:13: 0.6-0.7 ms/frame of waits).
 // (pending_mutex is declared next to mutex.)
 void prepass_begin(VkCommandBuffer cmd){if(!on)return;auto* s=cmd_state(cmd);if(!one_time(s))return;CpuTimer timer(CpuPrepass);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
+ s->hit_material_candidates.reset();
+ for(auto i=recording_pending.begin();i!=recording_pending.end();)if(current_recording(i->second->command)!=i->second->recording)i=recording_pending.erase(i);else ++i;
  for(auto i=pending.begin();i!=pending.end();)if(current_recording(i->second.command)!=i->second.recording)i=pending.erase(i);else ++i;
- if(pending.size()>=128 && !pending.contains(s->recording))return;
- auto& p=pending[s->recording];p={};p.command=handle(cmd);p.recording=s->recording;p.frame=frame_index();p.join.begin(p.command,p.recording);
- if(lean_hooks())p.pre.reserve(pre_hint); // last frame's candidates: no regrowth per draw
+ if(pending.size()+recording_pending.size()>=128 && !pending.contains(s->recording) && !recording_pending.contains(s->recording))return;
+ Pending initial{};initial.command=handle(cmd);initial.recording=s->recording;initial.frame=frame_index();initial.join.begin(initial.command,initial.recording);
+ if(lean_hooks())initial.pre.reserve(pre_hint);
+ if(perf_lists()){
+  auto list=std::make_shared<CandidateList>(initial.command,initial.recording,std::move(initial));
+  recording_pending[s->recording]=list;s->hit_material_candidates=list;pending.erase(s->recording);
+ }else {pending[s->recording]=std::move(initial);recording_pending.erase(s->recording);}
+
 }
 void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint32_t record,VkDeviceSize rawOffset,uint32_t stride,uint32_t triangles){
  if(!on || !state || args.kind>1 || record>=max_records)return;CpuTimer timer(CpuPrepass);
@@ -705,49 +719,65 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
- Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return;
- ++p->second.candidate_draws;
- if(p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p->second.join.assign(handle(cmd),state->recording,pre.key,record)){
-  p->second.pre.push_back(pre);if(family!=instanced::None)++p->second.instanced_prepass[family];}
+ Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,family);auto owned=std::static_pointer_cast<CandidateList>(state->hit_material_candidates);
+ std::unique_lock lock(owned?owned->mutex:(lean_hooks()?pending_mutex:mutex),std::defer_lock);lock_timed(lock);
+ Pending* entry=nullptr;
+ if(owned){if(!owned->current(handle(cmd),state->recording) || owned->published)return;entry=&owned->value;}
+ else {auto found=pending.find(state->recording);if(found==pending.end())return;entry=&found->second;}
+ auto& p=*entry;
+ ++p.candidate_draws;
+ if(p.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX) && p.join.assign(handle(cmd),state->recording,pre.key,record)){
+  p.pre.push_back(pre);if(family!=instanced::None)++p.instanced_prepass[family];}
 }
 uint32_t note_opaque_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,VkDeviceSize raw,uint32_t stride,uint32_t triangles){
  if(!on || !cfg_hot(CfgHot::rt_hit_material) || !one_time(state) || !opaque_depth_family(state->vs,state->fs) || !opaque_prepass_geometry_ok(args.kind,args.instances,args.count,triangles,stride))return UINT32_MAX;
  CpuTimer timer(CpuPrepass);
  Pre pre{};pre.key=key(cmd,*state,args);pre.raw=raw;pre.stride=stride;pre.triangles=triangles;pre.vs=state->vs;pre.fs=state->fs;pre.opaque=true;
- std::unique_lock lock(lean_hooks()?pending_mutex:mutex,std::defer_lock);lock_timed(lock);auto p=pending.find(state->recording);if(p==pending.end())return UINT32_MAX;
- ++p->second.candidate_draws;
- if(!p->second.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX))return UINT32_MAX;
- if(p->second.opaque_count>=nh_opaque_rows){++p->second.opaque_overflow;return UINT32_MAX;}
- if(!opaque_material_record(p->second.opaque_count,pre.record))return UINT32_MAX;++p->second.opaque_count;
- if(!p->second.join.assign(handle(cmd),state->recording,pre.key,pre.record))return UINT32_MAX;
- p->second.pre.push_back(pre);return pre.record;
+ auto owned=std::static_pointer_cast<CandidateList>(state->hit_material_candidates);
+ std::unique_lock lock(owned?owned->mutex:(lean_hooks()?pending_mutex:mutex),std::defer_lock);lock_timed(lock);
+ Pending* entry=nullptr;
+ if(owned){if(!owned->current(handle(cmd),state->recording) || owned->published)return UINT32_MAX;entry=&owned->value;}
+ else {auto found=pending.find(state->recording);if(found==pending.end())return UINT32_MAX;entry=&found->second;}
+ auto& p=*entry;
+ ++p.candidate_draws;
+ if(!p.join.note(handle(cmd),state->recording,pre.key,UINT32_MAX))return UINT32_MAX;
+ if(p.opaque_count>=nh_opaque_rows){++p.opaque_overflow;return UINT32_MAX;}
+ if(!opaque_material_record(p.opaque_count,pre.record))return UINT32_MAX;++p.opaque_count;
+ if(!p.join.assign(handle(cmd),state->recording,pre.key,pre.record))return UINT32_MAX;
+ p.pre.push_back(pre);return pre.record;
 }
 void prepass_observe(VkCommandBuffer,CmdState*,const DrawArgs&){
  // Only actual note_prepass candidates reserve a material join identity.
 }
 void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
- if(!on || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuScenePrepare);std::lock_guard lock(mutex);collect();std::lock_guard pl(pending_mutex);
- auto& s=slots[index];s.set={};s.handles.clear();s.pre.clear();s.owners.clear();s.prepared=s.attached=false;s.capacity_logged=false;
+ if(!on || !cfg_hot(CfgHot::rt_hit_material) || index>=kSceneSlots)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuScenePrepare);std::lock_guard lock(mutex);collect();std::unique_lock pl(pending_mutex);
+ auto& s=slots[index];s.set={};s.handles.clear();s.pre.clear();s.snapshot.reset();s.owners.clear();s.prepared=s.attached=false;s.capacity_logged=false;
  if(cap.xfb_size){caps=stream_caps(cap.xfb_size,stream_bytes);source_cap=caps.source;deferred_chunks=caps.deferred_chunks;query_cap=caps.query;}
- auto p=pending.find(state->recording);if(!cap.split || p==pending.end() || !p->second.join.current(handle(cmd),state->recording))return;
+ auto p=pending.find(state->recording);std::shared_ptr<const Pending> snapshot;
+ const Pending* candidates=nullptr;auto own=recording_pending.find(state->recording);
+ if(own!=recording_pending.end()){
+  if(!own->second->current(handle(cmd),state->recording))return;
+  snapshot=own->second->seal();candidates=snapshot.get();pl.unlock();
+ }else if(p!=pending.end())candidates=&p->second;
+ if(!cap.split || !candidates || !candidates->join.current(handle(cmd),state->recording))return;
  s.command=handle(cmd);s.recording=state->recording;s.frame=frame_index();s.cursor=0;s.generation=0;
- s.camera=cap.ubo;s.camera_offset=cap.ubo_offset;s.join=p->second.join;if(!mark_owner(cmd,s))return;
- s.opaque_used=p->second.opaque_count;s.opaque_overflow=p->second.opaque_overflow;std::memcpy(s.instanced_prepass,p->second.instanced_prepass,sizeof s.instanced_prepass);
+ s.camera=cap.ubo;s.camera_offset=cap.ubo_offset;s.join=candidates->join;if(!mark_owner(cmd,s))return;
+ s.opaque_used=candidates->opaque_count;s.opaque_overflow=candidates->opaque_overflow;std::memcpy(s.instanced_prepass,candidates->instanced_prepass,sizeof s.instanced_prepass);
  // When deferred was recorded first, exact audited draw keys are already known.
  // Copy only their source records; unrelated VT records cannot consume the cap.
  auto deferred=packet_for(s);
- uint32_t filtered=0,duplicates=0,range_dropped=0;const auto source_draws=p->second.candidate_draws,source_entries=uint32_t(p->second.pre.size());
+ uint32_t filtered=0,duplicates=0,range_dropped=0;const auto source_draws=candidates->candidate_draws,source_entries=uint32_t(candidates->pre.size());
  // Plan first, then size the slot's stream to the actual need (the slot is retired here,
  // so its old buffer has no GPU user left), then copy.
  std::vector<const Pre*> accepted;VkDeviceSize need=0;
- for(const auto& pre:p->second.pre){
+ for(const auto& pre:candidates->pre){
   uint32_t sourceRecord=0;if(!s.join.unique_source(pre.key,sourceRecord) || sourceRecord!=pre.record){++duplicates;continue;}
   if(deferred && std::none_of(deferred->materials.begin(),deferred->materials.end(),[&](const auto& m){return m.key==pre.key && deferred->join.unique(m.key,m.row.valid-1);})){++filtered;continue;}
   VkDeviceSize bytes=VkDeviceSize(pre.triangles)*3*pre.stride;
   if(!pre.stride || !byte_range(pre.raw,bytes,cap.xfb_size) || !byte_range(need,bytes,source_cap)){++range_dropped;continue;}
   accepted.push_back(&pre);need+=bytes;
  }
- s.source_overflow=range_dropped;pre_hint=p->second.pre.size();
+ s.source_overflow=range_dropped;pre_hint=candidates->pre.size();
  const VkDeviceSize size=source_stream_bytes(need,stream_bytes,source_cap);
  if(s.data.b && (s.data_bytes<size || s.data_bytes>2*size)){destroy(s.data);s.data_bytes=0;}
  if(!size || !create(s.data,size,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT))return;
@@ -770,13 +800,14 @@ void scene_prepare(VkCommandBuffer cmd,uint32_t index,const RtCapture& cap){
     side,(unsigned long long)w[9],(unsigned long long)w[10],(unsigned long long)w[11],(unsigned long long)w[21],(unsigned long long)w[12],(unsigned long long)w[13],(unsigned long long)w[14],(unsigned long long)w[15],
     (unsigned long long)w[16],(unsigned long long)w[17],(unsigned long long)w[18],(unsigned long long)w[19]);
   };
-  if(!p->second.pre.empty()){
-   auto source=std::find_if(p->second.pre.begin(),p->second.pre.end(),[](const auto& pre){return static_depth_family(pre.vs,pre.fs);});
-   if(source==p->second.pre.end())source=p->second.pre.begin();sample("source",source->key,source->vs,source->fs);
+  if(!candidates->pre.empty()){
+   auto source=std::find_if(candidates->pre.begin(),candidates->pre.end(),[](const auto& pre){return static_depth_family(pre.vs,pre.fs);});
+   if(source==candidates->pre.end())source=candidates->pre.begin();sample("source",source->key,source->vs,source->fs);
   }
   const auto& first=deferred->materials.front();sample("deferred",first.key,first.row.reserved==2?tileset_deferred_vs:0x3812bc980438747full,first.row.reserved==2?tileset_deferred_fs:0x8995da1e4060f53bull);
  }
- s.prepared=true;pending.erase(p);
+ if(perf_lists())s.snapshot=std::make_shared<const SourceSnapshot>(SourceSnapshot{s.join,s.pre});
+ s.prepared=true;if(snapshot)recording_pending.erase(state->recording);else pending.erase(p);
  barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
  if(cfg_hot(CfgHot::rt_stats) && s.frame%120==0)log("[hit material source] frame %llu cmd %p recording %llu level %u flags 0x%x prepared %zu copied %llu bytes source draws/entries %u/%u duplicate keys %u range dropped %u filtered unrelated %u; deferred packet %u camera %p+%llu",
   (unsigned long long)s.frame,(void*)cmd,(unsigned long long)s.recording,unsigned(state->level),unsigned(state->begin_flags),s.pre.size(),(unsigned long long)s.cursor,source_draws,source_entries,duplicates,range_dropped,filtered,unsigned(bool(deferred)),(void*)s.camera,(unsigned long long)s.camera_offset);
@@ -845,6 +876,12 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
    for(const auto& [id,s]:pending)if(s.frame==p.frame && current_recording(s.command)==s.recording &&
        instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
        std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
+  if(!source){std::lock_guard pl(pending_mutex);
+   for(const auto& [id,list]:recording_pending){std::lock_guard local(list->mutex);const auto& s=list->value;
+    if(s.frame==p.frame && current_recording(s.command)==s.recording &&
+       instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
+       std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
+  }
   if(!source)return false;
  }
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
@@ -1103,7 +1140,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(cfg_hot(CfgHot::rt_stats) && frame_index()%120==0)log("[hit material query reject] recording domain frame %llu level %u flags 0x%x",
     (unsigned long long)frame_index(),state?unsigned(state->level):UINT32_MAX,state?unsigned(state->begin_flags):0u);return false;
  }
- CpuTimer timer(CpuQuery);std::lock_guard lock(mutex);const bool lean=recycle_live();if(!lean)collect();auto& slot=slots[index];
+ CpuTimer timer(CpuQuery);std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);const bool lean=recycle_live();if(!lean)collect();auto& slot=slots[index];
  if(!slot.prepared || !slot.attached || slot.frame!=frame_index()){
   if(cfg_hot(CfgHot::rt_stats) && frame_index()%120==0)log("[hit material query reject] source epoch current %llu source %llu prepared %u attached %u",
    (unsigned long long)frame_index(),(unsigned long long)slot.frame,unsigned(slot.prepared),unsigned(slot.attached));return false;
@@ -1201,10 +1238,30 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    log("[hit material generated] frame %llu key %u: instanced G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; pairs %u",
     (unsigned long long)slot.frame,unsigned(generated_rows()),g.seen,g.pipeline,g.bindings,g.stream,g.captured,g.mapped,(unsigned long long)g.triangles,generated::kRowCount);}
  };
- for(const auto& deferred:packet->materials){
-  uint32_t record=0;if(!join_packets(slot.join,packet->join,deferred.key,deferred.row.valid-1,record))continue;
-  auto source=std::find_if(slot.pre.begin(),slot.pre.end(),[&](const auto& pre){return pre.record==record;});
-  if(source==slot.pre.end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
+ // Snapshot acquisition is two shared-pointer pins; finalized packet join/material
+ // metadata is immutable (late hooks may revoke valid, checked after relocking).
+ // The query's recording owner pins the source buffer while CPU pairing runs;
+ // q.deferred pins the packet. Only immutable source/packet metadata and local
+ // counters are used outside the lock. Publication and GPU recording stay locked.
+ const bool lists=perf_lists();
+ std::shared_ptr<const SourceSnapshot> source_snapshot;
+ const std::shared_ptr<const Deferred> packet_snapshot=packet;
+ const DrawJoin* pair_join=&slot.join;const DrawJoin* deferred_join=&packet->join;
+ const std::vector<Pre>* pair_pre=&slot.pre;const std::vector<Material>* pair_materials=&packet->materials;
+ const auto pair_cap=query_cap;const auto source_command=slot.command,source_recording=slot.recording,source_frame=slot.frame;
+ const auto source_generation=slot.generation;const auto source_set=slot.set;
+ uint64_t local_pairs[instanced::kFamilies][instanced::kPairOutcomes]{},local_tolerant=0;
+ if(lists){
+  if(!mark_owner(cmd,slot))return false;
+  if(!slot.snapshot)slot.snapshot=std::make_shared<const SourceSnapshot>(SourceSnapshot{slot.join,slot.pre});
+  source_snapshot=slot.snapshot;pair_join=&source_snapshot->join;pair_pre=&source_snapshot->pre;
+  deferred_join=&packet_snapshot->join;pair_materials=&packet_snapshot->materials;
+  lock.unlock();
+ }
+ for(const auto& deferred:*pair_materials){
+  uint32_t record=0;if(!join_packets(*pair_join,*deferred_join,deferred.key,deferred.row.valid-1,record))continue;
+  auto source=std::find_if(pair_pre->begin(),pair_pre->end(),[&](const auto& pre){return pre.record==record;});
+  if(source==pair_pre->end() || source->stride!=deferred.row.stride || source->triangles!=deferred.row.triangles ||
      (deferred.row.reserved==2 ? (source->alpha.rec.kind!=5 || source->alpha.rec.p0[2]!=0.f || source->alpha.rec.p0[1]!=0.f || source->alpha.tex!=deferred.tileset_views[3].view || source->alpha.tex_id!=deferred.tileset_views[3].image_id) :
       (!source->opaque && (source->alpha.tex!=deferred.table.view || source->alpha.cache!=deferred.albedo.view))) || !material_current(deferred))continue;
   // Instanced rows (native_hit_instanced.h pair_check): the key carries no frame identity and
@@ -1212,19 +1269,34 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   // time, camera; 2S translation; wind UBO words). Any difference: not mapped (counted).
   instanced::PairOutcome pair=instanced::PairSame;
   if(deferred.family){pair=source->family==deferred.family?instanced::pair_check(instanced::Family(deferred.family),source->inputs,deferred.inputs):instanced::PairUnread;
-   if(deferred.family<instanced::kFamilies)++pair_window[deferred.family][pair];
+   if(deferred.family<instanced::kFamilies)++local_pairs[deferred.family][pair];
    if(pair!=instanced::PairSame)continue;}
   VkDeviceSize bytes=VkDeviceSize(source->triangles)*3*source->stride;
-  if(!byte_range(cursor,bytes*2,query_cap)){++query_overflow;continue;}
+  if(!byte_range(cursor,bytes*2,pair_cap)){++query_overflow;continue;}
   auto m=deferred;m.snapshot=deferred.row.valid-1;m.source_raw=uint32_t(source->raw);m.deferred_raw=deferred.row.deferred;
   m.row.valid=record+1;m.row.pre=uint32_t(cursor);m.row.deferred=uint32_t(cursor+bytes);m.row.reserved=deferred.row.reserved==2?2u:source->opaque?1u:0u;
   if(!source->opaque && m.row.reserved!=2){m.row.table=source->alpha.rec.tex;std::memcpy(m.row.p0,source->alpha.rec.p0,32);std::memcpy(m.row.t,source->alpha.rec.t,128);}
   // Wind rows (paired: equal VS inputs): the clip check's derived tolerance for the fusable rounding.
   instanced::ClipTolerance tol{};
   if(m.family==instanced::Wind && instanced::wind_clip_tolerance(source->inputs,deferred.inputs,tol)){uint32_t flags;std::memcpy(&flags,&m.row.parameters[3],4);flags|=instanced::kRowTolerant;
-   std::memcpy(&m.row.parameters[3],&flags,4);std::memcpy(m.row.padding,tol.a,16);std::memcpy(m.row.padding+4,tol.b,16);++tolerant_window;}
+   std::memcpy(&m.row.parameters[3],&flags,4);std::memcpy(m.row.padding,tol.a,16);std::memcpy(m.row.padding+4,tol.b,16);++local_tolerant;}
   cursor+=bytes*2;q.materials.push_back(m);
  }
+ if(lists){
+  lock_timed(lock);
+  // A reset, new frame, replaced scene or revoked/ambiguous producer invalidates
+  // the snapshot. Never emit commands using metadata from a previous epoch.
+  if(!on || !cfg_hot(CfgHot::rt_hit_material) || cmd_recording(cmd)!=q.recording ||
+     slot.command!=source_command || slot.recording!=source_recording || slot.frame!=source_frame ||
+     slot.generation!=source_generation || slot.set!=source_set || !slot.prepared || !slot.attached ||
+     frame_index()!=source_frame || current_recording(source_command)!=source_recording ||
+     packet_for(slot)!=packet || query_cap!=pair_cap)return false;
+  // Resource currency may have changed while pairing was unlocked.
+  q.materials.erase(std::remove_if(q.materials.begin(),q.materials.end(),[](const auto& m){return !material_current(m);}),q.materials.end());
+ }
+ for(uint32_t f=0;f<instanced::kFamilies;++f)for(uint32_t outcome=0;outcome<instanced::kPairOutcomes;++outcome)pair_window[f][outcome]+=local_pairs[f][outcome];
+ tolerant_window+=local_tolerant;
+
  // Pool rows (native_hit_pool.h step 3): every ready record with a slot whose views and
  // sampler are current, against this frame's tile-set table. Same 256 B row; its t/p0/p1,
  // reflectance and channel come from the gather below (the record's captured engine bytes).
@@ -1370,19 +1442,37 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  for(uint32_t i=0;i<2;++i){writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=buffers+i;}
  writes[2].descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;writes[2].descriptorCount=cache_slots;writes[2].pImageInfo=caches.data();
  writes[3].descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;writes[3].descriptorCount=sampler_slots;writes[3].pImageInfo=samplers.data();dd->vk.UpdateDescriptorSets(dd->device,4,writes,0,nullptr);
+ CpuTimer query_record(CpuQueryRecord);
  // Only this query writes its rows/basis. Invalid submit order leaves its
  // publication word zero, so the assembly cannot read unfinished producers.
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
  dd->vk.CmdFillBuffer(cmd,q.rows.b,0,row_payload,0);
  if(!q.pool_rows.empty())dd->vk.CmdFillBuffer(cmd,q.rows.b,nh_pool_row_base,pool_rows_bytes,0);
  uint32_t header[4]={uint32_t(slot.frame),slot.generation,uint32_t(q.materials.size()),1};dd->vk.CmdUpdateBuffer(cmd,q.rows.b,0,16,header);
- for(const auto& m:q.materials){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,16+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
- for(const auto& m:q.pool_rows){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,nh_pool_row_base+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
+ const bool batch_record=cfg_hot(CfgHot::perf_hitmat_lists)!=0;
+ if(batch_record){
+  batch::RowUploads<Row> uploads;uploads.reserve(q.materials.size()+q.pool_rows.size());
+  for(const auto& m:q.materials){auto staged=m.row;staged.valid=0;uploads.add(16+VkDeviceSize(m.row.valid-1)*record_bytes,staged);}
+  for(const auto& m:q.pool_rows){auto staged=m.row;staged.valid=0;uploads.add(nh_pool_row_base+VkDeviceSize(m.row.valid-1)*record_bytes,staged);}
+  uploads.finish();for(const auto& run:uploads.runs)dd->vk.CmdUpdateBuffer(cmd,q.rows.b,run.offset,run.count*record_bytes,uploads.rows.data()+run.first);
+ }else{
+  for(const auto& m:q.materials){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,16+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
+  for(const auto& m:q.pool_rows){auto staged=m.row;staged.valid=0;dd->vk.CmdUpdateBuffer(cmd,q.rows.b,nh_pool_row_base+VkDeviceSize(m.row.valid-1)*record_bytes,record_bytes,&staged);}
+ }
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT|VK_PIPELINE_STAGE_HOST_BIT,VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
  VkDescriptorBufferInfo inputs[5]={{slot.data.b,0,slot.data_bytes},{VK_NULL_HANDLE,0,stream_bytes},{packet->rows.b,0,packet_rows},{q.rows.b,0,row_bytes},{q.data.b,0,std::max<VkDeviceSize>(cursor,256)}};
  VkWriteDescriptorSet join_writes[5]{};for(uint32_t i=0;i<5;++i){join_writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};join_writes[i].dstBinding=i;join_writes[i].descriptorCount=1;join_writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;join_writes[i].pBufferInfo=inputs+i;}
  dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,join_pipeline);uint32_t bound_chunk=UINT32_MAX;
- for(const auto& m:q.materials){uint32_t bytes=m.row.triangles*3u*m.row.stride;
+ auto emit_join=[&](uint32_t chunk,const uint32_t* push,uint32_t groups){
+  if(chunk!=bound_chunk){bound_chunk=chunk;inputs[1].buffer=packet->chunks[chunk].b;dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,join_layout,0,5,join_writes);}
+  dd->vk.CmdPushConstants(cmd,join_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,32,push);dd->vk.CmdDispatch(cmd,groups,1,1);
+ };
+ if(batch_record){
+  std::vector<batch::JoinJob> jobs;jobs.reserve(q.materials.size());
+  for(const auto& m:q.materials){const uint32_t bytes=m.row.triangles*3u*m.row.stride;
+   jobs.push_back({m.chunk,{16u+(m.row.valid-1)*record_bytes,16u+m.snapshot*record_bytes,m.source_raw,m.deferred_raw,bytes,uint32_t(row_payload),m.row.valid-1,m.snapshot},(bytes/4u+63u)/64u});}
+  batch::group_chunks(jobs);for(const auto& job:jobs)emit_join(job.chunk,job.push.data(),job.groups);
+ }else for(const auto& m:q.materials){uint32_t bytes=m.row.triangles*3u*m.row.stride;
   // Binding 1 is the material's deferred XFB chunk; re-pushed only when it changes.
   if(m.chunk!=bound_chunk){bound_chunk=m.chunk;inputs[1].buffer=packet->chunks[m.chunk].b;dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,join_layout,0,5,join_writes);}
   uint32_t push[8]={16u+(m.row.valid-1)*record_bytes,16u+m.snapshot*record_bytes,m.source_raw,m.deferred_raw,bytes,uint32_t(row_payload),m.row.valid-1,m.snapshot};
