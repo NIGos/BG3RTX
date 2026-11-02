@@ -32,6 +32,7 @@
 #include "../common/native_hit_tileset_inputs.h"
 #include "../common/native_hit_qualify.h"
 #include "../common/native_hit_pool.h"
+#include "../common/native_hit_instanced.h"
 #include "../common/spirv_visibility.h"
 #include "spirv_xfb.h"
 #include "../common/cascade_casters.h"
@@ -1668,7 +1669,8 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
   const bool vt_frame=native_hit::enabled() && (t_last_hash==0x3812bc980438747full || t_last_hash==0x2d2ac3c38992b7f0ull || detail_vs ||
                                                 t_last_hash==0xc32ce535d664fbbcull || native_hit::instanced_patch_vs(t_last_hash));
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
-                     g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,detail_vs?4u:1u);
+                     g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,
+                     detail_vs?4u:native_hit::instanced::frame_location(t_last_hash));
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {

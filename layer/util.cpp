@@ -235,16 +235,37 @@ static void ab_poll_hotkey() {
     }
   }
   last = now;
+  // Latency: from the toggle to the present of the first frame recorded entirely after it (this poll runs at
+  // a present, so frame F+1 may have started recording before it; F+2 cannot). A shader fetched or compiled
+  // for the new state on the render thread delays that present, so it is included.
+  static uint64_t toggle_frame = 0;
+  static LARGE_INTEGER toggle_t{};
+  static bool latency_pending = false;
+  if (latency_pending && frame_index() >= toggle_frame + 2) {
+    latency_pending = false;
+    log("[ab] toggle latency: %.1f ms from the toggle (frame %llu) to the present of frame %llu, the first recorded "
+        "entirely with ray tracing %s", double(now.QuadPart - toggle_t.QuadPart) * 1000.0 / double(freq.QuadPart),
+        (unsigned long long)toggle_frame, (unsigned long long)frame_index(), g_ab_off.load() ? "OFF" : "ON");
+  }
   bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
               (GetAsyncKeyState(VK_F9) & 0x8000);
-  if (down && !was_down && cfg_int("ab_hotkey", 1)) {
+  // ab_off (ini, default 0): the same toggle from the settings, for the queue (it cannot press the hotkey): a
+  // change of the key toggles A/B to its value.
+  static int ab_cfg = -1;
+  const int ab_now = cfg_int("ab_off", 0) != 0 ? 1 : 0;
+  const bool cfg_edge = ab_cfg >= 0 && ab_now != ab_cfg && (ab_now != 0) != g_ab_off.load();
+  ab_cfg = ab_now;
+  if ((down && !was_down && cfg_int("ab_hotkey", 1)) || cfg_edge) {
     bool off = !g_ab_off.load();
     g_ab_off.store(off);
-    log("[ab] Ctrl+Shift+F9: ray tracing %s (the game's own image %s)", off ? "OFF" : "ON",
+    log("[ab] %s: ray tracing %s (the game's own image %s)", cfg_edge ? "ab_off" : "Ctrl+Shift+F9", off ? "OFF" : "ON",
         off ? "shown" : "replaced again");
     since = now;
     longest_ms = 0;
     presents = 0;
+    toggle_frame = frame_index();
+    toggle_t = now;
+    latency_pending = true;
   }
   was_down = down;
 }

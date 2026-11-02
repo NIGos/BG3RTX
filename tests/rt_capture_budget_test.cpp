@@ -15,6 +15,11 @@ int main(){
  check(alpha_region(384*mib,64*mib,200*mib,100*mib,100*mib,true,60)==200*mib);
  check(alpha_region(384*mib,64*mib,300*mib,50*mib,0,true,60)==75*mib);
  check(alpha_region(384*mib,64*mib,300*mib,300*mib,0,false,60)==64*mib);
+ // Both reserves do not fit: split by demand (inn lr2 2026-11-02: alpha 418, opaque 373 MB of 1024).
+ {const uint64_t r=alpha_region(1024*mib,409*mib,613*mib,418*mib,373*mib,true,60);
+  check(r==541*mib && 1024*mib-r>=440*mib);   // opaque keeps room for the 440 MB peak that overflowed
+  check(alpha_region(1024*mib,409*mib,613*mib,418*mib,700*mib,true,60)==409*mib);}   // never below the floor
+ check(alpha_region(1024*mib,409*mib,0,200*mib,300*mib,true,60)==409*mib);   // reserves fit: unchanged policy
  check(opaque_partition_demand(700*mib,400*mib,false)==700*mib); // 24-byte path unchanged.
  check(opaque_partition_demand(700*mib,400*mib,true)==300*mib);
  check(opaque_partition_demand(700*mib,0,true)==700*mib);

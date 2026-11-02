@@ -645,6 +645,85 @@ def _run_dxc(tool, tree, request, entry, out):
     return data, ""
 
 
+class _KeyLock:
+    """Per-entry in-flight lock in the shared cache (<cache>/inflight/<key[:2]>/<key>.lock): parallel runs that miss
+    the same entry (merge-green and two agents' identity runs on a new main, 2026-11-02: ~1950 entries compiled up to
+    3 times) compile it once; the others wait for the lock and read the holder's result from <key>.done ("sha size",
+    written after the blob, before the unlock). The lock is an OS byte lock (msvcrt / flock, as _DxcSlot): a dead
+    holder's lock is released by the OS, so no stale lock survives a crash."""
+
+    def __init__(self, cache_dir, key):
+        d = Path(cache_dir) / "inflight" / key[:2]
+        self.lock, self.done = d / f"{key}.lock", d / f"{key}.done"
+        self._f = None
+
+    def acquire(self):
+        """Blocks until held; True when another holder had it first (it may have finished the entry)."""
+        self.lock.parent.mkdir(parents=True, exist_ok=True)
+        waited = False
+        while True:
+            f = open(self.lock, "a+b")
+            try:
+                f.seek(0)
+                if sys.platform == "win32":
+                    import msvcrt
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self._f = f
+                return waited
+            except OSError:
+                f.close()
+                waited = True
+                time.sleep(0.1)
+
+    def release(self):
+        if not self._f:
+            return
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                self._f.seek(0)
+                msvcrt.locking(self._f.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self._f.close()
+            self._f = None
+
+    def finished(self):
+        try:
+            sha, size = self.done.read_text().split()
+            return sha, int(size)
+        except (OSError, ValueError):
+            return None
+
+    def mark_done(self, sha, size):
+        tmp = self.done.with_name(f"{self.done.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(f"{sha} {size}")
+        os.replace(tmp, self.done)
+
+
+def _compile_entry(tool, tree, request, entry, out, cache, key):
+    """(data, err, shared): one entry through the in-flight lock; shared = taken from another run's compile."""
+    lk = _KeyLock(cache.dir, key)
+    lk.acquire()
+    try:
+        hit = lk.finished()
+        if hit:
+            try:
+                data = cache.blob_path(hit[0]).read_bytes()
+                if len(data) == hit[1] and hashlib.sha256(data).hexdigest() == hit[0]:
+                    return data, "", True
+            except OSError:
+                pass
+        data, err = _run_dxc(tool, tree, request, entry, out)
+        if data is not None:
+            lk.mark_done(cache.put_blob(data), len(data))
+        return data, err, False
+    finally:
+        lk.release()
+
+
 def _run_val(tool, path):
     r = subprocess.run([str(tool.spirv_val), *VAL_ARGS, str(path)], capture_output=True, text=True, **_LOW)
     return r.returncode == 0, (r.stdout + r.stderr).strip()[:4000]
@@ -691,12 +770,14 @@ def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", v
             concurrent.futures.ThreadPoolExecutor(jobs) as pool:
         if todo:
             with Progress(label, len(todo), cached=n_entries - len(todo)) as prog:
-                futs = {pool.submit(_run_dxc, tool, tree, request, e.name, Path(out_dir) / f"{i}.spv"): (tree, request, e)
-                        for i, (tree, request, e) in enumerate(todo)}
+                futs = {pool.submit(_compile_entry, tool, tree, request, e.name, Path(out_dir) / f"{i}.spv", cache, e.key):
+                        (tree, request, e) for i, (tree, request, e) in enumerate(todo)}
+                shared = 0
                 for i, f in enumerate(concurrent.futures.as_completed(futs)):
                     tree, request, e = futs[f]
                     try:
-                        data, err = f.result()
+                        data, err, from_other = f.result()
+                        shared += from_other
                     except Exception as ex:  # noqa: BLE001
                         data, err = None, f"[{e.name}] {ex!r}"
                     if data is None:
@@ -710,6 +791,8 @@ def compile_many(jobs_list, tool=None, cache=None, jobs=None, label="shaders", v
                     if i % 50 == 49:
                         cache.commit()
                 cache.commit()
+            if shared:
+                print(f"[{label}] {shared} of {len(todo)} entries taken from another run's compile (in-flight lock)", flush=True)
         for k, errs in failures.items():
             results[k].ok = False
             results[k].log = "\n".join(errs)

@@ -16,6 +16,10 @@ def lower_priority():
         if sys.platform == "win32":
             import ctypes
             k32 = ctypes.windll.kernel32
+            # HANDLE-typed: with ctypes' default int, the pseudo-handle -1 was passed as 0xFFFFFFFF on 64-bit and
+            # SetPriorityClass failed silently (shader_identity runs stayed Normal, 2026-11-02).
+            k32.GetCurrentProcess.restype = ctypes.c_void_p
+            k32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
             k32.SetPriorityClass(k32.GetCurrentProcess(), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS
         else:
             os.nice(5)

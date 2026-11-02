@@ -12,7 +12,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
   "label": "static-a",
@@ -27,7 +27,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0",
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
   "trace_at": [
    10
   ]
@@ -45,7 +45,7 @@
   "motion_end": 14,
   "pixels_per_second": 0,
   "direction": -1,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0"
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
   "label": "pan-e",
@@ -60,7 +60,7 @@
   "motion_end": 14,
   "pixels_per_second": 0,
   "direction": 1,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0"
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
   "label": "rotate-r",
@@ -75,7 +75,7 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": 1,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0"
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
   "label": "rotate-l",
@@ -90,7 +90,7 @@
   "motion_end": 19,
   "pixels_per_second": 60,
   "direction": -1,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0"
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
   "label": "static-b",
@@ -105,9 +105,39 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0",
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
   "trace_at": [
    10
   ]
+ },
+ {
+  "label": "ab-off",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=1"
+ },
+ {
+  "label": "ab-on",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=0"
  }
 ]

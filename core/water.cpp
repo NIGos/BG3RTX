@@ -239,10 +239,12 @@ constexpr struct { uint32_t binding; VkDescriptorType type; } kBind[] = {
     {60, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},  {61, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
     {62, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},   {63, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
     {64, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR}, {65, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
+    // rt_water_rr_hitdist (WATER_RR_HIT): RR's specular hit distance (core/gi.cpp g_rf_hit); a stand-in otherwise.
+    {30, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
 };
 constexpr uint32_t kNumBind = uint32_t(sizeof kBind / sizeof kBind[0]);
 
-bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
+bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool rr_hit) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
   if (g_layout && (g_alpha_layout != alpha_layout || g_push_bytes != push_bytes)) {
@@ -274,7 +276,7 @@ bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes) {
     g_push_bytes = push_bytes;
   }
   return make_pipe(g_primary, "rt/water_reflect.hlsl", "water_primary", g_layout) &&
-         make_pipe(g_reflect, "rt/water_reflect.hlsl", "water_reflect", g_layout);
+         make_pipe(g_reflect, rr_hit ? "rt/water_reflect.hlsl?WATER_RR_HIT=1" : "rt/water_reflect.hlsl", "water_reflect", g_layout);
 }
 
 bool ensure_view() {
@@ -1178,7 +1180,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
   if (!in.scene_tlas || !in.alpha || !host->rt_alpha || !host->rt_alpha(&alpha_layout, &alpha_any) || !alpha_layout ||
-      !ensure_buffers() || !ensure_layouts(alpha_layout, in.push_bytes)) {
+      !ensure_buffers() || !ensure_layouts(alpha_layout, in.push_bytes, in.rf_hit != VK_NULL_HANDLE)) {
     ++g_win.skip_layout;
     if (!g_failed_logged) g_failed_logged = true, host->log("[water] reflections unavailable (layout, buffers or pipelines)");
     return skip();
@@ -1233,9 +1235,11 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       {g_dev, 0, kStatBytes},
       cam2 ? VkDescriptorBufferInfo{in.cam2.buffer, in.cam2.offset, 224} : VkDescriptorBufferInfo{in.cam.buffer, in.cam.offset, in.cam.range},
       {}};
-  VkDescriptorImageInfo imgs[6] = {{VK_NULL_HANDLE, in.mat.view, in.mat.layout}, {VK_NULL_HANDLE, in.dep.view, in.dep.layout},
+  VkDescriptorImageInfo imgs[7] = {{VK_NULL_HANDLE, in.mat.view, in.mat.layout}, {VK_NULL_HANDLE, in.dep.view, in.dep.layout},
                                    {VK_NULL_HANDLE, in.dif.view, G},              {VK_NULL_HANDLE, in.spe.view, G},
-                                   {VK_NULL_HANDLE, g_out.view, G},               {VK_NULL_HANDLE, g_t.view, G}};
+                                   {VK_NULL_HANDLE, g_out.view, G},               {VK_NULL_HANDLE, g_t.view, G},
+                                   // 30: RR's hit distance with WATER_RR_HIT, else a stand-in the shader never reads
+                                   {VK_NULL_HANDLE, in.rf_hit ? in.rf_hit : g_t.view, G}};
   VkWriteDescriptorSet wr[kNumBind];
   for (uint32_t i = 0; i < kNumBind; ++i) {
     wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -1257,6 +1261,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       case 63: wr[i].pImageInfo = &imgs[5]; break;
       case 64: wr[i].pNext = &as[1]; break;
       case 65: wr[i].pBufferInfo = &bufs[5]; break;
+      case 30: wr[i].pImageInfo = &imgs[6]; break;
     }
   }
   const uint32_t gx = (in.w + kGroup - 1) / kGroup, gy = (in.h + kGroup - 1) / kGroup;

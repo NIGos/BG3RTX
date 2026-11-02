@@ -155,6 +155,44 @@ check(res == {"a.hlsl": si.SAME, "b.hlsl": si.IDENTICAL_INPUTS, "c.hlsl": si.SAM
               "d.hlsl?FOO=1": "DIFFERENT", "e.hlsl": "missing"}, f"identity states {res}")
 check(not any(c[1] == "b.hlsl" for c in calls), "identical inputs are not compiled")
 
+# In-flight lock: two runs (own Cache objects, one shared cache directory: two processes' view) that miss the same
+# entries at the same time compile each entry once; the other run takes the result (identical digests).
+import tempfile  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+with tempfile.TemporaryDirectory(prefix="b3k-", ignore_cleanup_errors=True) as shared_dir:
+    calls.clear()
+
+    def slow_dxc(tool_, tree, request, entry, out):
+        time.sleep(0.3)   # both runs are inside their compile window together
+        return fake_dxc(tool_, tree, request, entry, out)
+    si._run_dxc = slow_dxc
+    runs = {}
+
+    def run(name):
+        c = si.Cache(shared_dir)
+        runs[name] = si.compile_requests(si.SourceTree.memory(FILES, name), ["c.hlsl", "d.hlsl"], tool=tool, cache=c, jobs=2)
+        c.db.close()
+    th = [threading.Thread(target=run, args=(n,)) for n in ("p1", "p2")]
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):   # once: sys.stdout is global
+        for t in th:
+            t.start()
+        for t in th:
+            t.join()
+    si._run_dxc = fake_dxc
+    check(len(calls) == 3, f"two concurrent runs of one key compile it once ({len(calls)} compiles for 3 entries)")
+    check(all(runs["p1"][r].ok and runs["p1"][r].digest == runs["p2"][r].digest for r in ("c.hlsl", "d.hlsl")),
+          "the waiting run gets the holder's result")
+
+# tools/low_priority.py really lowers the process on Windows (the ctypes handle was truncated before: still Normal).
+if sys.platform == "win32":
+    probe = ("import ctypes,sys; sys.path.insert(0, sys.argv[1]); from tools.low_priority import lower_priority; "
+             "lower_priority(); k=ctypes.windll.kernel32; k.GetCurrentProcess.restype=ctypes.c_void_p; "
+             "k.GetPriorityClass.argtypes=[ctypes.c_void_p]; print(k.GetPriorityClass(k.GetCurrentProcess()))")
+    env = {k: v for k, v in __import__("os").environ.items() if k != "BG3RTX_NORMAL_PRIORITY"}
+    out = subprocess.run([sys.executable, "-c", probe, str(ROOT)], capture_output=True, text=True, env=env).stdout.strip()
+    check(out == str(0x4000), f"lower_priority sets BELOW_NORMAL ({out})")
+
 # Pruning: age, protection, size cap (oldest first), shared blobs, unreferenced blobs deleted.
 pc = si.MemoryCache()
 now = 1_000_000_000.0

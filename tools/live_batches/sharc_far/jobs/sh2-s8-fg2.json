@@ -47,10 +47,6 @@
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
   "\\[cfg\\] settings read",
   "\\[trace\\] frame \\d+ written",
-  "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified [1-9]\\d* unsupported \\d+",
-  "GI hit direct \\(\\d+ frames\\): candidates [1-9]\\d* qualified [1-9]\\d*",
-  "GI hit sun \\(\\d+ frames\\): evaluated \\d+, ",
-  "GI far \\(\\d+ frames\\): rays [1-9]\\d*; beyond the base radius: screen hits \\d+, qualified sun-lit \\d+ \\(outside the froxels \\d+\\), kept as native ambient \\d+ \\(of them roof rule \\d+\\); per ray: ambient visibility [0-9.]+ \\(old rule [0-9.]+\\), bounce [0-9.]+ \\(old rule [0-9.]+\\)",
   "gi: GPU cost [0-9.]+ ms/frame",
   "gi: trace pass \\(ray-traced, gi_rt=1, \\d+ rays/sample, .*\\) GPU median [0-9.]+ ms",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
@@ -92,7 +88,7 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "gi_rr_rays 2/1/2 rerun under Ultra + gi_far 6 m (sharc 0), S8, static camera: 6 traces per state (sh1 had 3: the QA temporal detector OFF-OFF null failed with 3-21 per mille excess regions). Energy (shot-rays view), GI trace cost, rays_flicker.py (the null OFF-b vs OFF-a must pass).",
+ "purpose": "gi_rr_rays 2/1/2 rerun under Ultra + gi_far 6 m (sharc 0), S8, static camera: 6 traces per state (sh1 had 3: the QA temporal detector OFF-OFF null failed with 3-21 per mille excess regions). Energy (shot-rays view), GI trace cost, rays_flicker.py (the null OFF-b vs OFF-a must pass). No rt_stats window by design (about 80 ms/frame, and the observables are energy, GI trace ms and the temporal std): the per-ray stats lines are not expected (sh2 055914 was INVALID only for them).",
  "estimated_phase_seconds": 132,
  "expect_every": [
   {

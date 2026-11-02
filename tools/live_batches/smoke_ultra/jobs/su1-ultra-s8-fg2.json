@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 480,
+ "timeout": 496,
  "repeat": 1,
  "live_batch": "smoke-ultra",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1",
@@ -42,7 +42,8 @@
   "\\[bvh\\] mesh pool",
   "\\[hit material pool basis\\]",
   "\\[cascade\\] buffer full",
-  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+  "\\[ab\\]"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -60,7 +61,10 @@
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
   "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
   "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
-  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)"
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+  "\\[ab\\] ab_off: ray tracing OFF",
+  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON"
  ],
  "expect_every": [
   {
@@ -189,10 +193,10 @@
   "\\[motion-plan\\] pointer centred in owned foreground game",
   "\\[motion-trace\\] phase=1 label=static-a repeat=0",
   "\\[motion-trace\\] phase=6 label=static-b repeat=0",
-  "\\[motion-plan\\] complete phases=7\\b",
+  "\\[motion-plan\\] complete phases=9\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Ultra smoke at S8 Water Queens House: preset ultra with every qualified experimental key on at launch (rt_hit_material, rt_hit_material_instanced, gi_hit_direct, gi_hit_sun, rt_emissive + rt_hit_emission=1, ls_box=2, the 6 water keys, rt_xfb_mb=1024, rt_cascade_mb=427, rt_cascade_casters=1 as Ultra sets it), exposure held from phase 1; static, pan Q/E and rotation windows. Gates in every window: RT capture capacity 0 drops, cascade buffer never full, scene-wait timeouts 0, water reflections traced > 0. Expected to FAIL today on the water gate: the water reflections are skipped while rt_cascade_casters=1; the job is the regression check for that fix.",
- "estimated_phase_seconds": 120
+ "purpose": "Ultra smoke at S8 Water Queens House: preset ultra with every qualified experimental key on at launch (rt_hit_material, rt_hit_material_instanced, gi_hit_direct, gi_hit_sun, rt_emissive + rt_hit_emission=1, ls_box=2, the 6 water keys, rt_xfb_mb=1024, rt_cascade_mb=427, rt_cascade_casters=1 as Ultra sets it), exposure held from phase 1; static, pan Q/E and rotation windows. Gates in every window: RT capture capacity 0 drops, cascade buffer never full, scene-wait timeouts 0, water reflections traced > 0. Expected to FAIL today on the water gate: the water reflections are skipped while rt_cascade_casters=1; the job is the regression check for that fix. Then ab-off / ab-on (ab_off=1 / 0, 8 s each): the A/B toggle from the settings, gated on the \"[ab] toggle latency\" lines (time to the first frame recorded entirely in the new state).",
+ "estimated_phase_seconds": 136
 }

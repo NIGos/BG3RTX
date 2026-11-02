@@ -1,0 +1,57 @@
+{
+ "_rule": "Committed BEFORE the run. Tier (a) L_b / L_a per diag window (rf hit shade terms / rf hit gi lines), and the scene colour of shot-on (rf_hit_shade + rf_hit_gi) vs shot-off-a/b. Derivation (2026-11-02): live m4p3 161852 / m4p4 113146 (diag windows: no trace, so not affected by the 385efd1 flaw) S6 1.090, S8 0.925 with FresnelBlend; the game's lobes at hits change the direct term -2.8% (S8 pack proxy, branch rf-hit-box): S6 0.0107 + 0.0657 x 0.972 = 0.0746 / 0.0701 = 1.064; S8 direct 0.0057 of 0.14: unchanged. rf_hit_gi adds the screen's GI term at hits (TRACK_D_REFLECTIONS 14): S8 +0.014 diffuse gap closes -> 1.00-1.03, S6 +0.04..0.09 -> 1.12-1.22.",
+ "hrg1-rf-gi-s6-fg2": {
+  "ratio@diag-rf": {
+   "predicted": 1.064,
+   "range": [
+    1.03,
+    1.1
+   ]
+  },
+  "ratio@diag-gi1": {
+   "predicted": 1.17,
+   "range": [
+    1.12,
+    1.22
+   ]
+  },
+  "ratio@diag-gi2": {
+   "predicted": 1.17,
+   "range": [
+    1.1,
+    1.25
+   ]
+  },
+  "shot-on": {
+   "predicted": null,
+   "basis": "rf_hit_shade shades 3% of S6 tier (b) hits (m4p3 161852); below the 2.84% S6 band"
+  }
+ },
+ "hrg2-rf-gi-s8-fg2": {
+  "ratio@diag-rf": {
+   "predicted": 0.925,
+   "range": [
+    0.9,
+    0.95
+   ]
+  },
+  "ratio@diag-gi1": {
+   "predicted": 1.015,
+   "range": [
+    0.98,
+    1.03
+   ]
+  },
+  "ratio@diag-gi2": {
+   "predicted": 1.015,
+   "range": [
+    1.0,
+    1.03
+   ]
+  },
+  "shot-on": {
+   "predicted": null,
+   "basis": "tier (b) shaded on 24% of S8 reflection rays, probe vs L_b ratio ~1: below the 1.73% band"
+  }
+ }
+}

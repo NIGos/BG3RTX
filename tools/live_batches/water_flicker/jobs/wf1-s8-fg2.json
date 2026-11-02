@@ -1,0 +1,185 @@
+{
+ "name": "wf1-s8-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 523,
+ "repeat": 1,
+ "live_batch": "water-flicker",
+ "window_mode": "visible_unfocused_fg",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_rr_hitdist=0",
+ "args": [
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/water_flicker/plans/wf1_s8.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[water\\]",
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|probe)",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "\\[hit material\\] buffer reuse",
+  "\\[sl\\] fg_letterbox",
+  "sun stats",
+  "^\\S+\\s+\\[core\\] sun:",
+  "\\[core\\] guard:",
+  "skipped: no variant for",
+  "\\[bvh\\] mesh pool",
+  "\\[hit material pool basis\\]",
+  "\\[cascade\\] buffer full",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+  "\\[water\\]",
+  "rf: reflection pass",
+  "gi: GPU cost",
+  "\\[pan\\]"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
+  "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+  "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+  "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+  "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+  "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+  "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+  "\\[water\\] rt/water_reflect\\.hlsl\\?WATER_RR_HIT=1\\S* water_reflect: built"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[water\\] water geometry UNAVAILABLE",
+  "\\[water\\] build submission failed",
+  "\\[water\\] reflections unavailable",
+  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+  "\\[water\\] compose UNAVAILABLE",
+  "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+  "\\[water\\] compose: variant pipeline creation failed",
+  "\\[water\\] compose: a water pipeline blends",
+  "\\[rrpost\\] exposure hold REFUSED",
+  "\\[cascade\\] could not allocate",
+  "skipped: no variant for",
+  "sun: WARNING \\d+ roof volumes within",
+  "over kSunMaxVolumes on [1-9]",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hit material pool basis\\] over kBasisCapBytes",
+  "\\[bvh\\] mesh pool full at"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\] visible_unfocused:.*preserve_fg=True",
+  "\\[motion-trace\\] phase=2 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=4 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": false,
+ "purpose": "S8 harbour water reflection flicker during camera rotation (user report 2026-11-02): rt_water_rr_hitdist 0/1/0 inside one run, unfocused (the user is at the PC). Static: energy (shot-*) and GPU cost (cost-*). Slow rotation with one K16 burst per state (rot-*): scripts/qa/pan_artifacts.py temporal events of the final luma (reprojected by the GPU camera), ON against both OFF bursts.",
+ "estimated_phase_seconds": 163,
+ "expect_every": [
+  {
+   "name": "water reflections traced in every window with the casters on (FAILS today: water is skipped with rt_cascade_casters=1)",
+   "select": "\\[water\\] reflections \\(\\d+ frames, ",
+   "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "one trace written in each static window",
+   "select": "\\[trace\\] frame \\d+ written: ",
+   "match": "\\[trace\\] frame \\d+ written: ",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1,
+   "event": true
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "; non-finite terms 0 \\(",
+   "windows": [
+    "cost-off-a",
+    "cost-on",
+    "cost-off-b"
+   ],
+   "min": 1
+  }
+ ]
+}
