@@ -497,6 +497,9 @@ void collect(bool force=false){
  CpuTimer timer(CpuCollect);recycle_trim();
  for(auto i=queries.begin();i!=queries.end();)if(retired(i->first)){destroy_query(*i->second);i=queries.erase(i);}else ++i;
  for(auto i=packets.begin();i!=packets.end();)if(i->second.use_count()==1 && retired(i->first)){destroy_packet(*i->second);i=packets.erase(i);}else ++i;
+ // Only slots whose frame can still get a query (or whose owners still run) keep their source copy (source_releasable).
+ for(auto& s:slots)if(source_releasable(bool(s.data.b),s.frame,now,std::all_of(s.owners.begin(),s.owners.end(),[&](uint64_t id){return retired(id);}))){
+  destroy(s.data);s.data_bytes=0;}
  std::set<uint64_t> live;for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
  for(const auto& [id,p]:packets)live.insert(id);for(const auto& [id,q]:queries){live.insert(id);live.insert(q->source);live.insert(q->deferred->recording);}
  for(auto i=owners.begin();i!=owners.end();)if(!live.contains(i->first) && retired(i->first)){submitted_queues.erase(i->first);i=owners.erase(i);}else ++i;
@@ -1104,9 +1107,10 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    q.materials.size(),double(cursor)*mb,double(query_cap)*mb,query_overflow,tables_used,table_free,table_overflow);
   // The VRAM the three streams hold now (all slots, packets and queries alive): what the derived caps cost.
   VkDeviceSize vs=0,vp=0,vq=0;for(const auto& sl:slots)vs+=sl.data.bytes;for(const auto& [k,pk]:packets)for(const auto& c:pk->chunks)vp+=c.bytes;
-  for(const auto& [k,qq]:queries)vq+=qq->data.bytes;
-  log("[hit material streams] frame %llu live %.0f MB: source %.0f MB in %u slots, deferred %.0f MB in %zu packets, query basis %.0f MB in %zu queries",
-   (unsigned long long)slot.frame,double(vs+vp+vq)*mb,double(vs)*mb,kSceneSlots,double(vp)*mb,packets.size(),double(vq)*mb,queries.size());
+  for(const auto& [k,qq]:queries)vq+=qq->data.bytes;uint32_t held=0;for(const auto& sl:slots)held+=sl.data.b?1u:0u;
+  uint64_t pooled=0;{std::lock_guard rl(recycle_mutex);pooled=recycled.retained();}
+  log("[hit material streams] frame %llu live %.0f MB: source %.0f MB in %u of %u slots, deferred %.0f MB in %zu packets, query basis %.0f MB in %zu queries; recycle pool %.0f MB",
+   (unsigned long long)slot.frame,double(vs+vp+vq)*mb,double(vs)*mb,held,kSceneSlots,double(vp)*mb,packets.size(),double(vq)*mb,queries.size(),double(pooled)*mb);
  };
  // rt_hit_material_instanced (native_hit_instanced.h): per family, the prepass alpha candidates, the
  // G-buffer draws (declined by pipeline / bindings / stream, captured) and the rows this query maps.
