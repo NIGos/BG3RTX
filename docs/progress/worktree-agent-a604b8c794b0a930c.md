@@ -20,3 +20,5 @@
 - Not live-verified: the larger-desktop case itself (3840x1600 game in a 3840x2160 swapchain). su1 ran
   with the pass at the output size. Check: borderless on a 3840x2160 desktop, FG on, log line
   `[sl] game output ... backbuffer subrect`, FG displayed/rendered 2.00, no UI ghosting at the bars.
+- Live batch prepared, not run: tools/live_batches/fg_letterbox (one S8 job, 75 s, borderless via the new auto-run.ps1
+  `-Borderless`, fg_letterbox 1 -> 0 -> 1; gates and predicted.json in its README). dryrun + lints pass. 95/95 CTests.
