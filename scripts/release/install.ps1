@@ -3,6 +3,9 @@
 param([string]$Destination = (Join-Path $env:LOCALAPPDATA 'Programs\BG3RTX'),
       [string]$GameDir = '', [switch]$NoShortcut, [switch]$WhatIf)
 $ErrorActionPreference = 'Stop'
+if (Test-Path -LiteralPath (Join-Path $Destination '.bg3rtx-state.json')) {
+  throw 'This installation uses the transactional lifecycle. Update it with Windows Setup or lifecycle.ps1, not the legacy installer.'
+}
 try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { }
 function Assert-Safe([string]$path) {
   if ($path -match '(?i)[\\/]Larian Studios([\\/]|$)') { throw "Refusing profile folder (saves): $path" }
