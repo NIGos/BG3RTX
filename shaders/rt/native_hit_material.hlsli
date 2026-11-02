@@ -1,4 +1,14 @@
 #ifndef BG3_NATIVE_HIT_MATERIAL_HLSLI
+#if defined(RT_SPEC_HIT_FAMILY)
+// Variant migration step S2a (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): one module for the instanced
+// hit-material families, constants 1004 (rt_hit_material_wind_rgb) and 1005 (rt_hit_material_ip_grass) set by
+// core/gi.cpp refresh() from the layer's capability words.
+#if defined(RT_HIT_WIND_RGB) || defined(RT_HIT_IP_GRASS) || !defined(RT_HIT_INSTANCED)
+#error RT_SPEC_HIT_FAMILY replaces RT_HIT_WIND_RGB / RT_HIT_IP_GRASS and needs RT_HIT_INSTANCED
+#endif
+[[vk::constant_id(1004)]] const uint kSpecWindRgb = 0u;
+[[vk::constant_id(1005)]] const uint kSpecIpGrass = 0u;
+#endif
 #define BG3_NATIVE_HIT_MATERIAL_HLSLI
 #include "../../common/native_opaque_transport.h"
 #include "../../common/native_vt_fields.h"
@@ -243,7 +253,10 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  // intentionally declines even harmless arithmetic differences in this slice.
 #ifdef RT_HIT_INSTANCED
  // Instanced rows (word 220 bits 8..9 = family): hm_clip_instanced, the wind rows within their derived tolerance.
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+ // Migration step S2a: RT_HIT_IP_GRASS as specialization constant 1005 (the 3-bit family field when set).
+ const uint hm_flags=gHitRecords.Load(row+220u),hm_family=(hm_flags>>8)&(kSpecIpGrass!=0u?7u:3u);
+#elif defined(RT_HIT_IP_GRASS)
  // rt_hit_material_ip_grass at startup: the family field is bits 8..10 (IP grass = 4); g_hm_clip then packs the family in
  // bits 0..2, the outcome in 3..5 and the rigid flag in bit 6. Without the define bits 8..9 only: an IP grass row reads
  // family 0 and gets the plain per-draw bit-exact check below (fail closed, uncounted).
@@ -253,7 +266,10 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
 #endif
  if(hm_family!=0u){
   const uint outcome=hm_clip_instanced(row,h0,h1.x,ii,hit.prim,(hm_flags&2u)!=0u);
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+  if(kSpecIpGrass!=0u)g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
+  else g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
+#elif defined(RT_HIT_IP_GRASS)
   g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
 #else
   g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
@@ -347,7 +363,28 @@ void hit_material_count(RtHit hit,uint status,uint bin){
  // The clip check per instanced family (core/gi.cpp kHitClipFirst 356: wind 356.., 2S 364..; kHitClip3First:
  // wind RGB 2S 427..): checked, bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256,
  // over x256, rigid offset.
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+ // Migration step S2a: RT_HIT_WIND_RGB (1004) and RT_HIT_IP_GRASS (1005) as specialization constants.
+ if(kSpecIpGrass!=0u){
+ const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
+ [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&64u)!=0u,bin);}
+ }else if(kSpecWindRgb!=0u){
+ const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+ [unroll]for(uint f=1;f<4;++f){const uint base=f<3u?356u+(f-1u)*8u:427u;const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
+ }else{
+ const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+ [unroll]for(uint f=1;f<3;++f){const uint base=356u+(f-1u)*8u;const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
+ }
+#elif defined(RT_HIT_IP_GRASS)
  // rt_hit_material_ip_grass at startup: families 1..4 (wind RGB 427.., IP grass 435..), the 3-bit packing above.
  const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
  [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;

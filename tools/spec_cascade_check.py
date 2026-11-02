@@ -72,9 +72,31 @@ def guard_id(file):
     return 1001 if file == "gi/gi_temporal.hlsl" else 1002
 
 
-# --key: the spec define marking a request, its old (value 0, value 1) requests, the constant id of a file.
-KEYS = {"cascade": (SPEC, old_requests, lambda f: SPEC_ID),
-        "guards": (GUARDS, old_requests_guards, guard_id)}
+FAMILY = "RT_SPEC_HIT_FAMILY=1"
+
+
+def old_requests_family(spec_request):
+    """Step S2a: [({1004: w, 1005: g}, old request)] for the four wind RGB / IP grass combinations."""
+    file, defs = split_request(spec_request)
+    out = []
+    for w, g in ((0, 0), (1, 0), (0, 1), (1, 1)):
+        add = (["RT_HIT_WIND_RGB=1"] if w else []) + (["RT_HIT_IP_GRASS=1"] if g else [])
+        ds = []
+        for d in defs:
+            ds += add if d == FAMILY else [d]
+        out.append(({1004: w, 1005: g}, file + ("?" + ";".join(ds) if ds else "")))
+    return out
+
+
+def two(olds, id_of):
+    """A key with one constant: [({id: 0}, old0), ({id: 1}, old1)]."""
+    return lambda r: [({id_of(split_request(r)[0]): v}, o) for v, o in enumerate(olds(r))]
+
+
+# --key: the spec define marking a request and its [(constant assignment, old request)] list.
+KEYS = {"cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
+        "guards": (GUARDS, two(old_requests_guards, guard_id)),
+        "hitfam": (FAMILY, old_requests_family)}
 
 
 def opt(tool, src, dst, *passes):
@@ -167,11 +189,12 @@ def differ(a, b):
     return len(set(ga) ^ set(gb)) + abs(len(ga) - len(gb)) + sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
 
 
-def check_one(tool, tmp, i, spec_path, old_path, value, spec_id=SPEC_ID):
+def check_one(tool, tmp, i, spec_path, old_path, assign):
     """The other constants of both modules (e.g. 1000 in a guards request) stay at their default 0 on both sides."""
-    d = Path(tmp) / f"{i}_{value}"
+    d = Path(tmp) / f"{i}_{'_'.join(f'{k}-{v}' for k, v in sorted(assign.items()))}"
     d.mkdir()
-    s = opt(tool, spec_path, d / "s.spv", f"--set-spec-const-default-value={spec_id}:{value}")
+    s = opt(tool, spec_path, d / "s.spv",
+            "--set-spec-const-default-value=" + " ".join(f"{k}:{v}" for k, v in sorted(assign.items())))
     s = opt(tool, s, d / "f.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
     s = opt(tool, s, d / "sO.spv", "-O")
     o = opt(tool, old_path, d / "of.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
@@ -190,8 +213,9 @@ def bin_dir():
     return ROOT / "bin"
 
 
-def replay(tool, P, pack, tmp, spec, olds, spec_id):
-    p0, p1 = olds(spec)
+def replay(tool, P, pack, tmp, spec, olds):
+    (a0, p0), (a1, p1) = olds(spec)[:2]
+    spec_id = next(iter(a1))
     t = Path(tmp)
     mods = {"old0": P(p0), "old1": P(p1)}
     for v in (0, 1):
@@ -226,7 +250,7 @@ def main():
     ap.add_argument("--replay", help="replay pack directory (read only)")
     ap.add_argument("--key", choices=sorted(KEYS), default="cascade", help="which migration step's constants")
     args = ap.parse_args()
-    marker, olds, id_of = KEYS[args.key]
+    marker, olds = KEYS[args.key]
     lower_priority()
     tool = Toolchain()
     tree = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
@@ -244,18 +268,19 @@ def main():
         random.Random(args.seed).sample([r for r in spec if r not in by_file.values()],
                                         min(args.sample, len(spec) - len(by_file)))))
     if args.replay:
-        replay_spec = next(r for r in spec if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl" and
-                           sorted(split_request(r)[1]) == sorted(d for d in ("RT_SPEC_CASCADE=1", marker)))
+        # gi_hit_direct's spec request with the fewest defines (the pack's variant is the plain one)
+        replay_spec = min((r for r in spec if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"),
+                          key=lambda r: len(split_request(r)[1]))
         pick = sorted(set(pick) | {replay_spec})
     pairs = {r: olds(r) for r in pick}
     # Once the spec build is the only cascade path the old requests are no longer listed; they still compile
     # from the same sources (the reference programs), so they are built here on demand.
-    unlisted = sorted({o for r in pick for o in pairs[r] if o not in known})
+    unlisted = sorted({o for r in pick for _, o in pairs[r] if o not in known})
     if unlisted:
         say(f"[spec cascade] {len(unlisted)} old reference requests not in shaders/variants.txt: compiled on demand")
     say(f"[spec cascade] {len(spec)} RT_SPEC_CASCADE requests over {len(by_file)} files; checking {len(pick)} "
         f"({'all' if args.all else f'each file once + {len(pick) - len(by_file)} random, seed {args.seed}'})")
-    need = sorted(set(pick) | {o for r in pick for o in pairs[r]})
+    need = sorted(set(pick) | {o for r in pick for _, o in pairs[r]})
     compiled = compile_requests(tree, need, tool=tool, cache=Cache(), jobs=args.jobs, label="spec cascade")
     bad = [r for r in need if not compiled[r].ok]
     for r in bad:
@@ -283,14 +308,14 @@ def main():
                     dst.write_bytes(again[r].blob(e.name))
                     local[(r, e.name)] = dst
         P = lambda r, e="main": local[(r, e)]  # noqa: E731
-        c0, c1 = pairs[pick[0]]
+        (_, c0), (_, c1) = pairs[pick[0]][:2]
         ctrl = differ(canonical(tool, opt(tool, P(c0), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its cascade variant differ in {ctrl} lines (must be > 0)")
-        jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in (0, 1)]
+        jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in range(len(pairs[r]))]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \
                 concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
-            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v], e), v, id_of(split_request(r)[0])):
+            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v][1], e), pairs[r][v][0]):
                     (r, e, v) for i, r, e, v in jobs}
             for f in concurrent.futures.as_completed(futs):
                 r, e, v = futs[f]
@@ -302,9 +327,9 @@ def main():
                     with lock:
                         fails.append((r, e, v, n))
                 prog.step(failed=bool(n))
-        ok_replay = replay(tool, P, args.replay, tmp, replay_spec, olds, id_of("gi/gi_trace_rt_hit_direct.hlsl")) if args.replay else True
+        ok_replay = replay(tool, P, args.replay, tmp, replay_spec, olds) if args.replay else True
     for r, e, v, n in sorted(fails):
-        say(f"DIFFERENT: {r} [{e}] value {v} vs {pairs[r][v]}: {n}")
+        say(f"DIFFERENT: {r} [{e}] {pairs[r][v][0]} vs {pairs[r][v][1]}: {n}")
     say(f"spec cascade: {len(pick) - len({r for r, _, _, _ in fails})}/{len(pick)} RT_SPEC_CASCADE requests are, "
         f"specialized to 0 and 1, the same program as their plain and RT_CASCADE_MASKS variants"
         f"{'' if ctrl else '; CONTROL BLIND'}{'' if ok_replay else '; REPLAY DIFFERS'}")

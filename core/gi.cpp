@@ -992,7 +992,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool guards = sv::guard_entry(file);
   const uint32_t mv_sample = sv::temporal_mv_entry(file) && host->cfg_int("gi_temporal_mv_sample", 0) != 0 ? 1u : 0u;
   const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
-  const std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
+  std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
+  // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
+  const bool hit_family = instanced && sv::hit_material_entry(file);
+  if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
@@ -1017,8 +1020,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                nullptr};
   pci.layout = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
-  uint32_t spec_data[3];
-  VkSpecializationMapEntry spec_entries[3];
+  uint32_t spec_data[5];
+  VkSpecializationMapEntry spec_entries[5];
   uint32_t n_spec = 0;
   auto spec_add = [&](uint32_t id, uint32_t v) {
     spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
@@ -1027,6 +1030,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   if (spec_cascade) spec_add(sv::kSpecIdCascade, spec_value);
   if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
   if (sv::prev_radiance_entry(file)) spec_add(sv::kSpecIdPrevRadiance, prev_guard);
+  if (hit_family) {
+    spec_add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
+    spec_add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
+  }
   const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
   if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;

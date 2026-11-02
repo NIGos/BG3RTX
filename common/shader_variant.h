@@ -257,8 +257,8 @@ inline std::string request(const char* file, unsigned flags) {
     add("RT_NATIVE_HAIR=1");
   }
   if (flags & kHitInstanced) add("RT_HIT_INSTANCED=1");
-  if (flags & kHitWindRgb) add("RT_HIT_WIND_RGB=1");
-  if (flags & kHitIpGrass) add("RT_HIT_IP_GRASS=1");
+  // Step S2a: wind RGB / IP grass are constants 1004 / 1005 of the instanced module (core/gi.cpp refresh).
+  if (flags & kHitInstanced) add("RT_SPEC_HIT_FAMILY=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

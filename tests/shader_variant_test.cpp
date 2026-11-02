@@ -30,9 +30,9 @@ int main(int argc, char** argv) {
         "RT_NATIVE_HAIR=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(!cascade_entry("gi/rt_sun_resolve.hlsl") && !cascade_entry("gi/rt_hit_two_bounce.hlsl"));
   // rt_hit_material_instanced: only the hit-material consumers, last but cascade; never the ordinary files.
-  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1");
   CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kHitInstanced | kCascade | kTileset) ==
-        "gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_TILESET=1;RT_HIT_INSTANCED=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+        "gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_TILESET=1;RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl?RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
   // gi_far: the gi_hit_sun files only, last; never the direct-only or ordinary files.
@@ -44,14 +44,14 @@ int main(int argc, char** argv) {
   CHECK(request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi | kCascade) ==
         "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_CASCADE=1;RF_HIT_GI=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_reflections_sharc_hit_shade_em.hlsl", kRfHitGi | kHitInstanced) ==
-        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_CASCADE=1;RF_HIT_GI=1;GI_SPEC_GUARDS=1");
+        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1;RF_HIT_GI=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_reflections.hlsl", kRfHitGi) == "gi/rt_reflections.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_hit_material.hlsl", kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_SPEC_CASCADE=1");   // needs the instanced key
-  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1");
   CHECK(request("gi/rt_shadow.hlsl", kHitInstanced | kHitWindRgb) == request("gi/rt_shadow.hlsl", 0));
   CHECK(request("gi/rt_hit_material.hlsl", kHitIpGrass) == "gi/rt_hit_material.hlsl?RT_SPEC_CASCADE=1");   // needs the instanced key
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
-        "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1;RT_SPEC_CASCADE=1");
+        "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_SPEC_HIT_FAMILY=1;RT_SPEC_CASCADE=1");
   CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   // rt_spec_cascade, the only cascade path: one request for both cascade values; the constant carries kCascade.
   CHECK(request("gi/gi_trace_rt.hlsl", 0) == "gi/gi_trace_rt.hlsl?RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");

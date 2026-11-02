@@ -27,3 +27,7 @@
   plan (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): G (gi-reproj guards as constants 1001/1002),
   S2-S5 to ~100-180 requests, one merge-green at the end. Constant-id registry SpecId in common/shader_variant.h;
   kSpecCascade moved to bit 16 (gi-reproj-guards uses 4096/8192).
+- Branch variant-migration (from spec-cascade-s1-default): step G, gi_temporal_mv_sample / gi_prev_radiance_guard
+  as constants 1001 / 1002 (GI_SPEC_GUARDS on their 18 files; 1591 variants instead of +2192 as defines); check
+  --key guards 34/34, S8 replay bit-identical for both values. Step S2a: RT_HIT_WIND_RGB / RT_HIT_IP_GRASS as
+  constants 1004 / 1005 (RT_SPEC_HIT_FAMILY on the instanced requests): 1591 -> 895 variants.
