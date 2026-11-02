@@ -178,6 +178,7 @@ std::unordered_map<VkQueue, uint32_t> g_queue_family;   // queues Streamline too
 bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, VkPresentInfoKHR& out,
                   VkSemaphore& wait);
 void snap_finish(DeviceData* dd);
+bool snap_last();   // the capture's last present is in flight
 bool g_fg_running_flag();
 
 // Every present Streamline makes (real and generated frames) passes here.
@@ -210,7 +211,7 @@ VKAPI_ATTR VkResult VKAPI_CALL w_QueuePresentKHR(VkQueue queue, const VkPresentI
     // The readback is finished at the NEXT present (snap_present), when the GPU is usually done with it: waiting
     // here stalled every captured present (wf5-s8-fg2 160335: one present per ~180 ms, 16-19 of 32 captured).
     // The last one of a capture is finished here.
-    if (g_snaps_left == 1) snap_finish(dd);
+    if (snap_last()) snap_finish(dd);
     return r;
   }
   return dd->vk.QueuePresentKHR(queue, info);
@@ -394,6 +395,8 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
   S.pending = true;
   return true;
 }
+
+bool snap_last() { return g_snaps_left == 1; }
 
 void snap_finish(DeviceData* dd) {
   Snap& S = g_snap;
