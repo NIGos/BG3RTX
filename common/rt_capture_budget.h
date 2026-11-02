@@ -81,6 +81,14 @@ inline uint64_t alpha_region(uint64_t size,uint64_t floor,uint64_t current,
   uint64_t cap=size/100*uint64_t((std::clamp)(max_percent,5,90));
   uint64_t opaque=opaque_previous*11/10;
   if(opaque && opaque<size)cap=(std::min)(cap,(std::max)(size-opaque,floor));
+  // Both reserves do not fit (alpha x1.5 + opaque x1.1 > size): the buffer is split in proportion to the two
+  // demands, so both keep the same relative headroom. Before, alpha kept its 50% while opaque had 10%: the inn
+  // rotation (lean_regression lr2 2026-11-02 04:42) had alpha 418 MB in a 613 MB region while opaque grew from
+  // about 373 to 440 MB of the remaining 411 MB (0.02 draws/frame dropped); split by demand: 541 / 483 MB.
+  if(alpha_previous && opaque_previous && alpha_previous*3/2+opaque_previous*11/10>size){
+   const double share=double(size)*double(alpha_previous)/double(alpha_previous+opaque_previous);
+   cap=(std::min)(cap,(std::max)(uint64_t(share)/mib*mib,floor));
+  }
   region=(std::min)(region,cap);
  } else region=floor;
  return region;
