@@ -1,0 +1,35 @@
+{
+ "_rule": "Committed BEFORE the run (2026-11-02). Scene colour before post (5c3fdabc float mean) shot-on vs shot-off-a/b; the qualified share (diag-on minus the diag-off mean, points of all hit lookups); the GI trace pass GPU median cost-on minus the cost-off mean.",
+ "hgn1-generated-camp-fg2": {
+  "shot-on": {
+   "predicted": null,
+   "basis": "camp shows no measurable energy per qualified point (hig1 IP grass +0.19% in a 2.19% band; the + Bounce bundle at 24% qualified +0.02%): null"
+  },
+  "qualified_share_points": {
+   "predicted": 12,
+   "range": [3, 25],
+   "basis": "camp pack 013545-2 (instanced off) blocked lookups by depth FS: f9ab595d bushes 20.2% (27ef2b49/2e34c667 is 8 of the 10 bush G-buffer draws in trace 140840; 6561beef/ce81ffaa and the ColorVar pair stay rejected) + 2f1b0ffd 5.4% (IP_AlphaTest(_2S)_VT 0de1b186/641822a7; shared with IP_GM_PlayerPosition, not generated) + a small wind RGB 9cc7094f part of 0d91554d (1 draw in 140840) = about 25 points upper bound; x about 0.5 for the bit-exact clip pass rate of rows whose VS pair is only proven textually equal (the audited wind RGB pair was 100% live) and the bush instance 977 (16% alone) in or out of view"
+  },
+  "gi_trace_ms": {
+   "predicted": 1.0,
+   "range": [0.2, 2.5],
+   "basis": "per-hit work on newly qualified foliage hits, as IP grass (+1.9 ms for its rows at camp, hm-source-trim): scaled by the predicted share"
+  }
+ },
+ "hgn2-generated-inn-fg2": {
+  "shot-on": {
+   "predicted": null,
+   "basis": "same mechanism, fewer rows: null"
+  },
+  "qualified_share_points": {
+   "predicted": 1.5,
+   "range": [0.3, 4.0],
+   "basis": "inn trace 084429: the generated pool pairs 651863a6 (7) + b0ecc292 (2) of the 219 'other pair' pool draws (hmm2 [hit material pool] line) x 44% 'pool without row' lookups (inn pack 013914-3) = about 1.8 points; IP_AlphaTest and the bushes block 0.0% of the inn pack's lookups (its 0de1b186/641822a7 draws are mostly the opaque IP_Base_VT, whose depth pass has no alpha record to pair with). The inn's 30.1% will not move much: its blockers are the pool pairs without a recipe (3b346b42 HLOD two-sided, ColorVar, SSS) the generator rejects"
+  },
+  "gi_trace_ms": {
+   "predicted": 0.1,
+   "range": [0.0, 0.5],
+   "basis": "few new rows"
+  }
+ }
+}

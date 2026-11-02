@@ -1670,7 +1670,7 @@ bool geo_patch_shader(const VkShaderModuleCreateInfo* ci, std::vector<uint32_t>&
                                                 t_last_hash==0xc32ce535d664fbbcull || native_hit::instanced_patch_vs(t_last_hash));
   bool ok = patch_vs(ci->pCode, ci->codeSize / 4, out, g_stride, &t_last_uv, &t_last_hair_outputs,vt_frame,&t_last_vt_outputs,g_tileset_capture && native_tileset_coverage::vertex(t_last_hash),&t_last_tileset_outputs,
                      g_tileset_capture && native_hit::enabled() && t_last_hash==native_hit::tileset_deferred_vs,
-                     detail_vs?4u:native_hit::instanced::frame_location(t_last_hash));
+                     detail_vs?4u:native_hit::instanced_frame_location(t_last_hash));
   if (!ok) return false;
   // The instancing analysis runs on the game's original SPIR-V.
   if (rt_enabled()) {
