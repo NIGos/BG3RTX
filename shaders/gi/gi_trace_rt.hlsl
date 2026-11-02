@@ -206,12 +206,19 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float RB = max(pc.gi_rt_radius, 0.01);      // the base radius (gi_rt_radius)
 #endif
 #elif defined(RT_SPEC_GI_FAR)
-  const float R = kSpecGiFar != 0u ? max(pc.radius, pc.gi_rt_radius) : pc.gi_rt_radius;
+  float R;
+  float RB = 0.0;
+  // Keep far-only arithmetic inside the specialization branch so it disappears when frozen off.
+  if (kSpecGiFar != 0u) {
+    R = max(pc.radius, pc.gi_rt_radius);
 #if SHARC_QUERY_PASS
-  const float RB = max(shc.gi_base_radius, 0.01);
+    RB = max(shc.gi_base_radius, 0.01);
 #else
-  const float RB = max(pc.gi_rt_radius, 0.01);
+    RB = max(pc.gi_rt_radius, 0.01);
 #endif
+  } else {
+    R = pc.gi_rt_radius;
+  }
 #else
   const float R = pc.gi_rt_radius;
 #endif
@@ -255,10 +262,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
       if (t >= 0.0 || aborted) far_stat(6u, fr.w0);   // the old rule occludes every hit with w0
     }
 #elif defined(RT_SPEC_GI_FAR)
-    const GiFarRay fr = gi_far_ray(t, aborted, R, RB);
-    if (kSpecGiFar != 0u && pc.rt_stats != 0u) {
-      g_far_stat[0] += 1u;
-      if (t >= 0.0 || aborted) far_stat(6u, fr.w0);
+    GiFarRay fr = (GiFarRay)0;
+    if (kSpecGiFar != 0u) {
+      fr = gi_far_ray(t, aborted, R, RB);
+      if (pc.rt_stats != 0u) {
+        g_far_stat[0] += 1u;
+        if (t >= 0.0 || aborted) far_stat(6u, fr.w0);
+      }
     }
 #endif
     float2 quv;
@@ -395,8 +405,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
         const uint far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
         if(far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
 #elif defined(RT_SPEC_GI_FAR)
-        const uint far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
-        if(kSpecGiFar!=0u && far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
+        uint far_local=kGiFarLocalUnknown;
+        if(kSpecGiFar!=0u){
+          far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
+          if(far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
+        }
 #endif
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
 #if RT_GI_FAR

@@ -1,3 +1,11 @@
+## S2b far-only guard fix (branch variant-migration, sampled offline checks passed, 2026-11-02)
+- Guard the far radius/base radius, per-ray weights and local classification with constant 1007; far-on math unchanged.
+- Before: gifar 0/20 (value 0 body differences). After: gifar 20/20, hitinst 31/31, cascade 52/52 with --sample 16;
+  controls differ by 58,222 / 42,254 / 1 lines respectively. Checker unchanged. Intermediate fix reversed far-on
+  radius loads (4 lines per module); moving the non-far initialization into else restored exact equivalence.
+- --pp-diff main: 274 requests, 86 identical inputs + 188 pp-same; 0 compiles needed with preprocessed keys.
+- No build needed (shader-only), no game launched, no commit. Variants request delta for this fix: 0.
+
 ## Variant migration G, S2a-S2c, S3a host (branch variant-migration, verification pending, 2026-11-02)
 - Verified (sampled, before PAUSE): G 87df2ce (guards as constants 1001/1002: --key guards 34/34, S8 replay
   bit-identical), S2a a332afc (wind RGB / IP grass 1004/1005: --key hitfam 27/27). 1591 -> 895 variants.
