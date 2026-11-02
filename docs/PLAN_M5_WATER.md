@@ -268,6 +268,16 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   `compose GPU 0\.[0-4]\d\d ms median`: the 0.5 ms bound is 4 times M5.2's 0.12 ms for the same rays over
   two full-screen passes. Frame time ON minus OFF should fall from 2.45 ms to within the OFF spread.
 
+M5.3b screen-edge fade (`rt_water_rf_edge=0`, live, WATER_RF_EDGE on every compose variant, 2026-11-02): the
+compose's choice is binary per pixel and per frame (tier 1: C + A L - B, else C with the probe), with no temporal
+smoothing, and A L matches B only in its weight E, not in radiance (bins 29-31 log L / probe). Under a camera turn the
+hidden / same-surface test is fixed to the view origin, but the screen border moves: hits leaving the screen switch
+the pixel to the probe in one frame (S8 harbour flicker). The key applies D-RF's own fade
+(gi/rt_reflections.hlsl, `rf_edge` 0.05 uv): C' = C + w (A L - B), w = saturate(min(quv, 1 - quv) / rf_edge). Both
+terms carry E, so w blends two estimates of one reflection (no double count). Key off: every request byte-identical.
+Live test: tools/live_batches/water_flicker (wf2-s8-fg2, NOT run). Open: the hidden-tier switch (tier 2) is still
+hard and moves under BG3's orbit camera (the eye moves, not only the view direction).
+
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 
 #### Design (2026-11-01, from the three S8/S1 FS dumps, spirv-dis --raw-id)
