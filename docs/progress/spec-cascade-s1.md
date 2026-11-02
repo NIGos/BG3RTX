@@ -12,7 +12,7 @@
 - Gate `py -3 tools/spec_cascade_check.py [--all] [--replay <pack>]`: each spec module specialized to 0 / 1, frozen,
   folded and -O must be the same program as the old plain / RT_CASCADE_MASKS module (canonical compare; a control
   pair must differ; blocks compared in reference order, DXC laid out one rt_shadow if/else the other way round).
-  Result: 60/60 (each of the 36 files once + 24 random, seed 1): value 0 = the plain program, value 1 = the
+  Result: 60/60 (each of the 36 files once + 24 random, seed 1) and 76/76 (+ 40 random, seed 2): value 0 = the plain program, value 1 = the
   RT_CASCADE_MASKS one; control differs. S8 replay (gi_hit_direct): giRaw, depth, rtStats bit-identical for both.
 - Next (S1 done): once qualified, make the spec build the only cascade path and drop the 1348 old cascade requests
   plus their 1348 plain twins: 4225 -> ~1530 variants (2962 today -> ~1620 modules).
