@@ -358,7 +358,7 @@ static Map on_map(const Knob& k, int c) {
 }
 
 // Keys every GUI entry wrote before the 2026-11-01 rationalization (docs/GUI_AUDIT_20261101.md):
-// each must still be written by a knob or be listed in kIniOnlyKeys (no orphan key).
+// each must still be written by a knob or be listed in kAutomaticKeys (no orphan key).
 static const char* const kOldKnobKeys[] = {
     "rt_cascade_casters", "ls_box", "ls_k", "ls_rest_samples", "rt_native_scalp", "rt_alpha_spill",
     "rt_native_tileset", "rt_native_hair", "rt_hair_physical_origin", "rt_hit_material",
@@ -495,17 +495,12 @@ static void test_gui_levels() {
   CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
-  // No orphan key: every key the old entries wrote is still written by a knob or is ini-only.
+  // No orphan key: every key the old entries wrote is still written by a knob or is automatic.
   for (const char* key : kOldKnobKeys) {
-    bool ini_only = false;
-    for (const char* k : kIniOnlyKeys) ini_only = ini_only || std::string(k) == key;
-    for (const char* k : kAutomaticKeys) ini_only = ini_only || std::string(k) == key;
-    if (!is_knob_key(key) && !ini_only) CHECK_EQ(std::string("orphan key ") + key, "");
+    bool automatic = false;
+    for (const char* k : kAutomaticKeys) automatic = automatic || std::string(k) == key;
+    if (!is_knob_key(key) && !automatic) CHECK_EQ(std::string("orphan key ") + key, "");
     CHECK(code_default(key) != nullptr);
-  }
-  for (const char* k : kIniOnlyKeys) {
-    CHECK(!is_knob_key(k));
-    CHECK_EQ(code_default(k), "0");
   }
   CHECK(find_knob("exp_fg_letterbox") == nullptr);
   // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
@@ -515,8 +510,8 @@ static void test_gui_levels() {
     for (int p = 0; p < kPresetCount; ++p) { Map m; for (auto& kv : expand_preset(p)) m[kv.first] = kv.second; CHECK(m.count(k) == 0); }   // no preset writes it
     CHECK(!key_change_needs_restart(k, "1", "0"));
   }
-  // A hand-set ini-only key survives a save.
-  CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=1\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "1");
+  // A hand-set automatic key (A/B off) survives a save.
+  CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=0\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "0");
 
   // Old knob ids resolve to the new knob, and their "On" key alone reads back as the alias level.
   for (const auto& o : kOldOn) {

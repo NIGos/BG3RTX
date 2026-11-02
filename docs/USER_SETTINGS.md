@@ -90,8 +90,9 @@ and `rt_emissive=1`. Far-field = `gi_far=1`, `gi_far_m=6`. RT water Reflections 
 **Developer only** (shown when `dev=1`, the developer `bg3rtx.ini`): Experimental lighting
 reference (`rt_hit_reference`), Local light sampling exact-k (`ls_k`), Current cascade sun shadows
 (`rt_sun_cascade_current`), and Emission at ray hits "All hits" (`rt_hit_emission=2`).
-**No entry:** `fg_letterbox` (frame generation in a swapchain larger than the game's output) stays
-an ini key you can add by hand; buffer reuse and the foliage rows come with Hidden-surface shading;
+**No entry (automatic):** `fg_letterbox=1` (frame generation in a swapchain larger than the game's
+output; equal sizes are unchanged), the hit-material buffer reuse, unlocked captures and lean hooks
+(default 1, keys kept for A/B), `rt_scene_wait=1`; the foliage rows come with Hidden-surface shading;
 capture buffer sizes follow the scene.
 
 - **Dependencies.** Every ray-traced effect needs "Ray-traced geometry", and reflections also
