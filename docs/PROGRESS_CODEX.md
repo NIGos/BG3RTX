@@ -1,4 +1,4 @@
-# BG3RTX progress - 2026-11-02 morning (main 2e5b4c2, ABI 25)
+# BG3RTX progress - 2026-11-02 morning (main fe8f75d, ABI 25)
 
 One current summary per area, no history. Everything older, verbatim: [archive/PROGRESS_20261102_morning.md](archive/PROGRESS_20261102_morning.md)
 (the 19 folded fragments of 11-01 / 11-02 and the summary before this rewrite), [archive/PROGRESS_20261101_evening.md](archive/PROGRESS_20261101_evening.md),
@@ -7,7 +7,7 @@ One current summary per area, no history. Everything older, verbatim: [archive/P
 Branches write `docs/progress/<branch>.md`; `py -3 scripts/fold_progress.py` folds them here. Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
 Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 
-## Report 2026-11-02 04:10 (main 2e5b4c2)
+## Report 2026-11-02 04:10 (main fe8f75d)
 - Done: stage 1 live (smoke_ultra valid with every Ultra key; scene wait 0 timeouts in gated windows; water 120/120 composed; shader cache 2nd launch 44 read 0 compiled; FG letterbox 2560x1440 in 3840x1600 swapchain FG 2.00 -> fg_letterbox automatic). Stage 2 GUI: Experimental 28 -> 5 entries, levels for water/materials.
 - Fixed: traced frames skipped the hit-material capture (layer/geocapture.cpp), so all earlier traced energies of hit features measured them off; re-measured after the fix.
 - Ultra now: + Bounce, Emission at ray hits (Hidden hits), Far-field sun bounce 6 m (gi_far: S8 -2.01% vs predicted -2.0%, camp -2.42%; +3.2-3.7 ms GI trace). smoke_ultra with all: valid, median frame 16.65 ms (was 13.75).
@@ -40,7 +40,7 @@ Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 - Not in Ultra: Box light shadows (question), + Reflections (rf_hit_shade), Native coverage, hair origins, OMM, cutout spill.
 - smoke_ultra with everything above: valid in every window, median frame 16.65 ms (13.75 before gi_far and emission).
 - Automatic (default 1, no GUI entry, keys kept for A/B): rt_hit_material_recycle, _capture_unlocked, _lean_hooks,
-  rt_scene_wait, fg_letterbox.
+  rt_scene_wait, fg_letterbox, rt_hit_material_pool_alpha.
 
 ## Stage 1: live check of the bugfix round (done)
 
@@ -78,8 +78,8 @@ Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
   gi_hit_* / gi_far / rf_hit_shade / hit emission measured the key off. All quoted energies are after the fix.
 - S6 diagnostic: GI hit shading adds light (+1.6% pack invariant), no darkening. The earlier S6 darkening was the
   animated lava (54.5% of luminance) and shots right after a DXC compile.
-- `rt_hit_material_pool_alpha` (off, live-tested S6): basis ranges and rows for alpha-tested pool meshes (row slot in
-  InstInfo meta bits 16..31). Before: S6 pool alpha without a row 39.0%. Key off: S8 / S6 packs bit-identical.
+- `rt_hit_material_pool_alpha` (default 1, automatic with rt_hit_material): rows for alpha-tested pool meshes.
+  m4s6 035213: S6 qualified 14.8% -> 52.1% (predicted +23 points), energy +1.06% / -0.38% (predicted +0.57%, band 2.84%), +0.46 ms GI trace.
 - `rt_hit_material_mask` (off, ini only): Base_MSK_VT rows. Live `m4_hit_mask` (S8 + inn) READY_FOR_LIVE, predicted S8 +1.1 points.
 - `rf_hit_shade` (+ Reflections, Experimental): bias above the spread, +1.4 to +1.8 ms. `rf_hit_gi` adds the GI term
   and the game's BRDF at hits (hd_game_scatter, box_light_test section 8). Expected S8 0.925 -> 1.0-1.03,
