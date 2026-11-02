@@ -16,6 +16,7 @@
 //       add one-bounce radiance into the diffuse buffer before SSS and fog,
 //       and keep the lit radiance for next frame's ray hits.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1013,7 +1014,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const VkSpecializationInfo spec_info{1, &spec_entry, sizeof(uint32_t), &spec_value};
   if (spec_cascade) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;
+  const auto t_pipe = std::chrono::steady_clock::now();   // driver compile on this thread (logged below)
   VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  const double pipe_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
@@ -1027,8 +1030,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   p.variant_files[variant] = selected;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu%s", selected.c_str(), (unsigned long long)blob.generation,
-            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "");
+  host->log("gi: %s generation %llu%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)blob.generation,
+            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "", pipe_ms);
   return true;
 }
 

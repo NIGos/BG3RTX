@@ -14,5 +14,9 @@
   pair must differ; blocks compared in reference order, DXC laid out one rt_shadow if/else the other way round).
   Result: 60/60 (each of the 36 files once + 24 random, seed 1) and 76/76 (+ 40 random, seed 2): value 0 = the plain program, value 1 = the
   RT_CASCADE_MASKS one; control differs. S8 replay (gi_hit_direct): giRaw, depth, rtStats bit-identical for both.
+- Live job (READY_FOR_LIVE, not authorized): tools/live_batches/spec_cascade (scc1, S8, one launch, 17 phases, ~5.7 min,
+  370 MB; dryrun passes). Gates: no gi/ DXC compile when rt_cascade_casters toggles with the key on, pipeline
+  creation logged ("gi: ... pipeline N ms", new in refresh), energy and gi/rf/ls/rt GPU ms of key-on vs off on both
+  sides for casters on and off; predicted.json: every delta 0 within the off-a/off-b spread.
 - Next (S1 done): once qualified, make the spec build the only cascade path and drop the 1348 old cascade requests
   plus their 1348 plain twins: 4225 -> ~1530 variants (2962 today -> ~1620 modules).
