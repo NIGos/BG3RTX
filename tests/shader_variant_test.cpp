@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 8192; ++m)   // every flag up to kSpecCascade
-      if ((m & a) == m && m) {
+    for (unsigned m = a; m; m = (m - 1) & a)   // every non-empty subset of the allowed flags
+      {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);
       }
