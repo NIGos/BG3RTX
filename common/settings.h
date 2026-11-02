@@ -252,7 +252,7 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}},
 
   // M4 hidden-surface bundle (docs/PLAN_M4_REFLECTIONS_GI.md "Promotion", m4_promotion without rf_hit_shade): Advanced,
-  // before the Experimental section; "+ Bounce" and "Hidden hits" in Ultra, Off elsewhere.
+  // before the Experimental section; "+ Bounce" in Ultra, Off elsewhere (Emission at ray hits stays experimental).
   {"exp_hidden_surface", "Hidden-surface shading",
    "Gives ray hits on surfaces the camera does not see their verified native material (static virtual-texture "
    "views, reflectance, tangent frame), including the wind-animated and two-sided foliage rows, with the capture "
@@ -278,19 +278,19 @@ inline constexpr Knob kKnobs[] = {
    {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"},
     {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",2}}},
 
+  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
+  // became these 8, 6 since RT water and Hidden-surface shading left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_hit_emission", "Emission at ray hits",
    "Bounce and reflection rays that hit a glowing surface (lava, braziers, glowing runes) on a hidden surface add "
    "that surface's emitted light, from the captured emissive geometry (this setting turns the emissive capture, "
    "rt_emissive, on with it). It shows where Hidden-surface shading + Bounce or + Reflections shades the hit. "
-   "Hidden hits in Ultra (M4 promotion).",
-   Kind::Choice, Apply::Live, "live; first enable compiles shaders", true,
+   "Experimental: Hidden hits waits for an S6 rerun with its prediction committed (m4_promotion 012015: +2.3%).",
+   Kind::Choice, Apply::Live, "live; first enable compiles shaders", false,
    {{"off", "Off", 0, {{"rt_hit_emission", "0"}, {"rt_emissive", "0"}}, {}},
     {"hidden", "Hidden hits", kCapRayQuery, {{"rt_hit_emission", "1"}, {"rt_emissive", "1"}}, {{"exp_hidden_surface", 1}}, {"rt_hit_emission"}},
     {"all", "All hits (developer)", kCapRayQuery, {{"rt_hit_emission", "2"}, {"rt_emissive", "1"}}, {{"exp_hidden_surface", 1}}, {"rt_hit_emission"}, true}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"}}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}},
 
-  // Experimental: features being tested, off in every preset (docs/GUI_AUDIT_20261101.md: 28 entries
-  // became these 8, 5 since RT water and the M4 bundle left). Each level writes every key it covers, so a file reads back as one level.
   {"exp_gi_far", "Far-field sun bounce",
    "Lengthens the bounce rays from 1 m to 6 m. Surfaces up to that distance that are on screen, or hidden with a "
    "verified native material lit by the sun, replace the game's ambient light for their ray. Other surfaces beyond "
