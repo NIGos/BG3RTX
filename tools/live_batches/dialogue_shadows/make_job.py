@@ -51,6 +51,11 @@ def step(label, seconds, trace=False, **keys):
 
 SHOT = 8   # one PNG trace at 5 s; 8 s holds 3-4 lines of 60 frames at the unfocused 30 fps floor
 plan = [
+    # Variant warm-up: the hair startup makes every pipeline a new variant; a first compile blocks the render thread
+    # 7-17 s (ds1 2026-11-02 10:03, 53 s without a present). Request the toggle-only variants (casters off, primary
+    # check, debug view, stats) here, before any judged window, so they come from the shader cache later.
+    step("diag-warm-a", 25, qa_exposure_hold="0", rt_cascade_casters="0", rt_stats="1", rt_primary_check="1", rt_debug="2"),
+    step("diag-warm-b", 15, qa_exposure_hold="0", rt_stats="1", rt_primary_check="1", ls_stats="1"),
     step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles; the hold latches after it
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
@@ -139,15 +144,15 @@ def job(name, save, first, hair):
               "ls box: requested but native set/layout or pipeline unavailable",
               r"\[geo\] rt_native_hair rejected", r"\[alpha hair\] rt_native_hair requires restart",
               r"\[hair origin\] enable rejected"]
-    # The user is at the PC: the game never takes focus (PostMessage input, FG kept; AGENTS.md "Lean live tests").
-    runner = [r"\[window-mode\] visible_unfocused:.*preserve_fg=True"]
+    # Foreground (user 2026-11-02 10:xx: the PC is free). The ds1 stall was a shader compile, not focus.
+    runner = [r"\[motion-plan\] pointer centred in owned foreground game"]
     runner += [rf"\[motion-trace\] phase={labels.index(l)} label={l} repeat=0" for l in traced]
     runner += [rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
     j = {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 250, "repeat": 1,
-        "live_batch": "dialogue-shadows", "window_mode": "visible_unfocused_fg",
+        "live_batch": "dialogue-shadows",
         "set": f"{BASE_SET},{USER},{start}",
-        "args": ["-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/{PLAN}"],
+        "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/{PLAN}"],
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "rt applied", r"\[rt\] scene wait", r"\[rt\] scene build GPU",
                      r"\[cpu\] capture hooks", r"\[trace\]", r"\[shaders\].*\?", r"\[crash\]", "FAILED", "ls box",
