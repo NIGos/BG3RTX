@@ -87,7 +87,7 @@ bool evacuation(const Chunks& chunks, size_t source, const std::vector<uint64_t>
   for (size_t item : items) {
     std::vector<size_t> order;
     for (size_t i = 0; i < ranges.size(); ++i)
-      if (i != source && ranges[i].used && ranges[i].cap &&
+      if (i != source && ranges[i].arena == 0 && ranges[i].used && ranges[i].cap &&
           double(ranges[i].used) / double(ranges[i].cap) >=
               double(ranges[source].used) / double(ranges[source].cap)) order.push_back(i);
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {

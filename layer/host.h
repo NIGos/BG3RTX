@@ -1014,7 +1014,9 @@ void fault_instance_destroyed(VkInstance inst);
 // Consumer and yield ids are vram_guard::Consumer / vram_guard::Yield (ints here, to keep host.h light).
 // vram_allow: true when the key is off or no budget is known; false refuses the grow (logged once per
 // window with `what`); over_cap: the caller's cap check failed, refused and counted the same way.
-// vram_cap: the consumer's cap scaled by the device budget, `fallback` when off.
+// Required RT capture checks the real driver budget (full replacement + shared grants),
+// bypassing LOW/cache caps; all refusals still log. vram_cap: budget-scaled cache cap,
+// layout hard cap for required RT capture, `fallback` when off.
 // vram_take_ask: bytes this yielder should free now (0 when not low), cleared by the call.
 bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap = false);
 uint64_t vram_cap(int consumer, uint64_t fallback);

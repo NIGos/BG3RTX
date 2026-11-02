@@ -10,6 +10,50 @@ static void check(bool ok, int line) {
 }
 #define CHECK(x) check((x), __LINE__)
 struct Chunk { ChunkRanges ra; };
+struct MotionResult { uint64_t reserved, occupied, live, peak; };
+// Increasing camera-turn rebuild sizes leave successively larger holes. A tiny
+// cached compacted mesh placed in a tail outlives the rebuild and pins 64 MB.
+static MotionResult motion(bool separate) {
+  constexpr uint64_t MB = 1ull << 20, chunk_size = 64 * MB;
+  struct Pending { unsigned frame; int chunk; uint64_t off, size; };
+  std::vector<Chunk> chunks;
+  std::vector<Pending> pending;
+  MotionResult result{};
+  for (unsigned frame = 0; frame < 96; ++frame) {
+    for (auto it = pending.begin(); it != pending.end();) {
+      if (!retired(it->frame, frame, frame, frame)) { ++it;continue; }
+      chunks[it->chunk].ra.release(it->off, it->size);
+      it = pending.erase(it);
+    }
+    for (auto& c : chunks) if (c.ra.reclaimable()) c.ra = {};
+    auto allocate = [&](uint64_t size, uint32_t arena) {
+      uint64_t off = 0;
+      int ci = allocate_fullest(chunks, size, 256, &off, -1, separate ? arena : UINT32_MAX);
+      if (ci < 0) {
+        Chunk c;c.ra.init(chunk_size);c.ra.arena = arena;
+        CHECK(c.ra.alloc(size, 256, &off));
+        chunks.push_back(c);ci = int(chunks.size() - 1);
+      }
+      return Pending{frame, ci, off, size};
+    };
+    const auto transient = allocate(32 * MB + frame * MB / 4, 1);
+    // Old range still occupies bytes for six presents AND GPU/scene retirement.
+    chunks[transient.chunk].ra.mark_pending(transient.size);
+    pending.push_back(transient);
+    allocate(MB / 4, 0); // persistent compacted destination, never released in turn
+    result.reserved = result.occupied = result.live = 0;
+    for (const auto& c : chunks) {
+      result.reserved += c.ra.cap;result.occupied += c.ra.used;result.live += c.ra.live;
+    }
+    result.peak = (std::max)(result.peak, result.reserved);
+    if (separate) {
+      // At most six in-flight rebuild chunks and one ordinary cache chunk.
+      CHECK(result.reserved <= 7 * chunk_size);
+      CHECK(result.reserved >= result.occupied && result.occupied >= result.live);
+    }
+  }
+  return result;
+}
 int main() {
   uint64_t off = 0;
   // Live ownership ends immediately, but occupied bytes survive all pending
@@ -98,5 +142,20 @@ int main() {
   CHECK(pool.free.size() == 1 && pool.free[0] == 1024);
   pool.grow(2048);
   CHECK(pool.cap == 2048 && !pool.used && pool.free.size() == 1 && pool.free[0] == 2048);
+  // Arena filtering cannot borrow a pending range or a persistent owner's hole.
+  chunks = std::vector<Chunk>(2);
+  chunks[0].ra.init(1024);chunks[1].ra.init(1024);chunks[1].ra.arena = 1;
+  CHECK(allocate_fullest(chunks, 256, 256, &off, -1, 1) == 1);
+  CHECK(allocate_fullest(chunks, 256, 256, &off) == 0);
+  CHECK(allocate_fullest(chunks, 256, 256, &off, 1, 1) == -1);
+  CHECK(allocate_fullest(chunks, 256, 256, &off, -1, UINT32_MAX) == 0);
+  const auto mixed = motion(false), separated = motion(true);
+  std::printf("Motion reproduction: mixed/separated reserve %.1f/%.1f MB, occupied %.1f MB, live %.1f MB\n",
+              double(mixed.reserved) / (1ull << 20), double(separated.reserved) / (1ull << 20),
+              double(separated.occupied) / (1ull << 20), double(separated.live) / (1ull << 20));
+  std::fflush(stdout);
+  CHECK(mixed.reserved > separated.reserved);
+  CHECK(mixed.occupied == separated.occupied && mixed.live == separated.live);
+  CHECK(separated.peak == 448 * (1ull << 20));
   std::printf("AS chunk allocator: %u checks passed\n", checks);
 }

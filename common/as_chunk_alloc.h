@@ -60,6 +60,7 @@ struct RangeAlloc {
 // used includes pending GPU retirement; live excludes it. Kept diagnostic AS
 // handles pin their backing chunk even if rt_as_keep is subsequently disabled.
 struct ChunkRanges : RangeAlloc {
+  uint32_t arena = 0; // cached mesh, per-draw, or cascade lifetime; never move live ranges
   uint64_t live = 0;
   size_t kept = 0;
   bool alloc(uint64_t size, uint64_t align, uint64_t* off) {
@@ -86,11 +87,14 @@ inline bool retired(uint64_t frame, uint64_t now, uint64_t gpu_done, uint64_t ol
 // and still try less-full chunks when alignment/fragmentation prevents a fit.
 // Pending ranges count as occupied: they are not allocatable yet.
 template<class Chunks>
-int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* off, int excluded = -1) {
+int allocate_fullest(Chunks& chunks, uint64_t size, uint64_t align, uint64_t* off, int excluded = -1,
+                     uint32_t arena = 0) {
   std::vector<size_t> order;
   order.reserve(chunks.size());
   for (size_t i = 0; i < chunks.size(); ++i)
-    if (int(i) != excluded && chunks[i].ra.cap && chunks[i].ra.cap - chunks[i].ra.used >= size) order.push_back(i);
+    if (int(i) != excluded && chunks[i].ra.cap &&
+        (arena == UINT32_MAX || chunks[i].ra.arena == arena) &&
+        chunks[i].ra.cap - chunks[i].ra.used >= size) order.push_back(i);
   std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
     const double x = double(chunks[a].ra.used) / double(chunks[a].ra.cap);
     const double y = double(chunks[b].ra.used) / double(chunks[b].ra.cap);

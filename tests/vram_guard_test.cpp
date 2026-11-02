@@ -19,6 +19,52 @@ int main() {
   refused.note(976*mib);refused.note(944*mib);
   CHECK(refused.count==27 && refused.peak==976*mib);
   CHECK(kRtCapture!=kCascade);
+  // Required opaque capture uses real headroom, never simulated shares or LOW
+  // hysteresis. A replacement reserves its full size, not just the growth delta.
+  {
+    Guard g;
+    g.sample(17000 * mib, 15640 * mib);
+    CHECK(g.low && !g.allow(64 * mib));
+    CHECK(g.allow_capture(1024 * mib, 31419 * mib));
+    CHECK(g.granted == 1024 * mib);
+    CHECK(!g.allow_capture(13400 * mib, 31419 * mib));
+    CHECK(g.granted == 1024 * mib);  // refusals reserve nothing
+    CHECK(g.allow_capture((31419 - 17000 - 1024) * mib, 31419 * mib));
+    CHECK(!g.allow_capture(1, 31419 * mib));
+    CHECK(cap(kRtCapture, 11730 * mib) == kCapRef[kRtCapture].ref);
+    g.sample(11900 * mib, 12000 * mib);
+    CHECK(g.low); // within real budget, but below the cache-trimming slack
+    CHECK(g.allow_capture(100 * mib, 12000 * mib));
+    CHECK(!g.allow_capture(1, 12000 * mib));
+    g.sample(12001 * mib, 12000 * mib);
+    CHECK(!g.allow_capture(1, 12000 * mib));
+  }
+  // Normal and required consumers share outstanding reservations in both orders.
+  {
+    Guard g;
+    g.sample(1000 * mib, 12000 * mib);
+    CHECK(g.allow(2000 * mib));
+    CHECK(g.allow_capture(8000 * mib, 12000 * mib));
+    CHECK(!g.allow(701 * mib)); // 300 MB slack after all shared grants
+    CHECK(g.allow(700 * mib));
+    CHECK(!g.allow_capture(301 * mib, 12000 * mib));
+    CHECK(g.allow_capture(300 * mib, 12000 * mib));
+    CHECK(!g.allow(1));
+    CHECK(!g.allow_capture(1, 12000 * mib));
+    g.sample(1000 * mib, 12000 * mib);
+    CHECK(g.granted == 0 && g.allow_capture(1000 * mib, 12000 * mib));
+    CHECK(g.allow(1000 * mib));
+  }
+  {
+    Guard g;
+    CHECK(g.allow_capture(UINT64_MAX, 0)); // no driver extension/sample: unchanged
+    g.sample(1, UINT64_MAX);
+    CHECK(g.allow_capture(UINT64_MAX - 1, UINT64_MAX));
+    CHECK(!g.allow_capture(1, UINT64_MAX));
+    CHECK(!g.allow(1)); // ordinary arithmetic must not wrap either
+    g.sample(0, UINT64_MAX);
+    CHECK(!g.allow(UINT64_MAX));
+  }
   // ---- headroom math ----
   // Slack: 2.5% of the budget (the evidence's 789 MB drop of 31419 MB), or a larger observed drop.
   CHECK(slack(31419 * mib, 0) == 31419 * mib / 1000 * 25);

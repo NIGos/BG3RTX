@@ -1,42 +1,49 @@
-# vram_guard: vg2 iteration 3 (prepared, not queued)
+# vram_guard: vg3 iteration 4 (prepared, not queued)
 
 One launch at Water Queens House, custom Ultra + FG 2, visible_unfocused_fg.
-Simulated budget: 15640 MiB. ON enables guard, compact and elastic; OFF and
-restore disable all three. Layer rebuild and game restart required by the owner.
+The driver supplies the real VRAM budget. `rt_vram_guard_budget_mb=0` explicitly
+disables any stale inherited INI simulation; no positive override is permitted.
+ON enables guard, compact and elastic; OFF/restore disable all three. Keys remain
+experimental and off by default. A layer rebuild and restart are required.
 This preparation does not authorize a live run.
 
-Edit `make_job.py`, then regenerate jobs/plans. The unchanged plan has 14 phases,
-206 s plus load, three PNG traces, about 190 MB. It includes ON view/turns,
-static OFF/ON/OFF energy shots, OFF turns, 25 s recovery settling and 20 s
-measured recovery. Jobs stay here, outside watched pending inboxes.
+`predicted.json` was updated before vg3 job/plan generation. Generate with
+`python tools/live_batches/vram_guard/make_job.py`. The active job is vg3 only;
+vg2's old job and generator are retained in `archive/` for reference. The old
+plan remains for historical analysis. Do not run the archived generator.
 
-Memory snapshots use event gates with 1 s settling. Every measured ON snapshot
-must be within budget and include reserve accounting; recovery needs at least
-three snapshots with a published repack and zero pool copy/retirement overlap.
-BLAS and scene-wait summaries retain complete-window semantics. No Streamline
->100 ms or fence timeout may occur in measured ON windows.
+The plan has 18 phases, 256 s plus load, three PNG traces and about 190 MB.
+After warmup and the same 10-notch camera lowering as vg2, it performs identical
+20 s right/left turn pairs at 60 pixels/s in OFF-a, ON, OFF-b order. Each pair
+has a 10 s static settling window. Opposite turns return the camera orientation.
+Static energy OFF/ON/OFF shots follow, then 25 s settling and 20 s measured ON
+recovery. Exposure stays held from before the first turn through recovery.
+Restore releases exposure and disables the bundle.
 
-Required capture events match production: `pending producer boundary` for a
-target and `detached slot` for replacement. A target alone cannot pass.
+The mandatory `post_gate` runs `gate.py`. Per direction and metric, it compares
+turn-wide peak and mean of complete 120-frame capture summaries. Intervals
+crossing settings/phase boundaries are discarded. Counts must match and be at
+least two per window. Missing or unequal evidence fails. For each statistic,
+the tolerance is absolute OFF-a minus OFF-b plus 0.02 draws/frame (two rounded
+hundredths). ON must stay below the larger OFF statistic plus that tolerance.
+Opaque drops and alpha made opaque are both gated. Peak catches a bad summary;
+mean catches more drops below an unchanged peak. No ordinal camera-angle
+alignment is claimed: log emission cadence can shift within a turn. Input paths
+and direction match; geometry/animation identity still needs inspection.
 
-The 21:38 vg2 log disproved the old pool eligibility prediction: 1050 / 2047 MiB
-never passes quarter-full. Iteration 3 keeps 25% headroom and requires 25% savings,
-retaining the peak target for 254 frames. Expected recovery pool: about 1312.5 MiB,
-about 734.5 MiB saved after retirement. Cascade recovery was already 3 x 352 MiB.
-Its final return to 3 x 544 MiB followed the restore phase disabling elastic;
-that key-off restoration is expected and outside the ON gates.
+Every ON memory snapshot (periodic, refusal, state change) after the derived 1 s
+in-flight setting transition must be within budget with consumer accounting. The
+post report `<log>.vg3.json` retains ON consumer snapshots, BLAS reserved/live/
+pending lines, comparison series/tolerances, float energy and failures. Repack
+or refusal is not mandatory when real headroom never triggers one. Existing
+logs retain refused growth attempts. Report GPU ms from existing RT/GI cost
+lines, not unfocused frame time; the bundle has no dedicated GPU timer.
 
-Capture sizing now retains a rolling 24-sample peak across replacements, shrinks
-only with another 25% capacity step free, and grows for actual demand exceeding
-capacity rather than reserve-only pressure. Refusal logs report attempt count
-and peak allocation: 25 retries of 960 MiB are not a 24000 MiB allocation.
-RT capture has its own accounting category. Growth still asks for the full
-replacement allocation because the old buffer remains alive.
+Float energy uses the existing production scene-colour reader (FS 5c3fdabc,
+slot 0 in dumps.json), with pre-exposure normalization. Require zero nonfinite
+scene pixels, exposure probes, and ON within +/-0.92% of mean OFF. The report
+also includes current OFF-OFF spread. PNG/bloom energy is never used.
 
-Predictions in `predicted.json` are unqualified. Read actual memory including
-retained buffers and report capture drops. Compare pre-post scene-colour float
-means from dumps.json: shot-on must match the OFF pair within 0.92% (2 x S8
-OFF-OFF sigma). GPU ms, energy and visual invariance need a later authorized run.
-
-Offline validation (fake queue only):
-`powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/vram_guard/dryrun.ps1`.
+Offline validation: `powershell -NoProfile -ExecutionPolicy Bypass -File
+tools/live_batches/vram_guard/dryrun.ps1 -Force`. Scratch must be outside every
+checkout. This tests wiring and failure propagation, not live quality.

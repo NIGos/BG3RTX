@@ -237,11 +237,15 @@ bool as_handle(VkDeviceSize size, int ci, VkDeviceSize off, AsAlloc& out) {
   out.addr = g_dd->vk.GetAccelerationStructureDeviceAddressKHR(g_dd->device, &ai);
   out.chunk = ci;out.off = off;out.size = size;return true;
 }
-bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr) {
+bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0) {
   out = AsAlloc{};
   size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
   VkDeviceSize off = 0;
-  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk);
+  // Small persistent compaction destinations must not pin holes left by large
+  // per-draw/cascade rebuilds. Keep their retirement/reuse domains separate.
+  // Key off retains the ordinary mixed allocator; ownership is recorded always.
+  const uint32_t allocation_arena = cfg_int("rt_vram_compact", 0) ? arena : UINT32_MAX;
+  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
   if (ci < 0) {
     VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
     if (guard_what && vram_guard_on() &&
@@ -252,6 +256,7 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
     if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
       return false;
     c.ra.init(cs);
+    c.ra.arena = arena;
     c.ra.alloc(size, kAsAlign, &off);
     // A retired empty slot (buf.b null, no range in it) is reused: chunk indices stay stable.
     for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
@@ -1673,7 +1678,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
-      if (!as_create(sz.accelerationStructureSize, s.as, "BLAS chunk for a per-draw BLAS (draw left out this frame)")) {
+      if (!as_create(sz.accelerationStructureSize, s.as, "BLAS chunk for a per-draw BLAS (draw left out this frame)", 1)) {
         if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
         g_dyn.erase(key);
@@ -1868,7 +1873,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if (g_casc_as.as) as_destroy(g_casc_as);
       const VkAccelerationStructureBuildSizesInfoKHR sz =
           blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
-      ok = as_create(sz.accelerationStructureSize, g_casc_as);
+      ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2);
       casc_scratch = sz.buildScratchSize;
       g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
       g_casc_sig = cap.cascade_sig;
@@ -2431,7 +2436,7 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd,uint32_t slot,const BvhSunBase& bas
     const auto& soup=cascades[layer].soup;
     bsz[layer]=blas_sizes(soup.tris,soup.stride,false,flags);
     scratch_bytes=(std::max)(scratch_bytes,bsz[layer].buildScratchSize);
-    if(!as_create(bsz[layer].accelerationStructureSize,s.cascade[layer])) return false;
+    if(!as_create(bsz[layer].accelerationStructureSize,s.cascade[layer],nullptr,2)) return false;
   }
   const VkDeviceSize instance_bytes=VkDeviceSize(count)*sizeof(VkAccelerationStructureInstanceKHR);
   if(!make_buf(s.instances,instance_bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|
