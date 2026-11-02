@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) and gi_far left; +exp_vt_alpha_masks 2026-11-02
+  CHECK(user_exp == 6);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) and gi_far left; +exp_vt_alpha_masks 2026-11-02; +exp_vram_guard
   CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));

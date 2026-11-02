@@ -1,0 +1,162 @@
+{
+ "name": "vg1-s8-low-long-view-fg2",
+ "save": "Water Queens House",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 516,
+ "repeat": 1,
+ "live_batch": "vram-guard",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,qa_exposure_hold=0",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/vram_guard/plans/vg1_s8.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[sl\\] warn",
+  "\\[pace\\]",
+  "\\[mem\\]",
+  "\\[vram\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "gi: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\]",
+  "\\[bvh\\] mesh (cache|pool)",
+  "\\[trace\\]",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[log\\]",
+  "\\[rrpost\\] exposure (held|hold|probe)"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2",
+  "\\[cfg\\] settings read",
+  "\\[vram\\] guard on \\(rt_vram_guard=1\\)",
+  "\\[vram\\] guard off \\(rt_vram_guard=0\\)",
+  "\\[mem\\] ours \\(window\\): BLAS chunks \\d+ MB reserved in \\d+ chunks",
+  "\\[mem\\] device-local VRAM of this process: used [1-9]\\d* MB, budget [1-9]\\d* MB",
+  "\\[bvh\\] mesh cache: \\d+ meshes",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
+ ],
+ "expect_every": [
+  {
+   "name": "VRAM: process usage within the driver's budget in every guard-on window",
+   "select": "\\[mem\\] ours \\(window\\):",
+   "match": "\\(within budget\\); guard (normal|LOW)",
+   "min": 1,
+   "windows": [
+    "view-on-a",
+    "turn-on-r",
+    "turn-on-l"
+   ]
+  },
+  {
+   "name": "VRAM: back within budget after the guard-off turn (recover-on, every complete line)",
+   "select": "\\[mem\\] ours \\(window\\):",
+   "match": "\\(within budget\\); guard (normal|LOW)",
+   "min": 3,
+   "windows": [
+    "recover-on"
+   ]
+  },
+  {
+   "name": "pacing: no Streamline 'Frame rate over 100 ms' in a guard-on window",
+   "select": "\\[sl\\] warn .*Frame rate over 100\\.00ms",
+   "match": "(?!)",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "view-on-a",
+    "turn-on-r",
+    "turn-on-l",
+    "recover-on"
+   ]
+  },
+  {
+   "name": "pacing: no Streamline fence wait timeout in a guard-on window",
+   "select": "\\[sl\\] warn .*waitCPUFence.*timed out",
+   "match": "(?!)",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "view-on-a",
+    "turn-on-r",
+    "turn-on-l",
+    "recover-on"
+   ]
+  },
+  {
+   "name": "scene wait: every window traces its own frame's scene (0 timeouts)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "view-on-a",
+    "turn-on-r",
+    "turn-on-l",
+    "settle-off",
+    "shot-off-a",
+    "shot-on",
+    "shot-off-b",
+    "turn-off-r",
+    "turn-off-l",
+    "recover-on"
+   ]
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "view-on-a",
+    "turn-on-r",
+    "turn-on-l",
+    "settle-off",
+    "shot-off-a",
+    "shot-on",
+    "shot-off-b",
+    "turn-off-r",
+    "turn-off-l",
+    "recover-on"
+   ]
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[log\\] reached \\d+ MB",
+  "\\[sl\\] .*eWarnOutOfVRAM"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[wheel-input\\] phase=1 notches=10\\b",
+  "\\[motion-trace\\] phase=6 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=13\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_vram_guard at the user's trigger (S8 port, custom Ultra, low camera long view, the turn of 2026-11-02 20:04: 21992 -> 31668 MB of a 30630 MB budget). One launch: guard on through the long view and the turn, OFF / ON / OFF static shots for energy (exposure held), the same turn guard off (the old behaviour, report), guard on again (recovery). Gates: [mem] ours within budget in every guard-on window, no Streamline >100 ms or fence timeout in them, scene wait 0 timeouts and RT capture 0 drops everywhere. Energy: shot-on within the OFF shots' noise (tools/m4_promotion_gate.py energy triples).",
+ "estimated_phase_seconds": 186
+}

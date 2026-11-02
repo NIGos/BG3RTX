@@ -1035,6 +1035,9 @@ void build(VkCommandBuffer cmd, std::vector<PCmd>& taken) {
 
 }  // namespace
 
+// rt_vram_guard breakdown: the soup buffer (present thread, read only).
+uint64_t em_vram_bytes() { return g_soup.size; }
+
 // ================= entry points =================
 
 void em_device_created(DeviceData* dd) {

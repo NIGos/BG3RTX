@@ -1,0 +1,162 @@
+// rt_vram_guard CPU policy (common/vram_guard.h): headroom math, hysteresis, per-card caps, yield order.
+#include "../common/vram_guard.h"
+#include "../common/native_hit_recycle.h"
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
+using namespace bg3::vram_guard;
+static unsigned checks;
+static void check(bool ok, int line) {
+  ++checks;
+  if (!ok) { std::fprintf(stderr, "vram guard check at line %d failed\n", line); std::exit(1); }
+}
+#define CHECK(x) check((x), __LINE__)
+
+int main() {
+  // ---- headroom math ----
+  // Slack: 2.5% of the budget (the evidence's 789 MB drop of 31419 MB), or a larger observed drop.
+  CHECK(slack(31419 * mib, 0) == 31419 * mib / 1000 * 25);
+  CHECK(slack(31419 * mib, 0) >= 785 * mib && slack(31419 * mib, 0) <= 789 * mib);
+  CHECK(slack(31419 * mib, 1200 * mib) == 1200 * mib);
+  // Margin: never below one BLAS chunk + slack; a 2047 MB pool step dominates.
+  CHECK(margin(31419 * mib, 0, 0) == kMinStep + slack(31419 * mib, 0));
+  CHECK(margin(31419 * mib, 2047 * mib, 0) == 2047 * mib + slack(31419 * mib, 0));
+
+  // ---- the evidence run, replayed: 21992 of 31419 MB, then 31668 of 30630 MB ----
+  {
+    Guard g;
+    CHECK(!g.sample(21992 * mib, 31419 * mib) && !g.low);
+    CHECK(g.allow(544 * mib * 3));                        // the cascade grow fits then
+    CHECK(g.allow(64 * mib));                             // a chunk
+    CHECK(g.granted == 544 * mib * 3 + 64 * mib);
+    // Over budget: low, the budget drop (789 MB) becomes the slack, every grow is refused.
+    CHECK(g.sample(31668 * mib, 30630 * mib) && g.low);
+    CHECK(g.max_drop == 789 * mib);
+    CHECK(!g.allow(64 * mib));
+    // Free down to used + 2 margins = budget.
+    const uint64_t m = g.margin_now();
+    CHECK(m == 544 * mib * 3 + 789 * mib);                // largest step this window + observed drop
+    CHECK(g.trim_need() == 31668 * mib + 2 * m - 30630 * mib);
+  }
+
+  // ---- hysteresis: enter at used + margin > budget, leave at used + 2 margins <= budget ----
+  {
+    Guard g;
+    const uint64_t B = 16000 * mib;
+    g.sample(1000 * mib, B);
+    const uint64_t m = g.margin_now();                    // 64 MB + 400 MB
+    CHECK(m == 64 * mib + B / 1000 * 25);
+    CHECK(!g.sample(B - m, B) && !g.low);                 // exactly one margin left: still normal
+    CHECK(g.sample(B - m + mib, B) && g.low);             // less than one margin: low
+    CHECK(!g.sample(B - m - 100 * mib, B) && g.low);      // a bit freed: stays low (no flapping)
+    CHECK(g.trim_need() == (B - m - 100 * mib) + 2 * m - B);
+    CHECK(!g.sample(B - 2 * m + mib, B) && g.low);        // just short of two margins
+    CHECK(g.sample(B - 2 * m, B) && !g.low);              // far below: growth allowed again
+    CHECK(g.trim_need() == 0);
+    CHECK(g.allow(64 * mib));
+  }
+
+  // ---- per-request headroom in normal state: used + granted + bytes + slack <= budget ----
+  {
+    Guard g;
+    const uint64_t B = 12000 * mib, s = slack(B, 0);
+    g.sample(B - s - 3000 * mib, B);                      // normal (3 GB above slack)
+    CHECK(!g.low);
+    CHECK(g.allow(2000 * mib));
+    CHECK(!g.allow(1001 * mib));                          // would cross budget - slack with the 2000 granted
+    CHECK(g.allow(1000 * mib));                           // exactly fits
+    CHECK(!g.allow(1));
+    g.sample(B - s - 3000 * mib, B);                      // a new sample resets the grants
+    CHECK(g.granted == 0);
+  }
+
+  // ---- the largest step decays over two windows, so one big pool grow does not keep the margin high ----
+  {
+    Guard g;
+    g.sample(1000 * mib, 31419 * mib);
+    g.allow(2047 * mib);
+    CHECK(g.largest_step() == 2047 * mib);
+    g.new_window();
+    CHECK(g.largest_step() == 2047 * mib);                // the previous window still counts
+    g.new_window();
+    CHECK(g.largest_step() == kMinStep);
+  }
+
+  // ---- no budget known: unchanged behaviour ----
+  {
+    Guard g;
+    CHECK(g.allow(uint64_t(8) << 30));
+    CHECK(!g.sample(5000 * mib, 0) && !g.low && g.trim_need() == 0);
+  }
+
+  // ---- per-consumer caps per card (budget ~ 95.5% of the heap, as the 32 GB card: 31419 of 32187 MB) ----
+  {
+    struct Card { uint64_t gb, budget; };
+    const Card cards[] = {{12, 11730 * mib}, {16, 15640 * mib}, {24, 23460 * mib}, {32, 31419 * mib}};
+    uint64_t prev[kConsumerCount] = {};
+    for (const Card& c : cards) {
+      for (int i = 0; i < kConsumerCount; ++i) {
+        const uint64_t v = cap(Consumer(i), c.budget);
+        CHECK(v >= kCapRef[i].floor && v <= kCapRef[i].ref);   // never below the start size, never above today
+        CHECK(v % mib == 0);
+        CHECK(v >= prev[i]);                                    // monotonic in the budget
+        prev[i] = v;
+      }
+      // Our growable consumers together stay within a fixed share of the card: BLAS + pool + 3 cascades + recycled.
+      const uint64_t ours = cap(kAsChunks, c.budget) + cap(kMeshPool, c.budget) + 3 * cap(kCascade, c.budget) +
+                            cap(kHitRecycle, c.budget);
+      CHECK(ours * 100 <= c.budget * 42);   // 12 GB: 1576 + 764 + 3 x 764 + 191 = 4823 MB = 41.1%, the same share as the 32 GB caps (12924 MB)
+    }
+    // The reference card keeps today's caps exactly.
+    CHECK(cap(kAsChunks, 31419 * mib) == 66 * 64 * mib);
+    CHECK(cap(kMeshPool, 31419 * mib) == 2047 * mib);
+    CHECK(cap(kCascade, 31419 * mib) == 2047 * mib);
+    CHECK(cap(kHitRecycle, 31419 * mib) == 512 * mib);
+    // 12 GB: the pool stops at 764 MB (2047 x 11730 / 31419), BLAS chunks at 1576 MB (24 full chunks), not 4.2 GB.
+    CHECK(cap(kMeshPool, 11730 * mib) == 764 * mib);
+    CHECK(cap(kAsChunks, 11730 * mib) == 1576 * mib);
+    CHECK(cap(kCascade, 11730 * mib) == 764 * mib);
+    CHECK(cap(kHitRecycle, 11730 * mib) == 191 * mib);
+    // 16 GB.
+    CHECK(cap(kMeshPool, 15640 * mib) == 1018 * mib);
+    CHECK(cap(kAsChunks, 15640 * mib) == 2102 * mib);
+    // A tiny budget: floors (the default sizes every card ran before the guard).
+    CHECK(cap(kMeshPool, 2000 * mib) == 256 * mib && cap(kCascade, 2000 * mib) == 427 * mib);
+    CHECK(cap(kAsChunks, 2000 * mib) == 22 * 64 * mib && cap(kHitRecycle, 2000 * mib) == 32 * mib);
+    // Unknown budget: the reference caps (unchanged behaviour).
+    CHECK(cap(kMeshPool, 0) == 2047 * mib);
+  }
+
+  // ---- who yields first: empty chunks, then recycled buffers, then LRU meshes; never more than asked ----
+  {
+    uint64_t ask[kYieldCount];
+    const uint64_t have[kYieldCount] = {640 * mib, 384 * mib, 900 * mib};
+    plan_trim(500 * mib, have, ask);
+    CHECK(ask[kYieldEmptyChunks] == 500 * mib && ask[kYieldRecycled] == 0 && ask[kYieldMeshLru] == 0);
+    plan_trim(800 * mib, have, ask);
+    CHECK(ask[kYieldEmptyChunks] == 640 * mib && ask[kYieldRecycled] == 160 * mib && ask[kYieldMeshLru] == 0);
+    plan_trim(1500 * mib, have, ask);
+    CHECK(ask[kYieldEmptyChunks] == 640 * mib && ask[kYieldRecycled] == 384 * mib && ask[kYieldMeshLru] == 476 * mib);
+    // More than everything: each gives all it has (live need is not in `have`), the rest is refused growth.
+    plan_trim(9000 * mib, have, ask);
+    CHECK(ask[0] == have[0] && ask[1] == have[1] && ask[2] == have[2]);
+    plan_trim(0, have, ask);
+    CHECK(ask[0] == 0 && ask[1] == 0 && ask[2] == 0);
+  }
+
+  // ---- the recycled pool's cap follows the budget (native_hit::recycle::Pool::set_cap) ----
+  {
+    using namespace bg3::native_hit::recycle;
+    Pool<int> pool;
+    std::vector<int> evict;
+    for (int i = 0; i < 6; ++i) pool.give(Key{64ull << 20, 1, false}, i, uint64_t(i), evict);
+    CHECK(evict.empty() && pool.retained() == 384ull << 20);
+    pool.set_cap(191ull << 20, evict);                    // the 12 GB card's share
+    CHECK(pool.retained() <= 191ull << 20 && evict.size() == 4 && evict[0] == 0);   // the oldest go first
+    pool.set_cap(0, evict);
+    CHECK(pool.retained() == 0 && pool.size() == 0);
+  }
+
+  std::printf("vram_guard_test: %u checks passed\n", checks);
+  return 0;
+}

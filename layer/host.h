@@ -1010,6 +1010,22 @@ const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr
                                                        VkInstanceCreateInfo* scratch);
 void fault_instance_created(VkInstance inst, PFN_vkGetInstanceProcAddr next);
 void fault_instance_destroyed(VkInstance inst);
+// ---- rt_vram_guard (layer.cpp, policy in common/vram_guard.h) ----
+// Consumer and yield ids are vram_guard::Consumer / vram_guard::Yield (ints here, to keep host.h light).
+// vram_allow: true when the key is off or no budget is known; false refuses the grow (logged once per
+// window with `what`); over_cap: the caller's cap check failed, refused and counted the same way.
+// vram_cap: the consumer's cap scaled by the device budget, `fallback` when off.
+// vram_take_ask: bytes this yielder should free now (0 when not low), cleared by the call.
+bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap = false);
+uint64_t vram_cap(int consumer, uint64_t fallback);
+uint64_t vram_take_ask(int yield);
+bool vram_guard_on();
+// Breakdown sources for the [mem] ours line (each module's own lock; never called with the guard lock held).
+struct BvhVram { uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0; uint32_t chunks = 0; };
+void bvh_vram(BvhVram* out);
+void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade);
+uint64_t em_vram_bytes();
+uint64_t water_vram_bytes();
 // Device-address ranges of our buffers, named in a fault report (live or freed).
 void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
 void fault_untrack(VkDeviceAddress addr);

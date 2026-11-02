@@ -1,4 +1,5 @@
 #include "../common/rt_capture_budget.h"
+#include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
 #include "../common/sun_raster_domain.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
@@ -1421,8 +1422,14 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
   if (c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
     const uint64_t demand = uint64_t(c->cursor) + c->c_over;
-    const uint64_t grown = capture_budget::cascade_grow(c->xfb.size, demand, g_storage_range);
-    if (grown > c->xfb.size && grown > g_cc_grown.load()) {
+    // rt_vram_guard: capped by the device budget's share (vram_guard::cap; never below the current size), and
+    // refused while VRAM is low. The step is the 3 frame buffers at the new size (each replaced one is freed
+    // deferred): refused, the left-out casters stay out (this line's counts) and the refusal is logged.
+    const uint64_t grown = (std::max)((std::min)(capture_budget::cascade_grow(c->xfb.size, demand, g_storage_range),
+                                                 uint64_t(vram_cap(vram_guard::kCascade, UINT64_MAX))),
+                                      uint64_t(c->xfb.size));
+    if (grown > c->xfb.size && grown > g_cc_grown.load() &&
+        vram_allow(vram_guard::kCascade, 3 * grown, "cascade capture grow (casters left out)")) {
       g_cc_grown = grown;
       log("[cascade] buffer full: %u draws (%.1f MB) left out, demand %.1f MB of %.0f MB; the capture grows to %llu MB",
           c->c_full, double(c->c_over) / 1048576.0, double(demand) / 1048576.0, double(c->xfb.size) / 1048576.0,
@@ -1525,6 +1532,18 @@ void cascade_on_present() {
 }
 
 }  // namespace
+
+// rt_vram_guard breakdown (present thread; sizes only, the buffers change at scene/start or grow points):
+// the device RT capture (the alpha region is part of it), and every cascade frame buffer allocated.
+void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade) {
+  *rt_capture = g_scratch.xfb.size;
+  *alpha_region = g_alpha_region.load();
+  uint64_t cc = 0;
+  for (const Capture& c : g_ccap) cc += c.xfb.size;
+  for (const auto& layer : g_sun_ccap)
+    for (const Capture& c : layer) cc += c.xfb.size;
+  *cascade = cc;
+}
 
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
                      VkDeviceSize destination_offset) {
