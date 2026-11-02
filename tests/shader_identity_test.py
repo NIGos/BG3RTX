@@ -184,6 +184,15 @@ with tempfile.TemporaryDirectory(prefix="b3k-", ignore_cleanup_errors=True) as s
     check(all(runs["p1"][r].ok and runs["p1"][r].digest == runs["p2"][r].digest for r in ("c.hlsl", "d.hlsl")),
           "the waiting run gets the holder's result")
 
+# tools/low_priority.py really lowers the process on Windows (the ctypes handle was truncated before: still Normal).
+if sys.platform == "win32":
+    probe = ("import ctypes,sys; sys.path.insert(0, sys.argv[1]); from tools.low_priority import lower_priority; "
+             "lower_priority(); k=ctypes.windll.kernel32; k.GetCurrentProcess.restype=ctypes.c_void_p; "
+             "k.GetPriorityClass.argtypes=[ctypes.c_void_p]; print(k.GetPriorityClass(k.GetCurrentProcess()))")
+    env = {k: v for k, v in __import__("os").environ.items() if k != "BG3RTX_NORMAL_PRIORITY"}
+    out = subprocess.run([sys.executable, "-c", probe, str(ROOT)], capture_output=True, text=True, env=env).stdout.strip()
+    check(out == str(0x4000), f"lower_priority sets BELOW_NORMAL ({out})")
+
 # Pruning: age, protection, size cap (oldest first), shared blobs, unreferenced blobs deleted.
 pc = si.MemoryCache()
 now = 1_000_000_000.0
