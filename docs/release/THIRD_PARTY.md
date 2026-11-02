@@ -5,8 +5,9 @@ Disk-only audit: 2026-11-02, branch `codex-licences`. Scope: the explicit file l
 loading in `layer/` and `tools/launcher/`. No build, package, compiler or game was run.
 
 The verbatim texts collected for release are in `docs/release/licences/` in the source tree.
-Their intended player-package location is `LICENSES/` with the same filenames. **The current
-package script does not yet copy this directory.** See Missing below before distributing.
+Their player-package location is `licences/` with the same relative paths. The package script
+copies every file in this directory and validates the required list below before building or writing
+a package. Packaging remains paused. See Missing below before distributing.
 This inventory is not a statement that every release requirement has been satisfied.
 
 ## Packaged and compiled components
@@ -44,7 +45,9 @@ those other `dxil.dll` copies.
 ## Exact text provenance
 
 Source paths are audit evidence on this machine, not player installation requirements.
-Each file below was copied as bytes, without decoding, reformatting, or newline changes.
+Each file below was originally copied as bytes. Release texts are now normalised to LF;
+only CRLF/CR newline bytes were changed. The hashes below describe the normalised files,
+not the original source bytes.
 
 | Collected filename (under `docs/release/licences/`) | Absolute source path | Version / provenance |
 |---|---|---|
@@ -57,16 +60,36 @@ Each file below was copied as bytes, without decoding, reformatting, or newline 
 | `NVIDIA-Aftermath.txt` | `D:\BG3_Tools\nsight-aftermath-sdk-2026.3\LICENSE` | Aftermath SDK 2026.3; API 2.27 |
 | `NVIDIA-Nsight-Graphics-Apache-2.0.txt` | `C:\Users\quali\Documents\Code Projects\BG3RTX\external\streamline-sdk-v2.14.16\NVIDIA Nsight Graphics SDK License (Apache 2.0).txt` | Nsight Graphics SDK notice bundled with Streamline 2.14.16; Apache 2.0, January 2004 |
 
-| Collected filename | SHA-256 (also the source SHA-256) |
+| Collected filename | SHA-256 (LF-normalised release copy) |
 |---|---|
-| `NVIDIA-RTX-SDKs-DLSS.txt` | `dc2778a3283427285984cdb5b3f7f03eae7d8a06057f672f2999c5ee7fd4f67d` |
-| `Streamline-MIT.txt` | `7b6f23e7d6f3ad6292f9308d2b42cdc3d82ae4e9b2abb55f230279d83bedd43d` |
-| `Streamline-3rd-party-licenses.md` | `cb251639994465f31d2178c16acedf1ff4f9cef1c370a09782ed36d4c86c1dca` |
-| `NVIDIA-DLSS-runtime.txt` | `3027f23ca5a46dd9cb8183fbd522983a86f64d7daac5982912bf9f214671f294` |
-| `NVIDIA-Reflex.txt` | `ebf83c07fb3b2939908c3795d887afde3161c89a28ba391724efc784ce1bdabe` |
-| `NVIDIA-Image-Scaling-MIT.txt` | `f80ecfbce8a84a5b4c1c59dc5a9f0ee9cf5a989c9fba3a9486ee874f7595a454` |
-| `NVIDIA-Aftermath.txt` | `606b69fb994b63e2122711694cde23a656bf861a8a27c2bab42acf5897230d4b` |
-| `NVIDIA-Nsight-Graphics-Apache-2.0.txt` | `44595e5ff02a0f1f0fae737e63ecb6fb70a3e9afac4e8878f9b083565013b893` |
+| `NVIDIA-RTX-SDKs-DLSS.txt` | `21b5daec892b12bea692e66bc8fe45cf5902ccaf3a7b831e78050d8859881c37` |
+| `Streamline-MIT.txt` | `c7782fdc4dfc64f7e6b09f37a694dcfa64034b712903986d252b13a08d5849cd` |
+| `Streamline-3rd-party-licenses.md` | `7c24ec8f5abd0a7bb0fa4fc35021146fd3bc2a2e7b0ed61e5977aad72d64aea3` |
+| `NVIDIA-DLSS-runtime.txt` | `d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0` |
+| `NVIDIA-Reflex.txt` | `c1ec2b31a3a2cda27486665dd97b9693b409be90847789fd2138fc9b8e2bc41d` |
+| `NVIDIA-Image-Scaling-MIT.txt` | `6efb198d6d184a4c80ab66641463b708339d7e00098e7c92caf12e9f178b53c9` |
+| `NVIDIA-Aftermath.txt` | `4f35875cfab9eab4725f70b7b2355de5b5310d5f956319450ba3dcb50f2f65d6` |
+| `NVIDIA-Nsight-Graphics-Apache-2.0.txt` | `8517178e5aab9335ca0c88d02efcba2f5d42bd894a5c4bedfdf8b99693110e88` |
+
+## Required notice files
+
+This list is read by `scripts/package.ps1`. Every listed filename must exist under
+`docs/release/licences/`; missing files stop packaging, including with `-NoBuild`.
+DXC and Vulkan placeholders below name the still-missing version-matched bundles;
+adding a filename alone does not establish that the text covers the selected binary/headers.
+Retain all subordinate notices as additional files in this directory.
+`-ListOnly` validates and emits only the notice payload as JSON, without building or writing files.
+
+- `NVIDIA-Aftermath.txt`
+- `NVIDIA-DLSS-runtime.txt`
+- `NVIDIA-Image-Scaling-MIT.txt`
+- `NVIDIA-Nsight-Graphics-Apache-2.0.txt`
+- `NVIDIA-RTX-SDKs-DLSS.txt`
+- `NVIDIA-Reflex.txt`
+- `Streamline-3rd-party-licenses.md`
+- `Streamline-MIT.txt`
+- `DirectXShaderCompiler-LICENSE.txt`
+- `Vulkan-Headers-LICENSE.txt`
 
 ## Required notices and release actions
 
@@ -150,12 +173,10 @@ not made, endorsed or supported by NVIDIA or Larian Studios.
    notices from `https://github.com/KhronosGroup/Vulkan-Headers` at `v1.4.357` / the exact
    SDK source revision. Record the chosen licence alternative and retain matching copyright
    notices; do not substitute an unrelated project's MIT text.
-3. **Package wiring (release blocker).** `scripts/package.ps1` still copies only the DLSS
-   SDK licence, Streamline MIT and Streamline third-party notices from `external/`, and only
-   warns for absent DXC/Vulkan files under `external/licences/`. It omits the collected
-   DLSS runtime, Reflex, NIS, full Nsight Apache and Aftermath texts. Update its explicit list to copy the
-   appropriate files from this checked-in directory into `LICENSES/` and fail for missing
-   required texts. This documentation task does not run or change the package script.
+3. **Package wiring (implemented; packaging remains paused).** The script copies this
+   inventory to `THIRD_PARTY.md` and every collected file to `licences/`. Missing required
+   texts now fail before builds or package writes. The missing DXC and Vulkan bundles above
+   still block packaging. No shader or game-data shipping policy was changed.
 4. **LSLib MIT text (conditional; not a player-package blocker while excluded).** If LSLib
    or dependent offline tools are distributed, obtain the exact v1.20.4 `LICENSE` from
    `https://github.com/Norbyte/lslib/blob/v1.20.4/LICENSE`, plus the separate notices/terms
