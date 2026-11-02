@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include "native_hit_records.h"
+#include "rt_capture_budget.h"
 namespace bg3::native_hit {
 // Deferred material draws captured per packet (one row each in the packet rows buffer).
 inline constexpr uint32_t material_slots=nh_deferred_rows;
@@ -94,5 +95,26 @@ inline uint64_t source_stream_bytes(uint64_t need,uint64_t granule,uint64_t cap)
  if(!granule || need>cap)return 0;
  uint64_t rounded=need<=granule?granule:((need+granule-1u)/granule)*granule;
  return rounded>cap?cap:rounded;
+}
+// The caps of the three streams, from the RT capture they copy (layer/hit_material.cpp; buffers are still sized to
+// the need, so a cap costs nothing until used). The source stream copies the paired draws' prepass triangles out of
+// one frame's capture: at most the capture's wide-stride alpha floor share (capture_budget kAlphaFloorPctWide, 40%),
+// in whole granules. The deferred XFB holds the same triangles at the same stride: one chunk per source granule plus
+// one (a draw never straddles two chunks). The query basis holds both copies: 2 x source. Never below the
+// 2026-10-31 fixed caps (128 MB, 4 chunks, 256 MB). Camp 2026-11-02 (hig1 09:54, IP grass on, 1024 MB capture): the
+// fixed caps overflowed 119-134 deferred rows (126.6 MB in 4/4 chunks), source 117/128 MB, basis 234/256 MB.
+inline constexpr uint64_t kSourceFloor=128ull<<20,kQueryFloor=256ull<<20;inline constexpr uint32_t kDeferredChunksFloor=4;
+inline constexpr unsigned kStreamCapturePct=capture_budget::kAlphaFloorPctWide;
+struct StreamCaps {uint64_t source{},query{};uint32_t deferred_chunks{};};
+inline StreamCaps stream_caps(uint64_t capture_bytes,uint64_t granule){
+ StreamCaps c{kSourceFloor,kQueryFloor,kDeferredChunksFloor};
+ if(!granule)return c;
+ const uint64_t limit=(uint64_t(UINT32_MAX)/2)/granule*granule;   // uint32 row offsets into the query basis (2 x source)
+ uint64_t source=capture_bytes/100*kStreamCapturePct/granule*granule;
+ if(source<=kSourceFloor)return c;   // small (24 B) or unknown capture: the fixed caps exactly
+ source=source>limit?limit:source;
+ c.source=source;c.query=2*source<kQueryFloor?kQueryFloor:2*source;
+ const uint64_t chunks=source/granule+1;c.deferred_chunks=chunks<kDeferredChunksFloor?kDeferredChunksFloor:uint32_t(chunks);
+ return c;
 }
 }
