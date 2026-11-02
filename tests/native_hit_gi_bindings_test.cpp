@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
+#include <filesystem>
+#include <string>
 using namespace bg3::native_hit_gi;
 static unsigned checks;
 static void check(bool ok,const char* reason){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",reason);std::exit(1);}}
@@ -80,6 +82,17 @@ static void module(const char* file,bool reference,bool tileset,bool sun,bool em
  else {for(uint32_t slot:{6u,7u})check(seen.contains(slot),"actual reference radiance outputs retained");}
  std::printf("PASS %s: %u unique set0 descriptors, push %u bytes\n",file,descriptors,push);
 }
+// "@file" expands in place to one argument per line (blank lines skipped): merge-green passes every
+// compiled module, beyond the Windows 32767-character command line (WinError 206).
+static std::vector<std::string> expand_args(int argc,char**argv){
+ std::vector<std::string> out;
+ for(int i=1;i<argc;++i){
+  if(argv[i][0]!='@'){out.emplace_back(argv[i]);continue;}
+  std::ifstream f(argv[i]+1);if(!f){std::fprintf(stderr,"FAIL cannot read response file %s\n",argv[i]+1);std::exit(1);}
+  for(std::string line;std::getline(f,line);){while(!line.empty()&&(line.back()=='\r'||line.back()==' '))line.pop_back();if(!line.empty())out.push_back(line);}
+ }
+ return out;
+}
 int main(int argc,char**argv){
  check(descriptor_count(false)==20 && descriptor_count(true)==21,"bounded plain/Hair union");
  check(!find(47,true),"roof volumes come from the sun set b8, not the push set");
@@ -95,5 +108,11 @@ int main(int argc,char**argv){
  check(descriptor_count(false,true)==18 && descriptor_count(true,true)==18,"bounded dedicated reference union");
  check(find(48,false,true)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"reference rebase camera retained");
  check(!find(50,true,true),"no hypothetical physical-origin reference descriptor");
- bool reference=false,tileset=false,sun=false,em=false;for(int i=1;i<argc;++i){if(std::strcmp(argv[i],"--reference")==0){reference=true;sun=false;em=false;continue;}if(std::strcmp(argv[i],"--tileset")==0){tileset=true;continue;}if(std::strcmp(argv[i],"--sun")==0){sun=true;continue;}if(std::strcmp(argv[i],"--nosun")==0){sun=false;continue;}if(std::strcmp(argv[i],"--em")==0){em=true;continue;}if(std::strcmp(argv[i],"--noem")==0){em=false;continue;}module(argv[i],reference,tileset,sun,em);}std::printf("PASS %u GI host/interface checks\n",checks);
+ {const auto rsp=std::filesystem::temp_directory_path()/"bg3rtx_gi_bindings_rsp_test.txt";
+  {std::ofstream f(rsp,std::ios::binary);f<<"--sun\r\na b.spv\n\n--em\n";}
+  std::string at="@"+rsp.string();char a0[]="x",a1[]="--tileset",a3[]="--reference";char* av[]={a0,a1,at.data(),a3};
+  const auto e=expand_args(4,av);std::filesystem::remove(rsp);
+  check(e==std::vector<std::string>{"--tileset","--sun","a b.spv","--em","--reference"},"response file expands in place, in order");}
+ const auto args=expand_args(argc,argv);
+ bool reference=false,tileset=false,sun=false,em=false;for(size_t i=0;i<args.size();++i){if(std::strcmp(args[i].c_str(),"--reference")==0){reference=true;sun=false;em=false;continue;}if(std::strcmp(args[i].c_str(),"--tileset")==0){tileset=true;continue;}if(std::strcmp(args[i].c_str(),"--sun")==0){sun=true;continue;}if(std::strcmp(args[i].c_str(),"--nosun")==0){sun=false;continue;}if(std::strcmp(args[i].c_str(),"--em")==0){em=true;continue;}if(std::strcmp(args[i].c_str(),"--noem")==0){em=false;continue;}module(args[i].c_str(),reference,tileset,sun,em);}std::printf("PASS %u GI host/interface checks\n",checks);
 }

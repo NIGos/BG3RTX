@@ -83,8 +83,14 @@ if (material_gi or references or sun_gi) and checker.exists():
             continue
         egi = [p for p, t, s in em_gi if t == tileset and not s]
         esgi = [p for p, t, s in em_gi if t == tileset and s]
-        result = subprocess.run([str(checker), *(["--tileset"] if tileset else []), *gi, "--sun", *sgi,
-                                 "--em", *esgi, "--nosun", *egi, "--reference", *refs], capture_output=True, text=True)
+        args = [*(["--tileset"] if tileset else []), *gi, "--sun", *sgi,
+                "--em", *esgi, "--nosun", *egi, "--reference", *refs]
+        # A response file (one argument per line, expanded in place by the checker): every module
+        # path on the command line exceeds the Windows 32767-character limit (WinError 206).
+        with tempfile.TemporaryDirectory() as tmp:
+            rsp = Path(tmp) / "gi_bindings_args.txt"
+            rsp.write_text("\n".join(str(a) for a in args) + "\n", encoding="utf-8")
+            result = subprocess.run([str(checker), f"@{rsp}"], capture_output=True, text=True)
         if result.returncode:
             res.append(("GI host descriptor interface", result.returncode, result.stdout + result.stderr))
         else:
