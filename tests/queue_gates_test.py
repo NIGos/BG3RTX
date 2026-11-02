@@ -140,7 +140,9 @@ def main():
                            Path(spec["args"][spec["args"].index("-MovePlan") + 1]).name).read_text(encoding="utf-8"))
         labels = {p["label"] for p in plan}
         check(f"{jf.name}: expect_every regexes compile, windows are plan labels",
-              all(re.compile(g["select"]) and re.compile(g["match"]) and set(g.get("windows") or []) <= labels for g in ee))
+              all(re.compile(g["select"]) and (re.compile(g["value"]) if g.get("trend") else re.compile(g["match"]))
+                  and set(g.get("windows") or []) | set(g.get("baseline") or []) | set(g.get("tail") or []) <= labels
+                  for g in ee))
     check(f"jobs with expect_every: {with_ee} (m4i, m4p1-4, m5w3-6 at least)", with_ee >= 9)
 
     # Exposure hold lint: an energy-gated plan (ON shot between two OFF shots) must hold the eye adaptation.
@@ -244,6 +246,33 @@ def main():
     bad = queue_gates.lint_scene_wait(ROOT / "tools" / "live_batches", queue_gates.capacity_problems)
     check("capacity lint: every lean job under tools/live_batches gates the RT capture (and the cascade with the casters on)"
           + ("" if not bad else ": " + "; ".join(f"{Path(k).name}: {v[0][:90]}" for k, v in bad.items())), not bad)
+
+    # Trend gates (long sessions): early windows against late ones, noise = the baseline's own spread.
+    tplan = [{"label": f"cost-c{i}"} for i in range(1, 5)]
+    trunner = "\n".join(["Game pid 1"] + [f"10:0{i}:00.000 [pan-plan] window {i} serial 0" for i in range(4)]
+                        + ["10:04:00.000 [motion-plan] complete phases=4", "Run ended: done"])
+
+    def tlog(values):   # 3 [mem] lines per window
+        lines = []
+        for i in range(4):
+            lines.append(f"10:0{i}:00.100  [cfg] settings read: 1 keys")
+            for j in range(3):
+                lines.append(f"10:0{i}:{10 + 15 * j:02d}.000  [mem] device-local VRAM of this process: used {values[i][j]} MB, budget 30000 MB")
+        return "\n".join(lines)
+
+    tg = [{"name": "vram", "trend": True, "select": r"\[mem\] device-local", "value": r"used ([0-9.]+) MB",
+           "baseline": ["cost-c1", "cost-c2"], "tail": ["cost-c3", "cost-c4"], "abs": 1}]
+    flat = tlog([[9000, 9010, 9005], [9008, 9002, 9012], [9011, 9004, 9009], [9003, 9010, 9007]])
+    check("trend: a flat series within its own noise passes", queue_gates.check(tg, flat, trunner, tplan) == [])
+    grow = tlog([[9000, 9010, 9005], [9050, 9100, 9150], [9200, 9250, 9300], [9350, 9400, 9450]])
+    f = queue_gates.check(tg, grow, trunner, tplan)
+    check("trend: a growing series fails with its numbers", len(f) == 1 and "grew" in f[0] and "9325" in f[0])
+    f = queue_gates.check([dict(tg[0], tail=["cost-c9"])], flat, trunner, tplan)
+    check("trend: a missing window is reported, not passed", len(f) >= 1 and "not in the runner log" in f[0])
+    f = queue_gates.check([dict(tg[0], min=7)], flat, trunner, tplan)
+    check("trend: too few lines on a side is a failure", len(f) == 2 and "need 7" in f[0])
+    check("trend: rel allowance scales with the baseline",
+          queue_gates.check([dict(tg[0], abs=0, rel=0.1)], grow, trunner, tplan) == [])
 
     if fails:
         print(f"{fails} check(s) failed")

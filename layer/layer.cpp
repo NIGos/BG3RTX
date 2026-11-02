@@ -1,6 +1,7 @@
 // Vulkan layer entry points: loader negotiation, instance/device creation,
 // dispatch, and the frame boundary (submit/present).
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include "host.h"
 #include "omm_submit.h"
@@ -129,6 +130,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo*
   LOADI(GetPhysicalDeviceProperties);
   LOADI(EnumerateDeviceExtensionProperties);
   LOADI(GetPhysicalDeviceMemoryProperties);
+  LOADI(GetPhysicalDeviceMemoryProperties2);
+  if (!id->GetPhysicalDeviceMemoryProperties2)
+    id->GetPhysicalDeviceMemoryProperties2 =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties2>(next(*out, "vkGetPhysicalDeviceMemoryProperties2KHR"));
   LOADI(GetPhysicalDeviceFeatures2);
   if (!id->GetPhysicalDeviceFeatures2)
     id->GetPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(next(*out, "vkGetPhysicalDeviceFeatures2KHR"));
@@ -525,6 +530,36 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   return r;
 }
 
+// VRAM of this process on the device-local heaps (VK_EXT_memory_budget), next to each [pace] line: the
+// long-session growth gate (tools/live_batches/long_session). Physical-device query only; nothing is enabled.
+static void log_memory_budget(DeviceData* dd) {
+  InstanceData* id = dd ? dd->inst : nullptr;
+  if (!id || !dd->physical || !id->GetPhysicalDeviceMemoryProperties2 || !id->EnumerateDeviceExtensionProperties) return;
+  static int supported = -1;
+  if (supported < 0) {
+    uint32_t n = 0;
+    id->EnumerateDeviceExtensionProperties(dd->physical, nullptr, &n, nullptr);
+    std::vector<VkExtensionProperties> ext(n);
+    if (n) id->EnumerateDeviceExtensionProperties(dd->physical, nullptr, &n, ext.data());
+    supported = 0;
+    for (const VkExtensionProperties& e : ext) supported |= strcmp(e.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0;
+    if (!supported) log("[mem] VK_EXT_memory_budget not supported: no VRAM lines");
+  }
+  if (!supported) return;
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
+  VkPhysicalDeviceMemoryProperties2 props{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, &budget};
+  id->GetPhysicalDeviceMemoryProperties2(dd->physical, &props);
+  double used = 0, avail = 0, size = 0;
+  for (uint32_t h = 0; h < props.memoryProperties.memoryHeapCount; ++h) {
+    if (!(props.memoryProperties.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)) continue;
+    used += double(budget.heapUsage[h]);
+    avail += double(budget.heapBudget[h]);
+    size += double(props.memoryProperties.memoryHeaps[h].size);
+  }
+  log("[mem] device-local VRAM of this process: used %.0f MB, budget %.0f MB, heaps %.0f MB", used / 1048576.0,
+      avail / 1048576.0, size / 1048576.0);
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
   DeviceData* dd = device_of(queue);
   uint64_t frame = ++g_frame;
@@ -562,6 +597,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
       log("[pace] rendered frame time over 600 frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
           med, 1000.0 / med, p99, 1000.0 / worst, s.back());
       ft.clear();
+      log_memory_budget(dd);
     }
     if (!g_core_started) {
       g_core_started = true;
