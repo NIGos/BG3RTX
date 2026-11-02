@@ -1,17 +1,41 @@
 {
- "_rule": "Written and committed BEFORE the run (2026-11-02), not queued. Evidence: the user's bg3rtx.log 2026-11-02 20:04 (S8 port, custom Ultra): [mem] used 21992 of 31419 MB at 20:04:07, 31668 of 30630 MB at 20:04:30 and 31.0-31.3 GB over a 30.4-30.6 GB budget until 20:07; BLAS chunks 81 -> 124 (64 MB each: 5.2 -> 7.9 GB reserved for 253 -> 1059 MB live); cascade 427 -> 544 MB x 3; 95 Streamline 'Frame rate over 100 ms' lines from 20:04 on, 10 before (19:59-20:03, load included). One observable per entry, A/B inside the one launch.",
- "vg1-s8-low-long-view-fg2": {
-  "on_windows_within_budget": {"predicted": true, "basis": "with the guard the BLAS chunks stop at 66 (4224 MB, vram_guard::cap on a 31419 MB budget) instead of 124 (7936 MB): 3.7 GB less than the evidence at the same view; growth stops when used + margin (largest step + 2.5% slack, about 2.4 GB at the trigger) passes the budget, and empty chunks are freed first. The gate fails if the game's own share alone passes the budget: the [mem] ours line then shows 'rest' above budget - tracked, and the guard cannot fix that (report it, do not tune)."},
-  "on_peak_used_mb": {"predicted": 28300, "range": [22000, 30600], "basis": "budget 30630 minus the margin at the trigger (1632 MB cascade step + 789 MB observed budget drop = 2421 MB) is about 28200 MB, the level where the guard turns low; above it only the game grows"},
-  "as_reserved_on_mb_max": {"predicted": 4224, "basis": "cap(kAsChunks) on the 32 GB budget; a mesh BLAS larger than a chunk can exceed it by one chunk-sized allocation (never: largest mesh BLAS in the evidence < 64 MB)"},
-  "refusals_on_turn": {"predicted": ">0", "basis": "the evidence turn wanted 43 new chunks above 81; the cap allows 66 - 81 already reserved = none: '[vram] guard: refused BLAS chunks' in turn-on-r or turn-on-l, unless empty chunks freed first (the compaction burst leaves empty chunks)"},
-  "empty_chunks_freed_mb": {"predicted": ">0", "basis": "hypothesis: 789 new meshes are built uncompacted, then compacted into new ranges: the burst leaves chunks with used 0 (as_reserved - as_live was 6.9 GB at 124 chunks); they are the first yielder"},
-  "streamline_over_100ms_on_windows": {"predicted": 0, "basis": "the 20:04-20:07 burst (95 lines) began with the over-budget sample; under budget the session had 10 in 5 min, most at the load. A line in an ON window under budget is a hitch of another cause: read it against turn-off-*"},
-  "fence_timeouts_on_windows": {"predicted": 0, "basis": "12 waitCPUFence timeouts in the evidence, all at or after 20:04:20 (over budget)"},
-  "off_turn_over_budget": {"predicted": true, "basis": "report only (old behaviour): growth is free again; the chunks re-grow toward the evidence's 124. If the off turn stays within budget the ON windows' freed reserve was not re-needed: still a valid run"},
-  "recover_on_within_budget": {"predicted": true, "basis": "guard back on after the off turn: low state, empty chunks / recycled buffers / LRU meshes asked; within 3 windows of 120 frames (min 3 complete lines must all be within budget; the first line after the toggle straddles and is skipped)"},
-  "energy_shot_on_vs_off_pct": {"predicted": 0.0, "range": [-0.92, 0.92], "basis": "static camera: the guard evicts only meshes unused for 8 frames and refuses growth a static view does not ask; 2 x the S8 OFF-OFF sigma 0.458% (GATE_AUDIT_20261101). Energy = pre-post scene colour mean of dumps.json, exposure held"},
-  "rt_passes_gpu_ms_delta": {"predicted": 0.0, "range": [-0.1, 0.1], "basis": "the guard is CPU only (one physical-device query every 16 frames, bookkeeping at grow points); report the rt passes and gi GPU ms of shot-on vs shot-off-*"},
-  "disk_mb": {"predicted": 190, "basis": "3 PNG traces x 60 MB + the log"}
+ "_rule": "Written BEFORE the vg2 run (2026-11-02 21:00), not queued. vg1 (20:48, INVALID): peaked at 18.6 of 31.4 GB; the user's 31.7 GB came after a ~600 m move (camera (-718,-56,-838) at 20:02-20:03 to (-213,12,-186) at 20:04, [core] ls camera lines; mesh cache 549 -> 210 meshes then 789 new in 6 s): two areas resident, about 3.1 GB ours (+43 BLAS chunks, cascade +351 MB) and about 6.6 GB the game's. A fresh S8 launch starts at (-218,15,-197), within 10 m of that pose, but input cannot replay the travel: vg2 gives the guard a 16 GB card's budget instead (rt_vram_guard_budget_mb=15640). vg1 measured: game share 10.3-11.3 GB, ours 3.0-7.6 GB (BLAS 2560 MB reserved for 211 live, mesh pool 2047 for 467 used, cascade 3 x 560 for 169 demand).",
+ "vg2-s8-low-long-view-fg2": {
+  "on_windows_within_test_budget": {
+   "predicted": true,
+   "basis": "caps at 15640 MB: BLAS 2102, pool 1018, cascade 1018 MB; growth refused at used + margin (64 MB..1 GB step + 391 MB slack) > 15640; game share 10.3-11.3 GB in vg1 leaves 4.3-5.3 GB, ours started at 3.0-3.9 GB"
+  },
+  "refusals_on_turn": {
+   "predicted": ">0",
+   "basis": "vg1's turn grew the pool 512 -> 2047 MB and BLAS 12 -> 43 chunks: both pass the 16 GB caps (pool 1018, BLAS 2102 MB)"
+  },
+  "off_turn_over_test_budget": {
+   "predicted": true,
+   "basis": "report: guard off, vg1 reached 18.6 GB"
+  },
+  "recover_on_within_test_budget": {
+   "predicted": false,
+   "basis": "report: the mesh pool, the cascade reserve and partly used BLAS chunks never shrink (VRAM_AUDIT ranks 1-3); the guard only stops growth and frees wholly empty chunks and idle buffers"
+  },
+  "streamline_over_100ms_on_windows": {
+   "predicted": 0,
+   "basis": "vg1 had 7 in the run, at load and around the shot toggles; none expected in the view/turn ON windows"
+  },
+  "energy_shot_on_vs_off_pct": {
+   "predicted": 0.0,
+   "range": [
+    -0.92,
+    0.92
+   ],
+   "basis": "static camera: the guard evicts only meshes unused for 8 frames and refuses growth a static view does not ask; 2 x the S8 OFF-OFF sigma 0.458% (GATE_AUDIT_20261101). Energy = pre-post scene colour mean of dumps.json, exposure held"
+  },
+  "rt_capture_opaque_drops": {
+   "predicted": ">0 in turns, on and off",
+   "basis": "report, not the guard: vg1 opaque peak 1182 MB of the fixed 1024 MB RT capture (409 MB alpha floor), 5.4 drops/frame in turn-on-l and 1.6-5.0 in the off turn"
+  },
+  "disk_mb": {
+   "predicted": 190,
+   "basis": "3 PNG traces x 60 MB + the log"
+  }
  }
 }

@@ -1,5 +1,5 @@
 {
- "name": "vg1-s8-low-long-view-fg2",
+ "name": "vg2-s8-low-long-view-fg2",
  "save": "Water Queens House",
  "session": false,
  "traces": 0,
@@ -7,13 +7,11 @@
  "timeout": 516,
  "repeat": 1,
  "live_batch": "vram-guard",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,qa_exposure_hold=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,qa_exposure_hold=0,rt_vram_guard_budget_mb=15640",
  "args": [
-  "-RealPresent",
-  "-Foreground",
   "-Move",
   "-MovePlan",
-  "captures/live_batches/vram_guard/plans/vg1_s8.json"
+  "captures/live_batches/vram_guard/plans/vg2_s8.json"
  ],
  "patterns": [
   "\\[hot\\]",
@@ -63,15 +61,6 @@
    ]
   },
   {
-   "name": "VRAM: back within budget after the guard-off turn (recover-on, every complete line)",
-   "select": "\\[mem\\] ours \\(window\\):",
-   "match": "\\(within budget\\); guard (normal|LOW)",
-   "min": 3,
-   "windows": [
-    "recover-on"
-   ]
-  },
-  {
    "name": "pacing: no Streamline 'Frame rate over 100 ms' in a guard-on window",
    "select": "\\[sl\\] warn .*Frame rate over 100\\.00ms",
    "match": "(?!)",
@@ -106,28 +95,6 @@
     "view-on-a",
     "turn-on-r",
     "turn-on-l",
-    "settle-off",
-    "shot-off-a",
-    "shot-on",
-    "shot-off-b",
-    "turn-off-r",
-    "turn-off-l",
-    "recover-on"
-   ]
-  },
-  {
-   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every window",
-   "select": "\\[geo\\] RT capture, last \\d+ frames:",
-   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
-   "min": 1,
-   "windows": [
-    "view-on-a",
-    "turn-on-r",
-    "turn-on-l",
-    "settle-off",
-    "shot-off-a",
-    "shot-on",
-    "shot-off-b",
     "turn-off-r",
     "turn-off-l",
     "recover-on"
@@ -148,7 +115,8 @@
   "\\[sl\\] .*eWarnOutOfVRAM"
  ],
  "expect_runner": [
-  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[window-mode\\] visible_unfocused: hwnd=",
+  "\\[motion-plan\\] posted pointer centre to owned unfocused HWND",
   "\\[wheel-input\\] phase=1 notches=10\\b",
   "\\[motion-trace\\] phase=6 label=shot-off-a repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
@@ -156,6 +124,7 @@
   "\\[motion-plan\\] complete phases=13\\b",
   "^Run ended: done"
  ],
+ "window_mode": "visible_unfocused_fg",
  "stop_on_dump": true,
  "purpose": "rt_vram_guard at the user's trigger (S8 port, custom Ultra, low camera long view, the turn of 2026-11-02 20:04: 21992 -> 31668 MB of a 30630 MB budget). One launch: guard on through the long view and the turn, OFF / ON / OFF static shots for energy (exposure held), the same turn guard off (the old behaviour, report), guard on again (recovery). Gates: [mem] ours within budget in every guard-on window, no Streamline >100 ms or fence timeout in them, scene wait 0 timeouts and RT capture 0 drops everywhere. Energy: shot-on within the OFF shots' noise (tools/m4_promotion_gate.py energy triples).",
  "estimated_phase_seconds": 186

@@ -644,6 +644,11 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
     if (window_end) s_window_start = frame;
     return;
   }
+  // Test budget (rt_vram_guard_budget_mb > 0, a test key): the guard, its caps and the [mem] ours line use
+  // min(driver budget, this), so a fresh launch reproduces the pressure of a long session or a smaller card
+  // (vg1 2026-11-02: 18.6 of 31.4 GB, the user's 31.7 GB event did not reproduce in a 4-minute run).
+  if (const int test_mb = cfg_int("rt_vram_guard_budget_mb", 0); test_mb > 0)
+    avail = (std::min)(avail, uint64_t(test_mb) << 20);
   // Breakdown and yield sizes first (each module's own lock; not under g_vg_mu).
   BvhVram b;
   bvh_vram(&b);
