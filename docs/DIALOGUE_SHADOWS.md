@@ -235,6 +235,19 @@ ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG 
 fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
 next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
 
+### ds1-ds3 result (batch dsh-20261102h, 13:46-13:58; INVALID only on the static-camera gate)
+
+Shots whose window had a `camera moving` scene build are discarded; each toggle against its two nearest static OFF
+shots; ROI = skin + hair class px. OFF ROI spread: ds1 12.9%, ds2 15.1%, ds3 12.5%.
+- ds1 camp: noao +42% (frame +5.9%); everything else within the spread (nohold +10.5%, hairorigin +13.3% borderline).
+- ds2 camp: noao +31.6% (frame +13.6%); hair +19.5%, hair+origin +30.9%; nosun +13.8% at the spread.
+- ds3 port, under a roof: hair+origin +26.9% (hair alone +32.5% but its window moved); noao +18.3%; nocascade,
+  noart +9% within the spread.
+Verdict: the character darkening is the RT AO (1-ray ambient visibility at gi_ao=1) and, under the port roof, the
+opaque hair cards (native hair coverage brightens the characters by about 20-30%). No local-light, box,
+art-unshadowed, held-draw or cascade toggle exceeds the spread. The camp "moving shadow" is not resolved by these
+shots (the PNG pairs are 3 frames apart). Next: rt_occ_stats per occluder kind for AO and sun on character px.
+
 ### Occluder-kind diagnostic (requested 2026-11-02, designed, not built)
 
 No existing view names the occluder: rt_debug 1/2 give visibility and game-vs-traced mask, ls_debug 2/9 the removed
