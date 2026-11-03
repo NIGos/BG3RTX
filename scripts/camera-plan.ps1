@@ -4,10 +4,18 @@ function Assert-SmoothRotationStep($step) {
       ($step.frame_interval -and $step.frame_interval -ne 1)) { throw 'Smooth modes need 1 or 2 pixels every frame' }
 }
 function Get-CameraPlanSample($step, [double]$elapsed, [int]$width, [int]$height) {
-  if ($step.turn_mode -and $step.turn_mode -notin @('legacy','hold_drag','centre_hold')) { throw 'Unknown turn_mode' }
+  if ($step.turn_mode -and $step.turn_mode -notin @('legacy','hold_drag','centre_hold','keys')) { throw 'Unknown turn_mode' }
   if ($step.turn_mode -in @('hold_drag','centre_hold')) { Assert-SmoothRotationStep $step }
   $active = $elapsed -ge $step.motion_start -and $elapsed -lt $step.motion_end
   $kind = if ($step.kind) { [string]$step.kind } elseif ($step.repeat_ms -gt 0) { 'pan' } else { 'static' }
+  if ($step.turn_mode -eq 'keys') {
+    if ($kind -ne 'rotate' -or $step.direction -notin @(-1,1)) { throw 'Key rotation needs kind rotate and direction -1 or +1' }
+    # Q/E remain held for the whole motion interval. No mouse samples, wrapping,
+    # frame pacing or duty cycle: BG3 determines the angular speed of a held key.
+    $scan = if ($step.direction -eq -1) { 0x10 } else { 0x12 }
+    return @{kind='key_turn';active=$active;scan=$scan;direction=[int]$step.direction;
+             x=[int][Math]::Floor($width/2);y=[int][Math]::Floor($height/2);segment=0}
+  }
   # Posted key repeat does not control held-key camera speed. A duty cycle does.
   if ($kind -eq 'pan' -and $step.key_period_ms) {
     if ($step.key_period_ms -le 0 -or $step.key_down_ms -le 0 -or $step.key_down_ms -gt $step.key_period_ms) {

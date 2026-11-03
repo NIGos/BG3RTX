@@ -106,6 +106,35 @@
     "turn_mode": "hold_drag"
   },
   {
+    "label": "rearm-turn-keys",
+    "kind": "static",
+    "seconds": 2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 2,
+    "motion_end": 2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "fg_snap=0"
+  },
+  {
+    "label": "turn-keys",
+    "kind": "rotate",
+    "seconds": 18,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 18,
+    "pixels_per_second": 1,
+    "direction": 1,
+    "set": "pan_capture=0,fg_snap=16",
+    "turn_mode": "keys"
+  },
+  {
     "label": "restore",
     "kind": "static",
     "seconds": 10,

@@ -100,7 +100,7 @@ param(
   [ValidateSet("auto", "on", "off")]
   [string]$AcceptModWarning = "auto",
   [int]$ModWarningAfterSec = 15,
-  # How a non-ASCII save folder name (the Crèche save) reaches -loadSaveGame. "utf8ansi"
+  # How a non-ASCII save folder name (the CrÃ¨che save) reaches -loadSaveGame. "utf8ansi"
   # passes its UTF-8 bytes as ANSI characters, for a game that reads its command line
   # through the ANSI code page and treats it as UTF-8; "wide" passes it unchanged.
   # auto = utf8ansi when the name is not ASCII.
@@ -740,16 +740,20 @@ while ((Get-Date) -lt $deadline) {
         $planHoverNext = (Get-Date).AddMilliseconds(100)
       }
       $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
-      $panInMotion = $sample.kind -eq 'pan' -and $sample.active
+      $panInMotion = $sample.kind -in @('pan','key_turn') -and $sample.active
       if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false; if ($step.shift) { Send-ShiftKey $false } }
       if ($panInMotion -and (Get-Date) -ge $panNextKey) {
         if ($step.shift) { Send-ShiftKey $true $moving }   # BG3 shows the movement-path UI while Shift is held
-        $MoveScan = [byte]$step.scan
+        $MoveScan = if ($sample.kind -eq 'key_turn') { [byte]$sample.scan } else { [byte]$step.scan }
         $moveVk = switch ([int]$MoveScan) { 0x1e { 0x41 } 0x10 { 0x51 } 0x12 { 0x45 } default { 0x44 } }   # A, Q (rotate left), E (rotate right), D
+        if ($sample.kind -eq 'key_turn' -and -not $moving) {
+          Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex mode=keys label=$($step.label) direction=$($sample.direction) scan=$MoveScan"
+        }
         Send-MoveKey $true $moving; $moving = $true
-        $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
+        $repeatMs = if ($sample.kind -eq 'key_turn') { 33 } else { $step.repeat_ms }
+        $panNextKey = (Get-Date).AddMilliseconds($repeatMs)
       }
-      if ($step.frame_delta_pixels) {
+      if ($sample.kind -eq 'rotate' -and $step.frame_delta_pixels) {
         # Independent short-lived log reader: leave Read-NewLog's cursor untouched.
         # fg_state_every=1 supplies one marker per rendered frame, including FG runs.
         if (Test-Path $log) {

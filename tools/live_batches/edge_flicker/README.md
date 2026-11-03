@@ -3,8 +3,14 @@
 `ef1-dialogue3-attribution` loads **Test Dialogue3**, the port save used by
 `dialogue_shadows`. It sends no camera or dialogue input. The first shot must
 match the white-haired character against the blurred background in
-`edge_flicker_user.webp`. A camera cut invalidates the comparison; the analysis
-reuses `dialogue_shadows.pair_registration.registration` and never warps beauty.
+`edge_flicker_user.webp`. There is no supported dialogue pause control in auto-run. Each phase declares
+`registration_policy=per-frame-exclude-unregistered`: the analyzer registers every
+rendered depth and presented PQ frame against baseline A, using gradient magnitude
+so a brightness or polarity change does not masquerade as camera motion. It keeps
+the longest consecutive registered run (at least four frames for both midpoint
+residual parities), reports exclusions, and never joins across cuts or warps beauty. A
+window without enough registered frames is INVALID. Translation registration
+cannot certify all rotation/zoom or facial animation; review those limits.
 No save is changed. No job is staged in a watched queue by these tools.
 
 `predicted.json` was written before the implementation and contains the four
@@ -78,9 +84,14 @@ python tools/live_batches/edge_flicker/analyze.py --game-log RUN.bg3rtx.log --ru
 `--capture-root DIRECTORY` remaps captured directory basenames after relocation.
 No manual mask painting or manifest is needed. The analyzer validates all queue
 expectations and every window, obtains capture paths from their logged timestamps,
-requires P00..P15 and a complete K8 transport, then checks each shot's first/last
-albedo against baseline A. The fixed mask is derived from both baseline bursts:
-depth steps touching class-3/5 support, union all class-5 hair. The control is
+requires 16 consecutive numerically sorted presents per capture (numbering may
+continue at P16, P128, etc.) and a complete K8 transport. The fixed mask is derived from both baseline bursts:
+relative depth discontinuities touching class-3/5 support, union all class-5
+hair. An adjacent relative jump must exceed the sum of the two outward slopes
+and six depth-rounding intervals (the central pair contributes twice). The interval is the existing
+`depth_prec(z) = z*z/0.1*2^-25 + z*2^-24` (reversed D24 into R32F), divided
+by local depth; smooth curved depth is not classified by nonzero second derivative.
+Baseline material endpoints outside the registered run are excluded. The control is
 eroded skin support excluding hair and edges. Armour has no character class;
 its silhouette cannot be attributed with this mask. It reports per-pixel temporal
 variance averaged over each mask, depth variance, albedo-motion fraction, midpoint

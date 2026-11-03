@@ -70,7 +70,8 @@ foreach ($job in $jobs) {
     elseif ($step.serial -or $step.capture_at) { $bursts = $false }
     if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
     $rearm = $step.label -like 'rearm-*' -and $step.kind -eq 'static' -and $step.seconds -eq 2 -and $step.set -eq 'fg_snap=0'
-    if (-not $rearm -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
+    $prefetch = $step.label -eq 'warmup' -and $step.kind -eq 'static' -and $step.seconds -ge 5 -and $step.seconds -le 45 -and -not $step.trace_at -and -not $step.serial -and -not $step.capture_at
+    if (-not $rearm -and -not $prefetch -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
     if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
     if ($label.StartsWith('cost-') -and $diag) { $roles = $false }
@@ -89,7 +90,7 @@ foreach ($job in $jobs) {
   if ($burstCount -gt $MaxBursts) { $bursts = $false }
   $totalBursts += $burstCount
   Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts
-  Check "${n}: phases 5-25 s (static capture rearm 2 s)" $sizes
+  Check "${n}: phases 5-25 s (static capture rearm 2 s; uncaptured warmup <=45 s)" $sizes
   Check "${n}: timeout $($job.timeout) >= plan + 240 s load" ($job.timeout -ge $sec + 240)
   $er = @($job.expect_runner)
   Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
