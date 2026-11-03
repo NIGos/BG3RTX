@@ -3,7 +3,7 @@
 python -m tools.hair_groom.batch --report-dir <dir> [--match Shadowheart Karlach ...] [--limit N] [--jobs J]
     [--out-dir data/assetdb/hair_grooms] [--catalogue <mesh_materials v2 json>] [--lslib <LSLib Tools dir>]
 
-1. Enumerates the LOD0 objects whose material template is CHAR_Hair in the mesh_materials catalogue
+1. Enumerates the LOD0 and LOD1 objects whose material template is CHAR_Hair in the mesh_materials catalogue
    (python -m tools.assets.mesh_materials) and resolves each one's ID_Depth_Root_Alpha_MSKA texture.
 2. Reads the GR2 and the mask from the installed paks (read-only) and decodes the GR2 with LSLib's reader
    (gr2_dump.ps1 under PowerShell 7; granny2.dll next to LSLib.dll, as in LSLib's ExportTool package), keeping
@@ -79,7 +79,8 @@ def styles(catalogue, match=()):
 
     out, seen = [], set()
     for r in doc["rows"]:
-        if r["lod"] != 0 or r["material_id"] not in hair:
+        # LOD0 and LOD1: the game draws LOD1 at camp/exploration distances (2026-11-03 live: no LOD0 draw at camp).
+        if r["lod"] > 1 or r["material_id"] not in hair:
             continue
         parts = r["object_id"].split(".")
         mesh = parts[1] if len(parts) >= 3 else ""
@@ -90,7 +91,7 @@ def styles(catalogue, match=()):
         tid = mask_id(doc["materials"][r["material_id"]]["native"])
         tex = doc["textures"].get(tid or "", {}).get("native", {}).get("SourceFile", "")
         seen.add((r["source"], mesh))
-        out.append({"name": Path(r["source"]).stem + ":" + mesh, "gr2": r["source"], "mesh": mesh,
+        out.append({"name": Path(r["source"]).stem + ":" + mesh, "gr2": r["source"], "mesh": mesh, "lod": r["lod"],
                     "mask": tex.replace("\\", "/"), "visual": r["visual_id"]})
     return sorted(out, key=lambda s: s["name"])
 
@@ -149,7 +150,15 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
             src.write_bytes(gr2)
             gr2_dump(lslib, src, Path(tmp) / "out.bin")
             hair = mesh.load_gr2_dump(Path(tmp) / "out.bin", style["mesh"])
-        grid, fit = convert.detect_tile_grid(hair)
+            # LOD1 cards merge several LOD0 cards (span several tiles): the atlas grid comes from the LOD0 mesh of the
+            # same GR2 (same mask) when it exists.
+            ref = hair
+            if style.get("lod", 0) and style["mesh"].endswith("_LOD1"):
+                try:
+                    ref = mesh.load_gr2_dump(Path(tmp) / "out.bin", style["mesh"][:-5])
+                except KeyError:
+                    pass
+        grid, fit = convert.detect_tile_grid(ref)
         root_corr = analysis.root_channel_check(mask, grid)
         groom, rep = convert.convert(hair, mask, tile_grid=grid)
         groom, dropped = convert.dedupe(groom)

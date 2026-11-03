@@ -44,6 +44,9 @@ plan = [
     step("settle-cam", 10, qa_exposure_hold="0", **GROOM),
     step("toggle-off-a", 20, qa_exposure_hold="0"),         # first toggle: constant 1020 = 0 pipelines build here
     step("toggle-off-b", 10, qa_exposure_hold="0"),
+    # 2026-11-03 10:40 run: the no-hair pipelines built inside cost-nohair. Warm them (and the way back) here.
+    step("warm-nohair", 25, qa_exposure_hold="0", **NO_HAIR),
+    step("warm-back", 15, qa_exposure_hold="0"),
     step("shot-off-a", SHOT, True),
     step("shot-groom-a", SHOT, True, **GROOM),
     step("shot-off-b", SHOT, True),

@@ -3,18 +3,20 @@
 Question: does the strand groom (rt_hair_groom, docs/RTX_HAIR_INTEGRATION.md) lower the native hair cost in the
 secondary rays without changing the character energy? Predictions (committed before the run): [predicted.json](predicted.json).
 
-Requires on the test PC: `data/assetdb/hair_grooms/<index id>.hgrm` for Shadowheart's hair, generated from the
+Requires on the test PC: `data/assetdb/hair_grooms/<index id>.hgrm` for Shadowheart's hair, LOD0 (e602d25d6dd783bb)
+and LOD1 (a97c222a4f2c0dda: the game draws LOD1 at camp distances; the 10:40 run matched nothing), generated from the
 user's paks (never shipped): `python -m tools.hair_groom.asset --gltf <LSLib export of HAIR_HUM_F_Shadowheart_Spring.GR2>`
 (the LSLib glTF export is the one in docs/RTX_HAIR_FEASIBILITY.md). And this branch merged into the test tree.
 
-Jobs (one foreground launch each, `py -3 make_job.py`, one plan `plans/hg_plan.json`, 215 s):
+Jobs (one foreground launch each, `py -3 make_job.py`, one plan `plans/hg_plan.json`, 255 s):
 1. `hg1-camp-fg2` (`Campsite - 27h`: the party at camp), 2. `hg2-dialogue1-fg2` (`Test Dialogue1`).
 
 Config: hair_qual's Ultra keys and hair startup latches, `rt_hair_gi_cull=0`, `rt_hair_groom=1` at startup (the
 device feature is negotiated there; later 0/1 is live).
 
 Phases: `warmup` 25 s and `settle-cam` 10 s (groom on: startup builds, groom upload); `toggle-off-a` 20 s /
-`toggle-off-b` 10 s (first groom toggle: the constant-1020-off pipelines build in their own slot); shots off / groom /
+`toggle-off-b` 10 s (first groom toggle: the constant-1020-off pipelines build in their own slot); `warm-nohair` 25 s /
+`warm-back` 15 s (the no-hair pipelines build before the cost windows; 10:40 run: they built in cost-nohair); shots off / groom /
 off / groom / off (8 s, one PNG trace at 5 s, exposure held); `settle` 5 s; cost `cost-off-a` / `cost-groom` /
 `cost-off-b` / `cost-nohair` (25 s each: one 300-frame rt passes and gi line); `restore` 5 s.
 

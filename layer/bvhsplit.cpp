@@ -476,7 +476,8 @@ uint64_t g_hold_why[7] = {};
 struct FrameDraw {
   uint64_t content_id = 0;
   uint64_t groom_id = 0;        // rt_hair_groom: the groom file joined to this draw's index range (0 none)
-  uint32_t groom_indices = 0;
+  uint32_t groom_indices = 0;   // the draw's index count (also when unmatched: the log names it)
+  hair_groom::JoinMiss groom_miss = hair_groom::JoinMiss::None;
   std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
@@ -806,7 +807,8 @@ bool ensure_hold_pack_pipeline() {
 // instance in the scene slot's groom TLAS, which only the secondary ray queries trace (rt_common.hlsli). The groom
 // files' arrays are uploaded once into the mesh pool, never repacked while native hair is on (pool_repack_begin).
 bool g_groom_on = false;                 // this capture: device feature, rt_hair_groom and native hair
-std::unordered_map<uint64_t, uint64_t> g_groom_join;   // draw identity (index range) -> groom index id (0: none)
+// Draw identity (index range) -> groom index id (0: none) and the join verdict.
+std::unordered_map<uint64_t, std::pair<uint64_t, hair_groom::JoinMiss>> g_groom_join;
 struct GroomAsset {
   struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0; uint32_t points = 0, segments = 0; float keep = 1; };
   std::vector<Lod> lods;
@@ -827,8 +829,13 @@ Buf g_groom_inst[kSceneSlots];
 Buf g_groom_scratch;
 struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, pad; };
 static_assert(sizeof(GroomPush) == 32);
-struct GroomStats { uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0; uint32_t lod[kGroomLods] = {}; } g_groom_st;
+struct GroomStats {
+  uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
+  uint32_t lod[kGroomLods] = {};
+  uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
+} g_groom_st;
 std::unordered_set<uint32_t> g_groom_logged_counts;
+std::unordered_set<uint64_t> g_groom_logged_unmatched;   // (index count, verdict) of unmatched hair draws, logged once
 
 bool ensure_groom_pipeline() {
   Bg3ShaderBlob blob{};
@@ -995,10 +1002,11 @@ int groom_pick_lod(GroomSlot& g, int lods) {
 
 // Reads the index range of an indexed draw from existing host mappings (as content_sample) and returns its groom
 // index id when a groom file has that id and index count; cached per draw identity. 0: none or not host data.
-uint64_t groom_join(const BvhDraw& d, uint64_t identity) {
+uint64_t groom_join(const BvhDraw& d, uint64_t identity, hair_groom::JoinMiss* miss) {
   const auto cached = g_groom_join.find(identity);
-  if (cached != g_groom_join.end()) return cached->second;
+  if (cached != g_groom_join.end()) { *miss = cached->second.second; return cached->second.first; }
   uint64_t id = 0;
+  bool mapped = false;
   const CmdState* s = d.s;
   const uint32_t ib = s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 : s->ib_type == VK_INDEX_TYPE_UINT16 ? 2 : 0;
   if (ib && d.args.kind == 1 && s->ib) {
@@ -1012,6 +1020,7 @@ uint64_t groom_join(const BvhDraw& d, uint64_t identity) {
       const uint64_t start = bm->second.second + offset;
       if (mp != tracker().mapped.end() && range != tracker().mapped_ranges.end() && start >= range->second.first &&
           start + bytes <= range->second.second) {
+        mapped = true;
         const uint8_t* p = mp->second + start;
         const uint64_t candidate = hair_groom::index_content_id([&](uint32_t i) {
           if (ib == 2) { uint16_t v; std::memcpy(&v, p + uint64_t(i) * 2, 2); return uint32_t(v); }
@@ -1021,11 +1030,10 @@ uint64_t groom_join(const BvhDraw& d, uint64_t identity) {
         else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64)
           log("[hair groom] draw with %u indices: index id %016llx has no groom file", d.args.count, (unsigned long long)candidate);
       }
-    } else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64) {
-      log("[hair groom] draw with %u indices: index buffer not host-mapped, no join", d.args.count);
     }
   }
-  g_groom_join[identity] = id;
+  *miss = hair_groom::join_miss(true, true, mapped, id != 0);
+  g_groom_join[identity] = {id, *miss};
   return id;
 }
 
@@ -1762,7 +1770,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   }
   if (g_groom_scratch.b) free_buf(g_groom_scratch);
   for (auto& u : g_groom_uploads) if (u.staging.b) free_buf(u.staging);
-  g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear();
+  g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear(); g_groom_logged_unmatched.clear();
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
   g_compact_qp = VK_NULL_HANDLE;
@@ -1843,9 +1851,12 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   dk = mix(dk, d.alpha);
   fd.dyn_key = mix(dk, g_dyn_seen[dk]++);   // the n-th draw with that identity this frame
   fd.omm_key = dk;
-  if (g_groom_on && indexed && d.alpha && hair_groom::count_known(d.args.count)) {
-    fd.groom_id = groom_join(d, dk);
+  if (g_groom_on) {
+    // Every draw gets its join verdict (cheap: the count filter before any index read); only hair draws use it.
     fd.groom_indices = d.args.count;
+    if (!indexed) fd.groom_miss = hair_groom::JoinMiss::NotIndexed;
+    else if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
+    else fd.groom_id = groom_join(d, dk, &fd.groom_miss);
   }
   if (!d.inst || !d.inst->ok) {
     ++g_st.not_inst_pattern;
@@ -2416,7 +2427,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     const GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
                                       ? groom_asset(cmd, fd.groom_id, fd.groom_indices) : nullptr;
     if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
-    if (hair && groom_ready && !fd.groom_id && !s.groom) ++g_groom_st.unmatched;
+    if (hair && groom_ready && !fd.groom_id) {
+      ++g_groom_st.unmatched;
+      ++g_groom_st.miss[size_t(fd.groom_miss)];
+      const uint64_t what = (uint64_t(fd.groom_indices) << 8) | uint64_t(fd.groom_miss);
+      if (g_groom_logged_unmatched.size() < 64 && g_groom_logged_unmatched.insert(what).second)
+        log("[hair groom] unmatched hair draw: %u indices (%u triangles): %s", fd.groom_indices, fd.prims,
+            hair_groom::join_miss_name(fd.groom_miss));
+    }
     if (!groom_src) {
       if (s.groom) { groom_release(*s.groom, now); s.groom.reset(); }
     } else {
@@ -3275,10 +3293,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_first = n;
   if (g_groom_on && now % 300 == 0) {
     log("[hair groom] frame %llu: %u groom instances; last 300 frames: matched %llu (LOD %u/%u/%u), full builds %llu, "
-        "refits %llu, compacted %llu, unmatched hair draws %llu",
+        "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu)",
         (unsigned long long)now, groom_count, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
-        (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched);
+        (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
+        (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
+        (unsigned long long)g_groom_st.miss[4]);
     g_groom_st = GroomStats{};
   }
   out->pool = g_pool.b;

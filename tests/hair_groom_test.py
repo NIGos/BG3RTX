@@ -160,6 +160,9 @@ def test_thin():
     check("thin widens radii", np.allclose(t.radii, g.radii[0] * 2), t.radii[:2])
     check("thin is deterministic", convert.thin(g, 0.5).strands == t.strands)
     check("thin 1.0 is identity", convert.thin(g, 1.0) is g)
+    wide = convert.thin(g, 0.5)
+    wide.radii[:] = 0.004
+    check("thin caps radii below the layer's bound", convert.thin(wide, 0.25).radii.max() <= convert.MAX_THIN_RADIUS)
 
 
 def test_asset():
@@ -229,8 +232,9 @@ def test_batch_catalogue():
         path = Path(d) / "cat.json"
         path.write_text(json.dumps(doc))
         got = batch.styles(path)
-        check("batch: one LOD0 CHAR_Hair style per GR2 and mesh, mask resolved",
-              got == [{"name": "HAIR_A:HAIR_A_Mesh", "gr2": "G/HAIR_A.GR2", "mesh": "HAIR_A_Mesh", "mask": "Generated/A_MSKA.DDS", "visual": "v1"}], got)
+        check("batch: one CHAR_Hair style per GR2 and mesh (LOD0 and LOD1), mask resolved",
+              got == [{"name": "HAIR_A:HAIR_A_Mesh", "gr2": "G/HAIR_A.GR2", "mesh": "HAIR_A_Mesh", "lod": 0, "mask": "Generated/A_MSKA.DDS", "visual": "v1"},
+                      {"name": "HAIR_A:HAIR_A_Mesh_LOD1", "gr2": "G/HAIR_A.GR2", "mesh": "HAIR_A_Mesh_LOD1", "lod": 1, "mask": "Generated/A_MSKA.DDS", "visual": "v1"}], got)
         check("batch: name filter", batch.styles(path, ["nothing"]) == [])
 
 

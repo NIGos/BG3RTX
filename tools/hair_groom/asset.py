@@ -72,6 +72,8 @@ def write(path, cid, hair, lods):
     with open(path, "xb") as f:
         f.write(MAGIC + struct.pack("<IQQ4I", 1, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0))
         for keep, g in lods:
+            if not (np.all(g.radii > 0) and np.all(g.radii < 0.01)):
+                raise ValueError(f"LOD {keep}: radius outside (0, 10 mm): the layer would reject the file")
             starts = segment_starts(g.offsets)
             f.write(struct.pack("<f3I", keep, len(g.points), len(starts), 0))
             f.write(np.asarray(g.triangle, "<u4").tobytes())
@@ -81,8 +83,10 @@ def write(path, cid, hair, lods):
             f.write(starts.astype("<u4").tobytes())
 
 
-def build(hair, mask, step=16):
-    g, _ = convert.convert(hair, mask, step=step)
+def build(hair, mask, step=16, grid_mesh=None):
+    """grid_mesh: the mesh whose cards define the atlas grid (LOD0 for a LOD1 mesh); default the mesh itself."""
+    grid, _ = convert.detect_tile_grid(grid_mesh or hair)
+    g, _ = convert.convert(hair, mask, tile_grid=grid, step=step)
     g, _ = convert.dedupe(g)
     return [(k, convert.thin(g, k)) for k in LODS]
 
@@ -102,7 +106,8 @@ def main():
     if path.exists():
         print(f"[hair groom asset] {path} exists, kept", flush=True)
         return
-    lods = build(hair, load_mask(args.mask))
+    grid_mesh = mesh.load(args.gltf, args.mesh[:-5]) if args.mesh.endswith("_LOD1") else None
+    lods = build(hair, load_mask(args.mask), grid_mesh=grid_mesh)
     write(path, cid, hair, lods)
     print(f"[hair groom asset] {path}: index id {index_id(hair.tris):016x}, position id {cid:016x}, " +
           ", ".join(f"LOD {k}: {g.strands} strands {g.segments} segments" for k, g in lods), flush=True)

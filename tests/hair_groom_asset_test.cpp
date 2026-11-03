@@ -3,6 +3,7 @@
 #include "../common/hair_groom_asset.h"
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 using namespace bg3::hair_groom;
 #define CHECK(x) do { if (!(x)) { std::printf("FAIL %d: %s\n", __LINE__, #x); std::exit(1); } } while (0)
@@ -37,6 +38,14 @@ int main() {
   const uint32_t other[6] = {0, 1, 2, 0, 3, 2};
   CHECK(index_content_id([&](uint32_t i) { return other[i]; }, 6) != 0xce53baad8d797436ull);
   CHECK(index_content_id([&](uint32_t i) { return quad[i]; }, 4) == 0);
+
+  // Join verdicts, in the order the layer tests them.
+  CHECK(join_miss(false, true, true, true) == JoinMiss::NotIndexed);
+  CHECK(join_miss(true, false, true, true) == JoinMiss::CountUnknown);
+  CHECK(join_miss(true, true, false, false) == JoinMiss::NotHostMapped);
+  CHECK(join_miss(true, true, true, false) == JoinMiss::NoFile);
+  CHECK(join_miss(true, true, true, true) == JoinMiss::None);
+  for (int m = 0; m < int(JoinMiss::Count); ++m) CHECK(std::string(join_miss_name(JoinMiss(m))) != "?");
 
   Asset a;
   auto b = asset();
