@@ -285,3 +285,36 @@ Generation on the user's machine (never inside the game folder; read-only paks):
 - Asset DB: is shipping `bg3rtx_assetdb.bin` (light positions, colours, names, UUIDs derived from the
   game's paks) acceptable for the beta, or must it be generated on the player's machine from day one?
   Conservative default here: generate it (frozen Python tool), like the VT masks.
+
+### SCC1 re-gate against the merged design (2026-11-03)
+
+The always-on design has 165 variants; one module per file and remaining layout define set.
+`rt_spec_cascade` is gone. The revised batch in tools/live_batches/spec_cascade rejects only actual
+DXC `compiled in` events (cache reads are allowed), including water, after warmup and on every
+converted-key toggle. Same-state energy and GPU ms predictions stay zero within OFF-OFF spread.
+The 01:39 run fails this gate: cascade-off caused water_compose:water_compose to compile at
+01:41:31.120 (1640 ms). core/water.cpp make_pipe -> shader_variant::water_request still varies
+RT_CASCADE_MASKS / RT_CASCADE_SUN_HIT. Both requests are listed; cascade specialization missed
+this water path. GI GPU repeats also exceed their own spread. The ignored retired key provides
+no old/new equivalence measurement. Additional converted-key windows are absent from that run;
+startup-latched hit/native capabilities need effective switching or startup fixtures, not INI-only
+claims. See the batch README and regate_013945.json. No live or shader compile was run for this audit.
+
+### SCC1 missed water cascade path (2026-11-03, offline candidate)
+
+Water compose, reflect and the glint prepass now always request `WATER_SPEC_CASCADE=1`, which
+selects the existing `RT_SPEC_CASCADE` implementation and registry id 1000. `RT_CASCADE_SUN_HIT`
+is a fixed marker of the sun-record layouts; its sun-ray state is guarded by constant 1000.
+`core/water.cpp::make_pipe` supplies cascade and edge (1014) in one specialization map and
+includes their values in the pipeline key. View and motion-vector requests stay plain.
+The glint prepass includes compose and keeps the same specialization suffix as its compose pipe.
+Variants fall from 165 to 145 (-20). No ABI, setting, preset or descriptor-layout changes.
+`spec_cascade_check.py --key watercasc --sample 16` compares legacy define paths for both values
+and all sampled entries: 19/19 requests, 66/66 comparisons; control 5,862 differing lines.
+`--key cascade --sample 8`: 44/44 requests, 88/88 comparisons; control 1 differing line.
+`--key wateredge --sample 8`: all 7/7 requests, 28/28 comparisons; control 7,316 lines.
+`shader_identity.py --pp-diff main`: all 209 unchanged requests agree (206 identical inputs,
+3 preprocessed-identical), zero compiles needed. This is offline equivalence, not a live pass.
+Build succeeded; all 117 CTests passed across the full run and targeted reruns after correcting
+the progress fragment's existing BOM and an unchanged header's checkout line endings.
+The zero-DXC toggle, energy and GPU-cost gates still require an authorized SCC1 run in game.

@@ -1,0 +1,158 @@
+{
+ "status": "FAIL",
+ "full_migration": "NOT_COVERED",
+ "failures": [
+  "every-window zero DXC compiles after warmup, including water and every converted key: window 'toggle-spec-c0' (phase 2): 1 of 1 line(s) fail /(?!x)x/; first: 01:41:31.120  [shaders] rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1:water_compose compiled in 1640 ms (generation 1)",
+  "c1 gi: delta -0.028 exceeds OFF-OFF spread 0.013",
+  "c0 gi: delta 0.0255 exceeds OFF-OFF spread 0.007",
+  "c0 rt: delta 0.01775 exceeds OFF-OFF spread 0.0105"
+ ],
+ "unobserved_windows": [
+  "toggle-gi_far-0",
+  "toggle-gi_far-1",
+  "toggle-gi_prev_radiance_guard-0",
+  "toggle-gi_prev_radiance_guard-1",
+  "toggle-gi_temporal_mv_sample-0",
+  "toggle-gi_temporal_mv_sample-1",
+  "toggle-rf_hit_gi-0",
+  "toggle-rf_hit_gi-1",
+  "toggle-rt_hair_physical_origin-0",
+  "toggle-rt_hair_physical_origin-1",
+  "toggle-rt_hit_material_instanced-0",
+  "toggle-rt_hit_material_instanced-1",
+  "toggle-rt_hit_material_ip_grass-0",
+  "toggle-rt_hit_material_ip_grass-1",
+  "toggle-rt_hit_material_wind_rgb-0",
+  "toggle-rt_hit_material_wind_rgb-1",
+  "toggle-rt_native_hair-0",
+  "toggle-rt_native_hair-1",
+  "toggle-rt_native_scalp-0",
+  "toggle-rt_native_scalp-1",
+  "toggle-rt_native_tileset-0",
+  "toggle-rt_native_tileset-1",
+  "toggle-rt_water_rf_edge-0",
+  "toggle-rt_water_rf_edge-1"
+ ],
+ "compiles": [
+  {
+   "line": "01:40:41.280  [shaders] gi/rt_sun_resolve.hlsl?RT_SPEC_NATIVE=1:main compiled in 51 ms (generation 1)",
+   "window": "startup"
+  },
+  {
+   "line": "01:41:31.120  [shaders] rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1:water_compose compiled in 1640 ms (generation 1)",
+   "window": "toggle-spec-c0"
+  }
+ ],
+ "cascade_off_pipeline_ms": [
+  441.0,
+  31.6,
+  189.9,
+  199.4,
+  335.1,
+  308.2,
+  3472.1
+ ],
+ "energy": {
+  "shot-c1-off-a": 0.1961001888,
+  "shot-c1-on": 0.1924311128,
+  "shot-c1-off-b": 0.1923300582,
+  "shot-c0-off-a": 0.19264341399999996,
+  "shot-c0-on": 0.192616493,
+  "shot-c0-off-b": 0.1925238868
+ },
+ "gpu_medians_ms": {
+  "cost-c1-off-a": {
+   "gi": 5.8774999999999995,
+   "rf": 0.5845,
+   "ls": 0.2115,
+   "rt": 4.813000000000001
+  },
+  "cost-c1-on": {
+   "gi": 5.843,
+   "rf": 0.584,
+   "ls": 0.212,
+   "rt": 4.774
+  },
+  "cost-c1-off-b": {
+   "gi": 5.8645,
+   "rf": 0.586,
+   "ls": 0.212,
+   "rt": 4.773
+  },
+  "cost-c0-off-a": {
+   "gi": 5.09,
+   "rf": 0.5914999999999999,
+   "ls": 0.209,
+   "rt": 4.0115
+  },
+  "cost-c0-on": {
+   "gi": 5.112,
+   "rf": 0.586,
+   "ls": 0.209,
+   "rt": 4.024
+  },
+  "cost-c0-off-b": {
+   "gi": 5.083,
+   "rf": 0.586,
+   "ls": 0.209,
+   "rt": 4.001
+  }
+ },
+ "repeat_comparisons": {
+  "c1": {
+   "energy": {
+    "delta": -0.0017840106999999772,
+    "off_off_spread": 0.0037701306000000046,
+    "within_spread": true
+   },
+   "gi": {
+    "delta": -0.02799999999999958,
+    "off_off_spread": 0.0129999999999999,
+    "within_spread": false
+   },
+   "rf": {
+    "delta": -0.0012500000000000844,
+    "off_off_spread": 0.0014999999999999458,
+    "within_spread": true
+   },
+   "ls": {
+    "delta": 0.0002500000000000002,
+    "off_off_spread": 0.0005000000000000004,
+    "within_spread": true
+   },
+   "rt": {
+    "delta": -0.019000000000000128,
+    "off_off_spread": 0.040000000000000924,
+    "within_spread": true
+   }
+  },
+  "c0": {
+   "energy": {
+    "delta": 3.2842600000027034e-05,
+    "off_off_spread": 0.00011952719999996919,
+    "within_spread": true
+   },
+   "gi": {
+    "delta": 0.025500000000000078,
+    "off_off_spread": 0.006999999999999673,
+    "within_spread": false
+   },
+   "rf": {
+    "delta": -0.002749999999999919,
+    "off_off_spread": 0.005499999999999949,
+    "within_spread": true
+   },
+   "ls": {
+    "delta": 0.0,
+    "off_off_spread": 0.0,
+    "within_spread": true
+   },
+   "rt": {
+    "delta": 0.017750000000000377,
+    "off_off_spread": 0.01049999999999951,
+    "within_spread": false
+   }
+  }
+ },
+ "qualification": "Retired switch ignored: same-state repeats, not old/new equivalence. New converted-key windows absent. No full qualification."
+}

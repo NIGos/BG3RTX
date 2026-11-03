@@ -90,14 +90,17 @@ int main(int argc, char** argv) {
   for (const char* r : kFixedRequests) {   // outside gi/: each names an existing file
     const std::string f(r, std::strchr(r, '?'));
     CHECK(std::filesystem::exists(root / "shaders" / f));
-    want.insert(r);
+    want.insert(water_request(r, false));
     want.insert(water_request(r, true));
   }
-  // rt_cascade_casters on the water passes (core/water.cpp): masks on every request, the sun ray with WATER_SHADOWS.
-  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl");
-  CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
+  // Cascade state changes only specialization, for both water families and every layout.
+  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1");
+  CHECK(water_request("rt/water_reflect.hlsl", true) == water_request("rt/water_reflect.hlsl", false));
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
-        "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
+        "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_CASCADE=1;RT_CASCADE_SUN_HIT=1");
+  CHECK(water_request("rt/water_view.hlsl", true) == "rt/water_view.hlsl");
+  CHECK(water_request("rt/water_mv.hlsl", true) == "rt/water_mv.hlsl");
+  for (const char* r : kFixedRequests) CHECK(water_request(r, false) == water_request(r, true));
   // rt_water_rf_edge: both values use the same module, including every record layout.
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
@@ -114,6 +117,8 @@ int main(int argc, char** argv) {
     for (const char* q : kFixedRequests) glisted = glisted || g == q, plisted = plisted || water_glint_prepass(g) == q;
     CHECK(glisted);
     CHECK(plisted);
+    CHECK(water_request(water_glint_prepass(g).c_str(), true) ==
+          water_glint_prepass(water_request(g.c_str(), true)));
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
