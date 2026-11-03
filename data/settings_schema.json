@@ -198,17 +198,17 @@
        {"id": "reflections", "label": "Far + reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "1", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "box_lights", "label": "Box light shadows",
-     "description": "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": true, "developer": false,
-     "category": "Lighting", "summary": "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
-     "cost": {"status": "Measured", "gpu": "+0.32 ms S6 / +0.20 ms S7", "vram": "Unknown", "provenance": "RTX 5090; ls_box=2; S6 forge and S7 inn; reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; investigation pending. Reference only."},
+     "description": "Shadows from projector lights in interiors, preserving the game's non-shadow-casting art lights. All in Ultra, Off in lower presets; +0.13 ms at the forge (RTX 5090).",
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Shadows from projector lights in interiors, preserving the game's non-shadow-casting art lights. All in Ultra, Off in lower presets; +0.13 ms at the forge (RTX 5090).",
+     "cost": {"status": "Measured", "gpu": "+0.13 ms S6", "vram": "Unknown", "provenance": "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."},
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 2},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
-       {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
      "description": "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",

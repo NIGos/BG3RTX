@@ -69,5 +69,29 @@
   "validity": "Own-frame scene, no timeout/pool-full/background build/invalid hair bounds in every measured window. No offline builds or compiles during future live cost windows.",
   "task3": "Conservative mapped static-draw subset implemented; broad character/instanced/GPU-pulled coverage remains open. Log evaluated/eligible/selected/cards/unknown and disclose zero eligible draws.",
   "timing": "Shared configuration generation clears GPU timing buckets and rejects delayed query results on every hair-key toggle, including OFF/ON/OFF cycles. 300-frame averages must contain a single state; scene-build totals include mean precompute."
+ },
+ "hair_cost3": {
+  "before": "All four 10:18-10:32 runs lost the GPU device about 2 s after mean ON; Streamline timed out about 1 s earlier. No mean qualification.",
+  "mean_prediction": "At most 64 strand candidates per draw. Missing live frame keeps probability -1 and full native coverage. Two tail words stay inside the draw allocation. Per-draw capped-thread count 0/1 stored beside probability; no host-visible atomics. Predict zero device loss; energy and GPU cost remain unqualified.",
+  "hq4": "Pool trim ON from load through every phase; no trim A/B in Dialogue3. Require zero pool-full and scene skips. HQ1-HQ3 still compare trim OFF/ON.",
+  "reported_pool_mb": {
+   "S8": [
+    261,
+    176
+   ],
+   "Dialogue1": [
+    364,
+    210
+   ],
+   "Dialogue2": [
+    137,
+    90
+   ],
+   "Dialogue3": [
+    1669,
+    1483
+   ]
+  },
+  "decisions": "Propose trim default-on separately, with unchanged lighting shaders and retained hold payload identity; it also packs ordinary holds. Drop cheap from shipping proposal: measured gain within noise. No default change in this repair."
  }
 }

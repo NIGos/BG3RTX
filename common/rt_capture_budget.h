@@ -68,13 +68,13 @@ using ElasticWindow=CaptureWindow<24>;
 // Empty cascade captures (including casters toggled off) do not establish a
 // smaller active working set. Inactivity has no upper bound, so no finite
 // timeout can guarantee that the old casters fit on their first returning
-// frame. Hold the allocated capacity until 24 consecutive nonempty samples
+// frame. Hold the allocated capacity until 120 consecutive nonempty samples
 // establish a smaller need. Replacing the buffer after recording has begun
 // cannot recover rejected draws or change commands/offsets already published.
-struct CascadeElasticWindow : ElasticWindow {
+struct CascadeElasticWindow : CaptureWindow<120> {
  uint64_t observe(uint64_t current,uint64_t wanted,uint64_t demand){
   if(!demand){reset();return current;}
-  return ElasticWindow::observe(current,wanted,demand);
+  return CaptureWindow<120>::observe(current,wanted,demand);
  }
 };
 // The primary capture runs every frame: retain a whole smoke_ultra statistics

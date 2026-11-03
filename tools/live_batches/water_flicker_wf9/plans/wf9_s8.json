@@ -115,9 +115,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "snap-turn-0",
@@ -133,9 +131,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "diag-view-turn-0",
@@ -151,9 +147,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "return-0",
@@ -169,9 +163,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-1",
@@ -187,9 +179,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "snap-turn-1",
@@ -205,9 +195,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,fg_snap=16",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "diag-view-turn-1",
@@ -223,9 +211,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,rt_debug=25,pan_capture=99101",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "return-1",
@@ -241,9 +227,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-2",
@@ -259,9 +243,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "snap-turn-2",
@@ -277,9 +259,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "diag-view-turn-2",
@@ -295,9 +275,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25,pan_capture=99102",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "return-2",
@@ -313,9 +291,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-3",
@@ -331,9 +307,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "snap-turn-3",
@@ -349,9 +323,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,fg_snap=16",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "diag-view-turn-3",
@@ -367,9 +339,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,rt_debug=25,pan_capture=99103",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "return-3",
@@ -385,9 +355,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4,
-    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
+    "turn_mode": "keys"
   },
   {
     "label": "restore",

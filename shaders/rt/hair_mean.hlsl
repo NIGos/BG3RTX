@@ -19,22 +19,27 @@ float4 hair_sample(uint tex,float2 uv,float g){return gAlphaTex[NonUniformResour
 [numthreads(64,1,1)]
 void main(uint3 id:SV_DispatchThreadID){
  if(id.x>=pc.instances)return;
+ uint info_bytes;Info.GetDimensions(info_bytes);
+ if(id.x>=info_bytes/16u)return;
  uint4 ii=Info.Load4(id.x*16u);
  if((ii.y&(1u<<12))==0u || ii.w==0u)return;
  uint a=ii.z,rec_bytes,pool_bytes,soup_bytes;
  gAlphaRec.GetDimensions(rec_bytes);Pool.GetDimensions(pool_bytes);Soup.GetDimensions(soup_bytes);
- if(a>rec_bytes || rec_bytes-a<208u || gAlphaRec.Load(a+8u)!=4u)return;
+ if((a&3u)!=0u || a>rec_bytes || rec_bytes-a<208u)return;
+ if(gAlphaRec.Load(a+8u)!=4u)return;
  uint bounds=gAlphaRec.Load(a+192u);
- if(bounds>pool_bytes || ii.w>(pool_bytes-bounds)/24u || pool_bytes-bounds-ii.w*24u<4u)return;
+ if(!nh_mean_range(bounds,gAlphaRec.Load(a+200u),ii.w,gAlphaRec.Load(a+204u),pool_bytes))return;
  uint out_at=bounds+ii.w*24u;
  Pool.Store(out_at,asuint(-1.0));
+ Pool.Store(out_at+4u,0u); // disjoint per-draw capped-thread counter, no atomics
  uint stride=ii.y&255u;if(stride<88u)return;
  bool held=(ii.y&(1u<<8))!=0u;
  uint bytes=held?pool_bytes:soup_bytes;
- if(ii.x>bytes || ii.w>(bytes-ii.x)/(3u*stride))return;
+ if((ii.x&3u)!=0u || (stride&3u)!=0u || ii.x>bytes || ii.w>(bytes-ii.x)/(3u*stride))return;
  // Pick a live strand frame, rather than interpreting native inactive NaNs.
  float3 n=0,t=0,b=0;bool found=false;
- for(uint prim=0;prim<ii.w;++prim){
+ uint scan=nh_scan_count(ii.w);
+ [loop]for(uint prim=0;prim<scan;++prim){
   uint v=ii.x+prim*3u*stride;
   float marker=asfloat(held?Pool.Load(v+12u):Soup.Load(v+12u));
   if(hm_proven_inactive(marker))continue;
@@ -44,7 +49,7 @@ void main(uint3 id:SV_DispatchThreadID){
   found=all(isfinite(n))&&all(isfinite(t))&&all(isfinite(b))&&dot(n,n)>0.0;
   if(found)break;
  }
- if(!found)return;
+ if(!found){Pool.Store(out_at+4u,ii.w>scan?1u:0u);return;}
  float angular[8];
  [unroll]for(uint d=0;d<8u;++d){
   // Equal-solid-angle Fibonacci directions; even physical coverage admits

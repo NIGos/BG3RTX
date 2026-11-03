@@ -1,11 +1,11 @@
 # S8 camera input probe (prepared offline)
 
 No live authorization. One Water Queens House launch, `visible_unfocused_fg`,
-80 s of phases plus loading (allow up to 4 min including the conservative 120 s load estimate).
-Legacy 1 px / 4 renders and hold_drag at 1 and 2 px/render: three 18 s measurement windows.
+100 s of phases plus loading (allow up to 4 min including the conservative 120 s load estimate).
+Legacy 1 px / 4 renders and hold_drag at 1 and 2 px/render: four 18 s measurement windows including held E.
 Each capture window follows a separate 2 s static `set: fg_snap=0` rearm phase.
 Repeated keys within one set collapse to their last value; they cannot rearm capture.
-Prediction was written before the job. No winner has been measured.
+The 10:08 live probe found mouse jumps and Q/E movement in 120/120 samples. Keys are selected for subsequent water turns.
 
 ## Exact input protocol
 
@@ -49,8 +49,8 @@ reports aggregate mean/max/signed yaw only and needs expensive primary diagnosti
 do not enable those here. No new render instrumentation or shader variants.
 The job requires moving scene-build samples and a completed delayed 16-present
 FG sequence in **every** turn subwindow; no raw burst, trace or image dumps.
-Each sequence starts 6 s after input starts. All 48 presents together are bounded
-at 302 MB (display <=3840x2160; half-size RGB plus 1% allowance), plus 50 MB logs.
+Each sequence starts 6 s after input starts. All 64 presents together are bounded
+at 403 MB (display <=3840x2160; half-size RGB plus 1% allowance), plus 50 MB logs.
 
 Read the existing scene-build GPU `camera moving` and `static` sample counts for
 each interior window. Report moving/(moving+static) and GPU ms; counts alone
@@ -66,8 +66,13 @@ never a pass. If the minimap cannot resolve that delta, yaw qualification remain
 pending. The fallback can reject jumps and support a visual input choice; it cannot
 certify a numeric rendered-yaw gate without render correspondence. The 2 px
 candidate should turn about twice as fast as 1 px; measure it.
-Select the slowest passing mode; no wf9 mode becomes active until then.
+The held-key window checks continuity and measures the game-controlled angular rate.
+wf9 and water_offscreen now use keys following the live movement evidence.
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/camera_probe/dryrun.ps1`.
 This uses the sibling fake-queue harness in TEMP, tests missing evidence rejection
 and stripped structural success, and grants no permission to a real queue.
+
+`turn_mode=keys` holds Q for direction -1 or E for +1 throughout motion_start..motion_end.
+The runner posts key-down with the repeat bit every 33 ms and key-up at motion end,
+phase boundary and cleanup. It emits no mouse rotation messages for that mode.

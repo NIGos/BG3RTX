@@ -35,9 +35,12 @@ def resize_mask(mask, shape):
 def masks(depths, materials):
     """One fixed baseline mask: silhouettes plus hair; skin interior control.
 
-    A step is a discontinuity when it exceeds both adjacent one-pixel plane
-    slopes plus float32 rounding. One half-grid pixel covers the sampling
-    footprint; no brightness threshold or hand-painted ROI.
+    Compare each adjacent depth pair relative to its local depth. The sum of
+    the two outward slopes bounds a smooth turn of the surface; unlike the old
+    second-difference > epsilon test it does not call any curvature an edge.
+    The remaining threshold is six depth conversion intervals: reversed D24
+    near=0.1 -> R32F, exactly depth_prec in shaders/rt/depth_tol.hlsli.
+    One half-grid pixel covers the sampling footprint; no brightness threshold.
     """
     char = np.zeros(depths[0].shape, bool)
     hair = char.copy()
@@ -51,11 +54,18 @@ def masks(depths, materials):
             raise ValueError('nonfinite depth')
         for axis in (0, 1):
             a, b = np.roll(d, 1, axis), np.roll(d, -1, axis)
-            step = np.abs(a-b)
-            slope = 2*np.minimum(np.abs(d-a), np.abs(b-d))
-            edge |= step > slope + np.abs(d)*np.finfo('f4').eps
-    edge[[0, -1], :] = False
-    edge[:, [0, -1]] = False
+            r = np.roll(d, -2, axis)
+            local = np.maximum.reduce([np.abs(a), np.abs(b), np.abs(d), np.abs(r)])
+            local = np.maximum(local, np.finfo('f4').tiny)
+            # All terms are dimensionless relative to the same local depth.
+            step = np.abs(d-b)/local
+            slope = (np.abs(d-a)+np.abs(r-b))/local
+            precision = sum(np.abs(v)**2 * (2**-25/.1) + np.abs(v)*2**-24
+                            for v in (a, d, d, b, b, r))/local
+            pair_edge = step > slope + precision
+            edge |= pair_edge | np.roll(pair_edge, 1, axis)
+    edge[:2, :] = edge[-2:, :] = False
+    edge[:, :2] = edge[:, -2:] = False
     edge = (im.dilate(edge, 1) & im.dilate(char, 1)) | hair
     interior = im.erode(char & ~hair & ~edge, 2)
     if not edge.any() or not interior.any():
@@ -91,9 +101,51 @@ def burst(directory):
 
 def presents(directory):
     files = sorted(directory.glob('p*.png'), key=lambda p: int(p.stem[1:]))
-    if [int(p.stem[1:]) for p in files] != list(range(16)):
-        raise ValueError(f'{directory}: need complete p00..p15 sequence')
+    ids = [int(p.stem[1:]) for p in files]
+    if len(ids) != 16 or ids != list(range(ids[0], ids[0]+16)):
+        raise ValueError(f'{directory}: need 16 consecutive presented frames')
     return [np.asarray(Image.open(p).convert('RGB'), dtype='f4')/255 for p in files]
+
+
+def registered_run(anchor, frames):
+    """Retain one consecutive registered run; cuts never bridge a temporal gap.
+
+    Rendered frames use lighting-independent depth. Presented frames have only
+    PQ beauty; phase correlation rejects translations without warping colours.
+    A global exposure/brightness change retains its phase correlation location.
+    """
+    def structure(frame):
+        grey = frame.mean(-1) if frame.ndim == 3 else frame
+        dy, dx = np.gradient(grey.astype('f8'))
+        return np.hypot(dx, dy)
+    anchor = structure(anchor)
+    regs = []
+    for frame in frames:
+        try:
+            regs.append(registration(anchor, structure(frame)))
+        except ValueError as error:
+            regs.append(dict(valid=False, error=str(error)))
+    runs, current = [], []
+    for i, r in enumerate(regs):
+        if r['valid']:
+            current.append(i)
+        elif current:
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    keep = max(runs, key=len, default=[])
+    if len(keep) < 4:
+        raise ValueError('dialogue shot moved: fewer than four consecutive registered frames')
+    return keep, dict(frames=regs, included=keep,
+                     excluded=[i for i in range(len(frames)) if i not in keep])
+
+
+def registered_endpoints(values, keep):
+    endpoints = [values[j] for j, frame in enumerate((0, 7)) if frame in keep]
+    if not endpoints:
+        raise ValueError('registered run has no material/albedo endpoint support')
+    return endpoints
 
 
 def energy(codes, mask):
@@ -180,23 +232,38 @@ def analyze(game_text, runner_text, resolve):
     if len(set(all_paths)) != 2*len(WINDOWS):
         raise ValueError('capture path reused across windows')
     bases = [burst(paths[label]['rendered']) for label in ('base-a', 'base-b')]
+    depth_anchor = bases[0]['depth'][0]
+    for b in bases:
+        keep, _ = registered_run(depth_anchor, b['depth'])
+        for field in ('codes', 'depth'):
+            b[field] = [b[field][i] for i in keep]
+        # Material/albedo exist only at original endpoints; discard endpoints
+        # outside the registered run rather than importing a cut's classes.
+        for field in ('material', 'albedo'):
+            b[field] = registered_endpoints(b[field], keep)
     edge, interior = masks([d for b in bases for d in b['depth']],
                            [m for b in bases for m in b['material']])
     ref_present = [presents(paths[label]['presented']) for label in ('base-a', 'base-b')]
+    present_anchor = ref_present[0][0]
+    ref_present = [[frames[i] for i in registered_run(present_anchor, frames)[0]]
+                   for frames in ref_present]
     refs = [b['codes'] for b in bases]
     rows = {}
     for label, _ in WINDOWS:
         print('analyzing '+label, flush=True)
         b = burst(paths[label]['rendered'])
-        regs = [registration(bases[0]['albedo'][0], a) for a in b['albedo']]
-        if not all(r['valid'] for r in regs):
-            raise ValueError(label+': dialogue shot moved; never warp beauty')
-        rows[label] = dict(registration=regs,
+        keep, rendered_regs = registered_run(depth_anchor, b['depth'])
+        for field in ('codes', 'depth'):
+            b[field] = [b[field][i] for i in keep]
+        presented = presents(paths[label]['presented'])
+        shown, present_regs = registered_run(present_anchor, presented)
+        rows[label] = dict(registration=dict(rendered=rendered_regs, presented=present_regs),
                            rendered=score(b['codes'], refs, edge, interior),
-                           presented=score(presents(paths[label]['presented']), ref_present, edge, interior),
+                           presented=score([presented[i] for i in shown], ref_present, edge, interior),
                            depth_edge_variance=float(np.stack(b['depth']).var(0, ddof=1)[edge].mean()))
-        moving = det.animated(b['albedo'], [], edge.shape)
-        rows[label]['animated_edge_fraction'] = float(moving[edge].mean())
+        albedos = [b['albedo'][j] for j, frame in enumerate((0, 7)) if frame in keep]
+        moving = det.animated(albedos, [], edge.shape) if len(albedos) > 1 else None
+        rows[label]['animated_edge_fraction'] = float(moving[edge].mean()) if moving is not None else None
         depth_var = np.stack(b['depth']).var(0, ddof=1)
         colour_var = np.stack([c @ Y for c in b['codes']]).var(0, ddof=1)
         # Spatial association, not a proof of DoF: depth and colour are captured
@@ -215,7 +282,7 @@ def analyze(game_text, runner_text, resolve):
                         'Presented PNG variance includes UI, frame pacing and base-FPS changes.',
                         'Parity is unlabeled; generated-frame identity is not inferred.',
                         'Half-size nearest samples can miss a full-resolution strand.',
-                        'Albedo registration rejects camera cuts, not all facial/hair animation.',
+                        'Per-frame depth/PQ registration excludes cuts; rotation/zoom or animation may remain.',
                         'Class 3/5 support covers skin/hair, not unclassified armour silhouette.',
                         'RR-off changes RT denoising too; post-late does not disable DoF.',
                         'Largest reduction is a candidate, never proof of one root cause.'])

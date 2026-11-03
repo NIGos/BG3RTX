@@ -113,10 +113,10 @@
     "\\[motion-trace\\] phase=4 label=shot-on-b repeat=0",
     "\\[motion-trace\\] phase=4 label=shot-on-b repeat=1",
     "\\[motion-trace\\] phase=4 label=shot-on-b repeat=2",
-    "\\[frame-drag\\] phase=\\d+ label=cost-turn-0 rendered=\\d+ x=\\d+",
-    "\\[frame-drag\\] phase=\\d+ label=cost-turn-1 rendered=\\d+ x=\\d+",
-    "\\[frame-drag\\] phase=\\d+ label=cost-turn-2 rendered=\\d+ x=\\d+",
-    "\\[frame-drag\\] phase=\\d+ label=cost-turn-3 rendered=\\d+ x=\\d+"
+    "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-0 direction=1\\b",
+    "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-1 direction=1\\b",
+    "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-2 direction=1\\b",
+    "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-3 direction=1\\b"
   ],
   "stop_on_dump": false,
   "purpose": "S8 Ultra hit shading 0/1/0/1 static and matched wf9 turns, compose shift fixed on; draft only.",

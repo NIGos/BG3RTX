@@ -676,14 +676,19 @@ templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
 (Implemented as `ls_box`: only box lights with a game shadow map are traced; the
 `ls_box_unshadowed` A/B key: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
-**User decision reverted 2026-11-03:** Box light shadows may hide artist-unshadowed
-lights in Grymforge; investigation pending. `ls_box=0` in every preset, including Ultra.
-The visible Off / Shadowed / All control returns to Experimental (audit C proposal 3 accepted).
-No shader or rendering logic changed. Existing live evidence: energy within band;
-local-light pass +0.32 ms S6 / +0.20 ms S7. These costs remain reference measurements,
-not visual approval. Investigate artistic lights in S6 (Adamantine Forge) before promotion.
+**User decision 2026-11-03: fixed box shadows approved for Ultra.**
+`ls_box=2` with `ls_box_honour_shadow=1` preserves the game's non-shadow-casting art
+lights. Ultra uses All; lower presets and repository/release base defaults stay Off.
+The visible Off / Shadowed / All control is qualified in Lighting.
+Valid same-run ba1 S6 Grymforge 08:02: fixed versus OFF has 8.6% of pixels differing
+by > 8 levels, versus 8.5% OFF-to-OFF noise; mean signed difference 0.0, energy within noise.
+Unshadowed traces are 0 (old mode: 369M per 120 frames, -5.27% lit luminance).
+Local-light pass: 0.45 ms off -> 0.58 ms fixed (+0.13 ms, RTX 5090).
+User visual check passed: S6 Adamantine Forge lower-right walkway and central pillar;
+the art lights remain visible with Box light shadows = All. The earlier +0.32 ms S6 /
++0.20 ms S7 costs describe legacy mode, not this qualification.
 
-**Art intent correction (2026-11-03, ls-box-art, offline candidate).**
+**Art intent correction (2026-11-03, ls-box-art, qualified for Ultra).**
 The extractor resolves placement/template `Shadow` (LGHT bit 2) and `CastShadow` (bit 9),
 light type 2 = box. The Lua bridge also captures both (`assetdb_api.h` runtime bits 5/6),
 but projector selection reads the native b29 record: `_m8 & 1` is its active shadow-map flag.
@@ -700,9 +705,9 @@ The experimental rf_hit_gi reflection hit path is unchanged (its legacy box poli
 Non-box identity: 216/216 byte-identical to main; pp-diff 216 unchanged / 15 box requests changed.
 No ABI or variant request changes.
 This is a conservative box-only art policy; the point/spot policy above is unchanged.
-Prepared S6 batch: `tools/live_batches/box_lights_art`, static OFF / old / fixed, every-window
-stats, held-exposure float scene means and diagnostic-free costs. Not queued or authorized.
-Live energy, visible recovery and GPU cost remain unmeasured; `ls_box=0` stays the default.
+Qualified S6 batch: `tools/live_batches/box_lights_art`, static OFF / old / fixed, every-window
+stats, held-exposure float scene means and diagnostic-free costs. ba1 valid at 08:02;
+energy, visible recovery and cost passed as recorded above. Ultra now uses `ls_box=2`.
 The following 2026-11-01 mode-2 evidence describes the legacy override.
 
 **`ls_box=2` (2026-11-01, off by default, READY_FOR_LIVE; GUI "Box light shadows: All box lights").**

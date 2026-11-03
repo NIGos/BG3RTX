@@ -104,7 +104,7 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "hair-cost2: hair-on full/pool/full/cheap/full/mean/full/visibility/full/combined/full, independent rt passes and GI GPU cost with character float energy. Same-run cards baseline. Zero pool-full or scene skips, including Dialogue3. No GI cull. Visibility is the certified mapped static-draw subset; unknowns stay native. Zero eligible/cards is no qualification.",
+ "purpose": "hair-cost3: hair-on full/pool/full/cheap/full/mean/full/visibility/full/combined/full, independent rt passes and GI GPU cost with character float energy. Same-run cards baseline. Zero pool-full or scene skips, including Dialogue3. No GI cull. Visibility is the certified mapped static-draw subset; unknowns stay native. Zero eligible/cards is no qualification.",
  "estimated_phase_seconds": 561,
  "expect_every": [
   {

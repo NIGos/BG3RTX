@@ -9,7 +9,7 @@ from PIL import Image
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.live_batches.edge_flicker.analyze import masks, energy, rank, burst, analyze
+from tools.live_batches.edge_flicker.analyze import masks, energy, rank, burst, analyze, presents, registered_run, registered_endpoints
 from tools.live_batches.edge_flicker.make_job import WINDOWS
 from tools.live_batches.dialogue_shadows.pair_registration import registration
 
@@ -33,6 +33,64 @@ class EdgeFlickerTest(unittest.TestCase):
             f[edge] += .1 * (-1)**i
         self.assertGreater(energy(frames, edge)['variance'], .01)
         self.assertLess(energy(frames, interior)['variance'], 1e-10)
+
+    def test_curved_depth_is_not_an_edge_and_is_scale_invariant(self):
+        y, x = np.indices(self.d.shape)
+        curve = 4 - np.sqrt(np.maximum(0, 4-((x-40)/20)**2-((y-32)/20)**2))
+        for scale in (.001, 1, 1000):
+            d = np.where(self.d == 2, curve, 10)*scale
+            edge, interior = masks([d.astype('f4')], [self.m])
+            self.assertFalse(edge[30, 40])
+            self.assertTrue(interior[30, 40])
+            self.assertTrue(edge[12, 40])
+            self.assertLess(edge.mean(), .2)
+
+    def test_present_numbers_continue_across_captures(self):
+        for start in (16, 128):
+            with tempfile.TemporaryDirectory() as tmp:
+                p = Path(tmp)
+                for n in reversed(range(start, start+16)):
+                    Image.fromarray(np.full((3, 4, 3), n-start, 'u1')).save(p/f'p{n}.png')
+                frames = presents(p)
+                self.assertEqual(len(frames), 16)
+                self.assertAlmostEqual(float(frames[15][0, 0, 0]), 15/255)
+                (p/f'p{start+7}.png').unlink()
+                with self.assertRaises(ValueError):
+                    presents(p)
+
+    def test_per_frame_registration_excludes_cuts_without_joining_gaps(self):
+        a = np.random.default_rng(21).random((64, 80, 3))
+        cut = np.roll(a, 9, axis=1)
+        frames = [a, a, a, a, cut, a, a, cut, a]
+        keep, report = registered_run(a, frames)
+        self.assertEqual(keep, [0, 1, 2, 3])
+        self.assertEqual(report['excluded'], [4, 5, 6, 7, 8])
+        keep, _ = registered_run(a, [a*.5, a*2, 1-a, a])
+        self.assertEqual(keep, [0, 1, 2, 3])
+        with self.assertRaises(ValueError):
+            registered_run(a, [a, a, cut, a])
+
+    def test_cut_endpoint_does_not_contaminate_baseline_masks(self):
+        skin = self.m.copy()
+        cut = np.zeros_like(skin)
+        cut[..., 3] = 5/255
+        self.assertIs(registered_endpoints([skin, cut], [0, 1, 2])[0], skin)
+        self.assertEqual(len(registered_endpoints([skin, cut], [0, 1, 2])), 1)
+        with self.assertRaisesRegex(ValueError, 'endpoint support'):
+            registered_endpoints([skin, cut], [2, 3, 4])
+
+    def test_batch_warmups_and_crash_policy(self):
+        root = Path(__file__).resolve().parents[1]/'tools/live_batches'
+        smoke = json.loads((root/'smoke_ultra/plans/su1_s8.json').read_text())
+        self.assertEqual(smoke[0]['seconds'], 45)
+        self.assertEqual(smoke[0]['motion_start'], 45)
+        water = json.loads((root/'water_offscreen/plans/wo1_s8.json').read_text())
+        self.assertIn('rt_water_hit_shade=2', water[0]['set'].split(','))
+        job = json.loads((root/'edge_flicker/jobs/ef1-dialogue3-attribution.json').read_text())
+        self.assertIn(r'\[crash\] exception 0x', job['forbid'])
+        self.assertFalse(any('mesh pool full' in f for f in job['forbid']))
+        plan = json.loads((root/'edge_flicker/plans/ef1.json').read_text())
+        self.assertTrue(all(s['registration_policy'] == 'per-frame-exclude-unregistered' for s in plan))
 
     def test_ranking_and_repeat_floor(self):
         rows = {label: {'rendered': {'edge': {'variance': 1.0}}} for label, _ in WINDOWS}
@@ -86,7 +144,8 @@ class EdgeFlickerTest(unittest.TestCase):
                             v = np.full(self.d.shape, 512, 'i4')
                             v[edge] += amplitude*(-1)**n
                             packed = (v | (v << 10) | (v << 20)).astype('<u4')
-                            fields = [('depth', self.d, 100), ('final', packed, 64)]
+                            depth = np.roll(self.d, 9, axis=1) if n == 7 else self.d
+                            fields = [('depth', depth, 100), ('final', packed, 64)]
                             if n in (0, 7):
                                 fields += [('material', material, 37), ('albedo', albedo, 37)]
                             for name, data, fmt in fields:
@@ -99,9 +158,11 @@ class EdgeFlickerTest(unittest.TestCase):
                         game.append(f'{stamp(t+1)} [pan] burst {step["serial"]} complete: 8 frames, 20 samples, transport ok -> {d}')
                     else:
                         for n in range(16):
-                            v = np.full((64,80,3), 128, 'i2')
+                            v = np.random.default_rng(22).integers(110, 146, (64,80,3), dtype='i2')
                             v[edge] += (amplitude//4)*(-1)**n
-                            Image.fromarray(v.astype('u1')).save(d/f'p{n:02}.png')
+                            if n >= 12:
+                                v = np.roll(v, 9, axis=1)
+                            Image.fromarray(v.astype('u1')).save(d/f'p{128+n}.png')
                         game += [f'{stamp(t+1)} [sl] capturing 16 presented frames to {d}',
                                  f'{stamp(t+1.01)} [sl] edge capture format 64, extent 160x128',
                                  f'{stamp(t+2)} [sl] present capture done']
@@ -112,6 +173,8 @@ class EdgeFlickerTest(unittest.TestCase):
                        '[window-mode] visible_unfocused_fg', 'Run ended: done']
             report = analyze('\n'.join(game), '\n'.join(runner), Path)
             self.assertEqual(report['status'], 'ATTRIBUTION_ONLY')
+            self.assertEqual(report['windows']['base-a']['registration']['rendered']['excluded'], [7])
+            self.assertEqual(report['windows']['base-a']['registration']['presented']['excluded'], [12, 13, 14, 15])
             self.assertEqual(report['rendered']['candidate'], 'ao-off')
             self.assertEqual(report['presented']['candidate'], 'ao-off')
             json.dumps(report, allow_nan=False)

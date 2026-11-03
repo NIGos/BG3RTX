@@ -1,13 +1,14 @@
 {
-  "status": "PREPARED_OFFLINE; no live permission; no winner yet",
+  "status": "PREPARED_OFFLINE; no live permission; keys selected from 10:08 camera probe evidence",
   "scene": "S8 Water Queens House",
-  "hypothesis": "BG3 integrates mouse deltas: compare legacy with continuous hold_drag at two speeds; centre_hold gives only one delta.",
+  "hypothesis": "PostMessage mouse modes jump tens of degrees; Q/E held keys moved the camera in 120/120 live samples. Add a held-key window to compare continuity.",
   "windows": {
     "legacy": "1 px every 4 renders; expected jump/hold reproducer",
     "hold_drag": [
       1,
       2
-    ]
+    ],
+    "keys": "E held for the whole phase (Q for reverse); measured game angular speed, no pixel calibration"
   },
   "target_degrees_per_second": [
     15,
@@ -16,5 +17,5 @@
   "gate": "For each candidate speed: positive median unwrapped absolute yaw/frame; max <= 3 * median; median near target_rate / measured_render_fps. Target is a desired angular rate, NOT a px-to-degree calibration. Reject rapid/full rotations and zero-median jump/hold.",
   "observable": "No per-frame yaw log found. Use scene build GPU camera moving/static sample counts and one delayed 16-present FG capture per subwindow; manual minimap yaw deltas are required to qualify. Counts alone cannot prove smoothness. FG presents are not rendered frames; report both rates and do not use present rate as render rate.",
   "cost": "No effect/shader change. Existing scene-build GPU ms only; no primary-check diagnostics.",
-  "capture_bound": "48 half-size presents at <=3840x2160 display: <302 MB uncompressed RGB + 1% container allowance; logs <=50 MB; no traces/raw bursts."
+  "capture_bound": "64 half-size presents at <=3840x2160 display: <403 MB uncompressed RGB + 1% container allowance; logs <=50 MB; no traces/raw bursts."
 }
