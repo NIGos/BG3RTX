@@ -412,6 +412,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_fibre", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
+  {"exp_hair_groom_crowd", "Strand hair crowd budget",
+   "Caps the strand groom work of a crowd: the largest characters get the finest strands, far ones coarser strands or cards. Refit and memory scale with it.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_crowd_ksegments", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"large", "4 close characters", kCapRayQuery, {{"rt_hair_groom_crowd_ksegments", "3500"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live},
+    {"small", "2 close characters", kCapRayQuery, {{"rt_hair_groom_crowd_ksegments", "1800"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Performance", {}},
+
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -760,6 +768,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_fibre", "0"},
+    {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},

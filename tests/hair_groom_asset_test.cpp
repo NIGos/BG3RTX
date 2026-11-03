@@ -4,6 +4,7 @@
 #include "../common/hair_groom_budget.h"
 #include "../common/hair_primary.h"
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <cmath>
 #include <string>
@@ -109,6 +110,34 @@ int main() {
   CHECK(plan_evictions(res, 140, 100, 200, 1000, 120, ev) && (ev == std::vector<uint64_t>{2, 1}));
   CHECK(!plan_evictions(res, 140, 140, 200, 1000, 120, ev) && ev.empty());
   CHECK(!plan_evictions(res, 0, 201, 200, 1000, 120, ev));
+  {   // LOD headers (the crowd plan's segment counts at index time)
+    const std::vector<uint8_t> b = asset();
+    Asset h;
+    uint64_t at = 0;
+    CHECK(parse_header(b.data(), b.size(), h, &at));
+    uint32_t points = 0, segments = 0;
+    uint64_t next = 0;
+    CHECK(lod_header(b.data() + at, at, &points, &segments, &next) && points == 3 && segments == 2 && next == b.size());
+    std::vector<uint8_t> bad = b;
+    std::memset(bad.data() + at, 0, 4);   // keep 0
+    CHECK(!lod_header(bad.data() + at, at, &points, &segments, &next));
+  }
+  {   // crowd plan (common/hair_groom_budget.h plan_crowd)
+    std::vector<CrowdCandidate> c(4);
+    const uint32_t seg[3] = {855000, 451000, 236000};   // Shadowheart LOD 0, 1/2, 1/4 at 2 mm
+    for (auto& k : c) { std::copy(seg, seg + 3, k.segments); k.lods = 3; }
+    c[0].size = 0.2f; c[0].want = 0;   // close
+    c[1].size = 0.1f; c[1].want = 0;
+    c[2].size = 0.05f; c[2].want = 1;
+    c[3].size = 0.01f; c[3].want = 2;   // far
+    CHECK((plan_crowd(c, 0) == std::vector<int>{0, 0, 1, 2}));                 // off: every screen-size LOD
+    CHECK((plan_crowd(c, 4000000) == std::vector<int>{0, 0, 1, 2}));           // enough for all
+    CHECK((plan_crowd(c, 1600000) == std::vector<int>{0, 1, 2, -1}));          // the far one keeps its cards
+    CHECK((plan_crowd(c, 900000) == std::vector<int>{0, -1, -1, -1}));         // never coarser than needed for the biggest
+    CHECK((plan_crowd(c, 100000) == std::vector<int>{-1, -1, -1, -1}));        // nothing fits: cards
+    std::swap(c[0], c[3]);                                                       // order comes from size, not position
+    CHECK((plan_crowd(c, 1600000) == std::vector<int>{-1, 1, 2, 0}));
+  }
   // ---- primary strand hair fail-safes (common/hair_primary.h) ----
   {
     using hair_primary::soup_update_ok;

@@ -40,4 +40,35 @@ inline bool plan_evictions(std::vector<Resident> residents, uint64_t used, uint6
   return false;
 }
 
+// Crowd plan (rt_hair_groom_crowd_ksegments, docs/RTX_HAIR_PRIMARY.md increment 5): the groom instances of a frame
+// share a budget of LSS segments (refit time and BLAS memory scale with segments; trace time scales with the hair
+// pixels/rays and only logarithmically with segments). Largest on screen first, each at its screen-size LOD or the
+// first coarser LOD that still fits; one that fits at no LOD keeps its cards (-1). budget 0: no plan (every
+// instance its screen-size LOD).
+struct CrowdCandidate {
+  float size = 0;             // screen-size measure (bounds diagonal / distance, as groom_pick_lod)
+  int want = 0;               // its screen-size LOD
+  uint32_t segments[4] = {};  // segments per LOD (0: no such LOD)
+  int lods = 0;
+};
+inline std::vector<int> plan_crowd(const std::vector<CrowdCandidate>& c, uint64_t budget_segments) {
+  std::vector<int> lod(c.size(), -1);
+  std::vector<size_t> order(c.size());
+  for (size_t i = 0; i < c.size(); ++i) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return c[a].size > c[b].size; });
+  uint64_t left = budget_segments;
+  for (size_t i : order) {
+    const CrowdCandidate& k = c[i];
+    if (budget_segments == 0) { lod[i] = (std::min)((std::max)(k.want, 0), (std::max)(k.lods - 1, 0)); continue; }
+    for (int l = (std::max)(k.want, 0); l < k.lods && l < 4; ++l) {
+      if (k.segments[l] && k.segments[l] <= left) {
+        lod[i] = l;
+        left -= k.segments[l];
+        break;
+      }
+    }
+  }
+  return lod;
+}
+
 }  // namespace bg3::hair_groom

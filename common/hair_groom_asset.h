@@ -88,8 +88,21 @@ struct Asset {
   bool has_uv = false;
   float uv[kSamples * 2] = {};   // v2: UV0 of the sampled corners
   uint32_t lod_count = 0;        // from the header (parse_header leaves `lods` empty)
+  uint32_t lod_segments[8] = {}; // per LOD, from lod_header (the crowd plan's costs before an upload)
   std::vector<Lod> lods;
 };
+
+// One LOD's 16-byte header at `at` (the first one at parse_header's header_bytes): its points and segments and where
+// the next LOD's header starts (after keep, points, segments, 0 and the arrays: points x 17 bytes, segments x 4).
+inline bool lod_header(const uint8_t* h16, uint64_t at, uint32_t* points, uint32_t* segments, uint64_t* next) {
+  float keep;
+  std::memcpy(&keep, h16, 4);
+  std::memcpy(points, h16 + 4, 4);
+  std::memcpy(segments, h16 + 8, 4);
+  if (!(keep > 0 && keep <= 1) || *points < 2 || *segments == 0 || *segments >= *points) return false;
+  *next = at + 16 + uint64_t(*points) * 17u + uint64_t(*segments) * 4u;
+  return true;
+}
 
 // Layout (tools/hair_groom/asset.py): 'HGRM', version 1 or 2, position id u64, index id u64, card vertices,
 // card indices, lods, 0; v2: 32 x (u, v) f32 corner samples; per LOD: keep f32, points, segments, 0, then the

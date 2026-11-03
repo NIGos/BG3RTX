@@ -78,13 +78,16 @@ def uv_samples(hair):
 
 
 def write(path, cid, hair, lods):
-    """lods: [(keep_fraction, Groom)]. cid: the position ID. Exclusive creation."""
+    """lods: [(keep_fraction, Groom)]. cid: the position ID. Exclusive creation. Every LOD is checked before the file
+    is created: a refused style leaves no file (a header-only stub once made the layer log it as malformed, and the
+    batch's exists() check would never have retried it)."""
+    for keep, g in lods:
+        if not (np.all(g.radii > 0) and np.all(g.radii < 0.01)):
+            raise ValueError(f"LOD {keep}: radius outside (0, 10 mm): the layer would reject the file")
     with open(path, "xb") as f:
         f.write(MAGIC + struct.pack("<IQQ4I", 2, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0))
         f.write(uv_samples(hair).tobytes())
         for keep, g in lods:
-            if not (np.all(g.radii > 0) and np.all(g.radii < 0.01)):
-                raise ValueError(f"LOD {keep}: radius outside (0, 10 mm): the layer would reject the file")
             starts = segment_starts(g.offsets)
             f.write(struct.pack("<f3I", keep, len(g.points), len(starts), 0))
             f.write(np.asarray(g.triangle, "<u4").tobytes())

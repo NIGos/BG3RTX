@@ -426,7 +426,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 13);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading remain.
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget remain.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
