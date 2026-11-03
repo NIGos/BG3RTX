@@ -26,12 +26,13 @@
 - Old all-hit emission remains custom and survives saving; lower levels reset the entire chain.
 - Sun shadows gains Ray-traced + hidden roofs: cascade-copy casters for hidden roofs/canopies.
 - Ultra uses that third level; others keep their previous sun behaviour. All sun levels apply Live.
-- Approved ls_box=2 in Ultra, High unchanged (Off); qualified Basic card, not Experimental.
+- Reverted box shadows on 2026-11-03: ls_box=0 in every preset, including Ultra; visible in Experimental.
 - Existing measured local-light cost: +0.32 ms S6 / +0.20 ms S7. No new GPU measurement needed.
-- Check S6 forge lower-right walkway and central pillar for the approved ledge shadows.
+- Grymforge may lose artist-unshadowed lights with box shadows; investigation pending before promotion.
 - Hair origins, OMM, cutout spill and Local light shadows Full + shadowed lights are dev-only.
 - Both launchers consume the consolidated shared cards/modes; WebView sample cards updated too.
 - Defaults regenerated (no value delta), schema regenerated; USER_SETTINGS and local-light TRACK updated.
-- Launcher and three C++ test targets built; all five relevant CTests pass: settings 2542, UI 23, bridge 78 checks.
-- JSON card assertions, defaults --check and JavaScript syntax pass. Full suite excluded to avoid shader tools.
+- Correction validation: 101 C++ targets built, excluding the shader fixture and native_hair_origin_test.
+- The latter has a preexisting Apply::Partial compile error; settings and launcher checks pass.
+- Schema regenerated and defaults check passes. Selected 108/108 CTests passed (180.33 s).
 - Shader requests delta 0; ABI unchanged. No game, shader tools, commits or git metadata mutations.

@@ -73,7 +73,7 @@ The window opens on your GPU and suggests a preset:
 | Low | RTX 2060-3060, 4060; AMD/Intel with ray tracing | No ray-traced scene, no Ray Reconstruction. Screen-space GI and contact shadows |
 | Medium | RTX 3070/3080, 4060 Ti/4070 | Ray-traced scene without alpha-tested objects, RT GI, fast local-light shadows, glossy reflections |
 | High | RTX 4080/4090, 5080 | Ray-traced lighting and full geometry; hardware suitability is estimated |
-| Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, sun shadows with hidden roofs, Box light shadows All, rough reflections, RT water + Refraction, Off-screen bounce light Far (6 m), frame cap 58 (116 shown with frame generation 2x) |
+| Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, sun shadows with hidden roofs, rough reflections, RT water + Refraction, Off-screen bounce light Far (6 m), frame cap 58 (116 shown with frame generation 2x) |
 
 The presets below RTX 5090 are estimates and have not been measured on those GPUs yet. Settings
 your GPU cannot run are marked "(not supported)" and the presets skip them. For example, an
@@ -95,7 +95,6 @@ reaches a running game:
 | Sun shadows | Screen-space / Ray-traced / Ray-traced + hidden roofs (Ultra) | live |
 | Global illumination | Off / Screen-space / Ray-traced / Ray-traced High | live |
 | Local light shadows | Off / Fast / Full | live |
-| Box light shadows | Off / Shadowed / All (Ultra; High remains Off) | live |
 | Reflections | Off / Glossy / Standard / Rough | live |
 | Frame generation | Off / 2x / 3x / 4x | 2x/3x/4x live; **Off <-> on needs a restart** |
 | RT lighting intensity | 50-100 % | live |
@@ -115,13 +114,16 @@ Near includes hidden-surface materials, bounced light and emission from glowing 
 Far extends sunlight bounce to 6 m. Far + reflections is experimental and in no preset.
 Reference costs on RTX 5090 at 4K-class output: Near ~+0.6 ms, Far ~+4 ms, top level ~+6 ms.
 Sun shadows with hidden roofs uses cascade-copy casters for geometry the camera hides, including
-roofs and canopies (+0.3 to +1.3 ms). Box light shadows All is visually approved for Ultra:
+roofs and canopies (+0.3 to +1.3 ms). Box light shadows were reverted on 2026-11-03:
+they may hide artist-unshadowed lights in Grymforge; investigation pending. They stay off in every
+preset, including Ultra, and remain visible in Experimental. Measured reference cost when enabled:
 +0.32 ms at the Adamantine Forge (S6), +0.20 ms at the inn (S7).
 
 **Experimental (being tested, off in every preset).**
 
 | Setting | Choices | Needs | Applies |
 |---|---|---|---|
+| Box light shadows | Off / Shadowed / All | Ray-traced geometry and Local light shadows | live |
 | Native coverage | Off / Hair + scalp / + Tilesets | Full geometry | **restart** |
 | Offline cutout masks | Off / On | Full geometry; locally prepared masks | live |
 
@@ -194,7 +196,7 @@ launcher keeps them when it saves. Delete the file to go back to the defaults.
 
 ## Command line (advanced)
 
-Box light shadows (`ls_box=2`) are enabled in Ultra after visual approval; other presets keep them off.
+Box light shadows (`ls_box`) stay off in every preset, including Ultra; Experimental retains manual choices.
 
 ```
 BG3RTX.exe --preset ultra          write bg3rtx_user.ini with a preset (limited to your GPU)

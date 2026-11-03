@@ -4,7 +4,7 @@
     {"id": "low", "label": "Low", "description": "RTX 2060-3060 / 4060, AMD and Intel with RT. No ray tracing, no Ray Reconstruction: screen-space GI and contact shadows.", "extra": {}},
     {"id": "medium", "label": "Medium", "description": "RTX 3070/3080, 4060 Ti/4070. Opaque ray-traced geometry, RT GI, fast local-light shadows, glossy reflections.", "extra": {}},
     {"id": "high", "label": "High", "description": "Estimated for RTX 4080/4090 and 5080. Ray-traced lighting and full geometry; hardware suitability is not a measured frame-rate promise.", "extra": {}},
-    {"id": "ultra", "label": "Ultra (RTX 5090)", "description": "RTX 5090 at 4K-class output. High plus Ray-traced High GI, hidden-roof sun shadows, box light shadows, rougher reflections and a 58 fps rendered cap (estimated 116 displayed with frame generation 2x). Includes water refraction and Far off-screen bounce light. Reference coverage: RTX 5090 scenes.", "extra": {"rt_rebuild_frames": "600"}}
+    {"id": "ultra", "label": "Ultra (RTX 5090)", "description": "RTX 5090 at 4K-class output. High plus Ray-traced High GI, hidden-roof sun shadows, rougher reflections and a 58 fps rendered cap (estimated 116 displayed with frame generation 2x). Includes water refraction and Far off-screen bounce light. Reference coverage: RTX 5090 scenes.", "extra": {"rt_rebuild_frames": "600"}}
   ],
   "knobs": [
     {"id": "rr", "label": "Ray Reconstruction",
@@ -72,19 +72,6 @@
        {"id": "fast", "label": "Fast", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1, "rr": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "full", "label": "Full", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "3"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "full_plus", "label": "Full + shadowed lights", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": true, "maturity": "developer"}
-     ]},
-    {"id": "box_lights", "label": "Box light shadows",
-     "description": "Shadows from projector lights in interiors. All is enabled in Ultra; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
-     "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
-     "category": "Lighting", "summary": "Shadows from projector lights in interiors. All is enabled in Ultra; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
-     "cost": {"status": "Measured", "gpu": "+0.32 ms S6 / +0.20 ms S7", "vram": "Unknown", "provenance": "RTX 5090; ls_box=2; S6 forge and S7 inn; visual approval 2026-11-03. Reference only."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 2},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "reflections", "label": "Reflections",
      "description": "Adds reflections on smooth surfaces. Higher levels include rougher surfaces; without Ray Reconstruction only mirror-like surfaces are traced.",
@@ -172,6 +159,19 @@
        {"id": "near", "label": "Near", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "0", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb", "gi_hit_direct", "gi_hit_sun", "rt_hit_emission"], "developer": false, "maturity": "qualified"},
        {"id": "far", "label": "Far (6 m)", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "1", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["gi_far"], "developer": false, "maturity": "qualified"},
        {"id": "reflections", "label": "Far + reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1", "rt_hit_emission": "1", "rt_emissive": "1", "gi_far": "1", "gi_far_m": "6"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "box_lights", "label": "Box light shadows",
+     "description": "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
+     "apply": "live", "apply_note": "", "advanced": false, "experimental": true, "developer": false,
+     "category": "Lighting", "summary": "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
+     "cost": {"status": "Measured", "gpu": "+0.32 ms S6 / +0.20 ms S7", "vram": "Unknown", "provenance": "RTX 5090; ls_box=2; S6 forge and S7 inn; reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; investigation pending. Reference only."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
+       {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_native_coverage", "label": "Native coverage",
      "description": "Improves the shape of hair, scalp and cutout surfaces in ray-traced lighting. Quality and cost remain unqualified.",

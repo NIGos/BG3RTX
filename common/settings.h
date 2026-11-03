@@ -42,7 +42,7 @@ inline constexpr const char* kPresetDesc[kPresetCount] = {
     "screen-space GI and contact shadows.",
     "RTX 3070/3080, 4060 Ti/4070. Opaque ray-traced geometry, RT GI, fast local-light shadows, glossy reflections.",
     "Estimated for RTX 4080/4090 and 5080. Ray-traced lighting and full geometry; hardware suitability is not a measured frame-rate promise.",
-    "RTX 5090 at 4K-class output. High plus Ray-traced High GI, hidden-roof sun shadows, box light shadows, rougher reflections and a 58 fps "
+    "RTX 5090 at 4K-class output. High plus Ray-traced High GI, hidden-roof sun shadows, rougher reflections and a 58 fps "
     "rendered cap (estimated 116 displayed with frame generation 2x). Includes water refraction and Far off-screen bounce light. Reference coverage: RTX 5090 scenes.",
 };
 
@@ -185,14 +185,6 @@ inline constexpr Knob kKnobs[] = {
     {"full_plus", "Full + shadowed lights", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "1"}}, {{"rt_geometry", 1}}, {}, true, false, false, Apply::Live}},
    {}, {0, 1, 2, 2}, false, {}, false, "Lighting", {}},
 
-  {"box_lights", "Box light shadows",
-   "Shadows from projector lights in interiors. All is enabled in Ultra; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
-   Kind::Choice, Apply::Live, "", false,
-   {{"off", "Off", 0, {{"ls_box", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "Shadowed", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live},
-    {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.32 ms S6 / +0.20 ms S7", "Unknown", "RTX 5090; ls_box=2; S6 forge and S7 inn; visual approval 2026-11-03. Reference only."}},
-
   {"reflections", "Reflections",
    "Adds reflections on smooth surfaces. Higher levels include rougher surfaces; without Ray Reconstruction only mirror-like surfaces are traced.",
    Kind::Choice, Apply::Live, "", false,
@@ -274,6 +266,14 @@ inline constexpr Knob kKnobs[] = {
 
   // Experimental features stay off in every preset. Hair origins, OMM and spill are developer-only
   // until qualified (user decisions 2026-11-03). Each level writes every key it covers.
+  {"box_lights", "Box light shadows",
+   "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
+   Kind::Choice, Apply::Live, "", false,
+   {{"off", "Off", 0, {{"ls_box", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "Shadowed", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live},
+    {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Lighting", {"Measured", "+0.32 ms S6 / +0.20 ms S7", "Unknown", "RTX 5090; ls_box=2; S6 forge and S7 inn; reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; investigation pending. Reference only."}},
+
   {"exp_native_coverage", "Native coverage",
    "Improves the shape of hair, scalp and cutout surfaces in ray-traced lighting. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Restart, "restart required", false,

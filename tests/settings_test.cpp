@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // Qualified memory management is automatic; two user-facing experimental entries remain.
+  // Qualified memory management is automatic; three user-facing experimental entries remain.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 2);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(user_exp == 3);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
   CHECK(dev == (std::vector<std::string>{"exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -429,20 +429,27 @@ static void test_gui_levels() {
   CHECK(!dev_mode("0"));
   CHECK(!dev_mode(code_default("dev")));   // the release profile hides them
 
-  // Main list: Roof sun shadows and Box light shadows (Off / Shadowed / All), not experimental.
+  // Sun shadows stay in the main list; Box light shadows remain visible in Experimental.
   const Knob* roof = find_knob("roof_shadows");
   const Knob* box = find_knob("box_lights");
   CHECK(roof && box);
   if (roof && box) {
-    CHECK(!roof->experimental && !box->experimental && !roof->advanced && !box->advanced);
+    CHECK(!roof->experimental && box->experimental && !roof->advanced && !box->advanced);
+    CHECK(knob_visible(*box, false));
+    CHECK(!box->dev_only);
     CHECK(choice_count(*box) == 3);
     CHECK_EQ(box->choices[1].label, "Shadowed");
     CHECK_EQ(box->choices[2].label, "All");
     for (int c = 0; c < 3; ++c) CHECK_EQ(get(on_map(*box, c), "ls_box"), std::to_string(c));
     CHECK(roof->preset[kUltra] == 2);
-    for (int p = 0; p < kPresetCount; ++p) CHECK(box->preset[p] == (p == kUltra ? 2 : 0));
+    for (int p = 0; p < kPresetCount; ++p) CHECK(box->preset[p] == 0);
+    for (int p = 0; p < kPresetCount; ++p) {
+      Map preset;
+      for (const auto& kv : expand_preset(p)) preset[kv.first] = kv.second;
+      CHECK_EQ(get(preset, "ls_box"), "0");
+    }
     CHECK(knob_index("roof_shadows") < knob_index("gi"));
-    CHECK(knob_index("box_lights") < knob_index("reflections"));
+    CHECK(knob_index("box_lights") > knob_index("exp_water"));
   }
 
   // Migration selects the highest legacy signal and saving completes that bundle.
@@ -456,7 +463,7 @@ static void test_gui_levels() {
     auto saved = parse_ini(render_user_ini("", -1, values));
     for (const auto& kv : on_map(bounce, signal.second)) CHECK_EQ(get(saved, kv.first.c_str()), kv.second);
   }
-  CHECK_EQ(get(on_map(*box, box->preset[kUltra]), "ls_box"), "2");
+  CHECK_EQ(get(on_map(*box, box->preset[kUltra]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
   CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
@@ -811,7 +818,7 @@ static void test_product_policy() {
   CHECK(!choice_available(*find_knob("exp_hidden_surface"), 3, false, false, ~0u));
   CHECK(choice_available(*find_knob("exp_hidden_surface"), 3, false, true, ~0u));
   CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 2), "qualified");
-  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "qualified");
+  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "experimental");
   CHECK_EQ(find_knob("exp_water")->category, "Surfaces");
   CHECK_EQ(find_knob("reflex")->category, "Performance");
   CHECK_EQ(find_knob("exp_water")->cost.status, "Estimate");
