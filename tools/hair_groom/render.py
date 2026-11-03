@@ -224,8 +224,10 @@ def composite(pix, depth, alpha, colour, npix):
     return image, np.exp(-total)
 
 
-def render(build, view, light_dir, head, light_pixel=None):
-    """build(view) -> Fragments of one hair version; head = (centre, radii) of the proxy."""
+def render(build, view, light_dir, head, light_pixel=None, shade_fn=None):
+    """build(view) -> Fragments of one hair version; head = (centre, radii) of the proxy. shade_fn: the fibre
+    shading (default shade(); tools/hair_groom/bsdf_compare.py passes the physically based one)."""
+    shade_fn = shade_fn or shade
     light_dir = light_dir / np.linalg.norm(light_dir)
     lview = light_view_for(view, light_dir, light_pixel or view.pixel * 2)
     lfrags = build(lview)
@@ -234,7 +236,7 @@ def render(build, view, light_dir, head, light_pixel=None):
     frags = frags.select(frags.depth < hd[frags.pixel])
     shadow = shadow_transmittance(lfrags, lview.project(frags.world.astype(np.float64)), lview)
     r, u, f = view.basis()
-    colour = shade(frags.tangent, -f, light_dir, shadow, frags.root)
+    colour = shade_fn(frags.tangent, -f, light_dir, shadow, frags.root)
     w, h = view.size
     image, trans = composite(frags.pixel, frags.depth, frags.alpha, colour, w * h)
     # Background: the head proxy, lit and shadowed by the hair at its surface, or dark grey.

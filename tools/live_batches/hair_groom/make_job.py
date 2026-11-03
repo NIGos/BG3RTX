@@ -77,6 +77,16 @@ def expect_every():
     for x in g:
         if "windows" in x:
             x["windows"] = judged
+    # Freeze: judge the bursts inside the plan, not the scene load. hg-20261103e 12:28:40: the 1088 ms present
+    # interval before the plan was the synchronous load of 54 vt_alpha masks (12:28:39.1-40.2, first split scene)
+    # that the first rt_shadow build's burst spans; it is not a groom or toggle build. The first toggle's burst
+    # (toggle-off-a) must still be there and stay below 1000 ms.
+    freeze = [x for x in g if x["name"].startswith("no freeze")]
+    for x in freeze:
+        g.remove(x)
+        g += [dict(x, name="no freeze: every build burst inside the plan < 1000 ms", event=True, min=0, windows=labels),
+              dict(x, name="no freeze: the first toggle's builds ran (toggle-off-a) and stayed < 1000 ms", event=True,
+                   min=1, windows=["toggle-off-a"])]
     g += [
         {"name": "first enable (startup): no build pending in settle-cam",
          "select": r"gi: background builds \(\d+ frames\):", "match": r", 0 pending, 0 started", "min": 1,
@@ -87,9 +97,12 @@ def expect_every():
          "min": 1, "windows": hair_on},
         # Participation: without a matched groom instance the A/B measures nothing (INVALID, not a pass).
         # The window maximum, not the instant of the line: 11:38 run, Shadowheart left the view between lines.
-        {"name": "groom participation: at least one groom instance in every groom-on window",
+        # Only windows long enough for a complete 300-frame line: the 8 s shots run at ~18 fps (150 frames), so
+        # they never hold one (hg-20261103e INVALID). The camera is held from the shots to cost-groom (static
+        # plan), so cost-groom's instances are the shots' characters.
+        {"name": "groom participation: at least one groom instance in the groom-on cost window",
          "select": r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most",
-         "match": r"last 300 frames: at most [1-9]\d* groom instances", "min": 1, "windows": groom_on},
+         "match": r"last 300 frames: at most [1-9]\d* groom instances", "min": 1, "windows": ["cost-groom"]},
     ]
     for prefix in ["rt passes", "gi"]:
         metric = (rf"{prefix}: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)" +

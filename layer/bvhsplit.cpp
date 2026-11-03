@@ -3,6 +3,7 @@
 #include "../common/native_hit_pool.h"
 #include "mesh_content_id.h"
 #include "hair_groom.h"
+#include "../common/hair_groom_budget.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -820,11 +821,17 @@ std::unordered_set<uint32_t> g_groom_uv_logged;
 // Draw identity (index range) -> groom index id (0: none) and the join verdict.
 std::unordered_map<uint64_t, std::pair<uint64_t, hair_groom::JoinMiss>> g_groom_join;
 struct GroomAsset {
-  struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0; uint32_t points = 0, segments = 0; float keep = 1; };
+  // One LOD's arrays in the mesh pool [base, base + size): uploaded when a slot first selects it, evicted
+  // (oldest first) when the groom budget needs room.
+  struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0, base = 0, size = 0; uint32_t points = 0, segments = 0;
+               float keep = 1; bool ready = false; uint64_t last_used = 0; };
   std::vector<Lod> lods;
   uint32_t indices = 0;
-  bool ready = false, failed = false;
+  bool failed = false;
 };
+// Mesh-pool bytes held by grooms (LOD arrays and slot points) against common/hair_groom_budget.h pool_budget.
+VkDeviceSize g_groom_pool_used = 0;
+uint64_t g_groom_budget_refusals = 0;
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
 struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
@@ -887,64 +894,109 @@ bool ensure_groom_pipeline() {
 }
 
 void groom_release(GroomSlot& g, uint64_t now) {
-  if (g.pos_size) g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+  if (g.pos_size) {
+    g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+    g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
+  }
   as_destroy(g.as);
   if (g.readback.b) free_buf(g.readback);
   if (g.compact == 1) g_groom_free_queries.push_back(g.query);
   g = GroomSlot{};
 }
 
-// The groom's arrays in the mesh pool (uploaded by this build's GPU section); nullptr when the file is
-// missing or malformed (never retried) or the pool cannot take it now (retried next frame).
-const GroomAsset* groom_asset(VkCommandBuffer cmd, uint64_t id, uint32_t indices) {
+// The mesh pool's largest capacity (pool_alloc's cap: configured maximum and the device-budget share).
+VkDeviceSize groom_pool_capacity() {
+  return (std::min)(VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20,
+                    VkDeviceSize(vram_cap(vram_guard::kMeshPool, UINT64_MAX)));
+}
+
+// Room for `need` more groom bytes in the pool budget, evicting LODs unused for 120 frames (oldest first).
+bool groom_make_room(VkDeviceSize need, uint64_t now) {
+  std::vector<hair_groom::Resident> residents;
+  for (auto& [id, a] : g_groom_assets)
+    for (size_t i = 0; i < a.lods.size(); ++i)
+      if (a.lods[i].ready) residents.push_back({id * kGroomLods + i, a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+  std::vector<uint64_t> evict;
+  if (!hair_groom::plan_evictions(residents, g_groom_pool_used, need, hair_groom::pool_budget(groom_pool_capacity()), now, 120, evict)) {
+    if (g_groom_budget_refusals++ % 300 == 0)
+      log("[hair groom] pool budget full (%.0f of %.0f MB, need %.1f MB): this draw keeps the card path",
+          double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0,
+          double(need) / 1048576.0);
+    return false;
+  }
+  for (uint64_t key : evict) {
+    GroomAsset::Lod& l = g_groom_assets[key / kGroomLods].lods[key % kGroomLods];
+    g_pending_free.push_back({now, -1, l.base, l.size});
+    g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
+    l.ready = false;
+  }
+  return true;
+}
+
+// The groom's index entry (no arrays yet); nullptr when the file is missing (never retried).
+GroomAsset* groom_asset(uint64_t id, uint32_t indices) {
   GroomAsset& a = g_groom_assets[id];
   if (a.failed) return nullptr;
-  if (a.ready) return a.indices == indices ? &a : nullptr;
+  if (!a.lods.empty()) return a.indices == indices ? &a : nullptr;
   const hair_groom::Loaded* src = hair_groom::find(id, indices);
   if (!src) { a.failed = true; return nullptr; }
-  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
-  VkDeviceSize total = 0;
-  a.lods.clear();
-  for (const auto& l : src->asset.lods) {
-    GroomAsset::Lod d;
-    d.points = l.points; d.segments = l.segments; d.keep = l.keep;
-    d.tri = total; total += up(VkDeviceSize(l.points) * 4);
-    d.bary = total; total += up(VkDeviceSize(l.points) * 8);
-    d.radius = total; total += up(VkDeviceSize(l.points) * 4);
-    d.seg = total; total += up(VkDeviceSize(l.segments) * 4);
-    d.segtri = total; total += up(VkDeviceSize(l.segments) * 4);
-    a.lods.push_back(d);
-    if (a.lods.size() == kGroomLods) break;
+  a.indices = indices;
+  a.lods.resize((std::min)(src->asset.lod_count, kGroomLods));
+  return &a;
+}
+
+// One LOD's arrays in the mesh pool, uploaded by this build's GPU section on first use (the file is read from
+// disk then and dropped after staging). nullptr: over budget or no pool room now (card path; retried later),
+// or the file changed (never retried).
+const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a, int lod, uint64_t now) {
+  GroomAsset::Lod& d = a.lods[size_t(lod)];
+  if (d.ready) { d.last_used = now; return &d; }
+  const hair_groom::Loaded* src = hair_groom::find(id, a.indices);
+  std::vector<uint8_t> bytes;
+  hair_groom::Asset full;
+  if (!src || !hair_groom::read_full(*src, bytes, full)) {
+    log("[hair groom] %016llx: file unreadable or changed since startup, groom off for it", (unsigned long long)id);
+    a.failed = true;
+    return nullptr;
   }
+  const auto& l = full.lods[size_t(lod)];
+  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
+  GroomAsset::Lod n;
+  n.points = l.points; n.segments = l.segments; n.keep = l.keep;
+  VkDeviceSize total = 0;
+  n.tri = total; total += up(VkDeviceSize(l.points) * 4);
+  n.bary = total; total += up(VkDeviceSize(l.points) * 8);
+  n.radius = total; total += up(VkDeviceSize(l.points) * 4);
+  n.seg = total; total += up(VkDeviceSize(l.segments) * 4);
+  n.segtri = total; total += up(VkDeviceSize(l.segments) * 4);
+  if (!groom_make_room(total, now)) return nullptr;
   VkDeviceSize base = 0;
   if (!pool_alloc(cmd, total, &base)) return nullptr;
   GroomUpload u{};
   if (!make_buf(u.staging, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "hair groom upload")) {
-    g_pending_free.push_back({frame_index(), -1, base, total});
+    g_pending_free.push_back({now, -1, base, total});
     return nullptr;
   }
-  for (size_t i = 0; i < a.lods.size(); ++i) {
-    const auto& l = src->asset.lods[i];
-    GroomAsset::Lod& d = a.lods[i];
-    std::memcpy(u.staging.map + d.tri, l.triangle, size_t(l.points) * 4);
-    std::memcpy(u.staging.map + d.bary, l.bary, size_t(l.points) * 8);
-    std::memcpy(u.staging.map + d.radius, l.radius, size_t(l.points) * 4);
-    std::memcpy(u.staging.map + d.seg, l.segment, size_t(l.segments) * 4);
-    for (uint32_t s = 0; s < l.segments; ++s) {   // the card triangle of each segment's first point (hit remap)
-      uint32_t first, tri;
-      std::memcpy(&first, l.segment + s, 4);
-      std::memcpy(&tri, l.triangle + first, 4);
-      std::memcpy(u.staging.map + d.segtri + VkDeviceSize(s) * 4, &tri, 4);
-    }
-    d.tri += base; d.bary += base; d.radius += base; d.seg += base; d.segtri += base;
+  std::memcpy(u.staging.map + n.tri, l.triangle, size_t(l.points) * 4);
+  std::memcpy(u.staging.map + n.bary, l.bary, size_t(l.points) * 8);
+  std::memcpy(u.staging.map + n.radius, l.radius, size_t(l.points) * 4);
+  std::memcpy(u.staging.map + n.seg, l.segment, size_t(l.segments) * 4);
+  for (uint32_t s = 0; s < l.segments; ++s) {   // the card triangle of each segment's first point (hit remap)
+    uint32_t first, tri;
+    std::memcpy(&first, l.segment + s, 4);
+    std::memcpy(&tri, l.triangle + first, 4);
+    std::memcpy(u.staging.map + n.segtri + VkDeviceSize(s) * 4, &tri, 4);
   }
+  n.tri += base; n.bary += base; n.radius += base; n.seg += base; n.segtri += base;
+  n.base = base; n.size = total; n.ready = true; n.last_used = now;
+  d = n;
   u.dst = base; u.bytes = total;
   g_groom_uploads.push_back(u);
-  a.indices = indices;
-  a.ready = true;
-  log("[hair groom] %016llx uploaded: %zu LODs, %.1f MB in the mesh pool at %llu", (unsigned long long)id, a.lods.size(),
-      double(total) / 1048576.0, (unsigned long long)base);
-  return &a;
+  g_groom_pool_used += total;
+  log("[hair groom] %016llx LOD %d uploaded: %.1f MB in the mesh pool at %llu (grooms %.0f of %.0f MB)", (unsigned long long)id,
+      lod, double(total) / 1048576.0, (unsigned long long)base, double(g_groom_pool_used) / 1048576.0,
+      double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
+  return &d;
 }
 
 VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDeviceSize pos_off,
@@ -1789,6 +1841,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   if (g_groom_scratch.b) free_buf(g_groom_scratch);
   for (auto& u : g_groom_uploads) if (u.staging.b) free_buf(u.staging);
   g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear(); g_groom_logged_unmatched.clear();
+  g_groom_pool_used = 0; g_groom_budget_refusals = 0;
   if (g_groom_uv_rb.b) free_buf(g_groom_uv_rb);
   g_groom_uv.clear(); g_groom_uv_logged.clear();
   for (GroomUvJob& j : g_groom_uv_jobs) j = GroomUvJob{};
@@ -2472,8 +2525,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
     // rt_hair_groom: the matched hair draw's groom (its card instance stays for primary queries).
-    const GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
-                                      ? groom_asset(cmd, fd.groom_id, fd.groom_indices) : nullptr;
+    GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
+                                ? groom_asset(fd.groom_id, fd.groom_indices) : nullptr;
     if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
     if (hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
         !g_groom_uv.count(fd.groom_identity) && fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
@@ -2506,19 +2559,23 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       GroomSlot& g = *s.groom;
       const int lod = groom_pick_lod(g, int(groom_src->lods.size()));
-      const GroomAsset::Lod& l = groom_src->lods[size_t(lod)];
+      const GroomAsset::Lod* lp = groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
+      bool ok = lp != nullptr;
+      const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
-      if (lod != g.lod) {   // a new LOD: new points range and a full build into a new BLAS
-        if (g.pos_size) g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+      if (ok && lod != g.lod) {   // a new LOD: new points range and a full build into a new BLAS
+        if (g.pos_size) {
+          g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+          g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
+        }
         as_destroy(g.as);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
         g.pos_size = 0; g.built = false; g.compact = 0; g.lod = lod;
       }
-      bool ok = true;
-      if (!g.pos_size) {
+      if (ok && !g.pos_size) {
         const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
-        ok = pool_alloc(cmd, pos + 32, &g.pos_off);
-        if (ok) { g.pos_size = pos + 32; g.bounds_off = g.pos_off + pos; }
+        ok = groom_make_room(pos + 32, now) && pool_alloc(cmd, pos + 32, &g.pos_off);
+        if (ok) { g.pos_size = pos + 32; g.bounds_off = g.pos_off + pos; g_groom_pool_used += g.pos_size; }
       }
       if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
       if (ok && !g.as.as) {
@@ -3363,12 +3420,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   if (g_groom_on && now % 300 == 0) {
     log("[hair groom] frame %llu: %u groom instances; last 300 frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
-        "UV pending %llu, UV mismatch %llu)",
+        "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB",
         (unsigned long long)now, groom_count, g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
         (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
-        (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6]);
+        (unsigned long long)g_groom_st.miss[4], (unsigned long long)g_groom_st.miss[5], (unsigned long long)g_groom_st.miss[6],
+        double(g_groom_pool_used) / 1048576.0, double(hair_groom::pool_budget(groom_pool_capacity())) / 1048576.0);
     g_groom_st = GroomStats{};
   }
   out->pool = g_pool.b;

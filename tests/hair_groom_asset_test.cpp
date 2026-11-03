@@ -1,6 +1,7 @@
 // common/hair_groom_asset.h: index-only content ID (shared fixture with tests/hair_groom_test.py) and
 // the .hgrm parser's range checks.
 #include "../common/hair_groom_asset.h"
+#include "../common/hair_groom_budget.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -93,6 +94,20 @@ int main() {
   CHECK(!parse(b.data(), b.size() - 1, a));                   // truncated
   b[0] = 'X';
   CHECK(!parse(b.data(), b.size(), a));
+  // Header-only index entry: ids, counts and the LOD count, no arrays.
+  b = asset();
+  CHECK(parse_header(b.data(), 40, a) && a.index_id == 9 && a.indices == 6 && a.lod_count == 1 && a.lods.empty());
+  CHECK(!parse_header(b.data(), 39, a));
+
+  // Pool budget: a quarter of the capacity; evictions oldest first, never pinned or recently used ones.
+  CHECK(pool_budget(2047ull << 20) == (2047ull << 20) / 4);
+  std::vector<uint64_t> ev;
+  std::vector<Resident> res = {{1, 40, 10, false}, {2, 30, 5, false}, {3, 50, 990, false}, {4, 20, 1, true}};
+  CHECK(plan_evictions(res, 140, 10, 200, 1000, 120, ev) && ev.empty());
+  CHECK(plan_evictions(res, 140, 70, 200, 1000, 120, ev) && ev == std::vector<uint64_t>{2});
+  CHECK(plan_evictions(res, 140, 100, 200, 1000, 120, ev) && (ev == std::vector<uint64_t>{2, 1}));
+  CHECK(!plan_evictions(res, 140, 140, 200, 1000, 120, ev) && ev.empty());
+  CHECK(!plan_evictions(res, 0, 201, 200, 1000, 120, ev));
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
 }

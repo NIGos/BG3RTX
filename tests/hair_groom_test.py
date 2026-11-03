@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, convert, geom, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, geom, mesh, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -325,7 +325,26 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_bsdf():
+    for beta in (0.2, 0.41, 0.7):
+        a, se = bsdf.furnace(beta, n=200000, return_se=True)
+        # Monte Carlo: within 4 standard errors (narrow lobes at low roughness are the noisy ones).
+        check(f"chiang white furnace beta {beta}", np.all(np.abs(a - 1) < np.maximum(0.01, 4 * se)), (a, se))
+    check("lambert fibre white furnace", np.all(np.abs(bsdf.furnace(0.41, n=200000, model="hit") - 1) < 0.03))
+    check("white colour has no absorption", np.all(bsdf.sigma_a_from_color((1, 1, 1), 0.41) == 0))
+    a = bsdf.furnace(0.41, bsdf.CHAR_HAIR["color"], n=100000)
+    check("absorbing colour: albedo below 1, red > green > blue", a[0] < 1 and a[0] > a[1] > a[2], a)
+    g = bsdf.furnace(0.41, bsdf.CHAR_HAIR["color"], n=20000, model="game")
+    check("game hair finite and positive", np.all(np.isfinite(g)) and np.all(g > 0), g)
+    _, lo = bsdf.lobe_sweep("game", backlit=0.2)
+    _, hi = bsdf.lobe_sweep("game", backlit=0.4)
+    check("game HairBacklit scales the backlit end", hi[-1].mean() > 1.5 * lo[-1].mean(), (lo[-1], hi[-1]))
+    _, ch = bsdf.lobe_sweep("chiang")
+    check("chiang forward scattering (TT) above back scattering", ch[-1].mean() > 5 * ch[0].mean(), ch[[0, -1]])
+    w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
+    check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
+
+for t in (test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
