@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--step", type=int, default=16, help="mask rows per strand segment")
     ap.add_argument("--pixel", type=float, default=0.0005, help="render pixel size in metres")
     ap.add_argument("--dedupe", action="store_true", help="drop strands repeated by stacked cards")
+    ap.add_argument("--keep-fraction", type=float, default=1.0, help="distance LOD: share of strands kept, radii widened")
     ap.add_argument("--max-fibre-diameter", type=float, help="split painted clumps into fibres (metres)")
     ap.add_argument("--depth-offset", type=float,
                     help="metres per unit of the mask depth channel (CHAR_Hair PixelDepthOffset; Shadowheart 0.001)")
@@ -70,6 +71,7 @@ def main():
                                     depth_offset=args.depth_offset, head_centre=head_centre)
     if args.dedupe:
         groom, report["dedupe_dropped_strands"] = convert.dedupe(groom)
+    groom = convert.thin(groom, args.keep_fraction)
     print(f"[groom] converted in {time.monotonic() - t0:.1f}s: {groom.strands} strands, {groom.segments} segments", flush=True)
     report.update(analysis.summary(groom, hair, mask, head_centre))
     np.savez_compressed(args.out / "groom.npz", points=groom.points, radii=groom.radii, joints=groom.joints,

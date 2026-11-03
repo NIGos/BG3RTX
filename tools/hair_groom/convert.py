@@ -259,3 +259,17 @@ def jacobian_u(mesh, tv):
     det = du1[:, 0] * du2[:, 1] - du1[:, 1] * du2[:, 0]
     det = np.where(np.abs(det) < 1e-12, np.nan, det)
     return (dp1 * du2[:, 1:2] - dp2 * du1[:, 1:2]) / det[:, None]
+
+
+def thin(groom, keep_fraction, seed=0x9E3779B9):
+    """Distance LOD: keep a deterministic `keep_fraction` of the strands and widen their radii by
+    1 / keep_fraction, so the projected area (2 r x length, summed) and hence the expected
+    coverage of a pixel much wider than a strand stay the same. Returns the thinned groom."""
+    if keep_fraction >= 1:
+        return groom
+    ids = np.arange(groom.strands, dtype=np.uint64)
+    h = (ids * np.uint64(seed) + np.uint64(0x632BE59BD9B4E019)) & np.uint64(0xFFFFFFFF)
+    keep = (h.astype(np.float64) / 2.0 ** 32) < keep_fraction
+    out = select(groom, keep)
+    out.radii = (out.radii / keep_fraction).astype(np.float32)
+    return out

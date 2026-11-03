@@ -43,6 +43,8 @@ static PFN_vkDestroyAccelerationStructureKHR pDestroyAS;
 static PFN_vkGetAccelerationStructureBuildSizesKHR pSizes;
 static PFN_vkCmdBuildAccelerationStructuresKHR pBuild;
 static PFN_vkGetAccelerationStructureDeviceAddressKHR pASAddr;
+static PFN_vkCmdWriteAccelerationStructuresPropertiesKHR pWriteProps;
+static PFN_vkCmdCopyAccelerationStructureKHR pCopyAS;
 
 struct Buf { VkBuffer b; VkDeviceMemory m; VkDeviceAddress addr; void* map; VkDeviceSize size; };
 
@@ -288,6 +290,8 @@ int main(int argc, char** argv) {
   LOAD(pSizes, "vkGetAccelerationStructureBuildSizesKHR");
   LOAD(pBuild, "vkCmdBuildAccelerationStructuresKHR");
   LOAD(pASAddr, "vkGetAccelerationStructureDeviceAddressKHR");
+  LOAD(pWriteProps, "vkCmdWriteAccelerationStructuresPropertiesKHR");
+  LOAD(pCopyAS, "vkCmdCopyAccelerationStructureKHR");
   VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
   pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   pci.queueFamilyIndex = fam;
@@ -491,7 +495,8 @@ int main(int argc, char** argv) {
     return a;
   };
   std::vector<VkAccelerationStructureGeometryLinearSweptSpheresDataNV> lss_data(ng);
-  auto groom_blas = [&](size_t k, VkBuildAccelerationStructureFlagsKHR flags) {
+  auto groom_blas = [&](size_t k, VkBuildAccelerationStructureFlagsKHR flags,
+                        VkRayTracingLssPrimitiveEndCapsModeNV caps = VK_RAY_TRACING_LSS_PRIMITIVE_END_CAPS_MODE_CHAINED_NV) {
     const Groom& g = grooms[k];
     auto& d = lss_data[k];
     d = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV};
@@ -505,7 +510,7 @@ int main(int argc, char** argv) {
     d.indexData.deviceAddress = g.starts.addr;
     d.indexStride = 4;
     d.indexingMode = VK_RAY_TRACING_LSS_INDEXING_MODE_SUCCESSIVE_NV;
-    d.endCapsMode = VK_RAY_TRACING_LSS_PRIMITIVE_END_CAPS_MODE_CHAINED_NV;
+    d.endCapsMode = caps;
     AS* a = new AS;
     a->geom.pNext = &d;
     a->geom.geometryType = VK_GEOMETRY_TYPE_LINEAR_SWEPT_SPHERES_NV;
@@ -605,6 +610,97 @@ int main(int argc, char** argv) {
     delete a;
   }
 
+  // Optimisation variants of one groom (points in the rest pose on entry and exit): compacted BLAS
+  // (size, refit, trace), end caps NONE (trace), and the trace of a refitted BLAS at a large sway
+  // against a fresh build of the same pose.
+  VkQueryPoolCreateInfo cqpi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+  cqpi.queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR;
+  cqpi.queryCount = 1;
+  VkQueryPool cqp;
+  CHECK(vkCreateQueryPool(dev, &cqpi, nullptr, &cqp));
+  auto groom_variants = [&](size_t k, AS& updatable) {
+    Groom& g = grooms[k];
+    std::string s;
+    auto traced = [&](AS& blas, const char* name) {
+      AS* t = make_tlas(blas);
+      std::string r = trace_all(t, p_opaque, &g);
+      t->destroy();
+      delete t;
+      return std::string("\"") + name + "\":{" + r + "}";
+    };
+    // Compaction.
+    AS* c0 = groom_blas(k, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+                               VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
+    timed([&](VkCommandBuffer cmd) {
+      vkCmdResetQueryPool(cmd, cqp, 0, 1);
+      c0->record(cmd, false);
+      barrier(cmd);
+      pWriteProps(cmd, 1, &c0->as, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, cqp, 0);
+    });
+    VkDeviceSize compact = 0;
+    CHECK(vkGetQueryPoolResults(dev, cqp, 0, 1, sizeof compact, &compact, 8, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+    AS c;
+    c.geom = c0->geom;
+    c.info = c0->info;
+    c.range = c0->range;
+    c.size = compact;
+    c.storage = make(compact, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false);
+    c.scratch = c0->scratch;  // the update scratch of the same geometry
+    c0->scratch = {};
+    VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+    ci.buffer = c.storage.b;
+    ci.size = compact;
+    ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    CHECK(pCreateAS(dev, &ci, nullptr, &c.as));
+    c.info.dstAccelerationStructure = c.as;
+    double copy_ms = timed([&](VkCommandBuffer cmd) {
+      VkCopyAccelerationStructureInfoKHR cp{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
+      cp.src = c0->as;
+      cp.dst = c.as;
+      cp.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
+      pCopyAS(cmd, &cp);
+    });
+    c0->destroy();
+    delete c0;
+    std::vector<double> crefit;
+    for (int r = 0; r < repeats; ++r) crefit.push_back(timed([&](VkCommandBuffer cmd) { c.record(cmd, true); }));
+    snprintf(line, sizeof line, "\"compacted\":{\"blas_mb\":%.2f,\"compact_copy_ms\":%.3f,\"refit_ms\":%.3f},", compact / 1048576.0,
+             copy_ms, median(crefit));
+    const std::string head = line;  // traced() reuses `line`
+    s += head + traced(c, "compacted_trace") + ",";
+    c.destroy();
+    // End caps NONE.
+    AS* n = groom_blas(k, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+                       VK_RAY_TRACING_LSS_PRIMITIVE_END_CAPS_MODE_NONE_NV);
+    timed([&](VkCommandBuffer cmd) { n->record(cmd, false); });
+    s += traced(*n, "caps_none_trace") + ",";
+    n->destroy();
+    delete n;
+    // Refit quality: build at rest, sway the cards (up to 2 cm at the tips), move the points, refit,
+    // trace; then rebuild the same pose and trace. Rays start on the swayed cards in both.
+    timed([&](VkCommandBuffer cmd) {
+      updatable.record(cmd, false);
+      barrier(cmd);
+      dispatch(cmd, p_deform, Push{nv, 0, 0, nt, 1.5f, {0, 0, 0}});
+      barrier(cmd);
+      dispatch(cmd, p_update, Push{g.points, 0, 0, nt, 0, {0, 0, 0}});
+      barrier(cmd);
+      updatable.record(cmd, true);
+    });
+    s += traced(updatable, "swayed_refit_trace") + ",";
+    timed([&](VkCommandBuffer cmd) { updatable.record(cmd, false); });
+    s += traced(updatable, "swayed_rebuild_trace");
+    timed([&](VkCommandBuffer cmd) {
+      VkBufferCopy cpy{0, 0, VkDeviceSize(nv) * 12};
+      vkCmdCopyBuffer(cmd, rest.b, cpos.b, 1, &cpy);
+      barrier(cmd);
+      dispatch(cmd, p_update, Push{g.points, 0, 0, nt, 0, {0, 0, 0}});
+      barrier(cmd);
+      updatable.record(cmd, false);
+    });
+    return s;
+  };
+
   // ---- grooms ----
   for (size_t k = 0; k < grooms.size(); ++k) {
     Groom& g = grooms[k];
@@ -643,6 +739,7 @@ int main(int argc, char** argv) {
     std::string tr = trace_all(tlas, p_opaque, &g);
     tlas->destroy();
     delete tlas;
+    tr += "," + groom_variants(k, *a);
     snprintf(line, sizeof line,
              "\"groom_step%u\":{\"strands\":%u,\"points\":%u,\"primitives\":%u,\"blas_mb\":%.2f,\"fast_build_blas_mb\":%.2f,"
              "\"build_ms\":%.3f,\"fast_build_ms\":%.3f,\"refit_ms\":%.3f,\"point_update_ms\":%.3f,\"frame_update_ms\":%.3f,",

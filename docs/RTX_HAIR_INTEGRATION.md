@@ -38,9 +38,11 @@ one key (`rt_hair_groom`, proposed), A/B in one run against the current native h
   Then an LSS BLAS refit (ALLOW_UPDATE, PREFER_FAST_TRACE). Bench: 0.008 ms update + 0.104 ms refit
   per character at 2 mm (0.061 ms total at 4 mm). Rebuild (1.3 ms) only when the draw re-appears
   or after N refits if trace cost drifts (measure; spring motion is small relative to strand length).
-- Memory per hair instance: BLAS 73 MB at 2 mm, 38 MB at 4 mm, plus 15 MB / 9 MB points. A party of
-  4 at 2 mm ~ 350 MB. Policy: 2 mm for the nearest N characters (dialogue), 4 mm otherwise, cards
-  beyond a distance (or for unmatched styles). VRAM budget to confirm on 32 GB.
+- Memory per hair instance (compacted BLAS + points): 60 + 15 MB at 2 mm, 30 + 8 MB with LOD 1/2,
+  15 + 4 MB with LOD 1/4. Policy (optimisation sweep in the experiment doc): 2 mm for characters over
+  ~10% of the screen, LOD 1/2 below, 1/4 for small ones, cards beyond or for unmatched styles. LOD
+  levels are separate BLASes built once per instance and switched with hysteresis. Refit only
+  instances inside the view or a shadow frustum; rebuild only after large pose changes.
 - Accessories (separate Base_AlphaTest_VT material) and the scalp stay as they are.
 
 ## 3. Ray-query consumers (shaders/rt/rt_common.hlsli)

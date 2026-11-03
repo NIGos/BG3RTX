@@ -81,6 +81,31 @@ Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: ma
   (+50%), refit 0.48 ms, BLAS 208 MB per character. Not worth it at game resolution (a fibre is
   sub-pixel either way): off, painted clumps stay as RT proxies (radius p50 0.125 mm).
 
+## Optimisation sweep (same bench, dedupe on; ms shadow/AO/GI per 3.7M-ray batch)
+User rule 2026-11-03: hair may cost more than 1 ms, but must be as cheap as possible. Cards with the
+3-sample test 1.94/1.71/2.99 in the same run; opaque cards (floor) 0.59/0.58/1.26.
+| Groom | Segments | Trace | BLAS MB (compacted) | Refit ms |
+|---|---:|---|---:|---:|
+| 1 mm | 1.65M | 0.80/0.69/1.11 | 140 (115) | 0.38 |
+| 1.5 mm | 1.12M | 0.88/0.72/1.19 | 95 (79) | 0.13..0.22 |
+| **2 mm** | 855k | 0.91/0.74/1.27 | 73 (**60**) | 0.10..0.12 |
+| 3 mm | 587k | 1.01/0.85/1.50 | 50 (41) | 0.07 |
+| 4 mm | 450k | 1.11..1.16/0.94..1.01/1.66..1.77 | 38 (32) | 0.05 |
+| 2 mm, LOD keep 1/2 (r x 2) | 429k | 0.71/0.62/1.03 | 37 (30) | 0.05 |
+| 2 mm, LOD keep 1/4 (r x 4) | 215k | 0.63/0.61/0.92 | 18 (15) | 0.03 |
+- Compaction (ALLOW_COMPACTION, copy 0.09 ms once): -17% memory, same trace and refit. Keep.
+- `ALLOW_UPDATE` itself costs ~15% trace (a FAST_TRACE build without it: 0.78/0.68/1.11), but a
+  per-frame rebuild costs 1.3 ms: refit wins. After a 2 cm sway, refit traces +0..5% vs a rebuild:
+  rebuild only on large pose changes. End caps NONE vs CHAINED (same flags): -0..3%, hit share
+  -0.1%: not worth it, CHAINED kept.
+- LOD (`convert.thin`): keep a fraction of strands, widen radii by its inverse so projected area is
+  kept. Render at 2 mm pixels (character a few metres away): IoU vs cards 0.92 (full), 0.91 (1/2),
+  0.89 (1/4); mean radiance within 0.5% (1/2) and -4% (1/4). Hit share unchanged (0.79..0.80).
+- Proposed policy: 2 mm compacted for characters covering more than ~10% of the screen, 1/2 below,
+  1/4 for small ones, cards beyond; refit only characters in the view or shadow frustum.
+  Worst case per near character (every ray of three full-screen batches from its hair): 2.9 ms
+  trace + 0.12 ms refit, against 6.6 ms for the card stand-in (the in-game card path costs more).
+
 ## Production path
 Integration design: docs/RTX_HAIR_INTEGRATION.md.
 

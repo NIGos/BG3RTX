@@ -149,6 +149,18 @@ def test_quality_options():
     check("dedupe keeps separate strands", convert.dedupe(g3)[1] == 0)
 
 
+def test_thin():
+    h, w = 256, 64
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 60, 4.0)], 2)
+    g, _ = convert.convert(card_mesh(), m, tile_grid=(1, 1), step=16)
+    t = convert.thin(g, 0.5)
+    check("thin keeps about half", 0.25 * g.strands <= t.strands <= 0.75 * g.strands, (g.strands, t.strands))
+    check("thin widens radii", np.allclose(t.radii, g.radii[0] * 2), t.radii[:2])
+    check("thin is deterministic", convert.thin(g, 0.5).strands == t.strands)
+    check("thin 1.0 is identity", convert.thin(g, 1.0) is g)
+
+
 def test_locate_overlap():
     uv = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], np.float32)
     tris = np.array([[0, 1, 2], [0, 1, 2]])  # the same UV triangle twice: an overlap
@@ -232,7 +244,7 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_bench_data, test_quality_options, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

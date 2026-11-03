@@ -15,3 +15,6 @@
   1 mm x mask G) is a raster trick, not volume: off. Fibre split to 0.18 mm: +50% trace, 208 MB BLAS: off.
 - Integration design: docs/RTX_HAIR_INTEGRATION.md (groom in secondary rays only, content-ID join,
   per-frame embedding update, masks in the four consumers, BSDF licence, fallback, ABI, gates).
+- Optimisation sweep: 2 mm segments + BLAS compaction (60 MB, -17%) is the near setting; LOD by strand
+  thinning (radius widened) 1/2: trace -22% (0.71/0.62/1.03 ms), 1/4: 0.63/0.61/0.92 ms, IoU 0.91/0.89.
+  ALLOW_UPDATE costs ~15% trace but refit (0.1 ms) beats rebuild (1.3 ms); end caps NONE gains 0..3%: kept CHAINED.
