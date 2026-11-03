@@ -12,6 +12,16 @@ from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load
 
 
 class PanTests(unittest.TestCase):
+    def test_water_coverage_r8_uint_is_exact_and_size_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'coverage.raw'
+            path.write_bytes(bytes([0, 1, 1, 0]))
+            entry = dict(width=2, height=2, format=13)
+            np.testing.assert_array_equal(decode(path, entry)[..., 0], [[0, 1], [1, 0]])
+            path.write_bytes(bytes([0, 1, 1]))
+            with self.assertRaises(ValueError):
+                decode(path, entry)
+
     def test_mixed_command_recordings_are_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
