@@ -98,9 +98,8 @@ int main(int argc, char** argv) {
   if(!keep_static_only(false,static_candidate(false,true,false))) return fail(83,"off retains old skin behavior");
   if(!keep_static_only(true,static_candidate(true,true,false))) return fail(84,"offscreen class A roof retained");
   // Default-path regression: two pass-local UBO allocations refer to the same
-  // model, material and pulled vertex instance. No static-only filter needed.
+  // model and pulled vertex instance. No static-only filter needed.
   uint32_t model[16]={};model[0]=model[5]=model[10]=model[15]=0x3f800000u;
-  a.material=0xabc;
   a.instance=model_instance_key(model,120,0x9000,128);
   const float zero_origin[3]={};
   if(!model_position(a,model,zero_origin)) return fail(102,"finite model placement");
@@ -116,8 +115,6 @@ int main(int argc, char** argv) {
   b.place=0x7777; // even a different ring allocation has identical contents
   if(!duplicate(100,b)) return fail(90,"pass-local allocation ignored");
   if(duplicate(101,b)) return fail(91,"previous frame cannot remove an offscreen caster");
-  b=a;b.material++;
-  if(duplicate(100,b)) return fail(92,"different material kept");
   b=a;model[12]=0x41200000u; // identical prop translated by 10 metres
   b.instance=model_instance_key(model,120,0x9000,128);
   model_position(b,model,zero_origin);
@@ -132,13 +129,41 @@ int main(int argc, char** argv) {
   if(duplicate(100,b)) return fail(97,"different instance range kept");
   b=a;b.instance=0;
   if(duplicate(100,b)) return fail(98,"unknown placement kept");
-  b=a;b.material=0;
-  if(duplicate(100,b)) return fail(99,"unknown material kept");
   b=a;b.vb++;
   if(duplicate(100,b)) return fail(100,"cascade-only roof mesh kept");
   if(model_pull_offset(0x1cf36b97d3067b6cull)!=64 || model_pull_offset(0x3812bc980438747full)!=96 ||
      model_pull_offset(0x50fbfceb06192473ull)!=0 || model_pull_offset(0x646a930e41f002bbull)!=0)
     return fail(101,"audited skin/camera layouts; wind and instanced roof remain exact");
+  // Real draw shape: camera/cascade constants AND material UBOs are separate
+  // ring allocations, and compute skinning may output into another VB region.
+  // Reproduce the previous key exactly to prove the allocation miss first.
+  auto previous_key=[](const DrawId& d,uint64_t material_buffer,uint64_t material_offset) {
+    const uint64_t material=mix(mix(mix(1469598103934665603ull,material_buffer),material_offset),256);
+    return mix(mix(mix(mix(mesh_key(d),material),d.instance),d.instances),d.first_instance);
+  };
+  DrawId camera_draw=a,cascade_draw=a;
+  cascade_draw.place=0x8000;cascade_draw.place_offset=8192;
+  if(previous_key(camera_draw,0x5000,256)==previous_key(cascade_draw,0x6000,4096))
+    return fail(110,"previous key must miss per-draw material allocations");
+  if(mesh_instance_key(camera_draw)!=mesh_instance_key(cascade_draw) || !duplicate(100,cascade_draw))
+    return fail(111,"geometry identity ignores constant and material allocations");
+  cascade_draw.vb=0x7777;cascade_draw.vb_offset=16384;
+  if(duplicate(100,cascade_draw)) return fail(112,"different skin output cannot prove common source");
+  // A camera VS outside the audited matrix layouts cannot supply placement.
+  camera_draw.instance=0;camera_draw.position_known=false;
+  if(mesh_instance_key(camera_draw)!=0 || model_pull_offset(0x0123456789abcdefull)!=0)
+    return fail(113,"unlisted camera layout has key zero");
+  InstanceSets unknown_camera;unknown_camera.insert(100,camera_draw);
+  if(unknown_camera.contains(100,cascade_draw)) return fail(114,"unknown camera cannot dedupe skin");
+  for(bool affine : {false,true}) {
+    // Skin VS is non-affine; compute-skinned affine input is storage-backed.
+    const bool skin=static_candidate(affine,true,true);
+    if(keep_static_only(true,skin)) return fail(115,"fallback removes both skin paths");
+    if(!keep_static_only(false,skin)) return fail(116,"fallback off retains comparison path");
+  }
+  DrawId prop=cascade_draw;prop.position[0]+=10;
+  InstanceSets props;props.insert(100,cascade_draw);
+  if(props.contains(100,prop)) return fail(117,"identical prop geometry at another place remains distinct");
   // Different pass origins (as with a distant sun-cascade eye) still identify
   // the same absolute instance. Translation precision comes from input ULPs.
   DrawId camera=a,shadow=a;

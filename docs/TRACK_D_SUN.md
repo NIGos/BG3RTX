@@ -206,3 +206,22 @@ variant request delta 0, no new GPU pass. CPU regressions cover duplicate remova
 distinct instances and differing origins. Visual roof coverage and dialogue
 confirmation remain pending; no game was launched. Validation details are in
 [the branch progress](progress/fix-cascade-dialogue.md).
+
+## Dialogue allocation follow-up (2026-11-03, READY_FOR_LIVE)
+
+The previous identity correction did not fire in three saves (0.0 mesh-offset
+matches); Dialogue1 remained 335 seen / 60 duplicates / 113 added. Material
+bindings are per-draw allocations, output VB regions may differ and unlisted
+camera VS layouts cannot supply the model identity. There is no captured
+skinning-source lineage, so index-buffer/range matching alone is unsafe.
+Matching now ignores material allocation but retains geometry and proven
+placement/instance constraints. Differing skinned output regions remain unmatched.
+The existing `rt_cascade_static_only=1` fallback excludes dynamic/unclassified
+legacy copies, including audited skin and storage-backed position paths; the
+camera copy is retained. Default 0 remains unchanged. Unknown static roofs can
+be omitted with this fallback. A key-0 counter exposes relaxed-identity coverage.
+Prepared dialogue pairs toggle the fallback in one run; exact zero image
+registration replaces the every-window camera-log gate. Predicted port character
+motion <=0.002 block luminance; nocascade gap must fall to camp level.
+No live run or measured GPU cost; no ABI/shader edits, variant request delta 0.
+Validation: [progress/fix-cascade-dialogue2.md](progress/fix-cascade-dialogue2.md).

@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0", "rt_cascade_static_only": "1"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -78,6 +78,8 @@ plan = [
     step("shot-charlights-on", SHOT, True, ls_owners="15"),          # lights owned by characters untraced
     step("shot-noart-on", SHOT, True, ls_noshadow="2"),              # lights the art leaves unshadowed untraced
     step("shot-off-c", SHOT, True),
+    step("shot-static-only-off", SHOT, True, rt_cascade_static_only="0"),
+    step("shot-static-only-on", SHOT, True, rt_cascade_static_only="1"),
     step("shot-nocascade-on", SHOT, True, rt_cascade_casters="0"),   # last frame's cascade soup out of the sun TLAS
     step("shot-boxold-on", SHOT, True, ls_box_cascade_old="1"),      # the old box passes: the cascade copy shadows local/box lights
     step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),            # no held (absent) draws while static
@@ -89,11 +91,12 @@ plan = [
     step("shot-off-e", SHOT, True),
     # H7 (moving shadows): two traces 0.5 s apart (the real gap is the frame numbers of the '[trace] frame N written'
     # lines), user config and the game's own sun map only. Moving with RT, still without = RT-only animated casters.
-    step("motion-base", 12, [6, 6.5]),
+    step("motion-base-fix-off", 12, [6, 6.5], rt_cascade_static_only="0"),
+    step("motion-base", 12, [6, 6.5], rt_cascade_static_only="1"),
     step("motion-nosun", 12, [6, 6.5], rt_shadows="0", contact_shadows="0"),
     step("view-lsremoved", 12, [6], ls_debug="2"),                # local light removed x4 (where D-LS darkens)
     step("view-lsowners", 12, [6], ls_debug="9"),                 # evaluated lights by owner (magenta character)
-    step("diag-view-sunmask", 12, [6], rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
+    step("diag-view-sunmask", 12, rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
     step("diag-ls-stats", 10, ls_stats="1"),                         # light removed % of the lit luminance
     # rt_occ_stats (docs/DIALOGUE_SHADOWS.md "Occluder-kind diagnostic"): per source the character px darkened, the
     # mean darkening, the occluder kinds and distances; one line per 60 frames. Each window flips one key so the kind
@@ -110,7 +113,7 @@ plan = [
     step("cost-off-a", 10),
     step("cost-hair", 10, **ORIGIN),
     step("cost-off-b", 10),
-    step("restore", 5, qa_exposure_hold="0"),
+    step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"),
 ]
 labels = [p["label"] for p in plan]
 shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
@@ -122,6 +125,10 @@ seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]
 
 expect_every = [
+    {"name": "candidate host: key-zero coverage counter in every cascade fix control window",
+     "select": r"\[cascade\] casters: cascade \d+, \d+ frames;",
+     "match": r"cascade casters with key 0 [0-9.]+ per frame", "min": 1,
+     "windows": ["shot-static-only-off", "shot-static-only-on", "motion-base-fix-off", "motion-base"]},
     {"name": "scene wait: every judged window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
      "select": r"\[rt\] scene wait: \d+ frames", "match": r"got this frame's scene, 0 timeouts", "min": 1,
      "windows": judged},
@@ -141,9 +148,8 @@ expect_every = [
      "select": r"occ stats \(\d+ frames\): character px", "match": r"sun replica mismatch \d+ of \d+ rays",
      "min": 1, "windows": occ},
 ]
-# Static camera is a per-shot flag, not a gate (ds1-ds3 13:46-14:00: the dialogue camera cuts after the load, so
-# shot-off-a moved in every run): a shot with a '[rt] scene build GPU (split, camera moving' line in its window is
-# excluded from the comparisons (char_energy.py --moved <labels>), and the count is reported.
+# Pair registration, rather than scene-build camera logs, decides whether shots are comparable.
+# Run pair_registration.py before interpreting character energy; never warp the images.
 
 
 def job(name, save, first, hair):
@@ -197,6 +203,8 @@ def job(name, save, first, hair):
                     "character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp "
                     "/ + physical origin, H7 moving-shadow PNG pairs 0.5 s apart (RT on and game sun only), ls_debug 2 and 9 "
                     "and rt_debug 2 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. "
+                    "Static-only 0/1 and motion-base fix OFF/ON test the dynamic-cascade fallback; "
+                    "pair_registration.py requires integer image registration (0,0) per ON/OFF neighbour. "
                     "predicted.json names which shot removes the shadow under each hypothesis."),
         "estimated_phase_seconds": seconds,
         "expect_every": expect_every,
@@ -222,7 +230,7 @@ _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters
               ("occnocasc", dict(rt_occ_stats="1", rt_cascade_casters="0")),
               ("boxold", dict(rt_occ_stats="1", ls_box_cascade_old="1"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
-warm_plan.append(step("restore", 5, qa_exposure_hold="0"))
+warm_plan.append(step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"))
 warm_seconds = sum(p["seconds"] for p in warm_plan)
 
 
@@ -268,7 +276,7 @@ def main():
         if a.no_hair:   # the hair phases still toggle the keys; with the startup off they are inert (logged rejected)
             j["forbid"] = [f for f in j["forbid"] if "hair" not in f]
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
-    print(f"{len(SAVES)} jobs, plan {PLAN}: {len(plan)} phases, {seconds} s, {len(traced)} PNG traces per job -> {out}")
+    print(f"{len(SAVES)} jobs, plan {PLAN}: {len(plan)} phases, {seconds} s, {sum(len(p.get('trace_at', [])) for p in plan)} PNG traces per job -> {out}")
 
 
 if __name__ == "__main__":

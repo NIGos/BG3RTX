@@ -19,6 +19,37 @@ Status READY_FOR_LIVE, not a visible-quality pass. Planned port/camp A/B, counte
 roof protection and cost checks: [progress/fix-cascade-dialogue.md](progress/fix-cascade-dialogue.md).
 No game launch; the attribution branch and its prepared jobs were not edited.
 
+## Allocation mismatch follow-up (fix-cascade-dialogue2, 2026-11-03)
+
+The 03:09 ds3 run disproved the previous default-path claim: mesh-offset
+matches stayed 0.0 in all three saves; Dialogue1 stayed at 335 seen / 60 duplicates /
+113 added. At the port a still chest changed by -0.073 block luminance; disabling
+cascade casters lit both characters (+5.8% whole frame).
+
+The relaxed key required an equal material buffer/offset/range, vertex output
+buffer/offset and an audited camera VS model layout. Per-draw allocation breaks
+the first two; an unlisted VS yields key 0. No captured compute-skinning source
+lineage proves that different output regions belong to the same character.
+Index range alone cannot distinguish two placed instances of the same mesh.
+
+Use the existing off-by-default `rt_cascade_static_only=1` fallback for skinned /
+dynamic / unclassified legacy copies. Its affine, known non-storage position
+filter already excludes the audited skinned VS and storage-backed positions.
+Opposite-policy F-1/F-2 soups are rejected after toggles. Camera-pass geometry
+still casts the current pose; unknown off-camera static
+roofs may be lost. The default value 0 still permits unmatched skinned copies.
+The added key-0 counter measures identity coverage before admission filtering.
+Identity can ignore material allocation while keeping proven geometry,
+model, placement and pulled-instance identity. It cannot prove a skinned match
+when vertex output regions differ. No live quality or GPU cost is claimed.
+
+Revised ds1-ds3 jobs compare static_only 0/1 and motion pairs in one run, outside
+the watched queue. Pair analysis requires exact (0,0) registration against OFF
+neighbours; the every-window static-camera log gate is removed. Port character
+motion must stay within RT-sun-off noise (0.002 block luminance), with the
+nocascade gap falling to the camp level. See the batch predictions and
+[progress/fix-cascade-dialogue2.md](progress/fix-cascade-dialogue2.md).
+
 ## Earlier investigation
 
 The user separates two new symptoms from the resolved UI blue-block issue:

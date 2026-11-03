@@ -45,7 +45,7 @@ struct DrawId {
   uint64_t ib = 0, ib_offset = 0;
   uint32_t ib_type = 0;
   uint64_t place = 0, place_offset = 0;   // instance stream or per-draw UBO; 0 unknown
-  uint64_t material = 0, instance = 0;  // canonical per-draw identity, independent of UBO allocation
+  uint64_t instance = 0;  // canonical geometry/placement identity, independent of UBO allocation
   double position[3] = {}, position_error[3] = {};
   bool position_known = false;
 };
@@ -95,8 +95,11 @@ inline uint64_t model_instance_key(const uint32_t model[16], uint32_t pull_index
   return h ? h : 1;
 }
 inline uint64_t mesh_instance_key(const DrawId& d) {
-  if(!d.material || !d.instance || !d.position_known) return 0;
-  uint64_t h=mix(mix(mesh_key(d),d.material),d.instance);
+  if(!d.instance || !d.position_known) return 0;
+  // Material UBO addresses are pass-local allocations, not geometry identity.
+  // Retain the vertex source/range: a compute-skinned output is NOT a stable
+  // skinning source. Without its producer lineage, use static-only instead.
+  uint64_t h=mix(mesh_key(d),d.instance);
   h=mix(mix(h,d.instances),d.first_instance);
   return h ? h : 1;
 }
@@ -125,8 +128,8 @@ inline bool model_position(DrawId& d,const uint32_t model[16],const float origin
   return d.position_known=true;
 }
 
-// Keep candidates in same-frame buckets. Nontranslation model words, mesh,
-// material and pulled instance are exact; only absolute placement has the
+// Keep candidates in same-frame buckets. Nontranslation model words, mesh and
+// pulled instance are exact; only absolute placement has the
 // derived float-input uncertainty above. Never borrow a previous-frame model.
 class InstanceSets {
  public:
