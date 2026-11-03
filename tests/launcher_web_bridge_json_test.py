@@ -17,8 +17,8 @@ assert state["modStatus"] == "Not checked"
 for setting in state["settings"]:
     assert "Unknown" not in setting["cost"]
     assert "Unknown" not in setting["vram"]
-far = next(s for s in state["settings"] if "+3.2-3.7 ms" in s["cost"])
-assert "RTX 5090" in far["provenance"] and "6 m" in far["provenance"]
+far = next(s for s in state["settings"] if s["id"] == "exp_hidden_surface")
+assert "RTX 5090" in far["provenance"] and "+3.2-3.7 ms" in far["provenance"]
 print("Version, unchecked status and A1 cost provenance retained; unknown cost pills omitted.")
 
 assert state["restartCount"] == 0 and state["restartBanner"] == ""
@@ -27,3 +27,16 @@ for setting in state["settings"]:
     for choice in setting["choices"]:
         assert choice["apply"] in {"Live", "Applies after a short hitch", "Restart to apply"}
 print("Every card and choice has an explicit apply badge; no pending restart at baseline.")
+
+assert far["title"] == "Off-screen bounce light"
+assert [c["label"] for c in far["choices"]] == ["Off", "Near", "Far (6 m)", "Far + reflections"]
+sun = next(s for s in state["settings"] if s["id"] == "sun_shadows")
+assert sun["choices"][2]["label"] == "Ray-traced + hidden roofs"
+box = next(s for s in state["settings"] if s["id"] == "box_lights")
+assert box["maturity"] == "qualified" and not box["experimental"]
+assert "+0.32 ms S6 / +0.20 ms S7" in box["cost"]
+assert not any(s["id"] in {"roof_shadows", "exp_hit_emission", "exp_gi_far", "exp_omm", "exp_alpha_spill", "exp_hair_physical_origin"} for s in state["settings"])
+local = next(s for s in state["settings"] if s["id"] == "local_shadows")
+assert [c["label"] for c in local["choices"]] == ["Off", "Fast", "Full"]
+print("Consolidated cards, qualified box shadows and developer visibility verified.")
+assert not far["choices"][3]["enabled"] and far["choices"][3]["maturity"] == "experimental"

@@ -18,3 +18,20 @@
   Isolated Chromium headless capture also exits -2147483645; browser access host is unavailable.
   Error sidecars and capture instructions are retained. WebView screenshot QA remains outstanding.
 - No game launch, DXC, shader tools, commits, merges or git metadata writes. No GPU pass changed.
+
+## Settings decisions (branch ux-apply-mode, kept, 2026-11-03)
+- Merged three Advanced rows into Off-screen bounce light: Off / Near / Far (6 m) / Far + reflections.
+- Ultra keeps its existing bounce/emission/far-field keys as Far. Reflection level stays experimental.
+- Choice::mark maps materials-only/emission/bounce to Near, far-field to Far, reflection keys to top.
+- Old all-hit emission remains custom and survives saving; lower levels reset the entire chain.
+- Sun shadows gains Ray-traced + hidden roofs: cascade-copy casters for hidden roofs/canopies.
+- Ultra uses that third level; others keep their previous sun behaviour. All sun levels apply Live.
+- Approved ls_box=2 in Ultra, High unchanged (Off); qualified Basic card, not Experimental.
+- Existing measured local-light cost: +0.32 ms S6 / +0.20 ms S7. No new GPU measurement needed.
+- Check S6 forge lower-right walkway and central pillar for the approved ledge shadows.
+- Hair origins, OMM, cutout spill and Local light shadows Full + shadowed lights are dev-only.
+- Both launchers consume the consolidated shared cards/modes; WebView sample cards updated too.
+- Defaults regenerated (no value delta), schema regenerated; USER_SETTINGS and local-light TRACK updated.
+- Launcher and three C++ test targets built; all five relevant CTests pass: settings 2542, UI 23, bridge 78 checks.
+- JSON card assertions, defaults --check and JavaScript syntax pass. Full suite excluded to avoid shader tools.
+- Shader requests delta 0; ABI unchanged. No game, shader tools, commits or git metadata mutations.

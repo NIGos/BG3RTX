@@ -665,6 +665,12 @@ templates). Validation as 9.3: `ls_debug=4` with the projector pixels included.
 (Implemented as `ls_box`: only box lights with a game shadow map are traced; the
 `ls_box_unshadowed` A/B key: removed 2026-10-31, see CONSOLIDATION.md C1.)
 
+**User decision 2026-11-03:** `ls_box=2` visually approved and promoted to Ultra
+("Box light shadows: All"), with no shader or rendering logic change. High stays Off.
+Existing live evidence: energy within band; local-light pass +0.32 ms S6 / +0.20 ms S7.
+Check the lower-right walkway beside the front disc and the central pillar in S6
+(Adamantine Forge): ledge shadows should darken them slightly. GUI cost note retained.
+
 **`ls_box=2` (2026-11-01, off by default, READY_FOR_LIVE; GUI "Box light shadows: All box lights").**
 Why S6 traced only 0.009 box lights per px (lr3 08:49:39 `ls box stats`): not culling or the froxel
 list (listed 2.44/px, evaluated 1.141/px), but the rule above: `ls_box=1` traces only `_m8 & 1`

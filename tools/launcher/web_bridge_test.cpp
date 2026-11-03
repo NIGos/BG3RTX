@@ -36,6 +36,12 @@ int main(int argc,char** argv){
   bridge.handle("{\"type\":\"preset\",\"value\":3}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kUltra);check(bridge.dirty()>0);
   bridge.handle("{\"type\":\"save\"}");check(saves==0);bridge.handle("{\"type\":\"confirm\"}");check(saves==1);check(bridge.dirty()==0);
   bridge.handle("{\"type\":\"play\"}");check(plays==1);bridge.handle("{\"type\":\"play\"}");check(plays==1);
+  json=bridge.state_json();
+  check(json.find("Off-screen bounce light")!=std::string::npos);
+  check(json.find("Ray-traced + hidden roofs")!=std::string::npos);
+  check(json.find("Far-field sun bounce")==std::string::npos);
+  check(json.find("Opacity micromaps")==std::string::npos);
+  check(json.find("Physical hair ray origins")==std::string::npos);
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==-1);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
@@ -53,10 +59,10 @@ int main(int argc,char** argv){
   db.handle("{\"type\":\"set\",\"id\":\"frame_generation\",\"value\":1}");
   auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);check(preview.find("NVIDIA Reflex: Off -> On")!=std::string::npos);check(dependencies.values[st::knob_index("reflex")]==0);
   db.handle("{\"type\":\"confirm\"}");check(writes==1);check(dependencies.values[st::knob_index("reflex")]==1);
-  db.handle("{\"type\":\"set\",\"id\":\"exp_hit_emission\",\"value\":2}");
-  int emission=st::knob_index("exp_hit_emission");if(emission>=0)check(dependencies.values[emission]!=2);
+  db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
+  int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);
   launcher::GraphicsInspection multiple;multiple.adapters.resize(2);multiple.adapters[0].gpu.name="First";multiple.adapters[1].gpu.name="Second";db.set_compatibility(multiple);check(!dependencies.have_gpu);db.handle("{\"type\":\"adapter\",\"value\":1}");check(dependencies.have_gpu&&dependencies.gpu.name=="Second");
-  if(emission<0)return 2;dependencies.values[emission]=2;launcher::web::Bridge legacy(dependencies);check(dependencies.values[emission]==-1);check(legacy.dirty()==0);
+  if(hidden_choice<0)return 2;dependencies.values[hidden_choice]=3;launcher::web::Bridge legacy(dependencies);check(dependencies.values[hidden_choice]==-1);check(legacy.dirty()==0);
   launcher::State pending;pending.caps=~0u;pending.preset=st::kHigh;
   pending.base=st::code_defaults();pending.base["rt_alpha"]="0";
   pending.values=st::preset_values(st::kHigh);pending.values[st::knob_index("rt_geometry")]=1;

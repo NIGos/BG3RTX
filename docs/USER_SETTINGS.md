@@ -73,7 +73,7 @@ The window opens on your GPU and suggests a preset:
 | Low | RTX 2060-3060, 4060; AMD/Intel with ray tracing | No ray-traced scene, no Ray Reconstruction. Screen-space GI and contact shadows |
 | Medium | RTX 3070/3080, 4060 Ti/4070 | Ray-traced scene without alpha-tested objects, RT GI, fast local-light shadows, glossy reflections |
 | High | RTX 4080/4090, 5080 | Ray-traced lighting and full geometry; hardware suitability is estimated |
-| Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, roof sun shadows, rough reflections, RT water + Refraction, Hidden-surface shading + Bounce, Emission at ray hits (Hidden hits), Far-field sun bounce 6 m, frame cap 58 (116 shown with frame generation 2x) |
+| Ultra (RTX 5090) | RTX 5090 | High plus Ray-traced High GI, sun shadows with hidden roofs, Box light shadows All, rough reflections, RT water + Refraction, Off-screen bounce light Far (6 m), frame cap 58 (116 shown with frame generation 2x) |
 
 The presets below RTX 5090 are estimates and have not been measured on those GPUs yet. Settings
 your GPU cannot run are marked "(not supported)" and the presets skip them. For example, an
@@ -92,11 +92,10 @@ reaches a running game:
 |---|---|---|
 | Ray Reconstruction | Off / On | live, brief hitch |
 | Ray-traced geometry | Off / Opaque only / Full | Off/Opaque live; **Opaque <-> Full needs a restart** |
-| Sun shadows | Screen-space / Ray-traced | live |
-| Roof sun shadows | Off / On (on in Ultra) | live |
+| Sun shadows | Screen-space / Ray-traced / Ray-traced + hidden roofs (Ultra) | live |
 | Global illumination | Off / Screen-space / Ray-traced / Ray-traced High | live |
-| Local light shadows | Off / Fast / Full / Full + shadowed lights | live |
-| Box light shadows | Off / Shadowed / All (off in every preset) | live |
+| Local light shadows | Off / Fast / Full | live |
+| Box light shadows | Off / Shadowed / All (Ultra; High remains Off) | live |
 | Reflections | Off / Glossy / Standard / Rough | live |
 | Frame generation | Off / 2x / 3x / 4x | 2x/3x/4x live; **Off <-> on needs a restart** |
 | RT lighting intensity | 50-100 % | live |
@@ -110,36 +109,41 @@ level in brackets.
 | Setting | Choices | Needs | Applies |
 |---|---|---|---|
 | RT water (Ultra: + Refraction) | Off / Reflections / + Shadows / + Refraction | Ray-traced geometry | **raising a level: restart**; lowering live |
-| Hidden-surface shading (Ultra: + Bounce) | Off / Materials / + Bounce / + Reflections | Full geometry; + Bounce: RT GI; + Reflections: Reflections on | **first enable: restart**; levels above Materials live |
-| Emission at ray hits (Ultra: Hidden hits) | Off / Hidden hits | Hidden-surface shading | live |
-| Far-field sun bounce (Ultra: 6 m) | Off / 6 m | Hidden-surface shading + Bounce | live |
+| Off-screen bounce light (Ultra: Far) | Off / Near / Far (6 m) / Far + reflections | Full geometry and RT GI; top level also needs Reflections | **restart to first enable or disable capture**; changes between enabled levels may hitch |
 
-"+ Reflections" of Hidden-surface shading is still being tested and is in no preset.
+Near includes hidden-surface materials, bounced light and emission from glowing hidden surfaces.
+Far extends sunlight bounce to 6 m. Far + reflections is experimental and in no preset.
+Reference costs on RTX 5090 at 4K-class output: Near ~+0.6 ms, Far ~+4 ms, top level ~+6 ms.
+Sun shadows with hidden roofs uses cascade-copy casters for geometry the camera hides, including
+roofs and canopies (+0.3 to +1.3 ms). Box light shadows All is visually approved for Ultra:
++0.32 ms at the Adamantine Forge (S6), +0.20 ms at the inn (S7).
 
 **Experimental (being tested, off in every preset).**
 
 | Setting | Choices | Needs | Applies |
 |---|---|---|---|
 | Native coverage | Off / Hair + scalp / + Tilesets | Full geometry | **restart** |
-| Physical hair ray origins (advanced) | Off / On | Native coverage | enable at startup, then live |
-| Opacity micromaps | Off / On | Full geometry, GPU support | **restart** |
-| Preserve cutout capture on overflow | Off / On | Full geometry | live |
+| Offline cutout masks | Off / On | Full geometry; locally prepared masks | live |
 
-What each level writes: Hidden-surface shading Materials = `rt_hit_material`,
-`rt_hit_material_instanced`, `rt_hit_material_recycle`, `rt_hit_material_wind_rgb`; + Bounce adds
-`gi_hit_direct`, `gi_hit_sun`; + Reflections adds `rf_hit_shade`, `rf_hit_gi`. Emission = `rt_hit_emission=1`
-and `rt_emissive=1`. Far-field = `gi_far=1`, `gi_far_m=6`. RT water Reflections = `rt_water_geometry`,
+What each level writes: Off-screen bounce light Near sets `rt_hit_material`,
+`rt_hit_material_instanced`, `rt_hit_material_wind_rgb`, `gi_hit_direct`, `gi_hit_sun`,
+`rt_hit_emission` and `rt_emissive` to 1. Far adds `gi_far=1`, `gi_far_m=6`;
+Far + reflections also enables `rf_hit_shade`, `rf_hit_gi`. Lower levels reset the higher levels.
+RT water Reflections = `rt_water_geometry`,
 `rt_water_reflections`, `rt_water_compose`; + Shadows adds `rt_water_shadows`, `rt_water_ls_shadows`,
 `rt_water_game_shadow`; + Refraction adds `rt_water_refraction`. Native coverage Hair + scalp =
 `rt_native_hair`, `rt_native_scalp`; + Tilesets adds `rt_native_tileset`.
 
 **Developer only** (shown when `dev=1`, the developer `bg3rtx.ini`): Experimental lighting
 reference (`rt_hit_reference`), Local light sampling exact-k (`ls_k`), Current cascade sun shadows
-(`rt_sun_cascade_current`), and Emission at ray hits "All hits" (`rt_hit_emission=2`).
+(`rt_sun_cascade_current`), Physical hair ray origins (`rt_hair_physical_origin`),
+Opacity micromaps (`rt_omm`), Preserve cutout capture on overflow (`rt_alpha_spill`),
+and Local light shadows "Full + shadowed lights". The three capture/hair options remain hidden
+until qualified. Hand-edited all-hit emission (`rt_hit_emission=2`) is preserved as a custom value.
 **No entry (automatic):** `fg_letterbox=1` (frame generation in a swapchain larger than the game's
 output; equal sizes are unchanged), the hit-material buffer reuse, unlocked captures and lean hooks
 (default 1, keys kept for A/B), `rt_scene_wait=1`; the foliage rows and the alpha-tested static mesh
-rows (`rt_hit_material_pool_alpha=1`) come with Hidden-surface shading; capture buffer sizes follow the scene.
+rows (`rt_hit_material_pool_alpha=1`) come with Off-screen bounce light; capture buffer sizes follow the scene.
 `bg3rtx.log` is capped at 64 MB: the earlier part moves to `bg3rtx.prev.log`, which also keeps the previous
 session's log.
 
@@ -148,9 +152,10 @@ session's log.
   work until it is on. **Save** lowers a choice whose required setting is off (the status line
   names it).
 - **Files from older versions.** A `bg3rtx_user.ini` written before these levels loads as the
-  highest level any of its keys selects (for example `rf_hit_shade=1` reads as Hidden-surface
-  shading + Reflections). Saving writes that level's keys; the marker shows "restart required"
-  when one of the added keys needs a game start.
+  highest level any of its keys selects (for example `rf_hit_shade=1` reads as Off-screen bounce light Far + reflections). Saving writes that level's keys; the marker shows "restart required"
+  when one of the added keys needs a game start. Old materials-only files map to Near;
+  old emission and far-field keys map to Near and Far respectively. Saving completes the selected
+  level. All-hit emission stays custom and survives an unrelated save.
 - **Restart required.** An orange marker shows a change that applies at the next start.
 - **While the game runs.** You can keep the window open, change settings and press **Save**:
   the game applies them within about a second.
@@ -189,8 +194,7 @@ launcher keeps them when it saves. Delete the file to go back to the defaults.
 
 ## Command line (advanced)
 
-Box light shadows (`ls_box`) stay off in every preset until the live box-light check passes
-(`docs/P3_BOX_LIGHTS.md`).
+Box light shadows (`ls_box=2`) are enabled in Ultra after visual approval; other presets keep them off.
 
 ```
 BG3RTX.exe --preset ultra          write bg3rtx_user.ini with a preset (limited to your GPU)
