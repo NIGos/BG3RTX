@@ -1,0 +1,239 @@
+{
+  "method": "exact paired sign test, ON minus OFF",
+  "family_size": 12,
+  "family_alpha": 0.05,
+  "minimum_pairs": 8,
+  "pairs": [
+    [
+      "off-a",
+      "on-a"
+    ],
+    [
+      "off-b",
+      "on-b"
+    ]
+  ],
+  "observables": {
+    "rendered/hair_over_dof": {
+      "verdict": "INSUFFICIENT",
+      "registration_valid": true,
+      "comparisons": {
+        "residual_x1000": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 1,
+          "differences_on_minus_off": [
+            2.1596059799194336,
+            -31.73408794403076
+          ],
+          "mean_difference": -14.787240982055664,
+          "paired_sd": 23.966460813086467,
+          "p_one_sided": 0.75,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 25.718470573425293
+        },
+        "residual_even": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 1,
+          "differences_on_minus_off": [
+            2.2221943363547325,
+            -32.028399989940226
+          ],
+          "mean_difference": -14.903102826792747,
+          "paired_sd": 24.218827507792657,
+          "p_one_sided": 0.75,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 26.06393489986658
+        },
+        "residual_odd": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 1,
+          "differences_on_minus_off": [
+            2.0970171317458153,
+            -31.4397809561342
+          ],
+          "mean_difference": -14.671381912194192,
+          "paired_sd": 23.714097347223998,
+          "p_one_sided": 0.75,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 25.373011827468872
+        }
+      }
+    },
+    "rendered/bright_contour": {
+      "verdict": "INSUFFICIENT",
+      "registration_valid": true,
+      "comparisons": {
+        "residual_x1000": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -5.3539334535598755,
+            -2.139130115509033
+          ],
+          "mean_difference": -3.7465317845344543,
+          "paired_sd": 2.2732092405168993,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 2.7722411155700684
+        },
+        "residual_even": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -5.425580486189574,
+            -0.6818175315856934
+          ],
+          "mean_difference": -3.0536990088876337,
+          "paired_sd": 3.3543469535419366,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 4.2000270914286375
+        },
+        "residual_odd": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -5.282288766466081,
+            -3.5964425187557936
+          ],
+          "mean_difference": -4.439365642610937,
+          "paired_sd": 1.1920733137938404,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 1.344457734376192
+        }
+      }
+    },
+    "presented/hair_over_dof": {
+      "verdict": "INSUFFICIENT",
+      "registration_valid": false,
+      "comparisons": {
+        "residual_x1000": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 1,
+          "differences_on_minus_off": [
+            1.0100853443145752,
+            -2.1957156658172607
+          ],
+          "mean_difference": -0.5928151607513428,
+          "paired_sd": 2.266843633398905,
+          "p_one_sided": 0.75,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 3.214287042617798
+        },
+        "residual_even": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 1,
+          "differences_on_minus_off": [
+            0.9178537875413895,
+            -4.68772160820663
+          ],
+          "mean_difference": -1.8849339103326201,
+          "paired_sd": 3.963740374785889,
+          "p_one_sided": 0.75,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 5.722736474126577
+        },
+        "residual_odd": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 0,
+          "differences_on_minus_off": [
+            1.1023164261132479,
+            0.2962895669043064
+          ],
+          "mean_difference": 0.6993029965087771,
+          "paired_sd": 0.5699470579651371,
+          "p_one_sided": 1.0,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 0.7058384362608194
+        }
+      }
+    },
+    "presented/bright_contour": {
+      "verdict": "INSUFFICIENT",
+      "registration_valid": false,
+      "comparisons": {
+        "residual_x1000": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -0.7209560126066208,
+            -5.800781607627869
+          ],
+          "mean_difference": -3.2608688101172447,
+          "paired_sd": 3.5919791254845133,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 5.1725335121154785
+        },
+        "residual_even": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -0.40133940638042986,
+            -7.213777716970071
+          ],
+          "mean_difference": -3.8075585616752505,
+          "paired_sd": 4.817121325832963,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 6.890900083817542
+        },
+        "residual_odd": {
+          "verdict": "INSUFFICIENT",
+          "reason": "insufficient alternations",
+          "pairs": 2,
+          "minimum_pairs": 8,
+          "improvements": 2,
+          "differences_on_minus_off": [
+            -1.0405726789031178,
+            -4.387785826111212
+          ],
+          "mean_difference": -2.714179252507165,
+          "paired_sd": 2.366837114467609,
+          "p_one_sided": 0.25,
+          "alpha_bonferroni": 0.004166666666666667,
+          "off_repeat_spread": 3.4541672794148326
+        }
+      }
+    }
+  },
+  "verdict": "INSUFFICIENT",
+  "reason": "insufficient alternations",
+  "quality_pass": false,
+  "qualified_for_ultra": false,
+  "qualification_note": "Residual gate only. Face control, registered float energy, transport, cost and S8 remain mandatory; no promotion."
+}

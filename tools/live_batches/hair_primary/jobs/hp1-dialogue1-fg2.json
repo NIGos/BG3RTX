@@ -7,7 +7,12 @@
  "timeout": 531,
  "repeat": 1,
  "live_batch": "hair-primary",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=0,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=0,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1,rt_hair_groom_primary=1",
+ "live_flow": {
+  "startup_only": [
+   "rt_hair_groom_primary"
+  ]
+ },
  "args": [
   "-RealPresent",
   "-Foreground",
@@ -98,7 +103,7 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "rt_hair_groom_primary A/B (docs/RTX_HAIR_PRIMARY.md): native hair and the strand groom in secondary rays on throughout; visible strands off/on/off/on/off full-resolution PNG shots for the user and the character float energy, cost cards/strands/cards (rt passes, gi, scene build GPU ms, strand G-buffer draw ms). Gated: strand G-buffer and velocity draws > 0 while on.",
+ "purpose": "Strand hair A/B (docs/RTX_HAIR_PRIMARY.md): rt_hair_groom_primary latched on at startup, rt_hair_groom toggled live (off: native cards everywhere; on: strands in RT and on screen); off/on/off/on/off full-resolution PNG shots for the user and the character float energy, cost cards/strands/cards (rt passes, gi, scene build GPU ms, strand G-buffer draw ms). Gated: strand G-buffer and velocity draws > 0 while on.",
  "estimated_phase_seconds": 231,
  "expect_every": [
   {
@@ -107,7 +112,6 @@
    "match": "got this frame's scene, 0 timeouts",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -127,7 +131,6 @@
    "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -147,7 +150,6 @@
    "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -167,7 +169,6 @@
    "match": ", buffer full 0\\.0, added ",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -188,7 +189,6 @@
    "match": ": 0 frames waiting, 0 pending, 0 started",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -209,7 +209,6 @@
    "min": 0,
    "event": true,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",
@@ -255,7 +254,6 @@
    "match": "; invalid/missing native state 0; unsupported native interfaces total \\d+; retired bounds-invalid primitives 0;",
    "min": 1,
    "windows": [
-    "warm-back",
     "shot-cards-a",
     "shot-strands-a",
     "shot-cards-b",

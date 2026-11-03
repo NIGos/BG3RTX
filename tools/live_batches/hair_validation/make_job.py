@@ -33,11 +33,14 @@ def phase(label, seconds=7, on=False, trace=False, turn=0, wheel=0):
 # latched at startup, then one F8 per stage, the keys of each stage set before its reload and held through a 60 s
 # survival window (3 x 20 s: phases stay within the lean 5-25 s rule). The first stage whose survival windows have no
 # frames names the culprit. Stage keys: on top of the previous stage.
+# rt_hair_groom_primary is latched on at startup (main 8df7978d), so the groom stage is also the strands-on-screen
+# stage; the last stage adds the fibre pass (rt_hair_fibre, a live core key).
 STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_physical_origin="0", rt_hair_groom="0",
-                            rt_hair_groom_primary="0", rt_hair_fibre="0")),
+                            rt_hair_groom_primary="1", rt_hair_fibre="0")),
           ("b-origin", dict(rt_hair_physical_origin="1")),
-          ("c-groom", dict(rt_hair_groom="1")),
-          ("d-primary", dict(rt_hair_groom_primary="1"))]
+          ("c-strands", dict(rt_hair_groom="1")),
+          ("d-fibre", dict(rt_hair_fibre="1"))]
+STRAND_STAGES = ("c-strands", "d-fibre")   # strands on screen: their survival windows need strand draws
 SURVIVE = [1, 2, 3]   # 3 adjacent same-key 20 s windows: uninterrupted 60 s > 25 s failure.
 
 
@@ -59,8 +62,8 @@ def make_bisect():
         keys.update(more)
         plan.append(stage_phase(f"set-{name}", 5, keys))   # the stage's keys before its reload
         plan.append(dict(stage_phase(f"reload-{name}", 5, keys), reload_selected=True))
-        # The primary stage's windows hold a whole 300-frame strand line at the unfocused 30 fps (> 21 s, live_flow).
-        plan += [stage_phase(f"survive-{name}-{i}", 25 if name == "d-primary" else 20, keys) for i in SURVIVE]
+        # The strand stages' windows hold a whole 300-frame strand line at the unfocused 30 fps (> 21 s, live_flow).
+        plan += [stage_phase(f"survive-{name}-{i}", 25 if name in STRAND_STAGES else 20, keys) for i in SURVIVE]
     plan.append(stage_phase("restore", 5, keys))
     return plan
 
@@ -102,7 +105,7 @@ def make(validation=False):
 def job(name, save, plan, validation=False):
     j = hp.job(name, save)
     labels = [p["label"] for p in plan]
-    j.update(live_batch="hair-validation", timeout=sum(p["seconds"] for p in plan)+420,
+    j.update(live_batch="hair-validation", timeout=sum(p["seconds"] for p in plan)+660,   # + readiness waits (<= 375 s, live_flow) + 240 s load + margin
              estimated_phase_seconds=sum(p["seconds"] for p in plan), window_mode="visible_unfocused_fg")
     j["args"] = ["-RealPresent", "-Move", "-MovePlan", f"captures/live_batches/hair_validation/plans/{name}.json"]
     if validation:
@@ -149,7 +152,7 @@ def bisect_job(name, save, plan):
     labels = [p["label"] for p in plan]
     survive = [l for l in labels if l.startswith("survive-")]
     # Frames after every reload: the per-60-frame scene-wait line in every survival window (none: the device or the
-    # game is gone in that stage). The level-load line of hair_primary once the primary stage reloads.
+    # game is gone in that stage). The level-load line of hair_primary once a strand stage reloads.
     j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read",
                    r"\[hair primary\] level load \(new G-buffer images\): strand swaps paused for \d+ frames"]
     j["expect_every"] = [dict(name="frames rendered in every survival window after a reload", select=r"\[rt\] scene wait: 60 frames",
@@ -157,16 +160,18 @@ def bisect_job(name, save, plan):
     j["expect_every"].append(dict(name="hair guards zero after every reload", select=r"\[alpha hair\] native coverage records",
                                   match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1,
                                   windows=[l for l in survive if l.endswith("-3")]))
-    # The primary stage is only proven with strands on screen (hv5 2026-11-03: every draw struck, 0 strand draws, yet
+    # A strand stage is only proven with strands on screen (hv5 2026-11-03: every draw struck, 0 strand draws, yet
     # "stable"): G-buffer and velocity strand draws in its survival windows after the 300-frame swap pause.
-    j["expect_every"].append(dict(name="strands drawn after the primary reload", select=r"\[hair primary\] frame \d+:",
+    j["expect_every"].append(dict(name="strands drawn after every strand-stage reload", select=r"\[hair primary\] frame \d+:",
                                   match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
-                                  windows=[l for l in survive if l.startswith("survive-d-primary") and not l.endswith("-1")]))
+                                  windows=[l for l in survive if any(l.startswith("survive-" + s) for s in STRAND_STAGES)
+                                           and not l.endswith("-1")]))
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
                           r"\[hair-reload\] selected save reload complete"]
-    j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch, native hair + scalp, then + physical "
-                    "origin, + strand groom, + strands on screen, each with a 60 s survival window. The first stage "
-                    "without frames after its reload names the culprit.")
+    j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch with rt_hair_groom_primary "
+                    "latched on: native hair + scalp, then + physical origin, + strand groom (RT and on screen), + the fibre "
+                    "pass, each with a 60 s survival window; the strand stages need strand draws. The first stage without "
+                    "frames after its reload names the culprit.")
     return j
 
 

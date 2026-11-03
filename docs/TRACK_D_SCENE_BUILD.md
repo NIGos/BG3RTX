@@ -1027,6 +1027,35 @@ S8 smoke_ultra must pass buffer-full 0.00 in every pan/rotation window before
 qualification. No game launched. Unapplied, independently tested default-OFF
 alternative: [patch](alternatives/fix-elastic-drops-default-off.patch).
 
+### Elastic demand headroom (2026-11-03, cascade-elastic-headroom, offline candidate)
+
+su1-ultra-s8-fg2.1.205937 at 21:02:20 grew 272 -> 368 MiB only after
+casters had been dropped (pan-q buffer full 0.1; demand max 301.71 MiB).
+The cascade window now restores reserve before overflow, like the RT window.
+Both retain the largest positive observed demand step across quiet windows.
+Reserve is max(demand / 4, preset capacity / 4, step * delay), rounded with
+demand to 16 MiB. The preset quarter reserve bootstraps the first pan without
+hardcoding S8 numbers. Delay covers four fence frames plus the next producer:
+ceil((4 + 3) / 3) = 3 cascade-slot observations; 5 primary observations.
+Cascade inactivity is not a growth observation. The existing 120-sample rolling
+target peak, shrink hysteresis, initial preset allocation, RT fixed floor,
+partition safeguards and retirement fences remain. A falling growth cap at
+replacement cannot turn a growth request into a shrink.
+
+The synthetic summary-envelope trace 206.18 -> 301.71 MiB (not exact frame
+telemetry) settles at 320 MiB static, grows to 592 MiB after the step, then
+shrinks to 320 MiB after 120 quiet samples while retaining learned headroom.
+For three slots: 960 MiB static vs old 816 (+144), vs fixed 1281 (-321);
+1776 MiB after that conservative step vs old 1104 (+672). Detached allocations
+overlap temporarily: 3 * (320 + 592) = 2736 MiB if all three overlap.
+Actual per-slot demand steps and fence latency determine runtime allocation.
+No GPU commands, shader requests (delta 0), ABI or settings changes; GPU cost
+unmeasured. Layer restart required. READY_FOR_LIVE: expect cascade buffer full
+0.0 and RT opaque buffer full 0.00 in EVERY su1 S8 window; inspect sun casters
+during Q/E pans. No game launched. Past observations cannot bound an unseen
+larger discontinuity, unbounded fence stalls or allocation/VRAM refusal; this
+candidate is not a universal zero-drop guarantee or a live quality pass.
+
 ### Elastic cascade inactivity regression (2026-11-03, promote-omm, offline fix)
 
 ds3 at 07:57:46-07:58:06 shrank cascade capture 320 -> 16 MiB after 24

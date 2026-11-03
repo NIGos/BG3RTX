@@ -782,3 +782,6 @@ including real Ultra. Targets: hair and bright-contour residual reach the suppli
 late-RR level, linear far-background energy and stable face remain within OFF
 repeat noise. GPU temporal ms/frame and visual qualification remain pending;
 no promotion. Check fine white hair over DoF and sun-lit rims in Test Dialogue3.
+
+Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
+The valid four-window receipt remains insufficient (2 pairs); quality, energy/control registration and S8 remain unqualified. No game launch or preset change.
