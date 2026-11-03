@@ -70,7 +70,7 @@ visible hair too. Method: near-field Chiang 2016 / far-field Marschner-d'Eon wri
 (longitudinal Gaussian lobes, azimuthal logistic, absorption from colour). Dual scattering (Zinke 2008)
 for the many-strand multiple scattering in shadow rays: forward-scattering transmittance and spread from
 the strand count along the shadow ray (two scalars per ray), no extra rays. Mapping from CHAR_Hair: Hair_Color
--> absorption sigma_a (inverse of the single-fibre albedo, Chiang 2016 eq. 9), Roughness -> beta_m/beta_n,
+-> absorption sigma_a (Chiang 2016 eq. 9: the colour is the multiple-scattering albedo of a hair volume), Roughness -> beta_m/beta_n,
 Scatter / HairBacklit -> TT weight only as a sanity check (physically derived lobes win), cuticle tilt 2-3 deg.
 Licence: pbrt-v3 hair is BSD-2 (port with notice) or own code from papers; RTXCR material library only after
 reading its NVIDIA RTX SDK licence and recording notices (docs/THIRD_PARTY). Inputs: material parameters
@@ -79,6 +79,7 @@ the expected albedo with absorption; brighter hair than the game's (allowed if p
 per hair hit batch (shading only; traversal unchanged). Gates: offline furnace + lobe tests (CTest) and a
 CPU/PT reference render vs the shader on a fixture; live: character energy within spread of the analytic
 expectation, backlit shot shows rim (PNG pair). Deps: step 1 (the groom hit carries the fibre tangent).
+Prototype 2026-11-03 (RTX_HAIR_INTEGRATION.md 4): energy OK; one-bounce Chiang is pale, needs dual scattering.
 
 ## 5. Animation (mostly NEEDS-LIVE)
 On screen: strands follow head turns, spring physics and wind exactly as the cards (points are embedded in the

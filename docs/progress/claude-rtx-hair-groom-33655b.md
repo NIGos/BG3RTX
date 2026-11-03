@@ -16,3 +16,9 @@
   32 corner UVs; the layer reads the same corners from its own soup and matches within 1e-3).
 - Check in game: Test Dialogue1, `[hair groom] UV join 6009 indices: matched` and `frame N: K groom instances`
   with K > 0; job tools/live_batches/hair_groom (Dialogue1 only). Build, CTests, dryrun pass.
+
+## rt_hair_groom pool budget and fibre BSDF prototype (2026-11-03)
+- Groom pool: at most 1/4 of the mesh pool (min of rt_mesh_pool_max_mb and VRAM cap); only the selected LOD
+  uploaded; headers indexed at start, files read on first match; LRU eviction after 120 unused frames.
+- Fibre BSDF offline (tools/hair_groom/bsdf.py, Chiang 2016): white furnace 1.00; GI hit today (Lambert)
+  3-6x darker than Chiang; single-scatter Chiang is pale, needs dual scattering for the brown (ROADMAP step 4).

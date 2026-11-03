@@ -90,6 +90,22 @@ Four query loops: `rt_visibility` (sun/local shadows), `rt_closest_debug` (prima
   from the papers. pbrt-v3's hair BSDF is BSD-2 licensed (portable with its notice). RTXCR's hair
   BSDF is under the NVIDIA RTX SDK licence (notices, redistribution terms): use only after reading it
   and recording the notice in docs/THIRD_PARTY / package licences. No RTXCR code is used today.
+
+- Offline prototype (2026-11-03): `tools/hair_groom/bsdf.py` (Chiang R/TT/TRT + residual, d'Eon M_p, own code
+from the papers), the game's camera-pixel hair (bg3_hair_spec + bg3_hair_diff) ported for comparison, the
+current GI hit (Lambert with Hair_Color on the round fibre); `python -m tools.hair_groom.bsdf_compare`.
+CHAR_Hair defaults: Hair_Color 0.136/0.082/0.043, Roughness 0.41, Scatter 0.30, HairBacklit 0.40.
+- Energy: white furnace Chiang 1.00 (beta 0.2/0.41/0.7, within 4 standard errors), Lambert fibre 1.00,
+  game 0.89. CTest `hair_groom_test` (test_bsdf).
+- Single-fibre albedo with Hair_Color: hit 0.136/0.082/0.043, game 0.33/0.27/0.21, Chiang 0.79/0.69/0.57
+  (mostly TT, forward). Colour check: a semi-infinite slab of random Chiang fibres (multiple scattering,
+  random walk) reflects 0.098/0.060/0.034 = 0.72/0.73/0.79 x Hair_Color: hue kept, 25% darker.
+- Shadowheart render (LOD 1/2, single scattering + opacity shadows), mean hair luminance front / backlit:
+  hit 0.024 / 0.011, game 0.046 / 0.036, Chiang 0.086 / 0.139. Images: docs/img/hair_groom/bsdf_*.jpg.
+- Finding: with one bounce Chiang hair is pale grey-beige (each fibre transmits 70% of the light); the brown
+  appears only with the multiple scattering between strands. So the shader integration needs dual scattering
+  (above) or the GI path through hair; a single-scatter Chiang alone would look washed out. Today's GI hit
+  (Lambert) is 3-6x too dark and has no forward scattering.
 - Coloured transmission through hair in shadows (TT) would need non-opaque LSS + any-hit: not planned;
   opaque fibres at real coverage are the physically closer default than today's ribbons.
 
