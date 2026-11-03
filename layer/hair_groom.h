@@ -17,12 +17,14 @@ void device_created(DeviceData*, bool rt_enabled);
 // The device has the feature and the key was on at creation (the card path stays otherwise).
 bool lss_enabled();
 
-// The groom files (data/assetdb/hair_grooms/*.hgrm), loaded once on first use.
+// The groom files (data/assetdb/hair_grooms/*.hgrm), indexed once on first use: header and UV samples only
+// (`asset.lods` empty). The arrays are read from disk when a LOD is uploaded (read_full), then dropped.
 struct Loaded {
   Asset asset;
-  std::vector<uint8_t> bytes;   // owns the views in `asset`
   std::string path;
 };
+// The whole file of a groom, parsed (views into `bytes`); false when it changed or is malformed.
+bool read_full(const Loaded& l, std::vector<uint8_t>& bytes, Asset& full);
 const Loaded* find(uint64_t index_id, uint32_t index_count);
 // Index counts of the loaded grooms: a draw with another count never matches (no hashing).
 bool count_known(uint32_t index_count);

@@ -87,28 +87,27 @@ struct Asset {
   uint32_t vertices = 0, indices = 0;
   bool has_uv = false;
   float uv[kSamples * 2] = {};   // v2: UV0 of the sampled corners
+  uint32_t lod_count = 0;        // from the header (parse_header leaves `lods` empty)
   std::vector<Lod> lods;
 };
 
 // Layout (tools/hair_groom/asset.py): 'HGRM', version 1 or 2, position id u64, index id u64, card vertices,
 // card indices, lods, 0; v2: 32 x (u, v) f32 corner samples; per LOD: keep f32, points, segments, 0, then the
 // arrays above in that order.
-// `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
-inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
+// The header and UV samples only (the layer indexes every file at startup without reading its arrays).
+// Sets `header_bytes` to where the LODs start.
+inline bool parse_header(const uint8_t* bytes, uint64_t size, Asset& out, uint64_t* header_bytes = nullptr) {
   out = {};
   if (size < 40 || std::memcmp(bytes, "HGRM", 4) != 0) return false;
-  uint32_t version, vertices, indices, lods, pad;
+  uint32_t version, lods;
   std::memcpy(&version, bytes + 4, 4);
   std::memcpy(&out.position_id, bytes + 8, 8);
   std::memcpy(&out.index_id, bytes + 16, 8);
-  std::memcpy(&vertices, bytes + 24, 4);
-  std::memcpy(&indices, bytes + 28, 4);
+  std::memcpy(&out.vertices, bytes + 24, 4);
+  std::memcpy(&out.indices, bytes + 28, 4);
   std::memcpy(&lods, bytes + 32, 4);
-  std::memcpy(&pad, bytes + 36, 4);
-  if ((version != 1 && version != 2) || !indices || indices % 3 || !lods || lods > 8 || !out.index_id) return false;
-  out.vertices = vertices;
-  out.indices = indices;
-  const uint32_t triangles = indices / 3;
+  if ((version != 1 && version != 2) || !out.indices || out.indices % 3 || !lods || lods > 8 || !out.index_id) return false;
+  out.lod_count = lods;
   uint64_t at = 40;
   if (version == 2) {
     if (size - at < sizeof out.uv) return false;
@@ -118,6 +117,15 @@ inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
       if (!(x == x) || x < -64.0f || x > 64.0f) return false;
     out.has_uv = true;
   }
+  if (header_bytes) *header_bytes = at;
+  return true;
+}
+
+// `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
+inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
+  uint64_t at = 0;
+  if (!parse_header(bytes, size, out, &at)) return false;
+  const uint32_t triangles = out.indices / 3, lods = out.lod_count;
   for (uint32_t l = 0; l < lods; ++l) {
     if (size - at < 16) return false;
     Lod lod;
