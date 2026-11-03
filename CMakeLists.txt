@@ -556,3 +556,6 @@ add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)
 
 add_executable(water_world_lights_test tests/water_world_lights_test.cpp)
 add_test(NAME water_world_lights_test COMMAND water_world_lights_test)
+
+add_executable(rr_post_temporal_test tests/rr_post_temporal_test.cpp)
+add_test(NAME rr_post_temporal_test COMMAND rr_post_temporal_test)

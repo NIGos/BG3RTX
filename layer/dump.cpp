@@ -26,6 +26,7 @@ struct Dump {
   uint32_t image_id, w, h, texel;
   VkFormat format;
   bool depth;
+  bool post_preview = false;
   uint32_t ordinal;            // pass ordinal inside its command buffer
   uint32_t slot;               // color attachment index, or 99 for depth
   uint64_t pass_fs;
@@ -142,9 +143,9 @@ static bool record_copy(VkCommandBuffer cmd, DeviceData* dd, VkImage image, VkIm
   return true;
 }
 
-std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
+std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview) {
   terrain_capture_pass(cmd,s);
-  if (!trace_recording() || !cfg_int("dump_images", 1)) return {};
+  if (!trace_recording() || (!post_preview && !cfg_int("dump_images", 1))) return {};
   DeviceData* dd = device_of(cmd);
   const VkDeviceSize budget = VkDeviceSize(cfg_int("dump_max_mb", 6144)) << 20;
   const uint32_t min_size = uint32_t(cfg_int("dump_min_size", 64));
@@ -153,6 +154,7 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
   std::string ids;
   auto one = [&](VkImage image, VkImageLayout layout, uint32_t slot, bool depth) {
     if (!image || layout == VK_IMAGE_LAYOUT_UNDEFINED) return;
+    if (post_preview && (depth || (slot != 1 && slot != 2 && slot != 6))) return;
     ImageRec rec;
     {
       std::shared_lock<std::shared_mutex> lock(tracker().mu);
@@ -174,6 +176,7 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s) {
     d.image_id = rec.id;
     d.format = rec.ci.format;
     d.depth = depth;
+    d.post_preview = post_preview;
     d.ordinal = s->pass.ordinal;
     d.slot = slot;
     d.pass_fs = s->pass.first_fs_hash;
@@ -441,7 +444,7 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
   // preview's size and with its nearest-texel sampling, so the same texels as every other preview of the
   // render-resolution targets (the G-buffer class in RT2's _a.png): float energy over a screen mask
   // (tools/live_batches/dialogue_shadows/char_energy.py) at ~10 MB per trace instead of full-size dumps.
-  if (g_dump_preview_f32 && !d.depth && d.pass_fs == kFsComposeDump) {
+  if (!d.depth && ((g_dump_preview_f32 && d.pass_fs == kFsComposeDump) || d.post_preview)) {
     std::vector<float> pv(size_t(ow) * oh * 4);
     for (uint32_t y = 0; y < oh; ++y)
       for (uint32_t x = 0; x < ow; ++x) {
@@ -565,6 +568,7 @@ uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
 bool pan_finished = true, pan_invalid = false;
 bool pan_water_mode=false, pan_water_debug=false;
 bool pan_edge_mode=false;
+bool pan_post_mode=false;
 int pan_delay_serial=0;
 uint64_t pan_request_ms=0;
 std::string pan_dir;
@@ -584,7 +588,8 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     pan_invalid=true; log("[pan] edge capture REFUSED: incompatible mode or extent budget"); return false;
   }
   if (edge_mode && std::strcmp(name,"depth")!=0 && std::strcmp(name,"final")!=0 &&
-      std::strcmp(name,"material")!=0 && std::strcmp(name,"albedo")!=0) return false;
+      std::strcmp(name,"material")!=0 && std::strcmp(name,"albedo")!=0 &&
+      !(cfg_int("pan_post",0) && (std::strcmp(name,"rr_post_ac")==0 || std::strcmp(name,"rr_post_eb")==0))) return false;
   if (water_mode && std::strcmp(name,"depth")!=0 && std::strncmp(name,"water_",6)!=0) return false;
   if (water_mode && uint64_t(r->width)*r->height > uint64_t(2560)*1440) {
     if (!pan_invalid) log("[pan] water capture REFUSED: render exceeds 2560x1440 pixel budget");
@@ -598,6 +603,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
       pan_serial = serial;
       pan_water_mode=water_mode;
       pan_edge_mode=edge_mode;
+      pan_post_mode=edge_mode && cfg_int("pan_post",0);
       pan_water_debug=water_mode && cfg_int("rt_debug",0)==25;
       pan_frames = 0;
       // Native tonemap (even without pan_inputs) can precede depth on another
@@ -629,7 +635,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   const bool is_final = std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
                         std::strncmp(name, "fg_", 3) == 0 || std::strncmp(name,"water_",6)==0;
   if (pan_finished || !pan_frames || now < pan_first || (!is_final && now > pan_last)) return false;
-  if (edge_mode && (now<=pan_first || !EdgePanSamples::wanted(name,now-pan_first))) return false;
+  if (edge_mode && (now<=pan_first || !EdgePanSamples::wanted(name,now-pan_first,pan_post_mode))) return false;
   PanSample p;
   p.name = name;
   p.image = r->image;
@@ -762,7 +768,7 @@ void pan_on_present(VkQueue queue) {
   for(const auto& p:pan_samples)completeness.add(p.recorded,p.name,p.recording);
   WaterPanSamples water_complete{pan_first,pan_target-1,pan_water_debug};
   for(const auto& p:pan_samples)water_complete.add(p.recorded,p.name,p.recording);
-  EdgePanSamples edge_complete{pan_first};
+  EdgePanSamples edge_complete{pan_first,pan_post_mode};
   for(const auto& p:pan_samples)edge_complete.add(p.recorded,p.name,p.recording);
   if(pan_edge_mode ? !edge_complete.complete() : pan_water_mode ? !water_complete.complete() : !completeness.complete())pan_invalid=true;
   make_dirs(pan_dir);
@@ -786,7 +792,7 @@ void pan_on_present(VkQueue queue) {
       if(pan_edge_mode) {
         // Same nearest half-size grid as fg_snap, without filtering thin edges.
         const uint32_t w=d.w/2,h=d.h/2;
-        if(!w || !h || d.texel!=4) { saved=false; pan_invalid=true; }
+        if(!w || !h || (d.texel!=4 && !(pan_post_mode && d.texel==8) && !(pan_post_mode && d.texel==16))) { saved=false; pan_invalid=true; }
         else {
           std::vector<uint8_t> packed(size_t(w)*h*d.texel);
           const auto* src=static_cast<const uint8_t*>(ptr);
