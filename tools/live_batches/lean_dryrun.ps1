@@ -22,6 +22,13 @@ if (-not (Test-Path $here)) { throw "no batch folder $here" }
 if (-not $Out) { $Out = Join-Path $env:TEMP "bg3rtx-$Batch-dryrun\$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $scripts = Join-Path $repo 'scripts'
+. (Join-Path $scripts 'low-priority.ps1')
+# Always run before reuse: new VALID logs can expose a false-positive forbid in
+# an otherwise unchanged batch. This helper only reads evidence and writes cache.
+$flowPython = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
+$flowArgs = @(); if ($flowPython -eq 'py') { $flowArgs += '-3' }
+& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here
+if ($LASTEXITCODE -ne 0) { throw 'live-flow design lint failed; fix before fake queue dryrun' }
 . (Join-Path $scripts 'camera-plan.ps1')
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')

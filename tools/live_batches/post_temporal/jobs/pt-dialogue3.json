@@ -256,6 +256,31 @@
       "windows": [
         "timing-on-b"
       ]
+    },
+    {
+      "name": "no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "rendered-off-a",
+        "presented-off-a",
+        "energy-off-a",
+        "timing-off-a",
+        "rendered-on-a",
+        "presented-on-a",
+        "energy-on-a",
+        "timing-on-a",
+        "rendered-off-b",
+        "presented-off-b",
+        "energy-off-b",
+        "timing-off-b",
+        "rendered-on-b",
+        "presented-on-b",
+        "energy-on-b",
+        "timing-on-b"
+      ]
     }
   ],
   "forbid": [
@@ -269,8 +294,7 @@
     "\\[sl\\] edge capture REFUSED",
     "\\[rrpost\\] exposure hold REFUSED",
     "\\[rrpost\\] temporal REFUSED",
-    "\\[rt\\] mesh.*pool full",
-    "nonfinite"
+    "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b"
   ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
@@ -281,6 +305,6 @@
     "\\[motion-trace\\] phase=15 label=energy-off-b repeat=0",
     "\\[motion-trace\\] phase=20 label=energy-on-b repeat=0"
   ],
-  "estimated_phase_seconds": 165,
+  "estimated_phase_seconds": 173,
   "purpose": "READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized."
 }

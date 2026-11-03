@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from tools.live_batches.edge_flicker.make_job import write
+from tools.live_batches.live_flow import repair_known_forbids
 HERE = Path(__file__).resolve().parent
 WINDOWS = [('off-a',0),('on-a',1),('off-b',0),('on-b',1)]
 
@@ -16,7 +17,7 @@ def make():
                              set=','.join(f'{k}={v}' for k,v in state.items()),**extra))
         base=dict(rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,
                   pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0)
-        step('warmup',20,base);step('warmup-camera',20,base)
+        step('warmup',20,base);step('warmup-camera',20,dict(base,rr_post_temporal=1))
         for i,(label,on) in enumerate(WINDOWS):
             state=dict(base,rr_post_temporal=on,qa_exposure_hold=1)
             # At 30 app fps, 5 s is > 9 Halton cycles and > 99.99% EMA warmup.
@@ -27,7 +28,7 @@ def make():
             # Float pre-post mean in dumps.json; no raw dumps or beauty PNG energy proxy.
             step('energy-'+label,5,state,trace_at=[1])
             traces.append(rf'\[motion-trace\] phase={len(plan)-1} label=energy-{label} repeat=0')
-            step('timing-'+label,10,dict(state,pan_post=0))
+            step('timing-'+label,12,dict(state,pan_post=0))
             every += [dict(name='AC/EB K8 '+label,select=rf'\[pan\] burst {serial+i} complete',
                            match=rf'\[pan\] burst {serial+i} complete: 8 frames, 36 samples, transport ok',
                            event=True,min=1,windows=['rendered-'+label]),
@@ -61,6 +62,7 @@ def make():
         if scene == 's8':
             job['framing_status'] = 'PROPOSED_STATIC_S8_REQUIRES_VERIFICATION'
         write(HERE/f'plans/pt_{scene}.json',plan)
+        repair_known_forbids(job,plan)
         write(HERE/f'jobs/pt-{scene}.json',job)
 
 if __name__=='__main__':make()
