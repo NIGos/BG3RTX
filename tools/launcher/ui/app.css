@@ -408,3 +408,5 @@ dialog {border-color:#9b896b;background:linear-gradient(#191c20f5,#191c20f5),var
 @media(max-width:860px) {.window {grid-template-rows:auto auto minmax(0,1fr) auto;}nav button {min-height:36px;padding:4px 7px;}nav {gap:2px;}footer .status {max-width:none;flex:1 0 100%;}.hero-copy {width:78%;}.hero {min-height:156px;}}
 @media(max-width:520px) {.hero-copy {width:100%;} .hero h2 {font-size:23px;}}
 @media(forced-colors:active) {dialog {background:Canvas;} .hero dt,.hero dd {color:CanvasText;} .btn.play::before,.btn.play::after {display:none;} .toggle input {opacity:1;appearance:auto;} .toggle span {display:none;}}
+
+  .restart-banner { color: var(--warn); font-weight: 700; margin-bottom: 4px; }

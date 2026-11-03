@@ -613,8 +613,18 @@ Changing any knob switches the preset combo to **Custom**. "Reset to preset" res
 | **Game-side** | DLSS mode / upscaler | game's own menu; it recreates SR, and our RR follows that feature's lifetime |
 | **Restart** | `rt` (device features), `rt_alpha` (capture source + memory), `fg` 0 → 2+ (Streamline loads at instance creation), memory budgets, `ngx_hook`, `sl_*`, `force_*`, `geo_capture` | the overlay shows "applies after restart" and writes the value; the launcher sets them before launch |
 
-So, among the user-facing knobs, only **"Ray-traced geometry: Full ↔ Opaque"** and
-**"Frame generation Off ↔ On"** need a restart. Everything else applies within a second.
+Apply policy update (2026-11-03): `common/settings.h` declares a Live, Hitch or Restart mode
+for every control and choice. Cards show the control's most demanding transition; Details explains
+mixed controls. Individual choice metadata records exceptions (water Off and hair-origin Off are live).
+Geometry alpha capture, native hair/tilesets, material/wind capture, OMM, current cascades and first
+hair-origin enable require startup resources. Water enable needs graphics pipeline patches. FG
+Off/On needs Streamline startup; existing 2x/3x/4x switches are live. RR resets history; first use of
+emission, far bounce and exact-k may synchronously compile a core pipeline (brief hitch).
+Other lighting, strength, cap, Reflex and CPU batching controls read configuration at runtime.
+Both launchers display the same three badge labels. Missing mode metadata fails `settings_test`.
+After Save, the pinned warning counts affected controls plus unexposed startup prerequisites against
+the original process baseline. It survives subsequent saves and launcher reopen in that session;
+a saved revert or a new game session clears it. Draft edits never replace this saved warning.
 
 ---
 
@@ -651,7 +661,7 @@ So, among the user-facing knobs, only **"Ray-traced geometry: Full ↔ Opaque"**
 
 | Item | Where | Notes |
 |---|---|---|
-| Settings table (single source of truth) | `common/settings.h` | Header-only, standard C++. It holds the entries of §6 (9 knobs + Reflex under Advanced; the preset is the combo), with labels, descriptions, choices → keys, per-preset values, apply class (live / hitch / partial restart), hardware caps per choice and dependencies between knobs. It also has the preset extras (Ultra: `rt_rebuild_frames=600`), `render_user_ini`, `suggest_preset` and `gpu_caps`. The phase-2 overlay can include it as is. `data/settings_schema.json` is the same table as JSON (also `BG3RTX.exe --dump-schema`); `settings_test` fails when the file is stale, and `settings_test.exe --write-schema` regenerates it |
+| Settings table (single source of truth) | `common/settings.h` | Header-only, standard C++. It holds the entries of §6 (9 knobs + Reflex under Advanced; the preset is the combo), with labels, descriptions, choices → keys, per-preset values, apply class (live / hitch / restart), hardware caps per choice and dependencies between knobs. It also has the preset extras (Ultra: `rt_rebuild_frames=600`), `render_user_ini`, `suggest_preset` and `gpu_caps`. The phase-2 overlay can include it as is. `data/settings_schema.json` is the same table as JSON (also `BG3RTX.exe --dump-schema`); `settings_test` fails when the file is stale, and `settings_test.exe --write-schema` regenerates it |
 | Layered config | `layer/util.cpp` `cfg_poll` | Order: `bg3rtx.ini` → `bg3rtx_user.ini` (`%BG3RTX_USER_INI%` replaces the path; `none` skips it) → `%BG3RTX_INI%`. **Change from §7.3.3:** the preset is not a separate layer. Any file may contain `preset=`, which expands at that file's position before the file's own keys, so a later file (test overrides) beats a user preset. Each layer is hot-reloaded on its own mtime, and a truncated layer keeps its previous keys. The log prints `[cfg] settings read`, `[cfg] knobs:` (choices + matching preset) and `[cfg] keys:` |
 | Derived `rt_build` (§7.3.2, partly) | `settings::resolve_derived` | Presets write `rt_build=auto`, which resolves to 1 only while an RT consumer (`rt_shadows`, `gi_rt`, `rt_local_shadows`, `rt_reflections`, `rt_debug`) is on. `bg3rtx.ini` keeps `rt_build=1`, so the developer default is unchanged. `rtscene.cpp` is untouched |
 | `fps_cap` (§7.3.4) | `layer/streamline.cpp` `reflex_apply`, `layer/framecap.cpp` | With Streamline active, `slReflexSetOptions` gets `frameLimitUs = 1e6/fps_cap`, and `reflex`/`fps_cap` are re-applied whenever they change (Reflex used to be set once). Without Streamline, a sleep limiter (high-resolution waitable timer, then a spin) runs in `QueuePresentKHR` |

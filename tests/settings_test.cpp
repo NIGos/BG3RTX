@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // Qualified memory management is automatic; five user-facing experimental entries remain.
+  // Qualified memory management is automatic; three user-facing experimental entries remain.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,8 +415,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
-  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 3);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(dev == (std::vector<std::string>{"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -429,20 +429,46 @@ static void test_gui_levels() {
   CHECK(!dev_mode("0"));
   CHECK(!dev_mode(code_default("dev")));   // the release profile hides them
 
-  // Main list: Roof sun shadows and Box light shadows (Off / Shadowed / All), not experimental.
+  // Sun shadows stay in the main list; Box light shadows remain visible in Experimental.
   const Knob* roof = find_knob("roof_shadows");
   const Knob* box = find_knob("box_lights");
   CHECK(roof && box);
   if (roof && box) {
-    CHECK(!roof->experimental && !box->experimental && !roof->advanced && !box->advanced);
+    CHECK(!roof->experimental && box->experimental && !roof->advanced && !box->advanced);
+    CHECK(knob_visible(*box, false));
+    CHECK(!box->dev_only);
     CHECK(choice_count(*box) == 3);
     CHECK_EQ(box->choices[1].label, "Shadowed");
     CHECK_EQ(box->choices[2].label, "All");
     for (int c = 0; c < 3; ++c) CHECK_EQ(get(on_map(*box, c), "ls_box"), std::to_string(c));
-    CHECK(roof->preset[kUltra] == 1);
+    CHECK(roof->preset[kUltra] == 2);
     for (int p = 0; p < kPresetCount; ++p) CHECK(box->preset[p] == 0);
+    for (int p = 0; p < kPresetCount; ++p) {
+      Map preset;
+      for (const auto& kv : expand_preset(p)) preset[kv.first] = kv.second;
+      CHECK_EQ(get(preset, "ls_box"), "0");
+    }
     CHECK(knob_index("roof_shadows") < knob_index("gi"));
-    CHECK(knob_index("box_lights") < knob_index("reflections"));
+    CHECK(knob_index("box_lights") > knob_index("exp_water"));
+  }
+
+  // Migration selects the highest legacy signal and saving completes that bundle.
+  const auto& bounce = *find_knob("exp_hidden_surface");
+  for (auto signal : {std::pair<const char*, int>{"rt_hit_material", 1}, {"rt_hit_emission", 1},
+                      {"gi_hit_direct", 1}, {"gi_hit_sun", 1}, {"gi_far", 2},
+                      {"rf_hit_shade", 3}, {"rf_hit_gi", 3}}) {
+    Map old = code_defaults(); old[signal.first] = "1";
+    CHECK(knob_value(bounce, old) == signal.second);
+    auto values = knob_values(old);
+    auto saved = parse_ini(render_user_ini("", -1, values));
+    for (const auto& kv : on_map(bounce, signal.second)) CHECK_EQ(get(saved, kv.first.c_str()), kv.second);
+  }
+  CHECK_EQ(get(on_map(*box, box->preset[kUltra]), "ls_box"), "0");
+  CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
+  CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
+  CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
+  for (const char* id : {"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill"}) {
+    CHECK(!knob_visible(*find_knob(id), false)); CHECK(knob_visible(*find_knob(id), true));
   }
 
   // Each level writes exactly these keys (a lower level resets the higher levels' keys).
@@ -453,14 +479,12 @@ static void test_gui_levels() {
   };
   const Level levels[] = {
       {"exp_hidden_surface",
-       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
-        "gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi"},
-       {{"0", "0", "0", "0", "0", "0", "0"},
-        {"1", "1", "1", "0", "0", "0", "0"},
-        {"1", "1", "1", "1", "1", "0", "0"},
-        {"1", "1", "1", "1", "1", "1", "1"}}},
-      {"exp_hit_emission", {"rt_hit_emission", "rt_emissive"}, {{"0", "0"}, {"1", "1"}, {"2", "1"}}},
-      {"exp_gi_far", {"gi_far", "gi_far_m"}, {{"0", nullptr}, {"1", "6"}}},
+       {"rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb", "gi_hit_direct", "gi_hit_sun",
+        "rf_hit_shade", "rf_hit_gi", "rt_hit_emission", "rt_emissive", "gi_far", "gi_far_m"},
+       {{"0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "6"},
+        {"1", "1", "1", "1", "1", "0", "0", "1", "1", "0", "6"},
+        {"1", "1", "1", "1", "1", "0", "0", "1", "1", "1", "6"},
+        {"1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "6"}}},
       {"exp_water",
        {"rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows",
         "rt_water_game_shadow", "rt_water_refraction"},
@@ -498,9 +522,9 @@ static void test_gui_levels() {
     }
     CHECK(knob_value(*k, code_defaults()) == 0);
   }
-  CHECK(find_knob("exp_hit_emission")->choices[2].dev);   // rt_hit_emission=2 is developer-only
-  CHECK(find_knob("exp_hidden_surface")->apply == Apply::Partial);
-  CHECK(find_knob("exp_water")->apply == Apply::Partial);
+  CHECK(find_knob("local_shadows")->choices[3].dev);
+  CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
+  CHECK(find_knob("exp_water")->apply == Apply::Restart);
   CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
@@ -543,23 +567,16 @@ static void test_gui_levels() {
 
   // Dependencies: shown (unmet_need, unmet_key_need) and enforced on save (enforce_needs).
   {
-    const int hs = knob_index("exp_hidden_surface"), far = knob_index("exp_gi_far"), em = knob_index("exp_hit_emission");
+    const int hs = knob_index("exp_hidden_surface");
     const int nc = knob_index("exp_native_coverage"), ho = knob_index("exp_hair_physical_origin");
     auto v = preset_values(kHigh);
-    v[far] = 1;
-    v[hs] = 1;
-    CHECK(!unmet_need(kKnobs[far], 1, v).empty());   // needs + Bounce
     v[hs] = 2;
-    CHECK(unmet_need(kKnobs[far], 1, v).empty());
     v[knob_index("reflections")] = 0;
     CHECK(unmet_need(kKnobs[hs], 2, v).empty());
-    CHECK(!unmet_need(kKnobs[hs], 3, v).empty());    // + Reflections needs Reflections on
-    v[knob_index("gi")] = 1;                         // screen-space GI
-    CHECK(!unmet_need(kKnobs[hs], 2, v).empty());    // + Bounce needs ray-traced GI
-    CHECK(unmet_need(kKnobs[hs], 1, v).empty());
+    CHECK(!unmet_need(kKnobs[hs], 3, v).empty());
+    v[knob_index("gi")] = 1;
+    CHECK(!unmet_need(kKnobs[hs], 1, v).empty());
     v = preset_values(kHigh);
-    v[em] = 1;
-    CHECK(!unmet_need(kKnobs[em], 1, v).empty());
     v[ho] = 1;
     CHECK(!unmet_need(kKnobs[ho], 1, v).empty());
     v[nc] = 1;
@@ -568,15 +585,13 @@ static void test_gui_levels() {
     // enforce_needs lowers the chain and nothing else.
     v = preset_values(kHigh);
     v[hs] = 3;
-    v[far] = 1;
-    v[em] = 1;
     v[knob_index("reflections")] = 0;
     auto changed = enforce_needs(v);
-    CHECK(v[hs] == 2 && v[far] == 1 && v[em] == 1);
+    CHECK(v[hs] == 2);
     CHECK(changed == std::vector<int>{hs});
     v[knob_index("rt_geometry")] = 1;
     enforce_needs(v);
-    CHECK(v[hs] == 0 && v[far] == 0 && v[em] == 0);
+    CHECK(v[hs] == 0);
     for (int p = 0; p < kPresetCount; ++p) {
       auto pv = preset_values(p);
       CHECK(enforce_needs(pv).empty());
@@ -584,7 +599,7 @@ static void test_gui_levels() {
     // Raw prerequisites from a level on: GI fallback 0 matters from + Bounce only.
     Map src = code_defaults();
     src["gi_rt_fallback"] = "1";
-    CHECK(unmet_key_need(kKnobs[hs], 1, src).empty());
+    CHECK(!unmet_key_need(kKnobs[hs], 1, src).empty());
     CHECK(!unmet_key_need(kKnobs[hs], 2, src).empty());
     src["gi_rt_fallback"] = "0";
     CHECK(unmet_key_need(kKnobs[hs], 3, src).empty());
@@ -632,11 +647,9 @@ static void test_user_ini_migration() {
   CHECK(v[knob_index("box_lights")] == 2);
   CHECK(v[knob_index("exp_alpha_spill")] == 1);
   CHECK(v[knob_index("exp_hidden_surface")] == 3);
-  CHECK(v[knob_index("exp_hit_emission")] == 1);
   CHECK(v[knob_index("exp_water")] == 3);
   CHECK(v[knob_index("exp_native_coverage")] == 0);
-  CHECK(v[knob_index("exp_gi_far")] == 1);     // Ultra's own level since gi_far joined Ultra (6 m)
-  CHECK(v[knob_index("roof_shadows")] == 1);   // Ultra
+  CHECK(v[knob_index("roof_shadows")] == 2);   // Ultra
   // The file is already enforceable: nothing it selects lacks a dependency in Ultra.
   auto enforced = v;
   CHECK(enforce_needs(enforced).empty());
@@ -766,7 +779,7 @@ static void test_ultra_water() {
   }
   CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1") && !key_change_needs_restart("rt_water_reflections", "0", "1"));
   CHECK(key_change_needs_restart("sharc_device", "1", "0"));
-  CHECK(w->apply == Apply::Partial);
+  CHECK(w->apply == Apply::Restart);
   // Before the Experimental section in the GUI order (after every main entry, before the first experimental one).
   int iw = knob_index("exp_water"), first_exp = kKnobCount;
   for (int i = 0; i < kKnobCount; ++i)
@@ -791,21 +804,21 @@ static void test_product_policy() {
   const auto& emission = *find_knob("exp_hit_emission");
   Map legacy = code_defaults();
   apply_layer(legacy, parse_ini("preset=ultra\ndev=0\nrt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n"));
-  CHECK(knob_value(emission, legacy) == 2);
-  CHECK(!choice_visible(emission, 2, false));
-  CHECK(choice_visible(emission, 2, true));
+  CHECK(knob_value(emission, legacy) == -1);
+  CHECK(!choice_visible(*find_knob("local_shadows"), 3, false));
+  CHECK(choice_visible(*find_knob("local_shadows"), 3, true));
   auto presented = presentation_values(legacy, false);
   CHECK(presented[knob_index(emission.id)] == -1);
   Map saved = parse_ini(render_user_ini("rt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n", kUltra, presented));
   CHECK_EQ(get(saved, "rt_hit_emission"), "2");
   CHECK_EQ(get(saved, "unknown_future_key"), "kept");
   Map reloaded = code_defaults(); apply_layer(reloaded, saved);
-  CHECK(knob_value(emission, reloaded) == 2);
+  CHECK(knob_value(emission, reloaded) == -1);
   CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 3), "experimental");
   CHECK(!choice_available(*find_knob("exp_hidden_surface"), 3, false, false, ~0u));
   CHECK(choice_available(*find_knob("exp_hidden_surface"), 3, false, true, ~0u));
   CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 2), "qualified");
-  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "awaiting_qualification");
+  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "experimental");
   CHECK_EQ(find_knob("exp_water")->category, "Surfaces");
   CHECK_EQ(find_knob("reflex")->category, "Performance");
   CHECK_EQ(find_knob("exp_water")->cost.status, "Estimate");
@@ -852,14 +865,14 @@ static void test_product_policy() {
     }
   }
   auto chain = preset_values(kLow);
-  chain[knob_index("exp_gi_far")] = 1;
+  chain[knob_index("exp_hidden_surface")] = 2;
   Map raw = code_defaults(); raw["gi_rt_fallback"] = "1";
   auto transitive = preview_dependencies(chain, raw, ~0u, true);
   CHECK(transitive.blocked.empty());
   CHECK(transitive.values[knob_index("exp_hidden_surface")] == 2);
   CHECK(transitive.values[knob_index("rt_geometry")] == 2);
   CHECK(transitive.values[knob_index("gi")] == 2);
-  CHECK(transitive.changed.size() == 3);
+  CHECK(transitive.changed.size() == 2);
   CHECK(transitive.required_keys.size() == 1);
   CHECK_EQ(transitive.required_keys[0].first, "gi_rt_fallback");
   CHECK_EQ(transitive.required_keys[0].second, "0");
@@ -878,6 +891,39 @@ static void test_product_policy() {
   CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
 }
 
+static void test_apply_modes() {
+  for(const auto& k:kKnobs) {
+    CHECK(k.apply!=Apply::Unspecified);
+    CHECK(apply_label(k.apply)[0]!=0);
+    for(int c=0;c<choice_count(k);++c) {
+      CHECK(k.choices[c].apply!=Apply::Unspecified);
+      CHECK(apply_label(k.choices[c].apply)[0]!=0);
+      CHECK(knob_apply(k,c)==k.choices[c].apply);
+    }
+  }
+  CHECK_EQ(apply_label(Apply::Live),"Live");
+  CHECK_EQ(apply_label(Apply::Hitch),"Applies after a short hitch");
+  CHECK_EQ(apply_label(Apply::Restart),"Restart to apply");
+  // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
+  CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
+  CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
+  CHECK(key_change_needs_restart("rt_bvh_split","0","1"));
+  CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
+  for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);
+  for (int c = 0; c < 3; ++c) CHECK(knob_apply(*find_knob("sun_shadows"), c) == Apply::Live);
+  const auto& static_casters = *find_knob("exp_cascade_static_only");
+  CHECK(static_casters.dev_only && static_casters.experimental);
+  CHECK_EQ(code_default("rt_cascade_static_only"), "0");
+  for (int c = 0; c < 2; ++c) {
+    CHECK(knob_apply(static_casters, c) == Apply::Live);
+    CHECK_EQ(get(on_map(static_casters, c), "rt_cascade_static_only"), std::to_string(c));
+  }
+  CHECK_EQ(static_casters.choices[1].need[0].knob, "sun_shadows");
+  CHECK(static_casters.choices[1].need[0].min_choice == 2);
+  CHECK(knob_apply(*find_knob("exp_water"),0)==Apply::Live);
+  CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -885,6 +931,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_apply_modes();
   test_product_policy();
   test_parse();
   test_preset_expansion();
