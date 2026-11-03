@@ -28,11 +28,10 @@ class PackageLicencesTest(unittest.TestCase):
         section = inventory.split("## Required notice files\n", 1)[1].split("\n## ", 1)[0]
         self.required = re.findall(r"^- `([^`]+)`$", section, re.M)
         self.assertGreaterEqual(len(self.required), 8)
-        # Fixture-only stand-ins exercise wiring; these are not release licence texts.
+        # Wiring checks must use the real collected release texts.
         for name in self.required:
             path = self.release / "licences" / name
-            if not path.exists():
-                path.write_text("Fixture notice only\n", encoding="utf-8")
+            self.assertTrue(path.is_file(), f"Missing real release notice: {name}")
 
     def list_notices(self):
         self.assertIsNotNone(POWERSHELL, "PowerShell is needed for package -ListOnly checks")
@@ -124,12 +123,13 @@ class PackageLicencesTest(unittest.TestCase):
         copies = re.findall(r'Copy-To[^\n]+', script)
         self.assertEqual([line for line in copies if '"bin' in line and '.dll"' in line],
                          ['Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\\VkLayer_bg3rtx.dll"'])
-        for entry in manifest["binaries"]:
-            self.assertTrue(entry["licences"], entry["destination"])
+        components = manifest["binaries"] + manifest["compiled_components"]
+        for entry in components:
+            self.assertTrue(entry["licences"], entry)
             for notice in entry["licences"]:
                 self.assertIn(notice, self.required)
-        # Each distinct binary dependency is checked with one missing notice at a time.
-        for notice in sorted({n for e in manifest["binaries"] for n in e["licences"]}):
+        # Each binary/header dependency fails with one missing real notice at a time.
+        for notice in sorted({n for e in components for n in e["licences"]}):
             with self.subTest(notice=notice):
                 path = self.release / "licences" / notice
                 data = path.read_bytes()

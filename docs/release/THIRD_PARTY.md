@@ -7,15 +7,15 @@ loading in `layer/` and `tools/launcher/`. Only disposable packaging tests were 
 The verbatim texts collected for release are in `docs/release/licences/` in the source tree.
 Their player-package location is `licences/` with the same relative paths. The package script
 copies every file in this directory and validates the required list below before building or writing
-a package. Packaging remains paused. See Missing below before distributing.
+a package. Packaging remains paused. See remaining release actions below before distributing.
 This inventory is not a statement that every release requirement has been satisfied.
 
 ## Packaged and compiled components
 
 | Component | Release files / use | Version identified on disk | Licence / collected text |
 |---|---|---|---|
-| Microsoft DirectX Shader Compiler (DXC) | `bin/dxcompiler.dll`; runtime HLSL-to-SPIR-V; `dxc/dxcapi.h` compiled into layer | Selected fallback `C:\VulkanSDK\1.4.357.0\Bin\dxcompiler.dll`: file 1.9.0.5399, product `1.9.0.5399 (a107ba613)` | Full version-matched text missing. Installed API header says University of Illinois Open Source License (NCSA); binary-wide NCSA vs Apache-2.0 WITH LLVM-exception classification remains unverified. |
-| Khronos Vulkan-Headers | Headers compiled into layer, core and launcher; no Vulkan SDK DLL is copied | `C:\VulkanSDK\1.4.357.0\Include\vulkan\vulkan_core.h`: `VK_HEADER_VERSION` 357, API 1.4.357 | Header SPDX: `Apache-2.0 OR MIT`. Version-matched upstream licence/notice bundle missing; full Apache 2.0 terms are available in the Nsight text below, with NVIDIA attribution (not a substitute for Khronos notices). |
+| Microsoft DirectX Shader Compiler (DXC) | `bin/dxcompiler.dll`; runtime HLSL-to-SPIR-V; `dxc/dxcapi.h` compiled into layer | Selected fallback `C:\VulkanSDK\1.4.357.0\Bin\dxcompiler.dll`: file 1.9.0.5399, product `1.9.0.5399 (a107ba613)` | University of Illinois/NCSA Open Source License, plus included third-party terms: `DirectXShaderCompiler-LICENSE.txt` and `DirectXShaderCompiler-ThirdPartyNotices.txt`, from commit `a107ba613`. See DXC classification below. |
+| Khronos Vulkan-Headers | Headers compiled into layer, core and launcher; no Vulkan SDK DLL is copied | `C:\VulkanSDK\1.4.357.0\Include\vulkan\vulkan_core.h`: `VK_HEADER_VERSION` 357, API 1.4.357 | Header SPDX: `Apache-2.0 OR MIT`; Apache-2.0 alternative selected for these headers. Version-matched `Vulkan-Headers-LICENSE.txt`, `Vulkan-Headers-Apache-2.0.txt` and `Vulkan-Headers-MIT.txt` retained from tag `v1.4.357`. |
 | NVIDIA Streamline | `bin/sl/sl.interposer.dll`, `sl.common.dll`, `sl.dlss_g.dll`, `sl.reflex.dll`, `sl.pcl.dll`; SDK headers compiled into layer | SDK 2.14.16 (`include/sl_version.h`); all five DLL resources 2.14.16.0 | MIT, with exceptions described in the full SDK text: `Streamline-MIT.txt`; preserve `Streamline-3rd-party-licenses.md`. |
 | NVIDIA DLSS SR, Ray Reconstruction and Frame Generation | `bin/sl/nvngx_dlss.dll`, `nvngx_dlssd.dll`, `nvngx_dlssg.dll` | All three DLL resources 310.9.16.0, from Streamline 2.14.16 production `bin/x64` | NVIDIA RTX SDKs License: `NVIDIA-DLSS-runtime.txt`, not Streamline MIT. |
 | NVIDIA Reflex Low Latency | `bin/sl/NvLowLatencyVk.dll`; Streamline Reflex integration | From Streamline 2.14.16 production `bin/x64`; DLL has no file/product version resource | NVIDIA SDK agreement and Reflex supplement: `NVIDIA-Reflex.txt`, in addition to Streamline plugin MIT. |
@@ -30,6 +30,16 @@ There is no `bin/dxcompiler.dll` in this worktree or the main checkout; the pack
 selects the SDK fallback above. Its SHA-256 is
 `1ea6b8a639c43ca2d9e14712962180a887879773e994d8370a087907371be763`.
 Re-audit when any selected binary, SDK or fallback changes.
+
+### DXC classification
+
+At commit `a107ba613`, `LICENSE.TXT` opens with the headings `LLVM Release License`
+and `University of Illinois/NCSA Open Source License`. This resolves the selected
+DXC classification to NCSA with the file's included third-party terms, rather than
+`Apache-2.0 WITH LLVM-exception`. The file also contains a section explicitly marked
+`THE FOLLOWING LICENSES ARE FOR BUILD AND TEST DEPENDENCIES ONLY.` Both that complete
+file and `ThirdPartyNotices.txt` are retained verbatim; no terms are rewritten or
+removed, and this classification does not extend to other compiler versions or DXIL.
 
 ### DXIL scope
 
@@ -96,12 +106,35 @@ below describe those exact bytes, including original line endings. Inventory pro
 | `DirectXShaderCompiler-sample-LICENSE.txt` | `88a72ac3a05a055a4344b32f87b5f2bfe1330710eeb8531068dc452c78402e03` |
 
 
+### Version-matched upstream texts integrated on 2026-11-03
+
+The coordinator supplied these official upstream downloads in `licences/upstream/`.
+This integration moved them to the package filenames below without changing bytes;
+no network was used during integration. The Vulkan `LICENSE.md` is renamed only for
+package compatibility. Apache-2.0 is selected for the dual-licensed compiled headers;
+the upstream overview, both full alternatives and their copyright notices are retained.
+
+| Collected filename | Source URL | Commit / tag |
+|---|---|---|
+| `DirectXShaderCompiler-LICENSE.txt` | https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/a107ba613/LICENSE.TXT | DXC commit `a107ba613` |
+| `DirectXShaderCompiler-ThirdPartyNotices.txt` | https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/a107ba613/ThirdPartyNotices.txt | DXC commit `a107ba613` |
+| `Vulkan-Headers-LICENSE.txt` | https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/v1.4.357/LICENSE.md | Vulkan-Headers tag `v1.4.357` |
+| `Vulkan-Headers-Apache-2.0.txt` | https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/v1.4.357/LICENSES/Apache-2.0.txt | Vulkan-Headers tag `v1.4.357` |
+| `Vulkan-Headers-MIT.txt` | https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/v1.4.357/LICENSES/MIT.txt | Vulkan-Headers tag `v1.4.357` |
+
+| Collected filename | SHA-256 (verbatim release copy) |
+|---|---|
+| `DirectXShaderCompiler-LICENSE.txt` | `27a49e35d1da96eba18fba54bc882667ff0ff8c0254f16f2b6e165d605ba7df8` |
+| `DirectXShaderCompiler-ThirdPartyNotices.txt` | `19512a5d0a015ef16d167272c164da49a604614a786206212a80ad486ed0be6d` |
+| `Vulkan-Headers-LICENSE.txt` | `95ad366d23fadf701d355bc45fb8b82ae2d700239471d35d41286ac3b08ff903` |
+| `Vulkan-Headers-Apache-2.0.txt` | `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |
+| `Vulkan-Headers-MIT.txt` | `1ca3502222d967f3be5751c55f6b7ee735b5383909c3b501495f54b216dbf227` |
+
 ## Required notice files
 
 This list is read by `scripts/package.ps1`. Every listed filename must exist under
 `docs/release/licences/`; missing files stop packaging, including with `-NoBuild`.
-DXC and Vulkan placeholders below name the still-missing version-matched bundles;
-adding a filename alone does not establish that the text covers the selected binary/headers.
+The DXC and Vulkan files below are the version-matched upstream texts recorded above.
 Retain all subordinate notices as additional files in this directory.
 `-ListOnly` validates and emits only the notice payload as JSON, without building or writing files.
 
@@ -116,7 +149,10 @@ Retain all subordinate notices as additional files in this directory.
 - `WebView2-LICENSE.txt`
 - `WebView2-NOTICE.txt`
 - `DirectXShaderCompiler-LICENSE.txt`
+- `DirectXShaderCompiler-ThirdPartyNotices.txt`
 - `Vulkan-Headers-LICENSE.txt`
+- `Vulkan-Headers-Apache-2.0.txt`
+- `Vulkan-Headers-MIT.txt`
 
 ## Required notices and release actions
 
@@ -185,7 +221,8 @@ notice dependencies, plus the six compiled SDK components. The packer reads this
 manifest before any build/write and copies binaries only through it. Missing notice
 files remain fatal; fixture-only texts in tests never enter the release collection.
 All existing notice files ship under `licences/` and therefore enter generated `files.txt`.
-`-ListOnly` and `-DryRun` remain blocked on this real checkout until both missing bundles exist.
+`-ListOnly` and `-DryRun` are no longer blocked by missing DXC or Vulkan notice files;
+this does not authorize package assembly or distribution.
 
 | Component | Version | Licence | Packaged file | Local source path |
 |---|---|---|---|---|
@@ -201,32 +238,14 @@ separately; no ordinary package promotion or redistribution approval is implied.
 
 ## Missing
 
-1. **Version-matched DXC distribution licence and third-party notices (release blocker).**
-   `C:\VulkanSDK\1.4.357.0\Include\dxc\dxcapi.h` explicitly names the University of Illinois
-   licence and `LICENSE.TXT`, but the installed SDK does not provide that full text.
-   An older NCSA text exists at
-   `external/DLSS/NVIDIAImageScaling/samples/third_party/DXC/license.txt`; it accompanies a
-   different compiler and was not relabelled as the 1.9 binary licence. Obtain the full
-   `LICENSE.TXT` (the exact upstream filename referenced by `dxcapi.h`), plus
-   any component notices referenced in that file, for DXC commit `a107ba613` from Microsoft's
-   `https://github.com/microsoft/DirectXShaderCompiler` release/source distribution, or the
-   exact LunarG SDK 1.4.357.0 component source/notice bundle via `https://vulkan.lunarg.com/`.
-   Confirm NCSA vs `Apache-2.0 WITH LLVM-exception` from that version's authoritative files,
-   including all subordinate notices. Store verbatim texts here before shipping.
-2. **Vulkan-Headers version-matched licence/notice bundle (release blocker).** The installed headers state
-   `Apache-2.0 OR MIT`, but `C:\VulkanSDK\1.4.357.0\Licenses\LICENSE.txt` is only a general
-   SDK registry disclaimer, not the component licence. Streamline supplies an older
-   2015-2023 Khronos short Apache notice and a full Apache text in the Nsight SDK file
-   copied above, but neither establishes the complete notices for SDK headers 1.4.357.
-   Obtain the `LICENSE.md`, `LICENSES/Apache-2.0.txt`, `LICENSES/MIT.txt` and any
-   notices from `https://github.com/KhronosGroup/Vulkan-Headers` at `v1.4.357` / the exact
-   SDK source revision. Record the chosen licence alternative and retain matching copyright
-   notices; do not substitute an unrelated project's MIT text.
-3. **Package wiring (implemented; packaging remains paused).** The script copies this
-   inventory to `THIRD_PARTY.md` and every collected file to `licences/`. Missing required
-   texts now fail before builds or package writes. The missing DXC and Vulkan bundles above
-   still block packaging. No shader or game-data shipping policy was changed.
-4. **LSLib MIT text (conditional; not a player-package blocker while excluded).** If LSLib
+1. **DXC and Vulkan notice collection resolved (2026-11-03).** The five version-matched
+   upstream files are present, hashed above and required by the package manifest.
+   The old sample DXC licence remains reference evidence only.
+2. **Package wiring implemented; release remains paused.** The script copies this
+   inventory and every collected text. All five new texts are mandatory before
+   builds or package writes. Project licence, NVIDIA notification, Microsoft runtime
+   terms and game-data redistribution decisions remain open; see RELEASE_OFFLINE_STATUS.md.
+3. **LSLib MIT text (conditional; not a player-package blocker while excluded).** If LSLib
    or dependent offline tools are distributed, obtain the exact v1.20.4 `LICENSE` from
    `https://github.com/Norbyte/lslib/blob/v1.20.4/LICENSE`, plus the separate notices/terms
    for every bundled dependency (MIT for LSLib does not cover every portable-release DLL).
@@ -237,5 +256,6 @@ Search coverage: main checkout `external/` (including nested sample SDKs), Vulka
 `C:\Users\quali\.nuget\packages`, all three local vcpkg cache archives under
 `C:\Users\quali\AppData\Local\vcpkg\archives` (Eigen/vcpkg helpers only), Program Files LLVM
 and NVIDIA SDK folders, Windows Kits, and read-only `D:\BG3_Tools\downloads`,
-`external_backup` and `nsight-aftermath-sdk-2026.3`. No network was used. Missing means
+`external_backup` and `nsight-aftermath-sdk-2026.3`. No network was used in that local search or this integration; the coordinator later
+supplied the five upstream files recorded above. Missing means
 not found in these inspected locations, not proof that no copy exists anywhere on the computer.

@@ -62,7 +62,8 @@
     {
       "destination": "bin/dxcompiler.dll",
       "licences": [
-        "DirectXShaderCompiler-LICENSE.txt"
+        "DirectXShaderCompiler-LICENSE.txt",
+        "DirectXShaderCompiler-ThirdPartyNotices.txt"
       ]
     }
   ],
@@ -70,13 +71,16 @@
     {
       "component": "DXC API",
       "licences": [
-        "DirectXShaderCompiler-LICENSE.txt"
+        "DirectXShaderCompiler-LICENSE.txt",
+        "DirectXShaderCompiler-ThirdPartyNotices.txt"
       ]
     },
     {
       "component": "Vulkan-Headers",
       "licences": [
-        "Vulkan-Headers-LICENSE.txt"
+        "Vulkan-Headers-LICENSE.txt",
+        "Vulkan-Headers-Apache-2.0.txt",
+        "Vulkan-Headers-MIT.txt"
       ]
     },
     {
