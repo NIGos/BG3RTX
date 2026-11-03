@@ -30,7 +30,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   all listed in `shaders/variants.txt`), not wrapper files. With a new key off, the ordinary
   shaders must compile to byte-identical SPIR-V (check it): that proves the default path is untouched.
 - `common/settings.h` = the one table of settings. New key: add it to `bg3rtx.ini`, run
-  `python scripts/gen_settings_defaults.py`, and the settings test must pass.
+  `python scripts/gen_settings_defaults.py`, and the settings test must pass. A user knob's category is
+  Lighting, Surfaces, Performance or Advanced: the launcher renders no knobs in any other page.
 - `data/assetdb` = offline game data (lights, materials, roofs, probes); `tools/assets` builds it.
 - Offline work runs at BelowNormal priority (`scripts/low-priority.ps1`, dot-sourced by build and
   merge-green; children inherit it). The game stays Normal: below builds it starves its level load.
@@ -38,14 +39,17 @@ These rules come from mistakes already made in this repo. They apply on every br
   harness `python -m scripts.qa` (docs/QA.md). Add a unit test for any non-trivial CPU logic.
 
 ## Developing the project
-- Priorities and the phase order are in `docs/HANDOFF_SESSION.md` ("Next"). Gaps ranked by
+- Stage order: `docs/GOAL_NEXT.md`; current queue: `docs/HANDOFF_SESSION.md`. Gaps ranked by
   screen impact: `docs/COVERAGE.md`. Per-effect design and history: `docs/TRACK_*.md`.
 - Read the existing design section before implementing (many plans are already written, e.g.
   TRACK_D_LOCAL_LIGHTS.md 9.10 for box lights); update that section when the design changes.
 - Branches: one per phase or fix, from current main, short-lived. Merge small verified steps
   often (off by default) instead of keeping long research branches; merge main into long ones daily.
 - Quality before frame rate on Ultra, but always report the cost (GPU ms of the pass, from the
-  existing `gpu` log lines) of a new effect or change.
+  existing `gpu` log lines) of a new effect or change. Budgets are optimisation targets, not hard stops:
+  never drop a correct, visible effect only for its ms; optimise it and let the user decide with the numbers.
+- Physical correctness is the judge: a correct result may be darker than the game (RT AO self-occlusion);
+  only physically wrong artefacts get fixed.
 - Reuse what exists: the `ls_check`-style in-frame reference comparisons, `rt_debug`/`ls_debug`
   views, `rt_stats`/`ls_stats` counters, `Ctrl+Shift+F9` A/B, the QA detectors.
 - When a feature is done: its key, its gate numbers, its cost, and how the user checks it in game
@@ -68,8 +72,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   Offline shader compiles and SPIR-V byte identity: `tools/shader_identity.py` (cached, progress; the
   `tests/*_shader_test.py` gates and merge-green's `tools/compile_shaders.py` use it). Don't call DXC directly.
 - Shader compile time is the bottleneck (lessons of 2026-11-02: four ~2 h identity runs and a 3 h merge-green at once):
-  - Variants multiply: a new on/off key goes in as a Vulkan specialization constant (see
-    docs/BUILD_AND_PACKAGE_EFFICIENCY.md, `rt_spec_cascade`), not a define, unless it changes a layout or
+  - Variants multiply: a new on/off key goes in as a Vulkan specialization constant (ids
+    registered in `common/shader_variant.h`, `kSpecId*`), not a define, unless it changes a layout or
     binding. Report the `shaders/variants.txt` request delta of every branch; +1000 needs a reason.
   - The cache keys on preprocessed text (`BG3RTX_SHADER_PP`): an edit that leaves a request's preprocessed text
     unchanged costs no compile. Only requests that really change are compiled and identity-checked.
@@ -89,7 +93,8 @@ These rules come from mistakes already made in this repo. They apply on every br
   plan `windows`; scripts/queue_gates.py) for per-window stats lines; plain `expect` is any-line.
 - Compare A/B within ONE run (toggle the key during the same moving session), never images
   across runs: two pans never match.
-- Energy: a quality change must not change mean brightness. Rejected temporal history falls
+- Energy: a reconstruction change (denoise, temporal, sampling, caching) must not change mean brightness.
+  A shading-model change is gated against the PT reference instead (it may change the mean). Rejected temporal history falls
   back to the fresh current sample (same expected value, noisier, never darker). Check that
   key-on mean equals key-off within noise on a static camera before trusting any residual.
 - A lower residual with lower energy is not an improvement.
@@ -104,7 +109,8 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Expensive diagnostics (`rt_stats` + `rt_primary_check` cost ~80 ms/frame, measured 2026-10-31)
   only in short dedicated windows, never in fps/cost windows.
 - PNG pairs instead of float bursts, unless a flicker analysis needs bursts.
-- Disk budget ~2 GB per batch; delete raw dumps after analysis, keep the summaries.
+- Disk budget ~2 GB per batch; delete raw dumps after analysis, keep the summaries. More is fine when a
+  one-off pack helps (replay, PT reference), as long as nothing dead accumulates.
 - Target 2-5 minutes per scene.
 - The window may take focus when the user allows it (removes the unfocused 30 fps cap).
 - When the user is at the PC, run jobs with `"window_mode": "visible_unfocused_fg"`: the game never takes
@@ -116,7 +122,10 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Energy is the float mean of the pre-post scene colour in `dumps.json`, never PNG previews or bloom
   dumps: the bloom's darkest-of-four filter darkens noise (TRACK_D_LOCAL_LIGHTS 9.11, 2026-11-01).
 - Keep what a test or comparison still reads (the current replay pack, gate baselines); delete superseded
-  packs and analysed raw dumps.
+  packs and analysed raw dumps. Superseded generated data (old catalogues, intermediate packs) may be
+  deleted without asking once a newer verified version is in use; never junction targets or `D:\BG3_Tools`.
+- Lint every job before queuing it (`tools/live_batches/live_flow.py`, lands with bundle6): forbid patterns
+  against recent valid logs, windows longer than the stats period, warm-up before measured windows.
 
 ## Coordinating agents (lessons of 2026-11-01)
 - Work in 2-3 streams, one per area (files that change together). Inside a stream, one agent fixes the items
@@ -139,7 +148,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 - When a live result disproves a hypothesis or a gate was wrong, write it down in the same batch.
 
 ## Merging
-- Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself.
+- Only `scripts/merge-green.ps1`, after reading the deciding log numbers yourself. Check its own
+  `MERGED <branch> onto` line, not a log grep for a merge subject (an older merge once matched).
+- Never commit on main while a merge-green runs (`.git/MERGE_HEAD` exists): the commit becomes the merge.
 - Features stay off by default until their gates pass. Push main and the branch after a merge.
 
 ## Writing
