@@ -12,6 +12,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -21,6 +22,46 @@ from tools.hair_retirement_check import retirement_fallback  # noqa: E402
 
 def reference_off(request):
     return request + (";" if "?" in request else "?") + "WATER_SURFACE_FRESNEL_REFERENCE=0"
+
+
+def counter_contract(blob):
+    """Inspect the emitted production module: all 12 reason lanes have atomic sinks.
+
+    This catches an omitted reason call, a shortened shared array and compile-time
+    elimination of diagnostics when specialization 1025 defaults to zero.
+    """
+    words = struct.unpack(f"<{len(blob)//4}I", blob)
+    instructions = []
+    at = 5
+    while at < len(words):
+        size, opcode = words[at] >> 16, words[at] & 65535
+        if not size or at + size > len(words):
+            return "malformed SPIR-V"
+        instructions.append((opcode, words[at+1:at+size]))
+        at += size
+    constants = {a[1]: a[2] for op,a in instructions if op == 43 and len(a) == 3}
+    names = {a[0]: struct.pack(f"<{len(a)-1}I", *a[1:]).split(b"\0")[0].decode()
+             for op,a in instructions if op == 5}
+    shared = next((i for i,n in names.items() if n == "gsSurface"), None)
+    if shared is None:
+        return "missing gsSurface"
+    array_lengths = {a[0]: constants.get(a[2]) for op,a in instructions if op == 28}
+    pointer_types = {a[0]: (a[1], a[2]) for op,a in instructions if op == 32}
+    variable = next((a for op,a in instructions if op == 59 and a[1] == shared), None)
+    pointee = pointer_types.get(variable[0], ()) if variable else ()
+    if not pointee or pointee[0] != 4 or array_lengths.get(pointee[1]) != 12:
+        return "gsSurface is not a 12-word workgroup array"
+    accesses = {a[1]: constants.get(a[-1]) for op,a in instructions if op in (65,66) and a[2] == shared}
+    atomic_lanes = {accesses[a[2]] for op,a in instructions if op == 234 and a[2] in accesses}
+    if not set(range(12)) <= atomic_lanes:
+        return f"missing reason atomic lanes {sorted(set(range(12))-atomic_lanes)}"
+    # Decode clean/reason bits, rather than merely carrying unused integer literals.
+    bit_masks = {constants[x] for op,a in instructions if op == 199 for x in a[2:] if x in constants}
+    if not {1,8,16,32,255,49152,49160} <= bit_masks:
+        return f"missing marker/reason decoding masks {sorted({1,8,16,32,255,49152,49160}-bit_masks)}"
+    if not any(op == 71 and len(a) == 3 and a[1:] == (1,1025) for op,a in instructions):
+        return "missing specialization 1025"
+    return None
 
 
 def main():
@@ -53,6 +94,14 @@ def main():
         new.cleanup()
     failed_off = [p for p in off_proofs if p['path'] == 'failed']
     failed_on = [r for r in on.values() if not r.ok or not r.valid]
+    counter_failures = []
+    for request, result in on.items():
+        if result.ok and "WATER_SPEC_RF_EDGE=1" in split_request(request)[1]:
+            failure = counter_contract(result.blob("water_compose"))
+            if failure:
+                counter_failures.append((request, failure))
+    for request, failure in counter_failures:
+        print(f"FAIL counter contract {request}: {failure}")
     failed_raw = [p for p in raw_proofs if p['path'] == 'failed']
     for p in failed_off:
         print(f"FAIL arithmetic OFF {p['request']}: {p['raw_state']}\n{p['error']}")
@@ -67,11 +116,12 @@ def main():
               "production_validated": len(on) - len(failed_on),
               "raw_ordinary_requests": len(ordinary), "raw_ordinary_identical": sum(identical(s) for _, s, _ in raw),
               "raw_ordinary_accepted": len(raw) - len(failed_raw),
+              "counter_contract_failures": counter_failures,
               "raw_capability_identity": "not claimed; capability modules add specialization arithmetic"}
     if args.json:
         Path(args.json).write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
-    return int(not requests or bool(missing or failed_off or failed_on or failed_raw))
+    return int(not requests or bool(missing or failed_off or failed_on or failed_raw or counter_failures))
 
 
 if __name__ == "__main__":
