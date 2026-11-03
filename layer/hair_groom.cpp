@@ -49,8 +49,17 @@ void load_all() {
     if (fopen_s(&f, path.c_str(), "rb") != 0 || !f) { ++bad; continue; }
     uint8_t head[40 + kSamples * 8] = {};
     const size_t got = fread(head, 1, sizeof head, f);
+    uint64_t at = 0;
+    bool lods_ok = parse_header(head, got, l->asset, &at);
+    // The LOD headers only (three 16-byte reads): the segment counts the crowd plan needs before any upload.
+    for (uint32_t k = 0; lods_ok && k < l->asset.lod_count && k < 8; ++k) {
+      uint8_t h16[16];
+      uint32_t points = 0;
+      lods_ok = _fseeki64(f, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, f) == 16 &&
+                lod_header(h16, at, &points, &l->asset.lod_segments[k], &at);
+    }
     fclose(f);
-    if (!parse_header(head, got, l->asset) || g_assets.count(l->asset.index_id)) {
+    if (!lods_ok || g_assets.count(l->asset.index_id)) {
       log("[hair groom] %s: malformed or duplicate index id, ignored", path.c_str());
       ++bad;
       continue;
