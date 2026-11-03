@@ -60,14 +60,14 @@ Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),
   saved_=state_.values;
 }
 st::Map Bridge::effective() const {st::Map m;st::apply_layer(m,state_.base);st::apply_layer(m,state_.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],state_.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
-int Bridge::dirty() const {return ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"");}
+int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L""));}
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
 bool Bridge::is_cancel_collection_intent(const std::string& message){Object o;if(!Parser{message}.parse(o))return false;auto type=get<std::string>(o,"type");return type=="closeReport"||type=="cancelReport";}
 void Bridge::set_compatibility(GraphicsInspection p,int selected){preview_kind_.clear();inspection_=std::move(p);selected_=selected;if(selected_<0&&inspection_.adapters.size()==1)selected_=0;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
 bool Bridge::save_preview(bool enable_required){
   auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental);
-  preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;blocked_=p.blocked;changes_.clear();
+  preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,p.values[i]));
   for(auto& kv:p.required_keys){std::string name="Startup prerequisite";for(auto& k:st::kKnobs)for(auto& n:k.required_on)if(n.key&&kv.first==n.key)name=n.label;changes_.push_back(name+": enable at next launch");}
   return blocked_.empty();
@@ -81,7 +81,7 @@ std::string Bridge::handle(const std::string& message){
     if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
     else if(preview_kind_=="save"&&blocked_.empty()){
       State candidate=state_;candidate.values=preview_values_;std::string error;
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved for next launch. Live changes have no runtime acknowledgement.";}
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.";}
       else status_=error.empty()?"Settings could not be saved. Your edits are kept.":error;
     }return state_json();
   }
@@ -91,13 +91,13 @@ std::string Bridge::handle(const std::string& message){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!st::knob_visible(st::kKnobs[i],dev)){status_="Setting is unavailable.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(k.experimental&&!experimental)valid=false;if(valid){state_.values[i]=value;status_.clear();}else status_="This choice is unavailable. Review compatibility or Experimental.";
+    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This choice is unavailable. Review compatibility or Experimental.";
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Unknown preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
     for(int i=0;i<st::kKnobCount;++i){if(state_.values[i]<0||!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
   }else if(type=="experimental")experimental=get<bool>(o,"value");
-  else if(type=="discard"){state_.values=saved_;state_.preset=saved_preset_;status_="Edits discarded.";}
+  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Edits discarded.";}
   else if(type=="save")save_preview(get<std::string>(o,"policy")=="enable");
   else if(type=="play"){
     if(!can_play_)status_="Play is unavailable. Check game location and whether the game is running.";

@@ -299,6 +299,16 @@
         "energy-static-2",
         "energy-static-3"
       ]
+    },
+    {
+      "name": "static build-camera delta < 0.01 m",
+      "select": "\\[core\\] \\[water\\] compose \\(",
+      "match": "build-camera delta avg/max 0\\.00[0-9]{4}/[0-9.]+ m \\([1-9][0-9]* last-pass samples\\)",
+      "min": 1,
+      "windows": [
+        "energy-static-1",
+        "energy-static-3"
+      ]
     }
   ],
   "energy_fs": "water-compose",

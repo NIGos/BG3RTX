@@ -9,6 +9,7 @@
 #include "../common/water_build_camera.h"
 #include "../common/water_fs_patch.h"
 #include "../common/water_policy.h"
+#include "fixtures/water_camera_capture.h"
 
 #include <cmath>
 #include <cstdio>
@@ -157,6 +158,35 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  {
+    // Reproduce the GPU ring publication + compose copies from one capture.
+    // Float4 13 means different things in these two camera buffer layouts.
+    WaterCameraCapture capture;
+    BuildCameraRing ring{};
+    float cameras[kBuildCameraCount][4]{};
+    const uint64_t frame = 17, tlas = 123;
+    ring.entries[build_camera_index(frame)] = {frame, tlas, 0};
+    std::memcpy(cameras[build_camera_index(frame)], capture.scene.data() + 52, 16);
+    const auto entry = find_build_camera(ring, tlas, frame + 1, frame);
+    CHECK(entry.frame == frame);
+    float payload[768 / sizeof(float)]{};
+    std::memcpy(payload, capture.lighting.data(), 400);
+    std::memcpy(reinterpret_cast<char*>(payload) + WATER_COMPOSE_BUILD_CAMERA_OFFSET,
+                cameras[build_camera_index(entry.frame)], 16);
+    const float translation[3] = {1.25f, -2.0f, 0.5f};
+    for (bool moved : {false, true}) {
+      auto current = capture.scene;
+      for (unsigned i = 0; i < 3; ++i) current[52 + i] += moved ? translation[i] : 0.0f;
+      std::memcpy(reinterpret_cast<char*>(payload) + WATER_COMPOSE_CURRENT_CAMERA_OFFSET,
+                  reinterpret_cast<const char*>(current.data()) + WATER_SCENE_CAMERA_ORIGIN_OFFSET, 16);
+      for (unsigned i = 0; i < 3; ++i) {
+        const float delta = payload[WATER_COMPOSE_CURRENT_CAMERA_OFFSET / 4 + i] -
+                            payload[WATER_COMPOSE_BUILD_CAMERA_OFFSET / 4 + i];
+        CHECK(delta == (moved ? translation[i] : 0.0f));
+        CHECK(payload[52 + i] - cameras[build_camera_index(entry.frame)][i] != delta);
+      }
+    }
+  }
   {
     using namespace bg3::water;
     BuildCameraRing ring{};

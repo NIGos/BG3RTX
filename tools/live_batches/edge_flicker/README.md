@@ -7,10 +7,12 @@ match the white-haired character against the blurred background in
 `registration_policy=per-frame-exclude-unregistered`: the analyzer registers every
 rendered depth and presented PQ frame against baseline A, using gradient magnitude
 so a brightness or polarity change does not masquerade as camera motion. It keeps
-the longest consecutive registered run (at least four frames for both midpoint
-residual parities), reports exclusions, and never joins across cuts or warps beauty. A
-window without enough registered frames is INVALID. Translation registration
-cannot certify all rotation/zoom or facial animation; review those limits.
+the longest consecutive run with low aligned rigid-control residual (at least
+four frames for both midpoint residual parities). Slow integer drift is aligned
+within each window, without interpolation or border wrapping. It reports shifts,
+residual bounds and exclusions. Cross-window translation is accepted when rigid
+structure agrees. Rotation/zoom, non-rigid motion or a weak control can remain
+ambiguous; inspect the control. Native-size PNGs require `fg_snap_full=1`.
 No save is changed. No job is staged in a watched queue by these tools.
 
 `predicted.json` was written before the implementation and contains the four

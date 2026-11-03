@@ -22,6 +22,9 @@ LIVE = "hair-groom"
 # A run without a groom instance is INVALID (gated).
 SAVES = [("hg2-dialogue1-fg2", "Test Dialogue1")]
 GROOM_START = "rt_hair_groom=1"
+# Full-resolution PNG dumps (dump_png_width=0): the user judges the groom on them (2026-11-03: a 1024 px crop of
+# armour was taken for hair). About 220 MB per trace, 5 traces.
+FULL_RES = "dump_png_width=0"
 
 BASE = {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_hair_physical_origin": "1", "rt_stats": "0",
         "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_hair_gi_cull": "0", "rt_hair_groom": "0"}
@@ -124,8 +127,8 @@ def job(name, save):
         r"\[geo\] transform feedback enabled: .*\(stride 88\)",
         r"\[hair groom\] \+ VK_NV_ray_tracing_linear_swept_spheres",
         r"\[hair groom\] device with linear swept spheres",
-        r"\[hair groom\] loaded .*\.hgrm: index id [0-9a-f]{16}",
-        r"\[hair groom\] [0-9a-f]{16} uploaded: \d+ LODs",
+        r"\[hair groom\] indexed .*\.hgrm: index id [0-9a-f]{16}",            # header-only index at start (streaming)
+        r"\[hair groom\] [0-9a-f]{16} LOD \d uploaded: [0-9.]+ MB in the mesh pool",  # per LOD on first use
         r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most [1-9]\d* groom instances",
         r"gi: background builds done: [1-9]\d* builds in \d+ ms",
         r"rt passes: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
@@ -144,7 +147,7 @@ def job(name, save):
     runner += [rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 300, "repeat": 1,
-        "live_batch": LIVE, "set": f"{hq.ULTRA},{hq.HAIR_START},rt_hair_gi_cull=0,{GROOM_START}",
+        "live_batch": LIVE, "set": f"{hq.ULTRA.replace('dump_png_width=1024', FULL_RES)},{hq.HAIR_START},rt_hair_gi_cull=0,{GROOM_START}",
         "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/hg_plan.json"],
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "gi: GPU cost", r"\[rt\] scene wait", r"\[rt\] scene build GPU",

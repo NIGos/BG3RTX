@@ -85,6 +85,32 @@ int main(int argc,char** argv){
   check(pb.dirty()>0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
   fail_save=false;pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");json=pb.handle("{\"type\":\"confirm\"}");
   check(pb.dirty()==0);check(json.find("\"restartNeeded\":false")!=std::string::npos);
+  // Last Experimental edit is saved atomically with settings, never on draft/discard/failure.
+  launcher::State trial;trial.caps=~0u;trial.preset=st::kUltra;trial.values=st::preset_values(st::kUltra);
+  st::KVList written;bool reject=false;launcher::web::Hooks th;
+  th.save=[&](launcher::State&,const st::KVList& keys,std::string&){if(reject)return false;written=keys;return true;};
+  launcher::web::Bridge tb(trial,th);tb.experimental=true;
+  tb.handle("{\"type\":\"set\",\"id\":\"exp_native_coverage\",\"value\":1}");
+  check(written.empty());tb.handle("{\"type\":\"discard\"}");check(tb.dirty()==0);
+  tb.handle("{\"type\":\"set\",\"id\":\"exp_native_coverage\",\"value\":1}");
+  reject=true;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");check(written.empty()&&tb.dirty()>0);
+  reject=false;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
+  st::Map ab=st::code_defaults();for(auto& kv:written)ab[kv.first]=kv.second;
+  check(st::lookup(ab,"ab_target")=="exp_native_coverage");
+  std::string line;check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="1"&&ab["rt_native_scalp"]=="1");
+  check(line.find("A/B: rt_native_hair=1") == 0);
+  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="0"&&ab["rt_native_scalp"]=="0");
+  auto reloaded=st::code_defaults();for(auto& kv:written)reloaded[kv.first]=kv.second;
+  reloaded["rt_native_hair"]="1";reloaded["rt_native_scalp"]="1";ab=reloaded;
+  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="0");
+  ab["ab_target"]="rr_post";ab["ab_choice"]="1";ab["rr_post"]="1";
+  check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="0");
+  check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="1");
+  ab["ab_target"]="exp_hair_gi_mean";check(!bg3::experimental_ab::flip(ab,line));
+  ab["ab_target"]="rr";check(!bg3::experimental_ab::flip(ab,line));
+  ab["ab_target"]="exp_native_coverage";ab["ab_choice"]="2";check(!bg3::experimental_ab::flip(ab,line));
+  written.clear();tb.handle("{\"type\":\"set\",\"id\":\"fps_cap\",\"value\":60}");tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
+  bool target_written=false;for(auto& kv:written)target_written|=kv.first=="ab_target";check(!target_written);
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }
 

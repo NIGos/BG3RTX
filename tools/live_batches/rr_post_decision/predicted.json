@@ -1,0 +1,58 @@
+{
+  "status": "OFFLINE_PREPARED_NOT_QUEUED",
+  "scene": "S8 Water Queens House, gameplay camera held still, companion close to camera; never dialogue, no Q/E or mouse input",
+  "framing": "Unverified offline. Future batch owner must verify the loaded S8 framing before authorization: companion hair inside hair_box, rigid wall/armour inside rigid_control. Coordinates below are an explicit proposed static framing, not Dialogue3 measurements. If unsupported, do not run the decision batch; prepare an appropriate static scene and update ROIs first. No save files are read or changed by this preparation.",
+  "windows": [
+    "base-a",
+    "post-late-a",
+    "base-b",
+    "post-late-b",
+    "resolve-off-a",
+    "resolve-on-a",
+    "resolve-off-b",
+    "resolve-on-b"
+  ],
+  "rr_post": [
+    1,
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1
+  ],
+  "rr_hair_resolve": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1
+  ],
+  "hypothesis": "Late RR reduces hair residual and sparkle beyond the spread of both same-state repeats, without losing hair detail. ef1 suggested 2.4-2.9 residual / 0.8-1.6% sparkle at rr_post=1 versus 1.25 / 0.35% at rr_post=0. These are historical targets, never an ef3 pass band.",
+  "ef2": "CANDIDATE, off: user saw good hair at normal viewing in live A/B. Analysis found 4x4 blocks only in 6x crops, gradient -24%, high frequency -48%, RR output -0.6%, no flicker gain over static baseline. Dialogue drift 10-18 px confounds ef2; neither rejection nor quality pass is justified.",
+  "registration": "Integer alignment in each burst and across windows; common valid overlap only, no interpolated beauty. Reject high aligned rigid-control residual/cuts rather than integer displacement alone. Report all shifts and rejected frames.",
+  "decision": "Report hair residual, sparkle, gradient/detail and rigid-control metrics for every window and both domains. Derive bands from same-state repeats, require improvement in both late windows. No automatic quality pass from lower variance or reduced brightness.",
+  "appearance": "Whole-frame PQ RGB histograms and mean, highlight percentiles and clipping compare both state repeats in rendered and presented bursts. These describe appearance, not linear energy. Inspect matching output-stage float full-frame means in dumps.json; normalize against pre-post compose 5c3fdabc. Never compare ungraded Xr/Z directly against rr_post=0 graded output. Check native grade/LUT identity, DoF silhouettes and bloom/highlight spread in trace previews. UI-contaminated PQ metrics are supplementary.",
+  "energy": "Same-stage pre-post scene float means from dumps.json must match within repeat spread with zero nonfinite pixels. Lower brightness cannot qualify reduced flicker.",
+  "cost": "Separate capture-free timing windows: report ngx guides/evaluate and rrpost chain/grade GPU ms. Ignore first straddling sample; no builds or diagnostics during future live cost windows.",
+  "budget": {
+    "scene_seconds": 285,
+    "load_allowance_seconds": 120,
+    "max_disk_bytes": 2000000000,
+    "launches_if_later_authorized": 1,
+    "estimated_disk_mb": 1702
+  },
+  "capture": {
+    "rendered_frames_per_window": 8,
+    "presented_frames_per_window": 16,
+    "float_traces_per_window": 1,
+    "native_presented_ordinal": 0,
+    "native_presented_files": "native.png beside the compact P16; same present as the first pNN.png"
+  },
+  "authorization": "No game launch or real queue staging authorized. Dryrun uses synthetic scratch roots only.",
+  "visual_review": "Save unscaled full-resolution presented hair crops at ordinal 0 in every burst, labeled side by side; include actual present IDs. Integer translations only; secondary 6x absolute-difference panel. No cross-window claim of identical animation or FG parity."
+}

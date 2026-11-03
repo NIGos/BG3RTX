@@ -20,7 +20,9 @@ Layer: `layer/hair_groom.cpp` (device feature, groom files), `layer/bvhsplit.cpp
 screen-size LOD 0/1/2 with 30-frame hysteresis, `rt/hair_groom_update.hlsl`, LSS BLAS refit, compaction after the
 first build, groom TLAS per scene slot). Shaders: `rt_common.hlsli` constant 1020 (`rt_groom_trace`). Core:
 `core/gi.cpp` constant 1020 on gi/ files with its own pipeline slot (512). Key `rt_hair_groom` (Developer GUI
-"Strand hair in ray-traced lighting"): on at startup for the device feature, then live A/B. Asset:
+"Strand hair in ray-traced lighting"): live on/off; optional supported LSS hardware
+is negotiated at device creation even with the effect off. Existing device retry
+retains ordinary RT if the optional feature fails. Asset:
 `python -m tools.hair_groom.asset`. Live job prepared: `tools/live_batches/hair_groom` (not queued).
 
 ## Why secondary only
@@ -145,3 +147,13 @@ CHAR_Hair defaults: Hair_Color 0.136/0.082/0.043, Roughness 0.41, Scatter 0.30, 
    camera, hair/skin shadows and backlight inspected. Predicted: rt and GI hair overhead drop by
    about half (bench ratio 2.0..2.3x on hair rays) plus 0.1..0.4 ms refit for the visible characters.
 Estimate: steps 1..2 about a week, step 3 one to two weeks, before the first live run.
+
+## User trial GUI (2026-11-03)
+The groom toggle is visible in Experimental with `dev=0`, off in every preset.
+Native hair + scalp is a separate live prerequisite; Full RT capture reserves
+88-byte vertices at startup even with coverage off (see NATIVE_HAIR.md).
+Local groom files and LSS support remain required; unmatched hair keeps cards.
+Dialogue1 reference: groom refit +0.57 ms, RT -1.1..1.5 ms and GI -1.6..1.8 ms
+versus native cards (RTX 5090). These are prior measurements, not a new gate.
+This GUI/startup preparation has offline checks only; no game was launched.
+Shader request delta 0; ABI unchanged; no preset/default promotion.
