@@ -47,22 +47,16 @@ void load_all() {
     l->path = path;
     FILE* f = nullptr;
     if (fopen_s(&f, path.c_str(), "rb") != 0 || !f) { ++bad; continue; }
-    _fseeki64(f, 0, SEEK_END);
-    const int64_t size = _ftelli64(f);
-    _fseeki64(f, 0, SEEK_SET);
-    if (size > 0 && size < (int64_t(1) << 31)) {
-      l->bytes.resize(size_t(size));
-      if (fread(l->bytes.data(), 1, l->bytes.size(), f) != l->bytes.size()) l->bytes.clear();
-    }
+    uint8_t head[40 + kSamples * 8] = {};
+    const size_t got = fread(head, 1, sizeof head, f);
     fclose(f);
-    if (l->bytes.empty() || !parse(l->bytes.data(), l->bytes.size(), l->asset) || g_assets.count(l->asset.index_id)) {
+    if (!parse_header(head, got, l->asset) || g_assets.count(l->asset.index_id)) {
       log("[hair groom] %s: malformed or duplicate index id, ignored", path.c_str());
       ++bad;
       continue;
     }
-    log("[hair groom] loaded %s: index id %016llx, %u indices, %zu LODs, LOD0 %u points %u segments", path.c_str(),
-        (unsigned long long)l->asset.index_id, l->asset.indices, l->asset.lods.size(), l->asset.lods[0].points,
-        l->asset.lods[0].segments);
+    log("[hair groom] indexed %s: index id %016llx, %u indices, %u LODs%s", path.c_str(),
+        (unsigned long long)l->asset.index_id, l->asset.indices, l->asset.lod_count, l->asset.has_uv ? ", UV samples" : "");
     g_counts.insert(l->asset.indices);
     g_assets[l->asset.index_id] = std::move(l);
     ++ok;
@@ -70,6 +64,25 @@ void load_all() {
   FindClose(h);
   log("[hair groom] %u groom files loaded, %u ignored", ok, bad);
 }
+}  // namespace
+
+bool read_full(const Loaded& l, std::vector<uint8_t>& bytes, Asset& full) {
+  bytes.clear();
+  FILE* f = nullptr;
+  if (fopen_s(&f, l.path.c_str(), "rb") != 0 || !f) return false;
+  _fseeki64(f, 0, SEEK_END);
+  const int64_t size = _ftelli64(f);
+  _fseeki64(f, 0, SEEK_SET);
+  if (size > 0 && size < (int64_t(1) << 31)) {
+    bytes.resize(size_t(size));
+    if (fread(bytes.data(), 1, bytes.size(), f) != bytes.size()) bytes.clear();
+  }
+  fclose(f);
+  // The index entry must still describe this file (it may have been replaced since startup).
+  return !bytes.empty() && parse(bytes.data(), bytes.size(), full) && full.index_id == l.asset.index_id &&
+         full.indices == l.asset.indices && full.lods.size() == l.asset.lod_count;
+}
+namespace {
 }  // namespace
 
 const void* device_features(InstanceData* id, VkPhysicalDevice phys, const void* next, std::vector<const char*>& extensions) {

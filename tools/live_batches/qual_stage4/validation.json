@@ -1,0 +1,25 @@
+{
+  "status": "PASS_SYNTHETIC_ONLY",
+  "game_launched": false,
+  "commands": [
+    "python tools/live_batches/qual_stage4/make_batch.py",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/qual_stage4/dryrun.ps1",
+    "git diff --check"
+  ],
+  "checks": [
+    "3 plans sampled",
+    "visible_unfocused_fg normalized",
+    "scene-wait lint",
+    "capacity lint",
+    "run A: 3/3 INVALID without evidence",
+    "run B: 3/3 structurally valid"
+  ],
+  "phase_seconds": [
+    275,
+    174,
+    265
+  ],
+  "estimated_capture_mb": 630,
+  "qualification": "CPU/GI screening only; original gates pending",
+  "environment": "Temporary py -3 launcher shim for installed python; no project tool modification"
+}

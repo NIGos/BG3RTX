@@ -1,0 +1,69 @@
+{
+  "status": "OFFLINE_PREPARED_NOT_QUEUED",
+  "scene": "Test Dialogue3, white hair against DoF background; no camera or dialogue input",
+  "evidence": {
+    "source": "ef1 2026-11-03 12:10, presented hair box, supplied live evidence",
+    "baseline_residual_x1000": [
+      2.87,
+      2.4
+    ],
+    "baseline_sparkle_percent": [
+      1.59,
+      0.83
+    ],
+    "post_late_residual_x1000": 1.25,
+    "post_late_sparkle_percent": 0.35,
+    "rr_off_residual_x1000": 1.51,
+    "rr_off_sparkle_percent": 0.47,
+    "cbt_off_residual_x1000": 3.58,
+    "cbt_off_sparkle_percent": 2.23,
+    "rigid_armour_residual_x1000_approx": 0.9,
+    "brightness": "unchanged"
+  },
+  "windows": [
+    "base-a",
+    "post-late",
+    "hair-resolve",
+    "base-b"
+  ],
+  "candidates": {
+    "rr_hair_guide": {
+      "status": "UNAVAILABLE_WITH_DOCUMENTED_INPUTS",
+      "hypothesis_target": "A valid coverage-aware guide would bring hair residual and sparkle to the rr_post=0 level without changing mean brightness or grading.",
+      "reason": "The local SDK transparency overlay requires removed premultiplied radiance. A binary G-buffer class or bare alpha cannot be passed as that input. No invented reactive input is queued."
+    },
+    "rr_hair_resolve": {
+      "status": "UNQUALIFIED_HYPOTHESIS",
+      "key": "rr_hair_resolve=1",
+      "prediction": "Coverage resolve lowers hair residual and sparkle toward the same-run post-late reference, while mean brightness, grading and rigid-control noise remain within baseline repeat spread.",
+      "reference_only": "ef1 post-late residual 1.25 and sparkle 0.35%; these are targets, not claimed results.",
+      "limit": "Class-5 occupancy is binary surviving coverage, not the original fragment alpha. An aligned cell resolve is experimental; it does not establish recovery of the game's exact dither pattern."
+    }
+  },
+  "decision": {
+    "registration": "Per-window rigid registration excluding the subtitle region; y >= 590 at 1920x800 is excluded, scaled with extent. Reject cuts and invalid windows.",
+    "improvement": "Each candidate must beat both new baseline windows by more than their measured repeat spread; also report distance from the same-run post-late reference in residual and sparkle.",
+    "reference_bands": "Historical residual spread is 0.47; historical sparkle spread is 0.76 percentage points. Derive final bands from ef2 repeats, never tune them to the candidate.",
+    "energy": "Compare baseline A/B versus hair-resolve at two ungraded stages: Xr (RR colour: dither-resolved X) and Z (RR output before the grade). Resolve these tracker images through the trace rrpost-tagged pass: color slot 0 is Xr, slot 2 is Z (rrpost_trace_images order). Join their image references/pass ordinal to dumps.json and use full-resolution decoded float RGB mean, weighted luminance and nonfinite count. Normalize scene drift with pre-post compose pass 5c3fdabc. Require candidate Xr and Z mean ratios to agree with baseline within the measured baseline-repeat spread; zero nonfinite pixels. Preserving Sharp cell mean does not guarantee preserved geometric Xr energy under spatially varying DoF A/C. Compose alone cannot detect candidate darkening. Never infer energy from PNG/PQ/bloom. rr_post=0 is only a temporal reference: its graded input/output is not comparable to raw linear Xr/Z.",
+    "grading": "For baseline-versus-resolve, compare grade constants/LUT identity and float grade-output means after confirming Xr/Z energy. Use compose mean for scene normalization. PQ hair mean is supplementary only. Do not compare rr_post=0 raw output energy against linear pre-post output. Any unexplained grade change blocks a quality pass.",
+    "cost": "Read ngx guides/evaluate and rrpost chain/grade GPU ms only from separate timing windows. First straddling sample is discarded by expect_every. No build/compile/live contention allowed. Resolve is inside chain timing, but occupancy capture occurs before the existing evaluate timer: these logs do not establish total candidate GPU cost.",
+    "quality": "No live evidence yet. Lower residual with reduced energy or softened detail is not a pass. Review hair detail and rigid-control patch.",
+    "activation": "The hair-resolve timing window must emit [rrpost] hair resolve: current class-5 occupancy, WIDTHxHEIGHT, mixed 4x4 cells after 1 s settling. Missing activation is INVALID; a pipeline fallback cannot count as candidate evidence."
+  },
+  "capture": {
+    "rendered_per_window": 8,
+    "presented_per_window": 16,
+    "energy_traces_per_window": 1,
+    "camera": "static",
+    "fg": 2
+  },
+  "budget": {
+    "max_disk_bytes": 2000000000,
+    "scene_seconds": 165,
+    "load_allowance_seconds": 120,
+    "game_launches": 1
+  },
+  "shader_request_delta": 1,
+  "shader_registry_delta": 0,
+  "shader_request_note": "One auto-discovered standalone shaders/rr_hair.hlsl request; no shaders/variants.txt entries added."
+}

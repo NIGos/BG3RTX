@@ -476,6 +476,8 @@ void ngx_on_present();
 // ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
 bool ngx_rr_active();
+// Current-frame class-5 surviving raster occupancy (R11G11B10, GENERAL).
+bool ngx_hair_mask(uint32_t w, uint32_t h, VkImageView* view);
 // RR's diffuse albedo guide (RGBA8, GENERAL) when it has this size.
 bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view);
 

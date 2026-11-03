@@ -267,6 +267,9 @@ static std::vector<SrFeature> g_feats;
 static GBuffer g_gbuf;
 static std::mutex g_gbuf_mu;
 
+static Guide g_hair;
+static uint64_t g_hair_frame = 0, g_hair_gen = 0;
+static VkPipeline g_hair_pipe = VK_NULL_HANDLE;
 static Guide g_guide[3];  // diffuse, specular, normal+roughness
 static uint32_t g_guide_w = 0, g_guide_h = 0;
 
@@ -545,6 +548,13 @@ bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
   return true;
 }
 
+bool ngx_hair_mask(uint32_t w, uint32_t h, VkImageView* view) {
+  if (!g_hair.initialized || g_hair_frame != frame_index() ||
+      g_hair.res.Resource.ImageViewInfo.Width != w || g_hair.res.Resource.ImageViewInfo.Height != h) return false;
+  *view = g_hair.view;
+  return true;
+}
+
 static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
   if (g_guide_w == w && g_guide_h == h && g_guide[0].image) return true;
   for (auto& g : g_guide) guide_destroy(dd, g);
@@ -585,9 +595,9 @@ static bool ensure_layouts(DeviceData* dd) {
   return true;
 }
 
-static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& gen, VkPipeline current) {
+static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& gen, VkPipeline current, const char* source = "rr_guides.hlsl") {
   Bg3ShaderBlob blob{};
-  if (!shader_get("rr_guides.hlsl", entry, "cs_6_0", &blob)) return current;
+  if (!shader_get(source, entry, "cs_6_0", &blob)) return current;
   if (current && blob.generation == gen) return current;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
@@ -601,12 +611,12 @@ static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& ge
   VkResult r = dd->vk.CreateComputePipelines(dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &p);
   dd->vk.DestroyShaderModule(dd->device, mod, nullptr);
   if (r != VK_SUCCESS) {
-    log("[ngx] rr_guides.hlsl:%s pipeline creation failed (%d)", entry, r);
+    log("[ngx] %s:%s pipeline creation failed (%d)", source, entry, r);
     return current;
   }
   if (current) defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)current);
   gen = blob.generation;
-  log("[ngx] rr_guides.hlsl:%s pipeline built (generation %llu)", entry, (unsigned long long)gen);
+  log("[ngx] %s:%s pipeline built (generation %llu)", source, entry, (unsigned long long)gen);
   return p;
 }
 
@@ -923,6 +933,39 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     }
   }
   dispatch_guides(dd, cmd, set, guide_push(*f, p.width, p.height, cam));
+  // Snapshot while RT2 still contains the G-buffer. Binary surviving sample
+  // occupancy is all this buffer proves; it is NOT the discarded material alpha.
+  if (cfg_int("rr_post", 1) && cfg_int("rr_hair_resolve", 0)) {
+    if (g_hair.image && (g_hair.res.Resource.ImageViewInfo.Width != p.width ||
+                        g_hair.res.Resource.ImageViewInfo.Height != p.height)) {
+      guide_destroy(dd, g_hair);
+      g_hair_frame = 0;
+      retire_guide_pool();
+    }
+    if (!g_hair.image && !guide_create(dd, g_hair, VK_FORMAT_B10G11R11_UFLOAT_PACK32, p.width, p.height))
+      guide_destroy(dd, g_hair);
+    g_hair_pipe = build_pipeline(dd, "capture", g_hair_gen, g_hair_pipe, "rr_hair.hlsl");
+    SetKey hk = key;
+    hk.out = g_hair.image;
+    VkDescriptorSet hs = g_hair.image ? get_set(dd, hk, g_hair.view) : VK_NULL_HANDLE;
+    if (hs && g_hair_pipe) {
+      if (!g_hair.initialized) {
+        VkImageMemoryBarrier init{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        init.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; init.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        init.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        init.srcQueueFamilyIndex = init.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        init.image = g_hair.image; init.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 0, 0, nullptr, 0, nullptr, 1, &init);
+        g_hair.initialized = true;
+      }
+      VkPipeline saved = g_pipe;
+      g_pipe = g_hair_pipe;
+      dispatch_guides(dd, cmd, hs, guide_push(*f, p.width, p.height, cam));
+      g_pipe = saved;
+      g_hair_frame = frame_index();
+    }
+  }
   if (known) {
     for (auto& x : b) {
       std::swap(x.oldLayout, x.newLayout);

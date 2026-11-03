@@ -363,6 +363,42 @@ from the latest save. The pairs differ only in `rr_guides_v2`.
 
 ## RR before post (`rr_post=1`, the default; AUDIT_SOTA #1, 2026-10-26)
 
+### Hair candidate (`rr-hair-guide`, 2026-11-03, unqualified)
+
+ef1 Dialogue3 presented hair-box residual was 2.87 / 2.40 (repeat spread 0.47),
+sparkle 1.59% / 0.83%. Late RR (`rr_post=0`) reached 1.25 / 0.35%; SR reached
+1.51 / 0.47%. CBT off worsened it to 3.58 / 2.23%; armour control was about 0.9.
+Mean brightness was unchanged. This identifies a pre-post-path quality gap.
+
+The local DLSS RR Integration Guide section 3.4.10 requires a separate,
+premultiplied transparency layer removed from the input colour. It is upscaled,
+not denoised. `nvsdk_ngx_helpers_dlssd_vk.h` exposes layer, opacity and motion
+inputs; its generic transparency mask is reserved. These are not reactive masks.
+The G-buffer retains class-5 surviving samples, not discarded fragment alpha or
+separate hair radiance/background. No unsupported coverage guide is submitted.
+The cached native deferred shader `captures/alpha_cache/42a95e17ec3adc51.glsl`
+overwrites RT1 alpha with 1; RT2 alpha contains material-class bits.
+
+`rr_hair_resolve=0` is an experimental GUI choice, off in every preset. When on,
+an independent G-buffer dispatch snapshots class-5 occupancy before aliasing.
+A separate pre-RR dispatch averages sharp RGB over mixed, aligned 4x4 cells.
+This preserves each cell's sharp-input mean before store quantization, not the
+native geometric resolve's mean or the spatially varying DoF-composed mean.
+It is a coverage proxy, not a recovered native dither pattern; silhouettes can
+soften by up to 3 render pixels. Legacy guide/post shaders remain untouched.
+
+Hair keeps the game's velocity-pass motion vectors; no verified defect warrants
+rewriting them. With default `rf_models=3`, class 5 has the fresh 65504 no-hit
+distance, not zero. RR accepts distance guides up to two frames old; spatial
+staleness remains a possible confound requiring captures, not a proven cause.
+
+Prepared ef2 lives in `tools/live_batches/rr_hair_guide`, outside pending inboxes.
+It compares baseline / late RR / resolve / baseline with separate P16 bursts,
+ungraded Xr/Z float means, grading and clean GPU timing. The quality target is
+late RR's residual/sparkle within new repeat noise, without lost energy/detail.
+GPU cost is unmeasured; occupancy capture is outside existing evaluate timing.
+No game was launched. No quality pass or default promotion is claimed.
+
 **The problem.** BG3 hands DLSS its *graded* image. Between the scene colour
 and the evaluate it runs, at render resolution: god rays (`a7466e4e`), depth of
 field (12 passes, composite `96bb806d`), a stencil-tagged dither resolve

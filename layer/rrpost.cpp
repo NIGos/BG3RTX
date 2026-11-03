@@ -134,8 +134,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"hair_resolve"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_HAIR };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -311,7 +311,7 @@ bool ensure_layout(DeviceData* dd) {
 
 VkPipeline pipeline(DeviceData* dd, Pipe& p) {
   Bg3ShaderBlob blob{};
-  if (!shader_get("rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
+  if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
   if (p.pipe && blob.generation == p.gen) return p.pipe;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
@@ -732,6 +732,16 @@ void on_resolve(DeviceData* dd, VkCommandBuffer cmd) {
   to_general(dd, cmd, {&g_xr});
   uint32_t ext[2] = {pc.bmax[0] - pc.bmin[0] + 1, pc.bmax[1] - pc.bmin[1] + 1};
   if (!run(dd, cmd, P_RESOLVE, b, pc, (ext[0] + 15) / 16, (ext[1] + 15) / 16)) return breaks("resolve pipeline");
+  if (cfg_int("rr_hair_resolve", 0)) {
+    VkImageView hair = VK_NULL_HANDLE;
+    if (ngx_hair_mask(g_ch.w, g_ch.h, &hair)) {
+      b.in[2] = hair; b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
+      if (!run(dd, cmd, P_HAIR, b, pc, (ext[0] + 7) / 8, (ext[1] + 7) / 8))
+        return breaks("hair resolve pipeline");
+      if (frame_index() % 120 == 0)
+        log("[rrpost] hair resolve: current class-5 occupancy, %ux%u, mixed 4x4 cells", g_ch.w, g_ch.h);
+    } else return breaks("current-frame hair occupancy unavailable");
+  }
   g_ch.stage = 3;
 }
 

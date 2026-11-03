@@ -16,3 +16,16 @@
   32 corner UVs; the layer reads the same corners from its own soup and matches within 1e-3).
 - Check in game: Test Dialogue1, `[hair groom] UV join 6009 indices: matched` and `frame N: K groom instances`
   with K > 0; job tools/live_batches/hair_groom (Dialogue1 only). Build, CTests, dryrun pass.
+
+## rt_hair_groom pool budget and fibre BSDF prototype (2026-11-03)
+- Groom pool: at most 1/4 of the mesh pool (min of rt_mesh_pool_max_mb and VRAM cap); only the selected LOD
+  uploaded; headers indexed at start, files read on first match; LRU eviction after 120 unused frames.
+- Fibre BSDF offline (tools/hair_groom/bsdf.py, Chiang 2016): white furnace 1.00; GI hit today (Lambert)
+  3-6x darker than Chiang; single-scatter Chiang is pale, needs dual scattering for the brown (ROADMAP step 4).
+
+## rt_hair_groom live hg-20261103e (Test Dialogue1, 17 grooms): works, cheaper; INVALID on two gate bugs
+- 5 groom instances, 1500 matched per 300 frames (LOD 600/0/900), refit +0.57 ms (BLAS 1.04 vs 0.47 ms).
+- Cost groom vs cards: rt 9.07 vs 10.2-10.57 ms, gi 12.51 vs 14.1-14.3 ms; no hair 7.14 / 9.08 ms.
+- Character energy on vs off +0.17% / +2.83% (off spread 1.38%); overcast shot, no visible change beyond animation.
+- Gates fixed: participation only in cost-groom (8 s shots < 300 frames); freeze judged inside the plan
+  (the 1088 ms startup burst was the vt_alpha mask load). The old log passes the new gates.

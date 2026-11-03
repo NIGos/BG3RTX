@@ -107,38 +107,84 @@ def presents(directory):
     return [np.asarray(Image.open(p).convert('RGB'), dtype='f4')/255 for p in files]
 
 
-def registered_run(anchor, frames):
-    """Retain one consecutive registered run; cuts never bridge a temporal gap.
+# Dialogue3 subtitle region in the 1920x800 presented capture. Normalize the
+# top of the region to the current capture height (rendered bursts are half-size).
+SUBTITLE_REGION = (0, 590, 1920, 800)
+DIALOGUE_ROIS = dict(hair_box=(640, 20, 880, 330),
+                     rigid_control=(720, 380, 900, 560))
+SPARKLE_CODE = .02  # Scratch metric: ~5 eight-bit PQ codes, not a quality gate.
 
-    Rendered frames use lighting-independent depth. Presented frames have only
-    PQ beauty; phase correlation rejects translations without warping colours.
-    A global exposure/brightness change retains its phase correlation location.
+
+def registration_structure(frame):
+    stop = round(frame.shape[0] * SUBTITLE_REGION[1] / SUBTITLE_REGION[3])
+    scene = frame[:stop]
+    grey = scene.mean(-1) if scene.ndim == 3 else scene
+    dy, dx = np.gradient(grey.astype('f8'))
+    return np.hypot(dx, dy)
+
+
+def registered_run(anchor, frames):
+    """Longest consecutive stable run inside this window, excluding subtitle UI.
+
+    The retained run can have a constant integer offset from base-a. Move masks
+    by that offset; never warp/resample beauty or join frames across a cut.
     """
-    def structure(frame):
-        grey = frame.mean(-1) if frame.ndim == 3 else frame
-        dy, dx = np.gradient(grey.astype('f8'))
-        return np.hypot(dx, dy)
-    anchor = structure(anchor)
+    local = registration_structure(frames[0])
     regs = []
     for frame in frames:
         try:
-            regs.append(registration(anchor, structure(frame)))
+            regs.append(registration(local, registration_structure(frame)))
         except ValueError as error:
             regs.append(dict(valid=False, error=str(error)))
     runs, current = [], []
     for i, r in enumerate(regs):
-        if r['valid']:
-            current.append(i)
-        elif current:
+        usable = 'shift_px' in r
+        same = current and r.get('shift_px') == regs[current[-1]].get('shift_px')
+        if current and (not usable or not same):
             runs.append(current)
             current = []
+        if usable:
+            current.append(i)
     if current:
         runs.append(current)
     keep = max(runs, key=len, default=[])
     if len(keep) < 4:
         raise ValueError('dialogue shot moved: fewer than four consecutive registered frames')
+    offset = registration(registration_structure(anchor), registration_structure(frames[keep[0]]))
     return keep, dict(frames=regs, included=keep,
-                     excluded=[i for i in range(len(frames)) if i not in keep])
+                     excluded=[i for i in range(len(frames)) if i not in keep],
+                     anchor_registration=offset,
+                     shift_px=offset['shift_px'],
+                     subtitle_top=round(frames[0].shape[0]*590/800))
+
+
+def shifted_mask(mask, shift):
+    """Integer mask translation with clipped borders, never toroidal wrapping."""
+    dy, dx = shift
+    h, w = mask.shape
+    out = np.zeros_like(mask)
+    sy0, sy1 = max(0, -dy), min(h, h-dy)
+    sx0, sx1 = max(0, -dx), min(w, w-dx)
+    if sy1 > sy0 and sx1 > sx0:
+        out[sy0+dy:sy1+dy, sx0+dx:sx1+dx] = mask[sy0:sy1, sx0:sx1]
+    return out
+
+
+def scaled_shift(shift, source_shape, target_shape):
+    return tuple(round(v*t/s) for v, s, t in zip(shift, source_shape, target_shape))
+
+
+def dialogue_metrics(codes, shift):
+    shape = codes[0].shape[:2]
+    h, w = shape
+    out = {}
+    for name, (x0, y0, x1, y1) in DIALOGUE_ROIS.items():
+        mask = np.zeros(shape, bool)
+        mask[round(y0*h/800):round(y1*h/800),
+             round(x0*w/1920):round(x1*w/1920)] = True
+        mask = shifted_mask(mask, shift)
+        out[name] = energy(codes, mask)
+    return out
 
 
 def registered_endpoints(values, keep):
@@ -156,17 +202,21 @@ def energy(codes, mask):
     residual = y[1:-1] - (y[:-2]+y[2:])/2
     return dict(pixels=int(mask.sum()), variance=float(variance[mask].mean()),
                 mean_code=float(y[:, mask].mean()),
+                residual=float(np.abs(residual[:, mask]).mean()),
+                residual_x1000=float(np.abs(residual[:, mask]).mean()*1000),
+                sparkle_percent=float((np.abs(residual[:, mask]) > SPARKLE_CODE).mean()*100),
+                sparkle_threshold_code=SPARKLE_CODE,
                 residual_even=float(np.abs(residual[1::2, mask]).mean()),
                 residual_odd=float(np.abs(residual[::2, mask]).mean()))
 
 
-def score(codes, references, edge, interior):
+def score(codes, references, edge, interior, shift=(0, 0)):
     shape = codes[0].shape[:2]
     if any(c.shape != codes[0].shape for c in codes):
         raise ValueError('frame dimensions changed')
     out = {}
     for name, mask in [('edge', edge), ('interior', interior)]:
-        mask = resize_mask(mask, shape)
+        mask = shifted_mask(resize_mask(mask, shape), shift)
         out[name] = energy(codes, mask)
         # Reuse the QA statistical test. Thin masks can be INCONCLUSIVE because
         # they cannot hold its 81-pixel footprint; never reinterpret as a pass.
@@ -174,7 +224,8 @@ def score(codes, references, edge, interior):
         for ref in references:
             if ref[0].shape != codes[0].shape:
                 raise ValueError('baseline framing dimensions differ')
-            result = det.temporal(ref, codes, moving=~mask)
+            result = (det.temporal(ref, codes, moving=~mask) if tuple(shift) == (0, 0) else
+                      dict(status='INCONCLUSIVE', reason='cross-window translation; use local ROI residual'))
             result.pop('map', None)
             tests.append(result)
         out[name]['baseline_excess_qa'] = tests
@@ -182,10 +233,13 @@ def score(codes, references, edge, interior):
 
 
 def rank(rows, domain):
-    baseline = [rows[k][domain]['edge']['variance'] for k in ('base-a', 'base-b')]
-    floor, spread = min(baseline), abs(baseline[0]-baseline[1])
+    baseline = [row[domain]['edge']['variance'] for label, row in rows.items()
+                if label.startswith('base-')]
+    floor, spread = min(baseline), max(baseline)-min(baseline)
     ranking = []
-    for label, _ in WINDOWS[1:-1]:
+    for label in rows:
+        if label.startswith('base-'):
+            continue
         value = rows[label][domain]['edge']['variance']
         ranking.append(dict(toggle=label, edge_variance=value, reduction=floor-value,
                             beyond_repeat_spread=floor-value > spread))
@@ -195,9 +249,32 @@ def rank(rows, domain):
                 candidate=ranking[0]['toggle'] if ranking[0]['beyond_repeat_spread'] else None)
 
 
-def analyze(game_text, runner_text, resolve):
-    job = json.loads((HERE/'jobs/ef1-dialogue3-attribution.json').read_text())
-    plan = json.loads((HERE/'plans/ef1.json').read_text())
+def roi_comparison(rows, domain):
+    """Report local hair/rigid metrics against every baseline repeat.
+
+    These are PQ-code diagnostics. Their repeat spread is empirical; the
+    sparkle threshold defines the scratch statistic and is never a pass gate.
+    """
+    out = {}
+    for region in DIALOGUE_ROIS:
+        values = {label: row['dialogue_roi'][domain][region] for label, row in rows.items()}
+        baseline = [v for label, v in values.items() if label.startswith('base-')]
+        out[region] = dict(baseline_labels=[k for k in values if k.startswith('base-')],
+            baseline_range={metric: [min(v[metric] for v in baseline), max(v[metric] for v in baseline)]
+                            for metric in ('residual_x1000', 'sparkle_percent', 'mean_code')},
+            windows=values)
+    return out
+
+
+def analyze(game_text, runner_text, resolve, job=None, plan=None):
+    if job is None:
+        job = json.loads((HERE/'jobs/ef1-dialogue3-attribution.json').read_text())
+    if plan is None:
+        plan = json.loads((HERE/'plans/ef1.json').read_text())
+    labels = [step['label'][len('rendered-'):] for step in plan
+              if step['label'].startswith('rendered-')]
+    if not labels or len(set(labels)) != len(labels):
+        raise ValueError('missing or duplicate rendered windows')
     failures = gates.check(job['expect_every'], game_text, runner_text, plan)
     for pattern in job['expect']:
         if not re.search(pattern, game_text, re.M):
@@ -213,7 +290,7 @@ def analyze(game_text, runner_text, resolve):
     lines = gates.stamped_lines(game_text)
     wins = gates.windows(runner_text, plan, lines)
     paths, evidence = {}, {}
-    for label, _ in WINDOWS:
+    for label in labels:
         paths[label] = {}
         for kind in ('rendered', 'presented'):
             win = next(w for w in wins if w['label'] == kind+'-'+label)
@@ -229,41 +306,48 @@ def analyze(game_text, runner_text, resolve):
             evidence[kind+'-'+label] = [l for l in selected if '[watch]' in l or
                                        'DLSS-G frame' in l or '[pace]' in l]
     all_paths = [p for row in paths.values() for p in row.values()]
-    if len(set(all_paths)) != 2*len(WINDOWS):
+    if len(set(all_paths)) != 2*len(labels):
         raise ValueError('capture path reused across windows')
     bases = [burst(paths[label]['rendered']) for label in ('base-a', 'base-b')]
     depth_anchor = bases[0]['depth'][0]
+    base_regs = []
     for b in bases:
-        keep, _ = registered_run(depth_anchor, b['depth'])
+        keep, reg = registered_run(depth_anchor, b['depth'])
+        base_regs.append(reg)
         for field in ('codes', 'depth'):
             b[field] = [b[field][i] for i in keep]
         # Material/albedo exist only at original endpoints; discard endpoints
         # outside the registered run rather than importing a cut's classes.
         for field in ('material', 'albedo'):
             b[field] = registered_endpoints(b[field], keep)
-    edge, interior = masks([d for b in bases for d in b['depth']],
-                           [m for b in bases for m in b['material']])
+    edge, interior = masks(bases[0]['depth'], bases[0]['material'])
+    inverse = tuple(-v for v in base_regs[0]['shift_px'])
+    edge, interior = shifted_mask(edge, inverse), shifted_mask(interior, inverse)
     ref_present = [presents(paths[label]['presented']) for label in ('base-a', 'base-b')]
     present_anchor = ref_present[0][0]
     ref_present = [[frames[i] for i in registered_run(present_anchor, frames)[0]]
                    for frames in ref_present]
     refs = [b['codes'] for b in bases]
     rows = {}
-    for label, _ in WINDOWS:
+    for label in labels:
         print('analyzing '+label, flush=True)
         b = burst(paths[label]['rendered'])
         keep, rendered_regs = registered_run(depth_anchor, b['depth'])
         for field in ('codes', 'depth'):
             b[field] = [b[field][i] for i in keep]
+        render_shift = scaled_shift(rendered_regs['shift_px'], b['depth'][0].shape, b['codes'][0].shape[:2])
         presented = presents(paths[label]['presented'])
         shown, present_regs = registered_run(present_anchor, presented)
         rows[label] = dict(registration=dict(rendered=rendered_regs, presented=present_regs),
-                           rendered=score(b['codes'], refs, edge, interior),
-                           presented=score([presented[i] for i in shown], ref_present, edge, interior),
-                           depth_edge_variance=float(np.stack(b['depth']).var(0, ddof=1)[edge].mean()))
+                           rendered=score(b['codes'], refs, edge, interior, render_shift),
+                           presented=score([presented[i] for i in shown], ref_present, edge, interior, present_regs['shift_px']),
+                           dialogue_roi=dict(rendered=dialogue_metrics(b['codes'], render_shift),
+                                             presented=dialogue_metrics([presented[i] for i in shown], present_regs['shift_px'])),
+                           depth_edge_variance=float(np.stack(b['depth']).var(0, ddof=1)[
+                               shifted_mask(edge, rendered_regs['shift_px'])].mean()))
         albedos = [b['albedo'][j] for j, frame in enumerate((0, 7)) if frame in keep]
         moving = det.animated(albedos, [], edge.shape) if len(albedos) > 1 else None
-        rows[label]['animated_edge_fraction'] = float(moving[edge].mean()) if moving is not None else None
+        rows[label]['animated_edge_fraction'] = float(moving[shifted_mask(edge, rendered_regs['shift_px'])].mean()) if moving is not None else None
         depth_var = np.stack(b['depth']).var(0, ddof=1)
         colour_var = np.stack([c @ Y for c in b['codes']]).var(0, ddof=1)
         # Spatial association, not a proof of DoF: depth and colour are captured
@@ -271,18 +355,21 @@ def analyze(game_text, runner_text, resolve):
         h, w = colour_var.shape
         fitted = depth_var[(np.arange(h)*depth_var.shape[0]//h)[:, None],
                            np.arange(w)*depth_var.shape[1]//w]
-        support = resize_mask(edge, (h, w))
+        support = shifted_mask(resize_mask(edge, (h, w)), render_shift)
         dv, cv = fitted[support], colour_var[support]
         rows[label]['depth_colour_variance_correlation'] = (
             float(np.corrcoef(dv, cv)[0, 1]) if dv.std() > 0 and cv.std() > 0 else None)
     return dict(status='ATTRIBUTION_ONLY', quality_pass=False, windows=rows,
                 rendered=rank(rows, 'rendered'), presented=rank(rows, 'presented'),
+                dialogue_roi=dict(rendered=roi_comparison(rows, 'rendered'),
+                                  presented=roi_comparison(rows, 'presented')),
                 rate_evidence=evidence, capture_paths={k: {d: str(p) for d, p in v.items()} for k,v in paths.items()},
                 limits=['PQ code variance, not float pre-post energy; no quality/brightness claim.',
                         'Presented PNG variance includes UI, frame pacing and base-FPS changes.',
                         'Parity is unlabeled; generated-frame identity is not inferred.',
                         'Half-size nearest samples can miss a full-resolution strand.',
-                        'Per-frame depth/PQ registration excludes cuts; rotation/zoom or animation may remain.',
+                        'Per-window registration excludes subtitle rows and cuts; rotation/zoom or animation may remain.',
+                        'Dialogue3 fixed hair/armour ROIs are normalized from 1920x800; PQ mean is not float energy.',
                         'Class 3/5 support covers skin/hair, not unclassified armour silhouette.',
                         'RR-off changes RT denoising too; post-late does not disable DoF.',
                         'Largest reduction is a candidate, never proof of one root cause.'])
@@ -294,12 +381,16 @@ def main():
     p.add_argument('--runner-log', type=Path, required=True)
     p.add_argument('--capture-root', type=Path)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--job', type=Path, help='Queue job JSON (default: ef1)')
+    p.add_argument('--plan', type=Path, help='Matching plan JSON (default: ef1)')
     a = p.parse_args()
     def resolve(path):
         return a.capture_root / path.replace('\\', '/').split('/')[-1] if a.capture_root else Path(path)
     try:
         report = analyze(a.game_log.read_text(errors='replace'),
-                         a.runner_log.read_text(errors='replace'), resolve)
+                         a.runner_log.read_text(errors='replace'), resolve,
+                         json.loads(a.job.read_text()) if a.job else None,
+                         json.loads(a.plan.read_text()) if a.plan else None)
     except (ValueError, OSError, KeyError, StopIteration) as error:
         report = dict(status='INVALID', quality_pass=False, error=str(error))
     a.out.parent.mkdir(parents=True, exist_ok=True)
