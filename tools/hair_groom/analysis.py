@@ -26,12 +26,16 @@ def root_channel_check(mask, tile_grid=(8, 2), threshold=128):
 
 
 def orientation(groom, head_centre, margin=0.005):
-    """Strands whose tip is closer to the head centre than the root (by > margin) are reversed."""
+    """Strands whose tip is closer to the head centre than the root (by > margin) are reversed. Only strands more
+    radial than tangential decide (|d_tip - d_root| > chord cos 45): a strand lying along the scalp has root and tip at
+    the same distance from the head whichever way it runs (Halsin 2026-11-03: 369 of 842 cards flagged by scalp strands
+    with a radial share of 0.20, the groom's images within 1-3% of the cards)."""
     first, last = groom.offsets[:-1], groom.offsets[1:] - 1
     d_root = np.linalg.norm(groom.points[first] - head_centre, axis=1)
     d_tip = np.linalg.norm(groom.points[last] - head_centre, axis=1)
+    chord = np.linalg.norm(groom.points[last] - groom.points[first], axis=1)
     reversed_ = d_tip < d_root - margin
-    decided = np.abs(d_tip - d_root) > margin
+    decided = np.abs(d_tip - d_root) > np.maximum(margin, chord / np.sqrt(2.0))
     per_card = {}
     for c, r, ok in zip(groom.card, reversed_, decided):
         if ok:

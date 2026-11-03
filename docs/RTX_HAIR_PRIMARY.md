@@ -128,7 +128,19 @@ reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 6
   LOD1 cards merge several LOD0 cards (63 of 205).
 - Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
   cannot follow them (needs a 2-D curve tracer).
-- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only.
+- Companions and orientation (2026-11-03, user: companions first). Companion hair through their templates and the
+  origin presets: Shadowheart, Astarion, Lae'zel, Gale, Karlach, Jaheira, Minthara and the generic origin pass;
+  Halsin was reviewed only for "roots away from the head" (369 of 842 cards) with images within 1-3% of the cards:
+  strands lying along the scalp (radial share 0.20) decided it. The orientation test now counts only strands more
+  radial than tangential (|d_tip - d_root| > chord cos 45, tested); rerun of the 109 reachable styles with that
+  reason: 26 now pass (Halsin LOD0 and LOD1 among them), 63 still have radial reversed cards (hat hair, buns).
+  Gale's beard stays in review (LOD0: coverage +0.11, IoU 0.76; LOD1 reject IoU 0.55): unchanged under six atlas
+  grids (IoU 0.755-0.759), the alpha-weighted width and the texel-size mip. Short beards share it (26 player, 13
+  named NPC): a systematic card/strand difference the reference does not explain; to pass: a card reference that
+  averages the game's dithered alpha test (C5), or an explicit visual review (batch --accept-review).
+  Now: 745 pass, 346 review, 126 reject (reachable: 718 / 244 / 98). Player 354 / 49 / 29, companion 4 / 1 / 1
+  (Gale's beard), named NPC 153 / 32 / 26, generic NPC 8 / 7 / 10, hat variant 167 / 138 / 32, item 32 / 17 / 0. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the

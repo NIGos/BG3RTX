@@ -108,6 +108,9 @@ def test_convert():
     check("orientation: root nearer the head", o["strands_reversed"] == 0 and o["strands_decided"] == 1, o)
     o = analysis.orientation(groom, np.array([0.0, -0.3, 0.0]))
     check("orientation: reversed card detected", o["strands_reversed"] == 1 and o["cards_mostly_reversed"] == 1, o)
+    # A strand running along the scalp (the head beside its middle): root and tip equally far, so it decides nothing.
+    o = analysis.orientation(groom, np.array([0.1, -0.1, 0.0]))
+    check("orientation: a tangential strand is not decided", o["strands_decided"] == 0 and o["cards_mostly_reversed"] == 0, o)
     # Mirrored UVs: the same card with u reflected (every UV triangle's winding flips) places the same strand,
     # reflected across the card, exactly embedded: the embedding does not depend on the UV orientation.
     mir = card_mesh()
