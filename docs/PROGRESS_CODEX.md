@@ -12,7 +12,7 @@ Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GO
 - AO / hair at camp confirmed: gi_ao=0 brightens faces +10..22%; native hair +4..14%.
 - Water on/off reflections while turning: cause in our compose (tier 1 25% -> 1% on camera-jump frames). Compose shift (rt_water_compose_shift) did not remove it; test confounded by jumpy turn input (45-90 deg per frame). Smooth turn modes + camera probe job prepared (bundle 2).
 - Native hair: +2.3..4.5 ms rt / +3.4..6.9 ms GI (S8, camp dialogues): stays off. rt_hair_gi_cull saves 1.2-2.3 ms but brightens characters +9..20% (not equivalent). Bug: Dialogue3 with hair fills the mesh pool (2047 MB), scene then skipped. Branch hair-cost2: pool fix, cheaper coverage, near-only hair.
-- Characters dark in dialogues: RT AO self-occlusion (50% of character pixels -39%, 99% self-hits under 5 cm). Branch ao-self-occlusion: derived ray start for characters.
+- Characters in dialogues: RT AO darkening is self-occlusion (50% of character pixels, 99% self-hits under 5 cm). User 11-03: this is fine, no AO change; only the moving shadow mattered (fixed).
 - Box lights: honour the game's shadow flag (88 Grymforge box lights have it off): fixed mode is closer to OFF energy, +0.13 ms. Still off (your visual check, question below).
 - OMM om4: check window confounded by scene-wait timeouts; gate fixed, rerun pending. rt passes -0.4..0.5 ms with OMM.
 - Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa (147 -> 135 variants). rf_edge / rr_hitdist kept (old metric invalid).
