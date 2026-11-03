@@ -426,6 +426,19 @@
        {"id": "large", "label": "3.5 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "3500"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
        {"id": "small", "label": "1.8 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "1800"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
+    {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
+     "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Developer", "summary": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary_order": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary_order": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims unused hair capture memory.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,

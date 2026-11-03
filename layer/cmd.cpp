@@ -168,6 +168,7 @@ static void pass_ready(VkCommandBuffer cmd, CmdState* s) {
   s->pass.depth_layout = s->depth_layout;
   core_on_pass_begin(cmd, &s->pass);
   { CpuTimer t(0); geo_pass_before(cmd, s); }
+  hair_primary_before_pass(cmd, s->pass);   // rt_hair_groom_primary_order: the G-buffer's groom header
 }
 
 static CmdState* describe_classic(VkCommandBuffer cmd, const VkRenderPassBeginInfo* info) {

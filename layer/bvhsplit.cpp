@@ -3495,7 +3495,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           float viewport[4];
           geo_render_size(&w, &h);
           geo_gbuffer_viewport(viewport);
-          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
+          hair_primary_publish(cmd, rec, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
         }
       } else {
         groom_count = 0;
@@ -4463,5 +4463,8 @@ bool bvh_replay_region(VkBuffer info, VkDeviceSize info_offset, BvhReplayRegion*
   }
   return true;
 }
+
+// A build record whose command buffer was submitted (hair_primary's ordered publish).
+bool bvh_rec_submitted(uint64_t id) { return rec_submitted(id); }
 
 }  // namespace bg3

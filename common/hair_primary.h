@@ -7,6 +7,8 @@
 #include <cstring>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace hair_primary {
 
@@ -27,7 +29,11 @@ constexpr uint32_t kRowBytes = 16;
 constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 1088, one vkCmdUpdateBuffer
 // Counts buffer of the fail-safe (rt/hair_primary_count.hlsl): strand pixels per groom k, then per groom the strand
 // pixels whose segment fails the readers' pool bound (hp_segment discards them; counted so the bound is never silent).
-constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kCountBytes = kRefusedOffset + kMaxGrooms * 4;
+// Then per groom the strand pixels sealed with an adjacent frame's tag (tag - 1 or tag + 1): the G-buffer of the counted
+// frame ran against another publish (the game submitted the prepass, which records the build, and the G-buffer in
+// another order), so the counted tag says nothing about that groom's strands.
+constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kOtherOffset = kRefusedOffset + kMaxGrooms * 4;
+constexpr uint32_t kCountBytes = kOtherOffset + kMaxGrooms * 4;
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;
@@ -74,14 +80,23 @@ inline bool soup_update_ok(bool captured, bool held, uint64_t soup_off, uint32_t
 // refused clone) keeps its cards in every pass (2026-11-03: the player's hair vanished: prepass hidden, the G-buffer
 // card then failed its EQUAL depth test).
 // GPU feedback (shaders/rt/hair_primary_count.hlsl): the strand pixels of each groom in a frame whose G-buffer variant
-// ran for it. kStrikes such frames in a row with no strand pixel at all mark the draw failed for the session: its cards
-// stay (the strands are not where the cards are: wrong groom, wrong frame, or a ray bug), logged once.
+// ran for it. kStrikes such frames in a row with no strand pixel at all retire the draw: its cards come back (the
+// strands are not where the cards are: wrong groom, wrong frame, or a ray bug), logged. Not for the session: a draw off
+// screen or behind another groom also has no strand pixel, so it is retried after kRetryFrames, doubled at each new
+// failure up to kRetryMaxFrames (hv5 2026-11-03: every draw of the counted frame struck at once, for good).
+// A counted frame whose strand pixels carry an adjacent frame's tag is no evidence (the G-buffer ran against another
+// publish), and the draws sharing one index-range key (two characters with the same hairstyle) are judged together.
 constexpr uint32_t kStrikes = 2;
+constexpr uint64_t kRetryFrames = 600, kRetryMaxFrames = 9600;
 struct SwapGate {
-  std::unordered_set<uint64_t> published, published_prev, gbuffer_now, gbuffer_prev, failed;
+  struct Retired { uint64_t until = 0, wait = 0; };
+  std::unordered_set<uint64_t> published, published_prev, gbuffer_now, gbuffer_prev;
+  std::unordered_map<uint64_t, Retired> failed;
   std::unordered_map<uint64_t, uint32_t> strikes;
+  uint64_t now = 0;   // the frame of the last publish (retirements count from it)
   // A build published its groom set (once per frame, after the prepass).
-  void publish(const uint64_t* keys, uint32_t n) {
+  void publish(const uint64_t* keys, uint32_t n, uint64_t frame = 0) {
+    now = frame ? frame : now + 1;
     published_prev.swap(published);
     published.clear();
     for (uint32_t i = 0; i < n; ++i)
@@ -89,25 +104,74 @@ struct SwapGate {
     gbuffer_prev.swap(gbuffer_now);
     gbuffer_now.clear();
   }
-  // A device or scene reset: the published sets go, the failed draws stay failed.
+  // A device or scene reset: the published sets go, retired draws stay retired until their retry frame.
   void clear() { published.clear(); published_prev.clear(); gbuffer_now.clear(); gbuffer_prev.clear(); strikes.clear(); }
-  bool groom_stable(uint64_t key) const { return published.count(key) && published_prev.count(key) && !failed.count(key); }
+  bool retired(uint64_t key) const {
+    const auto it = failed.find(key);
+    return it != failed.end() && now < it->second.until;
+  }
+  bool groom_stable(uint64_t key) const { return published.count(key) && published_prev.count(key) && !retired(key); }
   bool allow_gbuffer(uint64_t key) const { return groom_stable(key); }
   bool allow_prepass(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }
   bool allow_velocity(uint64_t key) const { return groom_stable(key) && gbuffer_prev.count(key); }
   void gbuffer_drew(uint64_t key) { gbuffer_now.insert(key); }
-  // One counted frame of `key`: drew = its G-buffer variant ran that frame. True when it just failed.
-  bool feedback(uint64_t key, bool drew, uint32_t pixels) {
-    if (!key || !drew || failed.count(key)) return false;
+  // One counted frame of `key`: drew = its G-buffer variant ran that frame; pixels with the counted tag, other with
+  // an adjacent frame's. True when it just got retired.
+  bool feedback(uint64_t key, bool drew, uint32_t pixels, uint32_t other = 0) {
+    if (!key || !drew || retired(key)) return false;
     if (pixels) {
       strikes.erase(key);
       return false;
     }
+    if (other) return false;   // the frame is misaligned: no evidence either way
     if (++strikes[key] < kStrikes) return false;
-    failed.insert(key);
+    strikes.erase(key);
+    Retired& r = failed[key];
+    r.wait = r.wait ? (r.wait * 2 < kRetryMaxFrames ? r.wait * 2 : kRetryMaxFrames) : kRetryFrames;
+    r.until = now + r.wait;
     return true;
   }
+  // A whole counted frame: per groom k its key, whether its draw ran the variant, its pixels with the counted tag and
+  // with an adjacent tag. Grooms sharing a key are summed first. Returns the keys retired by this frame.
+  std::vector<uint64_t> feedback_frame(const uint64_t* keys, const bool* drew, const uint32_t* pixels, const uint32_t* other,
+                                       uint32_t n) {
+    std::vector<uint64_t> order, out;
+    std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> sum;   // key -> (pixels, other)
+    std::unordered_set<uint64_t> ran;
+    for (uint32_t k = 0; k < n; ++k) {
+      if (!keys[k]) continue;
+      if (!sum.count(keys[k])) order.push_back(keys[k]);
+      auto& s = sum[keys[k]];
+      s.first += pixels[k];
+      s.second += other[k];
+      if (drew[k]) ran.insert(keys[k]);
+    }
+    for (uint64_t key : order) {
+      const auto& s = sum[key];
+      if (feedback(key, ran.count(key) != 0, uint32_t(s.first > 0xFFFFFFFFull ? 0xFFFFFFFFull : s.first),
+                   uint32_t(s.second > 0xFFFFFFFFull ? 0xFFFFFFFFull : s.second)))
+        out.push_back(key);
+    }
+    return out;
+  }
 };
+
+// rt_hair_groom_primary_order: the header is written in the G-buffer's own command buffer, right before its render
+// pass, instead of in the prepass's (where the groom build is recorded). The game may submit the two in either order;
+// the G-buffer then read an adjacent frame's header (hv5 2026-11-03: every groom struck at once). The header applied
+// is the newest staged publish whose build is ordered before the G-buffer on the GPU: recorded earlier in the same
+// command buffer, or in a command buffer already submitted (one queue). None: no strand swap this frame (fail closed).
+struct Staged { uint32_t tag = 0; uint64_t rec = 0; uint64_t cmd = 0; };
+template <class Submitted>
+inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submitted submitted) {
+  int best = -1;
+  for (int i = 0; i < n; ++i) {
+    const Staged& s = staged[i];
+    if (!s.tag || !(s.cmd == gbuffer_cmd || submitted(s.rec))) continue;
+    if (best < 0 || s.tag > staged[best].tag) best = i;
+  }
+  return best;
+}
 
 // Level loads (and resolution changes) recreate the game's G-buffer images. At such a boundary every published groom,
 // G-buffer proof and feedback is dropped and no draw is swapped for kLoadQuietFrames frames: the scene's draws,
