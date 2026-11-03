@@ -564,6 +564,7 @@ uint32_t pan_target = PanBurstSamples::raw_frames;
 uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
 bool pan_finished = true, pan_invalid = false;
 bool pan_water_mode=false, pan_water_debug=false;
+bool pan_edge_mode=false;
 int pan_delay_serial=0;
 uint64_t pan_request_ms=0;
 std::string pan_dir;
@@ -577,6 +578,13 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   uint64_t now = frame_index();
   const int serial = cfg_hot(CfgHot::pan_capture);
   const bool water_mode=cfg_int("pan_water",0)!=0;
+  const bool edge_mode=cfg_int("pan_edge",0)!=0;
+  if (edge_mode && (water_mode || r->width > (std::strcmp(name,"final")==0 ? 3840u : 2560u) ||
+                    r->height > (std::strcmp(name,"final")==0 ? 1600u : 1067u))) {
+    pan_invalid=true; log("[pan] edge capture REFUSED: incompatible mode or extent budget"); return false;
+  }
+  if (edge_mode && std::strcmp(name,"depth")!=0 && std::strcmp(name,"final")!=0 &&
+      std::strcmp(name,"material")!=0 && std::strcmp(name,"albedo")!=0) return false;
   if (water_mode && std::strcmp(name,"depth")!=0 && std::strncmp(name,"water_",6)!=0) return false;
   if (water_mode && uint64_t(r->width)*r->height > uint64_t(2560)*1440) {
     if (!pan_invalid) log("[pan] water capture REFUSED: render exceeds 2560x1440 pixel budget");
@@ -589,11 +597,12 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
       if (GetTickCount64()-pan_request_ms < uint64_t((std::max)(0,cfg_int("pan_delay_ms",0)))) return false;
       pan_serial = serial;
       pan_water_mode=water_mode;
+      pan_edge_mode=edge_mode;
       pan_water_debug=water_mode && cfg_int("rt_debug",0)==25;
       pan_frames = 0;
       // Native tonemap (even without pan_inputs) can precede depth on another
       // thread. Omit one explicit warmup, then require 16 complete frames.
-      pan_target = water_mode ? uint32_t((std::max)(2,(std::min)(16,cfg_int("pan_water_frames",8))))+1 : PanBurstSamples::raw_frames;
+      pan_target = edge_mode ? 9 : water_mode ? uint32_t((std::max)(2,(std::min)(16,cfg_int("pan_water_frames",8))))+1 : PanBurstSamples::raw_frames;
       pan_bytes = 0;
       pan_first = now;
       pan_finished = pan_invalid = false;
@@ -620,6 +629,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   const bool is_final = std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
                         std::strncmp(name, "fg_", 3) == 0 || std::strncmp(name,"water_",6)==0;
   if (pan_finished || !pan_frames || now < pan_first || (!is_final && now > pan_last)) return false;
+  if (edge_mode && (now<=pan_first || !EdgePanSamples::wanted(name,now-pan_first))) return false;
   PanSample p;
   p.name = name;
   p.image = r->image;
@@ -669,7 +679,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   }
   pan_bytes += bytes;
   pan_samples.push_back(std::move(p));
-  if (std::strcmp(name, "depth") == 0) {
+  if (!edge_mode && std::strcmp(name, "depth") == 0) {
     VkBuffer source = rt_scene_pose();
     if (source) {
       PanSample pose;
@@ -752,10 +762,13 @@ void pan_on_present(VkQueue queue) {
   for(const auto& p:pan_samples)completeness.add(p.recorded,p.name,p.recording);
   WaterPanSamples water_complete{pan_first,pan_target-1,pan_water_debug};
   for(const auto& p:pan_samples)water_complete.add(p.recorded,p.name,p.recording);
-  if(pan_water_mode ? !water_complete.complete() : !completeness.complete())pan_invalid=true;
+  EdgePanSamples edge_complete{pan_first};
+  for(const auto& p:pan_samples)edge_complete.add(p.recorded,p.name,p.recording);
+  if(pan_edge_mode ? !edge_complete.complete() : pan_water_mode ? !water_complete.complete() : !completeness.complete())pan_invalid=true;
   make_dirs(pan_dir);
   std::string manifest = "{\"version\":2,\"serial\":" + std::to_string(pan_serial) +
       ",\"K\":"+std::to_string(pan_target-1)+",\"raw_record_frames\":"+std::to_string(pan_target)+",\"water_only\":"+(pan_water_mode?"true":"false")+",\"omitted_warmup_record_frame\":"+std::to_string(pan_first)+
+      ",\"edge_only\":"+(pan_edge_mode?"true":"false")+",\"sample_stride\":"+(pan_edge_mode?"2":"1")+
       ",\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
   bool first = true;
   unsigned ordinal = 0;
@@ -770,7 +783,19 @@ void pan_on_present(VkQueue queue) {
     void* ptr = nullptr;
     bool saved = p.submitted != UINT64_MAX && dd->vk.MapMemory(dd->device, d.memory, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS;
     if (saved) {
-      if(pan_water_mode && p.coverage) {
+      if(pan_edge_mode) {
+        // Same nearest half-size grid as fg_snap, without filtering thin edges.
+        const uint32_t w=d.w/2,h=d.h/2;
+        if(!w || !h || d.texel!=4) { saved=false; pan_invalid=true; }
+        else {
+          std::vector<uint8_t> packed(size_t(w)*h*d.texel);
+          const auto* src=static_cast<const uint8_t*>(ptr);
+          for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)
+            std::memcpy(packed.data()+(size_t(y)*w+x)*d.texel,src+(size_t(y*2)*d.w+x*2)*d.texel,d.texel);
+          write_file(pan_dir+"\\"+file,packed.data(),packed.size());
+          d.w=w;d.h=h;
+        }
+      } else if(pan_water_mode && p.coverage) {
         // Exact FS written marker before the compose consumes it, packed to R8_UINT.
         std::vector<uint8_t> cls(size_t(d.w)*d.h);
         const auto* values=static_cast<const uint32_t*>(ptr);

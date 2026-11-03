@@ -25,7 +25,7 @@ NOHAIR_START = "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_
 BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,"
             "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,"
             "dump_png_width=768,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
-            "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,"
+            "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_omm_dyn=0,rt_vt_alpha_masks=0,rt_alpha_fine_lod=0,"
             "rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
             "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,"
             "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_owners=31,ls_noshadow=1,gi_ao=1.0")
@@ -226,6 +226,9 @@ _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters
               ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0")),
               ("occ", dict(rt_occ_stats="1")), ("occhair", dict(ORIGIN, rt_occ_stats="1")),
               ("occnocasc", dict(rt_occ_stats="1", rt_cascade_casters="0")),
+              # Match diag-occ-frames-casc0 exactly: stats/primary ON warm different pipelines.
+              ("occframesnocasc", dict(rt_occ_stats="1", rt_occ_stats_frames="4", rt_cascade_casters="0",
+                                        rt_stats="0", rt_primary_check="0")),
               ("boxold", dict(rt_occ_stats="1", ls_box_cascade_old="1"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
 warm_plan.append(step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"))

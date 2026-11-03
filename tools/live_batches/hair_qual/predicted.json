@@ -51,6 +51,23 @@
   "jobs": [
    "hq1-s8-water-fg2",
    "hq2-dialogue1-fg2"
-  ]
+  ],
+  "status": "REJECTED as equivalent, 2026-11-03: character energy +9..20%. Historical prediction only; current jobs leave cull off."
+ },
+ "_hair_cost2": {
+  "status": "OFFLINE CANDIDATE; user requires no commit; no live authorization",
+  "observed": "2026-11-03 05:39-06:00: hair minus cards rt +2.3/+2.8/+4.5 ms, GI +3.4/+4.0/+6.9 ms (S8/Dialogue1/Dialogue2). GI cull saves 1.2-2.3 ms but brightens character pixels +9..20%: rejected. Dialogue3 hit 2047 MB pool at 06:00:14, 59/60 scene skips; 10562 per-draw refits in one build.",
+  "keys": {
+   "rt_hair_pool_trim": "Release inactive snapshots after hold horizon instead of BLAS cache lifetime, retain GPU deferred retirement. No ray count or coverage change; expect less stale pool storage, no promised scene memory percentage. Dialogue3 must have zero pool-full and scene skips. Compact eligible ordinary held snapshots 88 to 24 bytes/vertex (-72.727% payload; 264 to 72 bytes/triangle), preserve native Hair/Tileset/unknown. One 64-thread group/draw, one 2D dispatch, 16 B metadata/draw in retired matrix ring. Copy traffic88-byte read + 88-byte write becomes 24-byte read + 24-byte write per vertex, no ray-count change. Gate positive hold-pack jobs/bytes and zero unavailable builds in every ON window. Judge mesh-cache used MB, not retained pool reservation. Native startup is 88 versus the existing 64-byte Ultra capture (+37.5%); 88/24 is the minimal-layout ratio, not the measured Ultra hair-off ratio.",
+   "rt_hair_cheap": "One mask sample instead of noise plus two mask samples on physical non-primary candidates: two fewer texture samples per evaluated candidate. Rays unchanged. Energy equivalence unproven. Dedicated hit-AO rays accept the first hit; joint GI/AO radiance rays retain closest search. Same ray count, unmeasured candidate savings. Distance-weighted AO can change when first hit is not nearest: energy gate is mandatory.",
+   "rt_hair_gi_mean": "Precompute empirical full-material UV/strand-direction mean after alpha commit: 64 UV points x 3 texture reads = 192 texture samples, 512 hard coverage decisions per hair draw per scene; +4 bytes/draw storage. Each GI bounce candidate then uses one stored probability and Bernoulli acceptance, saving 3 texture samples and strand-coverage evaluation; same ray count, physical triangle intersection remains. Approximation can bias energy; not a pass.",
+   "rt_hair_visibility": "Verified static unpulled Hair VS subset only: full CPU mapped position/index scan plus analytic bounded wind. Reject STORAGE/TRANSFER_DST/XFB source authority; unknown/instanced/Pubes/pulled stays native. Keep near bounds inside max(gi_rt_radius, enabled gi_far_m), or projected width OR height >1 render pixel including FP32 envelope. Only distant subpixel hair draws keep ordinary cards: zero native records/procedural primitives and native coverage samples for those draws, ordinary card traversal remains. This is per-draw, not whole-character bounds. No positive savings predicted without eligible/cards counters; all unknown is a null result, not a pass."
+  },
+  "comparison": "Independent OFF/ON/OFF for each key with native hair on, S8 and Dialogue1-3. OFF = full hair, all cost keys off; old GI cull stays off. Also same-run cards baseline and combined candidates.",
+  "cost": "Report rt passes and gi GPU ms separately, diagnostics off. Native-hair total incremental cost must be <1 ms against cards. Savings alone do not qualify. Include scene-build total GPU ms as well: the empirical-mean dispatch is precompute outside lighting RT/GI timings. Never hide precompute behind reduced GI time.",
+  "energy": "Float pre-post character pixels and whole frame equal full-hair OFF within measured OFF-repeat noise. Lower residual with lower energy fails.",
+  "validity": "Own-frame scene, no timeout/pool-full/background build/invalid hair bounds in every measured window. No offline builds or compiles during future live cost windows.",
+  "task3": "Conservative mapped static-draw subset implemented; broad character/instanced/GPU-pulled coverage remains open. Log evaluated/eligible/selected/cards/unknown and disclose zero eligible draws.",
+  "timing": "Shared configuration generation clears GPU timing buckets and rejects delayed query results on every hair-key toggle, including OFF/ON/OFF cycles. 300-frame averages must contain a single state; scene-build totals include mean precompute."
  }
 }

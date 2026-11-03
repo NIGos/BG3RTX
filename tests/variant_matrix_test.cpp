@@ -40,10 +40,9 @@ static unsigned key_flags(const std::string& k) {
   return 0;
 }
 
-// The skips that exist today (2026-11-02). Water's compose/reflect requests have no OMM or tileset
-// variant; the requests compile (see --requests), routing them is the fix. Native scalp/hair (and the
-// hair origin, which only needs the scalp defines on water) are routed since 2026-11-02.
-static const char* const kExpectedWaterSkips[] = {"rt_omm", "rt_native_tileset"};
+// Water traces the OMM reference tuple (ordinary shaders with the host superset
+// AlphaDSL). Tileset remains unsupported; scalp/hair are routed since 2026-11-02.
+static const char* const kExpectedWaterSkips[] = {"rt_native_tileset"};
 
 int main(int argc, char** argv) {
   CHECK(argc >= 2);

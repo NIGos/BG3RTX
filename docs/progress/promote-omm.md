@@ -1,0 +1,15 @@
+## Qualified OMM and caster capacity (branch promote-omm, OFFLINE_VERIFIED (live pending), 2026-11-03)
+- Ultra: rt_omm=1, rt_omm_dyn=1, rt_vt_alpha_masks=1, rt_alpha_fine_lod=1; rt_omm_reference=0.
+- High/lower and base defaults unchanged; no rule requires High promotion. GUI OMM/masks are qualified Advanced options.
+- om3 qualified fine LOD earlier; om4 camp 08:10 compared 1.17G rays, 0 not compared, 0 violations.
+- RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms: about -1 ms. Bake/cache budgets unchanged.
+- Caster policy: retain capacity through zero-demand windows; shrink only after 24 active smaller samples.
+- No finite inactivity timeout guarantees return; the VRAM guard still caps/refuses growth, retaining existing allocations.
+- ds0 warms caster-off pipelines; om4 warms the box OMM variant and gives diagnostics a complete window.
+- smoke_ultra uses promoted Ultra, retaining capture/VRAM/scene/water/cost gates and a separate OMM check.
+- Ultra integration caught the OMM/water skip; water now traces a safely pinned reference tuple, without new variants.
+- PASS: all 3 batch dryruns; defaults generator/check, schema regeneration and settings test (2880 checks).
+- PASS: elastic capacity policy (1728 checks); shader pp-diff main (232 identical inputs, 0 compiles), request delta 0.
+- PASS: full build (9 s), all 130/130 CTests (103.36 s), git diff --check; water compose 615566 checks.
+- Check in game later: Ultra after restart at Campsite - 27h; stable cutout foliage and returning roof shadows.
+- No game launched or Git metadata changed; post-fix live confirmation remains separate.

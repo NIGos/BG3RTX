@@ -1,8 +1,22 @@
 # Release defaults review — 2026-11-02
 
-Stage 6, documentation and proposed diff only. Reviewed branch `codex-release-defaults`,
+Original Stage 6 review, followed by the 2026-11-03 OMM promotion update below. Reviewed branch `codex-release-defaults`,
 HEAD `855c99d`. No INI, code, preset, Git metadata or shared asset was changed. No build,
 CMake, CTest, DXC, package operation or game was run. Shader request delta: **0**.
+
+## OMM promotion update (2026-11-03)
+
+User-confirmed om3/om4 qualification supersedes this review's original OMM hold.
+om4 camp, 08:10: 1.17G compared rays, 0 not compared, 0 violations; RT passes
+8.65-8.75 ms versus reference 9.37-10.08 ms (about -1 ms).
+Ultra enables `rt_omm`, `rt_omm_dyn`, `rt_vt_alpha_masks`, `rt_alpha_fine_lod`;
+`rt_omm_reference=0`, bake budget 131072 triangles/build, cache cap 256 MB.
+The qualified Opacity micromaps and Offline cutout masks controls are normal
+Advanced options, per the decision to hide OMM only until qualified.
+High/lower and base INIs remain unchanged; there is no rule extending this
+promotion to High. Hardware support and masks generated on the player's PC
+remain prerequisites. Combined Ultra smoke and memory qualification are separate
+checks, not implied by the camp speedup. Shader request delta: 0.
 
 ## Recommendation and load order
 
@@ -30,7 +44,7 @@ the later GUI override correctly. Explicit user overrides can still change these
 Release means the assembled package base, before a user preset. Ultra means that base
 with the current Ultra preset expanded, with no explicit user overrides. Repository is
 the checked-in `bg3rtx.ini`. Numeric spellings such as `1` and `1.0` are equivalent.
-The table includes every key differing between release and either comparison: **22 keys**.
+The table includes every key differing between release and either comparison: **26 keys**.
 All other keys agree. The only release-versus-repository value changes are `dev` and
 `dump_shaders`; the other 43 release entries pin values already zero in the repository.
 Preset choices, sliders and `kPresetExtra` were included, not just explicit release entries.
@@ -42,6 +56,10 @@ Preset choices, sliders and `kPresetExtra` were included, not just explicit rele
 | `fps_cap` | 0 | 58 | 0 | Ultra's rendered cap, 116 displayed with FG 2x. Correct; no cap in package base. |
 | `gi_rr_rays` | 1 | 2 | 1 | Ultra uses two GI rays. Keep: one-ray energy passed, but flicker null did not qualify a reduction. |
 | `rf_max_rough` | 0.6 | 0.8 | 0.6 | Ultra traces rougher reflections. Deliberate preset difference. |
+| `rt_omm` | 0 | 1 | 0 | Qualified om4 backend; restart and supported hardware required. |
+| `rt_omm_dyn` | 0 | 1 | 0 | Qualified dynamic mask bake; 256 MB cache cap. |
+| `rt_vt_alpha_masks` | 0 | 1 | 0 | Qualified locally generated cutout-mask source. |
+| `rt_alpha_fine_lod` | 0 | 1 | 0 | om3-qualified fine-LOD policy required by om4. |
 | `rt_cascade_casters` | 0 | 1 | 0 | Qualified roof casters in Ultra; base avoids its cost. Keep. |
 | `rt_rebuild_frames` | 60 | 600 | 60 | Ultra internal pacing for per-draw BLAS; static meshes are cached. Keep. |
 | `rt_hit_material` | 0 | 1 | 0 | Ultra's qualified hidden-surface material bundle. Keep base off. |
@@ -71,13 +89,13 @@ its release override does not grant promotion. Measured cost was +0.32 ms S6 / +
 Likewise `rf_hit_shade=0` and `rf_hit_gi=0` agree everywhere: + Reflections remains
 Experimental, with S8/S6/camp ratios 0.925/1.089/1.097 outside the accepted spread.
 
-### Today's keys: no promotion
+### Today's keys: qualified OMM promotion
 
 | Key or family | Reviewed default / Ultra | Release decision |
 |---|---|---|
-| `rt_vt_alpha_masks`, `rt_alpha_fine_lod` | 0 / 0 | Keep off. Catalogue availability is not a passed brightness gate; masks are generated on the player's PC, not shipped. |
-| `rt_omm`, `rt_omm_reference` | 0 / 0 | Keep off; reference is diagnostic. Forced-opaque upper bound is not OMM qualification. |
-| `rt_omm_dyn` and other incoming OMM switches | Not present at this HEAD; progress names dynamic bake awaiting om4 | Incoming keys must stay off. Do not infer enabled runtime OMM from catalogue coverage (~97%) or the 5.7–6.3 ms upper bound. |
+| `rt_vt_alpha_masks`, `rt_alpha_fine_lod` | 0 / 1 | Promote to Ultra after om3/om4; masks generated on the player's PC, not shipped. |
+| `rt_omm`, `rt_omm_reference` | 0 / 1; reference 0 / 0 | Promote backend to Ultra after om4; reference stays diagnostic and off. |
+| `rt_omm_dyn` | 0 / 1 | Promote the exact om4-tested dynamic bake; retain existing bake/cache budgets. |
 | `rt_hit_material_ip_grass` | 0 / 0 | Keep off: +1.9 ms, +1.5 GB for about +3 points share, per current progress. |
 | `rt_hit_material_generated` | 0 / 0 | Keep off: current progress records only +2.3 points camp; corrected bush/two-sided rerun is pending. |
 | `rt_water_rr_mv`, `rt_water_fg_mv`, `rt_water_glint_aa`, `rt_water_rf_edge`, `rt_water_rr_hitdist` | 0 / 0 | Remove failed experiments as below; retain zero until removal. |
@@ -111,8 +129,7 @@ qualified water chain; it is not one of these failed interventions.
 
 IP grass and generated rows are **not qualified**, but do not have the same removal
 verdict: generated rows have a concrete corrected rerun pending. Keep them off and out
-of the player GUI rather than claiming they are permanently rejected. OMM, VT masks,
-fine LOD and reprojection guards likewise remain pending. `gi_rr_rays=1` is not a null
+of the player GUI rather than claiming they are permanently rejected. OMM, VT masks and fine LOD are now qualified for Ultra; reprojection guards remain pending. `gi_rr_rays=1` is not a null
 key to delete: [rays-flicker-rerun](../progress/rays-flicker-rerun.md) passed energy
 (+0.11%, band 1.47%) but failed its OFF/OFF flicker control; Ultra remains 2 rays.
 
@@ -127,7 +144,7 @@ Developer-only controls must remain hidden with `dev=0`:
   raw dumps/failure injection, emissive overlap/logging, primary checks/epoch/identity/
   fade class, CPU timing, crash dumps, pan/replay/mesh captures, order/stability/capture/
   draw logs, SHaRC debug/stats/leak/fine checks, `ls_check`, and hit reference.
-- Raw A/B and attribution controls including `rt_omm_reference`, fine LOD, IP grass,
+- Raw A/B and attribution controls including `rt_omm_reference`, IP grass,
   generated rows, spec migration switches, GI guard switches and the five water
   experiments: no new player controls while unqualified. Existing automatic fixes
   (recycle/unlocked/lean hooks, scene wait, letterbox, pool alpha) stay automatic.
@@ -135,10 +152,10 @@ Developer-only controls must remain hidden with `dev=0`:
 `rt_mesh_audits=2`, `rt_em_calib=1` and sliced `rt_em_check_*` are correctness mechanisms,
 not failed debug features to strip. Keep player A/B `ab_hotkey=1`. Crash dumps remain
 off by the explicit user decision; a future report mode is separate work. Experimental
-Native coverage, hair origins, OMM, offline cutout masks and capture spill are currently
-visible by design, not developer-only knobs accidentally exposed. Do not silently
-hide qualified Advanced water, hidden shading, emission or far field. The five GUI
-audit decisions remain open; the referenced `GUI_AUDIT_20261102.md` is absent at this HEAD.
+Native coverage remains experimental; hair origins and capture spill stay developer-only.
+Qualified OMM and offline cutout masks are normal Advanced controls. Do not silently
+hide qualified Advanced water, hidden shading, emission or far field. The OMM GUI audit decision is applied by explicit user steering after qualification.
+Other unresolved audit decisions remain separate; `GUI_AUDIT_20261102.md` is absent at this HEAD.
 
 ## 3. VRAM risk by preset and card capacity
 

@@ -58,3 +58,13 @@ in REF and ON alike (`[rt] scene build GPU`). Energy: shot-on vs the shot-ref me
 Duration about 7.2 min (dry run estimate), disk about 0.26 GB (4 traces); delete the trace folders after reading.
 Offline check: `powershell -File tools\live_batches\omm_qual\dryrun.ps1 [-Out <scratch dir>]` (2026-11-02: all
 checks passed).
+
+2026-11-03 om4 preparation: `diag-warm-box-omm` (25 s, `ls_box=2`,
+`rt_stats=1`) warms the OMM box diagnostic variant before `diag-check`.
+Scene-wait logging is every 60 frames in both diagnostic windows, restored to
+120 in cost-ref-a; the 15 s check can produce a complete background line.
+The normal 12 ms wait budget is restored before cost. Plan: 152 s, 12 phases.
+
+After Ultra promotion, om1/om2 explicitly keep dynamic OMM, masks and fine LOD
+off; om3 keeps dynamic OMM off and switches only its original fine-LOD policy.
+These pins preserve the historical controls against the new Ultra defaults.

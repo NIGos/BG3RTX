@@ -27,7 +27,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+  "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120",
   "trace_at": [
    10
   ]
@@ -111,6 +111,36 @@
   ]
  },
  {
+  "label": "diag-warm-omm",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=1,rt_primary_check=0,ab_off=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60"
+ },
+ {
+  "label": "diag-omm",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 15,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 15,
+  "motion_end": 15,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=1,rt_primary_check=0,ab_off=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60"
+ },
+ {
   "label": "ab-off",
   "kind": "static",
   "speed": "static",
@@ -123,7 +153,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=1"
+  "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=1,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120"
  },
  {
   "label": "ab-on",

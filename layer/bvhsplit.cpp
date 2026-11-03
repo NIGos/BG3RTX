@@ -678,6 +678,8 @@ VkDescriptorSetLayout g_hair_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_hair_pl = VK_NULL_HANDLE;
 VkPipeline g_hair_pipe = VK_NULL_HANDLE;
 uint64_t g_hair_gen = 0;
+VkPipeline g_hold_pack_pipe = VK_NULL_HANDLE;
+uint64_t g_hold_pack_gen = 0;
 
 // ---- statistics (logged every rt_timing_frames builds) ----
 struct Stats {
@@ -686,6 +688,7 @@ struct Stats {
   uint64_t lost_magic = 0, lost_timeout = 0, lost_logged = 0;
   uint64_t evict_destroy = 0, evict_write = 0, evict_lru = 0, compactions = 0, compact_saved = 0;
   uint64_t dyn_refit = 0, dyn_rebuild = 0, dyn_new = 0, budget_deferred = 0, tlas_refit = 0;
+  uint64_t hold_pack_jobs = 0, hold_pack_bytes = 0, hold_copy_jobs = 0, hold_copy_bytes = 0, hold_pack_unavailable = 0;
   uint64_t not_inst_pattern = 0, not_inst_stream = 0, not_inst_count = 0;
   uint64_t fix_applied = 0, fix_late = 0, fix_bad = 0, fix_stale = 0;
   float err_max_ok = 0;
@@ -772,6 +775,28 @@ bool ensure_hair_pipeline() {
   VkPipeline pipe{};const auto result=vk.CreateComputePipelines(g_dd->device,VK_NULL_HANDLE,1,&ci,nullptr,&pipe);
   vk.DestroyShaderModule(g_dd->device,module,nullptr);if(result!=VK_SUCCESS)return false;
   defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_pipe));g_hair_pipe=pipe;g_hair_gen=blob.generation;return true;
+}
+
+bool ensure_hold_pack_pipeline() {
+  if (!ensure_hair_pipeline()) return false;
+  Bg3ShaderBlob blob{};
+  if (!shader_get("rt/hold_pack.hlsl", "main", "cs_6_6", &blob)) return false;
+  if (g_hold_pack_pipe && g_hold_pack_gen == blob.generation) return true;
+  auto& vk = g_dd->vk;
+  VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
+  VkShaderModule module{};
+  if (vk.CreateShaderModule(g_dd->device, &mi, nullptr, &module) != VK_SUCCESS) return false;
+  VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"};
+  ci.layout = g_hair_pl;
+  VkPipeline pipeline{};
+  const auto result = vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &pipeline);
+  vk.DestroyShaderModule(g_dd->device, module, nullptr);
+  if (result != VK_SUCCESS) return false;
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_hold_pack_pipe));
+  g_hold_pack_pipe = pipeline; g_hold_pack_gen = blob.generation;
+  return true;
 }
 
 
@@ -1719,6 +1744,8 @@ void bvh_device_destroyed(DeviceData* dd) {
   defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_compact_qp));
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_pipe));
   defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_pipe));
+  defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hold_pack_pipe));
+  g_hold_pack_pipe=VK_NULL_HANDLE;g_hold_pack_gen=0;
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_hair_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hair_dsl));
   g_hair_pipe=VK_NULL_HANDLE;g_hair_pl=VK_NULL_HANDLE;g_hair_dsl=VK_NULL_HANDLE;g_hair_gen=0;
@@ -1772,6 +1799,12 @@ bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_spl
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
+  static int held_visibility_policy = 0;
+  const int visibility_policy = geo_native_hair_enabled() ? cfg_int("rt_hair_visibility",0) : 0;
+  if (visibility_policy != held_visibility_policy) {
+    ++g_hold_epoch;
+    held_visibility_policy = visibility_policy;
+  }
   const bool content_on = cfg_int("rt_mesh_content_id", 0) != 0;
   if (g_content_on) {
     if (g_content_captures == 2 || g_content_captures % 120 == 0 || !content_on)
@@ -1990,6 +2023,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
+  const bool compact_holds_requested = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 0) != 0 &&
+                                       hold_frames && !moving;
+  const bool compact_holds = compact_holds_requested && ensure_hold_pack_pipeline();
+  if (compact_holds_requested && !compact_holds) ++g_st.hold_pack_unavailable;
   if (moving || !hold_frames) {
     ++g_hold_epoch;
     for (auto& [key, s] : g_dyn) if (s.hold_size) {
@@ -2123,7 +2160,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // 2 stride, 3 not submitted / newer record, 4 epoch, 5 alpha record not restorable, 6 held.
       int why = 6;
       if (!s.hold_size) why = 1;
-      else if (s.hold_stride != stride) why = 2;
+      else if (s.hold_stride != stride && !(geo_native_hair_enabled() && s.hold_stride == 24u)) why = 2;
       else if (!(now > s.last_used && now - s.last_used <= hold_frames)) why = 0;
       else if (!(rec_submitted(s.hold_rec) && s.hold_rec == s.rec)) why = 3;
       else if (s.hold_epoch != g_hold_epoch) why = 4;
@@ -2150,7 +2187,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   for (uint32_t i : cached) n_static += g_draws[i].instances;
   const bool casc = cap.cascade_tris && cap.cascade_xfb && cap.cascade_stride >= 12;
   const uint32_t n_inst = n_static + uint32_t(dyn.size()) + (casc ? 1u : 0u);
-  if (!ensure_ring(n_inst + (g_groom_on ? kGroomMax : 0u), n_mats) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
+  if (!ensure_ring(n_inst + (g_groom_on ? kGroomMax : 0u), n_mats + (compact_holds ? uint32_t(dyn.size()) : 0u)) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
     g_failed = true;
     log("[bvh] allocation failed (%u instances); the split is off, the legacy build takes over", n_inst);
     return false;
@@ -2174,6 +2211,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool dyn_refit_ok = cfg_int("rt_dyn_refit", 1) != 0;
   struct HoldCopy { VkDeviceSize src, dst, bytes; };
   std::vector<HoldCopy> hold_copies;
+  std::vector<DynHoldPackJob> hold_pack_jobs;
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
                      uint64_t key; uint32_t card = UINT32_MAX; };
@@ -2236,12 +2274,21 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if(hair && !ensure_hair_pipeline()){
       log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
     }
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u){
+    // Mean mode needs four trailing bytes after the active AABBs. Key-off
+    // retains the original allocation sizes (the Vulkan AABB stride is 24).
+    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 4u : 0u;
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail){
       if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
       s.hair_bounds_size=0;
-      const VkDeviceSize bytes=VkDeviceSize(fd.prims+fd.prims/4u)*24u;
+      const VkDeviceSize bytes=VkDeviceSize(fd.prims+fd.prims/4u)*24u+hair_mean_tail;
       if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
       s.hair_bounds_size=bytes;
+    }
+    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
+      // A toggled-to-triangle slot can remain active indefinitely. Its old
+      // procedural sidecar otherwise never expires with the inactive slot LRU.
+      g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+      s.hair_bounds_off=0;s.hair_bounds_size=0;s.hair_push={};
     }
     // rt_omm_dyn: a masked record with a ready micro-map for this draw's identity gets it (a new identity is baked
     // this frame and used from a later one); the BLAS flags allow the instance flag to switch it off.
@@ -2431,19 +2478,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
     if (!g_pool_copy.target.b && hold_frames && !moving && fd.prims <= hold_max_prims) {
-      const VkDeviceSize bytes = VkDeviceSize(fd.prims) * tri_bytes;
-      if (s.hold_size && (s.hold_size != bytes || s.hold_stride != stride)) {
+      s.hold_has_alpha = fd.cap_alpha && fd.rec != kNone;
+      const bool material_ok = !s.hold_has_alpha || alpha_snapshot(fd.rec, &s.hold_alpha);
+      const uint32_t snapshot_stride = dyn_hold_stride(stride, compact_holds, s.hold_has_alpha, s.hold_alpha.rec.kind);
+      const VkDeviceSize bytes = VkDeviceSize(fd.prims) * 3u * snapshot_stride;
+      if (s.hold_size && (s.hold_size != bytes || s.hold_stride != snapshot_stride)) {
         g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         s.hold_size = 0;
       }
       s.hold_rec = 0;
-      s.hold_has_alpha = fd.cap_alpha && fd.rec != kNone;
-      const bool material_ok = !s.hold_has_alpha || alpha_snapshot(fd.rec, &s.hold_alpha);
-      if (material_ok && fd.soup_off + bytes <= cap.xfb_size &&
+      if (material_ok && dyn_hold_pack_range(fd.soup_off, uint64_t(fd.prims)*3u, stride, cap.xfb_size) &&
           (s.hold_size || pool_alloc(cmd, bytes, &s.hold_off))) {
-        s.hold_size = bytes; s.hold_stride = stride; s.hold_epoch = g_hold_epoch;
+        s.hold_size = bytes; s.hold_stride = snapshot_stride; s.hold_epoch = g_hold_epoch;
         s.hold_rec = rec;
-        hold_copies.push_back({fd.soup_off, s.hold_off, bytes});
+        if (snapshot_stride != stride)
+          hold_pack_jobs.push_back({uint32_t(fd.soup_off), uint32_t(s.hold_off), fd.prims*3u, stride});
+        else hold_copies.push_back({fd.soup_off, s.hold_off, bytes});
       }
     }
     refit ? ++g_st.dyn_refit : ++g_st.dyn_rebuild;
@@ -2568,7 +2618,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       groom_work[gw->second].card = n;
       groom_bit = kInfoGroomReplaced;
     }
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u) | groom_bit,
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), ((fd.held ? s.hold_stride : stride) & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u) | groom_bit,
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);
@@ -2741,9 +2791,39 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // Conversion -> copy source; prior frame's shader reads -> snapshot writes.
     barrier(cmd, kCS | kXfer, kRW, kXfer, kRW);
     std::vector<VkBufferCopy> copies;
-    for (const HoldCopy& c : hold_copies) copies.push_back({c.src, c.dst, c.bytes});
+    for (const HoldCopy& c : hold_copies) {
+      copies.push_back({c.src, c.dst, c.bytes});
+      g_st.hold_copy_bytes += c.bytes;
+    }
+    g_st.hold_copy_jobs += hold_copies.size();
     dd->vk.CmdCopyBuffer(cmd, cap.xfb, g_pool.b, uint32_t(copies.size()), copies.data());
     barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS | kAS, kRW);
+  }
+  if (!hold_pack_jobs.empty()) {
+    // This retired scene slot owns the matrix ring tail. No per-draw dispatch,
+    // new metadata buffer, or host-visible shader atomics are needed.
+    const VkDeviceSize jobs_offset = rbase + g_mat_off + VkDeviceSize(n_mats)*48u;
+    const VkDeviceSize jobs_bytes = VkDeviceSize(hold_pack_jobs.size())*sizeof(DynHoldPackJob);
+    std::memcpy(g_ring.map + jobs_offset, hold_pack_jobs.data(), size_t(jobs_bytes));
+    barrier(cmd, kCS | kXfer | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
+            kCS, kRW);
+    const VkDescriptorBufferInfo buffers[3] = {{cap.xfb,0,cap.xfb_size},{g_pool.b,0,g_pool.size},
+                                             {g_ring.b,rbase+g_mat_off,VkDeviceSize(g_ring_mats)*48u}};
+    VkWriteDescriptorSet writes[3]{};
+    for (uint32_t i=0;i<3;++i) {
+      writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}; writes[i].dstBinding=i;
+      writes[i].descriptorCount=1; writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      writes[i].pBufferInfo=buffers+i;
+    }
+    dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hold_pack_pipe);
+    dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hair_pl,0,3,writes);
+    const uint32_t count=uint32_t(hold_pack_jobs.size()), gx=(std::min)(count,65535u);
+    const uint32_t push[4]={n_mats*48u,count,gx,0};
+    dd->vk.CmdPushConstants(cmd,g_hair_pl,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),push);
+    dd->vk.CmdDispatch(cmd,gx,(count+gx-1u)/gx,1);
+    g_st.hold_pack_jobs += count;
+    for (const auto& job : hold_pack_jobs) g_st.hold_pack_bytes += uint64_t(job.vertices)*24u;
+    barrier(cmd,kCS,VK_ACCESS_SHADER_WRITE_BIT,kCS|kAS,kRW);
   }
   fault_checkpoint(cmd, kCkBvhConverted, uint32_t(rec));
   // rt_omm_dyn: bakes of new micro-maps from this frame's converted soup, then the per-triangle uv checks that
@@ -3162,7 +3242,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_MEMORY_READ_BIT);
   fault_checkpoint(cmd, kCkBvhTlas, uint32_t(rec));
-  stamp(cmd, 3);
+  // Include the gated post-alpha empirical-coverage dispatch in scene GPU cost.
+  if(!(geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0)))stamp(cmd, 3);
   const size_t batch_swaps = batch.swaps.size();
   if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));
 
@@ -3883,8 +3964,22 @@ void bvh_on_present() {
     if (!pending && g_chunks[g_relocating_chunk].ra.live) g_relocating_chunk = -1;
   }
   // Per-draw BLAS not seen for a while; the mesh cache over its memory budget (LRU).
+  // Native hair raises the whole capture's stride to 88, including ordinary
+  // dynamic draws. Their hold snapshots used to retain that larger payload for
+  // the BLAS cache's 120-frame lifetime, although no hold can use it after four
+  // absent frames by default. Trim ownership, then use the SAME deferred range
+  // retirement as eviction; no live TLAS or bounds read can see reused storage.
+  const bool hair_pool_trim = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 0) != 0;
+  const uint32_t hold_horizon = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   for (auto it = g_dyn.begin(); it != g_dyn.end();) {
-    if (now > it->second.last_used + 120) {
+    if (hair_pool_trim && it->second.hold_size && dyn_hold_expired(now, it->second.last_used, hold_horizon)) {
+      g_pending_free.push_back({now, -1, it->second.hold_off, it->second.hold_size});
+      it->second.hold_size = 0;
+      it->second.hold_rec = 0;
+      it->second.hold_has_alpha = false;
+      it->second.hold_alpha = {};
+    }
+    if (dyn_slot_expired(now, it->second.last_used, hold_horizon, hair_pool_trim, it->second.hair)) {
       as_destroy(it->second.as);
       if (it->second.hold_size)
         g_pending_free.push_back({now, -1, it->second.hold_off, it->second.hold_size});
@@ -3964,10 +4059,13 @@ void bvh_on_present() {
   }
   log("[bvh] last %llu builds, per build: %.1f cached draws -> %.0f static instances (%.3fM triangles), %.1f captured "
       "draws (%.3fM triangles; per-draw BLAS: %.1f refits, %.1f rebuilds, %.2f new); TLAS refit %.0f%%; not instanceable per build: "
-      "pattern %.1f, stream %.1f, count %.1f",
+      "pattern %.1f, stream %.1f, count %.1f; hold pack %llu jobs (%llu bytes), copy %llu jobs (%llu bytes), unavailable %llu builds",
       (unsigned long long)s.builds, s.cached_draws / nb, s.static_inst / nb, s.static_tris / nb * 1e-6, s.dyn_draws / nb,
       s.dyn_tris / nb * 1e-6, s.dyn_refit / nb, s.dyn_rebuild / nb, s.dyn_new / nb, 100.0 * s.tlas_refit / nb, s.not_inst_pattern / nb,
-      s.not_inst_stream / nb, s.not_inst_count / nb);
+      s.not_inst_stream / nb, s.not_inst_count / nb,
+      (unsigned long long)s.hold_pack_jobs, (unsigned long long)s.hold_pack_bytes,
+      (unsigned long long)s.hold_copy_jobs, (unsigned long long)s.hold_copy_bytes,
+      (unsigned long long)s.hold_pack_unavailable);
   size_t chunks = 0;
   VkDeviceSize live = 0;
   for (const AsChunk& c : g_chunks) {

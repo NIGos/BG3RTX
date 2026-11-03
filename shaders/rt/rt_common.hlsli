@@ -451,6 +451,30 @@ AlphaRead native_scalp_alpha(uint a, float2 uv, float g, uint tex,float3 positio
 #endif
 
 #ifdef RT_NATIVE_HAIR
+static bool gHairCameraQuery=false;
+static bool gHairAoQuery=false;
+#if defined(RT_GI_HAIR_CULL)
+static bool gHairGiBounceQuery = false;
+#define RT_HAIR_GI_MEAN_QUERY gHairGiBounceQuery
+#else
+#define RT_HAIR_GI_MEAN_QUERY false
+#endif
+#ifdef RT_HAIR_CHEAP_REFERENCE
+#define RT_HAIR_CHEAP_ON (RT_HAIR_CHEAP_REFERENCE != 0)
+#else
+[[vk::constant_id(1018)]] const uint kSpecHairCheap = 0u;
+#define RT_HAIR_CHEAP_ON (kSpecHairCheap != 0u)
+#endif
+#if defined(RT_GI_HAIR_CULL)
+#ifdef RT_HAIR_GI_MEAN_REFERENCE
+#define RT_HAIR_GI_MEAN_ON (RT_HAIR_GI_MEAN_REFERENCE != 0)
+#else
+[[vk::constant_id(1019)]] const uint kSpecHairGiMean = 0u;
+#define RT_HAIR_GI_MEAN_ON (kSpecHairGiMean != 0u)
+#endif
+#else
+#define RT_HAIR_GI_MEAN_ON false
+#endif
 struct NativeHairData { float3 n, t, b, p; float4 fade; float3 ray; bool valid, physical; };
 static NativeHairData gNativeHair;
 float hair_param(uint a,uint i) { return asfloat(gAlphaRec.Load(a+48u+4u*i)); }
@@ -460,32 +484,18 @@ float4 hair_sample(uint tex,float2 uv,float g) {
   float lod=clamp(log2(max(g*float(max(w,h)),1e-8)),0.0,float(levels)-1.0);
   return gAlphaTex[NonUniformResourceIndex(tex)].SampleLevel(gAlphaWrap,uv,lod);
 }
-struct HairMaterialSample {float4 mask;float height;bool ok;};
-HairMaterialSample hair_material(uint a,float2 uv,float g,uint mask_tex,uint noise_tex,bool evaluate_depth) {
-  HairMaterialSample r=(HairMaterialSample)0;
-  float ns=hair_param(a,2), shift=hair_param(a,3);
-  float2 nuv=uv*ns;
-  if(!all(isfinite(nuv)))return r;
-  float4 noise=hair_sample(noise_tex,nuv,g*abs(ns));
-  float2 duv=(mad(noise.x,2.0,-1.0)*shift).xx;
-  if(!all(isfinite(duv)) || !all(isfinite(uv+duv)))return r;
-  float4 ca=hair_sample(mask_tex,uv+duv,g), cb=hair_sample(mask_tex,uv,g);
-  if(!all(isfinite(noise)) || !all(isfinite(ca)) || !all(isfinite(cb)))return r;
-  float4 center=float4(0.5,0,0,0), x=ca-center, y=cb-center;
-  r.mask=mad(max(sign(x),sign(y)),max(abs(x),abs(y)),center);
-  bool camera=gAlphaRec.Load(a+20u)!=0u;
-  if(camera && evaluate_depth && (hair_param(a,4)!=0.0 || hair_param(a,5)!=0.0)) {
-    float width=saturate(hair_param(a,7));
-    float blend=smoothstep(mad(-width,0.5,hair_param(a,6)),mad(width,0.5,hair_param(a,6)),r.mask.z);
-    r.height=max((1.0-r.mask.y)*lerp(hair_param(a,4)*0.01,hair_param(a,5)*0.01,blend),0.0);
-  }
-  r.ok=all(isfinite(r.mask)) && isfinite(r.height);return r;
-}
+#include "hair_material.hlsli"
 AlphaRead native_hair_alpha(uint a,float2 uv,float g,uint mask_tex,uint noise_tex) {
   AlphaRead r=(AlphaRead)0;r.coarser=false;
   if(!gNativeHair.valid)return r;
   bool physical=g_rt_class==1u || gNativeHair.physical;
-  HairMaterialSample sample=hair_material(a,uv,g,mask_tex,noise_tex,!physical);
+  HairMaterialSample sample;
+  if(physical && !gHairCameraQuery && RT_HAIR_CHEAP_ON) {
+    // Secondary-only approximation; primary coverage and virtual depth unchanged.
+    sample=(HairMaterialSample)0;
+    sample.mask=hair_sample(mask_tex,uv,g);
+    sample.ok=all(isfinite(sample.mask));
+  } else sample=hair_material(a,uv,g,mask_tex,noise_tex,!physical);
   if(!sample.ok)return r;
   float4 mask=sample.mask;float thick=sample.height;
   bool camera=gAlphaRec.Load(a+20u)!=0u;
@@ -1243,7 +1253,6 @@ uint occ_kind_of(bool procedural, uint inst, uint id, uint geom, uint prim) {
 // primary/debug queries deliberately retain RT_QUERY_FLAGS.
 #if defined(RT_GI_HAIR_CULL) && defined(RT_NATIVE_HAIR)
 // Enabled only around the GI bounce query, never its hit-material AO rays.
-static bool gHairGiBounceQuery = false;
 #ifdef RT_HAIR_GI_CULL_REFERENCE
 #define RT_HAIR_GI_CULL_ON (RT_HAIR_GI_CULL_REFERENCE != 0)
 #else
@@ -1254,6 +1263,17 @@ static bool gHairGiBounceQuery = false;
 #else
 #define RT_CLOSEST_QUERY_FLAGS RT_QUERY_FLAGS
 #endif
+
+// Dedicated hit-AO rays need no radiance identity. The experimental cheap
+// mode ends them at the first accepted hit; the distance-weighted AO estimator
+// can change, so character energy must be qualified. Joint GI/AO bounce rays
+// still need their closest radiance hit and never take this shortcut.
+#ifdef RT_NATIVE_HAIR
+#define RT_HAIR_AO_FLAGS ((RT_HAIR_ON && RT_HAIR_CHEAP_ON && (gHairAoQuery || g_rt_pass==kRtPassAO)) ? RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH : 0u)
+#else
+#define RT_HAIR_AO_FLAGS 0u
+#endif
+#define RT_CLOSEST_AO_QUERY_FLAGS (RT_CLOSEST_QUERY_FLAGS | RT_HAIR_AO_FLAGS)
 
 // Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
 // alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
@@ -1747,10 +1767,10 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -2123,10 +2143,10 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_AO_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;

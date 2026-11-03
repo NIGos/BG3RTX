@@ -84,6 +84,12 @@ int main(int argc, char** argv) {
   CHECK(kOccStats != kHitPool2s);
   CHECK(kSpecIdOccStats == 1011);
   CHECK(kSpecIdHairGiCull == 1017);
+  CHECK(kSpecIdHairCheap == 1018 && kSpecIdHairGiMean == 1019);
+  std::set<unsigned> hair_slots;
+  for(unsigned base=0;base<512u;++base)for(unsigned cheap=0;cheap<2u;++cheap)for(unsigned mean=0;mean<2u;++mean){
+    const unsigned slot=base|(cheap?kHairCheapSlot:0u)|(mean?kHairGiMeanSlot:0u);
+    CHECK(slot<kPipelineSlots && hair_slots.insert(slot).second);
+  }
   // Every existing installed slot retains a distinct cull-on sibling; toggling
   // back addresses the original pipeline instead of destroying/rebuilding it.
   for (unsigned base = 0; base < kHairGiCullSlot; ++base) {

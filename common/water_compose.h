@@ -327,10 +327,13 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
   if (stash_frame == now) return LightingUse::kThisFrame;
   return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
 }
-// The hit path borrows lighting descriptor sets only within the exact frame/TLAS.
-// Failure selects ordinary composition; it must not skip water shadows or refraction.
-inline constexpr bool hit_shade_frame_ok(LightingUse use,bool same_tlas) {
-  return use==LightingUse::kThisFrame && same_tlas;
+// Borrowed lights, TLAS and camera must describe one lighting frame. The immediately
+// previous frame is usable only when compose shifts the ray into that frame's space.
+// Failure selects ordinary composition, preserving shadows and refraction.
+inline constexpr bool hit_shade_frame_ok(uint64_t lighting_frame, uint64_t now, bool same_tlas,
+                                         bool same_lights, bool shifted) {
+  return lighting_frame && same_tlas && same_lights &&
+      (lighting_frame == now || (shifted && now > lighting_frame && now - lighting_frame == 1));
 }
 inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
 
@@ -352,6 +355,20 @@ inline LightingRefusal lighting_refusal(uint64_t stash_frame, uint64_t now) {
 // take_newer() and keep_stash() are the host calls; take_newer is never called for a build older
 // than this frame (rt_scene_set would wait for this frame's scene on the game's recording thread).
 enum class ScenePick : uint32_t { kStash = 0, kNewer, kStashKept, kNone };
+
+// Water shaders do not consume OMM proof bindings. Resolve the immutable
+// baseline of the selected generation and register this recording's use.
+// The query's bool reports acceleration permission, NOT reference validity.
+// Missing/retired tuples must never fall back to the accelerated input handle.
+template<class Handle,class Query>
+bool reference_scene(Handle selected,uint64_t expected,Handle& reference,uint64_t& identity,Query query){
+  reference={};identity=expected;
+  if(selected!=Handle{})query(selected,&reference,&identity);
+  if(reference==Handle{} || !identity || (expected && identity!=expected)){
+    reference={};identity=0;return false;
+  }
+  return true;
+}
 template <class TakeNewer, class KeepStash>
 ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t built, uint64_t now, TakeNewer take_newer,
                      KeepStash keep_stash) {

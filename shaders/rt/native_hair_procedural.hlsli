@@ -1,8 +1,8 @@
 // Native camera-depth surface over the original88-byte Hair card. Included
 // only in capable variants, after alpha_eval, InstInfo and RtCone.
 #include "../../common/native_hair_math.h"
+#include "../../common/native_hair_probability.h"
 static const uint kInfoHairProcedural=1u<<12;
-static bool gHairCameraQuery=false;
 struct HairPrimitive {
   InstInfo info;uint a,prim;float3 p0,p1,p2,n,c,rx,ry,rz,rw;float4 translation;
   float2 u0,u1,u2;float hmax;bool camera,ortho,valid,inactive;
@@ -53,6 +53,24 @@ bool hair_virtual(HairPrimitive p,float3 base,float height,out float3 surface_po
 }
 bool hair_alpha(HairPrimitive p,float2 bary,float footprint,float3 ray,bool physical,out bool known){
  alpha_stat(0,true,p.prim);
+ #if defined(RT_GI_HAIR_CULL)
+ if(physical && RT_HAIR_GI_MEAN_ON && RT_HAIR_GI_MEAN_QUERY && (gAlphaRec.Load(12u)&0x80000000u)!=0u) {
+  if((alpha_flags()&8u)!=0u){known=true;return true;}
+  uint bytes;gMeshPool.GetDimensions(bytes);
+  uint offset=gAlphaRec.Load(p.a+192u);
+  if(offset<=bytes && p.info.tris<=(bytes-offset)/24u && bytes-offset-p.info.tris*24u>=4u) {
+   float probability=asfloat(gMeshPool.Load(offset+p.info.tris*24u));
+   if(isfinite(probability) && probability>=0.0 && probability<=1.0) {
+    // One stored probability bypasses coverage material/strand interpolation.
+    // Include direction and instance so separate cards and rays are not correlated.
+    uint3 h=pcg3d(uint3(asuint(bary.x)^asuint(ray.x),asuint(bary.y)^asuint(ray.y),
+                      p.prim^(p.a*0x85ebca6bu)^(pc.frame*0x9e3779b9u)^asuint(ray.z)));
+    known=true;bool solid=nh_bernoulli(probability,h.x>>8);
+    alpha_stat(8,solid,p.prim);alpha_stat(9,!solid,p.prim);return solid;
+   }
+  }
+ }
+ #endif
  hair_inputs(p.info.base,p.info.meta,p.prim,bary,ray,false,p.camera);
  gNativeHair.physical=physical;
  if((alpha_flags()&8u)!=0u){known=true;return true;}

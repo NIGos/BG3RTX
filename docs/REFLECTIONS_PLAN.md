@@ -77,8 +77,12 @@ world membership binding 31 within this capability and one preparation request (
 camera space. Screen projection still uses the current-space H. The capability histogram
 uses eager pure predicates so specialization matches the fixed-key reference without changing
 the tier counts. Compose flag 64 controls
-hit shading separately from shift flag 32. Borrowed descriptors still require exact frame/TLAS
-identity: earlier-lighting passes retain ordinary composition, never stale lighting sets.
+hit shading separately from shift flag 32. Borrowed descriptors require one consistent lighting frame: the TLAS/material identity,
+light list and camera must agree. Compose can shade with F-1 lighting only when
+rt_water_compose_shift moves the ray into that lighting camera space and shared
+forward light bindings match the stash. Older frames or identity mismatches retain
+the probe. Ordinary and hit-capable pipeline layouts and specialization pipelines
+are cached across 0/2 toggles; no shader request is added.
 
 Keep water's `C' = C + A L - B` equation. Never add `A L` without removing `B`, never apply E
 or exposure twice, and never rescale L to force the image mean. If `A L == B`, replacement is
