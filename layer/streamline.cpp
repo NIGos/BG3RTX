@@ -2383,20 +2383,6 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
         dview = copied ? g_preserved_depth.view : g_depth_only_view;
         ld = copied ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : layout_of(d.image, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         lm = layout_of(m.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        // rt_water_fg_mv: the core's vectors (the game's with the water surface's parallax on the water pixels,
-        // core/water.cpp water_mv, double-buffered there) instead of the game's, at the same size and format.
-        if (cfg_int("rt_water_fg_mv", 0)) {
-          Img cm{};
-          static bool said = false;
-          if (ngx_core_motion_vectors(&cm.image, &cm.view, &cm.format, &cm.w, &cm.h) && cm.w == m.w && cm.h == m.h &&
-              cm.format == m.format) {
-            cm.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-            cm.seen = m.seen;
-            m = cm;
-            lm = VK_IMAGE_LAYOUT_GENERAL;
-            if (!said) said = true, log("[sl] DLSS-G gets the core's motion vectors (rt_water_fg_mv), %ux%u", cm.w, cm.h);
-          }
-        }
         lh = layout_of(h.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         lu = layout_of(u.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         input_layouts[0]=ld; input_layouts[1]=lm; input_layouts[2]=lh; input_layouts[3]=lu;
