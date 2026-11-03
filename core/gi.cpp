@@ -23,6 +23,9 @@
 #include <mutex>
 #include "../common/native_hair_origin.h"
 #include "../common/shader_variant.h"
+#include "../common/pipeline_async.h"
+#include "../common/pipeline_specs.h"
+#include <chrono>
 #include "../common/ls_exact_k.h"
 #include "../common/occ_stats.h"
 #include "../common/native_hit_capability.h"
@@ -98,6 +101,55 @@ struct Pipe {
   uint64_t variant_generations[256] = {};
   std::string variant_files[256];
 };
+
+// Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
+// gi_release (before FreeLibrary: never from the DLL's static destructors).
+extern "C" __declspec(dllimport) void* __stdcall GetCurrentThread();
+extern "C" __declspec(dllimport) int __stdcall SetThreadPriority(void* thread, int priority);
+bg3::pipe_async::Builds g_builds(
+    2, [](const bg3::pipe_async::Result& r) { host->defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
+    [] { SetThreadPriority(GetCurrentThread(), -1); });   // THREAD_PRIORITY_BELOW_NORMAL
+// A pipeline layout a background build may still read is destroyed once none does.
+void defer_layout_destroy(uint64_t layout) {
+  if (!layout) return;
+  g_builds.park(layout, [layout] { host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, layout); });
+}
+// On a worker: the SPIR-V (the layer's cache or DXC) and the compute pipeline of `req` for `layout`.
+using bg3::pipe_async::PipelineSpecs;
+bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& specs) {
+  bg3::pipe_async::Result r{};
+  Bg3ShaderBlob blob{};
+  if (!host->get_shader(req.c_str(), entry.c_str(), "cs_6_6", &blob)) return r;
+  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  mci.codeSize = blob.size_bytes;
+  mci.pCode = blob.code;
+  // A real module: chaining VkShaderModuleCreateInfo with a null module needs
+  // maintenance5, which the game's device does not enable (VUID-...-stage-08771).
+  VkShaderModule mod = VK_NULL_HANDLE;
+  if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
+    host->log("gi: %s shader module creation failed", req.c_str());
+    return r;
+  }
+  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry.c_str(),
+               nullptr};
+  pci.layout = layout;
+  const VkSpecializationInfo info{specs.count, specs.entries, specs.count * sizeof(uint32_t), specs.data};
+  if (specs.count) pci.stage.pSpecializationInfo = &info;
+  VkPipeline np = VK_NULL_HANDLE;
+  const auto t_pipe = std::chrono::steady_clock::now();
+  const VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  r.pipeline_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
+  host->vk->DestroyShaderModule(host->device, mod, nullptr);
+  if (pr != VK_SUCCESS) {
+    host->log("gi: %s pipeline creation failed (%d)", req.c_str(), int(pr));
+    return r;
+  }
+  r.pipeline = uint64_t(np);
+  r.generation = blob.generation;
+  r.ok = true;
+  return r;
+}
 
 // Bound pipeline capability, including a first-frame capability publication race.
 std::unordered_set<VkPipeline> g_omm_pipelines;
@@ -329,7 +381,7 @@ void rf_gi_drop() {
     p = Pipe{};
   }
   for (VkPipelineLayout& l : g_rf_shade_gi_layout) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)l);
+    defer_layout_destroy(uint64_t(l));
     l = VK_NULL_HANDLE;
   }
 }
@@ -654,7 +706,7 @@ bool ensure_current_sun_layout(VkDescriptorSetLayout materials) {
   if(g_current_sun_layout && g_current_sun_host_layout==materials) return true;
   for(auto pipeline:g_rt_shadow_current.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(pipeline));
   g_rt_shadow_current=Pipe{};
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  defer_layout_destroy(uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;
   g_current_sun_host_layout=materials;
@@ -670,13 +722,13 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   if (!game || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_rf_layout) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf.pipeline);
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_layout);
+    defer_layout_destroy(uint64_t(g_rf_layout));
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
     g_rf = Pipe{};
     g_rf_layout = VK_NULL_HANDLE;
     g_rf_set_layout = VK_NULL_HANDLE;
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf_sharc.pipeline);
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
+    defer_layout_destroy(uint64_t(g_rf_sharc_layout));
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
     rf_gi_drop();
@@ -955,7 +1007,7 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
       host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
       *p = Pipe{};
     }
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+    defer_layout_destroy(uint64_t(g_ls_box_layout));
     g_ls_box_layout = VK_NULL_HANDLE;
     host->log("ls: the lighting's set 1 layout changed (%p -> %p); rebuilding the box-light pipelines",
               (void*)g_ls_box_game, (void*)game);
@@ -1050,78 +1102,68 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
   const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
   if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
-  // Never retain an ordinary shader on compilation failure with kind3 records.
-  // Some diagnostic callers intentionally ignore refresh's boolean result.
-  if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
-  Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == slot_key;
-  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == slot_key) {
-    p.pipeline = p.variants[variant]; p.generation = blob.generation;
-    return true;
-  }
-  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-  mci.codeSize = blob.size_bytes;
-  mci.pCode = blob.code;
-  // A real module: chaining VkShaderModuleCreateInfo with a null module needs
-  // maintenance5, which the game's device does not enable (VUID-...-stage-08771).
-  VkShaderModule mod = VK_NULL_HANDLE;
-  if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
-    host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.variant_files[variant] == slot_key;
-  }
-  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
-               nullptr};
-  pci.layout = layout ? layout : g_layout;
+  // A request never built in this slot compiles and creates its pipeline on a worker (common/pipeline_async.h):
+  // the pass skips until it is ready (never a pipeline of another request: kind3 records, other layouts).
+  // A built one asks the layer for its generation (in memory: no compile here; hot reload rebuilt it already)
+  // and a new generation is built in the background too, the current pipeline kept meanwhile.
+  const VkPipelineLayout lay = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
-  uint32_t spec_data[12];
-  VkSpecializationMapEntry spec_entries[12];
-  uint32_t n_spec = 0;
-  auto spec_add = [&](uint32_t id, uint32_t v) {
-    spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
-    spec_data[n_spec++] = v;
-  };
-  if (sv::occ_stats_entry(file)) spec_add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
-  if (sv::rf_hit_gi_entry(file)) spec_add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
-  if (spec_cascade) spec_add(sv::kSpecIdCascade, spec_value);
-  if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
-  if (sv::prev_radiance_entry(file)) spec_add(sv::kSpecIdPrevRadiance, prev_guard);
+  PipelineSpecs specs;
+  if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
+  if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
+  if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
+  if (sv::temporal_mv_entry(file)) specs.add(sv::kSpecIdTemporalMv, mv_sample);
+  if (sv::prev_radiance_entry(file)) specs.add(sv::kSpecIdPrevRadiance, prev_guard);
   if (hit_family) {
-    spec_add(sv::kSpecIdHitInstanced, instanced ? 1u : 0u);
-    spec_add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
-    spec_add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
+    specs.add(sv::kSpecIdHitInstanced, instanced ? 1u : 0u);
+    specs.add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
+    specs.add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
   }
   // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
   // value keeps its own slot and pipeline, as the cascade constant does.
-  if (sv::gi_far_entry(file)) spec_add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
   if (std::strncmp(file, "gi/", 3) == 0) {
-    spec_add(sv::kSpecIdTileset, tileset ? 1u : 0u);
-    spec_add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
-    if (bg3::hair_origin::alternate_entry(file)) spec_add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
+    specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
+    specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
+    if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
   }
-  const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
-  if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
-  VkPipeline np = VK_NULL_HANDLE;
-  const auto t_pipe = std::chrono::steady_clock::now();   // driver compile on this thread (logged below)
-  VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
-  const double pipe_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
-  host->vk->DestroyShaderModule(host->device, mod, nullptr);
-  if (pr != VK_SUCCESS) {
-    host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.variant_files[variant] == slot_key;
+  slot_key += specs.key();
+  const bool known = p.variants[variant] && p.variant_files[variant] == slot_key;
+  // Diagnostic callers may ignore the return value: never expose a different specialization while building.
+  p.pipeline = known ? p.variants[variant] : VK_NULL_HANDLE;
+  if (known) {
+    Bg3ShaderBlob blob{};
+    if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
+      p.pipeline = p.variants[variant];
+      return true;
+    }
+    if (p.variant_generations[variant] == blob.generation) {
+      p.pipeline = p.variants[variant]; p.generation = blob.generation;
+      return true;
+    }
+  }
+  bg3::pipe_async::Result r{};
+  const std::string key = slot_key + "|" + std::to_string(uint64_t(lay));
+  const auto st = g_builds.poll(key, uint64_t(lay), [req = selected, lay, specs] { return build_pipeline(req, "main", lay, specs); }, &r);
+  if (st == bg3::pipe_async::State::kStarted)
+    host->log("gi: %s building in the background (%s)", selected.c_str(),
+              known ? "hot reload: the current pipeline meanwhile" : "the pass waits");
+  if (st != bg3::pipe_async::State::kReady) {
+    if (known) p.pipeline = p.variants[variant];
+    return known;
   }
   g_omm_pipelines.erase(p.variants[variant]);
-  if(omm)g_omm_pipelines.insert(np);
+  if(omm)g_omm_pipelines.insert(VkPipeline(r.pipeline));
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
-  p.variants[variant] = np;
-  p.variant_generations[variant] = blob.generation;
+  p.variants[variant] = VkPipeline(r.pipeline);
+  p.variant_generations[variant] = r.generation;
   p.variant_files[variant] = slot_key;
-  p.pipeline = np;
-  p.generation = blob.generation;
-  host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)blob.generation,
+  p.pipeline = p.variants[variant];
+  p.generation = r.generation;
+  host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
             spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
             guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
-            pipe_ms);
+            r.pipeline_ms);
   return true;
 }
 
@@ -2203,7 +2245,7 @@ void hit_em_drop() {
     *p = Pipe{};
   }
   for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3]}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    defer_layout_destroy(uint64_t(*l));
     *l = VK_NULL_HANDLE;
   }
   g_hit_em_dsl = VK_NULL_HANDLE;
@@ -3514,9 +3556,25 @@ void gi_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) {
 
 void gi_on_cmd_end(VkCommandBuffer cmd) { flush(cmd); }
 
-void gi_on_frame(uint64_t) {}
+// The background builds' status (common/pipeline_async.h Monitor): a line every rt_timing_frames presents and
+// one when a burst of builds is done (the gates of tools/live_batches/hair_qual).
+void gi_on_frame(uint64_t) {
+  static bg3::pipe_async::Monitor mon;
+  const double now = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  bg3::pipe_async::Monitor::Window w;
+  bg3::pipe_async::Monitor::Burst b;
+  const int frames = host->cfg_int("rt_timing_frames", 120);
+  const unsigned ev = mon.tick(g_builds.pending(), g_builds.started_total(), now, unsigned(frames > 0 ? frames : 120), &w, &b);
+  if (ev & bg3::pipe_async::Monitor::kWindow)
+    host->log("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,
+              w.pending, w.started);
+  if (ev & bg3::pipe_async::Monitor::kBurst)
+    host->log("gi: background builds done: %u builds in %.0f ms over %llu presents, longest present interval %.0f ms",
+              b.builds, b.ms, (unsigned long long)b.frames, b.longest_ms);
+}
 
 void gi_release() {
+  g_builds.join();   // the background builds read the layouts released below; their unclaimed pipelines are discarded
   g_omm_pipelines.clear();
   bg3::omm::release_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   std::lock_guard<std::mutex> lock(g_mu);
@@ -3525,7 +3583,7 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  defer_layout_destroy(uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
@@ -3539,7 +3597,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rf_queries);
   g_rf_queries = VK_NULL_HANDLE;
   g_rf_ms.clear();
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_layout);
+  defer_layout_destroy(uint64_t(g_rf_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
   g_rf_layout = VK_NULL_HANDLE;
   g_rf_set_layout = VK_NULL_HANDLE;
@@ -3566,11 +3624,11 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_ls_queries);
   g_ls_queries = VK_NULL_HANDLE;
   g_ls_ms.clear();
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_layout);
+  defer_layout_destroy(uint64_t(g_ls_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
   g_ls_layout = VK_NULL_HANDLE;
   g_ls_set_layout = VK_NULL_HANDLE;
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+  defer_layout_destroy(uint64_t(g_ls_box_layout));
   g_ls_box_layout = VK_NULL_HANDLE;
   g_ls_box_game = VK_NULL_HANDLE;
   g_ls_box_active = g_ls_box_missing_logged = false;
@@ -3602,9 +3660,9 @@ void gi_release() {
   g_stats_mem = VK_NULL_HANDLE;
   g_stats_map = nullptr;
   std::memset(g_stats_frame, 0, sizeof g_stats_frame);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
+  defer_layout_destroy(uint64_t(g_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rt_layout);
+  defer_layout_destroy(uint64_t(g_rt_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rt_set_layout);
   g_layout = VK_NULL_HANDLE;
   g_set_layout = VK_NULL_HANDLE;
@@ -3613,7 +3671,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_gi_set_layout));g_hit_gi_set_layout=VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_reference_set_layout));g_hit_reference_set_layout=VK_NULL_HANDLE;
   for (VkPipelineLayout* l : {&g_hit_reference_layout, &g_hit_gi_plain_layout, &g_hit_gi_layout, &g_hit_gi_sun_layout, &g_hit_gi_sun_sharc_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    defer_layout_destroy(uint64_t(*l));
     *l = VK_NULL_HANDLE;
   }
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_empty_dsl);
@@ -3622,3 +3680,29 @@ void gi_release() {
   g_sharc_logged = g_sharc_missing_logged = g_sharc_paused_logged = g_sharc_em_logged = false;
   g_pending.clear();
 }
+
+// The background builds for the other core passes (core.h; core/water.cpp make_pipe).
+int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout layout, VkPipeline* out, uint64_t* generation,
+                        const VkSpecializationInfo* specialization) {
+  bg3::pipe_async::Result r{};
+  PipelineSpecs specs;
+  if (specialization) {
+    for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+      const auto& m = specialization->pMapEntries[i];
+      uint32_t value;
+      std::memcpy(&value, static_cast<const char*>(specialization->pData) + m.offset, sizeof(value));
+      specs.add(m.constantID, value);
+    }
+  }
+  const std::string q = req, e = entry;
+  const std::string key = q + specs.key() + "|" + e + "|" + std::to_string(uint64_t(layout));
+  const auto st = g_builds.poll(key, uint64_t(layout), [q, e, layout, specs] { return build_pipeline(q, e, layout, specs); }, &r);
+  if (st == bg3::pipe_async::State::kStarted) host->log("%s %s: building in the background", req, entry);
+  if (st == bg3::pipe_async::State::kReady) {
+    *out = VkPipeline(r.pipeline);
+    *generation = r.generation;
+    return 1;
+  }
+  return st == bg3::pipe_async::State::kFailed ? -1 : 0;
+}
+void core_defer_layout_destroy(VkPipelineLayout layout) { defer_layout_destroy(uint64_t(layout)); }

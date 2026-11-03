@@ -4,7 +4,15 @@ import concurrent.futures
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.spec_cascade_check import phi_order, block_order, lower_priority
+from tools.spec_cascade_check import phi_order, block_order, lower_priority, old_requests_waterhair
+
+
+class WaterHairRequestsTest(unittest.TestCase):
+    def test_existing_native_ids_and_water_layout_defines(self):
+        request = "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_SPEC_NATIVE=1;RT_CASCADE_MASKS=1"
+        self.assertEqual(old_requests_waterhair(request), [
+            ({1008: 0, 1010: 0}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_CASCADE_MASKS=1"),
+            ({1008: 0, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1")])
 
 
 class PhiOrderTest(unittest.TestCase):

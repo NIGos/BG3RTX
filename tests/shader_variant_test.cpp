@@ -107,13 +107,19 @@ int main(int argc, char** argv) {
     want.insert(water_request(r, true));
   }
   // Cascade state changes only specialization, for both water families and every layout.
-  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1");
+  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1");
   CHECK(water_request("rt/water_reflect.hlsl", true) == water_request("rt/water_reflect.hlsl", false));
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
-        "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_CASCADE=1;RT_CASCADE_SUN_HIT=1");
+        "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1");
   CHECK(water_request("rt/water_view.hlsl", true) == "rt/water_view.hlsl");
   CHECK(water_request("rt/water_mv.hlsl", true) == "rt/water_mv.hlsl");
   for (const char* r : kFixedRequests) CHECK(water_request(r, false) == water_request(r, true));
+  CHECK(water_request("rt/water_reflect.hlsl", false, false) == water_request("rt/water_reflect.hlsl", false, true));
+  CHECK(water_request("rt/water_view.hlsl", false, true) == "rt/water_view.hlsl");
+  CHECK(water_request("rt/water_mv.hlsl", false, true) == "rt/water_mv.hlsl");
+  for (const char* r : kFixedRequests)
+    for (bool cascade : {false, true})
+      CHECK(water_request(r, cascade, false) == water_request(r, cascade, true));
   // rt_water_rf_edge: both values use the same module, including every record layout.
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
@@ -135,7 +141,7 @@ int main(int argc, char** argv) {
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
-    want.insert(water_request(b, true));
+    for (int c = 0; c < 4; ++c) want.insert(water_request(b, c & 1, (c & 2) != 0));
   }
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {

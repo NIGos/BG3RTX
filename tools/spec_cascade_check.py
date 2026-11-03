@@ -149,10 +149,17 @@ def two(olds, id_of):
 
 
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
-KEYS = {"watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
+# OMM remains a layout define (RT_OMM_SCENE), not constant 1012: S4 was rejected
+# in BUILD_AND_PACKAGE_EFFICIENCY.md. It has no specialization request to check.
+def old_requests_waterhair(spec_request):
+    # Water has no tileset route or receiver-origin image: reuse 1008=0 / 1010=hair.
+    return [(a, r) for a, r in old_requests_native(spec_request) if a[1008] == 0]
+
+
+KEYS = {"waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+        "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
         "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
         "occ": ("RT_SPEC_OCC_STATS=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OCC_STATS=1", "RT_OCC_STATS=1"), lambda f: 1011)),
-        "omm": ("RT_SPEC_OMM=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OMM=1", "RT_OMM_SCENE=1"), lambda f: 1012)),
         "rfgi": ("RF_SPEC_HIT_GI=1", two(lambda r: old_requests_swap(r, "RF_SPEC_HIT_GI=1", "RF_HIT_GI=1"), lambda f: 1013)),
         "wateredge": ("WATER_SPEC_RF_EDGE=1", two(lambda r: old_requests_swap(r, "WATER_SPEC_RF_EDGE=1", "WATER_RF_EDGE=1"), lambda f: 1014)),
         "native": ("RT_SPEC_NATIVE=1", old_requests_native),
@@ -360,7 +367,8 @@ def main():
     tool = Toolchain()
     tree = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
     known = set(tree.requests())
-    spec = sorted(r for r in known if marker in split_request(r)[1])
+    spec = sorted(r for r in known if marker in split_request(r)[1] and
+                  (args.key != "waterhair" or split_request(r)[0].startswith("rt/water_")))
     if args.key == "watershift":
         spec = [r for r in spec if split_request(r)[0] == "rt/water_compose.hlsl"]
     if not spec:
@@ -437,7 +445,10 @@ def main():
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
-        control_entry = "water_compose" if args.key in ("wateredge", "watercasc", "watershift") else "main"
+        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
+                         "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
+                         "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else
+                         "water_glint" if args.key == "waterhair" else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")

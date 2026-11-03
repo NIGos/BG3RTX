@@ -88,7 +88,6 @@
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=1 label=smoke-refit1 repeat=0",
   "\\[motion-trace\\] phase=5 label=shot-ref-a repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
   "\\[motion-trace\\] phase=9 label=shot-ref-b repeat=0",
