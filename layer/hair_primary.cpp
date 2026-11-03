@@ -665,6 +665,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   hair_primary::Header h{};
   h.tag = uint32_t(now + 1);
+  h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   h.width = width;
   h.height = height;
   h.tlas = tlas;

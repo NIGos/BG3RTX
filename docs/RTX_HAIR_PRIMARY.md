@@ -174,6 +174,23 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
   the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
 
+## 5c. Dithered strand tips (C3a, offline)
+`rt_hair_groom_tips` is a live Developer switch, off in every preset. Header word 15 is flags;
+bit 0 enables the native depth/velocity TAA alpha test at the strand UV. Both variants use the
+mask combination M.w (native velocity m2/m3 map to G-buffer m5/m7), fragment pixel centres,
+header tag minus 1 modulo 4, and the native auxiliary x jitter (G-buffer location 2, velocity
+location 6). SoftenTipsAlpha = 0 and DontTouchMe_Beard_Alpha = 1; no card grazing factor on a
+cylinder. Failed coverage discards the fragment after accepting/caching the strand hit; the
+pixel record and its consumers are unchanged. Velocity reconstructs UV from the same segment
+endpoints and cached parameter. Flag off bypasses the added test and velocity texture reads.
+
+CPU twin `primary.tips_keep`, CTest `hair_groom_test`: 4 x 5 pixel centres, four frame phases,
+20 uniform native-jitter phases, 1600 samples per alpha. Kept shares 0/0.25/0.5/0.75/1,
+exact for the five tested alphas; integration tolerance is one jitter bin (0.05). The spatial
+pattern alone is not uniform. Shader request delta: 0. Live appearance, matching coverage/MV
+and GPU cost remain unmeasured. In Test Dialogue1, enable on-screen strands only after the
+reload safety fix is qualified, then toggle tips and inspect fading tips and temporal edges.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.

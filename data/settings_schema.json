@@ -452,6 +452,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary_order": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary_order": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hair_groom_tips", "label": "Dithered strand tips",
+     "description": "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Developer", "summary": "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_tips": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_tips": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_visibility", "label": "Subpixel distant hair cards",
      "description": "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,

@@ -39,6 +39,19 @@ float hp_strand_depth_ortho(float d_card, float t_card, float t_strand, float dd
 }
 
 // The frame record (common/hair_primary.h): table offset, pixel entry size, the no-strand key, the segment bits.
+// Header word 15 is flags; bit 0 enables native mask-alpha tip coverage (common/hair_primary.h).
+static const uint hair_primary_flag_tips = 1u;
+// Native depth/velocity TAA alpha test (5a03e5b6 / b70cadc5): m8 = 0, m9 = 1,
+// no card grazing term on a cylindrical strand. Pixel centres and native per-draw jitter
+// are identical in both passes; tag is frame index + 1. The cached hit is never changed.
+bool hp_tips_keep(float alpha, float2 pixel, uint tag, float jitter) {
+  const float phase = float((tag - 1u) & 3u);
+  const float2 pattern = frac(float2((pixel.y * 2.0 + pixel.x - 1.5 + phase) * 0.2,
+                                   pixel.x * 2.4084 + pixel.y * 3.2535));
+  const float dither = frac(dot(float2(0.833, 0.1666), pattern) + jitter);
+  return alpha + dither - 0.6667 >= 0.3333;
+}
+
 static const uint hair_primary_table_offset = 64u;
 static const uint hair_primary_pixel_bytes = 16u;
 static const uint hair_primary_no_strand = 0xFFFFFFFFu;

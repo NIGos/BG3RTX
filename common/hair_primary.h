@@ -19,9 +19,10 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101;
 //  1 render width, 2 render height, 3 groom instance count (rows of the table below)
 //  4..5 groom TLAS device address (lo, hi), 6..7 mesh pool device address, 8..9 pixel array device address
 //  10..13 the G-buffer viewport x, y, width, height (float; a flipped viewport has a negative height)
-//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 reserved (0)
+//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 flags (bit 0: dithered strand tips)
 // Table at kTableOffset: per groom instance k (the groom TLAS instance index) four byte offsets into the mesh pool:
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
+constexpr uint32_t kFlagTips = 1u << 0;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
@@ -50,7 +51,7 @@ struct Header {
   uint32_t tag, width, height, count;
   uint64_t tlas, pool, pixels;
   float viewport[4];
-  uint32_t pool_bytes, reserved;
+  uint32_t pool_bytes, flags;
 };
 static_assert(sizeof(Header) == kHeaderWords * 4, "header words");
 

@@ -371,6 +371,25 @@ def test_bsdf():
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
 
+def test_tips_dither():
+    # Pixel centres over 4 x 5, all four frame phases, and a uniform sweep of
+    # the native per-draw jitter. Its 1/20 bin width bounds integration error;
+    # the spatial pattern alone is deliberately not a uniform random variable.
+    samples = np.array([(x + 0.5, y + 0.5, frame + 1, j / 20)
+                        for y in range(5) for x in range(4)
+                        for frame in range(4) for j in range(20)])
+    for alpha in (0, 0.25, 0.5, 0.75, 1):
+        kept = primary.tips_keep(alpha, samples[:, :2], samples[:, 2].astype(int), samples[:, 3])
+        share = float(kept.mean())
+        check(f"tips alpha {alpha:g}: {kept.sum()}/{len(kept)} = {share:.6f} (quantisation 0.05)",
+              abs(share - alpha) <= 1 / 20)
+        if alpha in (0, 1):
+            check(f"tips endpoint {alpha:g} exact", np.all(kept == bool(alpha)))
+    check("tips frame phase repeats every 4 tags",
+          np.array_equal(primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int), samples[:, 3]),
+                         primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int) + 4, samples[:, 3])))
+
+
 def test_primary():
     rng = np.random.default_rng(5)
     v = rng.normal(size=(20000, 3))
@@ -540,7 +559,7 @@ def test_cost():
     check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
 
 
-for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_tips_dither, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
