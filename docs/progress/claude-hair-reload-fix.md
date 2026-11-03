@@ -10,3 +10,11 @@
   native + scalp, + physical origin, + groom, + primary, 3 x 20 s survival windows with frames gated in each);
   hv4 adds the reload under GPU-AV. live_flow 5 jobs 0 failing; dryrun passes (31.3 min, 1.49 GB; budget 40 min).
   Build, 143/143 CTests. Not run live.
+- Review fixes (main f5b339eb findings): groom_make_room keys residents by an index into (id, LOD) refs (id * 4 + LOD
+  lost the top bits of 64-bit hash ids: empty asset, out-of-range LOD on eviction). LOD bounds read from a 4-slot
+  readback ring, newest slot of a GPU-completed frame (was the slot this frame's copy may still write). A failed groom
+  TLAS build clears kInfoGroomReplaced on its cards (they had lost occlusion and shadow). Strand G-buffer hit path
+  checks k < grooms like the miss path. hair_fibre removes the native sun term only for a known visibility (kept on
+  kRtUnknown, as local lights). Shader identity: 258/262 byte-identical; only hair_fibre (3) and
+  hair_primary_gbuffer differ (key-on shaders). Open: strand ownership per card draw (overlapping grooms) needs a
+  per-draw channel to the fragment shader; not a small fix.

@@ -440,7 +440,8 @@ struct GroomSlot {
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
   uint64_t rec = 0;            // build record of its last build/refit (refit once that was submitted)
-  Buf readback;                // host-visible: bounds (24 bytes) and the compacted size (at 32)
+  Buf readback;                // host-visible: the compacted size (at 32), then a ring of bounds (24 bytes per frame)
+  uint64_t bounds_frame[4] = {};   // the frame whose bounds each ring slot (at 64 + 32 * slot) holds; 0 none
   int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
   uint32_t query = 0;
   uint64_t query_frame = 0;
@@ -920,10 +921,15 @@ VkDeviceSize groom_pool_capacity() {
 
 // Room for `need` more groom bytes in the pool budget, evicting LODs unused for 120 frames (oldest first).
 bool groom_make_room(VkDeviceSize need, uint64_t now) {
+  // Keyed by the index into refs: the ids are 64-bit hashes, so id * kGroomLods + LOD would lose their top bits.
   std::vector<hair_groom::Resident> residents;
+  std::vector<GroomAsset::Lod*> refs;
   for (auto& [id, a] : g_groom_assets)
     for (size_t i = 0; i < a.lods.size(); ++i)
-      if (a.lods[i].ready) residents.push_back({id * kGroomLods + i, a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+      if (a.lods[i].ready) {
+        residents.push_back({refs.size(), a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+        refs.push_back(&a.lods[i]);
+      }
   std::vector<uint64_t> evict;
   if (!hair_groom::plan_evictions(residents, g_groom_pool_used, need, hair_groom::pool_budget(groom_pool_capacity()), now, 120, evict)) {
     if (g_groom_budget_refusals++ % 300 == 0)
@@ -933,7 +939,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
     return false;
   }
   for (uint64_t key : evict) {
-    GroomAsset::Lod& l = g_groom_assets[key / kGroomLods].lods[key % kGroomLods];
+    GroomAsset::Lod& l = *refs[size_t(key)];
     g_pending_free.push_back({now, -1, l.base, l.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
     l.ready = false;
@@ -1046,11 +1052,15 @@ VkAccelerationStructureBuildSizesInfoKHR groom_sizes(const GroomAsset::Lod& l) {
 // Screen-size LOD from the points' bounds of an earlier frame (camera-relative: |centre| is the distance).
 // The angular size extent / distance picks LOD 0 above 0.09 rad (about a tenth of a 50-degree view), LOD 1
 // above 0.03, LOD 2 (or the last) below; a change needs 30 consecutive frames (no flicker at a threshold).
-int groom_pick_lod(GroomSlot& g, int lods) {
+// The bounds come from the newest ring slot whose frame completed on the GPU (never the slot a copy may still write).
+int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
   int want = g.lod < 0 ? 0 : g.lod;
-  if (g.readback.map && g.lod >= 0) {
+  int slot = -1;
+  for (int i = 0; i < 4; ++i)
+    if (g.bounds_frame[i] && gpu_done > g.bounds_frame[i] + 1 && (slot < 0 || g.bounds_frame[i] > g.bounds_frame[slot])) slot = i;
+  if (g.readback.map && g.lod >= 0 && slot >= 0) {
     uint32_t w[6];
-    std::memcpy(w, g.readback.map, sizeof w);
+    std::memcpy(w, g.readback.map + 64 + 32 * slot, sizeof w);
     float lo[3], hi[3];
     bool ok = true;
     for (int c = 0; c < 3; ++c) {
@@ -2627,7 +2637,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         s.groom->id = fd.groom_id;
       }
       GroomSlot& g = *s.groom;
-      const int lod = groom_pick_lod(g, int(groom_src->lods.size()));
+      const int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done());
       const GroomAsset::Lod* lp = groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
@@ -2656,7 +2666,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           g_groom_pool_used += g.pos_size;
         }
       }
-      if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
+      if (ok && !g.readback.b) ok = make_buf(g.readback, 64 + 4 * 32, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
       if (ok && !g.as.as) {
         const auto sz = groom_sizes(l);
         g.build_scratch = sz.buildScratchSize; g.update_scratch = sz.updateScratchSize;
@@ -3006,8 +3016,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kCS | kXfer, kRW);
       for (const GroomWork& w : groom_work) {
-        const VkBufferCopy c{w.g->bounds_off, 0, 24};
+        const uint32_t slot = uint32_t(now % 4);
+        const VkBufferCopy c{w.g->bounds_off, 64 + 32 * slot, 24};
         dd->vk.CmdCopyBuffer(cmd, g_pool.b, w.g->readback.b, 1, &c);
+        w.g->bounds_frame[slot] = now;
       }
     }
   }
@@ -3454,6 +3466,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
   }
+  // No groom TLAS this frame (allocation or scratch failed): the cards marked replaced while the instance list was
+  // written keep their card path (rt_common.hlsli skips a replaced card, and rt_groom_trace finds no strand).
+  if (!groom_tlas_address)
+    for (const GroomWork& w : groom_work)
+      if (w.card != UINT32_MAX) info_out[w.card * 4 + 1] &= ~kInfoGroomReplaced;
   // Preserve the baseline mesh BLAS and TLAS. Material-specific variants are
   // separate, and expose instance ranges for the accelerated scene clone.
   if (omm_dyn_on) {
