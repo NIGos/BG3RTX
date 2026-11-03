@@ -1134,6 +1134,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const VkPipelineLayout lay = layout ? layout : g_layout;
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
+  if (sv::hit_material_entry(file)) specs.add(sv::kSpecIdAnimatedMaterial, host->cfg_int("rt_hit_material_animated",0) ? 1u : 0u);
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);

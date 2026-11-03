@@ -1,0 +1,24 @@
+{
+  "status": "BLOCKED_IMPLEMENTATION",
+  "key": "rt_hit_material_animated",
+  "off_by_default": true,
+  "authorization": "none; draft only; never copied to a watched inbox",
+  "prediction": {
+    "current_code": "Base_VT_Scrolling only. Lava and sprite publication absent; S6 lava gate must fail. No quality gain claimed.",
+    "completed_candidate": "Time-matched ray-hit albedo/emission follows the raster material phase in reflections and GI; OFF remains frozen or fallback.",
+    "energy_gate": "Static-camera pre-post float scene mean ON must lie inside repeat OFF uncertainty; reduced energy cannot qualify a lower residual.",
+    "residual_gate": "Compare native and RT recipe at the same captured game time/UV/resources, each ON window; beat OFF/OFF spread. PNG timestamps across different windows do not prove native formula parity.",
+    "cost": "GPU rt/gi ms in cost windows only, diagnostics and shader compiles off; cost unknown."
+  },
+  "blockers": [
+    "Publish and independently verify lava draw recipe including native flow view/sampler/material UBO/time and complete current geometry/basis.",
+    "Audit and publish sprite per-instance random hash / phase / rate / atlas recipe.",
+    "Add in-frame animated native-vs-RT sampler reference and float scene-energy analysis gates before qualification.",
+    "Identify a visible Base_VT_Scrolling instance in camp; current scene census only proves other scrolling capabilities.",
+    "Run candidate with real Ultra qualified keys after dependent offline checks."
+  ],
+  "frames_per_gate": 120,
+  "disk_estimate_mb": 740,
+  "game_launches": 0,
+  "defaults_promoted": false
+}

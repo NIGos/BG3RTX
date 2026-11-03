@@ -1,5 +1,11 @@
 # Plan M4: offscreen shaded reflections and GI hit lighting
 
+Animation audit (2026-11-03, anim-materials): [ANIMATED_MATERIALS.md](ANIMATED_MATERIALS.md)
+records complete-catalogue capability counts and native time/formula evidence.
+The default-off candidate publishes Base_VT_Scrolling only. Lava flow/bounce and
+sprite arithmetic are tested, but their resource/geometry publication paths are
+still missing. This is a partial implementation, not READY_FOR_LIVE or lava coverage.
+
 2026-10-31, docs only. Main 776441e, ABI 24. Milestone row: RENDERING_EXECUTION_PLAN.md M4.
 Runs after the consolidation live batch passes. Live jobs for increment 1:
 [tools/live_batches/m4_m5_first/](../tools/live_batches/m4_m5_first/README.md).

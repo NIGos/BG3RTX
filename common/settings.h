@@ -419,6 +419,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hit_material_paks", "1"}}, {{"exp_hidden_surface",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"},{"rt_hit_material_instanced","1","Instanced material startup"}}, false},
 
+  {"exp_hit_animated", "Animated surface materials",
+   "Animates supported surface textures at ray hits using the game's current time. Unsupported surfaces retain their fallback.",
+   Kind::Choice, Apply::Live, "", false,
+   {{"off", "Off", 0, {{"rt_hit_material_animated", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_animated", "1"}}, {{"exp_hidden_surface",1}}, {}, false, false, false, Apply::Live}},
+   {}, {0,0,0,0}, true, {{"rt_hit_material","1","Native material startup"}}, false},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -665,6 +672,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_pool_alpha", "1"},
     {"rt_hit_material_generated", "0"},
     {"rt_hit_material_paks", "0"},
+    {"rt_hit_material_animated", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_omm_reference", "0"},

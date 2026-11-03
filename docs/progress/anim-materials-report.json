@@ -1,0 +1,420 @@
+{
+  "branch": "anim-materials",
+  "base_commit": "ab7d1df7eea4",
+  "commit": null,
+  "status": "PARTIAL_IMPLEMENTATION",
+  "game_launched": false,
+  "git_metadata_written": false,
+  "shared_assetdb_written": false,
+  "key": "rt_hit_material_animated",
+  "default": 0,
+  "specialization_id": 1021,
+  "abi_delta": 0,
+  "shader_request_delta": 0,
+  "census": {
+    "counts": {
+      "classes": {
+        "displacement": {
+          "instances": 2403,
+          "templates": 182
+        },
+        "flowmap": {
+          "instances": 378,
+          "templates": 62
+        },
+        "pulse": {
+          "instances": 958,
+          "templates": 68
+        },
+        "scroll": {
+          "instances": 5532,
+          "templates": 459
+        },
+        "sprite": {
+          "instances": 700,
+          "templates": 47
+        },
+        "water": {
+          "instances": 412,
+          "templates": 20
+        },
+        "wind_cloth": {
+          "instances": 729,
+          "templates": 88
+        }
+      },
+      "materials": 32696,
+      "templates": 1063,
+      "time_instances": 7172,
+      "time_templates": 630
+    },
+    "compact": {
+      "classes": {
+        "displacement": {
+          "instances": 2,
+          "rows": 4,
+          "templates": 1
+        },
+        "flowmap": {
+          "instances": 21,
+          "rows": 44,
+          "templates": 4
+        },
+        "pulse": {
+          "instances": 3,
+          "rows": 5,
+          "templates": 2
+        },
+        "scroll": {
+          "instances": 3,
+          "rows": 5,
+          "templates": 2
+        },
+        "sprite": {
+          "instances": 0,
+          "rows": 0,
+          "templates": 0
+        },
+        "water": {
+          "instances": 0,
+          "rows": 0,
+          "templates": 0
+        },
+        "wind_cloth": {
+          "instances": 0,
+          "rows": 0,
+          "templates": 0
+        }
+      },
+      "instances": 17295,
+      "rows": 40983,
+      "sha256": "8d9eee47799befb93dc71cc01dd6b450dcc7a647a8ec7298128a13b4cb9f0198",
+      "unresolved_ids": []
+    },
+    "levels": {
+      "S6": {
+        "classes": {
+          "displacement": {
+            "instances": 40,
+            "templates": 9
+          },
+          "flowmap": {
+            "instances": 28,
+            "templates": 9
+          },
+          "pulse": {
+            "instances": 26,
+            "templates": 13
+          },
+          "scroll": {
+            "instances": 43,
+            "templates": 21
+          },
+          "sprite": {
+            "instances": 0,
+            "templates": 0
+          },
+          "water": {
+            "instances": 39,
+            "templates": 8
+          },
+          "wind_cloth": {
+            "instances": 45,
+            "templates": 22
+          }
+        },
+        "levels": [
+          "WLD_Underdark_C",
+          "WLD_UnderdarkSubs_C",
+          "PLT_UND_AdamantineForge",
+          "PLT_UND_AdamantineForgeAnvil"
+        ],
+        "materials": 645,
+        "objects": 20719,
+        "templates": 83,
+        "time_instances": 121,
+        "time_templates": 38,
+        "unresolved_visual_objects": 263
+      },
+      "S8": {
+        "classes": {
+          "displacement": {
+            "instances": 2,
+            "templates": 1
+          },
+          "flowmap": {
+            "instances": 2,
+            "templates": 1
+          },
+          "pulse": {
+            "instances": 2,
+            "templates": 1
+          },
+          "scroll": {
+            "instances": 4,
+            "templates": 2
+          },
+          "sprite": {
+            "instances": 0,
+            "templates": 0
+          },
+          "water": {
+            "instances": 2,
+            "templates": 1
+          },
+          "wind_cloth": {
+            "instances": 27,
+            "templates": 9
+          }
+        },
+        "levels": [
+          "BGH_WaterQueenHouse_B_ART"
+        ],
+        "materials": 144,
+        "objects": 856,
+        "templates": 30,
+        "time_instances": 29,
+        "time_templates": 10,
+        "unresolved_visual_objects": 3
+      },
+      "camp": {
+        "classes": {
+          "displacement": {
+            "instances": 2,
+            "templates": 2
+          },
+          "flowmap": {
+            "instances": 1,
+            "templates": 1
+          },
+          "pulse": {
+            "instances": 2,
+            "templates": 1
+          },
+          "scroll": {
+            "instances": 3,
+            "templates": 2
+          },
+          "sprite": {
+            "instances": 0,
+            "templates": 0
+          },
+          "water": {
+            "instances": 2,
+            "templates": 2
+          },
+          "wind_cloth": {
+            "instances": 25,
+            "templates": 12
+          }
+        },
+        "levels": [
+          "WLD_Campfire_E",
+          "CMP_Shrubbery_A",
+          "CMP_Shrubbery_B"
+        ],
+        "materials": 127,
+        "objects": 1155,
+        "templates": 32,
+        "time_instances": 28,
+        "time_templates": 14,
+        "unresolved_visual_objects": 5
+      },
+      "inn": {
+        "classes": {
+          "displacement": {
+            "instances": 1,
+            "templates": 1
+          },
+          "flowmap": {
+            "instances": 1,
+            "templates": 1
+          },
+          "pulse": {
+            "instances": 3,
+            "templates": 3
+          },
+          "scroll": {
+            "instances": 5,
+            "templates": 5
+          },
+          "sprite": {
+            "instances": 0,
+            "templates": 0
+          },
+          "water": {
+            "instances": 1,
+            "templates": 1
+          },
+          "wind_cloth": {
+            "instances": 21,
+            "templates": 14
+          }
+        },
+        "levels": [
+          "BGH_BlushingMermaid_A",
+          "BGH_BlushingMermaidCellarB"
+        ],
+        "materials": 285,
+        "objects": 1551,
+        "templates": 47,
+        "time_instances": 28,
+        "time_templates": 19,
+        "unresolved_visual_objects": 3
+      }
+    },
+    "unclassified_time_templates": 73,
+    "missing_templates": {
+      "Public/Engine/Assets/Materials/Engine_Default_Impostor.lsf": "missing template",
+      "Public/Engine/Assets/Materials/Engine_Default_Impostor_VT.lsf": "missing template",
+      "Public/Shared/Assets/Materials/Characters/CHAR_HAIR_TEMPASDLKBAW.lsf": "missing template",
+      "Public/Shared/Assets/Materials/Effects/OverlayMaterial/VFX_OverlayMaterial_AlphaBlend_Unlit_Invisible_SceneCol_Mask_01.lsf": "missing template"
+    },
+    "scope": "all catalogue entries; non-exclusive time-load plus parameter/name capability classification",
+    "catalogue_sha256": "2f49b159e0410dd75e374e18e2e7519215d151e1fa318ab367e9bee45f19cf1a",
+    "full_report": "captures/anim-materials/census-final.json"
+  },
+  "time_source": {
+    "set": 0,
+    "binding": 0,
+    "offset": 0,
+    "type": "float32",
+    "evidence": [
+      "common/emissive_policy.h family_fixup",
+      "4b52d62ee893d3b6 FS",
+      "8e6584bfaa46d6f3 FS",
+      "88d26a9941a51911 VS"
+    ]
+  },
+  "already_handled": {
+    "wind": "Audited native XFB Wind RG, AlphaTest 2S and Wind RGB; not every cloth/wind template.",
+    "pulse": "D-EM draw-time cosine evaluation; average fallback if time unreadable.",
+    "water": "Existing forward shading / animated geometry chain; no generic hidden-hit flowmap recipe."
+  },
+  "implementation": {
+    "published": [
+      "Base_VT_Scrolling"
+    ],
+    "arithmetic_only": [
+      "ENV_Lava_AlphaTest_Flowmap_Bounce_VT flow and WPO wave",
+      "BillboardCamera_Flipbook_GradientMap native frame/atlas arithmetic"
+    ],
+    "unsupported": [
+      "FLUID lava full heat/flow/normal/displacement/depth evaluation",
+      "ENV lava RT colour/emission publication",
+      "Sprite instance hash/geometry publication"
+    ],
+    "gpu_cost_ms": null,
+    "visual_gain": null
+  },
+  "draft": {
+    "path": "tools/live_batches/anim_materials",
+    "status": "BLOCKED_IMPLEMENTATION",
+    "phase_seconds_per_scene": 130,
+    "estimated_mb": 740,
+    "dryrun": "passed; fake runner only; no watched inbox"
+  },
+  "files_changed": [
+    "CMakeLists.txt",
+    "bg3rtx.ini",
+    "common/animated_material.h",
+    "common/native_vt_surface.h",
+    "common/settings.h",
+    "common/shader_variant.h",
+    "core/gi.cpp",
+    "data/settings_schema.json",
+    "docs/ANIMATED_MATERIALS.md",
+    "docs/PLAN_M4_REFLECTIONS_GI.md",
+    "docs/progress/anim-materials.md",
+    "docs/progress/anim-materials-report.json",
+    "layer/hit_material.cpp",
+    "shaders/rt/native_hit_material.hlsli",
+    "tests/animated_material_test.cpp",
+    "tests/animated_materials_test.py",
+    "tests/settings_test.cpp",
+    "tools/assets/animated_materials.py",
+    "tools/live_batches/anim_materials/README.md",
+    "tools/live_batches/anim_materials/dryrun.ps1",
+    "tools/live_batches/anim_materials/jobs/01-s6.json",
+    "tools/live_batches/anim_materials/jobs/02-camp.json",
+    "tools/live_batches/anim_materials/plans/camp.json",
+    "tools/live_batches/anim_materials/plans/s6.json",
+    "tools/live_batches/anim_materials/predicted.json"
+  ],
+  "artifacts": [
+    "captures/anim-materials/census-final.json",
+    "captures/anim-materials/compact-census.json",
+    "captures/anim-materials/replay-evidence.json",
+    "captures/anim-materials/sprite0.glsl",
+    "captures/anim-materials/sprite1.glsl"
+  ],
+  "commands": [
+    {
+      "cmd": "python -m tools.assets.animated_materials --catalogue <shared mesh_materials v2> --compact <shared compact v4> --out captures/anim-materials/census-final.json --cache captures/anim-materials/cache",
+      "exit_code": 0,
+      "summary": "All 1063 catalogue entries scanned; 4 referenced template files absent; counts are overlapping capabilities, not active-instance guarantees."
+    },
+    {
+      "cmd": "cmake --build build --target VkLayer_bg3rtx bg3rtx_core animated_material_test settings_test (MSVC environment, BelowNormal)",
+      "exit_code": 0,
+      "summary": "Host, core and candidate test targets build."
+    },
+    {
+      "cmd": "ctest --test-dir build -R '^(animated_material|animated_materials|settings|native_hit_pool|native_hit_generated|native_vt_recipes)' --output-on-failure",
+      "exit_code": 0,
+      "summary": "6/6 focused CTests pass; arithmetic covers 180 input combinations."
+    },
+    {
+      "cmd": "python tests/animated_materials_test.py",
+      "exit_code": 0,
+      "summary": "4 parser/classification/bounds tests pass after compact parser coverage added."
+    },
+    {
+      "cmd": "python scripts/gen_settings_defaults.py --check",
+      "exit_code": 0,
+      "summary": "Defaults match INI/release settings; schema regenerated using rebuilt settings_test."
+    },
+    {
+      "cmd": "python tools/shader_identity.py --filter '^gi/(gi_trace_rt_hit_direct|rt_hit_direct|rt_hit_shade).*hlsl' --validate --jobs 1",
+      "exit_code": 0,
+      "summary": "12/12 representative hit requests compiled and validated serially."
+    },
+    {
+      "cmd": "python tools/shader_identity.py --baseline HEAD --filter '^gi/gi_temporal.hlsl' --jobs 1",
+      "exit_code": 0,
+      "summary": "3/3 unaffected temporal requests byte-identical to ab7d1df7eea4."
+    },
+    {
+      "cmd": "python tools/shader_identity.py --baseline HEAD --filter '^gi/gi_trace_rt_hit_direct.hlsl' --jobs 1",
+      "exit_code": 1,
+      "summary": "FAIL: 0/4 hit requests byte-identical to baseline. New specialization constant changes their SPIR-V. Candidate not qualified."
+    },
+    {
+      "cmd": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/anim_materials/dryrun.ps1",
+      "exit_code": 0,
+      "summary": "2/2 fake evidence runs INVALID as required; 2/2 stripped structural runs valid; scene-wait and capacity lints pass. Process-local py shim needed on this machine."
+    },
+    {
+      "cmd": "python scripts/queue_gates.py --lint-exposure-hold tools/live_batches/anim_materials",
+      "exit_code": 0,
+      "summary": "Static shot windows hold exposure and restore."
+    },
+    {
+      "cmd": "git --no-optional-locks diff --check",
+      "exit_code": 0,
+      "summary": "No whitespace errors; pre-existing resolve-pp-diff.json preserved."
+    }
+  ],
+  "open_issues": [
+    "Task is partially implemented. Only Base_VT_Scrolling has a production RT row publication path; lava flow/emission/displacement and sprite publication remain unfinished.",
+    "Required key-off hit shader byte identity failed (0/4); no default-path equivalence or quality pass.",
+    "Existing S6/camp/S8 replay packs lack original lava time/material UBO/flow view/sampler/shader-pair/COLOR provenance; no captured-time lava comparison possible.",
+    "Census tags are heuristic overlapping capabilities plus verified time loads, not exhaustive output-dependency or active-switch certification; 73 time users unclassified and 4 templates unavailable.",
+    "Current-time scrolling rows require a visible current-frame draw; hidden culled rows decline. GPU execution-time parameter/time validation is pending.",
+    "Live draft is BLOCKED_IMPLEMENTATION. Identify a visible scrolling camp instance, implement missing lava/native reference gates, then rerun dependent offline checks. No authorization requested.",
+    "GPU cost, visible quality delta and real Ultra parity remain unmeasured."
+  ],
+  "preexisting_preserved": [
+    "resolve-pp-diff.json"
+  ]
+}

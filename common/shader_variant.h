@@ -45,6 +45,7 @@ enum SpecId : unsigned {
   kSpecIdHairCheap = 1018,           // rt_hair_cheap: physical secondary coverage
   kSpecIdHairGiMean = 1019,          // rt_hair_gi_mean: stored hard-coverage probability
   kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
+  kSpecIdAnimatedMaterial = 1021,     // native hit UV animation, no request multiplication
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1

@@ -33,7 +33,7 @@ enum Capture : uint32_t {CapturePool=0,CaptureNone=1,CaptureDraw=2};
 // with the three 1:1 colours (rt_hit_material_mask; layer/hit_material.cpp pool_mask_on).
 // LayoutVt4 = the LayoutBase VT layers one binding up: table/normal/albedo/physical at 1:4..1:7 (IP_Wind_GrassFlowers, whose
 // VS reads its wind noise texture at 1:3); no other view.
-enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2,LayoutMask=3,LayoutVt4=4};
+enum Layout : uint32_t {LayoutBase=0,LayoutDetail=1,LayoutIridescent=2,LayoutMask=3,LayoutVt4=4,LayoutScroll=6};
 // reflectance_offset: byte of the reflectance float in the material UBO 1:1 (FS 8e49cde8: 16).
 // two_sided: the FS multiplies the N column by (gl_FrontFacing ? 1 : -1) (nv_two_sided_sign).
 struct Recipe {uint64_t fs,vs;uint32_t transform_offset,tileset_index_offset,channel_offset;uint32_t reflectance=ReflectanceUbo;

@@ -27,6 +27,8 @@
 #include "../../common/native_opaque_transport.h"
 #include "../../common/native_vt_fields.h"
 #include "../../common/native_hit_records.h"
+#include "../../common/animated_material.h"
+[[vk::constant_id(1021)]] const uint kSpecAnimatedMaterial=0u;
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_hit_tileset_fields.h"
 #endif
@@ -53,12 +55,12 @@ struct NativeLayer {float4 value;bool known;};
 // Audited8995 sampling recipe, with declared isotropic ray-cone UV derivatives
 // instead of unavailable raster quad derivatives. The actual native sampler,
 // views, resident indirection channel and per-layer tile offsets are retained.
-NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,uint sampler,uint col){
+NativeLayer hit_material_layer(uint row,float2 uv,float g,uint table,uint cache,uint sampler,uint col,float2 uvscale=float2(1,1)){
  NativeLayer result=(NativeLayer)0;
  if(table==0 || table>=4096 || cache>=nh_cache_slots || sampler>=nh_sampler_slots || col>2 || !(g>0) || !isfinite(g) || !all(isfinite(uv)))return result;
  if(hm_t(row,0,2,3)!=2202.0)return result;
  float4 p0=asfloat(gHitRecords.Load4(row+48)),p1=asfloat(gHitRecords.Load4(row+64));
- float2 dx=p0.zw*float2(g,0),dy=p0.zw*float2(0,g);
+ float2 dx=p0.zw*float2(g*uvscale.x,0),dy=p0.zw*float2(0,g*uvscale.y);
  float2 scale=float2(hm_t(row,0,2,0),hm_t(row,0,3,0));
  float d1=dot(dx*scale,dx*scale),d2=dot(dy*scale,dy*scale);
  if(!(d1>0 && d2>0) || !isfinite(d1+d2))return result;
@@ -155,7 +157,15 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  // The facing is the geometry's, as the per-draw two-sided rows: world triangle, interpolated world N, the ray.
  if(two_sided)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
 #endif
- const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
+ const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);float2 uvscale=float2(1,1);
+ if(detail.x==6u){
+  if(kSpecAnimatedMaterial==0u)return hit_material_unknown(3);
+  const float4 anim=asfloat(gHitRecords.Load4(row+228u));
+  const float time=asfloat(gHitRecords.Load(row+244u));
+  if(!all(isfinite(anim)) || !isfinite(time))return hit_material_unknown(5);
+  AmUv q=am_scroll(am_uv(u.x,u.y),am_uv(anim.x,anim.y),am_uv(anim.z,anim.w),time);
+  u=float2(q.x,q.y);uvscale=anim.xy;
+ }
  NvFields fields;
  if(detail.x==2u){
   // ENV_DetailMap_Iridescent (word 224 = 2; native_vt_fields.h nv_iridescent_fields): five 2D
@@ -176,7 +186,7 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
                               float3(dot(v,basis[2]),dot(v,basis[0]),dot(v,basis[1])),q.x,q.z,q.w,hi);
   if(fields.status!=0)return hit_material_unknown(7);
  }else{
- NativeLayer al=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0),nl=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1),pl=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2);
+ NativeLayer al=hit_material_layer(row,u,g,h1.y,h2.y,h1.z,0,uvscale),nl=hit_material_layer(row,u,g,h1.y,h2.x,h1.z,1,uvscale),pl=hit_material_layer(row,u,g,h1.y,h2.z,h1.z,2,uvscale);
  if(!al.known || !nl.known || !pl.known)return hit_material_unknown(6);
  // Row word 220: the record pair's reflectance mode (native_vt_fields.h nv_reflectance; 81657854
  // mixes 0.5 with the normal layer's x by the UBO value; 3df678c0's 0.5 is already in word 208).

@@ -1,5 +1,6 @@
 #include "hit_material.h"
 #include "assetdb.h"
+#include "../common/animated_material.h"
 #include "../common/mesh_paks.h"
 #include "../common/pak_uv_join.h"
 #include "shader_cache.h"
@@ -141,6 +142,8 @@ std::atomic<bool> generated_key{true};
 bool generated_rows(){return generated_on && generated_key.load(std::memory_order_relaxed);}
 bool generated_recipe(const native_vt::Recipe* r){return r && generated::row_of(r)!=nullptr;}
 const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
+ static constexpr native_vt::Recipe scrolling{0x4b52d62ee893d3b6ull,0x2d2ac3c38992b7f0ull,0,32,36,native_vt::ReflectanceUbo,16,native_vt::CapturePool,native_vt::LayoutScroll};
+ if(vs==scrolling.vs && fs==scrolling.fs)return cfg_int("rt_hit_material_animated",0)?&scrolling:nullptr;
  const auto* r=pool::pool_recipe(vs,fs,generated_rows());
  if(!r&&paks_rows())r=paks_recipe(vs,fs);
  return r && r->layout==native_vt::LayoutMask && !pool_mask_on.load(std::memory_order_relaxed)?nullptr:r;
@@ -691,6 +694,7 @@ void publish_word(Query& query,uint32_t value){
 // tracker/sampler currency checks (their own leaf locks).
 struct PoolMaterial {
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
+ float animation[5]{};uint64_t animation_frame{}; // tiling.xy, speed.xy, captured game time
  const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
  bool pak{},pak_two_sided{}; // full verified HLOD fallback, current captured resources
  View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{}; // LayoutDetail only
@@ -1202,7 +1206,8 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return false;const auto frame=frame_index();CpuTimer timer(CpuMaterial);
  uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
  const auto* recipe=pool_recipe_on(state->vs,state->fs);
- const bool pak_fallback=recipe && !pool::pool_recipe(state->vs,state->fs,generated_rows());
+ const bool animated=recipe && recipe->layout==native_vt::LayoutScroll;
+ const bool pak_fallback=recipe && !animated && !pool::pool_recipe(state->vs,state->fs,generated_rows());
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
  // Revalidate full raw bytes before the refresh throttle. A same-handle host
  // write must not retain a previously witnessed pak material assignment.
@@ -1219,7 +1224,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   if(table && tilesets.range==VK_WHOLE_SIZE){auto size=geo_buffer_size(tilesets.buffer);tilesets.range=tilesets.offset<size?size-tilesets.offset:0;}
   // A current qualified record is not captured again before its refresh frame.
   std::lock_guard lock(pool_mutex);if(table)pool_tilesets={tilesets,frame};
-  if(!pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;
+  if(!animated && !pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;
    due=basisPipeline && pool_job_due(geometry,frame,args,stride);throttled=true;}
  }
  if(throttled)return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
@@ -1237,6 +1242,15 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
    uint32_t ubo[12]{};const uint32_t ubo_bytes=native_vt::material_bytes(*recipe); // LayoutMask: 44 bytes
    if(ok && !(read_mapped(m.engine.buffer,m.engine.offset,payload.engine,engine) && (constant || read_mapped(m.physical_ubo.buffer,m.physical_ubo.offset,ubo,ubo_bytes)))){ok=false;failures|=1u<<10;}
    if(ok && !constant)payload.reflectance=ubo[recipe->reflectance_offset/4u];
+   if(ok && animated){
+    Bg3Binding clock{};float game_time{};
+    ok=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,0,0,&clock,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) &&
+       clock.buffer && clock.range>=4 && omm::ordinary_frozen_binding(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,0,0) &&
+       read_mapped(clock.buffer,clock.offset,&game_time,4) && std::isfinite(game_time);
+    std::memcpy(payload.animation,ubo,16);payload.animation[4]=game_time;payload.animation_frame=frame;
+    for(float v:payload.animation)ok=ok && std::isfinite(v);
+    if(!ok)failures|=1u<<10;
+   }
    payload.recipe=recipe;
    if(ok && payload.detail_layout()){payload.detail_normal=m.detail_normal;payload.detail_mask=m.detail_mask;payload.detail_sampler=m.detail_sampler;
     payload.detail[0]=ubo[0];payload.detail[1]=ubo[1];payload.detail[2]=ubo[3];payload.detail[3]=ubo[4];}
@@ -1256,6 +1270,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
      for(uint32_t w:payload.detail)h=pool::mix(h,w);}
     if(payload.plain_layout()){for(const auto& v:m.plain)h=pool::mix(pool::mix(h,v.id),v.image_id);for(uint32_t w:payload.plain_floats)h=pool::mix(h,w);}
     if(payload.mask_layout()){h=pool::mix(pool::mix(pool::mix(h,m.detail_sampler.sampler.id),m.detail_mask.id),m.detail_mask.image_id);for(uint32_t w:payload.colours)h=pool::mix(h,w);}
+    if(animated){for(uint32_t w=0;w<4;++w)h=pool::mix(h,ubo[w]);uint32_t time_bits{};std::memcpy(&time_bits,payload.animation+4,4);h=pool::mix(h,time_bits);}
     o.identity=pool::mix(h,payload.reflectance);
    }
   }
@@ -1537,7 +1552,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(!mesh.basis_bytes)return;
    if(!recipe || m.basis.state!=pool::Basis::Ready || m.basis.slot>=nh_pool_rows || m.basis.gen!=m.mesh.gen || !m.mesh.basis_bytes ||
       r.seen.status!=pool::Status::Qualified || r.conflict || r.prev_conflict || !pool_current(m,frame_index()))return;
-   Material x{};x.table=m.table;x.normal=m.normal;x.albedo=m.albedo;x.physical=m.physical;x.sampler=m.sampler;
+   // Never replay a stale draw clock into this frame, including hidden pool rows.
+   if(recipe->layout==native_vt::LayoutScroll && (!cfg_int("rt_hit_material_animated",0) || m.animation_frame!=slot.frame))return;
+   Material x{};
+   if(recipe->layout==native_vt::LayoutScroll){x.layout=native_vt::LayoutScroll;x.row.padding[0]=native_vt::LayoutScroll;std::memcpy(x.row.padding+1,m.animation,20);}
+   x.table=m.table;x.normal=m.normal;x.albedo=m.albedo;x.physical=m.physical;x.sampler=m.sampler;
    if(m.detail_layout()){x.layout=native_vt::LayoutDetail;x.detail_normal=m.detail_normal;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;
     std::memcpy(x.detail,m.detail,16);}
    if(m.plain_layout()){x.layout=native_vt::LayoutIridescent;x.plain=m.plain;std::memcpy(x.plain_floats,m.plain_floats,24);}
@@ -1627,6 +1646,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   if(m.layout==native_vt::LayoutMask){m.row.padding[0]=native_vt::LayoutMask|(m.mask_sampler<<8);m.row.padding[1]=table_index(m.detail_mask);
    std::memcpy(m.row.padding+2,m.colours,24);}}
  tables_used=uint32_t(tables.size());log_capacity(q.materials.empty() && q.pool_rows.empty()?"tables full":"mapped");log_instanced();
+ if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0){
+  const auto animated_rows=std::count_if(q.pool_rows.begin(),q.pool_rows.end(),[](const auto& m){return m.layout==native_vt::LayoutScroll;});
+  log("[hit material animated] frame %llu scrolling rows %zu; current draw game time 0:0+0; lava/sprite unpublished",
+      (unsigned long long)slot.frame,size_t(animated_rows));
+ }
  if(q.materials.empty() && q.pool_rows.empty())return false;
  uint32_t first_table=0;q.rows_bytes=q.pool_rows.empty()?row_bytes:row_bytes+pool_rows_bytes;
  if(!create(q.rows,q.rows_bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,true) ||
