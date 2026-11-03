@@ -148,13 +148,82 @@ def write_report(report, out):
                                   "\n".join("- "+r["name"]+": "+r["verdict"] for r in report["checks"])+"\n", encoding="utf-8")
 
 
+def diagnostic_flicker(windows, roi, quantum):
+    """Same-run, stationary/registered consecutive RGB code arrays; cards ROI is fixed.
+
+    Three independent cards bursts estimate the temporal metric's envelope; adjacent
+    frames/pixels are not treated as independent noise repeats. This is a diagnostic,
+    not a linear-energy, silhouette, PT or full MV/trailing qualification.
+    """
+    from tools.live_batches.edge_flicker.analyze import energy
+    from tools.live_batches.hair_validation.make_job import CAPTURE_WINDOWS, DIAGNOSTIC_WINDOWS
+    if set(windows) != set(CAPTURE_WINDOWS):
+        raise ValueError("need every predicted capture window exactly once")
+    roi = np.asarray(roi, bool)
+    metrics = {}
+    if roi.ndim != 2 or not roi.any() or quantum <= 0 or not np.isfinite(quantum):
+        raise ValueError("nonempty baseline player-hair ROI and positive encoding quantum required")
+    for name, frames in windows.items():
+        frames = np.asarray(frames)
+        if frames.ndim != 4 or frames.shape[0] < 3 or frames.shape[1:] != (*roi.shape, 3) or not np.isfinite(frames[:,roi]).all():
+            raise ValueError("need finite consecutive RGB frames with a common ROI/resolution")
+        metrics[name] = energy(list(frames), roi)
+    repeats = [metrics['cards-'+c]['residual'] for c in 'abc']
+    # FIR coefficients (1, -1/2, -1/2) amplify code precision by at most 2.
+    centre, tolerance = hair.envelope(repeats, 2 * quantum, len(DIAGNOSTIC_WINDOWS))
+    checks = [hair.verdict(name+'/edge_flicker', metrics[name]['residual']-centre, tolerance,
+                          "same-run cards repeats + encoding precision; stationary player-head ROI")
+              for name in DIAGNOSTIC_WINDOWS]
+    return dict(schema=1, status='FAIL' if any(c['status']=='FAIL' for c in checks) else 'PASS',
+                checks=checks, metrics=metrics, cards_residual=centre, envelope=tolerance,
+                scope='Rendered edge-flicker diagnostic only; no energy or full temporal qualification')
+
+
+def diagnose(manifest, root):
+    from tools.live_batches.edge_flicker.analyze import burst, registered_run, aligned_frames
+    from tools.live_batches.hair_validation.make_job import CAPTURE_WINDOWS
+    if not manifest.get('run_id'):
+        raise ValueError('same-run identity required')
+    entries = manifest['captures']
+    if len(entries) != len(CAPTURE_WINDOWS) or {e['window'] for e in entries} != set(CAPTURE_WINDOWS):
+        raise ValueError('missing or duplicate predicted capture windows')
+    if any(e.get('run_id') != manifest['run_id'] for e in entries):
+        raise ValueError('cross-run comparison forbidden')
+    directories = [(root/e['directory']).resolve() for e in entries]
+    if len(set(directories)) != len(directories):
+        raise ValueError('cards repeats/candidates must use distinct bursts')
+    raw = {e['window']:burst(d)['codes'] for e,d in zip(entries,directories)}
+    anchor = raw['cards-a'][0]
+    x0,y0,x1,y1 = manifest['hair_roi']
+    h,w = anchor.shape[:2]
+    if not (0 <= x0 < x1 <= w and 0 <= y0 < y1 <= h):
+        raise ValueError('hair_roi must bound the player head in cards-a coordinates')
+    roi = np.zeros((h,w),bool); roi[y0:y1,x0:x1] = True
+    aligned = {}
+    for name, frames in raw.items():
+        rx0, ry0, rx1, ry1 = manifest['rigid_roi']
+        if not (0 <= rx0 < rx1 <= w and 0 <= ry0 < ry1 <= h):
+            raise ValueError('rigid_roi must bound stationary non-hair structure')
+        _, registration = registered_run(anchor, frames, dict(roi_extent=(w,h), subtitle_top=h,
+            rois=dict(rigid_control=manifest['rigid_roi'])))
+        if len(registration['included']) != len(frames):
+            raise ValueError(name+': registration excluded frames; consecutive evidence required')
+        for frame in registration['frames']:
+            frame['shift_px'] = tuple(a+b for a,b in zip(frame['shift_px'], registration['shift_px']))
+        aligned[name] = aligned_frames(frames, registration)
+        if not np.isfinite(np.asarray(aligned[name])[:,roi]).all():
+            raise ValueError(name+': registration clipped player hair ROI')
+    return diagnostic_flicker(aligned, roi, manifest['code_quantum'])
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("manifest", type=Path)
     p.add_argument("--out", required=True, type=Path)
     a = p.parse_args()
     try:
-        report = analyze(json.loads(a.manifest.read_text(encoding="utf-8")), a.manifest.parent)
+        manifest = json.loads(a.manifest.read_text(encoding="utf-8"))
+        report = (diagnose if manifest.get("kind") == "hv6" else analyze)(manifest, a.manifest.parent)
     except (KeyError, ValueError, OSError) as e:
         report = dict(schema=1, status="INVALID", checks=[hair.verdict("input", why=str(e), invalid=True)])
     write_report(report, a.out)
