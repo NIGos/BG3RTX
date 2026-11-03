@@ -522,6 +522,11 @@ omm_qual batch. Prerequisite either way: 11.1 A or B for the LOD domain.
   No shader change, so key-off SPIR-V is untouched. Differences of the kind-2 path from the VT rule: trilinear
   LOD log2(N g) instead of the VT's rounded mip of log2(N g) - 0.5, and a continuous stochastic weight. Held
   records keep mask views (no tracker id). GUI: Experimental "Offline cutout masks".
+- Default-Ultra regression fix (2026-11-03): retain the native alpha record before mask substitution.
+  Hit-material prepass qualification and generated-row source pairing read `alpha_snapshot_native()`
+  (kind 1, original indirection/cache slots); ray alpha tests and held ray snapshots retain the substituted
+  kind-2 record. Native and ray record indices reset and restore together. Missing-source capture skips
+  are counted in the family and generated-row logs (`no source`). No new key, shader or ABI change.
 - Live job (not run): tools/live_batches/vt_alpha (camp, OFF/ON/OFF, 4.1 min, 0.19 GB).
 - Option A share (`tools/assets/vt_alpha_gate_share.py`, same pack): foliage texel world size median 1.08 mm
   (p10 0.69, p90 2.03); receiver distance median 22.2 m (p10 14.6, p90 50.6), pixel angle 1.04 mrad. The gate

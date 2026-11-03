@@ -4,6 +4,7 @@
 #include "../common/native_hit_generated.h"
 #include "../common/native_hit_instanced.h"
 #include "../common/native_hit_pool.h"
+#include "../common/alpha_record_source.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,6 +14,31 @@ static unsigned checks;
 #define CHECK(x) do{++checks;if(!(x)){std::printf("FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
 
 int main() {
+  // The same append used by alpha_add_draw must preserve native kind-1 slots
+  // before an enabled offline VT mask rewrites the ray representation to kind 2.
+  struct Record {uint32_t kind,channel,tex,cache;float p0[4],scale[2];};
+  for(bool masks:{false,true}) {
+    std::vector<Record> ray,native;
+    const Record input{1,0,17,3,{0.25f,0.5f,0.125f,0.25f},{2.f,3.f}};
+    bg3::append_alpha_record(ray,native,input,[&](Record& r){
+      if(masks){r.kind=2;r.channel=0;r.tex=81;r.cache=0;r.scale[0]=r.scale[1]=1.f;}
+    });
+    CHECK(ray.size()==1 && native.size()==1);
+    CHECK(std::memcmp(&native[0],&input,sizeof(input))==0);
+    CHECK(ray[0].kind==(masks?2u:1u));
+    const auto& snapshot=native[0];
+    CHECK(prepass_alpha_ok(false,snapshot.kind,snapshot.channel,snapshot.p0[1],snapshot.p0[2]));
+    CHECK(!masks || !prepass_alpha_ok(false,ray[0].kind,ray[0].channel,ray[0].p0[1],ray[0].p0[2]));
+    DrawJoin prepass;prepass.begin(11,12);DrawKey draw{};draw.words[0]=99;
+    CHECK(prepass.note(11,12,draw,UINT32_MAX) && prepass.assign(11,12,draw,0));
+    CHECK(instanced::capture_source_ok(instanced::AlphaTest2s,true,&prepass,draw));
+    // Restored records retain aligned native/ray indices; next capture clears both.
+    bg3::append_alpha_record(ray,native,input,[](Record&){});
+    CHECK(ray.size()==2 && native.size()==2 && native[1].kind==1);
+    ray.clear();native.clear();
+    bg3::append_alpha_record(ray,native,input,[](Record&){});
+    CHECK(ray.size()==1 && native.size()==1 && native[0].tex==17);
+  }
   // An opaque draw sharing a generated pair has no alpha source. An unassigned,
   // unrelated or duplicate depth key cannot reserve its deferred stream either.
   DrawJoin source;source.begin(1, 2);

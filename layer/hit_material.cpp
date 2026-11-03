@@ -53,7 +53,7 @@ static_assert(offsetof(Row,p0)==48 && offsetof(Row,t)==80 && offsetof(Row,parame
 struct View {VkImageView view{};VkImage image{};VkImageLayout layout{};uint64_t id{};uint32_t image_id{};};
 struct Pre {DrawKey key;AlphaSnapshot alpha;VkDeviceSize raw{};uint32_t stride{},triangles{},record{};uint64_t vs{},fs{};bool opaque{};uint32_t family{};instanced::WindInputs inputs;};
 // rt_hit_material_instanced (native_hit_instanced.h) counters per family (0 unused, 1 wind, 2 alpha-test 2S, 3 wind RGB 2S).
-struct InstancedCount {uint32_t prepass{},seen{},pipeline{},bindings{},stream{},captured{},mapped{};uint64_t triangles{};};
+struct InstancedCount {uint32_t prepass{},seen{},pipeline{},bindings{},stream{},captured{},mapped{},no_source{};uint64_t triangles{};};
 struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflectance{};Row row;DrawKey key;View table,normal,albedo,physical;omm::BoundSampler sampler;Bg3Binding engine,physical_ubo,tilesets;std::array<View,9> tileset_views{};
  // LayoutDetail recipes (native_vt_surface.h, pool only): 2D detail normal 1:3, mask 1:8, sampler 0:7,
  // material UBO 1:1 strength/tiling/mask power/roughness add (bits).
@@ -730,7 +730,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
  const auto family=!tileset && instanced_live()?instanced::depth_family(state->vs,wind_rgb_on,ip_grass_rows(),generated_rows()):instanced::None;
  if(!tileset_vertex_count(args.count,args.instances,vertices) ||
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
- AlphaSnapshot snapshot{};if(!alpha_snapshot(record,&snapshot))return;
+ AlphaSnapshot snapshot{};if(!alpha_snapshot_native(record,&snapshot))return;
  if(!prepass_alpha_ok(tileset,snapshot.rec.kind,snapshot.rec.channel,snapshot.rec.p0[1],snapshot.rec.p0[2]))return;
  Pre pre{key(cmd,*state,args),snapshot,rawOffset,stride,triangles,record,state->vs,state->fs};pre.family=family;if(family!=instanced::None)pre.inputs=read_inputs(cmd,state,family);auto owned=std::static_pointer_cast<CandidateList>(state->hit_material_candidates);
  std::unique_lock lock(owned?owned->mutex:(lean_hooks()?pending_mutex:mutex),std::defer_lock);lock_timed(lock);
@@ -895,7 +895,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
        instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
        std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
   }
-  if(!source)return false;
+  if(!source){if(counts)++counts->no_source;if(gen)++gen->no_source;return false;}
  }
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
@@ -1267,17 +1267,17 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   InstancedCount c[instanced::kFamilies]{};for(uint32_t f=1;f<instanced::kFamilies;++f){c[f]=packet->instanced[f];c[f].prepass=slot.instanced_prepass[f];}
   for(const auto& m:q.materials)if(m.family>0 && m.family<instanced::kFamilies){++c[m.family].mapped;c[m.family].triangles+=m.row.triangles;}
   log("[hit material instanced] frame %llu key %u; wind: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; "
-      "alpha-test 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
+      "alpha-test 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; no source wind %u, alpha-test 2S %u",
    (unsigned long long)slot.frame,unsigned(instanced_live()),c[1].prepass,c[1].seen,c[1].pipeline,c[1].bindings,c[1].stream,c[1].captured,c[1].mapped,(unsigned long long)c[1].triangles,
-   c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles);
-  if(wind_rgb_on)log("[hit material instanced] frame %llu wind RGB 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
-   (unsigned long long)slot.frame,c[3].prepass,c[3].seen,c[3].pipeline,c[3].bindings,c[3].stream,c[3].captured,c[3].mapped,(unsigned long long)c[3].triangles);
-  if(ip_grass_on || generated_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles",
-   (unsigned long long)slot.frame,c[4].prepass,c[4].seen,c[4].pipeline,c[4].bindings,c[4].stream,c[4].captured,c[4].mapped,(unsigned long long)c[4].triangles);
+   c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles,c[1].no_source,c[2].no_source);
+  if(wind_rgb_on)log("[hit material instanced] frame %llu wind RGB 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; no source %u",
+   (unsigned long long)slot.frame,c[3].prepass,c[3].seen,c[3].pipeline,c[3].bindings,c[3].stream,c[3].captured,c[3].mapped,(unsigned long long)c[3].triangles,c[3].no_source);
+  if(ip_grass_on || generated_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; no source %u",
+   (unsigned long long)slot.frame,c[4].prepass,c[4].seen,c[4].pipeline,c[4].bindings,c[4].stream,c[4].captured,c[4].mapped,(unsigned long long)c[4].triangles,c[4].no_source);
   // rt_hit_material_generated: its instanced rows alone (they are also in their family's numbers above).
   if(generated_on){InstancedCount g=packet->generated;for(const auto& m:q.materials)if(m.generated){++g.mapped;g.triangles+=m.row.triangles;}
-   log("[hit material generated] frame %llu key %u: instanced G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; pairs %u",
-    (unsigned long long)slot.frame,unsigned(generated_rows()),g.seen,g.pipeline,g.bindings,g.stream,g.captured,g.mapped,(unsigned long long)g.triangles,generated::kRowCount);}
+   log("[hit material generated] frame %llu key %u: instanced G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; pairs %u; no source %u",
+    (unsigned long long)slot.frame,unsigned(generated_rows()),g.seen,g.pipeline,g.bindings,g.stream,g.captured,g.mapped,(unsigned long long)g.triangles,generated::kRowCount,g.no_source);}
  };
  // Snapshot acquisition is two shared-pointer pins; finalized packet join/material
  // metadata is immutable (late hooks may revoke valid, checked after relocking).

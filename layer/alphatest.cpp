@@ -38,6 +38,7 @@
 #include "omm_content.h"
 #include "assetdb.h"
 #include "../common/vt_alpha_masks.h"
+#include "../common/alpha_record_source.h"
 
 #include <algorithm>
 #include <map>
@@ -174,6 +175,7 @@ bool g_logged = false;
 
 // This capture's records and views.
 std::vector<AlphaRec> g_recs;
+std::vector<AlphaRec> g_native_recs; // same indices, before offline VT-mask substitution
 std::vector<std::pair<VkImageView, VkImageLayout>> g_tex, g_cache;
 // Why draws stayed opaque, for the log.
 uint32_t g_fail[6] = {};
@@ -881,6 +883,7 @@ void alpha_begin_capture() {
     native_scalp::publish_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t))));
   g_stream_reads = cfg_int("rt_alpha_stream", 0) != 0;
   g_recs.clear();
+  g_native_recs.clear();
   g_tileset_incomplete=false;
   g_native_samplers.clear();
   g_tex.clear();
@@ -1064,9 +1067,8 @@ bool alpha_add_draw(VkCommandBuffer cmd,const AlphaFs& a,uint32_t first_tri,uint
     }
     return false;
   }
-  vt_mask_substitute(r);
   if (rec_index) *rec_index = uint32_t(g_recs.size());
-  g_recs.push_back(r);
+  append_alpha_record(g_recs, g_native_recs, r, vt_mask_substitute);
   if (r.kind == 3) {if(r.p0[2]!=0.0f) ++g_scalp_dither; else ++g_scalp_hard;}
   if (r.kind == 4) ++g_hair_records;
   return true;
@@ -1120,10 +1122,10 @@ bool alpha_fine_mask(uint32_t index, AlphaRec* rec, VkImageView* view, uint32_t*
   return false;
 }
 
-bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
+static bool alpha_snapshot_impl(uint32_t index, AlphaSnapshot* out, bool native) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (index >= g_recs.size()) return false;
-  const AlphaRec& r = g_recs[index];
+  const AlphaRec& r = native ? g_native_recs[index] : g_recs[index];
   *out={};out->rec=r;
   if(r.kind==5){
     if(r.cache && r.cache<=g_native_samplers.size())out->native_sampler=g_native_samplers[r.cache-1u];
@@ -1155,6 +1157,13 @@ bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
   return true;
 }
 
+bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
+  return alpha_snapshot_impl(index, out, false);
+}
+bool alpha_snapshot_native(uint32_t index, AlphaSnapshot* out) {
+  return alpha_snapshot_impl(index, out, true);
+}
+
 uint32_t alpha_restore(const AlphaSnapshot& saved) {
   if(saved.rec.kind==5){
     std::lock_guard lock(g_mu);if(g_recs.size()>=kMaxRecords){g_tileset_incomplete=true;return UINT32_MAX;}
@@ -1164,7 +1173,7 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
     }
     if(r.p0[2]==1.f && saved.cache_id && view_image_id(saved.cache)==saved.cache_id)r.channel=slot_of(g_tex,kTextures,saved.cache,saved.cache_layout);
     if(!r.tex || !r.cache || (r.p0[2]==1.f && !r.channel))r.p0[1]=float(native_tileset_coverage::NtcMissing);
-    const auto index=uint32_t(g_recs.size());g_recs.push_back(r);return index;
+    const auto index=uint32_t(g_recs.size());append_alpha_record(g_recs,g_native_recs,r,[](AlphaRec&){});return index;
   }
   // A view destroyed during the hold (its handle possibly reused for another image,
   // e.g. a glyph or UI texture) must not be bound: the held draw is dropped instead.
@@ -1181,7 +1190,7 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
             r.kind == 4 ? slot_of(g_tex, kTextures, saved.cache, saved.cache_layout) : 0;
   if (!r.tex || ((r.kind == 1 || r.kind == 4) && !r.cache)) return UINT32_MAX;
   const uint32_t index = uint32_t(g_recs.size());
-  g_recs.push_back(r);
+  append_alpha_record(g_recs,g_native_recs,r,[](AlphaRec&){});
   return index;
 }
 

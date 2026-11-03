@@ -51,13 +51,13 @@ $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFro
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }
 Check "$($jobs.Count) job files, all one live_batch ($($jobs[0].live_batch))" ($jobs.Count -ge 1 -and @($jobs.live_batch | Select-Object -Unique).Count -eq 1)
-$totalSec = 0; $totalTraces = 0; $totalBursts = 0
+$totalWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
   Check "${n}: plan path is captures/live_batches/$Batch/plans/" ($planRel -like "captures/live_batches/$Batch/plans/*")
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
-  $sec = ($plan | Measure-Object seconds -Sum).Sum; $totalSec += $sec
+  $sec = ($plan | Measure-Object seconds -Sum).Sum; $waitSec = ($plan | ForEach-Object { [double]$_.wait_log_timeout } | Measure-Object -Sum).Sum; $totalSec += $sec; $totalWaitSec += $waitSec
   $state = @{}; $ok = Apply-Set $state $job.set
   $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
@@ -71,7 +71,9 @@ foreach ($job in $jobs) {
     if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
     $rearm = $step.label -like 'rearm-*' -and $step.kind -eq 'static' -and $step.seconds -eq 2 -and $step.set -eq 'fg_snap=0'
     $prefetch = $step.label -eq 'warmup' -and $step.kind -eq 'static' -and $step.seconds -ge 5 -and $step.seconds -le 45 -and -not $step.trace_at -and -not $step.serial -and -not $step.capture_at
-    if (-not $rearm -and -not $prefetch -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
+    # 300-frame CPU intervals at 30 fps need three lines (two full intervals) after a toggle.
+    $cpuSample = $Batch -eq 'qual_stage4' -and $step.label -match '^cost-(hooks|submit)-(off|on)-[ab]$' -and $step.kind -eq 'static' -and $step.seconds -eq 35 -and -not $step.trace_at -and -not $step.serial -and -not $step.capture_at
+    if (-not $rearm -and -not $prefetch -and -not $cpuSample -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
     if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
     if ($label.StartsWith('cost-') -and $diag) { $roles = $false }
@@ -90,8 +92,8 @@ foreach ($job in $jobs) {
   if ($burstCount -gt $MaxBursts) { $bursts = $false }
   $totalBursts += $burstCount
   Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts
-  Check "${n}: phases 5-25 s (static capture rearm 2 s; uncaptured warmup <=45 s)" $sizes
-  Check "${n}: timeout $($job.timeout) >= plan + 240 s load" ($job.timeout -ge $sec + 240)
+  Check "${n}: phases 5-25 s (static rearm 2 s; warmup <=45 s; qual_stage4 CPU samples 35 s)" $sizes
+  Check "${n}: timeout $($job.timeout) >= plan + readiness waits + 240 s load" ($job.timeout -ge $sec + $waitSec + 240)
   $er = @($job.expect_runner)
   Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
     [bool]($er -match "phases=$($plan.Count)\\b") -and
@@ -126,9 +128,9 @@ $lint = @(& py -3 (Join-Path $scripts 'queue_gates.py') --lint-capacity $here 2>
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
-$min = ($totalSec + $jobs.Count * $LoadSec) / 60.0
+$min = ($totalSec + $totalWaitSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $totalBursts * $BurstMB + $jobs.Count * $LogMB
-Say ("estimate: plans {0} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb)
+Say ("estimate: plans {0} s + readiness waits <={7} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 
