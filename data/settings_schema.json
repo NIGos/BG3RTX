@@ -16,21 +16,21 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rr": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"rr": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "hitch", "caps": ["dlss"], "keys": {"rr": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "rt_geometry", "label": "Ray-traced geometry",
      "description": "Includes scene geometry in ray-traced lighting. Full also includes cutout foliage, grates and chains.",
-     "apply": "partial", "apply_note": "Opaque <-> Full: restart", "advanced": false, "experimental": false, "developer": false,
+     "apply": "restart", "apply_note": "Opaque <-> Full: restart", "advanced": false, "experimental": false, "developer": false,
      "category": "Lighting", "summary": "Includes scene geometry in ray-traced lighting. Full also includes cutout foliage, grates and chains.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_build": "0", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "opaque", "label": "Opaque only", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "full", "label": "Full (with alpha-tested)", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_build": "0", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "opaque", "label": "Opaque only", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "full", "label": "Full (with alpha-tested)", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_build": "auto", "rt_alpha": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "sun_shadows", "label": "Sun shadows",
      "description": "Adds contact detail to sunlight shadows. Ray-traced shadows can include objects outside the camera view.",
@@ -41,8 +41,8 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"rt_shadows": "0", "contact_shadows": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"rt_shadows": "1", "contact_shadows": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "ss", "label": "Screen-space", "apply": "live", "caps": [], "keys": {"rt_shadows": "0", "contact_shadows": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "rt", "label": "Ray-traced", "apply": "live", "caps": ["ray_query"], "keys": {"rt_shadows": "1", "contact_shadows": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "roof_shadows", "label": "Roof sun shadows",
      "description": "Keeps sunlight shadows under roofs hidden by the camera.",
@@ -53,8 +53,8 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_cascade_casters": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_cascade_casters": "1"}, "needs": {"rt_geometry": 1, "sun_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "gi", "label": "Global illumination",
      "description": "Adds indirect light and contact shading. Ray-traced High uses more samples to reduce noise.",
@@ -65,10 +65,10 @@
      "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 2, "high": 2, "ultra": 3},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "ss", "label": "Screen-space", "caps": [], "keys": {"gi": "1", "gi_rt": "0", "gi_rays": "2", "gi_steps": "12"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "rt", "label": "Ray-traced", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "rt_high", "label": "Ray-traced High", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "ss", "label": "Screen-space", "apply": "live", "caps": [], "keys": {"gi": "1", "gi_rt": "0", "gi_rays": "2", "gi_steps": "12"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "rt", "label": "Ray-traced", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "rt_high", "label": "Ray-traced High", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "local_shadows", "label": "Local light shadows",
      "description": "Adds shadows from torches, lamps and spells. Fast requires Ray Reconstruction; Full keeps native shadows where needed.",
@@ -79,10 +79,10 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 2},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_local_shadows": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "fast", "label": "Fast", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1, "rr": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "full", "label": "Full", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "3"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "full_plus", "label": "Full + shadowed lights", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_local_shadows": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "fast", "label": "Fast", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "1", "ls_shadowed": "0"}, "needs": {"rt_geometry": 1, "rr": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "full", "label": "Full", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "3"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "full_plus", "label": "Full + shadowed lights", "apply": "live", "caps": ["ray_query"], "keys": {"rt_local_shadows": "1", "ls_samples": "0", "ls_shadowed": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "box_lights", "label": "Box light shadows",
      "description": "Adds shadows to broad area lights in interiors. Awaiting qualification; off in every preset.",
@@ -93,9 +93,9 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "Shadowed", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"},
-       {"id": "all", "label": "All", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"ls_box": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"},
+       {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
     {"id": "reflections", "label": "Reflections",
      "description": "Adds reflections on smooth surfaces. Higher levels include rougher surfaces; without Ray Reconstruction only mirror-like surfaces are traced.",
@@ -106,24 +106,24 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 1, "high": 2, "ultra": 3},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_reflections": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "glossy", "label": "Glossy", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.4"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "standard", "label": "Standard", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.6"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "rough", "label": "Rough", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.8"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_reflections": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "glossy", "label": "Glossy", "apply": "live", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.4"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "standard", "label": "Standard", "apply": "live", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.6"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "rough", "label": "Rough", "apply": "live", "caps": ["ray_query"], "keys": {"rt_reflections": "1", "rf_max_rough": "0.8"}, "needs": {"rt_geometry": 1, "gi": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "frame_generation", "label": "Frame generation",
      "description": "Adds generated display frames between rendered frames. Requires NVIDIA Reflex; display-frame estimates are not measured frame rates.",
-     "apply": "partial", "apply_note": "Off <-> on: restart", "advanced": false, "experimental": false, "developer": false,
+     "apply": "restart", "apply_note": "Off <-> on: restart", "advanced": false, "experimental": false, "developer": false,
      "category": "Performance", "summary": "Adds generated display frames between rendered frames. Requires NVIDIA Reflex; display-frame estimates are not measured frame rates.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"fg": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "2x", "label": "2x", "caps": ["fg"], "keys": {"fg": "2"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "3x", "label": "3x", "caps": ["mfg"], "keys": {"fg": "3"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "4x", "label": "4x", "caps": ["mfg"], "keys": {"fg": "4"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"fg": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "2x", "label": "2x", "apply": "restart", "caps": ["fg"], "keys": {"fg": "2"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "3x", "label": "3x", "apply": "restart", "caps": ["mfg"], "keys": {"fg": "3"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "4x", "label": "4x", "apply": "restart", "caps": ["mfg"], "keys": {"fg": "4"}, "needs": {"reflex": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "rt_intensity", "label": "RT lighting intensity",
      "description": "Adjusts the strength of indirect light, local shadows and reflections. Lower values blend toward the original appearance.",
@@ -152,62 +152,62 @@
      "required_from_choice": {},
      "preset_values": {"low": 1, "medium": 1, "high": 1, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"reflex": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": [], "keys": {"reflex": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "boost", "label": "On + Boost", "caps": [], "keys": {"reflex": "2"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"reflex": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"reflex": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "boost", "label": "On + Boost", "apply": "live", "caps": [], "keys": {"reflex": "2"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_water", "label": "RT water",
      "description": "Adds reflections, shadows and a refracted view of the water bed. Enabling water lighting requires a restart.",
-     "apply": "partial", "apply_note": "on: restart; off: live", "advanced": true, "experimental": false, "developer": false,
+     "apply": "restart", "apply_note": "on: restart; off: live", "advanced": true, "experimental": false, "developer": false,
      "category": "Surfaces", "summary": "Adds reflections, shadows and a refracted view of the water bed. Enabling water lighting requires a restart.",
      "cost": {"status": "Estimate", "gpu": "0.5-0.7 ms", "vram": "Up to 520 MB", "provenance": "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."},
      "required_on": {"rt": "1", "sharc_device": "1"},
      "required_from_choice": {"rt": 1, "sharc_device": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 3},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_water_geometry": "0", "rt_water_reflections": "0", "rt_water_compose": "0", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "reflections", "label": "Reflections", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false, "maturity": "qualified"},
-       {"id": "shadows", "label": "Reflections + shadows", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
-       {"id": "refraction", "label": "Reflections + shadows + refraction", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_geometry": "0", "rt_water_reflections": "0", "rt_water_compose": "0", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "reflections", "label": "Reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "0", "rt_water_ls_shadows": "0", "rt_water_game_shadow": "0", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_compose", "rt_water_reflections", "rt_water_geometry"], "developer": false, "maturity": "qualified"},
+       {"id": "shadows", "label": "Reflections + shadows", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
+       {"id": "refraction", "label": "Reflections + shadows + refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_hidden_surface", "label": "Hidden-surface shading",
      "description": "Improves light bouncing from surfaces behind the camera. The reflections level remains experimental.",
-     "apply": "partial", "apply_note": "first enable: restart; levels live", "advanced": true, "experimental": false, "developer": false,
+     "apply": "restart", "apply_note": "Native materials and wind capture are reserved at startup; bounce/reflection levels switch live.", "advanced": true, "experimental": false, "developer": false,
      "category": "Advanced", "summary": "Improves light bouncing from surfaces behind the camera. The reflections level remains experimental.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1", "gi_rt_fallback": "0"},
      "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1, "gi_rt_fallback": 2},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 2},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_material": "0", "rt_hit_material_instanced": "0", "rt_hit_material_wind_rgb": "0", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "materials", "label": "Materials", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb"], "developer": false, "maturity": "qualified"},
-       {"id": "bounce", "label": "+ Bounce", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["gi_hit_direct", "gi_hit_sun"], "developer": false, "maturity": "qualified"},
-       {"id": "reflections", "label": "+ Reflections", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_hit_material": "0", "rt_hit_material_instanced": "0", "rt_hit_material_wind_rgb": "0", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "materials", "label": "Materials", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "0", "gi_hit_sun": "0", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb"], "developer": false, "maturity": "qualified"},
+       {"id": "bounce", "label": "+ Bounce", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "0", "rf_hit_gi": "0"}, "needs": {"rt_geometry": 2, "gi": 2}, "migrate_from": ["gi_hit_direct", "gi_hit_sun"], "developer": false, "maturity": "qualified"},
+       {"id": "reflections", "label": "+ Reflections", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material": "1", "rt_hit_material_instanced": "1", "rt_hit_material_wind_rgb": "1", "gi_hit_direct": "1", "gi_hit_sun": "1", "rf_hit_shade": "1", "rf_hit_gi": "1"}, "needs": {"rt_geometry": 2, "gi": 2, "reflections": 1}, "migrate_from": ["rf_hit_shade", "rf_hit_gi"], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_hit_emission", "label": "Emission at ray hits",
      "description": "Adds emitted light when lighting rays hit glowing hidden surfaces, such as lava or braziers.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": false, "developer": false,
+     "apply": "hitch", "apply_note": "First use may compile a core pipeline; no game restart.", "advanced": true, "experimental": false, "developer": false,
      "category": "Advanced", "summary": "Adds emitted light when lighting rays hit glowing hidden surfaces, such as lava or braziers.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1"},
      "required_from_choice": {"rt": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_emission": "0", "rt_emissive": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "hidden", "label": "Hidden hits", "caps": ["ray_query"], "keys": {"rt_hit_emission": "1", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": false, "maturity": "qualified"},
-       {"id": "all", "label": "All hits (developer)", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": true, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hit_emission": "0", "rt_emissive": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "hidden", "label": "Hidden hits", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_hit_emission": "1", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": false, "maturity": "qualified"},
+       {"id": "all", "label": "All hits (developer)", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_hit_emission": "2", "rt_emissive": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": ["rt_hit_emission"], "developer": true, "maturity": "developer"}
      ]},
     {"id": "exp_gi_far", "label": "Far-field sun bounce",
      "description": "Includes more distant surfaces in sunlight bounce. Requires hidden-surface bounce lighting.",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": true, "experimental": false, "developer": false,
+     "apply": "hitch", "apply_note": "First use may compile a core pipeline; no game restart.", "advanced": true, "experimental": false, "developer": false,
      "category": "Advanced", "summary": "Includes more distant surfaces in sunlight bounce. Requires hidden-surface bounce lighting.",
      "cost": {"status": "Estimate", "gpu": "+3.2-3.7 ms", "vram": "Unknown", "provenance": "RTX 5090; Water Queens House and camp; 4K-class output; 2026-11-02 progress; ABI 26; 6 m; incremental GI trace cost. Reference only."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"gi_far": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "m6", "label": "6 m", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": ["gi_far"], "developer": false, "maturity": "qualified"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"gi_far": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "m6", "label": "6 m", "apply": "hitch", "caps": ["ray_query"], "keys": {"gi_far": "1", "gi_far_m": "6"}, "needs": {"exp_hidden_surface": 2}, "migrate_from": ["gi_far"], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_native_coverage", "label": "Native coverage",
      "description": "Improves the shape of hair, scalp and cutout surfaces in ray-traced lighting. Quality and cost remain unqualified.",
@@ -218,21 +218,21 @@
      "required_from_choice": {"rt": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_native_tileset": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "hair", "label": "Hair + scalp", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "experimental"},
-       {"id": "tilesets", "label": "+ Tilesets", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_native_tileset": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "hair", "label": "Hair + scalp", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "experimental"},
+       {"id": "tilesets", "label": "+ Tilesets", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_hair_physical_origin", "label": "Physical hair ray origins (advanced)",
      "description": "Adjusts where light rays start on hair to improve secondary lighting. Quality and cost remain unqualified.",
-     "apply": "partial", "apply_note": "Enable at startup; then live A/B", "advanced": true, "experimental": true, "developer": false,
+     "apply": "restart", "apply_note": "Enable at startup to reserve ray-origin resources; then live A/B is available.", "advanced": true, "experimental": true, "developer": false,
      "category": "Advanced", "summary": "Adjusts where light rays start on hair to improve secondary lighting. Quality and cost remain unqualified.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1", "rt_native_hair": "1", "rt_origin": "1"},
      "required_from_choice": {"rt": 1, "rt_native_hair": 1, "rt_origin": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Uses supported hardware to accelerate cutout shadows. Requires compatible hardware; quality and cost remain unqualified.",
@@ -243,8 +243,8 @@
      "required_from_choice": {"rt": 1, "rt_bvh_split": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_vt_alpha_masks", "label": "Offline cutout masks",
      "description": "Uses locally prepared foliage masks to improve cutout shadows. Coverage and brightness remain unqualified.",
@@ -255,8 +255,8 @@
      "required_from_choice": {"rt": 1, "rt_alpha": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
      "description": "Preserves more cutout surfaces when scene capture fills. Quality and cost remain unqualified.",
@@ -267,8 +267,8 @@
      "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_alpha_spill": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_alpha_spill": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "perf_hitmat_lists", "label": "Hit material CPU batching",
      "description": "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. Preserves material validation and shading. Requires Hidden-surface shading at startup.",
@@ -279,8 +279,8 @@
      "required_from_choice": {"rt_hit_material": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"perf_hitmat_lists": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"perf_hitmat_lists": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_hitmat_lists": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"perf_hitmat_lists": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "perf_hook_state", "label": "Reuse capture hook state",
      "description": "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. Experimental CPU optimization; geometry and material coverage stay the same.",
@@ -291,8 +291,8 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"perf_hook_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "caps": [], "keys": {"perf_hook_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_hook_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_hook_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "perf_submit_batch", "label": "Batch descriptor and submit bookkeeping",
      "description": "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Unqualified CPU experiment.",
@@ -303,8 +303,8 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"perf_submit_batch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "caps": [], "keys": {"perf_submit_batch": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Hidden-surface shading at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
@@ -315,22 +315,22 @@
      "required_from_choice": {"rt": 1, "rt_hit_material": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_hit_reference": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "direct", "label": "Direct only", "caps": ["ray_query"], "keys": {"rt_hit_reference": "1"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "two", "label": "Two surfaces", "caps": ["ray_query"], "keys": {"rt_hit_reference": "2"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hit_reference": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "direct", "label": "Direct only", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hit_reference": "1"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "two", "label": "Two surfaces", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hit_reference": "2"}, "needs": {"rt_geometry": 2, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_ls_exact_k", "label": "Local light sampling (exact-k)",
      "description": "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the mean brightness is unchanged. Needs Local light shadows Full. Off by user decision (developer only).",
-     "apply": "live", "apply_note": "live; first enable compiles shaders", "advanced": false, "experimental": true, "developer": true,
+     "apply": "hitch", "apply_note": "First use may compile a core pipeline; no game restart.", "advanced": false, "experimental": true, "developer": true,
      "category": "Developer", "summary": "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the mean brightness is unchanged. Needs Local light shadows Full. Off by user decision (developer only).",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"ls_k": "0", "ls_rest_samples": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "k1", "label": "1 exact light", "caps": ["ray_query"], "keys": {"ls_k": "1", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "k2", "label": "2 exact lights", "caps": ["ray_query"], "keys": {"ls_k": "2", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"ls_k": "0", "ls_rest_samples": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "k1", "label": "1 exact light", "apply": "hitch", "caps": ["ray_query"], "keys": {"ls_k": "1", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "k2", "label": "2 exact lights", "apply": "hitch", "caps": ["ray_query"], "keys": {"ls_k": "2", "ls_rest_samples": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_current_sun", "label": "Current cascade sun shadows",
      "description": "Uses the current four native sun-caster domains with finite per-layer rays and native receiver selection. Needs ray-traced geometry, Roof sun shadows, RT device setup and the static BVH split. Gives one window of samples, then falls back while the scene is unready (DIALOGUE_SHADOWS.md): developer only until fixed. Restart required.",
@@ -341,8 +341,8 @@
      "required_from_choice": {"rt": 1, "rt_bvh_split": 1, "rt_cascade_casters": 1},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "caps": [], "keys": {"rt_sun_cascade_current": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "caps": ["ray_query"], "keys": {"rt_sun_cascade_current": "1"}, "needs": {"rt_geometry": 1, "roof_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_sun_cascade_current": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_sun_cascade_current": "1"}, "needs": {"rt_geometry": 1, "roof_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]}
   ]
 }

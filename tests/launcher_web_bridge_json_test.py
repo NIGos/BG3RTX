@@ -20,3 +20,10 @@ for setting in state["settings"]:
 far = next(s for s in state["settings"] if "+3.2-3.7 ms" in s["cost"])
 assert "RTX 5090" in far["provenance"] and "6 m" in far["provenance"]
 print("Version, unchecked status and A1 cost provenance retained; unknown cost pills omitted.")
+
+assert state["restartCount"] == 0 and state["restartBanner"] == ""
+for setting in state["settings"]:
+    assert setting["apply"] in {"Live", "Applies after a short hitch", "Restart to apply"}, setting["id"]
+    for choice in setting["choices"]:
+        assert choice["apply"] in {"Live", "Applies after a short hitch", "Restart to apply"}
+print("Every card and choice has an explicit apply badge; no pending restart at baseline.")

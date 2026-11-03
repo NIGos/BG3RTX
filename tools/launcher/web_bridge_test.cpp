@@ -1,5 +1,6 @@
 ﻿// CPU-only bridge fixture: injected effects never launch or write real settings.
 #include "web_bridge.h"
+#include "ui_state.h"
 #include <cstdio>
 namespace st=bg3::settings;
 int main(int argc,char** argv){
@@ -39,7 +40,10 @@ int main(int argc,char** argv){
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
   launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("Graphics compatibility unavailable")!=std::string::npos);
-  bridge.set_restart_needed(true);check(bridge.state_json().find("\"restartNeeded\":true")!=std::string::npos);
+  bridge.set_restart_count(3);check(bridge.state_json().find("\"restartNeeded\":true")!=std::string::npos);
+  check(bridge.state_json().find("Restart BG3 to apply 3 changes")!=std::string::npos);
+  bridge.handle("{\"type\":\"discard\"}");check(bridge.state_json().find("Restart BG3 to apply 3 changes")!=std::string::npos);
+  bridge.set_restart_count(0);check(bridge.state_json().find("\"restartNeeded\":false")!=std::string::npos);
   bridge.handle("{\"type\":\"closeReport\"}");check(bridge.state_json().find("\"visible\":false")!=std::string::npos);
   int before=s.preset;bridge.handle("{\"type\":\"preset\",\"value\":3}");bridge.handle("{\"type\":\"experimental\",\"value\":true}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==before);
   check(bridge.handle(std::string(65537,'x')).find("Invalid launcher message")!=std::string::npos);
@@ -53,6 +57,28 @@ int main(int argc,char** argv){
   int emission=st::knob_index("exp_hit_emission");if(emission>=0)check(dependencies.values[emission]!=2);
   launcher::GraphicsInspection multiple;multiple.adapters.resize(2);multiple.adapters[0].gpu.name="First";multiple.adapters[1].gpu.name="Second";db.set_compatibility(multiple);check(!dependencies.have_gpu);db.handle("{\"type\":\"adapter\",\"value\":1}");check(dependencies.have_gpu&&dependencies.gpu.name=="Second");
   if(emission<0)return 2;dependencies.values[emission]=2;launcher::web::Bridge legacy(dependencies);check(dependencies.values[emission]==-1);check(legacy.dirty()==0);
+  launcher::State pending;pending.caps=~0u;pending.preset=st::kHigh;
+  pending.base=st::code_defaults();pending.base["rt_alpha"]="0";
+  pending.values=st::preset_values(st::kHigh);pending.values[st::knob_index("rt_geometry")]=1;
+  const auto process_baseline=pending.base;
+  launcher::web::Bridge* pending_bridge=nullptr;bool fail_save=false;
+  launcher::web::Hooks ph;
+  ph.save=[&](launcher::State& candidate,const st::KVList&,std::string& error){
+    if(fail_save){error="Fixture save failed";return false;}
+    auto after=candidate.base;
+    for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],candidate.values[i],kv);for(auto& v:kv)after[v.first]=v.second;}
+    pending_bridge->set_restart_count(launcher::ui_state::restart_count(process_baseline,after));return true;
+  };
+  launcher::web::Bridge pb(pending,ph);pending_bridge=&pb;
+  auto edit_save=[&](const char* edit){pb.handle(edit);pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");return pb.handle("{\"type\":\"confirm\"}");};
+  json=edit_save("{\"type\":\"set\",\"id\":\"rt_geometry\",\"value\":2}");
+  check(pb.dirty()==0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  json=edit_save("{\"type\":\"set\",\"id\":\"fps_cap\",\"value\":60}");
+  check(pb.dirty()==0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  fail_save=true;json=edit_save("{\"type\":\"set\",\"id\":\"rt_geometry\",\"value\":1}");
+  check(pb.dirty()>0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  fail_save=false;pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");json=pb.handle("{\"type\":\"confirm\"}");
+  check(pb.dirty()==0);check(json.find("\"restartNeeded\":false")!=std::string::npos);
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }
 

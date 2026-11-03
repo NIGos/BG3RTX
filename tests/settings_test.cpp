@@ -499,8 +499,8 @@ static void test_gui_levels() {
     CHECK(knob_value(*k, code_defaults()) == 0);
   }
   CHECK(find_knob("exp_hit_emission")->choices[2].dev);   // rt_hit_emission=2 is developer-only
-  CHECK(find_knob("exp_hidden_surface")->apply == Apply::Partial);
-  CHECK(find_knob("exp_water")->apply == Apply::Partial);
+  CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
+  CHECK(find_knob("exp_water")->apply == Apply::Restart);
   CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
@@ -766,7 +766,7 @@ static void test_ultra_water() {
   }
   CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1") && !key_change_needs_restart("rt_water_reflections", "0", "1"));
   CHECK(key_change_needs_restart("sharc_device", "1", "0"));
-  CHECK(w->apply == Apply::Partial);
+  CHECK(w->apply == Apply::Restart);
   // Before the Experimental section in the GUI order (after every main entry, before the first experimental one).
   int iw = knob_index("exp_water"), first_exp = kKnobCount;
   for (int i = 0; i < kKnobCount; ++i)
@@ -878,6 +878,28 @@ static void test_product_policy() {
   CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
 }
 
+static void test_apply_modes() {
+  for(const auto& k:kKnobs) {
+    CHECK(k.apply!=Apply::Unspecified);
+    CHECK(apply_label(k.apply)[0]!=0);
+    for(int c=0;c<choice_count(k);++c) {
+      CHECK(k.choices[c].apply!=Apply::Unspecified);
+      CHECK(apply_label(k.choices[c].apply)[0]!=0);
+      CHECK(knob_apply(k,c)==k.choices[c].apply);
+    }
+  }
+  CHECK_EQ(apply_label(Apply::Live),"Live");
+  CHECK_EQ(apply_label(Apply::Hitch),"Applies after a short hitch");
+  CHECK_EQ(apply_label(Apply::Restart),"Restart to apply");
+  // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
+  CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
+  CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
+  CHECK(key_change_needs_restart("rt_bvh_split","0","1"));
+  CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
+  CHECK(knob_apply(*find_knob("exp_water"),0)==Apply::Live);
+  CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -885,6 +907,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_apply_modes();
   test_product_policy();
   test_parse();
   test_preset_expansion();
