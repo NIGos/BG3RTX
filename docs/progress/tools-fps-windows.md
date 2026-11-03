@@ -6,3 +6,6 @@
 - lean_dryrun delegates duration rules; 5 hair jobs and both 5-job fake-queue paths pass. Aggregate estimate 71.1 min exceeds the retained 65 min limit.
 - cp4 and combined camp/S8 remain blocked by readiness/launch budgets; combined receipts now retain these failures. No game, queue submission or Git metadata writes.
 - Validation: 147/147 CTests pass; 58 focused tooling tests pass. Shader request delta 0.
+- Bundle 12: reconciled tools-fps-windows with water-fresnel-zero2; wsf1 generator derives 11.9 s static windows and 1.1 s restore, preserving gates and predicted.json.
+- Repaired gpu_opt1 generator indentation and split save-dependent plans; regenerated 8 failing jobs to pass all 22 active-job lints. Linked SHA-256 into pak_uv_join_test for pakjoin-publish.
+- Bundle 12 validation: full build and 147/147 CTests pass (verified process exit 0); water shader identity passes, shader request delta 0. No game, queue submission or Git metadata writes.
