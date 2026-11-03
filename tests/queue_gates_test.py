@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -300,5 +301,25 @@ def main():
     return 0
 
 
+class MidnightTests(unittest.TestCase):
+    def test_shared_origin_with_different_first_stamps(self):
+        # Both stream orderings around midnight share one day origin. Runner preamble
+        # stamps count even when the first phase starts after midnight.
+        for runner_text, game_text in [
+            ("23:59:58.000 launch\n00:00:01.000 [pan-plan] window 0\n00:00:06.000 [motion-plan] complete",
+             "00:00:02.000 [cfg] settings read\n00:00:03.000 event ok"),
+            ("00:00:01.000 [pan-plan] window 0\n00:00:06.000 [motion-plan] complete",
+             "23:59:59.000 preamble\n00:00:02.000 [cfg] settings read\n00:00:03.000 event ok"),
+            ("23:59:59.000 [pan-plan] window 0\n00:00:06.000 [motion-plan] complete",
+             "00:00:02.000 [cfg] settings read\n00:00:03.000 event ok"),
+        ]:
+            self.assertFalse(queue_gates.check([dict(select="event", match="ok", event=True, windows=["cost"])],
+                                         game_text, runner_text, [dict(label="cost")]))
+
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    code = main()
+    if code:
+        sys.exit(code)
+    unittest.main()

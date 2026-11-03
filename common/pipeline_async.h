@@ -4,7 +4,7 @@
 // of DXC plus 7 s of driver pipeline creation per variant, minutes of freeze on the first frames with
 // rt_native_hair (ds1 log 2026-11-02 10:03). Builds run on a small pool of worker threads instead; the
 // render thread polls each frame and installs the result when it is ready. Until then the caller skips
-// the pass (a new request) or keeps the previous pipeline of the same request (a hot reload).
+// the pass only if it has no pipeline yet; live toggles keep the previous compatible pipeline.
 //
 // - One build per key (request + layout). poll() starts it, reports it busy, then hands the result over
 //   once (the entry is erased). A failed build is not retried for kFailCooldown polls of that key.
@@ -13,6 +13,7 @@
 // - join() (core unload) stops the workers, drops the queued builds and discards unclaimed results.
 // Workers persist (one DXC instance each in the layer; per-job threads would leak one per build).
 // tests/pipeline_async_test.cpp.
+#include <algorithm>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -35,6 +36,13 @@ struct Result {
 
 enum class State { kStarted, kBuilding, kReady, kFailed };
 
+// Select only within one pass and layout. Layout retirement clears the caller's previous handle.
+// Pending and failed replacements reuse previous work only if its resource mode is compatible.
+template <class Handle>
+constexpr Handle select_pipeline(State state, Handle ready, Handle previous, bool previous_compatible = true) {
+  return state == State::kReady && ready ? ready : previous_compatible ? previous : Handle{};
+}
+
 inline constexpr unsigned kFailCooldown = 240;   // polls of a failed key before it is built again
 
 class Builds {
@@ -55,7 +63,18 @@ class Builds {
     auto it = jobs_.find(key);
     if (it != jobs_.end()) {
       Job& j = *it->second;
-      if (!j.done) return State::kBuilding;
+      if (!j.done) {
+        // Demand outranks speculative startup work that has not begun yet.
+        if (j.warm && !j.running) {
+          auto queued = std::find(queue_.begin(), queue_.end(), it->second);
+          if (queued != queue_.end()) {
+            queue_.erase(queued);
+            j.warm = false;
+            queue_.insert(std::find_if(queue_.begin(), queue_.end(), [](const auto& q) { return q->warm; }), it->second);
+          }
+        }
+        return State::kBuilding;
+      }
       const Result r = j.result;
       jobs_.erase(it);
       if (out) *out = r;
@@ -72,11 +91,28 @@ class Builds {
     job->dep = dep;
     job->fn = fn;
     jobs_[key] = job;
-    queue_.push_back(job);
+    queue_.insert(std::find_if(queue_.begin(), queue_.end(), [](const auto& q) { return q->warm; }), job);
     ++started_;
     while (threads_.size() < workers_) threads_.emplace_back([this] { work(); });
     cv_.notify_one();
     return State::kStarted;
+  }
+
+  // Startup prewarm: enqueue without consuming a completed result. The normal poll takes it once.
+  bool prewarm(const std::string& key, uint64_t dep, const Fn& fn) {
+    std::unique_lock<std::mutex> lock(mu_);
+    drain_locked();
+    if (stopping_ || jobs_.count(key) || failed_.count(key)) return false;
+    auto job = std::make_shared<Job>();
+    job->dep = dep;
+    job->fn = fn;
+    job->warm = true;
+    jobs_[key] = job;
+    queue_.push_back(job);
+    ++started_;
+    while (threads_.size() < workers_) threads_.emplace_back([this] { work(); });
+    cv_.notify_one();
+    return true;
   }
 
   // A build of `dep` is queued or running.
@@ -144,6 +180,7 @@ class Builds {
     Result result;
     bool done = false;
     bool running = false;
+    bool warm = false;
   };
   struct Parked {
     uint64_t dep;
@@ -216,7 +253,7 @@ class Builds {
 };
 
 // Per-present status of the builds (core/gi.cpp gi_on_frame), the observables of the live gates:
-// - a window of `window_frames` presents: frames with a build pending (a new request's pass skipped), builds
+// - a window of `window_frames` presents: frames with a build pending, builds
 //   started, builds still pending at its end ("gi: background builds (N frames): ...");
 // - a burst, from the frame a build started to the first frame with none pending: builds started, wall time,
 //   presents and the longest present interval inside it ("gi: background builds done: ..."): the first enable of

@@ -74,7 +74,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, Count
+  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, rt_hit_material_paks, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -474,6 +474,9 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 // G-buffer discovery; with rr=1 also records the RR guide dispatch into `cmd`.
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
+void ngx_join_prewarm();
+void rrpost_prewarm(DeviceData* dd);
+void rrpost_join_prewarm();
 void ngx_on_present();
 // ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.
@@ -691,6 +694,9 @@ struct InstPipe {
   uint32_t pos_offset = 0;
   uint32_t pos_stride = 0; // zero: dynamic binding stride
   bool pos_float3 = false; // content identity supports raw float3 only
+  uint8_t uv_binding = 0xff; // paks: audited copy of a raw per-vertex float2 input
+  uint32_t uv_offset = 0, uv_stride = 0;
+  bool paks_cull_known = false, paks_two_sided = false;
 };
 void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);
@@ -909,6 +915,9 @@ void water_forget_pipeline(VkPipeline p);
 void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci);
 void hair_primary_device_destroyed(DeviceData* dd);
 void hair_primary_note_module(VkShaderModule m, uint64_t hash);
+void hair_primary_forget_module(VkShaderModule m);
+// The depth image of the last main G-buffer pass (0 before the first): a new one marks a level load.
+uint64_t geo_gbuffer_depth_image();
 void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
                                  const VkPipeline* out);
 void hair_primary_forget_pipeline(VkPipeline p);

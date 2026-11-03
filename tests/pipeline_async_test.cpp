@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <future>
 #include <set>
 
 namespace pa = bg3::pipe_async;
@@ -15,6 +16,48 @@ static int checks = 0;
 #define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL line %d: %s\n", __LINE__, #x); std::exit(1); } } while (0)
 
 int main() {
+  // Prewarming uses the visible live settings, excludes restart tilesets and developer controls.
+  pa::PipelineSpecs warm;
+  using namespace bg3::shader_variant;
+  warm.add(kSpecIdTileset, 0); warm.add(kSpecIdScalpHair, 0);
+  warm.add(kSpecIdWaterComposeShift, 0); warm.add(kSpecWaterHitShade, 0);
+  warm.add(kSpecIdCompactHitState, 0); warm.add(kSpecIdAlphaMetadataCache, 0);
+  warm.add(kSpecIdWaterEmptyTiles, 0);
+  const auto alternatives = pa::experimental_specs(warm, false);
+  CHECK(alternatives.size() == 5); // hit shading 1/2 and three exact GPU candidates (native hair graduated: restart-only, not prewarmed)
+  std::set<uint32_t> gpu_choices;
+  for (const auto& alt : alternatives) {
+    CHECK(alt.data[0] == 0); // tilesets require restart
+    CHECK(alt.data[2] == 0); // compose shift is developer-only
+    for (uint32_t i = 4; i < alt.count; ++i)
+      if (alt.data[i]) gpu_choices.insert(alt.entries[i].constantID);
+  }
+  CHECK(gpu_choices == (std::set<uint32_t>{kSpecIdCompactHitState, kSpecIdAlphaMetadataCache, kSpecIdWaterEmptyTiles}));
+  {
+    pa::Builds builds(1, {});
+    CHECK(builds.prewarm("warm", 1, [] { return pa::Result{42, 3, true}; }));
+    builds.wait_idle();
+    CHECK(!builds.prewarm("warm", 1, [] { return pa::Result{}; }));
+    pa::Result result;
+    CHECK(builds.poll("warm", 1, {}, &result) == pa::State::kReady);
+    CHECK(result.pipeline == 42 && builds.started_total() == 1);
+  }
+  // Demand is served before queued prewarming, and still consumes its result exactly once.
+  {
+    pa::Builds builds(1, {});
+    std::promise<void> started, release;
+    auto wait = release.get_future();
+    builds.poll("blocker", 1, [&] { started.set_value(); wait.wait(); return pa::Result{1, 1, true}; }, nullptr);
+    started.get_future().wait();
+    std::vector<int> order;
+    builds.prewarm("speculative", 1, [&] { order.push_back(2); return pa::Result{2, 1, true}; });
+    builds.prewarm("promoted", 1, [&] { order.push_back(4); return pa::Result{4, 1, true}; });
+    CHECK(builds.poll("promoted", 1, {}, nullptr) == pa::State::kBuilding);
+    builds.poll("demand", 1, [&] { order.push_back(3); return pa::Result{3, 1, true}; }, nullptr);
+    release.set_value();
+    builds.wait_idle();
+    CHECK(order == std::vector<int>({4, 3, 2}));
+  }
   // The queued payload owns its values after the render stack is changed/destroyed.
   pa::PipelineSpecs off;
   off.add(1008, 0); off.add(1010, 0); off.add(1014, 0); off.add(1017, 0);
@@ -154,6 +197,18 @@ int main() {
     for (int i = 0; i < 3; ++i) m.tick(0, 3, 1176 + 16 * i, 4, &w, &b);
     CHECK(m.tick(0, 3, 1224, 4, &w, &b) == pa::Monitor::kWindow);
     CHECK(w.waiting == 0 && w.started == 0 && w.pending == 0);
+  }
+  for (auto state : {pa::State::kStarted, pa::State::kBuilding, pa::State::kFailed, pa::State::kReady}) {
+    // Full -> half and half -> full both refuse an old pipeline until ready.
+    for (bool installed_half : {false,true}) for (bool requested_half : {false,true}) {
+      const bool compatible = installed_half == requested_half;
+      CHECK(pa::select_pipeline(state, 0u, 7u, compatible) == (compatible ? 7u : 0u));
+      CHECK(pa::select_pipeline(state, 9u, 7u, compatible) ==
+            (state == pa::State::kReady ? 9u : compatible ? 7u : 0u));
+    }
+    CHECK(pa::select_pipeline(state, 0u, 7u) == 7u);
+    CHECK(pa::select_pipeline(state, 0u, 0u) == 0u);
+    CHECK(pa::select_pipeline(state, 9u, 7u) == (state == pa::State::kReady ? 9u : 7u));
   }
   std::printf("pipeline_async_test: %d checks passed\n", checks);
   return 0;

@@ -1,0 +1,109 @@
+# Offline live-job design checks
+
+Run `python tools/live_batches/live_flow.py` to check every checked-in job, or
+pass a batch folder or a single job JSON. `lean_dryrun.ps1` runs this check before
+its reuse cache and fake queue. No command in this helper launches the game.
+The current per-job findings are in [live_flow_audit.md](live_flow_audit.md).
+
+The corpus reads `captures/queue/results.jsonl` from this checkout, falling back
+to the main checkout for a linked worktree. Only rows with `valid: true` qualify.
+It selects the newest 3 readable logs per save; old rows resolve save names from
+the exact job name in prepared jobs and queue `done` jobs. Unknown saves are
+reported and excluded. `--results`, `--newest` and `--cache` override these choices.
+The cache lives in this checkout's `captures/.cache`; result, job and log file
+size/mtime signatures invalidate it. Regex hits are cached against that corpus.
+Forbids matching any VALID log fail with a quoted line. Expect patterns are also
+compiled and matched, with hit counts in a JSON `--report`; no historic match
+is required for an expectation about a new effect. Missing corpus evidence fails.
+
+Window gates use the producer cadence, the worst alignment of the next line,
+and the runner's skipped first line after settings apply. The window endpoint is
+exclusive. Every required line must fit; `when_present` does not excuse an
+insufficient window when its pass runs. Known periodic events also have their
+cadence checked. One-off trace/burst events retain event semantics.
+
+Required pool-log lines also need `rt_stats=1` in each gated window; startup
+candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
+The runner sends the full job context through a JSON file. Lint checks the remaining
+job-derived environment values against the Windows 32767 UTF-16-unit limit
+(including the terminator), including tags and generated INI/log paths.
+
+Jobs can declare these planning assumptions in a top-level `live_flow` object:
+
+```json
+{
+  "expected_fps": 18,
+  "settings_latency_s": 1,
+  "trace_stall_s": 3,
+  "startup_only": ["example_startup_key"]
+}
+```
+
+Foreground jobs must declare expected rendered FPS. Visible unfocused jobs use
+30 rendered FPS. Trace stall bounds must be declared for periodic gates in trace
+windows. Unknown producers must declare `period_frames` or `period_s` on their
+gate, with the source of the cadence recorded in the batch's documentation.
+The lint reports the minimum window length and guaranteed complete-line count.
+These are planning assumptions, not a promise about an arbitrarily stalled GPU.
+
+Rendering values used during measurement must run in earlier non-capture phases.
+Only capture commands, exposure latching and diagnostic switches are exempt;
+they schedule observations. Startup-only keys must remain constant after warmup.
+Warmup after the first measured window cannot repair a cold first measurement.
+Known load-time mesh-pool forbids have become zero-tolerance event gates over
+measured windows, preserving failure detection while excluding scene loading.
+
+## Combining saves
+
+```powershell
+python tools/live_batches/combine.py <job.json> <job.json> --out captures/offline/combined
+```
+
+The tool groups by save, writes one job/plan/manifest per save, and immediately
+runs the shared offline design checks. It rejects incompatible trees, window
+modes, runner args, declared startup keys and timing assumptions.
+Only single MovePlan jobs are supported. It never writes a pending inbox.
+
+A reset before each later batch sets every key used by any batch to the next
+batch's startup value or its shipped preset/default value. Unknown keys without
+explicit baselines in every input are rejected. Each source batch keeps its own
+warmup requirements. Labels, trace phase numbers, every-window and trend gates
+are prefixed/rebased; patterns and expectations are merged. Only common forbids
+apply globally; each batch's full forbid list is checked again on its own slice.
+
+Different presets are supported: each reset restores the next batch's preset and
+all settings that differ between the shipped presets, including keys untouched
+by either plan. An explicitly declared startup-only preset still cannot change.
+
+The combined job's gated post command extracts each batch automatically. To
+extract offline, use `--extract <manifest> --log <log> --runner <runner> --out <dir>`;
+add `--run-post` to execute original post commands. Incomplete runs and plan drift
+fail closed. Original labels, indices, queue log basenames and sibling runner
+files are restored. Each slice contains the common launch preamble plus its own
+game lines; trace paths still point to the original captures. Each original post
+command receives only that slice's log, runner and captures. `results.json` records
+per-batch validity and post exit codes. Keep the source jobs, captures and manifest
+until their post gates have finished reading them.
+
+## Offline live-batch preparation
+
+Jobs and plans belong under `tools/live_batches/<batch>`, never a watched inbox.
+Write `predicted.json` before generating jobs. Combine phase groups with
+`combine.py` into one launch per save; use a separate short GPU-AV launch.
+Startup-latched settings must agree across combined phases. Do not combine
+validation timing with performance windows. Hold Q/E for turns; use wheel for zoom.
+
+Run the batch's `dryrun.ps1`. It samples every camera phase, checks trace markers,
+window roles, scene-wait/capacity lints, budgets, and fake-queue positive/negative
+paths. These receipts have no live authorization. Run Python synthetic tests too.
+
+Only the serial queue may launch a game, with fresh authorization. An offline
+dryrun, missing observables, or a draw-count log never grants a quality pass.
+Every ON window and baseline character must be represented in the analyzer input.
+Keep raw capture provenance; report FAIL/INVALID per check in JSON and Markdown.
+
+Camera plan fields are shared by the runner and lint in `scripts/camera-plan-fields.json`.
+`registration_policy` is analysis-only metadata for edge_flicker, rr_hair_guide and
+rr_post_decision; it does not schedule runner actions. Unknown fields fail before launch.
+Combined jobs retain external `requires_success_of` prerequisites; inputs depending
+on another input must run separately.

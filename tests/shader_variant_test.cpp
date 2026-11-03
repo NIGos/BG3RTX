@@ -17,6 +17,10 @@ int main(int argc, char** argv) {
   const std::filesystem::path root = argv[1];
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
+  CHECK(request("gi/rt_reflections.hlsl",kTraceHalf).find("RT_TRACE_HALF=1")!=std::string::npos);
+  CHECK(request("gi/rt_shadow.hlsl",kTraceHalf)==request("gi/rt_shadow.hlsl",0));
+  for(unsigned base=0;base<kTraceHalfSlot;++base)
+    CHECK((base|kTraceHalfSlot)!=base && (base|kTraceHalfSlot)<kPipelineSlots);
   CHECK(kSpecWaterHitShade == 1016);
   CHECK(water_hit_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
   // Fixed spellings: migrated keys share one request; the remaining defines keep their order.
@@ -99,6 +103,14 @@ int main(int argc, char** argv) {
   }
   CHECK(hair_gi_cull_slot("gi/rt_shadow.hlsl", true) == 0u);
   // rt_hair_groom (constant 1020): its own slot bit above every other, on every gi/ file only.
+  CHECK(gpu_opt_entry("gi/rt_hit_two_bounce.hlsl") && gpu_opt_entry("gi/rt_shadow.hlsl"));
+  CHECK(!gpu_opt_entry("gi/gi_temporal.hlsl") && !gpu_opt_entry("probe.hlsl"));
+  CHECK(kSpecIdCompactHitState == 1024 && kSpecIdAlphaMetadataCache == 1022 && kSpecIdWaterEmptyTiles == 1023);
+  std::set<unsigned> gpu_opt_slots;
+  for(unsigned base=0;base<kCompactHitStateSlot;++base)for(unsigned compact=0;compact<2;++compact)for(unsigned alpha=0;alpha<2;++alpha){
+    unsigned slot=base|(compact?kCompactHitStateSlot:0u)|(alpha?kAlphaMetadataCacheSlot:0u);
+    CHECK(slot<kPipelineSlots && gpu_opt_slots.insert(slot).second);
+  }
   CHECK(kSpecIdHairGroom == 1020);
   for (unsigned base = 0; base < kHairGroomSlot; ++base) {
     const auto on = base | hair_groom_slot("gi/rt_shadow.hlsl", true);

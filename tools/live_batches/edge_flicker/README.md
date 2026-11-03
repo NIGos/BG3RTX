@@ -3,8 +3,7 @@
 `ef1-dialogue3-attribution` loads **Test Dialogue3**, the port save used by
 `dialogue_shadows`. It sends no camera or dialogue input. The first shot must
 match the white-haired character against the blurred background in
-`edge_flicker_user.webp`. There is no supported dialogue pause control in auto-run. Each phase declares
-`registration_policy=per-frame-exclude-unregistered`: the analyzer registers every
+`edge_flicker_user.webp`. There is no supported dialogue pause control in auto-run. The analysis uses `per-frame-exclude-unregistered`: the analyzer registers every
 rendered depth and presented PQ frame against baseline A, using gradient magnitude
 so a brightness or polarity change does not masquerade as camera motion. It keeps
 the longest consecutive run with low aligned rigid-control residual (at least
@@ -118,3 +117,5 @@ No full trace dumps or input-copy bursts. Scene phases **180 s**, with 120 s loa
 allowance **300 s / 5 min**; timeout 420 s is a failure ceiling, not the target.
 Keep raw captures until analysis/review; then remove only those explicitly
 identified burst directories, retaining the report, logs and predictions.
+
+2026-11-03 offline repair: warm all attribution states before baseline; 220 s phases plus 120 s load require a 6 minute dryrun bound. Registration remains per-frame with unregistered frames excluded (an analysis contract, not a camera-plan field). Combined startup reserves rt_xfb_mb=1024 explicitly.

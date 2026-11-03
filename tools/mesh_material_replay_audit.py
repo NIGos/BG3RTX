@@ -43,6 +43,75 @@ def preservation(before, after):
             "header_equal": header_equal, "evaluated_energy_proved": False}
 
 
+def pak_index(summary):
+    """Index local candidates only; their SHA selects a full byte comparison."""
+    summary = Path(summary)
+    doc = json.loads(summary.read_text(encoding='utf-8'))
+    result = {}
+    for batch in doc['batches']:
+        data = json.loads((summary.parent / batch).read_text(encoding='utf-8'))
+        for row in data['rows']:
+            result.setdefault((row['index_count'], row['geometry_sha256']), []).append(row)
+    return result
+
+
+def pak_geometry(pack, index):
+    """Exact ordered object-space position/UV candidates, never qualified joins.
+
+    Old packs have no game resource/UUID bridge or native COLOR streams. Soup is
+    camera-relative and is excluded. Sparse pool packs remain unsupported here.
+    """
+    pack = Path(pack)
+    report = dict(scope='pool only; bit-exact ordered position3/UV2; not hit weighted',
+        examined=0, no_uv=0, unsupported=0, missing=0, unique_candidate=0, ambiguous=0,
+        candidate_triangles=0, proven_joined_rows=0, joined_coverage_estimate=None,
+        reason='No native texture UUID-to-view bridge or per-draw COLOR/cull/basis proof in these packs')
+    pool = None
+    for line in (pack/'manifest.txt').read_text().splitlines():
+        fields = line.split()
+        if fields[:3] == ['buffer', '1', '8'] and len(fields) == 5:
+            pool = pack/fields[4]
+        if fields[:3] == ['range', '1', '8']:
+            report['unsupported_pool_ranges'] = True
+            return report
+    if pool is None:
+        report['pool_missing'] = True
+        return report
+    import numpy as np
+    size = pool.stat().st_size
+    with pool.open('rb') as stream:
+        for base, meta, record, tris in struct.iter_unpack('<4I', (pack/'s1b7.bin').read_bytes()):
+            if not meta & (1 << 8):
+                continue
+            stride = meta & 255
+            if stride < 24:
+                report['no_uv'] += 1
+                continue
+            if meta & (1 << 9) or not tris or base + tris*3*stride > size:
+                report['unsupported'] += 1
+                continue
+            report['examined'] += 1
+            stream.seek(base)
+            raw = stream.read(tris*3*stride)
+            corners = np.empty((tris*3, 5), dtype='<f4')
+            corners[:, :3] = np.ndarray((tris*3, 3), '<f4', raw, strides=(stride, 4))
+            corners[:, 3:] = np.ndarray((tris*3, 2), '<f4', raw, offset=16, strides=(stride, 4))
+            full = corners.tobytes()
+            candidates = index.get((tris*3, hashlib.sha256(full).hexdigest()), [])
+            exact = [r for r in candidates if Path(r['full_geometry_cache']).read_bytes() == full]
+            contracts = {(r['material_id'], r.get('two_sided'), r.get('uses_vertex_color'),
+                r.get('color_layout', 0), r.get('color_sha256'),
+                Path(r.get('template', '')).name == 'Engine_Default_HLOD_GM_VT.lsf') for r in exact}
+            if not exact:
+                report['missing'] += 1
+            elif len(contracts) > 1:
+                report['ambiguous'] += 1
+            else:
+                report['unique_candidate'] += 1
+                report['candidate_triangles'] += tris
+    return report
+
+
 def audit(pack, candidate=None):
     pack = Path(pack)
     if not (pack / "manifest.txt").is_file():
@@ -94,11 +163,16 @@ def main():
     parser.add_argument("--pack", type=Path, action="append", required=True)
     parser.add_argument("--candidate-root", type=Path, help="mirror root of candidate pack tables; input only")
     parser.add_argument("--out", type=Path, required=True, help="new report outside source replay packs")
+    parser.add_argument('--pak-summary', type=Path, help='completed offline batch summary; exact geometry candidates only')
     args = parser.parse_args()
     out = args.out.resolve()
     if any(out.is_relative_to(p.resolve()) for p in args.pack):
         parser.error("report must be outside every read-only source pack")
     reports = [audit(p, args.candidate_root / p.name if args.candidate_root else None) for p in args.pack]
+    if args.pak_summary:
+        index = pak_index(args.pak_summary)
+        for pack, report in zip(args.pack, reports):
+            report['pak_geometry_candidates'] = pak_geometry(pack, index)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"status": "INVENTORY_ONLY" if not args.candidate_root else "PRESERVATION_CHECK", "packs": reports}, indent=2) + "\n")
     print(f"audited {len(reports)} packs; {sum(r['active_rows'] for r in reports)} active rows; report {out}", flush=True)

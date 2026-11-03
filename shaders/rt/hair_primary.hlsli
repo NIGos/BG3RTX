@@ -43,6 +43,46 @@ static const uint hair_primary_table_offset = 64u;
 static const uint hair_primary_pixel_bytes = 16u;
 static const uint hair_primary_no_strand = 0xFFFFFFFFu;
 static const uint hair_primary_max_segment = 0x00FFFFFFu;
+// Largest strand radius a groom file may hold (common/hair_groom_asset.h rejects radii >= 10 mm).
+static const float hair_primary_max_radius = 0.01;
+
+// Pixel entry seal (word 3): the frame tag mixed with the other three words, so a reader never pairs this frame's tag
+// with the words of an older entry (the 16-byte stores of a pixel are not atomic). Bit 31 set: a zeroed entry never
+// matches.
+uint hp_mix(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+uint hp_seal(uint3 e, uint tag) { return (tag ^ hp_mix(e.x ^ hp_mix(e.y ^ hp_mix(e.z)))) | 0x80000000u; }
+
+// Inverse of a 4x4 matrix (the card fragment's camera-relative point from the jittered view-projection).
+float4x4 hp_inverse4(float4x4 m) {
+  const float a00 = m[0][0], a01 = m[0][1], a02 = m[0][2], a03 = m[0][3];
+  const float a10 = m[1][0], a11 = m[1][1], a12 = m[1][2], a13 = m[1][3];
+  const float a20 = m[2][0], a21 = m[2][1], a22 = m[2][2], a23 = m[2][3];
+  const float a30 = m[3][0], a31 = m[3][1], a32 = m[3][2], a33 = m[3][3];
+  const float b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10;
+  const float b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+  const float b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30;
+  const float b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  const float det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  const float s = 1.0 / det;
+  return float4x4(
+      (a11 * b11 - a12 * b10 + a13 * b09) * s, (a02 * b10 - a01 * b11 - a03 * b09) * s,
+      (a31 * b05 - a32 * b04 + a33 * b03) * s, (a22 * b04 - a21 * b05 - a23 * b03) * s,
+      (a12 * b08 - a10 * b11 - a13 * b07) * s, (a00 * b11 - a02 * b08 + a03 * b07) * s,
+      (a32 * b02 - a30 * b05 - a33 * b01) * s, (a20 * b05 - a22 * b02 + a23 * b01) * s,
+      (a10 * b10 - a11 * b08 + a13 * b06) * s, (a01 * b08 - a00 * b10 - a03 * b06) * s,
+      (a30 * b04 - a31 * b02 + a33 * b00) * s, (a21 * b02 - a20 * b04 - a23 * b00) * s,
+      (a11 * b07 - a10 * b09 - a12 * b06) * s, (a00 * b09 - a01 * b07 + a02 * b06) * s,
+      (a31 * b01 - a30 * b03 - a32 * b00) * s, (a20 * b03 - a21 * b01 + a22 * b00) * s);
+}
+
+// Strand ownership of a card fragment (overlapping grooms, layered cards). Every strand point lies on its groom's
+// card triangles (hair_groom_update.hlsl), so a point of segment p0 -> p1 is within |p1 - p0| / 2 of the card surface
+// and the capsule's surface within the radius more. Along the fragment's ray (card surface at t_card; cos_card: |cos|
+// of the ray against the card normal) that is a band of that distance / cos_card, plus the card's own distance spread
+// over the pixel (foot). A hit outside the band belongs to another card: that card's own fragment writes it.
+bool hp_on_card(float t_card, float t_hit, float cos_card, float foot, float seg_len) {
+  return abs(t_hit - t_card) <= (hair_primary_max_radius + 0.5 * seg_len) / max(cos_card, 1e-6) + foot;
+}
 
 // Parameter in [0, 1] of the point of segment p0 -> p1 closest to `hit` (the strand's UV and motion are
 // interpolated with it).

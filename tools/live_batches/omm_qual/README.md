@@ -68,3 +68,5 @@ The normal 12 ms wait budget is restored before cost. Plan: 152 s, 12 phases.
 After Ultra promotion, om1/om2 explicitly keep dynamic OMM, masks and fine LOD
 off; om3 keeps dynamic OMM off and switches only its original fine-LOD policy.
 These pins preserve the historical controls against the new Ultra defaults.
+
+2026-11-03 offline repair: foreground planning assumes 30 rendered FPS, 1 s settings latency and 1 s per trace. Added pre-measurement reference/fine-LOD/wait-budget warmups; 494 s phases plus four 120 s loads require a 17 minute dryrun bound. OMM OFF retains its exact whole-run bans as zero-tolerance event gates, so OMM ON evidence from another configuration cannot invalidate their design. Invalid VT-alpha cache skips remain forbidden in measured om3 windows; load-time skips are excluded.

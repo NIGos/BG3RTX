@@ -330,6 +330,8 @@ static void cfg_read_files() {
   }
   settings::Map next = raw;
   bool derived = settings::resolve_derived(next);
+  static const settings::Map startup = next;
+  settings::retain_startup_tilesets(next,startup);
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_cfg.swap(next);
@@ -445,6 +447,7 @@ static const CfgHotKey kCfgHot[] = {
   {"perf_hook_state", 0},
   {"rt_hair_groom", 0},
   {"rt_hair_groom_primary", 0},
+  {"rt_hit_material_paks", 0},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];

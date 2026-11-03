@@ -26,6 +26,7 @@
 // Anything out of order breaks the chain for that frame and the evaluate falls
 // back to RR on the game's graded colour (logged).
 #include "host.h"
+#include "../common/pipeline_async.h"
 
 #include <cmath>
 #include <cstring>
@@ -319,10 +320,17 @@ bool ensure_layout(DeviceData* dd) {
   return true;
 }
 
-VkPipeline pipeline(DeviceData* dd, Pipe& p) {
+// The shader file that defines an entry. The build and the per-frame generation check must agree:
+// asking rr_post.hlsl for a temporal entry fails to compile ("missing entry point definition").
+const char* entry_source(const char* entry) {
+  if (strcmp(entry, "hair_resolve") == 0) return "rr_hair.hlsl";
+  if (strcmp(entry, "temporal") == 0 || strcmp(entry, "temporal_final") == 0) return "rr_post_temporal.hlsl";
+  return "rr_post.hlsl";
+}
+
+VkPipeline compile_pipeline(DeviceData* dd, Pipe& p) {
   Bg3ShaderBlob blob{};
-  if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" :
-                  (strcmp(p.entry, "temporal") == 0 || strcmp(p.entry, "temporal_final") == 0) ? "rr_post_temporal.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
+  if (!shader_get(entry_source(p.entry), p.entry, "cs_6_0", &blob)) return p.pipe;
   if (p.pipe && blob.generation == p.gen) return p.pipe;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
@@ -344,6 +352,32 @@ VkPipeline pipeline(DeviceData* dd, Pipe& p) {
   p.gen = blob.generation;
   log("[rrpost] rr_post.hlsl:%s pipeline built (generation %llu)", p.entry, (unsigned long long)p.gen);
   return np;
+}
+
+bg3::pipe_async::Builds g_builds(1,
+    [](const bg3::pipe_async::Result& r) { defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
+    [] { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); });
+bool g_prewarmed = false;
+bg3::pipe_async::Result compile_background(DeviceData* dd, const char* entry) {
+  Pipe fresh{entry};
+  auto p = compile_pipeline(dd, fresh);
+  return {uint64_t(p), fresh.gen, p != VK_NULL_HANDLE};
+}
+VkPipeline pipeline(DeviceData* dd, Pipe& p) {
+  if (p.pipe) {
+    Bg3ShaderBlob blob{};
+    if (!shader_get(entry_source(p.entry), p.entry, "cs_6_0", &blob) ||
+        blob.generation == p.gen) return p.pipe;
+  }
+  bg3::pipe_async::Result result;
+  const auto st = g_builds.poll(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
+    return compile_background(dd, entry);
+  }, &result);
+  if (st == bg3::pipe_async::State::kReady) {
+    if (p.pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(p.pipe));
+    p.pipe = VkPipeline(result.pipeline); p.gen = result.generation;
+  }
+  return p.pipe;
 }
 
 void barrier(DeviceData* dd, VkCommandBuffer cmd, VkPipelineStageFlags src, VkPipelineStageFlags dst, VkAccessFlags sa,
@@ -976,6 +1010,9 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
 }
 
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs) {
+  if (cs == kCsLighting && cfg_int("rr", 1)) {
+    if (auto* dd = device_of(cmd)) rrpost_prewarm(dd);
+  }
   if (!cfg_int("rr", 1) || !cfg_int("rr_post", 1)) return;
   if (cs != kCsResolve && cs != kCsLighting && cs != kCsAdapt) {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -1039,6 +1076,19 @@ bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint3
   out->dof = g_ch.dof;
   return true;
 }
+
+void rrpost_prewarm(DeviceData* dd) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (g_prewarmed || !ensure_layout(dd)) return;
+  g_prewarmed = true;
+  unsigned count = 0;
+  for (const auto& p : g_pipes)
+    count += g_builds.prewarm(p.entry, uint64_t(g_pl), [dd, entry=p.entry] {
+      return compile_background(dd, entry);
+    }) ? 1u : 0u;
+  log("[rrpost] Experimental prewarm: %u startup pipelines (RR order and hair resolve, below normal priority)", count);
+}
+void rrpost_join_prewarm() { g_builds.join(); g_prewarmed = false; }
 
 void rrpost_forget_image(VkImage image) {
   std::lock_guard<std::mutex> lock(g_mu);

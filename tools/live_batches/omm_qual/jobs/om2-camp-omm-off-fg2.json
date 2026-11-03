@@ -64,9 +64,7 @@
   "compile call failed",
   "RR creation failed",
   "RR evaluate failed",
-  "\\[cascade\\] could not allocate",
-  "\\[omm\\] requesting EXT micromap",
-  "\\[omm\\] last \\d+ builds"
+  "\\[cascade\\] could not allocate"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
@@ -108,6 +106,25 @@
     "cost-off-b"
    ],
    "when_present": true
+  },
+  {
+   "name": "OMM off forbids \\[omm\\] requesting EXT micromap",
+   "select": "\\[omm\\] requesting EXT micromap",
+   "match": "(?!)",
+   "event": true,
+   "min": 0
+  },
+  {
+   "name": "OMM off forbids \\[omm\\] last \\d+ builds",
+   "select": "\\[omm\\] last \\d+ builds",
+   "match": "(?!)",
+   "event": true,
+   "min": 0
   }
- ]
+ ],
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 1
+ }
 }

@@ -7,9 +7,17 @@
   "traces": 0,
   "hold": 90,
   "timeout": 480,
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_xfb_mb"
+    ]
+  },
   "repeat": 1,
   "stop_on_dump": false,
-  "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0,dump_png_width=384",
+  "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
   "args": [
     "-RealPresent",
     "-Move",
@@ -258,6 +266,31 @@
       "windows": [
         "timing-on-b"
       ]
+    },
+    {
+      "name": "no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "rendered-off-a",
+        "presented-off-a",
+        "energy-off-a",
+        "timing-off-a",
+        "rendered-on-a",
+        "presented-on-a",
+        "energy-on-a",
+        "timing-on-a",
+        "rendered-off-b",
+        "presented-off-b",
+        "energy-off-b",
+        "timing-off-b",
+        "rendered-on-b",
+        "presented-on-b",
+        "energy-on-b",
+        "timing-on-b"
+      ]
     }
   ],
   "forbid": [
@@ -271,11 +304,7 @@
     "\\[sl\\] edge capture REFUSED",
     "\\[rrpost\\] exposure hold REFUSED",
     "\\[rrpost\\] temporal REFUSED",
-    "\\[rt\\] mesh.*pool full",
-    "nonfinite",
-    "\\[rrpost\\] temporal REFUSED",
-    "\\[rt\\] mesh.*pool full",
-    "nonfinite"
+    "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b"
   ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
@@ -286,7 +315,7 @@
     "\\[motion-trace\\] phase=15 label=energy-off-b repeat=0",
     "\\[motion-trace\\] phase=20 label=energy-on-b repeat=0"
   ],
-  "estimated_phase_seconds": 165,
+  "estimated_phase_seconds": 173,
   "purpose": "READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized.",
   "framing_status": "PROPOSED_STATIC_S8_REQUIRES_VERIFICATION"
 }

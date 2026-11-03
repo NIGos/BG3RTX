@@ -60,6 +60,7 @@ if($DryRun){
 }
 $script:permissionRunner="$PID|$([guid]::NewGuid().ToString('N'))"
 $script:permissionStates=@()
+$script:childContextFiles=@()
 $script:minimizer=$null
 function Assert-QueueRuntime {
   $playing=Get-QueueUserPlayingBlock $root
@@ -258,7 +259,7 @@ function Start-Session($job, $tree, [int]$timeout) {
     }
     $why = Get-RunEnded $out
     "- session $id did not become ready: $why" | Write-Record $md
-    return @{ failed = $why }
+    return @{ failed = $why; completed = $false }
   }
   $log = Join-Path $tree "bg3rtx.log"
   $s = @{ id = $id; key = (Get-SessionKey $job); tree = $tree; proc = $proc; out = $out; quit = $quit; request = $request
@@ -359,7 +360,7 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   $tagText = "session $($s.id)#$k, core gen $($s.generation)"
   $outcome = if ($fault) { "Run ended: $fault after ${sec}s ($tagText)" } else { "Run ended: done after ${sec}s ($tagText)" }
   $r = @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
-          session = "$($s.id)#$k"; generation = $s.generation; saved = $(if ($k -gt 1) { $s.readySec } else { 0 }); fault = $fault }
+          session = "$($s.id)#$k"; generation = $s.generation; saved = $(if ($k -gt 1) { $s.readySec } else { 0 }); fault = $fault; completed = -not $fault }
   $r   # after a fault the caller closes the session, once the run is recorded
   } finally {
     if($phase){Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue}
@@ -490,7 +491,11 @@ function Run-Job($file) {
     $actualBuild=Get-QueueBuildIdentity $tree
     $script:permissionStates+=Use-QueuePermission $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
     $script:permissionContext=@{job=$job;tree=$tree;build=$actualBuild}
-    $env:BG3RTX_QUEUE_CONTEXT=New-QueueChildContext $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
+    $contextFile=Join-Path $q ('child-context.'+[guid]::NewGuid().ToString('N')+'.json')
+    New-QueueChildContext $job $root $tree $actualBuild $PermissionSession $script:permissionRunner | Set-Content -LiteralPath $contextFile -Encoding UTF8
+    $script:childContextFiles+=@($contextFile)
+    Remove-Item Env:BG3RTX_QUEUE_CONTEXT -ErrorAction SilentlyContinue
+    $env:BG3RTX_QUEUE_CONTEXT_FILE=$contextFile
     if(-not $DryRun -and -not $script:minimizer){
       $script:minimizer=Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$(Join-Path $PSScriptRoot 'game-minimizer.ps1')`"",'-WhilePid',$PID
     }
@@ -507,7 +512,7 @@ function Run-Job($file) {
         $s = Start-Session $job $tree $timeout
         if ($s -and $s.failed) {
           $r = @{ outcome = "Run ended: session did not start: $($s.failed)"; nv = (Get-Nv153 $tree $t0); dumps = (Get-Dumps $tree $t0)
-                  keptLog = $null; captures = @(); lines = @(); session = "failed"; generation = $null; saved = 0 }
+                  keptLog = $null; captures = @(); lines = @(); session = "failed"; generation = $null; saved = 0; completed = $false }
         } elseif (-not $s) {
           "- (layer in this tree has no session support: run alone)" | Write-Record $md
         }
@@ -530,7 +535,7 @@ function Run-Job($file) {
     # "expect": log lines that prove the run tested what it meant to (the feature switched on,
     # the asset DB loaded, the level loaded). A run missing any is INVALID, never a pass.
     $missing = @()
-    if ($r.ContainsKey('completed') -and -not $r.completed) { $missing += 'successful terminal state' }
+    if (-not $r.completed) { $missing += 'successful terminal state' }
     if ($r.runner_missing) { $missing += @($r.runner_missing) }
     if ($job.expect -and $r.keptLog -and (Test-Path $r.keptLog)) {
       foreach ($p in @($job.expect | Where-Object { $_ })) {
@@ -658,5 +663,11 @@ try {
     }
     $idle = Get-Date
   }
-} finally { Stop-Session "runner stopped"; foreach($state in $script:permissionStates | Select-Object -Unique){Close-QueuePermission $state $script:permissionRunner} }
+} finally {
+  Stop-Session "runner stopped"
+  foreach($state in $script:permissionStates | Select-Object -Unique){Close-QueuePermission $state $script:permissionRunner}
+  # Session and nested QA children retain their original context until stopped.
+  foreach($contextFile in $script:childContextFiles){Remove-Item -LiteralPath $contextFile -ErrorAction SilentlyContinue}
+  Remove-Item Env:BG3RTX_QUEUE_CONTEXT_FILE -ErrorAction SilentlyContinue
+}
 "queue empty"

@@ -59,6 +59,18 @@
        {"id": "rt", "label": "Ray-traced", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "rt_high", "label": "Ray-traced High", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "rt_trace_scale", "label": "Lighting trace resolution",
+     "description": "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+     "apply": "hitch", "apply_note": "resets lighting history", "advanced": true, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "half", "label": "Half", "apply": "hitch", "caps": [], "keys": {"rt_trace_scale": "0.5"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "full", "label": "Full", "apply": "hitch", "caps": [], "keys": {"rt_trace_scale": "1.0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
     {"id": "local_shadows", "label": "Local light shadows",
      "description": "Adds shadows from torches, lamps and spells. Fast requires Ray Reconstruction; Full keeps native shadows where needed.",
      "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,
@@ -171,9 +183,9 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_water_hit_shade", "label": "Water: hidden-surface reflections",
-     "description": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "description": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "apply": "live", "apply_note": "live; needs captured materials at startup", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
@@ -182,6 +194,20 @@
        {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"rt_water_hit_shade": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On (experimental)", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_shade": "1"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": ["rt_water_hit_shade"], "developer": false, "maturity": "experimental"},
        {"id": "world", "label": "World lights (experimental)", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_shade": "2"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": ["rt_water_hit_shade"], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_water_hit_cost", "label": "Water reflection optimizations",
+     "description": "Experimental: compare sparse light lookup, zero-light rejection and candidate order. Energy qualification pending.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Experimental: compare sparse light lookup, zero-light rejection and candidate order. Energy qualification pending.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"rt_water_hit_cost": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "sparse", "label": "Sparse lights", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_cost": "1"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
+       {"id": "zero", "label": "Zero light rejection", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_cost": "2"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
+       {"id": "order", "label": "Unsorted candidates", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_cost": "4"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_hidden_surface", "label": "Off-screen bounce light",
      "description": "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
@@ -246,6 +272,42 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_post_temporal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_temporal": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
+    {"id": "exp_compact_hit_state", "label": "Compact ray hit state",
+     "description": "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_compact_hit_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_compact_hit_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_alpha_metadata_cache", "label": "Cache alpha metadata",
+     "description": "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_alpha_metadata_cache": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_alpha_metadata_cache": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_water_empty_tiles", "label": "Skip empty water tiles",
+     "description": "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_empty_tiles": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_empty_tiles": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
      "description": "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
@@ -259,16 +321,16 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_compose_shift": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_native_coverage", "label": "Native hair + scalp",
-     "description": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-     "apply": "live", "apply_note": "hair + scalp: live; tilesets: restart", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks). + Tilesets also enables tileset coverage.",
+     "apply": "restart", "apply_note": "restart", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks). + Tilesets also enables tileset coverage.",
+     "cost": {"status": "Measured", "gpu": "RT +2.3-6.3 ms, GI +3.2-8.8 ms over cards (S8, dialogues)", "vram": "88-byte capture vertices", "provenance": "RTX 5090; hair_qual 2026-11-03; user decision: hair shadows need it, cost accepted"},
      "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
      "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_native_tileset": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "hair", "label": "Hair + scalp", "apply": "live", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "experimental"},
+       {"id": "hair", "label": "Hair + scalp", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "qualified"},
        {"id": "tilesets", "label": "+ Tilesets", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": true, "maturity": "developer"}
      ]},
     {"id": "exp_hair_gi_cull", "label": "Omit hair from indirect rays",
@@ -345,16 +407,16 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_visibility": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
-     "description": "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+     "cost": {"status": "Measured", "gpu": "Neutral", "vram": "Mesh pool -26-50%", "provenance": "RTX 5090; hair_qual 2026-11-03"},
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_pool_trim": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_hair_cheap", "label": "Single-sample hair coverage",
      "description": "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",
@@ -451,6 +513,18 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hit_paks", "label": "Pak material coverage",
+     "description": "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+     "apply": "restart", "apply_note": "restart to enable; off is live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt_hit_material": "1", "rt_hit_material_instanced": "1"},
+     "required_from_choice": {"rt_hit_material": 1, "rt_hit_material_instanced": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hit_material_paks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material_paks": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Hidden-surface shading at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",

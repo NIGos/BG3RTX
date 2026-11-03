@@ -1,0 +1,20 @@
+## Water hit cost (branch water-hit-cost, READY_FOR_LIVE, 2026-11-03)
+- No commit, Git metadata writes, game launch or real queue submission. ABI unchanged; request delta 0.
+- rt_water_hit_cost, SpecId 1021, default 0: bit 1 sparse slots, bit 2 cone/zero, bit 4 slot-order K; 7 combines them.
+- Experimental GUI exposes individual steps; presets off. Pipelines cached for A/B; original loop isolated when off.
+- Sparse traversal: <=4096 membership reads/hit -> <=128 mask reads + N active reads; +512 B device memory.
+- At illustrative N=39: 167 vs 4096 reads (24.5x fewer), not a measured GPU speedup.
+- Prepare adds one mask atomic per unique active slot, not per duplicate froxel occurrence.
+- Cone before falloff saves one pow on an excluded spot; zero incident skips BRDF, not extra visibility rays.
+- Slot order removes <=496 insertion moves/nontruncated hit; effective K remains min(reaching,32), overflow retains probe.
+- Material already fetched once and shared by local/sun/sky. No redundant fetch removed.
+- Positive cutoff deferred: encoded half-ULP does not bound composed/exposed error. Exact zero discards no energy.
+- Temporal reuse deferred without energy/stability evidence; material/cluster hit binning needs a new work list.
+- Build passed; all 132 CTests passed, including 10,000 randomized CPU incident comparisons.
+- pp-diff wf9-compose-shift: 236 common requests, 145 input-identical, 80 pp-identical, 11 changed.
+- waterhit --sample 16: 9/9 layouts, 96/96 comparisons, 9 key-off baseline matches; active modes 1/2: 64/64 matches.
+- watercost --sample 0: both files, 60/60 comparisons; prepare 3/3 valid, both states and key-off baseline match.
+- Dryrun passed: 349 s, 32 captures, 1930 MB; each bit and combined 0/value/0/value at fixed hit shade 2.
+- S8 Water Queens House, Ultra: pool column reflections; static float energy, reflection GPU median/p90, compose separately.
+- Supplied cost 0.15 ms -> 0.8-2.4 ms median, p90 up to 3.3 ms; candidate cost unmeasured. Budgets are targets, not stops.
+- No quality pass or preset promotion. Every ON still requires energy within OFF noise, preserved coverage and zero truncation.

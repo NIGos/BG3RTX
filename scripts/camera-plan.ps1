@@ -137,3 +137,38 @@ function Get-RotationMouseMessages($action) {
   }
   @{message=$message;buttons=$buttons;x=$action.x;y=$action.y}
 }
+
+# Search the whole current run, including cached pipelines from earlier phases.
+# Match individual lines and use the latest matching record for each requirement.
+function Test-CameraPlanReady($step, [string]$text) {
+  foreach ($pattern in @($step.wait_log)) {
+    $latest=$null
+    foreach ($line in ($text -split "`n")) {
+      if ($line -match $pattern) { $latest=$line }
+    }
+    if ($null -eq $latest) { return $false }
+  }
+  return $true
+}
+
+# Central list of phase fields consumed by auto-run and the camera samplers.
+# Fail offline on typos instead of silently accepting an ignored instruction.
+function Assert-CameraPlanFields($step) {
+  $registry=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'camera-plan-fields.json') -Raw | ConvertFrom-Json
+  $allowed=@($registry.runner)+@($registry.analysis_only)
+  $names=if ($step -is [System.Collections.IDictionary]) { @($step.Keys) } else { @($step.PSObject.Properties.Name) }
+  foreach ($name in $names) {
+    if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
+  }
+  if ($step.wait_log) {
+    if (-not ($step.wait_log_timeout -gt 0) -or [double]::IsInfinity([double]$step.wait_log_timeout)) {
+      throw 'wait_log requires a finite positive wait_log_timeout'
+    }
+    foreach ($pattern in @($step.wait_log)) {
+      if (-not ($pattern -is [string]) -or -not $pattern.Trim()) { throw 'wait_log requires nonempty regex strings' }
+      [void][regex]::new($pattern)
+    }
+  } elseif ($step.wait_log_timeout) { throw 'wait_log_timeout requires wait_log' }
+  if ('recenter' -in $names -and -not ($step.recenter -is [bool])) { throw 'recenter requires a boolean' }
+  if ('reload_selected' -in $names -and -not ($step.reload_selected -is [bool])) { throw 'reload_selected requires a boolean' }
+}

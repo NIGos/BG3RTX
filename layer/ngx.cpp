@@ -17,6 +17,7 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
+#include "../common/pipeline_async.h"
 
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
@@ -620,6 +621,33 @@ static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& ge
   return p;
 }
 
+static bg3::pipe_async::Builds g_hair_builds(1,
+    [](const bg3::pipe_async::Result& r) { defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
+    [] { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); });
+static bool g_hair_warmed = false;
+static bg3::pipe_async::Result compile_hair(DeviceData* dd) {
+  uint64_t gen = 0;
+  auto p = build_pipeline(dd, "capture", gen, VK_NULL_HANDLE, "rr_hair.hlsl");
+  return {uint64_t(p), gen, p != VK_NULL_HANDLE};
+}
+static void prewarm_hair(DeviceData* dd) {
+  if (!g_hair_warmed) {
+    g_hair_warmed = true;
+    g_hair_builds.prewarm("hair", uint64_t(g_pl), [dd] { return compile_hair(dd); });
+    log("[ngx] Experimental prewarm: 1 extra pipeline (RR hair capture, below normal priority)");
+  }
+  Bg3ShaderBlob blob{};
+  const bool reload = g_hair_pipe && shader_get("rr_hair.hlsl", "capture", "cs_6_0", &blob) && blob.generation != g_hair_gen;
+  if (!g_hair_pipe || reload) {
+    bg3::pipe_async::Result r;
+    if (g_hair_builds.poll("hair", uint64_t(g_pl), [dd] { return compile_hair(dd); }, &r) == bg3::pipe_async::State::kReady) {
+      if (g_hair_pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_hair_pipe));
+      g_hair_pipe = VkPipeline(r.pipeline); g_hair_gen = r.generation;
+    }
+  }
+}
+void ngx_join_prewarm() { g_hair_builds.join(); g_hair_warmed = false; }
+
 static VkImageView view_of(DeviceData* dd, VkImage img, bool depth) {
   auto it = g_views.find(img);
   if (it != g_views.end()) return it->second;
@@ -870,6 +898,7 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     if (x.w == p.width && x.h == p.height && !x.rr_failed) f = &x;
   if (!f) return;
   if (!ensure_layouts(dd) || !ensure_guides(dd, p.width, p.height)) return;
+  prewarm_hair(dd);
   g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
   if (!g_pipe) return;
 
@@ -944,7 +973,7 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     }
     if (!g_hair.image && !guide_create(dd, g_hair, VK_FORMAT_B10G11R11_UFLOAT_PACK32, p.width, p.height))
       guide_destroy(dd, g_hair);
-    g_hair_pipe = build_pipeline(dd, "capture", g_hair_gen, g_hair_pipe, "rr_hair.hlsl");
+    prewarm_hair(dd);
     SetKey hk = key;
     hk.out = g_hair.image;
     VkDescriptorSet hs = g_hair.image ? get_set(dd, hk, g_hair.view) : VK_NULL_HANDLE;
@@ -1256,6 +1285,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   const uint32_t w = f.w, h = f.h;
   if (!gb.rt[0] || gb.w != w || gb.h != h) return refuse("no G-buffer pass at the render resolution seen yet");
   if (!ensure_layouts(dd) || !ensure_guides(dd, w, h)) return refuse("guide resources unavailable");
+  prewarm_hair(dd);
   g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
   if (!g_pipe) return refuse("rr_guides.hlsl has not compiled");
 

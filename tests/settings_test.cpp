@@ -52,6 +52,11 @@ static void test_parse() {
 }
 
 static void test_preset_expansion() {
+  for(int p=0;p<kPresetCount;++p) {
+    Map m; for(auto& kv:expand_preset(p)) m[kv.first]=kv.second;
+    CHECK_EQ(get(m,"rt_trace_scale"),p<=kMedium?"0.5":"1.0");
+    if(p<kUltra) for(const char* key:{"gi_far","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_hit_emission","rt_emissive"}) CHECK_EQ(get(m,key),"0");
+  }
   Map high;
   for (auto& kv : expand_preset(kHigh)) high[kv.first] = kv.second;
   CHECK_EQ(get(high, "rr"), "1");
@@ -382,7 +387,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // Qualified memory management is automatic; three user-facing experimental entries remain.
+  // Count the merged user-facing experimental knobs and pin developer-only ordering.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -411,17 +416,17 @@ static void test_gui_levels() {
     for (const std::string& key : knob_keys(k)) {
       if (!code_default(key)) CHECK_EQ(std::string(k.id) + " writes unknown key " + key, "");
     }
-    // The launcher only has these pages (tools/launcher/ui/app.js `sections`, plus Developer):
+    // Knob pages of the launcher (tools/launcher/ui/app.js `sections`; Memory and Support render no knobs; plus Developer):
     // a knob in any other category would be in the schema but never shown.
     if (!k.dev_only) {
       const std::string c = k.category;
-      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Memory" || c == "Advanced");
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced");   // the Memory page shows capacity only
     }
     // Off in every preset for experimental knobs.
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 11);   // Includes the default-off RR hair coverage resolve candidate, the temporal post candidate, strand hair on screen, physical strand shading and the strand crowd budget.
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget remain.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -511,7 +516,7 @@ static void test_gui_levels() {
     // Promoted (Advanced, in Ultra): RT water (M5), Hidden-surface shading "+ Bounce" and Emission "Hidden hits" (M4),
     // Far-field sun bounce 6 m (gf2 031330).
     const std::string id = l.knob;
-    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission" && id != "exp_gi_far") &&
+    CHECK(k->experimental == (id != "exp_water" && id != "exp_hidden_surface" && id != "exp_hit_emission" && id != "exp_gi_far" && id != "exp_native_coverage") &&
           !k->dev_only);
     CHECK(choice_count(*k) == int(l.values.size()));
     for (int c = 0; c < choice_count(*k); ++c) {
@@ -534,7 +539,7 @@ static void test_gui_levels() {
   CHECK(find_knob("local_shadows")->choices[3].dev);
   CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
   CHECK(find_knob("exp_water")->apply == Apply::Restart);
-  CHECK(find_knob("exp_native_coverage")->apply == Apply::Live);
+  CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);   // 88-byte capture layout is startup-only
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
   // No orphan key: every key the old entries wrote is still written by a knob or is automatic.
@@ -657,7 +662,7 @@ static void test_user_ini_migration() {
   CHECK(v[knob_index("exp_alpha_spill")] == 1);
   CHECK(v[knob_index("exp_hidden_surface")] == 3);
   CHECK(v[knob_index("exp_water")] == 3);
-  CHECK(v[knob_index("exp_native_coverage")] == 0);
+  CHECK(v[knob_index("exp_native_coverage")] == 1);   // Ultra
   CHECK(v[knob_index("roof_shadows")] == 2);   // Ultra
   // The file is already enforceable: nothing it selects lacks a dependency in Ultra.
   auto enforced = v;
@@ -728,7 +733,7 @@ static void test_rendering_experiments() {
       v[knob_index("local_shadows")]=1;CHECK(!unmet_need(*lk,1,v).empty());
     }
   }
-  CHECK(find_knob("exp_native_coverage")->apply==Apply::Live);
+  CHECK(find_knob("exp_native_coverage")->apply==Apply::Restart);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};
   CHECK(!choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
   gpu.opacity_micromap=true;CHECK(choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
@@ -947,18 +952,18 @@ static void test_apply_modes() {
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
   for (const auto* key : {"rt_hair_visibility", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean"}) {
     const auto& knob = *find_knob(std::string("exp_") + (key + 3));
-    CHECK(knob.experimental);
+    CHECK(knob.experimental == (std::string(key) != "rt_hair_pool_trim"));
     CHECK(knob.dev_only == (std::string(key)=="rt_hair_visibility" || std::string(key)=="rt_hair_gi_mean"));
     CHECK_EQ(code_default(key), "0");
     CHECK(!key_change_needs_restart(key, "0", "1"));
-    for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==0);
+    for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==(std::string(key)=="rt_hair_pool_trim" && preset==3 ? 1 : 0));
     for(int choice=0;choice<2;++choice)CHECK(knob_apply(knob,choice)==Apply::Live);
   }
   // Player trial toggles are visible, default-off and live in both directions.
   // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
   CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
   for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_hit_shade",
-                         "exp_native_coverage", "exp_hair_groom", "exp_hair_pool_trim", "exp_hair_cheap"}) {
+                         "exp_hair_groom", "exp_hair_cheap"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
     CHECK(k.choices[0].apply==Apply::Live || k.choices[0].apply==Apply::Hitch);

@@ -445,7 +445,8 @@ struct GroomSlot {
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
   uint64_t rec = 0;            // build record of its last build/refit (refit once that was submitted)
-  Buf readback;                // host-visible: bounds (24 bytes) and the compacted size (at 32)
+  Buf readback;                // host-visible: the compacted size (at 32), then a ring of bounds (24 bytes per frame)
+  uint64_t bounds_frame[4] = {};   // the frame whose bounds each ring slot (at 64 + 32 * slot) holds; 0 none
   int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
   uint32_t query = 0;
   uint64_t query_frame = 0;
@@ -831,6 +832,7 @@ Buf g_groom_uv_rb;                         // host-visible, kGroomUvJobs x 32 x 
 std::unordered_set<uint32_t> g_groom_uv_logged;
 // Draw identity (index range) -> groom index id (0: none) and the join verdict.
 std::unordered_map<uint64_t, std::pair<uint64_t, hair_groom::JoinMiss>> g_groom_join;
+hair_primary::LoadGuard g_groom_load;   // level-load boundary for the join caches (the G-buffer depth image)
 struct GroomAsset {
   // One LOD's arrays in the mesh pool [base, base + size): uploaded when a slot first selects it, evicted
   // (oldest first) when the groom budget needs room.
@@ -925,10 +927,15 @@ VkDeviceSize groom_pool_capacity() {
 
 // Room for `need` more groom bytes in the pool budget, evicting LODs unused for 120 frames (oldest first).
 bool groom_make_room(VkDeviceSize need, uint64_t now) {
+  // Keyed by the index into refs: the ids are 64-bit hashes, so id * kGroomLods + LOD would lose their top bits.
   std::vector<hair_groom::Resident> residents;
+  std::vector<GroomAsset::Lod*> refs;
   for (auto& [id, a] : g_groom_assets)
     for (size_t i = 0; i < a.lods.size(); ++i)
-      if (a.lods[i].ready) residents.push_back({id * kGroomLods + i, a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+      if (a.lods[i].ready) {
+        residents.push_back({refs.size(), a.lods[i].size, a.lods[i].last_used, a.lods[i].last_used == now});
+        refs.push_back(&a.lods[i]);
+      }
   std::vector<uint64_t> evict;
   if (!hair_groom::plan_evictions(residents, g_groom_pool_used, need, hair_groom::pool_budget(groom_pool_capacity()), now, 120, evict)) {
     if (g_groom_budget_refusals++ % 300 == 0)
@@ -938,7 +945,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
     return false;
   }
   for (uint64_t key : evict) {
-    GroomAsset::Lod& l = g_groom_assets[key / kGroomLods].lods[key % kGroomLods];
+    GroomAsset::Lod& l = *refs[size_t(key)];
     g_pending_free.push_back({now, -1, l.base, l.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
     l.ready = false;
@@ -1051,11 +1058,15 @@ VkAccelerationStructureBuildSizesInfoKHR groom_sizes(const GroomAsset::Lod& l) {
 // Screen-size LOD from the points' bounds of an earlier frame (camera-relative: |centre| is the distance).
 // The angular size extent / distance picks LOD 0 above 0.09 rad (about a tenth of a 50-degree view), LOD 1
 // above 0.03, LOD 2 (or the last) below; a change needs 30 consecutive frames (no flicker at a threshold).
-int groom_pick_lod(GroomSlot& g, int lods) {
+// The bounds come from the newest ring slot whose frame completed on the GPU (never the slot a copy may still write).
+int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
   int want = g.lod < 0 ? 0 : g.lod;
-  if (g.readback.map && g.lod >= 0) {
+  int slot = -1;
+  for (int i = 0; i < 4; ++i)
+    if (g.bounds_frame[i] && gpu_done > g.bounds_frame[i] + 1 && (slot < 0 || g.bounds_frame[i] > g.bounds_frame[slot])) slot = i;
+  if (g.readback.map && g.lod >= 0 && slot >= 0) {
     uint32_t w[6];
-    std::memcpy(w, g.readback.map, sizeof w);
+    std::memcpy(w, g.readback.map + 64 + 32 * slot, sizeof w);
     float lo[3], hi[3];
     bool ok = true;
     for (int c = 0; c < 3; ++c) {
@@ -1363,6 +1374,18 @@ bool ensure_omm_dyn_pipe() {
   if (!shader_get("rt/omm_bake_mask.hlsl", "bake", "cs_6_6", &bake) || !shader_get("rt/omm_bake_mask.hlsl", "check", "cs_6_6", &check))
     return false;
   OmmDynPipe& p = g_omm_dyn_pipe;
+  // Retry each allocation independently: the stats buffer may survive a failed readback allocation.
+  if (!g_omm_dyn_stats.b) {
+    if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "OMM dyn counters"))
+      return false;
+    g_omm_dyn_stats_zero = true;
+  }
+  if (!g_omm_dyn_readback.b) {
+    if (!make_buf(g_omm_dyn_readback, kOmmDynStatsBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "OMM dyn counters readback"))
+      return false;
+    std::memset(g_omm_dyn_readback.map, 0, size_t(kOmmDynStatsBytes));
+  }
   if (p.bake && p.check && p.gen_bake == bake.generation && p.gen_check == check.generation) return true;
   auto& vk = g_dd->vk;
   if (!p.dsl) {
@@ -1398,14 +1421,6 @@ bool ensure_omm_dyn_pipe() {
   if (p.bake) g_omm_old_pipelines.push_back(p.bake);
   if (p.check) g_omm_old_pipelines.push_back(p.check);
   p.bake = nb; p.check = nc; p.gen_bake = bake.generation; p.gen_check = check.generation;
-  if (!g_omm_dyn_stats.b) {
-    if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "OMM dyn counters") ||
-        !make_buf(g_omm_dyn_readback, kOmmDynStatsBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "OMM dyn counters readback"))
-      return false;
-    std::memset(g_omm_dyn_readback.map, 0, size_t(kOmmDynStatsBytes));
-    g_omm_dyn_stats_zero = true;
-  }
   return true;
 }
 
@@ -2175,6 +2190,35 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_pool_grew = false;
   pool_repack_begin(cmd, rec, now);
 
+  // Procedural bounds are required for correctness, unlike mesh-cache and
+  // hold uploads. Allocate every current draw's bounds before either optional
+  // user can consume the load burst's remaining pool space.
+  const bool native_pool = geo_native_hair_enabled();
+  const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
+  if (native_pool) {
+    // Equal-key draws can be reordered by the later dynamic sort. Reserve
+    // the maximum of every native recipe, whichever duplicate wins there.
+    std::unordered_map<uint64_t,uint32_t> needed;
+    for (const FrameDraw& fd : g_draws) {
+      if (fd.cached || !fd.captured || !fd.prims) continue;
+      AlphaRec ar{};
+      if (!fd.cap_alpha || fd.rec==kNone || !alpha_native_hair_record(fd.rec,&ar)) continue;
+      auto& prims=needed[fd.dyn_key];prims=(std::max)(prims,fd.prims);
+    }
+    for (const auto& [key,prims] : needed) {
+      DynSlot& s = g_dyn[key];
+      if (s.hair_bounds_size >= VkDeviceSize(prims)*24u+hair_mean_tail) continue;
+      if (s.hair_bounds_size) g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+      s.hair_bounds_size=0;
+      // Mark newly discovered slots for normal expiry even if this scene fails.
+      s.last_used=now;
+      const VkDeviceSize bytes=(VkDeviceSize(prims)+prims/4u)*24u+hair_mean_tail;
+      if (!pool_alloc(cmd,bytes,&s.hair_bounds_off)) return false;
+      s.hair_bounds_size=bytes;
+    }
+  }
+  const VkDeviceSize cache_budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb",2048),64)) << 20;
+
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
   struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; };
@@ -2221,6 +2265,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.created = m.last_used = m.last_audit = now;
       m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
+      // Old LRU policy reacted only after all uploads: one load could allocate
+      // millions of wide vertices while evicted ranges still awaited GPU use.
+      // A declined extraction keeps this draw's captured dynamic BLAS path.
+      if (native_pool && !capture_budget::mesh_cache_admit(g_pool_ra.used,as_bytes(),
+              m.pool_size,sz.accelerationStructureSize,cache_budget)) {
+        ++g_st.budget_deferred;
+        continue;
+      }
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
       if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
@@ -2347,6 +2399,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     g_groom_seen.clear();
   }
+  // A level load (a new G-buffer depth image, hair_primary::LoadGuard): the join caches are keyed by draw identities
+  // made of Vulkan handles, which the new level reuses for other meshes; a stale verdict would give a new mesh with
+  // the same index count another style's groom, and a UV readback issued before the load would land on a reused
+  // identity. Drop the cached verdicts and the readbacks in flight (their copies still land; nothing reads them).
+  if (g_groom_load.observe(geo_gbuffer_depth_image(), now)) {
+    uint32_t pending = 0;
+    for (GroomUvJob& job : g_groom_uv_jobs) {
+      pending += job.used ? 1u : 0u;
+      job = GroomUvJob{};
+    }
+    log("[hair groom] level load: %zu join verdicts, %zu UV joins and %u UV readbacks in flight dropped",
+        g_groom_join.size(), g_groom_uv.size(), pending);
+    g_groom_join.clear();
+    g_groom_uv.clear();
+    g_groom_logged_unmatched.clear();
+  }
   struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; };
   std::vector<GroomUvCopy> groom_uv_copies;
   if (groom_ready) {
@@ -2428,14 +2496,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     // Mean mode needs eight trailing bytes after the active AABBs. Key-off
     // retains the original allocation sizes (the Vulkan AABB stride is 24).
-    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail){
-      if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
-      s.hair_bounds_size=0;
-      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u+hair_mean_tail;
-      if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
-      s.hair_bounds_size=bytes;
-    }
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail)return false;
     if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
       // procedural sidecar otherwise never expires with the inactive slot LRU.
@@ -2612,7 +2673,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         s.groom->id = fd.groom_id;
       }
       GroomSlot& g = *s.groom;
-      int lod = groom_pick_lod(g, int(groom_src->lods.size()));
+      int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done());
       if (const auto* src = hair_groom::find(fd.groom_id, groom_src->indices))
         for (uint32_t l = 0; l < kGroomLods; ++l) g.segments[l] = l < groom_src->lods.size() ? src->asset.lod_segments[l] : 0u;
       g_groom_seen.push_back(s.groom);
@@ -2647,7 +2708,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           g_groom_pool_used += g.pos_size;
         }
       }
-      if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
+      if (ok && !g.readback.b) ok = make_buf(g.readback, 64 + 4 * 32, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
       if (ok && !g.as.as) {
         const auto sz = groom_sizes(l);
         g.build_scratch = sz.buildScratchSize; g.update_scratch = sz.updateScratchSize;
@@ -2997,8 +3058,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kCS | kXfer, kRW);
       for (const GroomWork& w : groom_work) {
-        const VkBufferCopy c{w.g->bounds_off, 0, 24};
+        const uint32_t slot = uint32_t(now % 4);
+        const VkBufferCopy c{w.g->bounds_off, 64 + 32 * slot, 24};
         dd->vk.CmdCopyBuffer(cmd, g_pool.b, w.g->readback.b, 1, &c);
+        w.g->bounds_frame[slot] = now;
       }
     }
   }
@@ -3445,6 +3508,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
     }
   }
+  // No groom TLAS this frame (allocation or scratch failed): the cards marked replaced while the instance list was
+  // written keep their card path (rt_common.hlsli skips a replaced card, and rt_groom_trace finds no strand).
+  if (!groom_tlas_address)
+    for (const GroomWork& w : groom_work)
+      if (w.card != UINT32_MAX) info_out[w.card * 4 + 1] &= ~kInfoGroomReplaced;
   // Preserve the baseline mesh BLAS and TLAS. Material-specific variants are
   // separate, and expose instance ranges for the accelerated scene clone.
   if (omm_dyn_on) {

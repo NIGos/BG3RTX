@@ -60,6 +60,36 @@
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=0,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1"
  },
  {
+  "label": "warm-cards",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=0,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=0"
+ },
+ {
+  "label": "warm-full",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=0,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=0"
+ },
+ {
   "label": "settle-cam",
   "kind": "static",
   "speed": "static",

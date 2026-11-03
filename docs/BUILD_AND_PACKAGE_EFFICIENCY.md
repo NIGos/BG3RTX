@@ -318,3 +318,21 @@ and all sampled entries: 19/19 requests, 66/66 comparisons; control 5,862 differ
 Build succeeded; all 117 CTests passed across the full run and targeted reruns after correcting
 the progress fragment's existing BOM and an unchanged header's checkout line endings.
 The zero-DXC toggle, energy and GPU-cost gates still require an authorized SCC1 run in game.
+
+### RT continuity and Experimental prewarm (rt-continuity, 2026-11-03)
+
+A live specialization or request change keeps the previous pipeline of the same pass and layout.
+Only a pass without a pipeline waits. GI caches the complete specialization key; water retains
+both hit layouts and uses ordinary reflections/compose until the hit layout is ready.
+Water now supplies native tileset constant 1008 as well as scalp/hair 1010; no new shader requests.
+Startup queues visible live Experimental choices when their real descriptor layouts first exist.
+Workers run below normal priority; demand takes precedence over queued prewarming. Ready results
+stay owned by the queue until requested, and layout retirement/unload discards unused results.
+With dev off: one hair alternative per GI entry; water adds one hair alternative per entry,
+one compose-shift alternative per compose entry, and two hit-shading alternatives per hit entry.
+Both water hit layouts are prepared with startup material resources. RR queues 1 capture and
+12 post pipelines (13 total); several post pipelines would already be needed with RR before post.
+With dev on, visible live hair specializations, 4 exact-k entries and 2 reference entries also warm.
+The core logs per-entry extras and their cumulative total; the total depends on scene/layouts.
+This warms individual choices relative to startup, not every combination. Later combinations keep
+RT running while they build. Shader cache hits avoid DXC; driver pipeline creation can still cost time.

@@ -37,7 +37,8 @@ HpBuf g_header, g_pixels;              // header: fixed (its address is in every
 bool g_header_tried = false;
 bool g_pixels_fresh = false;           // just allocated: zero it before the next header update
 uint32_t g_px_w = 0, g_px_h = 0;
-std::unordered_map<VkShaderModule, uint64_t> g_mods;           // the two native hair FS modules
+std::unordered_map<VkShaderModule, uint64_t> g_mods;           // the native hair FS modules (erased when destroyed)
+hair_primary::LoadGuard g_load;                               // level-load boundary (the G-buffer depth image)
 std::unordered_map<VkPipeline, VkPipeline> g_variant;         // game pipeline -> variant
 enum class Pass : uint8_t { Prepass, Gbuffer, Velocity };
 std::unordered_map<VkPipeline, Pass> g_pass_of;               // variant -> its pass
@@ -331,11 +332,17 @@ void hair_primary_device_destroyed(DeviceData* dd) {
 }
 
 void hair_primary_note_module(VkShaderModule m, uint64_t hash) {
-  if (hash != hair_primary::kDeferredStaticFs && hash != hair_primary::kDepthStaticFs &&
-      hash != hair_primary::kVelocityStaticFs)
-    return;
+  const bool ours = hash == hair_primary::kDeferredStaticFs || hash == hair_primary::kDepthStaticFs ||
+                    hash == hair_primary::kVelocityStaticFs;
   std::lock_guard<std::mutex> lock(g_mu);
-  g_mods[m] = hash;
+  // A reused handle must never keep a hair hash (it would give a non-hair pipeline a strand variant).
+  if (ours) g_mods[m] = hash;
+  else g_mods.erase(m);
+}
+
+void hair_primary_forget_module(VkShaderModule m) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_mods.erase(m);
 }
 
 void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
@@ -436,7 +443,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   std::lock_guard<std::mutex> lock(g_mu);
   const auto it = g_variant.find(s->pipe[0]);
   // A groom published this or last frame (the build of this frame may still be recorded on another thread).
-  if (it == g_variant.end() || g_published + 2 < frame_index() + 1) return false;
+  if (it == g_variant.end() || g_published + 2 < frame_index() + 1 || g_load.quiet(frame_index())) return false;
   // Only the main camera's passes (portraits and other small passes keep their cards: the record is the main view's).
   if (s->pass.width != g_px_w || s->pass.height != g_px_h) return false;
   const uint64_t key = hair_primary_draw_key(s, args);
@@ -472,6 +479,15 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
   DeviceData* dd = g_dd;
   if (!dd) return;
   const uint64_t now = frame_index();
+  if (g_load.observe(geo_gbuffer_depth_image(), now)) {
+    // A level load: nothing of the old scene is trusted (see LoadGuard).
+    g_gate.clear();
+    g_last_tag = 0;
+    g_pixels_fresh = true;
+    for (CountSlot& s : g_cnt) s.valid = false;
+    log("[hair primary] level load (new G-buffer images): strand swaps paused for %llu frames, groom state reset",
+        (unsigned long long)hair_primary::kLoadQuietFrames);
+  }
   if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
     g_gate.clear();
     return;

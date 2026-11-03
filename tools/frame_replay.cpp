@@ -989,6 +989,16 @@ Replay replay(const fs::path& pack, const std::vector<uint32_t>* spirv_in, const
   // The raw counters (kCounters x 64 bins of uint32): per-slot diagnostics such as HM_BLOCKERS
   // (native_hit_material.hlsli, tools/hit_material_blockers.py) read their slots from it.
   if (!hooks) write_vec(out / "rtstats.bin", result.runs.back().raw_stats);
+  if (!hooks && m.pass == "water_compose_fixture") {
+    // Exact integer side effects of the real production compose entry, read only
+    // after dispatch completion. This opt-in fixture leaves ordinary replay intact.
+    for (const auto& binding : {std::pair<uint32_t,const char*>{61,"waterStats.bin"},
+                               {64,"waterCamera.bin"}, {66,"waterRecords.bin"}}) {
+      auto it = buffers.find(key(0, binding.first));
+      check(it != buffers.end(), "water fixture buffer missing");
+      write_vec(out / binding.second, download(it->second, it->second.size));
+    }
+  }
   for (auto& w : result.warnings) std::printf("  note: %s\n", w.c_str());
   return result;
 }

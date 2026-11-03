@@ -97,12 +97,12 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
-  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline; so do both rt_hair_groom
-  // states (kHairGroomSlot). Sparse: a pass builds a handful of the kPipelineSlots indices.
+  VkPipelineLayout active_layout = VK_NULL_HANDLE;
+  bool trace_half = false;   // Resolution mode of the installed reflection pipeline.
+  // Cache by complete request, specialization values and layout. Live toggles retain both states,
+  // including values which previously collided in the same bit-indexed variant slot.
   struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
-  std::unordered_map<unsigned, Variant> variants;
+  std::unordered_map<std::string, Variant> variants;
 };
 
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
@@ -112,9 +112,14 @@ extern "C" __declspec(dllimport) int __stdcall SetThreadPriority(void* thread, i
 bg3::pipe_async::Builds g_builds(
     2, [](const bg3::pipe_async::Result& r) { host->defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
     [] { SetThreadPriority(GetCurrentThread(), -1); });   // THREAD_PRIORITY_BELOW_NORMAL
+std::recursive_mutex g_prewarm_mu;
+std::unordered_map<uint64_t, std::unordered_set<std::string>> g_prewarmed;
+uint64_t g_prewarm_count = 0;
 // A pipeline layout a background build may still read is destroyed once none does.
 void defer_layout_destroy(uint64_t layout) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   if (!layout) return;
+  g_prewarmed.erase(layout);
   g_builds.park(layout, [layout] { host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, layout); });
 }
 // On a worker: the SPIR-V (the layer's cache or DXC) and the compute pipeline of `req` for `layout`.
@@ -152,6 +157,26 @@ bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string
   r.generation = blob.generation;
   r.ok = true;
   return r;
+}
+
+std::string build_key(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& specs) {
+  return req + specs.key() + "|" + entry + "|" + std::to_string(uint64_t(layout));
+}
+
+// Called when a pass first has its real layout (game descriptor layouts do not exist at DLL load).
+void prewarm_experimental(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& base) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
+  if (!g_prewarmed[uint64_t(layout)].insert(req + "|" + entry).second) return;
+  unsigned count = 0;
+  for (const auto& specs : bg3::pipe_async::experimental_specs(base, host->cfg_int("dev", 0) != 0)) {
+    const auto key = build_key(req, entry, layout, specs);
+    count += g_builds.prewarm(key, uint64_t(layout), [req, entry, layout, specs] {
+      return build_pipeline(req, entry, layout, specs);
+    }) ? 1u : 0u;
+  }
+  g_prewarm_count += count;
+  if (count) host->log("gi: Experimental prewarm %s %s: %u extra pipelines, %llu startup total (below normal priority)",
+                       req.c_str(), entry.c_str(), count, (unsigned long long)g_prewarm_count);
 }
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -210,8 +235,8 @@ constexpr uint32_t kRtBindings = kBindings + 3;
 // clusters, 24 b24 index list, 25 b25 lights (SSBOs), 26 b39 constants (UBO),
 // 27 b40 shadow views (SSBO), 28 b41 shadow atlas (sampled), 29 set0/b2 (UBO).
 constexpr uint32_t kLsBindings = kRtBindings + 9;
-// D-RF adds its hit distance image (30; RR's DLSSD.SpecularHitDistance). 31 push
-// descriptors, within the 32 every device must support.
+// D-RF adds full-grid hit distance (30). Half-grid delta/distance reuses GI's
+// unused RGBA16F binding 8, keeping the push layout at 32 descriptors.
 constexpr uint32_t kRfBindings = kLsBindings + 1;
 
 // Bindings past the contiguous ranges (docs/archive/AUDIT_RT.md fixes), in every layout whose
@@ -390,6 +415,8 @@ void rf_gi_drop() {
   }
 }
 bool g_rf_logged = false, g_rf_missing_logged = false;
+Bg3Image g_rf_raw{};
+Pipe g_rf_resolve{};
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
 Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resolution at startup opt-in, otherwise 1x1.
@@ -401,11 +428,18 @@ uint32_t g_w = 0, g_h = 0, g_hw = 0, g_hh = 0, g_parity = 0, g_shift = 1;
 // RR mode (docs/QUALITY.md fix 3): with Ray Reconstruction denoising the frame,
 // the GI traces 1 ray per full-res pixel and keeps no history of its own, the
 // input RR is designed for. gi_rr: -1 follows rr, 0 off, 1 on.
+bool trace_half() {
+  return host->cfg_float("rt_trace_scale", 1.0f) == 0.5f;
+}
+bool reflection_half() {
+  return trace_half() && !host->cfg_int("rf_debug", 0) && !host->cfg_int("rf_validate", 0);
+}
 uint32_t gi_res_shift() {
   int m = host->cfg_int("gi_rr", -1);
   bool rr = m < 0 ? host->rr_active() : m != 0;
-  return rr ? 0u : 1u;
+  return rr && !trace_half() ? 0u : 1u;
 }
+bool g_alloc_trace_half=false;
 bool g_images_ready = false, g_logged = false;
 uint64_t g_last_pre_frame = 0;
 
@@ -470,7 +504,7 @@ void timing_collect() {
 }
 
 Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g_hist_depth[0], &g_hist_depth[1],
-                                &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux, &g_ls_nodata};
+                                &g_prev_radiance, &g_rt_vis, &g_rf_raw, &g_rf_hit, &g_origin, &g_aux, &g_ls_nodata};
 
 // Track D: GPU time of the ray-traced shadow pass, 2 timestamps per frame.
 VkQueryPool g_rt_queries = VK_NULL_HANDLE;
@@ -563,11 +597,12 @@ void trace_timing_collect() {
     auto& v = g_tr_ms[k];
     if (v.size() < 300) continue;
     std::sort(v.begin(), v.end());
-    bool rr_mode = g_shift == 0;
+    const int rr_setting=host->cfg_int("gi_rr",-1);
+    bool rr_mode=rr_setting<0?host->rr_active():rr_setting!=0;
     host->log("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
               k ? "ray-traced, gi_rt=1" : "screen-space",
-              uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 4)),
-              rr_mode ? "full res, RR denoises" : "half res, own accumulation", v[v.size() / 2], v[v.size() / 10],
+              uint32_t(trace_half() && k ? 1 : rr_mode ? (trace_half()?1:host->cfg_int("gi_rr_rays", 1)) : host->cfg_int("gi_rays", 4)),
+              rr_mode ? (g_shift?"half res, spatial resolve + RR":"full res, RR denoises") : "half res, own accumulation", v[v.size() / 2], v[v.size() / 10],
               v[v.size() * 9 / 10], v.size());
     v.clear();
   }
@@ -639,9 +674,10 @@ void release_images() {
 
 bool ensure_images(uint32_t w, uint32_t h) {
   uint32_t shift = gi_res_shift();
-  if (w == g_w && h == g_h && shift == g_shift && g_raw.image) return true;
+  if (w == g_w && h == g_h && shift == g_shift && trace_half()==g_alloc_trace_half && g_raw.image) return true;
   release_images();
   g_shift = shift;
+  g_alloc_trace_half=trace_half();
   uint32_t hw = shift ? (w + 1) / 2 : w, hh = shift ? (h + 1) / 2 : h;
   VkImageUsageFlags use = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   bool ok = host->alloc_image(hw, hh, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_raw) &&
@@ -655,7 +691,8 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_origin) &&
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
-            host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
+            host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit) &&
+            host->alloc_image(trace_half() ? (w+1)/2 : 1, trace_half() ? (h+1)/2 : 1, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_rf_raw);
   if(ok) {
     ok=host->alloc_image(g_hair_origin_cap?w:1u,g_hair_origin_cap?h:1u,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
     if(ok && g_hair_origin_cap)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
@@ -671,7 +708,7 @@ bool ensure_images(uint32_t w, uint32_t h) {
 }
 
 VkDescriptorType binding_type(uint32_t i) {
-  if (i == kLsBindings) return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;   // D-RF hit distance
+  if (i >= kLsBindings) return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;   // D-RF hit distance
   if (i >= kRtBindings)
     return (i == 21 || i == 26 || i == 29) ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
            : i == 28                       ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
@@ -744,6 +781,8 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   VkDescriptorSet unused;
   if (!game || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_rf_layout) {
+    for(const auto& [slot,v]:g_rf_resolve.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(v.pipeline));
+    g_rf_resolve=Pipe{};
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf.pipeline);
     defer_layout_destroy(uint64_t(g_rf_layout));
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
@@ -1070,6 +1109,7 @@ bool ensure_rf_hit_contract() {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   namespace sv = bg3::shader_variant;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
@@ -1106,7 +1146,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool hair_cheap = scalp && host->cfg_int("rt_native_hair", 0) != 0 && host->cfg_int("rt_hair_cheap", 0) != 0;
   const bool hair_gi_mean = scalp && sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_mean", 0) != 0;
   const bool hair_groom = scalp && host->cfg_int("rt_hair_groom", 0) != 0;
-  const unsigned variant = (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const bool rf_half = std::strncmp(file,"gi/rt_reflections",17)==0 && reflection_half();
+  const bool gpu_opt_entry = sv::gpu_opt_entry(file);
+  const bool compact_hit = gpu_opt_entry && host->cfg_int("rt_compact_hit_state", 0) != 0;
+  const bool alpha_cache = gpu_opt_entry && host->cfg_int("rt_alpha_metadata_cache", 0) != 0;
+  const unsigned variant = (rf_half ? sv::kTraceHalfSlot : 0u) | (compact_hit ? sv::kCompactHitStateSlot : 0u) | (alpha_cache ? sv::kAlphaMetadataCacheSlot : 0u) | (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1116,7 +1160,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
                                                  (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) | (pool_2s ? unsigned(sv::kHitPool2s) : 0u) |
-                                                 (spec_cascade ? unsigned(sv::kSpecCascade) : 0u));
+                                                 (spec_cascade ? unsigned(sv::kSpecCascade) : 0u) | (rf_half ? unsigned(sv::kTraceHalf) : 0u));
   // Step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample / gi_prev_radiance_guard
   // (docs/TRACK_C_GI.md "Reprojection guards", live, off) are constants 1001 / 1002 of their files' one module. The
   // values join the slot key, so a toggle recreates the slot's pipeline (driver compile only, no DXC).
@@ -1130,12 +1174,17 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
   if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
   // A request never built in this slot compiles and creates its pipeline on a worker (common/pipeline_async.h):
-  // the pass skips until it is ready (never a pipeline of another request: kind3 records, other layouts).
+  // the previous pipeline of this pass/layout runs until it is ready.
   // A built one asks the layer for its generation (in memory: no compile here; hot reload rebuilt it already)
   // and a new generation is built in the background too, the current pipeline kept meanwhile.
   const VkPipelineLayout lay = layout ? layout : g_layout;
+  if (p.active_layout != lay) { p.pipeline = VK_NULL_HANDLE; p.active_layout = lay; }
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
+  if (gpu_opt_entry) {
+    specs.add(sv::kSpecIdCompactHitState, compact_hit ? 1u : 0u);
+    specs.add(sv::kSpecIdAlphaMetadataCache, alpha_cache ? 1u : 0u);
+  }
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
@@ -1169,10 +1218,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(hair_primary::kSpecRecordHi, uint32_t(a >> 32));
   }
   slot_key += specs.key();
-  Pipe::Variant& slot = p.variants[variant];
+  Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
-  // Diagnostic callers may ignore the return value: never expose a different specialization while building.
-  p.pipeline = known ? slot.pipeline : VK_NULL_HANDLE;
+  // Keep the last working specialization while a live replacement builds.
+  // Binding 8, dispatch and resolve already use the requested resolution. A
+  // pipeline compiled for the other grid cannot run while its replacement builds.
+  const VkPipeline previous = bg3::pipe_async::select_pipeline(bg3::pipe_async::State::kBuilding,
+      VkPipeline{}, p.pipeline, std::strncmp(file,"gi/rt_reflections",17)!=0 || p.trace_half==rf_half);
+  p.pipeline = known ? slot.pipeline : previous;
+  if (known) p.trace_half = rf_half;
   if (known) {
     Bg3ShaderBlob blob{};
     if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
@@ -1185,14 +1239,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     }
   }
   bg3::pipe_async::Result r{};
-  const std::string key = slot_key + "|" + std::to_string(uint64_t(lay));
+  const std::string key = build_key(selected, "main", lay, specs);
   const auto st = g_builds.poll(key, uint64_t(lay), [req = selected, lay, specs] { return build_pipeline(req, "main", lay, specs); }, &r);
+  prewarm_experimental(selected, "main", lay, specs);
   if (st == bg3::pipe_async::State::kStarted)
     host->log("gi: %s building in the background (%s)", selected.c_str(),
-              known ? "hot reload: the current pipeline meanwhile" : "the pass waits");
+              p.pipeline ? "the previous pipeline meanwhile" : "the pass waits");
   if (st != bg3::pipe_async::State::kReady) {
-    if (known) p.pipeline = slot.pipeline;
-    return known;
+    p.pipeline = bg3::pipe_async::select_pipeline(st, VkPipeline{}, p.pipeline);
+    return p.pipeline != VK_NULL_HANDLE;
   }
   g_omm_pipelines.erase(slot.pipeline);
   if(omm)g_omm_pipelines.insert(VkPipeline(r.pipeline));
@@ -1201,12 +1256,25 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   slot.generation = r.generation;
   slot.file = slot_key;
   p.pipeline = slot.pipeline;
+  p.trace_half = rf_half;
   p.generation = r.generation;
   host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
             spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
             guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
             r.pipeline_ms);
   return true;
+}
+
+// Live developer controls can select another entry rather than another specialization.
+void prewarm_pass(Pipe& p, const char* file, VkPipelineLayout layout) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
+  if (!g_prewarmed[uint64_t(layout)].insert(std::string("entry:") + file).second) return;
+  const auto before = g_builds.started_total(), alternatives_before = g_prewarm_count;
+  refresh(p, file, layout);
+  const auto extra = g_builds.started_total() - before - (g_prewarm_count - alternatives_before);
+  g_prewarm_count += extra;
+  if (extra) host->log("gi: Experimental prewarm entry %s: %llu extra, %llu startup total", file,
+                      (unsigned long long)extra, (unsigned long long)g_prewarm_count);
 }
 
 void memory_barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkPipelineStageFlags dst) {
@@ -1237,7 +1305,7 @@ struct Bound {
   VkDescriptorBufferInfo ls_buf[8];
   VkDescriptorImageInfo ls_atlas;
   VkDescriptorImageInfo img[kRtBindings - 2];
-  VkDescriptorImageInfo rf_hit;
+  VkDescriptorImageInfo rf_hit, rf_raw;
   VkWriteDescriptorSet w[kRfBindings];
   VkWriteDescriptorSetAccelerationStructureKHR as;
   VkAccelerationStructureKHR tlas;
@@ -1710,7 +1778,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
               g_stats_n, 100.0 * t[47] / px, 100.0 * t[45] / px, 100.0 * t[44] / px, 100.0 * t[46] / px,
               100.0 * t[40] / px, 100.0 * t[41] / tr, 100.0 * t[42] / tr, 100.0 * t[43] / tr);
   }
-  if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
+  if(bg3::native_tileset::requested(host->cfg_int("rt_native_tileset",0)!=0,host->cfg_int("rt_hit_material_paks",0)!=0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
   if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135],t[kGiHitNfFirst],t[kGiHitNfFirst+1]);
@@ -2070,10 +2138,12 @@ Push make_push() {
   pc.debug = uint32_t(host->cfg_int("gi_debug", 0));
   pc.history = host->cfg_float("gi_history", 0.1f);
   pc.ao = host->cfg_float("gi_ao", 1.0f);
-  if (g_shift == 0) {   // RR mode: 1 spp, no accumulation of our own
-    pc.rays = uint32_t(host->cfg_int("gi_rr_rays", 1));
+  int rr_mode = host->cfg_int("gi_rr", -1);
+  if (rr_mode < 0 ? host->rr_active() : rr_mode != 0) {   // RR mode: 1 spp, no accumulation of our own
+    pc.rays = trace_half() ? 1u : uint32_t(host->cfg_int("gi_rr_rays", 1));
     pc.history = 1.0f;
   }
+  if (trace_half() && host->cfg_int("gi_rt", 0)) pc.rays = 1u;
   pc.cs_length = host->cfg_float("cs_length", 0.02f);
   pc.cs_strength = host->cfg_float("cs_strength", 1.0f);
   pc.cs_steps = uint32_t(host->cfg_int("cs_steps", 12));
@@ -2279,7 +2349,7 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (s.rf_sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
-  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  vk.CmdDispatch(cmd, ((reflection_half() ? (g_w+1)/2 : g_w) + 7) / 8, ((reflection_half() ? (g_h+1)/2 : g_h) + 7) / 8, 1);
   return true;
 }
 
@@ -2439,7 +2509,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
     if (!s.gi) hp.strength = 0.0f;
   }
   vk.CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof hp, &hp);
-  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  vk.CmdDispatch(cmd, ((reflection_half() ? (g_w+1)/2 : g_w) + 7) / 8, ((reflection_half() ? (g_h+1)/2 : g_h) + 7) / 8, 1);
   if (!g_hit_em_logged && host->cfg_int("rt_hit_emission", 0) > 0) {
     g_hit_em_logged = true;
     host->log("hit emission: first rf_hit_shade dispatch %s the emissive scene (sharc %d)",
@@ -2907,7 +2977,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // composite, so gi=1).
   const bool rf_want = tlas && host->cfg_int("rt_reflections", 1);
   s.rf = rf_want && s.ls_ok && s.game_set1 && s.gi && ensure_rf_layout(s.game_set1_layout) &&
-         refresh(g_rf, "gi/rt_reflections.hlsl", g_rf_layout);
+         refresh(g_rf, "gi/rt_reflections.hlsl", g_rf_layout) &&
+         (!reflection_half() || refresh(g_rf_resolve,"gi/rf_resolve.hlsl",g_rf_layout));
   if (rf_want && !s.rf && !g_rf_missing_logged) {
     g_rf_missing_logged = true;
     host->log("rf: rt_reflections skipped: light list %d, lighting set 1 %p (layout %p), gi %d, pipeline %d", s.ls_ok,
@@ -3203,6 +3274,14 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   timestamp(cmd, 2);
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
   // (the sun set first: none free means no D-LS this frame, before any transition)
+  if (host->cfg_int("dev", 0) && s.ls && g_ls_layout) {
+    prewarm_pass(g_ls_k, "gi/rt_local_shadows_k.hlsl", g_ls_layout);
+    prewarm_pass(g_ls_full_k, "gi/rt_local_shadows_full_k.hlsl", g_ls_layout);
+    if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
+      prewarm_pass(g_ls_box_k, "gi/rt_local_shadows_box_k.hlsl", g_ls_box_layout);
+      prewarm_pass(g_ls_full_box_k, "gi/rt_local_shadows_full_box_k.hlsl", g_ls_box_layout);
+    }
+  }
   const VkDescriptorSet sun_set = s.ls && s.tlas && g_ls.pipeline ? write_sun_set(s) : VK_NULL_HANDLE;
   if (sun_set) {
     Bound lb;
@@ -3369,6 +3448,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     rb.w[kLsBindings].descriptorCount = 1;
     rb.w[kLsBindings].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     rb.w[kLsBindings].pImageInfo = &rb.rf_hit;
+    if (reflection_half()) {
+      rb.rf_raw = {VK_NULL_HANDLE, g_rf_raw.view, VK_IMAGE_LAYOUT_GENERAL};
+      rb.w[8].pImageInfo = &rb.rf_raw;
+    }
     Push rp = pc;
     // Bit 26: the screen's D-LS box pass ran (ls_box=1): rf_hit_shade's boxes then follow its
     // give-back; clear, the screen keeps the game's box x AO and the hit applies the same factor
@@ -3403,6 +3486,15 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       }
     }
     reflection_applied = hit_shade || rf_dispatch(cmd, rb, s, rp);
+    if (reflection_applied && reflection_half()) {
+      memory_barrier(cmd, kCS, kCS);
+      const auto& vk=*host->vk;
+      vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_rf_resolve.pipeline);
+      VkWriteDescriptorSet wr[kRfBindings+kNumExtras+1];
+      vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_rf_layout,0,gather_writes(rb,kRfBindings,wr),wr);
+      vk.CmdPushConstants(cmd,g_rf_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof rp,&rp);
+      vk.CmdDispatch(cmd,(g_w+7)/8,(g_h+7)/8,1);
+    }
     rf_timestamp(cmd, 1);
     if (rg_stats && hit_shade && g_rg_ran) {   // after the end timestamp: outside the timed region
       memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -3456,6 +3548,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   // One cache-free reference renderer: direct or finite two-surface subset.
   // Normal RF/probe replacement remains separate and unchanged.
+  if (host->cfg_int("dev", 0) && s.tlas && s.ls_ok && host->cfg_int("rt_hit_material", 0) &&
+      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))) &&
+      ensure_hit_reference_layout()) {
+    prewarm_pass(g_hit_direct, "gi/rt_hit_direct.hlsl", g_hit_reference_layout);
+    prewarm_pass(g_hit_two_bounce, "gi/rt_hit_two_bounce.hlsl", g_hit_reference_layout);
+  }
   const int reference_mode=host->cfg_int("rt_hit_reference",0);
   if(s.tlas && s.ls_ok && (pc.rf_debug==7 || reference_mode==1 || reference_mode==2) && host->cfg_int("rt_hit_material",0) &&
      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) && ensure_hit_reference_layout()){
@@ -3479,7 +3577,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
-    if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
+    if (s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
         bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t))))) {
       const VkDescriptorSet hs = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
       if (hs && ((g_sunt_ok && g_sunt.view) || g_ls_nodata.view)) {
@@ -3657,6 +3755,8 @@ void gi_on_frame(uint64_t) {
 
 void gi_release() {
   g_builds.join();   // the background builds read the layouts released below; their unclaimed pipelines are discarded
+  g_prewarmed.clear();
+  g_prewarm_count = 0;
   g_omm_pipelines.clear();
   bg3::omm::release_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   std::lock_guard<std::mutex> lock(g_mu);
@@ -3669,7 +3769,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
-                  &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
+                  &g_rf_resolve, &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
@@ -3776,9 +3876,11 @@ int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout lay
       specs.add(m.constantID, value);
     }
   }
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   const std::string q = req, e = entry;
-  const std::string key = q + specs.key() + "|" + e + "|" + std::to_string(uint64_t(layout));
+  const std::string key = build_key(q, e, layout, specs);
   const auto st = g_builds.poll(key, uint64_t(layout), [q, e, layout, specs] { return build_pipeline(q, e, layout, specs); }, &r);
+  prewarm_experimental(q, e, layout, specs);
   if (st == bg3::pipe_async::State::kStarted) host->log("%s %s: building in the background", req, entry);
   if (st == bg3::pipe_async::State::kReady) {
     *out = VkPipeline(r.pipeline);

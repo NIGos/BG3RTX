@@ -24,6 +24,12 @@ int main(int argc,char** argv){
  VkBaseInStructure unknown{VK_STRUCTURE_TYPE_APPLICATION_INFO};ds.pNext=&unknown;check(!tileset_inputs(p).valid);ds.pNext=nullptr;
  a[5].location=4;check(!tileset_inputs(p).valid);a[5].location=5;
  VkDynamicState state=VK_DYNAMIC_STATE_VERTEX_INPUT_EXT;VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dyn.dynamicStateCount=1;dyn.pDynamicStates=&state;p.pDynamicState=&dyn;check(!tileset_inputs(p).valid);state=VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE;check(tileset_inputs(p).valid);
+ check(!tileset_inputs(p).cull_known);
+ VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};raster.cullMode=VK_CULL_MODE_NONE;p.pRasterizationState=&raster;
+ check(tileset_inputs(p).cull_known && tileset_inputs(p).two_sided);
+ raster.cullMode=VK_CULL_MODE_BACK_BIT;check(tileset_inputs(p).cull_known && !tileset_inputs(p).two_sided);
+ raster.pNext=&unknown;check(!tileset_inputs(p).cull_known);raster.pNext=nullptr;
+ state=VK_DYNAMIC_STATE_CULL_MODE;check(!tileset_inputs(p).cull_known);state=VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE;
  uint32_t n=99;check(tileset_vertex_count(6,3,n)&&n==18);check(!tileset_vertex_count(5,3,n));check(!tileset_vertex_count(3,UINT32_MAX,n));check(!tileset_vertex_count(3,0,n));
  DrawKey raw;raw.words[1]=6;raw.words[2]=3;std::array<InputStream,6> streams;for(unsigned i=0;i<6;++i)streams[i]={i+1,16*i,32,uint32_t(VK_FORMAT_R32G32B32A32_SFLOAT)};
  DrawKey expected;check(tileset_key(raw,streams,expected));

@@ -1,0 +1,154 @@
+{
+  "name": "go2-camp-high",
+  "save": "Campsite - 27h",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 840,
+  "repeat": 1,
+  "live_batch": "gpu-opt2",
+  "window_mode": "visible_unfocused_fg",
+  "set": "preset=high,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/gpu_opt2/plans/camp.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[trace\\]",
+    "\\[ngx\\] RR",
+    "\\[rrpost\\] exposure",
+    "\\[rt\\] scene wait",
+    "gi: resources",
+    "gi: trace pass",
+    "rf: reflection pass"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "gi: trace pass .*GPU median",
+    "rf: reflection pass GPU median",
+    "\\[rrpost\\] exposure held",
+    "\\[ngx\\] RR create .*: Success"
+  ],
+  "expect_every": [
+    {
+      "name": "GI timing",
+      "select": "gi: trace pass .*GPU median [\\d.]+ ms",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, ",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "reflection timing",
+      "select": "rf: reflection pass GPU median [\\d.]+ ms",
+      "match": "rf: reflection pass GPU median [\\d.]+ ms",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1,
+      "period_frames": 300
+    },
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ]
+    },
+    {
+      "select": "\\[trace\\] frame \\d+ written",
+      "match": "\\[trace\\] frame \\d+ written",
+      "windows": [
+        "shot-off-a",
+        "shot-on",
+        "shot-off-b"
+      ],
+      "event": true,
+      "settle_s": 1,
+      "min": 3
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "scaled GI actually applied",
+      "select": "gi: trace pass",
+      "match": "1 rays/sample, half res, spatial resolve \\+ RR",
+      "windows": [
+        "cost-on"
+      ],
+      "min": 1
+    },
+    {
+      "name": "no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "cost-off-a",
+        "shot-off-a",
+        "cost-on",
+        "shot-on",
+        "cost-off-b",
+        "shot-off-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x[0-9a-f]+",
+    "skipped: no variant",
+    "query basis overflow",
+    "RR (creation|evaluate) failed"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=11\\b",
+    "\\[motion-trace\\] phase=4 label=shot-off-a repeat=0",
+    "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
+    "\\[motion-trace\\] phase=10 label=shot-off-b repeat=0"
+  ],
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_xfb_mb"
+    ]
+  },
+  "estimated_phase_seconds": 140
+}
