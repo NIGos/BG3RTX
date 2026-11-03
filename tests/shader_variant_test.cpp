@@ -17,6 +17,10 @@ int main(int argc, char** argv) {
   const std::filesystem::path root = argv[1];
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
+  CHECK(request("gi/rt_reflections.hlsl",kTraceHalf).find("RT_TRACE_HALF=1")!=std::string::npos);
+  CHECK(request("gi/rt_shadow.hlsl",kTraceHalf)==request("gi/rt_shadow.hlsl",0));
+  for(unsigned base=0;base<kTraceHalfSlot;++base)
+    CHECK((base|kTraceHalfSlot)!=base && (base|kTraceHalfSlot)<kPipelineSlots);
   CHECK(kSpecWaterHitShade == 1016);
   CHECK(water_hit_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
   // Fixed spellings: migrated keys share one request; the remaining defines keep their order.

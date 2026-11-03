@@ -176,6 +176,13 @@ inline constexpr Knob kKnobs[] = {
     {"rt_high", "Ray-traced High", kCapRayQuery, {{"gi", "1"}, {"gi_rt", "1"}, {"gi_rr_rays", "2"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
    {}, {1, 2, 2, 3}, false, {}, false, "Lighting", {}},
 
+  {"rt_trace_scale", "Lighting trace resolution",
+   "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+   Kind::Choice, Apply::Hitch, "resets lighting history", true,
+   {{"half", "Half", 0, {{"rt_trace_scale", "0.5"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"full", "Full", 0, {{"rt_trace_scale", "1.0"}}, {}, {}, false, false, false, Apply::Hitch}},
+   {}, {0, 0, 1, 1}, false, {}, false, "Performance", {}},
+
   {"local_shadows", "Local light shadows",
    "Adds shadows from torches, lamps and spells. Fast requires Ray Reconstruction; Full keeps native shadows where needed.",
    Kind::Choice, Apply::Live, "", false,
@@ -572,6 +579,7 @@ inline constexpr KV kDefaults[] = {
     {"gi", "1"},
     {"gi_rays", "4"},
     {"gi_rr_rays", "1"},
+    {"rt_trace_scale", "1.0"},
     {"gi_steps", "16"},
     {"gi_radius", "0.15"},
     {"gi_thickness", "0.03"},

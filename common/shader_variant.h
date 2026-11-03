@@ -16,7 +16,7 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kSpecCascade = 1u << 16 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kTraceHalf = 1u << 17, kSpecCascade = 1u << 16 };
 // kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
@@ -59,7 +59,7 @@ enum SpecId : unsigned {
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
 // Separate installed slots preserve both warmed cull states during same-run A/B.
-inline constexpr unsigned kHairGiCullSlot = 256u, kHairCheapSlot = 512u, kHairGiMeanSlot = 1024u, kHairGroomSlot = 2048u, kCompactHitStateSlot = 4096u, kAlphaMetadataCacheSlot = 8192u, kPipelineSlots = 16384u;
+inline constexpr unsigned kHairGiCullSlot = 256u, kHairCheapSlot = 512u, kHairGiMeanSlot = 1024u, kHairGroomSlot = 2048u, kCompactHitStateSlot = 4096u, kAlphaMetadataCacheSlot = 8192u, kTraceHalfSlot = 16384u, kPipelineSlots = 32768u;
 inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
   return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
 }
@@ -223,6 +223,7 @@ inline unsigned allowed(const char* file) {
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   if (occ_stats_entry(file)) f |= kOccStats;
+  if (std::strncmp(file,"gi/rt_reflections",17)==0) f |= kTraceHalf;
   return f;
 }
 
@@ -282,6 +283,7 @@ inline std::string request(const char* file, unsigned flags) {
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
   if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
+  if (flags & kTraceHalf) add("RT_TRACE_HALF=1"); // extra storage binding 31: layout variant
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
