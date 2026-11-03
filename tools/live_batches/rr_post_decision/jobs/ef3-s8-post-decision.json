@@ -1,0 +1,568 @@
+{
+  "name": "ef3-s8-post-decision",
+  "save": "Water Queens House",
+  "session": false,
+  "live_batch": "rr-post-decision",
+  "window_mode": "visible_unfocused_fg",
+  "traces": 0,
+  "hold": 90,
+  "timeout": 600,
+  "repeat": 1,
+  "stop_on_dump": false,
+  "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=1,dump_raw=0,dump_shaders=0,rt_timing_frames=120,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_hair_resolve=0,fg_snap_full=1,dump_png_width=1024",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/rr_post_decision/plans/ef3.json"
+  ],
+  "patterns": [
+    "\\[pan\\]",
+    "\\[sl\\]",
+    "\\[ngx\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[cfg\\]",
+    "\\[rrpost\\]",
+    "GPU cost",
+    "FAILED",
+    "\\[crash\\]",
+    "\\[trace\\]",
+    "\\[dump\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+  ],
+  "expect_every": [
+    {
+      "name": "K8 base-a",
+      "select": "\\[pan\\] burst 98500 complete",
+      "match": "\\[pan\\] burst 98500 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-base-a"
+      ]
+    },
+    {
+      "name": "P16 base-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-base-a"
+      ]
+    },
+    {
+      "name": "float stats base-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-base-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting base-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-base-a"
+      ]
+    },
+    {
+      "name": "RR GPU timing base-a",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-base-a"
+      ]
+    },
+    {
+      "name": "post GPU timing base-a",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-base-a"
+      ]
+    },
+    {
+      "name": "K8 post-late-a",
+      "select": "\\[pan\\] burst 98501 complete",
+      "match": "\\[pan\\] burst 98501 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-post-late-a"
+      ]
+    },
+    {
+      "name": "P16 post-late-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-post-late-a"
+      ]
+    },
+    {
+      "name": "float stats post-late-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-post-late-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting post-late-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-post-late-a"
+      ]
+    },
+    {
+      "name": "RR GPU timing post-late-a",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-post-late-a"
+      ]
+    },
+    {
+      "name": "K8 base-b",
+      "select": "\\[pan\\] burst 98502 complete",
+      "match": "\\[pan\\] burst 98502 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-base-b"
+      ]
+    },
+    {
+      "name": "P16 base-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-base-b"
+      ]
+    },
+    {
+      "name": "float stats base-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-base-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting base-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-base-b"
+      ]
+    },
+    {
+      "name": "RR GPU timing base-b",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-base-b"
+      ]
+    },
+    {
+      "name": "post GPU timing base-b",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-base-b"
+      ]
+    },
+    {
+      "name": "K8 post-late-b",
+      "select": "\\[pan\\] burst 98503 complete",
+      "match": "\\[pan\\] burst 98503 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-post-late-b"
+      ]
+    },
+    {
+      "name": "P16 post-late-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-post-late-b"
+      ]
+    },
+    {
+      "name": "float stats post-late-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-post-late-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting post-late-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-post-late-b"
+      ]
+    },
+    {
+      "name": "RR GPU timing post-late-b",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-post-late-b"
+      ]
+    },
+    {
+      "name": "K8 resolve-off-a",
+      "select": "\\[pan\\] burst 98504 complete",
+      "match": "\\[pan\\] burst 98504 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-resolve-off-a"
+      ]
+    },
+    {
+      "name": "P16 resolve-off-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-resolve-off-a"
+      ]
+    },
+    {
+      "name": "float stats resolve-off-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-resolve-off-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting resolve-off-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-resolve-off-a"
+      ]
+    },
+    {
+      "name": "RR GPU timing resolve-off-a",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-resolve-off-a"
+      ]
+    },
+    {
+      "name": "post GPU timing resolve-off-a",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-resolve-off-a"
+      ]
+    },
+    {
+      "name": "K8 resolve-on-a",
+      "select": "\\[pan\\] burst 98505 complete",
+      "match": "\\[pan\\] burst 98505 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-resolve-on-a"
+      ]
+    },
+    {
+      "name": "P16 resolve-on-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-resolve-on-a"
+      ]
+    },
+    {
+      "name": "float stats resolve-on-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-resolve-on-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting resolve-on-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-resolve-on-a"
+      ]
+    },
+    {
+      "name": "RR GPU timing resolve-on-a",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-a"
+      ]
+    },
+    {
+      "name": "post GPU timing resolve-on-a",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-a"
+      ]
+    },
+    {
+      "name": "resolve active resolve-on-a",
+      "select": "\\[rrpost\\] hair resolve:",
+      "match": "current class-5 occupancy, \\d+x\\d+, mixed 4x4 cells",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-a"
+      ]
+    },
+    {
+      "name": "K8 resolve-off-b",
+      "select": "\\[pan\\] burst 98506 complete",
+      "match": "\\[pan\\] burst 98506 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-resolve-off-b"
+      ]
+    },
+    {
+      "name": "P16 resolve-off-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-resolve-off-b"
+      ]
+    },
+    {
+      "name": "float stats resolve-off-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-resolve-off-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting resolve-off-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-resolve-off-b"
+      ]
+    },
+    {
+      "name": "RR GPU timing resolve-off-b",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-resolve-off-b"
+      ]
+    },
+    {
+      "name": "post GPU timing resolve-off-b",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-resolve-off-b"
+      ]
+    },
+    {
+      "name": "K8 resolve-on-b",
+      "select": "\\[pan\\] burst 98507 complete",
+      "match": "\\[pan\\] burst 98507 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-resolve-on-b"
+      ]
+    },
+    {
+      "name": "P16 resolve-on-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-resolve-on-b"
+      ]
+    },
+    {
+      "name": "float stats resolve-on-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-resolve-on-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting resolve-on-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-resolve-on-b"
+      ]
+    },
+    {
+      "name": "RR GPU timing resolve-on-b",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-b"
+      ]
+    },
+    {
+      "name": "post GPU timing resolve-on-b",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-b"
+      ]
+    },
+    {
+      "name": "resolve active resolve-on-b",
+      "select": "\\[rrpost\\] hair resolve:",
+      "match": "current class-5 occupancy, \\d+x\\d+, mixed 4x4 cells",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "timing-resolve-on-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x",
+    "RR (creation|evaluate) failed",
+    "FAILED, keeping previous",
+    "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+    "PNG write failed",
+    "capture writer backlog",
+    "\\[sl\\] edge capture REFUSED",
+    "\\[rrpost\\] exposure hold REFUSED"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=43\\b",
+    "\\[motion-trace\\] phase=5 label=energy-base-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=energy-post-late-a repeat=0",
+    "\\[motion-trace\\] phase=15 label=energy-base-b repeat=0",
+    "\\[motion-trace\\] phase=20 label=energy-post-late-b repeat=0",
+    "\\[motion-trace\\] phase=25 label=energy-resolve-off-a repeat=0",
+    "\\[motion-trace\\] phase=30 label=energy-resolve-on-a repeat=0",
+    "\\[motion-trace\\] phase=35 label=energy-resolve-off-b repeat=0",
+    "\\[motion-trace\\] phase=40 label=energy-resolve-on-b repeat=0"
+  ],
+  "estimated_phase_seconds": 285,
+  "purpose": "Offline prepared only. Static S8 gameplay close companion; no dialogue or camera input. Proposed ROIs require framing verification before future authorization. rr_post 1/0/1/0; then resolve 0/1/0/1 at rr_post=1. See predicted.json. Capture, float traces and clean cost windows are separate.",
+  "analysis": {
+    "roi_extent": [
+      1920,
+      800
+    ],
+    "subtitle_top": 800,
+    "full_resolution_presented": true,
+    "rois": {
+      "hair_box": [
+        800,
+        80,
+        1100,
+        380
+      ],
+      "rigid_control": [
+        1150,
+        300,
+        1450,
+        550
+      ]
+    }
+  },
+  "framing_status": "PROPOSED_STATIC_S8_REQUIRES_VERIFICATION"
+}
