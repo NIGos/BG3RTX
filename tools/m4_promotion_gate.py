@@ -59,11 +59,9 @@ import sys
 import time
 from pathlib import Path
 
-try:
-    from tools.longrun import FileCache, Progress
-except ImportError:   # run as a script from tools/
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from tools.longrun import FileCache, Progress
+# Prefer this checkout even when another environment provides a tools package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.longrun import FileCache, Progress
 
 REPO = Path(__file__).resolve().parents[1]
 SCENE_FS = "5c3fdabc"   # BG3 compose: lit HDR scene colour before transparents and post (RR's input)

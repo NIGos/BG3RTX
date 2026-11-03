@@ -1,0 +1,328 @@
+{
+  "name": "ef1-dialogue3-attribution",
+  "save": "Test Dialogue3",
+  "session": false,
+  "live_batch": "edge-flicker",
+  "window_mode": "visible_unfocused_fg",
+  "traces": 0,
+  "hold": 90,
+  "timeout": 420,
+  "repeat": 1,
+  "stop_on_dump": false,
+  "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/edge_flicker/plans/ef1.json"
+  ],
+  "patterns": [
+    "\\[pan\\]",
+    "\\[sl\\]",
+    "\\[ngx\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[cfg\\]",
+    "\\[rrpost\\]",
+    "GPU cost",
+    "FAILED",
+    "\\[crash\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+  ],
+  "expect_every": [
+    {
+      "name": "K8 base-a",
+      "select": "\\[pan\\] burst 98300 complete",
+      "match": "\\[pan\\] burst 98300 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-base-a"
+      ]
+    },
+    {
+      "name": "P16 base-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-base-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting base-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-base-a"
+      ]
+    },
+    {
+      "name": "K8 fg-off",
+      "select": "\\[pan\\] burst 98301 complete",
+      "match": "\\[pan\\] burst 98301 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-fg-off"
+      ]
+    },
+    {
+      "name": "P16 fg-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-fg-off"
+      ]
+    },
+    {
+      "name": "K8 ao-off",
+      "select": "\\[pan\\] burst 98302 complete",
+      "match": "\\[pan\\] burst 98302 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-ao-off"
+      ]
+    },
+    {
+      "name": "P16 ao-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-ao-off"
+      ]
+    },
+    {
+      "name": "FG actually presenting ao-off",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-ao-off"
+      ]
+    },
+    {
+      "name": "K8 sun-off",
+      "select": "\\[pan\\] burst 98303 complete",
+      "match": "\\[pan\\] burst 98303 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-sun-off"
+      ]
+    },
+    {
+      "name": "P16 sun-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-sun-off"
+      ]
+    },
+    {
+      "name": "FG actually presenting sun-off",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-sun-off"
+      ]
+    },
+    {
+      "name": "K8 gi-off",
+      "select": "\\[pan\\] burst 98304 complete",
+      "match": "\\[pan\\] burst 98304 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-gi-off"
+      ]
+    },
+    {
+      "name": "P16 gi-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-gi-off"
+      ]
+    },
+    {
+      "name": "FG actually presenting gi-off",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-gi-off"
+      ]
+    },
+    {
+      "name": "K8 rr-off",
+      "select": "\\[pan\\] burst 98305 complete",
+      "match": "\\[pan\\] burst 98305 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-rr-off"
+      ]
+    },
+    {
+      "name": "P16 rr-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-rr-off"
+      ]
+    },
+    {
+      "name": "FG actually presenting rr-off",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-rr-off"
+      ]
+    },
+    {
+      "name": "K8 cbt-off",
+      "select": "\\[pan\\] burst 98306 complete",
+      "match": "\\[pan\\] burst 98306 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-cbt-off"
+      ]
+    },
+    {
+      "name": "P16 cbt-off",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-cbt-off"
+      ]
+    },
+    {
+      "name": "FG actually presenting cbt-off",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-cbt-off"
+      ]
+    },
+    {
+      "name": "K8 post-late",
+      "select": "\\[pan\\] burst 98307 complete",
+      "match": "\\[pan\\] burst 98307 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-post-late"
+      ]
+    },
+    {
+      "name": "P16 post-late",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-post-late"
+      ]
+    },
+    {
+      "name": "FG actually presenting post-late",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-post-late"
+      ]
+    },
+    {
+      "name": "K8 base-b",
+      "select": "\\[pan\\] burst 98308 complete",
+      "match": "\\[pan\\] burst 98308 complete: 8 frames, 20 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-base-b"
+      ]
+    },
+    {
+      "name": "P16 base-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-base-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting base-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-base-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception",
+    "RR (creation|evaluate) failed",
+    "FAILED, keeping previous",
+    "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+    "PNG write failed",
+    "capture writer backlog",
+    "\\[sl\\] edge capture REFUSED",
+    "\\[bvh\\] mesh pool full",
+    "\\[rrpost\\] exposure hold REFUSED"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=30\\b"
+  ],
+  "estimated_phase_seconds": 180,
+  "purpose": "Offline prepared only. One held port shot, independent toggles, no input. Attribution only; retain default native hair. See predicted.json."
+}

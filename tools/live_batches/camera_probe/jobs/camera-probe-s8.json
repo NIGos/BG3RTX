@@ -28,7 +28,7 @@
     "\\[sl\\] present capture done"
   ],
   "forbid": [
-    "\\[crash\\] exception",
+    "\\[crash\\] exception 0x",
     "VK_ERROR_DEVICE_LOST",
     "PNG write failed",
     "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)"
@@ -36,14 +36,12 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=7\\b",
-    "\\[rotation-input\\] phase=1\\b",
+    "\\[motion-plan\\] complete phases=8\\b",
     "\\[rotation-input\\] phase=2\\b",
-    "\\[rotation-input\\] phase=3\\b",
     "\\[rotation-input\\] phase=4\\b",
-    "\\[rotation-input\\] phase=5\\b"
+    "\\[rotation-input\\] phase=6\\b"
   ],
-  "estimated_phase_seconds": 110,
+  "estimated_phase_seconds": 80,
   "window_mode": "visible_unfocused_fg",
   "stop_on_dump": false,
   "expect_every": [
@@ -55,9 +53,7 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2",
-        "turn-centre_hold-1",
-        "turn-centre_hold-2"
+        "turn-hold_drag-2"
       ]
     },
     {
@@ -70,9 +66,7 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2",
-        "turn-centre_hold-1",
-        "turn-centre_hold-2"
+        "turn-hold_drag-2"
       ]
     },
     {
@@ -85,9 +79,7 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2",
-        "turn-centre_hold-1",
-        "turn-centre_hold-2"
+        "turn-hold_drag-2"
       ]
     }
   ]

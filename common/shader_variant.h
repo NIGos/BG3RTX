@@ -42,6 +42,8 @@ enum SpecId : unsigned {
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
   kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
+  kSpecIdHairCheap = 1018,           // rt_hair_cheap: physical secondary coverage
+  kSpecIdHairGiMean = 1019,          // rt_hair_gi_mean: stored hard-coverage probability
   kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
@@ -51,7 +53,7 @@ enum SpecId : unsigned {
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
 // Separate installed slots preserve both warmed cull states during same-run A/B.
-inline constexpr unsigned kHairGiCullSlot = 256u, kPipelineSlots = 512u;
+inline constexpr unsigned kHairGiCullSlot = 256u, kHairCheapSlot = 512u, kHairGiMeanSlot = 1024u, kPipelineSlots = 2048u;
 inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
   return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
 }
@@ -222,8 +224,9 @@ inline unsigned allowed(const char* file) {
 // here without updating that test's expected skips fails it.
 struct NoVariant { const char* key; const char* defines; };
 inline constexpr NoVariant kWaterNoVariant[] = {
-    {"rt_omm", "RT_OMM_SCENE=1"},
     {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
+// Water deliberately traces the same-generation OMM reference TLAS. Its alpha
+// layout is the host's superset layout; unused OMM bindings need no shader variant.
 // rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the

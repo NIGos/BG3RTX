@@ -61,3 +61,34 @@ struct WaterPanSamples {
     return true;
   }
 };
+
+// Small static-shot attribution bursts. Keep depth/final every frame and
+// material/albedo at both ends, so missing masks or a camera cut cannot pass.
+struct EdgePanSamples {
+  uint64_t warmup;
+  std::array<uint8_t,8> masks{};
+  std::array<uint64_t,8> lighting_recordings{};
+  bool invalid=false;
+  bool retained(uint64_t f) const { return f>warmup && f-warmup<=8; }
+  static bool wanted(std::string_view name, uint64_t index) {
+    return name=="depth" || name=="final" ||
+      ((index==1 || index==8) && (name=="material" || name=="albedo"));
+  }
+  void add(uint64_t f,std::string_view name,uint64_t recording) {
+    if(!retained(f))return;
+    uint8_t bit=name=="depth"?1:name=="final"?2:name=="material"?4:name=="albedo"?8:0;
+    auto& mask=masks[f-warmup-1];
+    if(!bit || !recording || (mask&bit))invalid=true;
+    if(bit!=2) {
+      auto& lighting=lighting_recordings[f-warmup-1];
+      if(lighting && lighting!=recording)invalid=true;
+      lighting=recording;
+    }
+    mask|=bit;
+  }
+  bool complete() const {
+    if(invalid)return false;
+    for(size_t i=0;i<masks.size();++i)if(masks[i]!=(i==0 || i==7 ? 15 : 3))return false;
+    return true;
+  }
+};

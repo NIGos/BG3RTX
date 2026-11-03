@@ -22,6 +22,7 @@
 #include <cstring>
 #include <mutex>
 #include "../common/native_hair_origin.h"
+#include "../common/hair_cost_epoch.h"
 #include "../common/shader_variant.h"
 #include "../common/pipeline_async.h"
 #include "../common/pipeline_specs.h"
@@ -419,6 +420,9 @@ constexpr uint32_t kRing = 8;
 VkQueryPool g_queries = VK_NULL_HANDLE;
 uint32_t g_slot = 0;
 bool g_slot_written[kRing] = {};
+uint64_t g_slot_hair_epoch[kRing] = {};
+HairCostEpoch g_hair_timing_epoch;
+void hair_timing_update();
 double g_ns_per_tick = 1.0, g_ms_sum = 0;
 uint32_t g_ms_count = 0;
 
@@ -433,6 +437,7 @@ void timing_init() {
 
 void timestamp(VkCommandBuffer cmd, uint32_t index) {
   if (!g_queries) return;
+  if (index == 0) g_slot_hair_epoch[g_slot] = g_hair_timing_epoch.generation;
   uint32_t q = g_slot * 4 + index;
   host->vk->CmdResetQueryPool(cmd, g_queries, q, 1);
   host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_queries, q);
@@ -440,9 +445,11 @@ void timestamp(VkCommandBuffer cmd, uint32_t index) {
 
 // Reads the oldest ring slot if the GPU is done with it.
 void timing_collect() {
+  hair_timing_update();
   if (!g_queries) return;
   uint32_t old = (g_slot + 1) % kRing;
   if (!g_slot_written[old]) return;
+  if (!g_hair_timing_epoch.accepts(g_slot_hair_epoch[old])) { g_slot_written[old]=false; return; }
   uint64_t t[4];
   if (host->vk->GetQueryPoolResults(host->device, g_queries, old * 4, 4, sizeof t, t, sizeof(uint64_t),
                                     VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
@@ -467,15 +474,27 @@ Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g
 VkQueryPool g_rt_queries = VK_NULL_HANDLE;
 uint32_t g_rt_slot = 0;
 bool g_rt_written[kRing] = {};
+uint64_t g_rt_hair_epoch[kRing] = {};
 double g_rt_ms_sum = 0;
 uint32_t g_rt_ms_count = 0;
 uint64_t g_rt_frames_traced = 0, g_rt_frames_stale = 0, g_rt_frames_missing = 0;
 bool g_rt_logged = false;
 
+void hair_timing_update() {
+  if (!g_hair_timing_epoch.update(hair_cost_mask([](const char* key,int fallback) { return host->cfg_int(key,fallback); }))) return;
+  std::fill_n(g_slot_written,kRing,false);
+  std::fill_n(g_rt_written,kRing,false);
+  g_ms_sum = g_rt_ms_sum = 0;
+  g_ms_count = g_rt_ms_count = 0;
+  g_rt_frames_traced = g_rt_frames_stale = g_rt_frames_missing = 0;
+}
+
 void rt_timing_collect() {
+  hair_timing_update();
   if (!g_rt_queries) return;
   uint32_t old = (g_rt_slot + 1) % kRing;
   if (!g_rt_written[old]) return;
+  if (!g_hair_timing_epoch.accepts(g_rt_hair_epoch[old])) { g_rt_written[old]=false; return; }
   uint64_t t[2];
   if (host->vk->GetQueryPoolResults(host->device, g_rt_queries, old * 2, 2, sizeof t, t, sizeof(uint64_t),
                                     VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
@@ -498,6 +517,7 @@ void rt_timing_collect() {
 
 void rt_timestamp(VkCommandBuffer cmd, uint32_t index) {
   if (!g_rt_queries) return;
+  if (index == 0) g_rt_hair_epoch[g_rt_slot] = g_hair_timing_epoch.generation;
   uint32_t q = g_rt_slot * 2 + index;
   host->vk->CmdResetQueryPool(cmd, g_rt_queries, q, 1);
   host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_rt_queries, q);
@@ -1081,7 +1101,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
   const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
   const bool hair_gi_cull = sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_cull", 0) != 0;
-  const unsigned variant = sv::hair_gi_cull_slot(file, hair_gi_cull) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const bool hair_cheap = scalp && host->cfg_int("rt_native_hair", 0) != 0 && host->cfg_int("rt_hair_cheap", 0) != 0;
+  const bool hair_gi_mean = scalp && sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_mean", 0) != 0;
+  const unsigned variant = (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1128,6 +1150,10 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
     if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
+  }
+  if (std::strncmp(file, "gi/", 3) == 0) {
+    specs.add(sv::kSpecIdHairCheap, hair_cheap ? 1u : 0u);
+    specs.add(sv::kSpecIdHairGiMean, hair_gi_mean ? 1u : 0u);
   }
   if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();

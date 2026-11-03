@@ -122,3 +122,11 @@ Offline check: `powershell -File tools\live_batches\dialogue_shadows\dryrun.ps1 
 Last result 2026-11-03: foreground dryrun passed all structural, scene-wait and capacity checks;
 run A failed closed and left all 3 dependent jobs unrun; run B completed all 4 synthetic jobs valid.
 Scratch result: `%TEMP%/bg3rtx-dialogue_shadows-dryrun/20261103-032552`. No game or real inbox was used.
+
+2026-11-03 ds3 correction: ds0 also warms the exact `rt_cascade_casters=0`,
+`ls_box=2`, `rt_occ_stats=1`, `rt_stats=0`, `rt_primary_check=0` family twice.
+The earlier statistics-on warm-up left 8 pipelines rebuilding in the 6 s
+`diag-occ-frames-casc0` window. New ds0 plan: 555 s, 23 phases.
+
+Dialogue controls pin OMM, dynamic OMM, masks and fine LOD off so the new Ultra
+defaults do not change the measured alpha policy.

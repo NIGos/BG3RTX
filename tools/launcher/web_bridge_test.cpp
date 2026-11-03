@@ -40,7 +40,7 @@ int main(int argc,char** argv){
   check(json.find("Off-screen bounce light")!=std::string::npos);
   check(json.find("Ray-traced + hidden roofs")!=std::string::npos);
   check(json.find("Far-field sun bounce")==std::string::npos);
-  check(json.find("Opacity micromaps")==std::string::npos);
+  check(json.find("Opacity micromaps")!=std::string::npos);
   check(json.find("Physical hair ray origins")==std::string::npos);
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==-1);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);

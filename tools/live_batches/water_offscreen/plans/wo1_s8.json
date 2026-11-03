@@ -18,80 +18,80 @@
     "label": "shot-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 16,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 16,
+    "motion_end": 16,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
     "trace_at": [
-      5,
+      4,
       7,
-      9
+      10
     ]
   },
   {
     "label": "shot-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 16,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 16,
+    "motion_end": 16,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
     "trace_at": [
-      5,
+      4,
       7,
-      9
+      10
     ]
   },
   {
     "label": "shot-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 16,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 16,
+    "motion_end": 16,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
     "trace_at": [
-      5,
+      4,
       7,
-      9
+      10
     ]
   },
   {
     "label": "shot-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 16,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 16,
+    "motion_end": 16,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
     "trace_at": [
-      5,
+      4,
       7,
-      9
+      10
     ]
   },
   {
