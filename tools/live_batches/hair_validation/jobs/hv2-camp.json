@@ -93,7 +93,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence.",
-  "estimated_phase_seconds": 189.2,
+  "estimated_phase_seconds": 191.6,
   "expect_every": [
     {
       "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -233,6 +233,5 @@
       ]
     }
   ],
-  "window_mode": "visible_unfocused_fg",
-  "live_flow": {}
+  "window_mode": "visible_unfocused_fg"
 }

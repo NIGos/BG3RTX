@@ -457,6 +457,9 @@ Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-s
 weight, and existing depth-aware `gather_history` before full-grid AO/composite and dense RR guides.
 Reflection half-grid traces write a dedicated RGBA16F delta/hit-distance target through
 the unused GI raw slot (set 0 binding 8), preserving D-RF's 32-descriptor push layout.
+Core review follow-up (core-review-fixes, 2026-11-03): asynchronous replacements
+reuse an installed reflection pipeline only when its resolution mode matches the
+requested bindings/dispatch/resolve. Otherwise the pass waits for the new pipeline.
 A full-grid depth/normal/material-guided resolve applies deltas to native destination lighting,
 with hit distance from the strongest guide sample (never averaged with the no-hit sentinel).
 Diagnostic reflection debug/validation retains full resolution. Non-RR uses the spatial resolve;

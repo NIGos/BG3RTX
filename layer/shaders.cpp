@@ -29,6 +29,9 @@ namespace sc = shader_cache;
 struct ShaderEntry {
   std::string file, entry, profile;
   std::vector<uint32_t> code;
+  // Bg3ShaderBlob borrows code after g_mu is released, including on async workers.
+  // Keep replaced allocations until process exit; the shader cache has no device lifetime.
+  std::vector<std::vector<uint32_t>> retired_code;
   uint64_t generation = 0;
   std::string key;          // the cache key `code` was built from (empty: none)
   bool built = false;       // the first build was attempted
@@ -349,6 +352,7 @@ static void build(ShaderEntry& e, const sc::Tree& tree, bool reload) {
   g_build_us += now_us() - t0;
   (hit ? g_hits : ok ? g_compiled : g_failed) += 1;
   if (ok) {
+    if (!e.code.empty()) e.retired_code.push_back(std::move(e.code));
     e.code.swap(code);
     e.key = key;
     ++e.generation;
@@ -442,7 +446,7 @@ bool shader_get(const char* file, const char* entry, const char* profile, Bg3Sha
   }
   lock.unlock();
   if (!t_prefetch) g_render_wait_us += now_us() - t0;
-  if (note) manifest_note(e);
+  if (note && ok) manifest_note(e);   // a failed request is never prefetched again (its FAILED line would fail every run)
   return ok;
 }
 

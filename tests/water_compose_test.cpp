@@ -213,19 +213,29 @@ int main(int argc, char** argv) {
     CHECK(find_build_camera(ring, 999, 9).frame == 0);
   }
   CHECK((kFlagSceneShift & kFlagHitShade) == 0u);
+  // Level unload can retire every borrowed lighting resource. Scene retention
+  // alone must never authorize either F-1 hit-shading path.
+  for (uint64_t frame : {0ull, 98ull, 99ull, 100ull, 101ull})
+    for (bool seen : {false,true})
+      CHECK(hit_shade_inputs_alive(frame,100,seen) == (frame!=0 && (frame==100 || seen)));
+  CHECK(!hit_shade_inputs_alive(0,0,true));
   // Hidden-hit shading can fail independently of the ordinary water chain.
   for (uint64_t frame : {0ull, 97ull, 98ull, 99ull, 100ull, 101ull})
     for (bool tlas : {false,true}) for (bool lights : {false,true}) for (bool shift : {false,true})
       CHECK(hit_shade_frame_ok(frame,100,tlas,lights,shift) ==
             (tlas && lights && (frame==100 || (frame==99 && shift))));
   CHECK(!hit_shade_frame_ok(0,0,true,true,true));
-  // A distinct TLAS in every ring frame must not suppress F-1 shading.
+  // F-1 geometry can be coherent while its borrowed lighting has expired.
   for(uint64_t now=100;now<220;++now){
     const uint64_t lighting=now-1,stash_tlas=lighting+1000,current_tlas=now+1000;
     CHECK(current_tlas!=stash_tlas);
     CHECK(hit_shade_previous_frame(lighting,now,true,true));
+    CHECK(!hit_shade_previous_frame(lighting,now,hit_shade_inputs_alive(lighting,now,false),true));
+    CHECK(hit_shade_previous_frame(lighting,now,hit_shade_inputs_alive(lighting,now,true),true));
     CHECK(!hit_shade_frame_ok(lighting,now,current_tlas==stash_tlas,true,true));
     CHECK(hit_shade_frame_ok(lighting,now,stash_tlas==stash_tlas,true,true));
+    CHECK(!(hit_shade_inputs_alive(lighting,now,false) &&
+            hit_shade_frame_ok(lighting,now,true,true,true)));
     CHECK(!hit_shade_previous_frame(lighting,now,false,true));
     CHECK(!hit_shade_previous_frame(lighting,now,true,false));
   }

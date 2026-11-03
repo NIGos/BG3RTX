@@ -28,6 +28,41 @@ def phase(label, seconds=7, on=False, trace=False, turn=0, wheel=0):
     return p
 
 
+# Reload bisect (hv5; hv1 2026-11-03 18:40 lost the device after the F8 reload): one launch with every hair capability
+# latched at startup, then one F8 per stage, the keys of each stage set before its reload and held through a 60 s
+# survival window (3 x 20 s: phases stay within the lean 5-25 s rule). The first stage whose survival windows have no
+# frames names the culprit. Stage keys: on top of the previous stage.
+STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_physical_origin="0", rt_hair_groom="0",
+                            rt_hair_groom_primary="0", rt_hair_fibre="0")),
+          ("b-origin", dict(rt_hair_physical_origin="1")),
+          ("c-groom", dict(rt_hair_groom="1")),
+          ("d-primary", dict(rt_hair_groom_primary="1"))]
+SURVIVE = [1, 2, 3]   # 20 s windows after each reload
+
+
+def stage_phase(label, seconds, keys, trace=False):
+    p = hp.hg.step(label, seconds, trace, **keys)
+    p["set"] += ",pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    return p
+
+
+def make_bisect():
+    keys = {}
+    every = {}
+    for _, more in STAGES:
+        every.update(more)
+    # Warm every value the stages use before the first judged window (pipelines, groom uploads), then stage A.
+    plan = [stage_phase("warmup", PRIMARY_LOG_FRAMES / UNFOCUSED_FPS, every),
+            stage_phase("warm-settle", 10, dict(STAGES[0][1]))]
+    for name, more in STAGES:
+        keys.update(more)
+        plan.append(stage_phase(f"set-{name}", 5, keys))   # the stage's keys before its reload
+        plan.append(dict(stage_phase(f"reload-{name}", 5, keys), reload_selected=True))
+        plan += [stage_phase(f"survive-{name}-{i}", 20, keys) for i in SURVIVE]
+    plan.append(stage_phase("restore", 5, keys))
+    return plan
+
+
 def make(validation=False):
     warm = [phase("warmup", PRIMARY_LOG_FRAMES / UNFOCUSED_FPS),
             phase("warm-strands", PRIMARY_LOG_FRAMES / UNFOCUSED_FPS, True)]
@@ -53,8 +88,12 @@ def make(validation=False):
     restore = [phase("restore", 5)]
     for p in cost + reload + restore:
         p["set"] += ",pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    # hv4: the same reload under GPU-AV, so validation names a bad access across the load boundary.
+    vreload = [dict(phase("validation-reload", 5, True), reload_selected=True), phase("validation-after-reload", cost_seconds, True)]
+    for p in vreload:
+        p["set"] += ",pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
     plan = combine([warm, shots, motion, toggles, temporal, cost, reload, restore] if not validation else
-                   [warm, [phase("validation-strands", cost_seconds, True)], restore])
+                   [warm, [phase("validation-strands", cost_seconds, True)], vreload, restore])
     return plan
 
 
@@ -98,9 +137,29 @@ def job(name, save, plan, validation=False):
     j["expect_every"] = gates
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
     j["expect_runner"] += [rf"\[motion-trace\] phase={i} label={p['label']} repeat=0" for i, p in enumerate(plan) if p.get("trace_at")]
-    if not validation:
-        j["expect_runner"].append(r"\[hair-reload\] selected save reload complete")
+    j["expect_runner"].append(r"\[hair-reload\] selected save reload complete")
     j["purpose"] = "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence."
+    return j
+
+
+def bisect_job(name, save, plan):
+    j = job(name, save, plan, validation=False)
+    labels = [p["label"] for p in plan]
+    survive = [l for l in labels if l.startswith("survive-")]
+    # Frames after every reload: the per-60-frame scene-wait line in every survival window (none: the device or the
+    # game is gone in that stage). The level-load line of hair_primary once the primary stage reloads.
+    j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read",
+                   r"\[hair primary\] level load \(new G-buffer images\): strand swaps paused for \d+ frames"]
+    j["expect_every"] = [dict(name="frames rendered in every survival window after a reload", select=r"\[rt\] scene wait: 60 frames",
+                              match=r"\[rt\] scene wait: 60 frames", event=True, min=1, windows=survive)]
+    j["expect_every"].append(dict(name="hair guards zero after every reload", select=r"\[alpha hair\] native coverage records",
+                                  match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1,
+                                  windows=[l for l in survive if l.endswith("-3")]))
+    j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
+                          r"\[hair-reload\] selected save reload complete"]
+    j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch, native hair + scalp, then + physical "
+                    "origin, + strand groom, + strands on screen, each with a 60 s survival window. The first stage "
+                    "without frames after its reload names the culprit.")
     return j
 
 
@@ -115,7 +174,10 @@ def main():
         plan = make(validation)
         for folder, value in (("plans", plan), ("jobs", job(name, save, plan, validation))):
             (HERE/folder/f"{name}.json").write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
-    print("4 jobs generated, 3 save launches + isolated short GPU-AV; no queue staging")
+    plan = make_bisect()
+    for folder, value in (("plans", plan), ("jobs", bisect_job("hv5-reload-bisect", "Test Dialogue1", plan))):
+        (HERE/folder/"hv5-reload-bisect.json").write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
+    print("5 jobs generated, 3 save launches + isolated short GPU-AV + the reload bisect; no queue staging")
 
 
 if __name__ == "__main__":

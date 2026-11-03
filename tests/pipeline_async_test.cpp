@@ -199,6 +199,13 @@ int main() {
     CHECK(w.waiting == 0 && w.started == 0 && w.pending == 0);
   }
   for (auto state : {pa::State::kStarted, pa::State::kBuilding, pa::State::kFailed, pa::State::kReady}) {
+    // Full -> half and half -> full both refuse an old pipeline until ready.
+    for (bool installed_half : {false,true}) for (bool requested_half : {false,true}) {
+      const bool compatible = installed_half == requested_half;
+      CHECK(pa::select_pipeline(state, 0u, 7u, compatible) == (compatible ? 7u : 0u));
+      CHECK(pa::select_pipeline(state, 9u, 7u, compatible) ==
+            (state == pa::State::kReady ? 9u : compatible ? 7u : 0u));
+    }
     CHECK(pa::select_pipeline(state, 0u, 7u) == 7u);
     CHECK(pa::select_pipeline(state, 0u, 0u) == 0u);
     CHECK(pa::select_pipeline(state, 9u, 7u) == (state == pa::State::kReady ? 9u : 7u));
