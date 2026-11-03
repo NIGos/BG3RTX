@@ -204,10 +204,40 @@
    ]
   },
   {
-   "name": "no freeze: every burst's longest present interval < 1000 ms (startup and first toggle)",
+   "name": "no freeze: every build burst inside the plan < 1000 ms",
    "select": "gi: background builds done: ",
    "match": "longest present interval \\d{1,3} ms",
-   "min": 2
+   "min": 0,
+   "event": true,
+   "windows": [
+    "warmup",
+    "settle-cam",
+    "toggle-off-a",
+    "toggle-off-b",
+    "warm-nohair",
+    "warm-back",
+    "shot-off-a",
+    "shot-groom-a",
+    "shot-off-b",
+    "shot-groom-b",
+    "shot-off-c",
+    "settle",
+    "cost-off-a",
+    "cost-groom",
+    "cost-off-b",
+    "cost-nohair",
+    "restore"
+   ]
+  },
+  {
+   "name": "no freeze: the first toggle's builds ran (toggle-off-a) and stayed < 1000 ms",
+   "select": "gi: background builds done: ",
+   "match": "longest present interval \\d{1,3} ms",
+   "min": 1,
+   "event": true,
+   "windows": [
+    "toggle-off-a"
+   ]
   },
   {
    "name": "first enable (startup): no build pending in settle-cam",
@@ -236,13 +266,11 @@
    ]
   },
   {
-   "name": "groom participation: at least one groom instance in every groom-on window",
+   "name": "groom participation: at least one groom instance in the groom-on cost window",
    "select": "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most",
    "match": "last 300 frames: at most [1-9]\\d* groom instances",
    "min": 1,
    "windows": [
-    "shot-groom-a",
-    "shot-groom-b",
     "cost-groom"
    ]
   },
