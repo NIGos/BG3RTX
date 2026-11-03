@@ -46,6 +46,15 @@ std::unordered_set<uint64_t> g_keys, g_keys_prev;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
 struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0; } g_st;
 uint64_t g_logged_pipes = 0;
+// GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
+// after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
+constexpr uint32_t kTimed = 64, kTimeSlots = 4;
+VkQueryPool g_qp = VK_NULL_HANDLE;
+float g_ts_period = 1.0f;
+uint32_t g_timed[kTimeSlots] = {};      // pairs written in each slot's frame
+uint64_t g_slot_frame[kTimeSlots] = {}; // frame_index + 1 the slot was reset for
+double g_ms_sum = 0;                    // strand G-buffer draw ms over the timed frames of the window
+uint32_t g_ms_frames = 0;
 
 bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* what) {
   DeviceData* dd = g_dd;
@@ -132,6 +141,9 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
     if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
       stores |= reinterpret_cast<const VkPhysicalDeviceFeatures2*>(p)->features.fragmentStoresAndAtomics != VK_FALSE;
   g_frag_stores = stores;
+  VkPhysicalDeviceProperties props{};
+  if (dd->inst && dd->inst->GetPhysicalDeviceProperties) dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
+  g_ts_period = props.limits.timestampPeriod > 0 ? props.limits.timestampPeriod : 1.0f;
 }
 
 void hair_primary_device_destroyed(DeviceData* dd) {
@@ -141,6 +153,8 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_variant.clear();
   g_pass_of.clear();
   g_mods.clear();
+  if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
+  g_qp = VK_NULL_HANDLE;
   for (HpBuf* b : {&g_header, &g_pixels}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
     if (b->m) dd->vk.FreeMemory(dd->device, b->m, nullptr);
@@ -264,11 +278,22 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   const Pass pass = g_pass_of[it->second];
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
+  s->hp_query = UINT32_MAX;
+  const uint64_t now = frame_index();
+  const uint32_t slot = uint32_t(now % kTimeSlots);
+  // Timed only after this frame's publish reset the slot (GPU order: the reset is in the prepass's buffer).
+  if (pass == Pass::Gbuffer && g_qp && g_slot_frame[slot] == now + 1 && g_timed[slot] < kTimed) {
+    s->hp_query = (slot * kTimed + g_timed[slot]++) * 2u;
+    g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query);
+  }
   return true;
 }
 
-void hair_primary_unswap(VkCommandBuffer cmd, const CmdState* s) {
-  if (g_dd && s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
+void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s) {
+  if (!g_dd) return;
+  if (s->hp_query != UINT32_MAX) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query + 1);
+  s->hp_query = UINT32_MAX;
+  if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
 }
 
 void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, const hair_primary::Row* rows,
@@ -297,6 +322,34 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
     g_px_h = height;
     g_pixels_fresh = true;
     log("[hair primary] pixel record %ux%u: %.1f MB", width, height, double(g_pixels.size) / 1048576.0);
+  }
+  // Timing: read the oldest slot (its frame is done: kTimeSlots - 1 frames back), then reset it for this frame.
+  if (!g_qp) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kTimed * kTimeSlots * 2;
+    if (dd->vk.CreateQueryPool(dd->device, &qi, nullptr, &g_qp) != VK_SUCCESS) g_qp = VK_NULL_HANDLE;
+  }
+  if (g_qp) {
+    const uint32_t slot = uint32_t(now % kTimeSlots);
+    if (g_slot_frame[slot] && g_timed[slot]) {
+      uint64_t r[kTimed * 4];
+      const uint32_t n = g_timed[slot];
+      if (dd->vk.GetQueryPoolResults(dd->device, g_qp, slot * kTimed * 2, n * 2, sizeof r, r, 16,
+                                     VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) >= 0) {
+        double ms = 0;
+        bool all = true;
+        for (uint32_t i = 0; i < n; ++i) {
+          const uint64_t* a = r + i * 4;   // begin value, availability, end value, availability
+          all = all && a[1] && a[3];
+          if (a[1] && a[3] && a[2] >= a[0]) ms += double(a[2] - a[0]) * g_ts_period * 1e-6;
+        }
+        if (all) { g_ms_sum += ms; ++g_ms_frames; }
+      }
+    }
+    dd->vk.CmdResetQueryPool(cmd, g_qp, slot * kTimed * 2, kTimed * 2);
+    g_timed[slot] = 0;
+    g_slot_frame[slot] = now + 1;
   }
   if (g_pixels_fresh) {   // tag 0 is never a frame tag
     dd->vk.CmdFillBuffer(cmd, g_pixels.b, 0, VK_WHOLE_SIZE, 0u);
@@ -337,7 +390,10 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
         "G-buffer and %llu velocity strand draws, %llu pipelines refused",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused);
-  if (now % 300 == 0) g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0;
+  if (now % 300 == 0 && g_ms_frames)
+    log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
+        g_ms_sum / g_ms_frames, g_ms_frames);
+  if (now % 300 == 0) g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
 }
 
 }  // namespace bg3

@@ -69,7 +69,10 @@ Measure the temporal variance on hair pixels (live metric) before adding more ra
 Groom LOD 0: 0.25 ns per ray on hair (3.7M rays 0.91 ms, shadow-like). Primary rays are coherent, so this is
 an upper bound. Close-up head at 1.6M hair pixels: ~0.4 ms prepass trace; the G-buffer and velocity
 variants read the record (no trace). Plus refit 0.1 ms per character and 11 MB previous points at LOD 0.
-Report per character: prepass variant GPU ms (timestamps around the hair draws), VRAM of previous points.
+Measured live by `[hair primary] strand G-buffer draws GPU X ms/frame` (a BOTTOM_OF_PIPE timestamp pair around
+each swapped G-buffer draw, up to 64 per frame, averaged per 300 frames). VRAM: pixel record 16 B per render pixel
+(41.7 MB at 2560x1067) plus per point 8 B UV + 12 B previous position (LOD 0 ~19 MB, LOD 1/2 ~10 MB per character).
+Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

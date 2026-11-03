@@ -24,4 +24,6 @@
   `layer/hair_primary.cpp` (variants, draw swap, header after the groom TLAS), per-point UVs in the groom
   update. Requires LSS, shaderInt64, fragmentStoresAndAtomics. Not run live.
 - 2: velocity variant `hair_primary_velocity.hlsl` (native FS b70cadc5 form, last frame's strand points,
-  +12 B/point). Check in game: `[hair primary]` lines (prepass, G-buffer and velocity strand draws > 0).
+  +12 B/point). Cost line `[hair primary] strand G-buffer draws GPU X ms/frame` (per-draw timestamps).
+- Live job READY_FOR_LIVE: tools/live_batches/hair_primary (Dialogue1, cards/strands shots at full resolution,
+  cost cards/strands/cards; gated on G-buffer and velocity strand draws > 0). Dryrun pass, not run.

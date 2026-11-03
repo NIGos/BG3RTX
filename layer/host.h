@@ -273,6 +273,7 @@ struct CmdState {
   std::array<VertexBinding, kMaxVertexBindings> vb{};
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
+  uint32_t hp_query = UINT32_MAX;      // rt_hair_groom_primary: the timestamp pair of the swapped draw
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
   // Game images, views and buffers this recording's work (ours or the game's
   // passes our hooks read) references; merged into the lifetime registry at
@@ -914,7 +915,7 @@ void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
-void hair_primary_unswap(VkCommandBuffer cmd, const CmdState* s);
+void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
 void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, const hair_primary::Row* rows,
                           const uint64_t* keys, uint32_t count, uint32_t width, uint32_t height, const float* viewport);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.
