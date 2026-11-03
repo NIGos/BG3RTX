@@ -41,8 +41,7 @@ bool pak_uv_capture(VkCommandBuffer cmd,CmdState* s,const DrawArgs& a,const Inst
  if(!paks_rows() || !one_time(s) || !ip.uv_ok || !ip.pos_float3 || ip.pos_binding>=CmdState::kMaxVertexBindings ||
     ip.uv_binding>=CmdState::kMaxVertexBindings || a.kind!=1 || !a.instances ||
     s->vb[ip.pos_binding].offset>UINT64_MAX-ip.pos_offset || s->vb[ip.uv_binding].offset>UINT64_MAX-ip.uv_offset)return false;
- bool candidate=false;for(const auto& row:pak_meshes)if(row.index_count==a.count &&
-  mesh_paks::hlod_compatible(row,s->vs,s->fs,ip.paks_cull_known,ip.paks_two_sided)){candidate=true;break;}
+ const bool candidate=mesh_paks::has_candidates(pak_meshes,a.count);
  const uint64_t size=uint64_t(a.count)*stride;std::array<uint64_t,32> copies{};
  if(!candidate || size>pool::kJobXfbBytes || !mesh_paks::uv_join::offsets(a.count,stride,size,copies))return false;
  std::lock_guard lock(mutex);pak_uv_poll();const auto key=pak_uv_key(*s,a,ip);

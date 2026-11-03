@@ -18,7 +18,14 @@ int main(){
   rb={};CHECK(rb.begin());CHECK(rb.finish(true,false,uv.data()));CHECK(rb.state==uv_join::State::Rejected);
   rb={};CHECK(rb.begin());uv[63]=NAN;CHECK(rb.finish(true,true,uv.data()));CHECK(rb.state==uv_join::State::Rejected);
   rb={};CHECK(rb.begin());uv[63]=0;CHECK(rb.finish(true,true,uv.data()));CHECK(rb.state==uv_join::State::Ready);
-  Row r;r.index_count=3;std::vector<Row> rows{r};
+  Row r;r.index_count=3;r.flags=4;std::vector<Row> rows{r};
+  // Camp's ordinary STI pool pair must reach discovery even though it cannot
+  // publish the HLOD fallback. This count/UV fixture used to be filtered out
+  // before scheduling any readback, leaving attempts and draws at zero.
+  CHECK(has_candidates(rows,3));CHECK(!has_candidates(rows,6));CHECK(!has_candidates(rows,0));
+  CHECK(!has_candidates({},3));
+  CHECK(!hlod_compatible(r,0x2d2ac3c38992b7f0ull,0x14678345c10aefbcull,true,false));
+  CHECK(hlod_compatible(r,0x2d2ac3c38992b7f0ull,0xb0ecc292e8661561ull,true,false));
   CHECK(lookup(rows,3,nullptr,uv.data()).status==Match::Unique);
   rows.push_back(r);rows[1].corners={1};
   CHECK(lookup(rows,3,nullptr,uv.data()).status==Match::Ambiguous);
