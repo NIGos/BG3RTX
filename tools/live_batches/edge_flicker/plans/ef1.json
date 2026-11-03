@@ -12,6 +12,7 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -27,6 +28,7 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -42,6 +44,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -57,6 +60,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -72,6 +76,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -87,6 +92,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -102,6 +108,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -117,6 +124,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -132,6 +140,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -147,6 +156,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0"
   },
   {
@@ -162,6 +172,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -177,6 +188,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98300,qa_exposure_hold=1"
   },
   {
@@ -192,6 +204,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -207,6 +220,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -222,6 +236,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98301,qa_exposure_hold=1"
   },
   {
@@ -237,6 +252,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -252,6 +268,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -267,6 +284,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98302,qa_exposure_hold=1"
   },
   {
@@ -282,6 +300,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -297,6 +316,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -312,6 +332,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98303,qa_exposure_hold=1"
   },
   {
@@ -327,6 +348,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -342,6 +364,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -357,6 +380,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98304,qa_exposure_hold=1"
   },
   {
@@ -372,6 +396,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -387,6 +412,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -402,6 +428,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98305,qa_exposure_hold=1"
   },
   {
@@ -417,6 +444,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -432,6 +460,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -447,6 +476,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=98306,qa_exposure_hold=1"
   },
   {
@@ -462,6 +492,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -477,6 +508,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -492,6 +524,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98307,qa_exposure_hold=1"
   },
   {
@@ -507,6 +540,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -522,6 +556,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -537,6 +572,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=98308,qa_exposure_hold=1"
   },
   {
@@ -552,6 +588,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
   },
   {
@@ -567,6 +604,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
+    "registration_policy": "per-frame-exclude-unregistered",
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,pan_edge=0,pan_prepare=0,qa_exposure_hold=0"
   }
 ]
