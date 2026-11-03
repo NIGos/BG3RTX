@@ -330,14 +330,14 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {}, false, "Surfaces", {"Measured", "+0.00 ms (compose 0.12 ms on and off) S8", "Unknown", "RTX 5090; wf9 2026-11-03: turning screen hits 7% -> 17%, hidden 25% -> 15.5%, static delta 0 m, energy within noise"}},
 
   {"exp_native_coverage", "Native hair + scalp",
-   "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-   Kind::Choice, Apply::Live, "hair + scalp: live; tilesets: restart", false,
+   "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks).",
+   Kind::Choice, Apply::Restart, "restart", false,
    {{"off", "Off", 0, {{"rt_native_hair", "0"}, {"rt_native_scalp", "0"}, {"rt_native_tileset", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"hair", "Hair + scalp", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "0"}},
-     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Live},
+     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Restart},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Lighting", {"Measured", "RT +2.3-6.3 ms, GI +3.2-8.8 ms over cards (S8, dialogues)", "88-byte capture vertices", "RTX 5090; hair_qual 2026-11-03; user decision: hair shadows need it, cost accepted"}},
 
   {"exp_hair_gi_cull", "Omit hair from indirect rays",
    "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
@@ -361,11 +361,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
-   "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
+   "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Memory", {"Measured", "Neutral", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}},
 
   {"exp_hair_cheap", "Single-sample hair coverage",
    "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",

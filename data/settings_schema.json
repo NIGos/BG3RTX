@@ -259,16 +259,16 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_compose_shift": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_native_coverage", "label": "Native hair + scalp",
-     "description": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-     "apply": "live", "apply_note": "hair + scalp: live; tilesets: restart", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks).",
+     "apply": "restart", "apply_note": "restart", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks).",
+     "cost": {"status": "Measured", "gpu": "RT +2.3-6.3 ms, GI +3.2-8.8 ms over cards (S8, dialogues)", "vram": "88-byte capture vertices", "provenance": "RTX 5090; hair_qual 2026-11-03; user decision: hair shadows need it, cost accepted"},
      "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
      "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_native_tileset": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "hair", "label": "Hair + scalp", "apply": "live", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "experimental"},
+       {"id": "hair", "label": "Hair + scalp", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "qualified"},
        {"id": "tilesets", "label": "+ Tilesets", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": true, "maturity": "developer"}
      ]},
     {"id": "exp_hair_gi_cull", "label": "Omit hair from indirect rays",
@@ -308,16 +308,16 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_visibility": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
-     "description": "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
+     "category": "Memory", "summary": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+     "cost": {"status": "Measured", "gpu": "Neutral", "vram": "Mesh pool -26-50%", "provenance": "RTX 5090; hair_qual 2026-11-03"},
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_pool_trim": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_hair_cheap", "label": "Single-sample hair coverage",
      "description": "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",
