@@ -444,7 +444,9 @@ static VkResult fake_acquire(VkDevice device, VkSwapchainKHR sc, VkSemaphore sem
   si.signalSemaphoreCount = sem ? 1 : 0;
   si.pSignalSemaphores = &sem;
   std::lock_guard<std::mutex> lock(g_queue_mu);
-  return dd->vk.QueueSubmit(dd->graphics_queue, 1, &si, fence);
+  const VkResult r = dd->vk.QueueSubmit(dd->graphics_queue, 1, &si, fence);
+  fault_on_result(dd, r, "headless acquire submission");
+  return r;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL AcquireNextImageKHR(VkDevice device, VkSwapchainKHR sc, uint64_t timeout,
