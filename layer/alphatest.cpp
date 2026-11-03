@@ -857,10 +857,12 @@ bool alpha_native_hair_record(uint32_t index,AlphaRec* out) {
   if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
   *out=g_recs[index];return true;
 }
-bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset) {
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset,uint32_t allocation,uint32_t tris) {
   std::lock_guard<std::mutex> lock(g_mu);
   if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
-  std::memcpy(reinterpret_cast<uint8_t*>(&g_recs[index])+192,&pool_offset,4);return true;
+  auto* bytes=reinterpret_cast<uint8_t*>(&g_recs[index]);
+  std::memcpy(bytes+192,&pool_offset,4); // 196 retains the Pubes subtype.
+  std::memcpy(bytes+200,&allocation,4);std::memcpy(bytes+204,&tris,4);return true;
 }
 bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset) {
   if(!geo_native_hair_enabled() || !g_stamp_buf || slot>=kRing)return false;

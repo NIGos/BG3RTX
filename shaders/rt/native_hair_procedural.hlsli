@@ -58,7 +58,7 @@ bool hair_alpha(HairPrimitive p,float2 bary,float footprint,float3 ray,bool phys
   if((alpha_flags()&8u)!=0u){known=true;return true;}
   uint bytes;gMeshPool.GetDimensions(bytes);
   uint offset=gAlphaRec.Load(p.a+192u);
-  if(offset<=bytes && p.info.tris<=(bytes-offset)/24u && bytes-offset-p.info.tris*24u>=4u) {
+  if(nh_mean_range(offset,gAlphaRec.Load(p.a+200u),p.info.tris,gAlphaRec.Load(p.a+204u),bytes)) {
    float probability=asfloat(gMeshPool.Load(offset+p.info.tris*24u));
    if(isfinite(probability) && probability>=0.0 && probability<=1.0) {
     // One stored probability bypasses coverage material/strand interpolation.

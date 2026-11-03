@@ -1994,13 +1994,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if(hair && !ensure_hair_pipeline()){
       log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
     }
-    // Mean mode needs four trailing bytes after the active AABBs. Key-off
+    // Mean mode needs eight trailing bytes after the active AABBs. Key-off
     // retains the original allocation sizes (the Vulkan AABB stride is 24).
-    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 4u : 0u;
+    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
     if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail){
       if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
       s.hair_bounds_size=0;
-      const VkDeviceSize bytes=VkDeviceSize(fd.prims+fd.prims/4u)*24u+hair_mean_tail;
+      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u+hair_mean_tail;
       if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
       s.hair_bounds_size=bytes;
     }
@@ -2128,7 +2128,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       hp.depth[0]=0.01f*(std::max)({0.0f,hair_record.p1[0],hair_record.p1[1]});
       hp.stride=stride;hp.camera=hair_record.channel;
       float bounded{};std::memcpy(&bounded,data+188,4);hp.bounded=bounded==1.0f;
-      if(!alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off)))return false;
+      if(s.hair_bounds_off>UINT32_MAX || s.hair_bounds_size>UINT32_MAX ||
+         !alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off),uint32_t(s.hair_bounds_size),fd.prims))return false;
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
