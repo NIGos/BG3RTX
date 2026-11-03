@@ -1,0 +1,109 @@
+{
+  "binaries": [
+    {
+      "destination": "bin/sl/sl.interposer.dll",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "destination": "bin/sl/sl.common.dll",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "destination": "bin/sl/sl.dlss_g.dll",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "destination": "bin/sl/sl.reflex.dll",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "destination": "bin/sl/sl.pcl.dll",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "destination": "bin/sl/nvngx_dlssg.dll",
+      "licences": [
+        "NVIDIA-DLSS-runtime.txt"
+      ]
+    },
+    {
+      "destination": "bin/sl/NvLowLatencyVk.dll",
+      "licences": [
+        "NVIDIA-Reflex.txt"
+      ]
+    },
+    {
+      "destination": "bin/sl/nvngx_dlss.dll",
+      "licences": [
+        "NVIDIA-DLSS-runtime.txt"
+      ]
+    },
+    {
+      "destination": "bin/sl/nvngx_dlssd.dll",
+      "licences": [
+        "NVIDIA-DLSS-runtime.txt"
+      ]
+    },
+    {
+      "destination": "bin/dxcompiler.dll",
+      "licences": [
+        "DirectXShaderCompiler-LICENSE.txt"
+      ]
+    }
+  ],
+  "compiled_components": [
+    {
+      "component": "DXC API",
+      "licences": [
+        "DirectXShaderCompiler-LICENSE.txt"
+      ]
+    },
+    {
+      "component": "Vulkan-Headers",
+      "licences": [
+        "Vulkan-Headers-LICENSE.txt"
+      ]
+    },
+    {
+      "component": "DLSS SDK",
+      "licences": [
+        "NVIDIA-RTX-SDKs-DLSS.txt"
+      ]
+    },
+    {
+      "component": "Streamline SDK",
+      "licences": [
+        "Streamline-MIT.txt",
+        "Streamline-3rd-party-licenses.md"
+      ]
+    },
+    {
+      "component": "Aftermath SDK (optional headers)",
+      "licences": [
+        "NVIDIA-Aftermath.txt"
+      ]
+    },
+    {
+      "component": "WebView2 static loader and headers",
+      "licences": [
+        "WebView2-LICENSE.txt",
+        "WebView2-NOTICE.txt"
+      ]
+    }
+  ]
+}

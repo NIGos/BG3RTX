@@ -2,6 +2,7 @@
 
 Developer checklist. Player instructions: [README.md](README.md).
 This is not release approval. Packaging remains paused until the open decisions and gates are resolved.
+Offline status audit: [RELEASE_OFFLINE_STATUS.md](RELEASE_OFFLINE_STATUS.md).
 
 ## Defaults and memory
 
@@ -83,7 +84,7 @@ Inventory and unresolved terms: [THIRD_PARTY.md](THIRD_PARTY.md).
 This checklist does not resolve redistribution permission.
 
 - [ ] Choose the project's licence and resolve the NVIDIA notification decision.
-- [ ] Verify the required NVIDIA, Streamline, DXC and Vulkan licence texts are present in LICENSES.
+- [ ] Verify the required NVIDIA, Streamline, DXC and Vulkan licence texts are present in `licences/` (SHaRC opt-in uses `LICENSES/`).
 - [ ] Resolve asset DB redistribution under Larian's terms.
 - [ ] Keep SHaRC source headers out unless redistribution is resolved. Keep sharc off.
   Keep Aftermath, OMM SDK, development Streamline DLLs and developer tools out of the player archive.
