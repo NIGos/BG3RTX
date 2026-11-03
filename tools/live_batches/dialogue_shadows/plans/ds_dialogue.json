@@ -48,36 +48,6 @@
   ]
  },
  {
-  "label": "diag-occ-frames-hold4",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 6,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 6,
-  "motion_end": 6,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,rt_sun_roofs=1,rt_sun_replace=1,gi=1,ls_box_cascade_old=0"
- },
- {
-  "label": "diag-occ-frames-hold0",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 6,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 6,
-  "motion_end": 6,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,rt_sun_roofs=1,rt_sun_replace=1,gi=1,ls_box_cascade_old=0"
- },
- {
   "label": "diag-occ-frames-casc0",
   "kind": "static",
   "speed": "static",
@@ -145,6 +115,36 @@
   "trace_at": [
    5
   ]
+ },
+ {
+  "label": "diag-occ-frames-hold4",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,rt_sun_roofs=1,rt_sun_replace=1,gi=1,ls_box_cascade_old=0"
+ },
+ {
+  "label": "diag-occ-frames-hold0",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,rt_sun_roofs=1,rt_sun_replace=1,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "shot-off-a",

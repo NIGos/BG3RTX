@@ -57,17 +57,19 @@ plan = [
     # The first held shot right after the load (user screens 7-9, port: the moving face band is in THIS shot; the later
     # diag-occ windows may sit in another cut). Its trace proves the framing; sun rays on character px with distances.
     step("diag-view-occ-first", 12, [6], rt_occ_stats="1", qa_exposure_hold="0"),
-    # Frame by frame (4-frame lines) in the same shot, rt_dyn_hold 4 then 0: a moving occluder shows as kind/distance
-    # changing line to line; held/stale geometry as 'held' that vanishes with hold 0.
-    step("diag-occ-frames-hold4", 6, rt_occ_stats="1", rt_occ_stats_frames="4", qa_exposure_hold="0"),
-    step("diag-occ-frames-hold0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_dyn_hold="0", qa_exposure_hold="0"),
+    # User 2026-11-03: sun between the buildings that should be static but moves: (f) and (g) first, in this shot.
     # (f) cascade copies re-fitted to the close-up camera; (g) the roof trust (rt_sun_roofs) and the whole replace rule.
+    # Every phase is a 'static' motion step: the runner sends no input, so a moving band is from our side or the game's.
     step("diag-occ-frames-casc0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_cascade_casters="0", qa_exposure_hold="0"),
     step("diag-view-occ-roofs0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_roofs="0", qa_exposure_hold="0"),
     step("diag-view-occ-replace0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_replace="0", qa_exposure_hold="0"),
     # (e) a cinematic light rig: the game's mask (red) vs our traced sun (green) in the same first shot; an offset band
     # of the same shape = another light direction.
     step("diag-view-sunmask-first", 8, [5], rt_debug="2", qa_exposure_hold="0"),
+    # Frame by frame (4-frame lines) in the same shot, rt_dyn_hold 4 then 0: a moving occluder shows as kind/distance
+    # changing line to line; held/stale geometry as 'held' that vanishes with hold 0.
+    step("diag-occ-frames-hold4", 6, rt_occ_stats="1", rt_occ_stats_frames="4", qa_exposure_hold="0"),
+    step("diag-occ-frames-hold0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_dyn_hold="0", qa_exposure_hold="0"),
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
     step("shot-nolocal-on", SHOT, True, rt_local_shadows="0"),               # the game's own local-light shadows
