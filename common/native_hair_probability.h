@@ -30,6 +30,12 @@ NHP_INLINE bool nh_bernoulli(float probability, NHP_UINT random24) {
   return probability >= 0.0f && probability <= 1.0f && random24 <= 0xffffffu &&
          float(random24) * (1.0f / 16777216.0f) < probability;
 }
+// Single candidate decision: 2 means full native fallback, never retry the
+// probability until accepted. Comparisons reject NaN and infinities as invalid.
+NHP_INLINE NHP_UINT nh_consume(float probability, NHP_UINT random24) {
+  if (!(probability >= 0.0f && probability <= 1.0f) || random24 > 0xffffffu) return 2u;
+  return nh_bernoulli(probability, random24) ? 1u : 0u;
+}
 #ifdef __cplusplus
 }
 #endif

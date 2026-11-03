@@ -45,21 +45,6 @@
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=1,rt_hair_gi_mean=0,rt_hair_visibility=0"
  },
  {
-  "label": "warm-mean",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 25,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 25,
-  "motion_end": 25,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0"
- },
- {
   "label": "warm-visibility",
   "kind": "static",
   "speed": "static",
@@ -73,21 +58,6 @@
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1"
- },
- {
-  "label": "warm-combined",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 25,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 25,
-  "motion_end": 25,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=1,rt_hair_gi_mean=1,rt_hair_visibility=1"
  },
  {
   "label": "settle-cam",
@@ -303,7 +273,7 @@
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=0"
  },
  {
-  "label": "shot-mean",
+  "label": "shot-visibility",
   "kind": "static",
   "speed": "static",
   "seconds": 8,
@@ -315,13 +285,13 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1",
   "trace_at": [
    5
   ]
  },
  {
-  "label": "cost-mean",
+  "label": "cost-visibility",
   "kind": "static",
   "speed": "static",
   "seconds": 25,
@@ -333,7 +303,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1"
  },
  {
   "label": "shot-full-3",
@@ -369,25 +339,7 @@
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=0"
  },
  {
-  "label": "shot-visibility",
-  "kind": "static",
-  "speed": "static",
-  "seconds": 8,
-  "repeat_ms": 0,
-  "scan": 16,
-  "capture_at": 0,
-  "serial": 0,
-  "motion_start": 8,
-  "motion_end": 8,
-  "pixels_per_second": 0,
-  "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1",
-  "trace_at": [
-   5
-  ]
- },
- {
-  "label": "cost-visibility",
+  "label": "warm-mean",
   "kind": "static",
   "speed": "static",
   "seconds": 25,
@@ -399,7 +351,40 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=1"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0"
+ },
+ {
+  "label": "shot-mean",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 8,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 8,
+  "motion_end": 8,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0",
+  "trace_at": [
+   5
+  ]
+ },
+ {
+  "label": "cost-mean",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=1,rt_hair_visibility=0"
  },
  {
   "label": "shot-full-4",
@@ -433,6 +418,21 @@
   "pixels_per_second": 0,
   "direction": 0,
   "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=0,rt_hair_gi_mean=0,rt_hair_visibility=0"
+ },
+ {
+  "label": "warm-combined",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 25,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 25,
+  "motion_end": 25,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_pool_trim=1,rt_hair_cheap=1,rt_hair_gi_mean=1,rt_hair_visibility=1"
  },
  {
   "label": "shot-combined",

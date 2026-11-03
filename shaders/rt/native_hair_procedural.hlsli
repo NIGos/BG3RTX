@@ -60,12 +60,12 @@ bool hair_alpha(HairPrimitive p,float2 bary,float footprint,float3 ray,bool phys
   uint offset=gAlphaRec.Load(p.a+192u);
   if(nh_mean_range(offset,gAlphaRec.Load(p.a+200u),p.info.tris,gAlphaRec.Load(p.a+204u),bytes)) {
    float probability=asfloat(gMeshPool.Load(offset+p.info.tris*24u));
-   if(isfinite(probability) && probability>=0.0 && probability<=1.0) {
+   if(nh_consume(probability,0u)!=2u) {
     // One stored probability bypasses coverage material/strand interpolation.
     // Include direction and instance so separate cards and rays are not correlated.
     uint3 h=pcg3d(uint3(asuint(bary.x)^asuint(ray.x),asuint(bary.y)^asuint(ray.y),
                       p.prim^(p.a*0x85ebca6bu)^(pc.frame*0x9e3779b9u)^asuint(ray.z)));
-    known=true;bool solid=nh_bernoulli(probability,h.x>>8);
+    known=true;bool solid=nh_consume(probability,h.x>>8)==1u;
     alpha_stat(8,solid,p.prim);alpha_stat(9,!solid,p.prim);return solid;
    }
   }

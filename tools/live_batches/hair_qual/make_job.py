@@ -207,16 +207,19 @@ BASE.update({key: "0" for key in COST_KEYS})
 def cost2_job(name, save, kind):
     states = [("pool", {"rt_hair_pool_trim": "1"}),
               ("cheap", {"rt_hair_cheap": "1"}),
-              ("mean", {"rt_hair_gi_mean": "1"}),
               ("visibility", {"rt_hair_visibility": "1"}),
+              ("mean", {"rt_hair_gi_mean": "1"}),
               ("combined", {key: "1" for key in COST_KEYS})]
     phases = [step("warmup", 25, qa_exposure_hold="0", **ON)]
-    phases += [step("warm-" + label, 25, **dict(ON, **keys)) for label, keys in states]
+    phases += [step("warm-" + label, 25, **dict(ON, **keys)) for label, keys in states if "rt_hair_gi_mean" not in keys]
     phases += [step("settle-cam", 10, **ON), step("shot-cards", SHOT, True),
                step("cost-cards", 25), step("shot-full-0", SHOT, True, **ON),
                step("cost-full-0", 25, **ON)]
     # Shared full-hair repeats bracket each individual ON for both observables.
     for i, (label, keys) in enumerate(states, 1):
+        # Mean can lose the device: finish every unrelated observable first.
+        if "rt_hair_gi_mean" in keys:
+            phases += [step("warm-" + label, 25, **dict(ON, **keys))]
         phases += [step("shot-" + label, SHOT, True, **dict(ON, **keys)),
                    step("cost-" + label, 25, **dict(ON, **keys)),
                    step("shot-full-" + str(i), SHOT, True, **ON),
@@ -265,13 +268,14 @@ def cost2_job(name, save, kind):
     j["expect_every"] = gates
     j["expect"] = [x for x in j["expect"] if "primary-ray check match" not in x]
     j["expect"].append(r"gi: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)")
+    j["expect"].append(r"\[hair mean\] rt_hair_gi_mean ignored: disabled pending GPU device-loss root-cause repair")
     j["expect_runner"] = [r"\[motion-plan\] pointer centred in owned foreground game"]
     j["expect_runner"] += [rf"\[motion-trace\] phase={i} label={p['label']} repeat=0"
                            for i, p in enumerate(phases) if p.get("trace_at")]
     j["expect_runner"] += [rf"\[motion-plan\] complete phases={len(phases)}\b", "^Run ended: done"]
     if name.startswith("hq4-"):
         j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hq_cost3_trim_plan.json"
-    j["purpose"] = ("hair-cost3: hair-on full/pool/full/cheap/full/mean/full/visibility/full/combined/full, independent "
+    j["purpose"] = ("Mean requests are quarantined/ignored; cannot qualify mean cost or energy. hair-cost4: hair-on full/pool/full/cheap/full/visibility/full/mean/full/combined/full, independent "
                     "rt passes and GI GPU cost with character float energy. Same-run cards baseline. "
                     "Zero pool-full or scene skips, including Dialogue3. No GI cull. "
                     "Visibility is the certified mapped static-draw subset; unknowns stay native. Zero eligible/cards is no qualification.")
