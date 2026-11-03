@@ -398,6 +398,28 @@ def test_primary():
     gb = primary.gbuffer(hits, cam)
     nb = primary.stereo_decode(gb["rt0"][rows[0], 32])
     check("tracer: G-buffer normal faces the camera (view z < 0)", nb[2] < -0.9, nb)
+    # Motion vector: a world-static point, camera moved 5 cm; the jitter-free pixels of both frames differ by the MV.
+    size = np.array([1280.0, 720.0])
+
+    def vp_at(cam_pos):
+        f, r, u = np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])
+        m = np.zeros((4, 4))
+        k = np.tan(np.radians(25.0))
+        m[:3, 0], m[:3, 1], m[:3, 3] = r / (k * size[0] / size[1]), u / k, f
+        m[:3, 2], m[3, 2] = -1e-4 * f, 0.1
+        return m
+
+    def pixel(p_rel, vp):
+        c = np.append(p_rel, 1.0) @ vp
+        return ((c[:2] / c[3]) * np.array([0.5, -0.5]) + 0.5) * size
+
+    world, cam0, cam1 = np.array([0.1, 1.6, 2.0]), np.array([0.0, 1.5, 0.0]), np.array([0.05, 1.5, 0.0])
+    jit, pjit = np.array([0.3, -0.2]), np.array([-0.1, 0.4])
+    frag = pixel(world - cam1, vp_at(cam1)) - np.array([jit[0], -jit[1]])   # the jittered raster position
+    mv = primary.motion_vector(frag, world - cam0, vp_at(cam0), np.ones(2), np.zeros(2), size, jit, pjit)
+    want = pixel(world - cam1, vp_at(cam1)) - pixel(world - cam0, vp_at(cam0)) - np.array([pjit[0], -pjit[1]])
+    check("motion vector of a static point = jitter-free pixel difference (native b70cadc5 form)",
+          np.allclose(mv, want, atol=1e-9), (mv, want))
     check("tracer: G-buffer tangent decodes to +x", np.allclose(primary.oct12_decode(gb["rt3"][rows[0], 32]), [1, 0, 0], atol=1e-3))
 
 

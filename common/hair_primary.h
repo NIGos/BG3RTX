@@ -58,5 +58,7 @@ inline uint64_t pixel_bytes(uint32_t width, uint32_t height) { return uint64_t(w
 // after this frame's groom TLAS exists). Instanced hair (0ca5ee93..., other bindings) keeps its cards.
 constexpr uint64_t kDeferredStaticFs = 0x42a95e17ec3adc51ull;
 constexpr uint64_t kDepthStaticFs = 0x5a03e5b678b2d040ull;
+// The velocity pass's static hair FS (motion vectors): the strand variant hair_primary_velocity.hlsl.
+constexpr uint64_t kVelocityStaticFs = 0xb70cadc5dd3adcbdull;
 
 }  // namespace hair_primary

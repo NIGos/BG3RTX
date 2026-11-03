@@ -5,10 +5,11 @@
 // Also the points' bounds (orderable uints, min xyz then max xyz) for the layer's screen-size LOD; the pool is
 // device-local, the layer copies the six words to a host-visible buffer.
 // rt_hair_groom_primary (uv_off nonzero): also the point's card UV (soup vertex bytes 16..23, the captured UV0),
-// read by the strand G-buffer variant (hair_primary_gbuffer.hlsl).
+// read by the strand G-buffer variant (hair_primary_gbuffer.hlsl); prev_off nonzero: last frame's points are copied
+// there first (the velocity variant's previous positions, camera-relative to last frame's camera).
 [[vk::binding(0, 0)]] ByteAddressBuffer Soup;
 [[vk::binding(1, 0)]] RWByteAddressBuffer Pool;
-struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off; };
+struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad0, pad1, pad2; };
 [[vk::push_constant]] Push pc;
 
 uint orderable(float f) { const uint u = asuint(f); return (u & 0x80000000u) != 0u ? ~u : u | 0x80000000u; }
@@ -22,6 +23,7 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   GroupMemoryBarrierWithGroupSync();
   const uint i = id.x;
   if (i < pc.points) {
+    if (pc.prev_off != 0u) Pool.Store3(pc.prev_off + i * 12u, Pool.Load3(pc.pos_off + i * 12u));
     const uint tri = Pool.Load(pc.tri_off + i * 4u);
     const float2 b = asfloat(Pool.Load2(pc.bary_off + i * 8u));
     float3 v[3];

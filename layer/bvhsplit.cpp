@@ -434,6 +434,8 @@ struct GroomSlot {
   int lod = -1, lod_votes = 0;
   VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
   VkDeviceSize uv_off = 0;     // rt_hair_groom_primary: per-point card UV after the bounds (0: not allocated)
+  VkDeviceSize prev_off = 0;   // and last frame's points after the UVs (valid once prev_frames > 0)
+  uint32_t prev_frames = 0;    // updates since the points range was allocated (the first copies garbage)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
@@ -848,8 +850,8 @@ std::vector<uint32_t> g_groom_free_queries;
 TlasSlot g_groom_tlas[kSceneSlots];
 Buf g_groom_inst[kSceneSlots];
 Buf g_groom_scratch;
-struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off; };
-static_assert(sizeof(GroomPush) == 32);
+struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad[3]; };
+static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
@@ -2578,14 +2580,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         }
         as_destroy(g.as);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
-        g.pos_size = 0; g.uv_off = 0; g.built = false; g.compact = 0; g.lod = lod;
+        g.pos_size = 0; g.uv_off = 0; g.prev_off = 0; g.prev_frames = 0; g.built = false; g.compact = 0; g.lod = lod;
       }
       if (ok && !g.pos_size) {
         const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
-        const VkDeviceSize uv = hp_on ? (VkDeviceSize(l.points) * 8 + 15) / 16 * 16 : 0;
-        ok = groom_make_room(pos + 32 + uv, now) && pool_alloc(cmd, pos + 32 + uv, &g.pos_off);
+        const VkDeviceSize uv = hp_on ? (VkDeviceSize(l.points) * 8 + 15) / 16 * 16 : 0, prev = hp_on ? pos : 0;
+        ok = groom_make_room(pos + 32 + uv + prev, now) && pool_alloc(cmd, pos + 32 + uv + prev, &g.pos_off);
         if (ok) {
-          g.pos_size = pos + 32 + uv; g.bounds_off = g.pos_off + pos; g.uv_off = uv ? g.pos_off + pos + 32 : 0;
+          g.pos_size = pos + 32 + uv + prev; g.bounds_off = g.pos_off + pos;
+          g.uv_off = uv ? g.pos_off + pos + 32 : 0;
+          g.prev_off = prev ? g.pos_off + pos + 32 + uv : 0;
+          g.prev_frames = 0;
           g_groom_pool_used += g.pos_size;
         }
       }
@@ -2931,9 +2936,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pl, 0, 2, wr);
       for (const GroomWork& w : groom_work) {
         const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
-                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off)};
+                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off),
+                           uint32_t(w.g->prev_off), {0, 0, 0}};
         dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
         dd->vk.CmdDispatch(cmd, (w.l->points + 127) / 128, 1, 1);
+        ++w.g->prev_frames;
       }
       barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kCS | kXfer, kRW);
       for (const GroomWork& w : groom_work) {
@@ -3341,7 +3348,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
         if (groom_count < hair_primary::kMaxGrooms) {
-          hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg), 0u};
+          // Previous points: valid from the second update of this points range (the first copies stale bytes).
+          hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
+                                  w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
           hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
         }
         ++groom_count;

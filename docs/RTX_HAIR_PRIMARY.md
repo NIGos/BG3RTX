@@ -37,10 +37,11 @@ Options considered:
   strand's own UV (card UV at its embedding point; gradients from the card UV), RT3.xyz = view-space strand
   tangent (the native FS writes its tangent in the same space; root-to-tip sign: open item), RT2.w = class 5 |
   the draw's light channel. The draw's own material descriptors are bound (same pipeline layout).
-- **Velocity (Velocity FS).** Reads the per-pixel record (instance, segment, parameter along the segment),
-  evaluates the point at the previous frame's positions (one previous-points buffer per groom instance,
-  roadmap step 5), projects it with the previous view-projection and writes current minus previous pixel
-  position with jitter removed, exactly the game's convention (TRACK_B_FG "Motion vectors").
+- **Velocity (Velocity FS b70cadc5, `shaders/rt/hair_primary_velocity.hlsl`).** Reads the pixel entry (no
+  trace), evaluates the strand point at the same parameter in last frame's points (the groom update copies
+  them before writing the new ones; camera-relative to last frame's camera), projects it with set 0 b5 `m2`
+  and writes the native form: fragment + jitter minus previous pixel + previous jitter, in pixels. No
+  previous points yet: the current point moved with the camera only. Depth test GREATER_OR_EQUAL, no writes.
 - **Shadow cascades:** cards, unchanged (RT shadows already see strands with `rt_hair_groom`).
 
 Per-pixel record (render resolution, 16 B: groom k << 24 | segment, v, native depth, frame tag;
@@ -88,5 +89,6 @@ Report per character: prepass variant GPU ms (timestamps around the hair draws),
   the GPU bench in a primary mode against the 1a CPU reference (coverage IoU, depth and tangent error).
 - **1c (layer):** variant pipelines for matched hair draws, per-pixel record, key; live job Dialogue1:
   groom primary on/off in one run, full-resolution PNG pairs, prepass GPU ms, hair temporal variance.
-- **2:** previous points + velocity variant. **3:** fibre BSDF in our lighting. **4:** DoF/RR post check
+- **2 (done offline):** previous points + velocity variant; `primary.motion_vector` twin (CTest).
+  **3:** fibre BSDF in our lighting. **4:** DoF/RR post check
   with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per character, VRAM.

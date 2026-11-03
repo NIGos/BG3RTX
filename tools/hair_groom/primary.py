@@ -96,6 +96,16 @@ def segment_param(hit, p0, p1):
     return np.clip(((np.asarray(hit) - p0) * d).sum(-1) / np.maximum((d * d).sum(-1), 1e-30), 0.0, 1.0)
 
 
+def motion_vector(frag_xy, prev_rel, prev_vp, scale, offset, size, jitter, prev_jitter):
+    """The native velocity FS b70cadc5 (and hair_primary_velocity.hlsl) for a strand point: fragment position plus the
+    current jitter (y negated) minus the previous pixel of `prev_rel` (camera-relative to the previous camera,
+    projected with the previous view-projection, row vectors) plus the previous jitter. Pixels, current - previous."""
+    c = np.append(np.asarray(prev_rel, np.float64), 1.0) @ prev_vp
+    uv = (c[:2] / c[3]) * np.array([0.5, -0.5]) + 0.5
+    prev_px = (uv * scale + offset) * size + np.array([prev_jitter[0], -prev_jitter[1]])
+    return np.asarray(frag_xy, np.float64) + np.array([jitter[0], -jitter[1]]) - prev_px
+
+
 def strand_depth_ortho(d_card, t_card, t_strand, dd_dt):
     """Orthographic: D is affine in the distance along the (parallel) ray."""
     return d_card + (t_strand - t_card) * dd_dt

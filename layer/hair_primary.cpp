@@ -1,7 +1,8 @@
 // rt_hair_groom_primary (docs/RTX_HAIR_PRIMARY.md): the visible hair of matched static CHAR_Hair draws becomes the
 // strand groom. At pipeline creation every static hair pipeline gets a variant: the camera Depth prepass a clone
 // without depth writes (the cards leave no depth; their XFB capture is unchanged), the G-buffer the strand fragment
-// shader shaders/rt/hair_primary_gbuffer.hlsl with depth GREATER_OR_EQUAL + writes (reversed Z). At draw time a
+// shader shaders/rt/hair_primary_gbuffer.hlsl with depth GREATER_OR_EQUAL + writes (reversed Z), the velocity pass
+// (FS b70cadc5) rt/hair_primary_velocity.hlsl (strand motion from last frame's points, no depth writes). At draw time a
 // matched draw (its index range is in the groom set of the latest build) is drawn with the variant. The strand
 // shader reads the frame record (common/hair_primary.h) through the header address baked as specialization
 // constants 1100/1101; bvhsplit publishes the header after the groom TLAS build (hair_primary_publish).
@@ -37,13 +38,14 @@ bool g_pixels_fresh = false;           // just allocated: zero it before the nex
 uint32_t g_px_w = 0, g_px_h = 0;
 std::unordered_map<VkShaderModule, uint64_t> g_mods;           // the two native hair FS modules
 std::unordered_map<VkPipeline, VkPipeline> g_variant;         // game pipeline -> variant
-std::unordered_map<VkPipeline, bool> g_is_gbuffer;            // variant -> G-buffer (true) or prepass clone
+enum class Pass : uint8_t { Prepass, Gbuffer, Velocity };
+std::unordered_map<VkPipeline, Pass> g_pass_of;               // variant -> its pass
 // Index ranges of the grooms in the last two published TLASes: a draw is swapped only when its groom is in both, so
 // the prepass (recorded before this frame's build) and the G-buffer (after it) agree on a draw that just appeared.
 std::unordered_set<uint64_t> g_keys, g_keys_prev;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
-struct Stats { uint64_t prepass = 0, gbuffer = 0, refused = 0, publishes = 0; } g_st;
-uint64_t g_logged_frame = 0;
+struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0; } g_st;
+uint64_t g_logged_pipes = 0;
 
 bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* what) {
   DeviceData* dd = g_dd;
@@ -137,7 +139,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   for (auto& [game, v] : g_variant) dd->vk.DestroyPipeline(dd->device, v, nullptr);
   g_variant.clear();
-  g_is_gbuffer.clear();
+  g_pass_of.clear();
   g_mods.clear();
   for (HpBuf* b : {&g_header, &g_pixels}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
@@ -149,7 +151,9 @@ void hair_primary_device_destroyed(DeviceData* dd) {
 }
 
 void hair_primary_note_module(VkShaderModule m, uint64_t hash) {
-  if (hash != hair_primary::kDeferredStaticFs && hash != hair_primary::kDepthStaticFs) return;
+  if (hash != hair_primary::kDeferredStaticFs && hash != hair_primary::kDepthStaticFs &&
+      hash != hair_primary::kVelocityStaticFs)
+    return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_mods[m] = hash;
 }
@@ -169,7 +173,8 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
         if (it != g_mods.end()) fs = int(k), hash = it->second;
       }
     if (fs < 0 || !out[i] || !header_ready()) continue;
-    const bool gbuffer = hash == hair_primary::kDeferredStaticFs;
+    const Pass pass = hash == hair_primary::kDeferredStaticFs ? Pass::Gbuffer
+                    : hash == hair_primary::kVelocityStaticFs ? Pass::Velocity : Pass::Prepass;
     bool library = false, dynamic_depth = false;
     for (auto p = static_cast<const VkBaseInStructure*>(ci.pNext); p; p = p->pNext)
       library |= p->sType == VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR ||
@@ -187,9 +192,10 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     const VkSpecializationMapEntry spec_map[2] = {{hair_primary::kSpecRecordLo, 0, 4}, {hair_primary::kSpecRecordHi, 4, 4}};
     const VkSpecializationInfo spec{2, spec_map, sizeof spec_words, spec_words};
     VkPipelineDepthStencilStateCreateInfo dsv = *ds;
-    if (gbuffer) {
+    if (pass != Pass::Prepass) {
       Bg3ShaderBlob blob{};
-      if (!shader_get("rt/hair_primary_gbuffer.hlsl", "main", "ps_6_6", &blob)) {
+      const char* file = pass == Pass::Gbuffer ? "rt/hair_primary_gbuffer.hlsl" : "rt/hair_primary_velocity.hlsl";
+      if (!shader_get(file, "main", "ps_6_6", &blob)) {
         if (g_st.refused++ < 8) log("[hair primary] strand fragment shader unavailable: hair keeps its cards");
         continue;
       }
@@ -200,12 +206,14 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
       stages[size_t(fs)].module = mod;
       stages[size_t(fs)].pName = "main";
       stages[size_t(fs)].pSpecializationInfo = &spec;
-      // Strands write their own depth on top of whatever the prepass left (no card depth there).
-      if (g_logged_frame++ < 4)
-        log("[hair primary] G-buffer hair pipeline: native depth test %u write %u compare %d -> strands test 1 write 1 "
-            "compare GREATER_OR_EQUAL", ds->depthTestEnable, ds->depthWriteEnable, int(ds->depthCompareOp));
+      // G-buffer: strands write their own depth on top of whatever the prepass left (no card depth there).
+      // Velocity: the strand depth the G-buffer wrote passes, nearer geometry does not; no writes.
+      if (g_logged_pipes++ < 6)
+        log("[hair primary] %s hair pipeline: native depth test %u write %u compare %d -> strands test 1 write %u "
+            "compare GREATER_OR_EQUAL", pass == Pass::Gbuffer ? "G-buffer" : "velocity", ds->depthTestEnable,
+            ds->depthWriteEnable, int(ds->depthCompareOp), unsigned(pass == Pass::Gbuffer));
       dsv.depthTestEnable = VK_TRUE;
-      dsv.depthWriteEnable = VK_TRUE;
+      dsv.depthWriteEnable = pass == Pass::Gbuffer ? VK_TRUE : VK_FALSE;
       dsv.depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
     } else {
       dsv.depthWriteEnable = VK_FALSE;
@@ -226,7 +234,7 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     auto it = g_variant.find(out[i]);
     if (it != g_variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
     g_variant[out[i]] = v;
-    g_is_gbuffer[v] = gbuffer;
+    g_pass_of[v] = pass;
   }
 }
 
@@ -234,7 +242,7 @@ void hair_primary_forget_pipeline(VkPipeline p) {
   std::lock_guard<std::mutex> lock(g_mu);
   auto it = g_variant.find(p);
   if (it == g_variant.end()) return;
-  g_is_gbuffer.erase(it->second);
+  g_pass_of.erase(it->second);
   defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
   g_variant.erase(it);
 }
@@ -254,7 +262,8 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   const uint64_t key = hair_primary_draw_key(s, args);
   if (!g_keys.count(key) || !g_keys_prev.count(key)) return false;
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
-  ++(g_is_gbuffer[it->second] ? g_st.gbuffer : g_st.prepass);
+  const Pass pass = g_pass_of[it->second];
+  ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
   return true;
 }
 
@@ -324,11 +333,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
   g_published = now + 1;
   ++g_st.publishes;
   if (now % 300 == 0)
-    log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass and %llu "
-        "G-buffer strand draws, %llu pipelines refused",
+    log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
+        "G-buffer and %llu velocity strand draws, %llu pipelines refused",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
-        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.refused);
-  if (now % 300 == 0) g_st.publishes = g_st.prepass = g_st.gbuffer = 0;
+        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused);
+  if (now % 300 == 0) g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0;
 }
 
 }  // namespace bg3

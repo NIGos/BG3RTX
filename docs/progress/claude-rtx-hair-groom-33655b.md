@@ -22,5 +22,6 @@
   depth rel. 7e-7, normal 0.0004 deg; Shadowheart (tapered radii) IoU 0.995 (report only).
 - 1c: key `rt_hair_groom_primary` (off, live, GUI "Strand hair on screen", needs rt_hair_groom);
   `layer/hair_primary.cpp` (variants, draw swap, header after the groom TLAS), per-point UVs in the groom
-  update. Requires LSS, shaderInt64, fragmentStoresAndAtomics. Check in game: `[hair primary]` lines
-  (header, pipelines, "N prepass and M G-buffer strand draws"). Not run live.
+  update. Requires LSS, shaderInt64, fragmentStoresAndAtomics. Not run live.
+- 2: velocity variant `hair_primary_velocity.hlsl` (native FS b70cadc5 form, last frame's strand points,
+  +12 B/point). Check in game: `[hair primary]` lines (prepass, G-buffer and velocity strand draws > 0).
