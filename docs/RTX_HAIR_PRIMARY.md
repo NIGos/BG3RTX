@@ -97,13 +97,14 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   the colour, `hb_eval_pixel` = mean over four fibre offsets), GPU vs `bsdf.py` in `hair_primary_gpu_test`
   (16k samples, 4 colour/roughness cases: relative error p99 4e-6, max 1.5e-5).
   **3b-1 (done offline):** `tools/hair_groom/dual.py`, dual scattering (Zinke 2008, paper densities d_f = d_b =
-  0.7) from fibre averages integrated over `bsdf.evaluate`. Validation: radiance toward the light from a
-  semi-infinite slab of random fibres, path traced (next-event estimates, all orders) vs the visible fibre shaded
-  by the model. Ratio model/reference: CHAR_Hair colour single scattering 0.27/0.35/0.46, dual 0.71/0.76/0.80;
-  (0.6, 0.45, 0.3) 0.13-0.19 vs 0.76-0.78; brighter hair is underestimated (white 0.40, held-out light
-  colours 0.47-0.93). Fitting d_f/d_b ends at the grid edge (d_f 1.0): the model's structure is the limit, so
-  the paper constants stay; next refinement: a per-channel correction table (absorption, roughness) from the
-  path tracer. CTest `hair_groom_test` (test_dual).
+  0.7) from fibre averages integrated over `bsdf.evaluate`, plus a per-channel correction k(colour, roughness) of
+  its multiple-scattering part (`TABLE_K`, 8 x 3, `python -m tools.hair_groom.dual --table`). Reference: a
+  semi-infinite slab of random fibres, path traced with next-event estimates of every order, flux toward the
+  upper hemisphere (the retro direction alone was too noisy: 10-32% between seeds); roughness < 0.35 is clamped
+  (the walk does not converge there). Model / reference, CHAR_Hair colour: single scattering 0.21/0.29/0.40,
+  dual 0.70/0.73/0.75, corrected 1.02/1.01/1.01; held-out colours corrected 0.97-1.04 (one 1.12 at 18%
+  reference spread). A measurement bug found on the way (radiance vs flux: a cos(theta_o) factor) is fixed in
+  the estimator. CTest `hair_groom_test` (test_dual).
   **3b-2 (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
   (hb_eval_pixel - the game's class-5 term, bg3_materials/bg3_sun) x radiance x our visibility, behind its own
   key; Hair_Color from the strand's RT1 (the native material output). Open: single-scatter Chiang is pale

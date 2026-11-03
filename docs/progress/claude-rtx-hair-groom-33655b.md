@@ -26,7 +26,7 @@
 - 2: velocity variant `hair_primary_velocity.hlsl` (native FS b70cadc5 form, last frame's strand points,
   +12 B/point). Cost line `[hair primary] strand G-buffer draws GPU X ms/frame` (per-draw timestamps).
 - 3a: fibre BSDF in HLSL (`hair_bsdf.hlsli`), GPU vs CPU max rel. error 1.5e-5; not wired yet.
-- 3b-1: dual scattering `tools/hair_groom/dual.py` vs a path-traced fibre slab: CHAR_Hair colour 0.71-0.80 of the
-  reference (single scattering 0.27-0.46); light hair underestimated (0.40-0.93).
+- 3b-1: dual scattering `tools/hair_groom/dual.py` + path-traced per-channel correction: CHAR_Hair colour 1.01-1.02 of a
+  path-traced fibre slab (single scattering 0.21-0.40, plain dual 0.70-0.75); held-out colours 0.97-1.04.
 - Live job READY_FOR_LIVE: tools/live_batches/hair_primary (Dialogue1, cards/strands shots at full resolution,
   cost cards/strands/cards; gated on G-buffer and velocity strand draws > 0). Dryrun pass, not run.

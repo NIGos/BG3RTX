@@ -424,20 +424,26 @@ def test_primary():
 
 
 def test_dual():
-    # Dual scattering (Zinke 2008, paper densities 0.7) vs a path-traced slab of random fibres, retro direction.
-    # Measured 2026-11-03: CHAR_Hair colour dual/ref 0.71/0.76/0.80, single scattering 0.27/0.35/0.46.
+    # Dual scattering (Zinke 2008, paper densities 0.7) and its path-traced per-channel correction (TABLE_K) vs a
+    # path-traced slab of random fibres, flux leaving toward the upper hemisphere. Measured 2026-11-03 for the
+    # CHAR_Hair colour: single 0.21/0.29/0.40, dual 0.70/0.73/0.75, corrected 1.02/1.01/1.01 of the reference;
+    # held-out colours corrected 0.97-1.04 (one 1.12 at 18% reference spread).
     c, r = bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]
-    ref = dual.slab_retro_reference(c, r, n=4000)
-    ds, ss = dual.slab_retro_dual(c, r, n=60000), dual.slab_retro_dual(c, r, n=60000, single_only=True)
-    check("dual scattering recovers most of the path-traced hair radiance (0.6..1.05 of it)",
-          np.all(ds / ref > 0.6) and np.all(ds / ref < 1.05), ds / ref)
-    # The 4000-path reference has a few % noise: compare the two models on it, with a 0.2 margin.
-    check("single scattering alone stays well below dual scattering", np.all(ss / ref < ds / ref - 0.2), (ss / ref, ds / ref))
+    ref = dual.slab_retro_reference(c, r, n=6000, seed=21)
+    ss = dual.slab_retro_dual(c, r, n=60000, single_only=True)
+    ds = dual.slab_retro_dual(c, r, n=60000)
+    dk = dual.slab_retro_dual(c, r, n=60000, corrected=True)
+    # Bounds: two 12000-path references of this colour spread <= 3%; 6000 paths and a 10% margin.
+    check("corrected dual scattering within 10% of the path-traced hair", np.all(np.abs(dk / ref - 1) < 0.1), dk / ref)
+    check("uncorrected dual scattering below it (0.6..0.85)", np.all(ds / ref > 0.6) and np.all(ds / ref < 0.85), ds / ref)
+    check("single scattering alone well below dual scattering", np.all(ss / ref < ds / ref - 0.2), (ss / ref, ds / ref))
     hue = lambda v: v / v.sum()
-    check("dual scattering keeps the hue closer than single scattering",
-          np.abs(hue(ds) - hue(ref)).max() < np.abs(hue(ss) - hue(ref)).max(), (hue(ds), hue(ss), hue(ref)))
+    check("corrected model keeps the reference hue (chromaticity within 0.02)", np.abs(hue(dk) - hue(ref)).max() < 0.02,
+          (hue(dk), hue(ref)))
     av = dual.averages((1, 1, 1), r, n=100000)
     check("white fibre: forward + backward fractions ~1 (energy)", np.all(np.abs(av.a_f + av.a_b - 1) < 0.03), av.a_f + av.a_b)
+    check("correction table: k > 1 everywhere (the model misses multiple scattering, never adds)",
+          np.all(np.asarray(dual.TABLE_K) > 1))
 
 
 for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
