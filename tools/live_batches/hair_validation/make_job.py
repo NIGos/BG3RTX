@@ -59,7 +59,8 @@ def make_bisect():
         keys.update(more)
         plan.append(stage_phase(f"set-{name}", 5, keys))   # the stage's keys before its reload
         plan.append(dict(stage_phase(f"reload-{name}", 5, keys), reload_selected=True))
-        plan += [stage_phase(f"survive-{name}-{i}", 20, keys) for i in SURVIVE]
+        # The primary stage's windows hold a whole 300-frame strand line at the unfocused 30 fps (> 21 s, live_flow).
+        plan += [stage_phase(f"survive-{name}-{i}", 25 if name == "d-primary" else 20, keys) for i in SURVIVE]
     plan.append(stage_phase("restore", 5, keys))
     return plan
 
@@ -126,7 +127,7 @@ def job(name, save, plan, validation=False):
                       match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1, windows=judged))
     gates.append(dict(name="strands participate in each ON cost window", select=r"\[hair primary\] frame \d+:",
                       match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
-                      windows=["validation-strands"] if validation else ["cost-strands", "cost-after-reload"]))
+                      windows=["validation-strands", "validation-after-reload"] if validation else ["cost-strands", "cost-after-reload"]))
     if not validation:
         for label, serial in (("cards",98410),("strands",98411)):
             gates += [dict(name="rendered K8 "+label, select=rf"\[pan\] burst {serial} complete",
@@ -156,6 +157,11 @@ def bisect_job(name, save, plan):
     j["expect_every"].append(dict(name="hair guards zero after every reload", select=r"\[alpha hair\] native coverage records",
                                   match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1,
                                   windows=[l for l in survive if l.endswith("-3")]))
+    # The primary stage is only proven with strands on screen (hv5 2026-11-03: every draw struck, 0 strand draws, yet
+    # "stable"): G-buffer and velocity strand draws in its survival windows after the 300-frame swap pause.
+    j["expect_every"].append(dict(name="strands drawn after the primary reload", select=r"\[hair primary\] frame \d+:",
+                                  match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
+                                  windows=[l for l in survive if l.startswith("survive-d-primary") and not l.endswith("-1")]))
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
                           r"\[hair-reload\] selected save reload complete"]
     j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch, native hair + scalp, then + physical "
