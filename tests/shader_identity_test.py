@@ -299,12 +299,16 @@ with quiet:
     si.compile_requests(tp1, REQUESTS, tool=tool, cache=pc4, jobs=2)
 check(not calls, "after a backfill a comment-only header edit compiles nothing")
 
-# A commit's blob ids equal the working tree's for unmodified files (cache shared across trees).
-dirty = subprocess.run(["git", "status", "--porcelain", "--", "shaders", "common"], cwd=ROOT, capture_output=True,
-                       text=True).stdout
+# Cache ids describe raw source bytes. Git checkout filters (for example LF -> CRLF)
+# can change a clean file's bytes, so a clean status alone does not imply equal ids.
 if subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True).returncode == 0:
     head, work = si.SourceTree.commit("HEAD"), si.SourceTree.worktree(ROOT)
-    same = [p for p in head.ids if p not in dirty]
-    check(same and all(head.ids[p] == work.ids.get(p) for p in same), "commit and worktree blob ids agree")
-    check(all(si.git_blob_id(head.read(p)) == head.ids[p] for p in same[:50]), "cat-file contents match their ids")
+    shared = sorted(head.ids.keys() & work.ids.keys())
+    same = [p for p in shared if head.read(p) == work.read(p)]
+    check(same and all(head.ids[p] == work.ids[p] for p in same),
+          "byte-identical commit and worktree sources share blob ids")
+    check(shared and all(si.git_blob_id(work.read(p)) == work.ids[p] for p in shared),
+          "worktree ids hash raw checkout bytes, including filtered files")
+    check(all(si.git_blob_id(head.read(p)) == head.ids[p] for p in shared[:50]),
+          "cat-file contents match their ids")
 print(f"shader_identity_test: {checks} checks passed")

@@ -268,6 +268,12 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   `compose GPU 0\.[0-4]\d\d ms median`: the 0.5 ms bound is 4 times M5.2's 0.12 ms for the same rays over
   two full-screen passes. Frame time ON minus OFF should fall from 2.45 ms to within the OFF spread.
 
+2026-11-03 cleanup: retire rt_water_rr_mv, rt_water_fg_mv and rt_water_glint_aa.
+Retain rt_water_rf_edge and rt_water_rr_hitdist off: their whole-water verdicts are invalid
+for reflections (wf8); re-measure with the wf8/wf9 reflection-only metric.
+See [KEY_AUDIT_20261103.md](KEY_AUDIT_20261103.md) for verdict sources and retained candidates.
+The historical measurements remain here; they do not close the reflection-specific defect in M5.3d.
+
 M5.3b screen-edge fade (`rt_water_rf_edge=0`, live, WATER_RF_EDGE on every compose variant, 2026-11-02): the
 compose's choice is binary per pixel and per frame (tier 1: C + A L - B, else C with the probe), with no temporal
 smoothing, and A L matches B only in its weight E, not in radiance (bins 29-31 log L / probe). Under a camera turn the
