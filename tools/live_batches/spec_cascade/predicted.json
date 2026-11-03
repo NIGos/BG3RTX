@@ -1,0 +1,29 @@
+{
+ "_rule": "Committed BEFORE the run (2026-11-02). Offline: each RT_SPEC_CASCADE module specialized to 0/1 is the same program as the old plain / RT_CASCADE_MASKS module (tools/spec_cascade_check.py 60/60 + 76/76), and the S8 gi_hit_direct replay is bit-identical. So the image and the GPU work are those of the off windows: every delta 0, judged against the off-a vs off-b spread of the same run (noise), never a tuned threshold.",
+ "scc1-spec-cascade-s8-fg2": {
+  "shot-c1-on": {
+   "predicted": 0.0,
+   "basis": "scene colour (dumps.json float mean) vs shot-c1-off-a/b: same program"
+  },
+  "shot-c0-on": {
+   "predicted": 0.0,
+   "basis": "same, casters off"
+  },
+  "gpu_ms_delta@cost-c1-on": {
+   "predicted": 0.0,
+   "basis": "gi / rf / ls / rt passes medians vs the mean of cost-c1-off-a/b; within their spread"
+  },
+  "gpu_ms_delta@cost-c0-on": {
+   "predicted": 0.0,
+   "basis": "same, casters off"
+  },
+  "dxc_compiles@toggle-spec-c0": {
+   "predicted": 0,
+   "basis": "the request string does not change with rt_cascade_casters"
+  },
+  "pipeline_ms@toggle-spec-c0": {
+   "predicted": null,
+   "basis": "first measurement: driver compile per cascade pass, on the render thread (NVIDIA disk cache cold: a few 100 ms each, estimate)"
+  }
+ }
+}

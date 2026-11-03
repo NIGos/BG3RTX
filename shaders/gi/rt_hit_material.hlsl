@@ -28,9 +28,16 @@ void main(uint3 id:SV_DispatchThreadID){
   float3 normal=to_lighting_space(decode_normal(gNormal.Load(int3(fp,0)).xy));
   matched=matched && all(isfinite(alb)) && all(isfinite(physical)) && all(isfinite(normal));
   stat_add(263u,matched,fp.x^fp.y);
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  stat_add(NtsStatQualified,material.family==NtsRecipe,fp.x^fp.y);
+  stat_add(NtsStatPrimaryMatch,material.family==NtsRecipe && matched,fp.x^fp.y);
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   stat_add(NtsStatQualified,material.family==NtsRecipe,fp.x^fp.y);
   stat_add(NtsStatPrimaryMatch,material.family==NtsRecipe && matched,fp.x^fp.y);
+#endif
 #endif
   float3 da=abs(alb-material.parameters.value.linear_albedo);
   float errors[5]={max(da.x,max(da.y,da.z)),length(normal-material.normal),abs(physical.x-material.parameters.value.perceptual_roughness),

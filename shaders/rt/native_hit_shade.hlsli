@@ -242,7 +242,15 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
  float3 amb_d,amb_s;
  native_hit_ambient(lit.material,position,outgoing,cluster,r.local_probes,amb_d,amb_s);
  r.radiance_ao1=(qa_local?0.0.xxx:lit.direct.radiance)+sun.radiance+amb_d+amb_s;
+#ifdef RF_SPEC_HIT_GI
+ // Keep the material colour outside the composition branch. Copying this float3
+ // through its merged struct introduces a redundant vector shuffle after specialization.
+ r.dcol=lit.material.parameters.value.diffuse_color;
+#endif
 #ifdef NATIVE_HIT_GI
+#ifdef RF_SPEC_HIT_GI
+ if(RF_GI_ON) {
+#endif
  // A and the GI bounce from the screen at the hit's pixel or from the estimator, then the screen's
  // composition (common/hit_gi_compose.h); the box part as below.
  float3 bounce;
@@ -256,12 +264,20 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
   HgFrame hf;hf.m0x=lFlags.m0.x;hf.m0y=lFlags.m0.y;hf.ao_direct=pc.ao_direct;hf.strength=pc.strength;
   const HgOut ho=hg_compose(hi,hf,r.ao,bounce);
   r.direct=ho.direct;r.native=hi.game*ho.f;r.sun=ho.sun;r.ambient_d=ho.amb_d;r.ambient_s=ho.amb_s;
-  r.ambient=r.ambient_d+r.ambient_s;r.gi=ho.gi;r.dcol=hi.dcol;r.radiance=ho.radiance;
+  r.ambient=r.ambient_d+r.ambient_s;r.gi=ho.gi;
+#ifndef RF_SPEC_HIT_GI
+  r.dcol=hi.dcol;
+#endif
+  r.radiance=ho.radiance;
 #ifdef NATIVE_HIT_BOX_TERM
   r.box=qa_local?0.0.xxx:g_hd_box*(hd_box_game()?ho.f:((pc.ao_direct&3u)==1u?1.0:ho.f));
 #endif
  }
-#else
+#endif
+#ifdef RF_SPEC_HIT_GI
+ } else {
+#endif
+#if !defined(NATIVE_HIT_GI) || defined(RF_SPEC_HIT_GI)
  // The screen's AO at the hit, applied term by term as the lighting applies b6.
  r.ao=native_hit_ao(position,rt_hit_normal(hit),footprint,key);
  const float f=native_hit_ao_factor(r.ao);
@@ -278,6 +294,9 @@ NativeHitShade native_hit_shade(RtHit hit,float3 position,float3 outgoing,float 
  r.ambient_s=amb_s*native_hit_spec_occlusion(r.ao,dot(outgoing,lit.material.normal),lit.material.parameters.value.base_roughness);
  r.ambient=r.ambient_d+r.ambient_s;
  r.radiance=r.direct+r.sun+r.ambient;
+#endif
+#ifdef RF_SPEC_HIT_GI
+ }
 #endif
  r.status=all(isfinite(r.radiance)) && all(r.radiance>=0) && all(isfinite(r.radiance_ao1))?kHitShadeOk:kHitShadeInvalid;
  return r;

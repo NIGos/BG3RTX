@@ -28,8 +28,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
     rtOrigin[fp] = float4(0, 0, 0, kOriginNoHit);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if (RT_HAIR_ORIGIN_ON) {
+    rtHairOrigin[fp]=0.0.xxxx;
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
     rtHairOrigin[fp]=0.0.xxxx;
+#endif
 #endif
     return;
   }
@@ -65,10 +71,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
   h.t = h.t >= 0.0 ? h.t + t0 : -1.0;
   if (h.t > 0.0) {
     float3 Ng = rt_hit_normal(h);
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+    // The primary faux-depth surface's geometric normal comes from the actual
+    // native depth field. The base-card normal belongs to physical secondaries.
+    if((inst_info(h.inst).meta&kInfoHairProcedural)!=0u)Ng=o.xyz;
+  }
+#else
 #ifdef RT_NATIVE_HAIR
     // The primary faux-depth surface's geometric normal comes from the actual
     // native depth field. The base-card normal belongs to physical secondaries.
     if((inst_info(h.inst).meta&kInfoHairProcedural)!=0u)Ng=o.xyz;
+#endif
 #endif
     float l = length(Ng);
     // The same surface as the depth buffer (see the window above); an aborted query's hit
@@ -77,6 +91,30 @@ void main(uint3 tid : SV_DispatchThreadID) {
     if (l > 0.0 && !h.aborted && abs(h.t - dist) < tol) {
       Ng /= l;
       o = float4(dot(Ng, V) < 0.0 ? -Ng : Ng, h.t / dist - 1.0);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if (RT_HAIR_ORIGIN_ON) {
+      // Class 5 also includes Scalp; class alone is not receiver identity.
+      // A competing depth-compatible surface prevents physical publication.
+      if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
+         (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
+        HairPrimitive primitive=hair_primitive(h.inst,h.prim);
+        physical_candidate=primitive.camera;
+        // Start from camera zero, not the restricted virtual search window:
+        // a large virtual displacement must not cause cancellation of tBase.
+        float3 physical_o=0.0.xxx;
+        if(primitive.valid && !primitive.inactive && primitive.camera &&
+           ((pc.ls_flags & (1u << 21)) == 0u ||
+            !hpo_competing_receiver(-V*t0,-V,t0,dist+w))) {
+          HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
+          float physical_t=card.t;
+          float3 physical_n=normalize(primitive.n);
+          if(card.status==1u && physical_t>0.0 && isfinite(physical_t) && all(isfinite(physical_n)) && hpo_unit_normal(physical_n)) {
+            physical_origin=float4(dot(physical_n,V)<0?-physical_n:physical_n,physical_t);
+          }
+        }
+      }
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
       // Class 5 also includes Scalp; class alone is not receiver identity.
       // A competing depth-compatible surface prevents physical publication.
@@ -99,24 +137,39 @@ void main(uint3 tid : SV_DispatchThreadID) {
         }
       }
 #endif
+#endif
     }
   }
   if (dot(o.xyz, o.xyz) < 0.5) o.xyz = Ns;   // degenerate: fall back to the shading normal
   else if (dot(o.xyz, V) < 0.0) o.xyz = -o.xyz;
   if (!all(isfinite(o))) o = float4(Ns, kOriginNoHit);
   rtOrigin[fp] = o;
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if (RT_HAIR_ORIGIN_ON) {
+  rtHairOrigin[fp]=physical_origin;
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   rtHairOrigin[fp]=physical_origin;
+#endif
 #endif
   if (pc.rt_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;
     stat_add(71, true, bin);
     stat_add(72, o.w != kOriginNoHit, bin);
     stat_add(73, dot(o.xyz, Ns) < 0.9, bin);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if (RT_HAIR_ORIGIN_ON) {
+    stat_add(188,physical_candidate,bin);
+    stat_add(189,physical_origin.w>0.0,bin);
+    stat_add(190,physical_candidate && physical_origin.w<=0.0,bin);
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
     stat_add(188,physical_candidate,bin);
     stat_add(189,physical_origin.w>0.0,bin);
     stat_add(190,physical_candidate && physical_origin.w<=0.0,bin);
+#endif
 #endif
   }
 }
