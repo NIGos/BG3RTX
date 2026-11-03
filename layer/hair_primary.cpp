@@ -472,7 +472,7 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s) {
   if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
 }
 
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, const hair_primary::Row* rows,
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
                           const uint64_t* keys, uint32_t count, uint32_t width, uint32_t height, const float* viewport) {
   if (!hair_primary_wanted()) return;
   std::lock_guard<std::mutex> lock(g_mu);
@@ -549,6 +549,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
   h.height = height;
   h.tlas = tlas;
   h.pool = pool;
+  h.pool_bytes = uint32_t((std::min)(pool_bytes, uint64_t(UINT32_MAX)));
   h.pixels = g_pixels.addr;
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
   uint8_t bytes[hair_primary::kHeaderBytes] = {};

@@ -36,8 +36,9 @@ bool hf_strand(uint2 fp, float d, out float3 T) {
   if (abs(asfloat(e.z) - d) > 1e-6 * max(abs(d), 1e-6)) return false;   // something else won this pixel
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + (e.x >> 24) * 16u, 16);
   const uint64_t pool = hf_addr(rec + 24u);
-  const uint i0 = hf_ld(pool + row.z + (e.x & hair_primary_max_segment) * 4u);
-  const float3 dp = hf_f3(pool + row.x + (i0 + 1u) * 12u) - hf_f3(pool + row.x + i0 * 12u);
+  uint i0;
+  if (!hp_segment(pool, hf_ld(rec + 56u), row, e.x & hair_primary_max_segment, i0)) return false;
+  const float3 dp = hf_f3(hp_at(pool, row.x, i0 + 1u, 12u)) - hf_f3(hp_at(pool, row.x, i0, 12u));
   if (!(dot(dp, dp) > 0.0)) return false;
   T = normalize(dp);
   return true;

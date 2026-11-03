@@ -108,6 +108,23 @@ def test_convert():
     check("orientation: root nearer the head", o["strands_reversed"] == 0 and o["strands_decided"] == 1, o)
     o = analysis.orientation(groom, np.array([0.0, -0.3, 0.0]))
     check("orientation: reversed card detected", o["strands_reversed"] == 1 and o["cards_mostly_reversed"] == 1, o)
+    # Mirrored UVs: the same card with u reflected (every UV triangle's winding flips) places the same strand,
+    # reflected across the card, exactly embedded: the embedding does not depend on the UV orientation.
+    mir = card_mesh()
+    mir.uv = np.c_[1 - mir.uv[:, 0], mir.uv[:, 1]].astype(np.float32)
+    gm, rm = convert.convert(mir, m, tile_grid=(1, 1), step=16)
+    emb_m = np.einsum("pk,pkd->pd", gm.bary, mir.positions[mir.tris[gm.triangle]])
+    check("mirrored UV card: same strand, exactly embedded", gm.strands == 1 and np.allclose(emb_m, gm.points, atol=1e-6)
+          and np.allclose(gm.points[:, 1], p[:, 1], atol=1e-6) and np.allclose(gm.radii, groom.radii, rtol=1e-4)
+          and rm["unmapped_samples"] == 0, (gm.strands, rm))
+    # Collapsed card vertices (a triangle without world area: no UV -> world Jacobian, width 0 there): the strand
+    # keeps a positive radius from its measured samples (the layer refuses r <= 0).
+    col = card_mesh()
+    col.positions = col.positions.copy()
+    col.positions[4:6] = col.positions[2:4]   # row 2 onto row 1
+    gc, _ = convert.convert(col, m, tile_grid=(1, 1), step=16)
+    check("collapsed triangle: every radius positive", gc.strands == 1 and np.all(gc.radii > 0) and np.all(np.isfinite(gc.radii)),
+          gc.radii.min() if gc.strands else None)
     # A second identical card on top: every point is a layered duplicate.
     two = card_mesh()
     two.positions = np.concatenate([two.positions, two.positions + [0, 0, 1e-4]]).astype(np.float32)
@@ -427,6 +444,15 @@ def test_primary():
             wrong += ok and not mine
     check("ownership: every strand pixel kept by its own card only", owned == hits2.hit.sum() and wrong == 0,
           (owned, wrong, int(hits2.hit.sum())))
+    # Pool bounds (2026-11-03 19:53: a strand read at pool + 0xFA000000 of a 2 GB pool lost the device).
+    pool = 2146435072
+    row = (468596768, 470000000, 476000000, 0)
+    check("pool bound: a valid segment passes", primary.segment_ok(row, 1000, 5000, pool))
+    check("pool bound: the crash's read (i0 * 12 = 3.9 GB past the points) fails closed",
+          not primary.segment_ok(row, 1000, (0xFA000000 - row[0]) // 12, pool))
+    check("pool bound: 64-bit offsets (i0 * 12 wraps in 32 bits)", not primary.segment_ok(row, 1000, 0x15555556, pool)
+          and (row[0] + 0x15555556 * 12) % 2 ** 32 < pool)
+    check("pool bound: a segment index past the pool fails", not primary.segment_ok(row, 0xFFFFFF, 0, 476000000 + 1000))
     s = primary.seal(5 << 24 | 7, 0x3F000000, 0x3F400000, 1234)
     check("pixel seal: changes with any word, never matches a zeroed entry",
           s != primary.seal(4 << 24 | 7, 0x3F000000, 0x3F400000, 1234) and s != primary.seal(5 << 24 | 7, 0, 0x3F400000, 1234)

@@ -1,6 +1,6 @@
 """Batch conversion of every CHAR_Hair hairstyle into strand grooms, on the player's PC (rt_hair_groom).
 
-python -m tools.hair_groom.batch --report-dir <dir> [--match Shadowheart Karlach ...] [--limit N] [--jobs J]
+python -m tools.hair_groom.batch --report-dir <dir> [--match Shadowheart Karlach ...] [--names <file>] [--limit N] [--jobs J]
     [--out-dir data/assetdb/hair_grooms] [--catalogue <mesh_materials v2 json>] [--lslib <LSLib Tools dir>]
 
 1. Enumerates the LOD0 and LOD1 objects whose material template is CHAR_Hair in the mesh_materials catalogue
@@ -46,6 +46,12 @@ ROOT_REJECT = 0.3
 # reversed cards: root/tip shading only). Unmapped samples are reported only: with several tiles per card the
 # strands of the neighbouring tiles fall outside the card by construction.
 COVER_REVIEW, RADIANCE_REVIEW, REVERSED_REVIEW = 0.08, 0.15, 0.25
+# Mirrored UV triangles (a card whose UV triangles have both windings): the embedding is barycentric, so either
+# orientation places strands exactly (hair_groom_test); only a fold, where the mirrored triangles overlap the
+# texture of the others, loses that card's strands (a sample lands in the first triangle). The loss is at most the
+# share of such cards, so the share is reviewed against the coverage tolerance (the image gates measure the rest).
+# Batch 2026-11-03: 191 styles had this as their only reason, median share 0.8% (p90 2.2%), IoU median 0.95.
+MIXED_REVIEW = COVER_REVIEW
 
 
 def say(msg):
@@ -199,7 +205,7 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
             review.append(f"coverage differs by {max(cover, key=abs):+.2f}")
         if max(abs(x) for x in light) > RADIANCE_REVIEW:
             review.append(f"mean radiance differs by {max(light, key=abs):+.0%}")
-        if rep["mixed_winding_cards"]:
+        if rep["mixed_winding_cards"] > MIXED_REVIEW * max(rep["cards"], 1):
             review.append(f"{rep['mixed_winding_cards']} cards with mirrored UV triangles")
         if min(ious) < IOU_PASS:
             review.append(f"silhouette IoU {min(ious):.2f}")
@@ -240,6 +246,8 @@ def main():
     ap.add_argument("--game", default=None)
     ap.add_argument("--lslib", default=None, help="LSLib Tools folder with LSLib.dll and granny2.dll")
     ap.add_argument("--match", nargs="*", default=[])
+    ap.add_argument("--names", type=Path, help="file of style names (one per line) to redo even if recorded: the styles "
+                                               "a converter or gate change affects; only these run")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--jobs", type=int, default=max(1, min(4, (os.cpu_count() or 2) // 4)))
     ap.add_argument("--accept-review", action="store_true", help="also write the assets of needs-review styles")
@@ -257,6 +265,9 @@ def main():
         ap.error(f"{lslib} has no granny2.dll (copy it next to LSLib.dll from LSLib's ExportTool package)")
     out_dir = args.out_dir or Path(catalogue).parent / "hair_grooms"
     todo = styles(catalogue, args.match)
+    redo = set(args.names.read_text(encoding="utf-8").splitlines()) - {""} if args.names else set()
+    if redo:
+        todo = [s for s in todo if s["name"] in redo]
     if args.limit:
         todo = todo[:args.limit]
     args.report_dir.mkdir(parents=True, exist_ok=True)
@@ -284,7 +295,7 @@ def main():
         for s in todo:
             s["inputs"] = entry_key(s)
             old = state.get(s["name"])
-            if old and old.get("inputs") == s["inputs"]:
+            if old and old.get("inputs") == s["inputs"] and s["name"] not in redo:
                 skipped += 1
                 continue
             futs[pool.submit(process, s, game, lslib, out_dir, args.report_dir, args.accept_review)] = s
