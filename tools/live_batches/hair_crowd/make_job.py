@@ -63,7 +63,7 @@ GROOM_ON = ["cost-strands", "cost-crowd"]
 
 def job(name, save):
     j = hp.job(name, save)
-    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hc_plan.json"
+    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/" + ("hc_plan.json" if name == SAVES[0][0] else name + ".json")
     # The user may be at the PC: the game never takes focus (AGENTS.md). A full pool is a measured outcome here
     # (the crowd budget's point), not a failure; refusals are counted by the strand gates.
     j["window_mode"] = "visible_unfocused_fg"
@@ -109,9 +109,12 @@ def main():
     out = Path(a.out)
     (out / "jobs").mkdir(parents=True, exist_ok=True)
     (out / "plans").mkdir(parents=True, exist_ok=True)
-    (out / "plans" / "hc_plan.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
     for name, save in SAVES:
+        filename = "hc_plan.json" if name == SAVES[0][0] else name + ".json"
+        (out / "plans" / filename).write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(job(name, save), indent=1) + "\n", encoding="utf-8")
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(out)
     print(f"{len(SAVES)} jobs; hc_plan {len(plan)} phases/{hp.seconds} s -> {out}")
 
 

@@ -18,6 +18,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from scripts.queue_gates import phase_states, _apply
+from tools.live_batches import fps_windows
 
 # Recent VALID logs, scene-ready -> both a zero-timeout scene interval and
 # a watch interval with zero pipeline builds. See LIVE_FLOW.md for timestamps.
@@ -88,7 +89,7 @@ def corpus(results, cache, newest=3, inventory=None):
     sources = job_files(inventory)
     if results.exists():
         sources += sorted((results.parent / "done").glob("*.json"))
-    key = [2, newest, signature(results) if results.exists() else None,
+    key = [4, newest, signature(results) if results.exists() else None,
            [signature(p) for p in sources]]
     try:
         old = read(cache)
@@ -96,12 +97,13 @@ def corpus(results, cache, newest=3, inventory=None):
             return old
     except (OSError, ValueError, KeyError, TypeError):
         pass
-    saves = {}
+    saves, jobs = {}, {}
     for p in sources:
         try:
             j = read(p)
             if j.get("save"):
                 saves[j.get("name", p.stem)] = j["save"]
+                jobs[j.get("name", p.stem)] = j
         except (OSError, ValueError):
             continue
     rows, warnings = [], []
@@ -132,7 +134,12 @@ def corpus(results, cache, newest=3, inventory=None):
         seen.add(str(p.resolve()))
         counts[save] = counts.get(save, 0) + 1
         logs.append([str(p), signature(p)])
-        entries.append(dict(save=save, path=str(p), lines=p.read_text(encoding="utf-8-sig", errors="replace").splitlines()))
+        runner = Path(row.get("runner_log") or p.with_suffix(".runner.txt"))
+        runner_text = runner.read_text(encoding="utf-8-sig", errors="replace") if runner.is_file() else ""
+        if runner.is_file():
+            logs.append([str(runner), signature(runner)])
+        entries.append(dict(save=save, path=str(p), job=jobs.get(row.get("job")), runner=runner_text,
+                            lines=p.read_text(encoding="utf-8-sig", errors="replace").splitlines()))
         if time.monotonic() - tick >= 25:
             print(f"corpus: {len(entries)} logs indexed, {len(counts)} saves", flush=True)
             tick = time.monotonic()
@@ -145,6 +152,15 @@ def corpus(results, cache, newest=3, inventory=None):
 
 def regex_problems(job, evidence, memo=None):
     errors, coverage = [], {}
+    # Preserve the existing recent-log forbid audit. Older VALID runs are useful
+    # for FPS states but may predate fixes which introduced today's forbids.
+    counts, recent = {}, []
+    for entry in evidence:
+        save = entry.get("save", entry["path"])
+        counts[save] = counts.get(save, 0) + 1
+        if counts[save] <= 3:
+            recent.append(entry)
+    evidence = recent
     memo = {} if memo is None else memo
     for kind in ("forbid", "expect"):
         for pattern in job.get(kind, []):
@@ -173,8 +189,8 @@ def regex_problems(job, evidence, memo=None):
 
 
 def period(gate, state, fps):
-    if "period_s" in gate:
-        return float(gate["period_s"])
+    if producer_requirements(gate["select"]):
+        return 120 / fps
     if "period_frames" in gate:
         return float(gate["period_frames"]) / fps
     sel = gate["select"].replace("\\", "")
@@ -202,6 +218,8 @@ def period(gate, state, fps):
         return max(30, float(state.get("rt_timing_frames", 300))) / fps
     if "gi: background builds (" in sel:
         return max(1, float(state.get("rt_timing_frames", 120))) / fps
+    if "period_s" in gate:
+        return float(gate["period_s"])
     return None
 
 
@@ -331,6 +349,7 @@ def window_problems(job, plan):
                 errors.append(f"windows: unknown gate window {label!r}")
                 continue
             p, state = phases[label]
+            fps = fps_windows.expected(job, state)["fps"]
             window_meta = segment_meta.get(label, meta)
             trace_stall = float(window_meta.get("trace_stall_s", 1))
             if not math.isfinite(trace_stall) or trace_stall < 0:
@@ -367,7 +386,7 @@ def window_problems(job, plan):
             complete = max(0, math.ceil(available / dt - 1e-9) - 1 - skip)
             minimum = overhead + (need + skip) * dt
             budgets.append(dict(window=label, gate=name, complete=complete, required=need,
-                                period_s=dt, minimum_seconds_exclusive=minimum))
+                                period_s=dt, fps=fps, fps_evidence=fps_windows.expected(job, state), minimum_seconds_exclusive=minimum))
             if complete < need:
                 errors.append(f"windows: {label}: {name}: worst-case {complete} complete lines, need {need}; "
                               f"{dt:g} s/line at {fps:g} fps; minimum > {minimum:g} s (settings/trace stalls and straddle included)")
@@ -437,6 +456,7 @@ def duration_budget(job, plan):
                     for seg in job.get("live_flow", {}).get("segments", [])
                     for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
     for phase, state in zip(plan, phase_states(job, plan)):
+        fps = fps_windows.expected(job, state)["fps"]
         current = float(phase.get("seconds", 0))
         label = phase.get("label", "")
         bare_label = label.rsplit("--", 1)[-1]
@@ -489,7 +509,7 @@ def duration_budget(job, plan):
             unresolved.append("failure-latency observation bound retained")
             minimum = max(minimum,current)
         motion_endpoint = phase.get("kind") not in (None,"static") and minimum == float(phase.get("motion_end",phase.get("seconds",0)))
-        minimum = minimum if unresolved or motion_endpoint else math.floor(minimum * 10 + 1e-7) / 10 + .1
+        minimum = minimum if (unresolved and minimum == current) or motion_endpoint else math.floor(minimum * 10 + 1e-7) / 10 + .1
         windows.append(dict(window=label, seconds=current, minimum_seconds=round(minimum, 3),
                             savings_seconds=round(max(0, current-minimum), 3), unresolved=unresolved,
                             readiness_timeout_seconds=float(phase.get("wait_log_timeout", 0)),
@@ -518,13 +538,15 @@ def tighten(job, plan):
     budget = duration_budget(job, plan)
     for phase, window in zip(plan, budget["windows"]):
         old = float(phase["seconds"])
-        new = min(old, window["minimum_seconds"])
+        new = window["minimum_seconds"]
         phase["seconds"] = new
         for key in ("motion_start", "motion_end"):
             if phase.get(key) == old:
                 phase[key] = new
     job["estimated_phase_seconds"] = round(sum(float(p["seconds"]) for p in plan), 3)
-    return dict(name=job["name"], before_seconds=before, after_seconds=job["estimated_phase_seconds"])
+    return dict(name=job["name"], before_seconds=before, after_seconds=job["estimated_phase_seconds"],
+                windows=[dict(window=p["label"], before_seconds=w["seconds"], after_seconds=p["seconds"])
+                         for p,w in zip(plan,budget["windows"]) if p["seconds"] != w["seconds"]])
 
 
 def startup_producers(job, plan):
@@ -545,7 +567,7 @@ def startup_producers(job, plan):
     groups = {}
     for pattern in job.get("expect", []):
         related = next((g for g in job.get("expect_every", []) if g.get("match") == pattern and not g.get("event")), None)
-        dt = period(related or dict(select=pattern), states[0], fps)
+        dt = period(related or dict(select=pattern), states[0], fps_windows.expected(job, states[0])["fps"])
         if dt is None or not math.isfinite(dt) or dt <= 0:
             continue
         target = next((states[i] for i,p in enumerate(plan) if related and p.get("label") in related.get("windows", [])), None)
@@ -586,8 +608,25 @@ def settings(text):
     return state
 
 
+def retime(job, plan):
+    """One regeneration path for generators and the offline CLI."""
+    job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
+    changes = tighten(job, plan)
+    for phase, state in zip(plan, phase_states(job, plan)):
+        if phase.get("wait_log"):
+            patterns = phase["wait_log"]
+            patterns = [patterns] if isinstance(patterns, str) else patterns
+            periods = [period(dict(select=rx), state, fps_windows.expected(job,state)["fps"]) for rx in patterns]
+            phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout",0)), max([dt+5 for dt in periods if dt is not None] or [0]))
+    budget = duration_budget(job, plan)
+    job["timeout"] = max(float(job.get("timeout", 0)), math.ceil(budget["seconds"] + budget["readiness_timeout_seconds"] + 120))
+    return changes
+
+
 def tighten_files(directory):
     """Refresh checked-in artifacts with the same model used by lint/preflight."""
+    index = corpus(default_results(), ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+    fps_windows.configure(index["entries"])
     reports = []
     for path in job_files(directory):
         job, plan, plan_path = load_job(path)
@@ -610,7 +649,7 @@ def tighten_files(directory):
             first_warm["wait_log"] = list(dict.fromkeys(
                 [p for p in patterns if p != r"\[auto\] scene ready"] + [r"\[auto\] scene ready"]))
         startup_producers(job, plan)
-        reports.append(tighten(job, plan))
+        reports.append(retime(job, plan))
         for target, value in ((plan_path, plan), (path, job)):
             text = target.read_text(encoding="utf-8-sig")
             match = re.search(r"\n( +)\S", text)
@@ -649,10 +688,23 @@ def plan_field_problems(plan):
             for i, step in enumerate(plan) for key in sorted(set(step) - allowed)]
 
 
+def launch_problems(job, duration):
+    limit = float(job.get("max_minutes", 15))
+    if not math.isfinite(limit) or limit <= 0:
+        return ["duration: max_minutes must be finite and positive"]
+    if duration["seconds"] + duration["readiness_timeout_seconds"] > 60 * limit:
+        return ["duration: launch exceeds max_minutes (default 15); split the batch or explicitly set max_minutes"]
+    return []
+
+
 def lint(job, plan, evidence, memo=None):
     regex, coverage = regex_problems(job, evidence, memo)
     windows, budgets = window_problems(job, plan)
-    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets, duration=duration_budget(job, plan))
+    duration = duration_budget(job, plan)
+    timeout = []
+    if "timeout" in job and float(job["timeout"]) < duration["seconds"] + duration["readiness_timeout_seconds"]:
+        timeout.append("duration: timeout does not cover plan + readiness allowance")
+    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan) + timeout, regex_coverage=coverage, windows=budgets, duration=duration, replay=fps_windows.replay(job, plan, evidence))
 
 
 def markdown_report(report):
@@ -696,7 +748,10 @@ def main(argv=None):
     ap.add_argument("target", nargs="?", default=str(ROOT / "tools/live_batches"))
     ap.add_argument("--results", default=str(default_results()))
     ap.add_argument("--cache", default=str(ROOT / "captures/.cache/live_flow_corpus.json"))
-    ap.add_argument("--newest", type=int, default=3)
+    ap.add_argument("--newest", type=int, default=100000)
+    ap.add_argument("--retime", action="store_true", help="regenerate durations with the corpus FPS model")
+    ap.add_argument("--batches", help="comma-separated batch folders to regenerate with --retime")
+    ap.add_argument("--replay-only", action="store_true", help="report historical gate coverage without regex-forbid audit")
     ap.add_argument("--report")
     ap.add_argument("--tree", help="actual runner tree for preflight plan resolution")
     ap.add_argument("--preflight", action="store_true", help="refuse invalid or overlong launches before starting the runner")
@@ -704,6 +759,7 @@ def main(argv=None):
     if a.newest < 1:
         ap.error("--newest must be positive")
     index = corpus(a.results, a.cache, a.newest)
+    fps_windows.configure(index["entries"])
     print(f"VALID corpus: {len(index['entries'])} logs, {len(index['saves'])} saves; {a.results}", flush=True)
     report = dict(corpus={k: v for k, v in index.items() if k not in ("entries", "key", "matches")}, jobs={})
     failures = 0
@@ -716,17 +772,38 @@ def main(argv=None):
                 plan_path = Path(a.tree) / args[args.index("-MovePlan") + 1]
                 plan = read(plan_path)
             else:
-                job, plan, _ = load_job(path)
-            result = lint(job, plan, index["entries"], memo)
+                job, plan, plan_path = load_job(path)
+            changes = None
+            if a.retime and (not a.batches or path.parent.parent.name in a.batches.split(",")):
+                changes = retime(job, plan)
+                write(plan_path if a.preflight and a.tree else load_job(path)[2], plan)
+                write(path, job)
+                manifest_path = path.parent.parent / (path.stem + ".manifest.json")
+                if job.get("live_flow", {}).get("segments") and manifest_path.is_file():
+                    manifest = read(manifest_path)
+                    manifest["plan"] = plan
+                    for segment in manifest["slices"]:
+                        for original, updated in zip(segment["plan"], plan[segment["offset"]:segment["offset"]+segment["count"]]):
+                            for field in ("seconds", "motion_start", "motion_end", "wait_log_timeout"):
+                                if field in updated:
+                                    original[field] = updated[field]
+                        segment["job"].setdefault("live_flow", {})["fps_windows"] = job["live_flow"]["fps_windows"]
+                        segment["job"]["estimated_phase_seconds"] = round(sum(p["seconds"] for p in segment["plan"]), 3)
+                    write(manifest_path, manifest)
+            if a.replay_only:
+                budget = duration_budget(job, plan)
+                replay_plan = [dict(p, seconds=w["minimum_seconds"]) for p,w in zip(plan,budget["windows"])]
+                result = dict(problems=[], duration=budget, replay=fps_windows.replay(job, replay_plan, index["entries"]))
+            else:
+                result = lint(job, plan, index["entries"], memo)
+            if changes is not None:
+                result["changes"] = changes
             duration = result["duration"]
             print(f"{job.get('name', path.stem)}: expected duration {duration['seconds']:g} s after load; minimum {duration['minimum_seconds']:g} s; readiness timeout allowance {duration['readiness_timeout_seconds']:g} s", flush=True)
             for finding in duration["findings"]:
                 print(f"{job.get('name', path.stem)}: {finding}", flush=True)
-            limit = float(job.get("max_minutes", 15))
-            if a.preflight and (not math.isfinite(limit) or limit <= 0):
-                result["problems"].append("duration: max_minutes must be finite and positive")
-            if a.preflight and duration["seconds"] + duration["readiness_timeout_seconds"] > 60 * limit:
-                result["problems"].append("duration: launch exceeds max_minutes (default 15); split the batch or explicitly set max_minutes")
+            if a.preflight:
+                result["problems"] += launch_problems(job, duration)
             if not index["entries"]:
                 result["problems"].append("corpus: no readable VALID logs; regex validation has no evidence")
         except (OSError, ValueError, KeyError, TypeError) as e:
@@ -746,8 +823,10 @@ def main(argv=None):
             write(a.report, report)
     index["matches"] = memo
     write(a.cache, index)
+    unproven = sum(bool(r.get("replay", {}).get("problems")) for r in report["jobs"].values())
+    print(f"replay gates: {len(report['jobs'])} jobs, {unproven} with unsatisfied historical evidence (see report)", flush=True)
     print(f"live-flow: {len(report['jobs'])} jobs, {failures} failing", flush=True)
-    return int(bool(failures))
+    return int(bool(failures or a.replay_only and unproven))
 
 
 if __name__ == "__main__":
