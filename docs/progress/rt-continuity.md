@@ -12,3 +12,13 @@
 - Checks: build + 132/132 CTests passed; pipeline selection 342 checks, 25 repeat passes. Identity: 236/236 unchanged, zero compiles needed.
 - Water native gate: 19/19 requests, 152/152 comparisons; combined hit/shift: 9/9 requests, 96/96 comparisons. No shader source changed.
 - Live continuity/first-toggle latency and GPU cost are unmeasured. Check S8 pool/native coverage after a separately authorized launch.
+
+## Trial follow-up (rt-continuity, READY_FOR_LIVE, 2026-11-03)
+- User trial 15:07-15:10: reflection 73.7M hit attempts (11.1M hidden, 14.3M offscreen), compose 0.
+- Host accepts F-1 only by borrowing an existing exact slot/generation query; current-frame camera checks remain.
+- Borrowing recordings pin query storage and slot resources until every query user retires; CPU lifetime tests added.
+- Water selects its separate ordinary/hit pipeline cache before layout validation; ordinary layouts ignore inactive hit sets.
+- Native tileset INI edits wait for restart in the layer; launcher reports the selected choice apply mode. Hair/scalp stay live.
+- Hit-shade text warns of about a minute compiling on first enable. ABI/defaults/presets unchanged; shader requests +0.
+- Validation: build + 132/132 CTests passed; schema regenerated. PP diff main: 236/236 unchanged, 0 compiles; diff check clean.
+- No game launch or git metadata writes. Layer restart required; S8 compose attempts and GPU cost remain unmeasured.

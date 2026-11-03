@@ -695,3 +695,15 @@ ray rebasing and delta stats. A synthetic dual-layout capture fixture now checks
 zero static delta and exact translated delta through the ring/copy layout. Static
 ON windows must report average delta < 0.01 m. Key remains off; live cost and
 quality after this correction are unmeasured. No ABI or variant request change.
+
+### F-1 query ownership follow-up (rt-continuity, 2026-11-03)
+The 15:07-15:10 user trial had 73.7M reflection hit attempts but zero in compose:
+the host rejected F-1 material registration before the tuple correction could run.
+Borrow only an existing query for the same slot/generation at exactly F-1; its
+original camera validation remains authoritative. Register every borrowing recording
+as both a slot and query owner; collect query storage only after all users retire.
+Keep ordinary two-set and hit four-set pipeline caches separate before layout validation.
+Native tileset changes remain saved for restart, while hair/scalp remain live.
+ABI and shader requests unchanged. READY_FOR_LIVE after offline gates; restart the
+layer and check S8 compose hit attempts with hit shade 1/2 and compose shift 1.
+GPU cost and visible quality remain unmeasured; no game launch in this task.

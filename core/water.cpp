@@ -329,11 +329,17 @@ constexpr struct { uint32_t binding; VkDescriptorType type; } kBind[] = {
 };
 constexpr uint32_t kNumBind = uint32_t(sizeof kBind / sizeof kBind[0]);
 
+void select_reflection_mode(bool hit);
 bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool rr_hit) {
+  // Select the owning cache before checking compatibility. A hit-layout change
+  // must never retire the ordinary two-set pipelines.
+  select_reflection_mode(hit_active());
+  const VkDescriptorSetLayout game=hit_active()?g_hit.game_layout:VK_NULL_HANDLE;
+  const VkDescriptorSetLayout sun=hit_active()?g_hit.sun_layout:VK_NULL_HANDLE;
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
   if (g_layout && (g_alpha_layout != alpha_layout || g_push_bytes != push_bytes ||
-      g_hit_game_layout!=g_hit.game_layout || g_hit_sun_layout!=g_hit.sun_layout)) {
+      g_hit_game_layout!=game || g_hit_sun_layout!=sun)) {
     release_pipe(g_primary);
     release_pipe(g_reflect);
     core_defer_layout_destroy(g_layout);
@@ -361,7 +367,7 @@ bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     li.pushConstantRangeCount = 1;
     li.pPushConstantRanges = &pc;
     if (vk.CreatePipelineLayout(dev, &li, nullptr, &g_layout) != VK_SUCCESS) return g_layout = VK_NULL_HANDLE, false;
-    g_hit_game_layout=g_hit.game_layout;g_hit_sun_layout=g_hit.sun_layout;
+    g_hit_game_layout=game;g_hit_sun_layout=sun;
     g_alpha_layout = alpha_layout;
     g_push_bytes = push_bytes;
   }
@@ -664,7 +670,11 @@ constexpr uint32_t kNumCBindLs = kNumCBindRefr - 1;   // M5.4b: the layout with 
 constexpr uint32_t kNumCBind = kNumCBindLs - 7;       // M5.3 / M5.4: the layout without the light list
 uint32_t g_cpush_nb = 0;   // the binding count g_cpush was made with
 
+void select_compose_mode(bool hit);
 bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool sun, bool ls, bool refr, bool gsh) {
+  select_compose_mode(hit_active());
+  const VkDescriptorSetLayout hit_game=hit_active()?g_hit.game_layout:VK_NULL_HANDLE;
+  const VkDescriptorSetLayout hit_sun=hit_active()?g_hit.sun_layout:VK_NULL_HANDLE;
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
   if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr || g_cgsh != gsh)) {   // the record layout of the buffer decides the variant
@@ -708,7 +718,7 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     if (vk.CreateQueryPool(dev, &qi, nullptr, &g_cqp) != VK_SUCCESS) g_cqp = VK_NULL_HANDLE;
   }
   if (g_clayout && (g_calpha != alpha_layout || g_cpush_bytes != push_bytes ||
-      g_chit_game_layout!=g_hit.game_layout || g_chit_sun_layout!=g_hit.sun_layout)) {
+      g_chit_game_layout!=hit_game || g_chit_sun_layout!=hit_sun)) {
     release_pipe(g_copy);
     release_pipe(g_compose);
     core_defer_layout_destroy(g_clayout);
@@ -736,7 +746,7 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     li.pushConstantRangeCount = 1;
     li.pPushConstantRanges = &pc;
     if (vk.CreatePipelineLayout(dev, &li, nullptr, &g_clayout) != VK_SUCCESS) return g_clayout = VK_NULL_HANDLE, false;
-    g_chit_game_layout=g_hit.game_layout;g_chit_sun_layout=g_hit.sun_layout;
+    g_chit_game_layout=hit_game;g_chit_sun_layout=hit_sun;
     g_calpha = alpha_layout;
     g_cpush_bytes = push_bytes;
   }

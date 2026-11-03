@@ -259,7 +259,7 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Neutral at camp", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
-   "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+   "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
    Kind::Choice, Apply::Live, "live; needs captured materials at startup", false,
    {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
@@ -892,6 +892,13 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;
+}
+
+// Native tileset capture is allocated at startup. Saving its next-launch value
+// must not change shaders or scene publication in the running process.
+inline void retain_startup_tilesets(Map& candidate,const Map& startup) {
+  auto i=startup.find("rt_native_tileset");
+  candidate["rt_native_tileset"]=i==startup.end()?"0":i->second;
 }
 
 // Every choice is explicit. A custom value uses the control's most demanding mode.

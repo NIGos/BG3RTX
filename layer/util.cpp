@@ -330,6 +330,8 @@ static void cfg_read_files() {
   }
   settings::Map next = raw;
   bool derived = settings::resolve_derived(next);
+  static const settings::Map startup = next;
+  settings::retain_startup_tilesets(next,startup);
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_cfg.swap(next);

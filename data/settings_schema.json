@@ -171,9 +171,9 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_water_hit_shade", "label": "Water: hidden-surface reflections",
-     "description": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "description": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "apply": "live", "apply_note": "live; needs captured materials at startup", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
