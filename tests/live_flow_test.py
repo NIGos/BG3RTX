@@ -28,6 +28,89 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_duration_ignores_absence_gates_and_uses_period_counts(self):
+        j, p = fixture()
+        j["expect_every"].append(dict(select="failure", match="(?!)", event=True, min=0, windows=["cost-off"]))
+        p[2]["seconds"] = 60
+        budget = f.duration_budget(j, p)
+        cost = next(w for w in budget["windows"] if w["window"] == "cost-off")
+        self.assertEqual(cost["minimum_seconds"], 11.1)  # 1s apply + 2 x 5s cadence
+        self.assertTrue(budget["findings"])
+        f.tighten(j, p)
+        self.assertEqual(p[2]["seconds"], 11.1)
+        self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_duration_trace_uses_segment_stall_and_exclusive_endpoint(self):
+        j, p = fixture()
+        p[2].update(seconds=30, trace_at=[1, 6])
+        j["live_flow"] = dict(trace_stall_s=1, segments=[dict(offset=2,count=1,live_flow=dict(trace_stall_s=4))])
+        j["expect_every"] = [dict(select=r"\[trace\] frame", match="ok", event=True,min=2,windows=["cost-off"])]
+        result = f.duration_budget(j, p)
+        shot = next(w for w in result["windows"] if w["window"] == "cost-off")
+        self.assertAlmostEqual(shot["minimum_seconds"], 10.1)
+
+    def test_extract_skipped_slice_preserves_later_and_final_failure_preserves_earlier(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        for j in (a, b):
+            for field in ("expect", "expect_every", "expect_runner", "forbid"):
+                j[field] = []
+        _, plan, manifest = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        manifest["plan"] = plan
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            log, run = folder / "fake.log", folder / "fake.runner.txt"
+            log.write_text("00:00:00.000 preamble\n00:00:02.000 scene\n")
+            offset = manifest["slices"][1]["offset"]
+            for failed_first in (True, False):
+                indices = [0] + list(range(offset-1, len(plan))) if failed_first else list(range(offset+1))
+                runner = []
+                for t, index in enumerate(indices, 1):
+                    runner.append(f"00:00:{t:02}.000 [pan-plan] window {index} set={plan[index]['set']}")
+                    if index == (0 if failed_first else offset):
+                        runner.append(f"00:00:{t:02}.500 [fail-fast] phase={index} slice={0 if failed_first else offset} check=forbidden test")
+                if failed_first:
+                    runner.append(f"00:00:20.000 [motion-plan] complete phases={len(plan)}")
+                runner.append("Run ended: fail-fast")
+                run.write_text("\n".join(runner))
+                result = c.extract(manifest, log, run, folder / str(failed_first))
+                self.assertEqual([r["valid"] for r in result], [False, True] if failed_first else [True, False])
+                failed = result[0 if failed_first else 1]
+                self.assertFalse(failed["completed"])
+                self.assertEqual(failed["failed_check"], "forbidden test")
+                self.assertNotIn("[motion-plan] complete", Path(failed["log"]).with_suffix(".runner.txt").read_text())
+
+    def test_preflight_uses_only_actual_tree_plan_and_rejects_long_launch(self):
+        job, plan = fixture()
+        job["args"] = ["-MovePlan", "actual/only.json"]
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            f.write(folder / "job.json", job)
+            f.write(folder / "actual/only.json", plan)
+            index = dict(entries=[dict(path="fake",lines=[])],saves=[],logs=[],matches={})
+            with patch.object(f, "corpus", return_value=index):
+                self.assertEqual(f.main([str(folder / "job.json"), "--preflight", "--tree", str(folder), "--cache", str(folder / "cache")]), 0)
+                plan[0]["seconds"] = 901
+                f.write(folder / "actual/only.json", plan)
+                self.assertEqual(f.main([str(folder / "job.json"), "--preflight", "--tree", str(folder), "--cache", str(folder / "cache")]), 1)
+
+    def test_startup_producer_uses_on_warmup_and_preserves_trace_indices(self):
+        job, plan = fixture()
+        pattern = r"\[hair primary\] draws [1-9]\d*"
+        job["expect"] = [pattern, r"\[hit material paks\] loaded 40983 candidates"]
+        job["expect_every"] = [dict(select=r"\[hair primary\]", match=pattern, period_frames=300, windows=["cost-on"])]
+        job["expect_runner"].append(r"phase=3 label=cost-on")
+        f.startup_producers(job, plan)
+        self.assertEqual(plan[2]["label"], "producer-sanity-warm-on")
+        self.assertEqual(plan[2]["wait_log"], [pattern])
+        self.assertIn("rr=1", plan[2]["set"])
+        self.assertEqual(plan[2]["wait_log_timeout"], 15)
+        self.assertIn(r"phase=4 label=cost-on", job["expect_runner"])
+        self.assertIsNone(f.period(dict(select=r"\[hit material paks\] loaded 40983 candidates"), {}, 30))
+        old = deepcopy(plan)
+        f.startup_producers(job, plan)
+        self.assertEqual(plan, old)
+
     def test_single_measured_value_needs_warming_and_startup_match(self):
         j, p = fixture()
         p[1]["set"] = "rr=0"

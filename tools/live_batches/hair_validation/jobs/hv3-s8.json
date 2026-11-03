@@ -82,18 +82,18 @@
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
-    "\\[motion-plan\\] complete phases=29\\b",
+    "\\[motion-plan\\] complete phases=30\\b",
     "^Run ended: done",
-    "\\[motion-trace\\] phase=2 label=shot-cards-a repeat=0",
-    "\\[motion-trace\\] phase=3 label=shot-strands-a repeat=0",
-    "\\[motion-trace\\] phase=4 label=shot-cards-b repeat=0",
-    "\\[motion-trace\\] phase=5 label=shot-strands-b repeat=0",
-    "\\[motion-trace\\] phase=6 label=shot-cards-c repeat=0",
+    "\\[motion-trace\\] phase=3 label=shot-cards-a repeat=0",
+    "\\[motion-trace\\] phase=4 label=shot-strands-a repeat=0",
+    "\\[motion-trace\\] phase=5 label=shot-cards-b repeat=0",
+    "\\[motion-trace\\] phase=6 label=shot-strands-b repeat=0",
+    "\\[motion-trace\\] phase=7 label=shot-cards-c repeat=0",
     "\\[hair-reload\\] selected save reload complete"
   ],
   "stop_on_dump": true,
   "purpose": "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence.",
-  "estimated_phase_seconds": 297.0,
+  "estimated_phase_seconds": 189.2,
   "expect_every": [
     {
       "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -233,5 +233,6 @@
       ]
     }
   ],
-  "window_mode": "visible_unfocused_fg"
+  "window_mode": "visible_unfocused_fg",
+  "live_flow": {}
 }

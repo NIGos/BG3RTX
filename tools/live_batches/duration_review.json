@@ -1,0 +1,115 @@
+{
+  "jobs": [
+    {
+      "job": "hv1-dialogue1",
+      "before_seconds": 297.0,
+      "after_seconds": 189.2,
+      "unresolved": []
+    },
+    {
+      "job": "hv2-camp",
+      "before_seconds": 297.0,
+      "after_seconds": 189.2,
+      "unresolved": []
+    },
+    {
+      "job": "hv3-s8",
+      "before_seconds": 297.0,
+      "after_seconds": 189.2,
+      "unresolved": []
+    },
+    {
+      "job": "hv4-gpuav",
+      "before_seconds": 50.0,
+      "after_seconds": 25.5,
+      "unresolved": []
+    },
+    {
+      "job": "pt-dialogue3",
+      "before_seconds": 173,
+      "after_seconds": 92.5,
+      "unresolved": []
+    },
+    {
+      "job": "pt-s8",
+      "before_seconds": 173,
+      "after_seconds": 92.5,
+      "unresolved": []
+    },
+    {
+      "job": "cp4-compact-camp-join",
+      "before_seconds": 80,
+      "after_seconds": 23.7,
+      "unresolved": []
+    },
+    {
+      "job": "go1-camp",
+      "before_seconds": 321,
+      "after_seconds": 226.1,
+      "unresolved": []
+    },
+    {
+      "job": "go2-s8",
+      "before_seconds": 321,
+      "after_seconds": 226.1,
+      "unresolved": []
+    },
+    {
+      "job": "go2-camp-high",
+      "before_seconds": 176,
+      "after_seconds": 118.2,
+      "unresolved": []
+    },
+    {
+      "job": "go2-s8-medium",
+      "before_seconds": 176,
+      "after_seconds": 118.2,
+      "unresolved": []
+    },
+    {
+      "job": "wo1-s8-hit-shade",
+      "before_seconds": 557,
+      "after_seconds": 490.9,
+      "unresolved": []
+    },
+    {
+      "job": "wf9-s8-compose-shift",
+      "before_seconds": 302,
+      "after_seconds": 257.3,
+      "unresolved": []
+    },
+    {
+      "job": "su1-ultra-s8-fg2",
+      "before_seconds": 221,
+      "after_seconds": 105.4,
+      "unresolved": []
+    },
+    {
+      "job": "ef1-dialogue3-attribution",
+      "before_seconds": 220,
+      "after_seconds": 86.8,
+      "unresolved": []
+    },
+    {
+      "job": "combined-Campsite---27h",
+      "before_seconds": 587.0,
+      "after_seconds": 370.2,
+      "unresolved": []
+    },
+    {
+      "job": "combined-Test-Dialogue3",
+      "before_seconds": 398.0,
+      "after_seconds": 180.4,
+      "unresolved": []
+    },
+    {
+      "job": "combined-Water-Queens-House",
+      "before_seconds": 1775.0,
+      "after_seconds": 1295.9,
+      "unresolved": []
+    }
+  ],
+  "absent_batches": [
+    "water_surface_fresnel"
+  ]
+}

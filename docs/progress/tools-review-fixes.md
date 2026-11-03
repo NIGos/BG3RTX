@@ -11,3 +11,8 @@
 - wf9 transport INVALID is a real missing-coverage capture defect; water energy lacks post-water scene dumps. Both remain unresolved.
 - Exploratory savings: empty tiles compose ~0.156 ms; combined hit-cost reflection ~1.574 ms / compose ~2.498 ms; temporal ~0.12 ms.
 - 27 unit tests, 7 job lints and all 3 combined dryrun manifests pass; no game or Git metadata writes. Shader request delta 0.
+- Default fail-fast rejects forbids, failed windows and silent producers; combined failures skip slices with explicit incomplete status and normal settings restoration.
+- Queue preflight lints the actual plan, reports duration and refuses launches above 15 minutes without max_minutes; oversized water/cold-camp combinations remain blocked.
+- Derived window budgets and startup producer checks refresh active generators; post 173 -> 92.5 s, GPU2 176 -> 118.2 s; all job deltas: tools/live_batches/duration_review.json.
+- Offline checks: 18 active lints, 3 combined dryruns, 32 flow + 2 generator + 15 guard + 17 hair tests pass; available queue/restore PowerShell tests pass.
+- No game, real queue writes or Git metadata changes; cancellation/native py and child-permission/pwsh checks remain environment-blocked; shared-marker Git-writing test skipped.

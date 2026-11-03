@@ -49,6 +49,21 @@ gate, with the source of the cadence recorded in the batch's documentation.
 The lint reports the minimum window length and guaranteed complete-line count.
 These are planning assumptions, not a promise about an arbitrarily stalled GPU.
 
+Queue preflight runs the same lint before starting a MovePlan job and prints its
+scheduled duration and readiness allowance. The default launch limit is 15 minutes;
+an explicit positive `max_minutes` overrides it. Duration reports include each
+window, the plan total, and savings findings above 1.5 times the window minimum
+or 1.3 times the plan minimum. Unresolved observation bounds remain explicit.
+
+Fail-fast is on unless a job sets `"fail_fast": false`. The runner checks forbids,
+closed every-window gates after their settling margin, and required periodic
+producer expectations. A silent producer reports `producer silent: <pattern>`.
+Combined jobs carry each source's checks; a local failure skips to the next
+settings reset. Crash and device loss end the launch. Status records retain
+`completed`, `failed_check`, `failed_phase`, and `slice_failures`; failed slices
+never acquire a successful completion marker during extraction. The runner uses
+its normal close path and restores the prior automatic settings file.
+
 Rendering values used during measurement must run in earlier non-capture phases.
 Only capture commands, exposure latching and diagnostic switches are exempt;
 they schedule observations. Startup-only keys must remain constant after warmup.

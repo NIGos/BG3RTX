@@ -85,12 +85,12 @@
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
-    "\\[motion-plan\\] complete phases=4\\b",
+    "\\[motion-plan\\] complete phases=5\\b",
     "^Run ended: done"
   ],
   "stop_on_dump": true,
   "purpose": "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence.",
-  "estimated_phase_seconds": 50.0,
+  "estimated_phase_seconds": 25.5,
   "expect_every": [
     {
       "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -168,5 +168,6 @@
       ]
     }
   ],
-  "window_mode": "visible_unfocused_fg"
+  "window_mode": "visible_unfocused_fg",
+  "live_flow": {}
 }

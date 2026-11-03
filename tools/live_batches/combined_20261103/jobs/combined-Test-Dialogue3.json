@@ -6,7 +6,7 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 698,
+  "timeout": 2640,
   "repeat": 1,
   "stop_on_dump": false,
   "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_ao=1.0,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
@@ -573,7 +573,591 @@
   ],
   "requires_success_of": [],
   "post_gate": true,
-  "estimated_phase_seconds": 398.0,
+  "fail_fast": true,
+  "fail_fast_slices": [
+    {
+      "offset": 0,
+      "count": 23,
+      "forbid": [
+        "VK_ERROR_DEVICE_LOST",
+        "\\[crash\\] exception 0x",
+        "RR (creation|evaluate) failed",
+        "FAILED, keeping previous",
+        "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+        "PNG write failed",
+        "capture writer backlog",
+        "\\[sl\\] edge capture REFUSED",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[rrpost\\] temporal REFUSED",
+        "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[cfg\\] settings read",
+        "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+      ],
+      "expect_every": [
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-a",
+          "select": "\\[pan\\] burst 98700 complete",
+          "match": "\\[pan\\] burst 98700 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-a",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-a",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost off-a",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-off-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-a",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-a",
+          "select": "\\[pan\\] burst 98701 complete",
+          "match": "\\[pan\\] burst 98701 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-a",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-a",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost on-a",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-a",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--temporal GPU cost on-a",
+          "select": "\\[rrpost\\] gpu temporal:",
+          "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-on-a"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-b",
+          "select": "\\[pan\\] burst 98702 complete",
+          "match": "\\[pan\\] burst 98702 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-b",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-b",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost off-b",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-off-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-b",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-b",
+          "select": "\\[pan\\] burst 98703 complete",
+          "match": "\\[pan\\] burst 98703 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-b",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-b",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost on-b",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-b",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--temporal GPU cost on-b",
+          "select": "\\[rrpost\\] gpu temporal:",
+          "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-on-b"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--no mesh pool exhaustion in measured windows (load excluded)",
+          "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-a",
+            "b1-pt-dialogue3--presented-off-a",
+            "b1-pt-dialogue3--energy-off-a",
+            "b1-pt-dialogue3--timing-off-a",
+            "b1-pt-dialogue3--rendered-on-a",
+            "b1-pt-dialogue3--presented-on-a",
+            "b1-pt-dialogue3--energy-on-a",
+            "b1-pt-dialogue3--timing-on-a",
+            "b1-pt-dialogue3--rendered-off-b",
+            "b1-pt-dialogue3--presented-off-b",
+            "b1-pt-dialogue3--energy-off-b",
+            "b1-pt-dialogue3--timing-off-b",
+            "b1-pt-dialogue3--rendered-on-b",
+            "b1-pt-dialogue3--presented-on-b",
+            "b1-pt-dialogue3--energy-on-b",
+            "b1-pt-dialogue3--timing-on-b"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 1,
+        "startup_only": [
+          "rt_xfb_mb"
+        ]
+      }
+    },
+    {
+      "offset": 24,
+      "count": 38,
+      "forbid": [
+        "VK_ERROR_DEVICE_LOST",
+        "\\[crash\\] exception 0x",
+        "RR (creation|evaluate) failed",
+        "FAILED, keeping previous",
+        "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+        "PNG write failed",
+        "capture writer backlog",
+        "\\[sl\\] edge capture REFUSED",
+        "\\[rrpost\\] exposure hold REFUSED"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[cfg\\] settings read",
+        "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+      ],
+      "expect_every": [
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 base-a",
+          "select": "\\[pan\\] burst 98300 complete",
+          "match": "\\[pan\\] burst 98300 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-base-a"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 base-a",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-base-a"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting base-a",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-base-a"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 fg-off",
+          "select": "\\[pan\\] burst 98301 complete",
+          "match": "\\[pan\\] burst 98301 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-fg-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 fg-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-fg-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 ao-off",
+          "select": "\\[pan\\] burst 98302 complete",
+          "match": "\\[pan\\] burst 98302 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-ao-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 ao-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-ao-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting ao-off",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-ao-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 sun-off",
+          "select": "\\[pan\\] burst 98303 complete",
+          "match": "\\[pan\\] burst 98303 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-sun-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 sun-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-sun-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting sun-off",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-sun-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 gi-off",
+          "select": "\\[pan\\] burst 98304 complete",
+          "match": "\\[pan\\] burst 98304 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-gi-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 gi-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-gi-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting gi-off",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-gi-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 rr-off",
+          "select": "\\[pan\\] burst 98305 complete",
+          "match": "\\[pan\\] burst 98305 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-rr-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 rr-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-rr-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting rr-off",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-rr-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 cbt-off",
+          "select": "\\[pan\\] burst 98306 complete",
+          "match": "\\[pan\\] burst 98306 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-cbt-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 cbt-off",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-cbt-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting cbt-off",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-cbt-off"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 post-late",
+          "select": "\\[pan\\] burst 98307 complete",
+          "match": "\\[pan\\] burst 98307 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-post-late"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 post-late",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-post-late"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting post-late",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-post-late"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--K8 base-b",
+          "select": "\\[pan\\] burst 98308 complete",
+          "match": "\\[pan\\] burst 98308 complete: 8 frames, 20 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--rendered-base-b"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--P16 base-b",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-base-b"
+          ]
+        },
+        {
+          "name": "b2-ef1-dialogue3-attribution--FG actually presenting base-b",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-ef1-dialogue3-attribution--presented-base-b"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 1,
+        "startup_only": [
+          "rt_xfb_mb"
+        ]
+      }
+    }
+  ],
+  "estimated_phase_seconds": 180.39999999999978,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,

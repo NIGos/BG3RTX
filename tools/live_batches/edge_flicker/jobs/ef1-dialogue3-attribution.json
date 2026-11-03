@@ -330,6 +330,6 @@
     "^Run ended: done",
     "\\[motion-plan\\] complete phases=38\\b"
   ],
-  "estimated_phase_seconds": 220,
+  "estimated_phase_seconds": 86.8,
   "purpose": "Offline prepared only. No supported dialogue pause key. Register every captured frame; exclude cuts, never warp. Attribution only; retain default native hair. See predicted.json."
 }

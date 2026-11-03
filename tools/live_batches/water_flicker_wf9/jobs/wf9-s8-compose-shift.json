@@ -101,15 +101,15 @@
     "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-1 direction=1\\b",
     "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-2 direction=1\\b",
     "\\[rotation-input\\] phase=\\d+ mode=keys label=cost-turn-3 direction=1\\b",
-    "\\[motion-plan\\] complete phases=24\\b",
-    "\\[motion-trace\\] phase=2 label=energy-static-0 repeat=0",
-    "\\[motion-trace\\] phase=3 label=energy-static-1 repeat=0",
-    "\\[motion-trace\\] phase=4 label=energy-static-2 repeat=0",
-    "\\[motion-trace\\] phase=5 label=energy-static-3 repeat=0"
+    "\\[motion-plan\\] complete phases=25\\b",
+    "\\[motion-trace\\] phase=3 label=energy-static-0 repeat=0",
+    "\\[motion-trace\\] phase=4 label=energy-static-1 repeat=0",
+    "\\[motion-trace\\] phase=5 label=energy-static-2 repeat=0",
+    "\\[motion-trace\\] phase=6 label=energy-static-3 repeat=0"
   ],
   "stop_on_dump": false,
   "purpose": "S8 compose camera-space shift 0/1/0/1; static energy calibration then smooth turns; no live authorization.",
-  "estimated_phase_seconds": 302,
+  "estimated_phase_seconds": 257.3,
   "expect_every": [
     {
       "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",

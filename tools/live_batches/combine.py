@@ -104,7 +104,7 @@ def combine_group(sources, plan_arg):
             raise ValueError(f"incompatible startup-only key {k}")
     combined = deepcopy(first)
     combined.update(name="combined-" + slug(first["save"]), live_batch="combined", requires_success_of=prerequisites,
-                    patterns=[], expect=[], expect_every=[], expect_runner=[], post_gate=True)
+                    patterns=[], expect=[], expect_every=[], expect_runner=[], post_gate=True, fail_fast=True)
     combined.pop("post", None)
     combined.pop("live_flow", None)
     for field in ("estimated_phase_seconds", "purpose", "framing_status"):
@@ -117,8 +117,8 @@ def combine_group(sources, plan_arg):
         prefix = f"b{n + 1}-{slug(job['name'])}--"
         reset = {k: initial.get(k, baseline.get(k)) for k in keys}
         if n:
-            plan.append(dict(label=prefix + "settings-reset", kind="static", seconds=5, repeat_ms=0,
-                             capture_at=0, serial=0, motion_start=5, motion_end=5, set=assignments(reset)))
+            plan.append(dict(label=prefix + "settings-reset", kind="static", seconds=1.1, repeat_ms=0,
+                             capture_at=0, serial=0, motion_start=1.1, motion_end=1.1, set=assignments(reset)))
         else:
             combined["set"] = assignments(reset)
         offset = len(plan)
@@ -146,6 +146,11 @@ def combine_group(sources, plan_arg):
             if rx not in combined["expect_runner"]:
                 combined["expect_runner"].append(rx)
         slices.append(dict(prefix=prefix, offset=offset, count=len(original), source=str(path), job=job, plan=original))
+    combined["fail_fast_slices"] = [dict(offset=s["offset"], count=s["count"],
+        forbid=s["job"].get("forbid", []), expect=s["job"].get("expect", []),
+        expect_every=[g for g in combined["expect_every"] if g["name"].startswith(s["prefix"])],
+        fail_fast=s["job"].get("fail_fast", True), set=s["job"].get("set", ""),
+        live_flow=s["job"].get("live_flow", {})) for s in slices]
     combined["expect_runner"].append(rf"\[motion-plan\] complete phases={len(plan)}\b")
     combined["timeout"] = int(sum(float(p["seconds"]) + float(p.get("wait_log_timeout", 0)) for p in plan) + 300)
     combined["hold"] = max(90, *(j.get("hold", 0) for _, j, _ in sources))
@@ -169,16 +174,43 @@ def extract(manifest, log, runner, out, run_post=False, status=""):
     plan = manifest["plan"]
     lines = gates.stamped_lines(text)
     wins = gates.windows(runtext, plan, lines)
-    if (len(wins) != len(plan) or gates.plan_drift(wins, plan)
+    failures = {}
+    for match in re.finditer(r"\[fail-fast\] phase=(-?\d+) slice=(\d+) check=(.*)", runtext):
+        failures[int(match[2])] = dict(phase=int(match[1]), check=match[3].strip())
+    # A final failed slice has no plan-complete event. Its failure timestamp
+    # closes the last observed window, without manufacturing a successful end.
+    if wins and failures and not math.isfinite(wins[-1]["end"]):
+        clock = gates._Clock(lines[0][0] if lines else None)
+        failure_end = None
+        for line in runtext.splitlines():
+            timestamp = clock(gates._sec(line))
+            if "[fail-fast]" in line and timestamp is not None:
+                failure_end = timestamp
+        if failure_end is not None:
+            wins[-1]["end"] = failure_end
+    by_index = {w["index"]: w for w in wins}
+    permitted_missing = {i for batch in manifest["slices"] if batch["offset"] in failures
+                         for i in range(batch["offset"], batch["offset"] + batch["count"])}
+    for batch in manifest["slices"]:
+        offset = batch["offset"]
+        if offset in failures and offset and plan[offset-1].get("label", "").endswith("settings-reset"):
+            permitted_missing.add(offset-1)
+    missing = set(range(len(plan))) - set(by_index)
+    preamble_end = wins[0]["start"] if wins else float("inf")
+    if (gates.plan_drift(wins, plan) or missing - permitted_missing
             or any(not math.isfinite(w['end']) for w in wins)
-            or not re.search(r"^Run ended: done\b", runtext, re.MULTILINE)):
+            or not re.search(r"^Run ended: (?:done|fail-fast)\b", runtext, re.MULTILINE)):
         raise ValueError("cannot extract: incomplete runner or plan drift")
     results = []
     for batch in manifest["slices"]:
         job, original = batch["job"], batch["plan"]
         offset, count = batch["offset"], batch["count"]
-        start, end = wins[offset]["start"], wins[offset + count - 1]["end"]
-        sliced = "\n".join(l for t, l in lines if t < wins[0]["start"] or start <= t < end) + "\n"
+        batch_wins = [w for w in wins if offset <= w["index"] < offset + count]
+        failure = failures.get(offset)
+        completed = not failure and len(batch_wins) == count
+        start = batch_wins[0]["start"] if batch_wins else 0
+        end = batch_wins[-1]["end"] if batch_wins else start
+        sliced = "\n".join(l for t, l in lines if t < preamble_end or start <= t < end) + "\n"
         kept = []
         clock = gates._Clock(lines[0][0] if lines else None)
         for line in runtext.splitlines():
@@ -193,12 +225,15 @@ def extract(manifest, log, runner, out, run_post=False, status=""):
             elif "[motion-plan] complete" in line or "Run ended:" in line:
                 continue
             elif timestamp is not None:
-                if not (timestamp < wins[0]["start"] or start <= timestamp < end):
+                if not (timestamp < preamble_end or start <= timestamp < end):
                     continue
             kept.append(line)
         h, rem = divmod(end % 86400, 3600)
         mi, sec = divmod(rem, 60)
-        kept += [f"{int(h):02}:{int(mi):02}:{sec:06.3f} [motion-plan] complete phases={count}", "Run ended: done"]
+        if completed:
+            kept += [f"{int(h):02}:{int(mi):02}:{sec:06.3f} [motion-plan] complete phases={count}", "Run ended: done"]
+        else:
+            kept.append("Run ended: fail-fast")
         run_slice = "\n".join(kept) + "\n"
         # Preserve the original queue log basename convention used by Run.find_job.
         folder = out / batch["prefix"].removesuffix("--")
@@ -210,11 +245,13 @@ def extract(manifest, log, runner, out, run_post=False, status=""):
         flow.write(folder / "plan.json", original)
         flow.write(folder / "job.json", job)
         errors = gates.check(job.get("expect_every", []), sliced, run_slice, original)
+        if not completed:
+            errors.insert(0, "fail-fast: " + (failure["check"] if failure else "incomplete slice"))
         for field, source in (("expect", sliced), ("expect_runner", run_slice)):
             errors += [f"missing {field}: {rx}" for rx in job.get(field, []) if not re.search(rx, source, re.IGNORECASE | re.MULTILINE)]
         errors += [f"forbidden log pattern: {rx}" for rx in job.get("forbid", []) if re.search(rx, sliced, re.IGNORECASE | re.MULTILINE)]
         post_exit = None
-        if run_post and job.get("post"):
+        if completed and run_post and job.get("post"):
             captures = re.findall(r"\[trace\].*written:.* -> (.+)", sliced)
             cmd = job["post"].replace("{log}", str(dst)).replace("{runner}", str(dst.with_suffix(".runner.txt"))).replace("{status}", str(status)).replace("{captures}", " ".join(captures))
             post = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True)
@@ -222,7 +259,9 @@ def extract(manifest, log, runner, out, run_post=False, status=""):
             (folder / "post.txt").write_text(post.stdout + post.stderr, encoding="utf-8")
             if job.get("post_gate") and post_exit:
                 errors.append(f"post gate exit {post_exit}")
-        results.append(dict(job=job["name"], valid=not errors, problems=errors, log=str(dst), post_exit=post_exit))
+        results.append(dict(job=job["name"], valid=not errors, completed=completed, failed_check=failure["check"] if failure else None,
+                            failed_phase=failure["phase"] if failure else None,
+                            problems=errors, log=str(dst), post_exit=post_exit))
     flow.write(out / "results.json", results)
     return results
 

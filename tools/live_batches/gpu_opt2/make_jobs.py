@@ -24,3 +24,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(Path(__file__).resolve().parent)
