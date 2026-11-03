@@ -416,7 +416,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {}, false, "Memory", {"Measured", "Neutral", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Performance", {"Measured", "Neutral", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}},
 
   {"exp_hair_cheap", "Single-sample hair coverage",
    "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",

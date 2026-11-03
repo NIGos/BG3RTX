@@ -24,7 +24,7 @@ int main() {
   warm.add(kSpecIdCompactHitState, 0); warm.add(kSpecIdAlphaMetadataCache, 0);
   warm.add(kSpecIdWaterEmptyTiles, 0);
   const auto alternatives = pa::experimental_specs(warm, false);
-  CHECK(alternatives.size() == 6); // hair, hit shading 1/2 and three exact GPU candidates
+  CHECK(alternatives.size() == 5); // hit shading 1/2 and three exact GPU candidates (native hair graduated: restart-only, not prewarmed)
   std::set<uint32_t> gpu_choices;
   for (const auto& alt : alternatives) {
     CHECK(alt.data[0] == 0); // tilesets require restart

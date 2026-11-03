@@ -396,7 +396,7 @@
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
-     "category": "Memory", "summary": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+     "category": "Performance", "summary": "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
      "cost": {"status": "Measured", "gpu": "Neutral", "vram": "Mesh pool -26-50%", "provenance": "RTX 5090; hair_qual 2026-11-03"},
      "required_on": {},
      "required_from_choice": {},

@@ -416,11 +416,11 @@ static void test_gui_levels() {
     for (const std::string& key : knob_keys(k)) {
       if (!code_default(key)) CHECK_EQ(std::string(k.id) + " writes unknown key " + key, "");
     }
-    // The launcher only has these pages (tools/launcher/ui/app.js `sections`, plus Developer):
+    // Knob pages of the launcher (tools/launcher/ui/app.js `sections`; Memory and Support render no knobs; plus Developer):
     // a knob in any other category would be in the schema but never shown.
     if (!k.dev_only) {
       const std::string c = k.category;
-      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Memory" || c == "Advanced");
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced");   // the Memory page shows capacity only
     }
     // Off in every preset for experimental knobs.
     if (k.experimental)
