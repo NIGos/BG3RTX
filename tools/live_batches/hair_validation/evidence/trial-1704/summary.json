@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "run_id": "trial-1704",
+  "status": "FAIL",
+  "source": "bg3rtx.log",
+  "checks": [
+    {
+      "name": "device_faults",
+      "status": "FAIL",
+      "value": 1,
+      "threshold": 0,
+      "verdict": "FAIL: device_faults: VK_ERROR_DEVICE_LOST"
+    },
+    {
+      "name": "exceptions",
+      "status": "FAIL",
+      "value": 1,
+      "threshold": 0,
+      "verdict": "FAIL: exceptions: [crash] exception 0x"
+    },
+    {
+      "name": "pool_full",
+      "status": "FAIL",
+      "value": 1,
+      "threshold": 0,
+      "verdict": "FAIL: pool_full: pool full"
+    },
+    {
+      "name": "hair_guards",
+      "status": "PASS",
+      "value": 0,
+      "threshold": 0,
+      "verdict": "PASS: hair_guards: zero forbidden events"
+    },
+    {
+      "name": "guard_evidence",
+      "status": "PASS",
+      "value": 0,
+      "threshold": 0,
+      "verdict": "PASS: guard_evidence: required log evidence"
+    },
+    {
+      "name": "completion",
+      "status": "FAIL",
+      "value": 1,
+      "threshold": 0,
+      "verdict": "FAIL: completion: required log evidence"
+    },
+    {
+      "name": "strand_participation",
+      "status": "PASS",
+      "value": 0,
+      "threshold": 0,
+      "verdict": "PASS: strand_participation: required log evidence"
+    },
+    {
+      "name": "gpuav",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: gpuav: dedicated validation log absent"
+    },
+    {
+      "name": "missing_hair",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: missing_hair: required capture evidence absent"
+    },
+    {
+      "name": "silhouette_iou_loss",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: silhouette_iou_loss: required capture evidence absent"
+    },
+    {
+      "name": "depth_sanity",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: depth_sanity: required capture evidence absent"
+    },
+    {
+      "name": "z_fighting",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: z_fighting: required capture evidence absent"
+    },
+    {
+      "name": "duplicates",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: duplicates: required capture evidence absent"
+    },
+    {
+      "name": "character_energy",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: character_energy: required capture evidence absent"
+    },
+    {
+      "name": "pt_shadow_backlight",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: pt_shadow_backlight: required capture evidence absent"
+    },
+    {
+      "name": "rendered/motion_reprojection",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: rendered/motion_reprojection: required capture evidence absent"
+    },
+    {
+      "name": "rendered/trailing_residual",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: rendered/trailing_residual: required capture evidence absent"
+    },
+    {
+      "name": "rendered/flicker_residual",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: rendered/flicker_residual: required capture evidence absent"
+    },
+    {
+      "name": "presented/motion_reprojection",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: presented/motion_reprojection: required capture evidence absent"
+    },
+    {
+      "name": "presented/trailing_residual",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: presented/trailing_residual: required capture evidence absent"
+    },
+    {
+      "name": "presented/flicker_residual",
+      "status": "INVALID",
+      "value": null,
+      "threshold": null,
+      "verdict": "INVALID: presented/flicker_residual: required capture evidence absent"
+    }
+  ],
+  "limitations": [
+    "Historical logs only; visual, temporal, lighting and performance qualification unavailable"
+  ]
+}

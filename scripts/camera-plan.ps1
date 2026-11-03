@@ -157,7 +157,7 @@ function Assert-CameraPlanFields($step) {
   $allowed=@('label','kind','speed','seconds','repeat_ms','scan','capture_at','serial',
     'motion_start','motion_end','pixels_per_second','direction','set','trace_at',
     'turn_mode','frame_delta_pixels','frame_interval','key_period_ms','key_down_ms',
-    'hover_x','hover_y','shift','shift_hold','wheel','wheel_ms','wait_log','wait_log_timeout','recenter')
+    'hover_x','hover_y','shift','shift_hold','wheel','wheel_ms','wait_log','wait_log_timeout','recenter','reload_selected')
   $names=if ($step -is [System.Collections.IDictionary]) { @($step.Keys) } else { @($step.PSObject.Properties.Name) }
   foreach ($name in $names) {
     if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
@@ -172,4 +172,5 @@ function Assert-CameraPlanFields($step) {
     }
   } elseif ($step.wait_log_timeout) { throw 'wait_log_timeout requires wait_log' }
   if ('recenter' -in $names -and -not ($step.recenter -is [bool])) { throw 'recenter requires a boolean' }
+  if ('reload_selected' -in $names -and -not ($step.reload_selected -is [bool])) { throw 'reload_selected requires a boolean' }
 }
