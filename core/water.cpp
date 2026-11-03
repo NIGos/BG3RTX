@@ -93,6 +93,8 @@ std::mutex g_mu;
 VkDescriptorSetLayout g_push = VK_NULL_HANDLE, g_alpha_layout = VK_NULL_HANDLE, g_view_dsl = VK_NULL_HANDLE;
 VkPipelineLayout g_layout = VK_NULL_HANDLE, g_view_layout = VK_NULL_HANDLE;
 uint32_t g_push_bytes = 0;
+VkDescriptorSetLayout g_hit_game_layout=VK_NULL_HANDLE, g_hit_sun_layout=VK_NULL_HANDLE;
+VkDescriptorSetLayout g_chit_game_layout=VK_NULL_HANDLE, g_chit_sun_layout=VK_NULL_HANDLE;
 struct Pipe { VkPipeline p = VK_NULL_HANDLE; uint64_t gen = 0; std::string req; };   // req: the request p runs
 // rt_cascade_casters (live, as core/gi.cpp refresh): the water requests trace the cascade's masks.
 bool cascade_on() { return host->cfg_int("rt_cascade_casters", 0) != 0; }
@@ -102,7 +104,9 @@ bool scalp_on() {
   return bg3::native_scalp::has_capability(
       static_cast<uint32_t*>(host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
 }
-Pipe g_primary, g_reflect, g_view;
+Pipe g_primary, g_reflect, g_view, g_world_prepare;
+VkBuffer g_world_lights=VK_NULL_HANDLE; VkDeviceMemory g_world_memory=VK_NULL_HANDLE;
+constexpr VkDeviceSize kWorldBytes=4097*4;
 bool g_building = false;   // a make_pipe this frame waits for its background build (not "unavailable")
 
 Bg3Image g_out{}, g_t{};
@@ -204,19 +208,54 @@ bool ensure_buffers() {
 VkDeviceSize stat_off(uint32_t slot) { return VkDeviceSize(slot) * kStatBytes; }
 VkDeviceSize param_off(uint32_t slot) { return kRing * kStatBytes + VkDeviceSize(slot) * kParamBytes; }
 
+WaterHitInputs g_hit{};
+bool hit_active() { return g_hit.game && g_hit.sun && g_hit.game_layout && g_hit.sun_layout; }
+constexpr VkDescriptorType hit_type(uint32_t b) {
+  return b==21 || b==26 || b==29 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER :
+         b==28 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+}
+// Add only absent bindings: compose already has the forward draw's light list with WATER_LS.
+void hit_bindings(std::vector<VkDescriptorSetLayoutBinding>& b) {
+  if (!hit_active()) return;
+  b.push_back({31,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+  for (uint32_t slot=21;slot<=29;++slot) {
+    bool found=false; for (const auto& x:b) found |= x.binding==slot;
+    if (!found) b.push_back({slot,hit_type(slot),1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+  }
+}
+void hit_sources(VkCommandBuffer cmd,VkPipelineLayout layout,const WaterHitInputs& h,bool only_flags_camera=false) {
+  VkDescriptorBufferInfo bi[9]{}; VkDescriptorImageInfo image{}; VkWriteDescriptorSet wr[9]{}; uint32_t n=0;
+  for (uint32_t i=0;i<9;++i) {
+    if (only_flags_camera && i!=0 && i!=8) continue;
+    const auto& src=h.lights[i]; bi[i]={src.buffer,src.offset,src.range};
+    auto& w=wr[n++]; w={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}; w.dstBinding=21+i;
+    w.descriptorCount=1; w.descriptorType=hit_type(21+i);
+    if(i==7) {image={VK_NULL_HANDLE,src.view,src.layout};w.pImageInfo=&image;} else w.pBufferInfo=&bi[i];
+  }
+  host->vk->CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,n,wr);
+  VkDescriptorBufferInfo world{g_world_lights,0,kWorldBytes};
+  VkWriteDescriptorSet ww{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};ww.dstBinding=31;ww.descriptorCount=1;
+  ww.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;ww.pBufferInfo=&world;
+  host->vk->CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&ww);
+  VkDescriptorSet sets[]={h.game,h.sun};
+  host->vk->CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,layout,2,2,sets,h.ndyn,h.ndyn?h.dyn:nullptr);
+}
 bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout layout) {
-  const std::string req = bg3::shader_variant::water_request(base, cascade_on(), scalp_on());
+  const bool hit = hit_active() && std::strcmp(entry, "water_copy") != 0 && (std::strncmp(base,"rt/water_reflect.hlsl",21)==0 ||
+                                    std::strncmp(base,"rt/water_compose.hlsl",21)==0);
+  const std::string req = bg3::shader_variant::water_request(
+      bg3::shader_variant::water_hit_request(base, hit).c_str(), cascade_on(), scalp_on());
   const bool cascade_spec = req.find("WATER_SPEC_CASCADE=1") != std::string::npos;
   const uint32_t cascade_value = cascade_spec && cascade_on() ? 1u : 0u;
   const char* file = req.c_str();
   const bool native_spec = req.find("RT_SPEC_NATIVE=1") != std::string::npos;
   const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
-  const bool shift_spec = cascade_spec && (req.find("rt/water_compose.hlsl") == 0 || req.find("rt/water_glint.hlsl") == 0);
+  const bool shift_spec = cascade_spec && (req.find("rt/water_compose.hlsl") == 0);
   const uint32_t values[] = {0u, native_spec && scalp_on() ? 1u : 0u,
                             edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u,
                             cascade_value,
-                            shift_spec && host->cfg_int("rt_water_compose_shift", 0) != 0 ? 1u : 0u};
-  VkSpecializationMapEntry entries[5]{};
+                            shift_spec && host->cfg_int("rt_water_compose_shift", 0) != 0 ? 1u : 0u, hit ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_shade",0),0,2)) : 0u};
+  VkSpecializationMapEntry entries[6]{};
   uint32_t count = 0;
   if (native_spec) {
     entries[count++] = {bg3::shader_variant::kSpecIdTileset, 0, sizeof(uint32_t)};
@@ -225,9 +264,10 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   if (edge_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterRfEdge, 2 * sizeof(uint32_t), sizeof(uint32_t)};
   if (cascade_spec) entries[count++] = {bg3::shader_variant::kSpecIdCascade, 3 * sizeof(uint32_t), sizeof(uint32_t)};
   if (shift_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterComposeShift, 4 * sizeof(uint32_t), sizeof(uint32_t)};
+  if (hit) entries[count++] = {bg3::shader_variant::kSpecWaterHitShade, 5 * sizeof(uint32_t), sizeof(uint32_t)};
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
   const std::string pipe_key = req + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
-      + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]);
+      + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]);
   // A built request asks the layer for its generation (in memory, no compile: hot reload rebuilt it);
   // a new request or generation is built in the background (core_pipeline_async), the pass skipping a
   // new request meanwhile and keeping the current pipeline of the same request.
@@ -268,34 +308,41 @@ constexpr uint32_t kNumBind = uint32_t(sizeof kBind / sizeof kBind[0]);
 bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, bool rr_hit) {
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
-  if (g_layout && (g_alpha_layout != alpha_layout || g_push_bytes != push_bytes)) {
+  if (g_layout && (g_alpha_layout != alpha_layout || g_push_bytes != push_bytes ||
+      g_hit_game_layout!=g_hit.game_layout || g_hit_sun_layout!=g_hit.sun_layout)) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_primary.p);
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_reflect.p);
     core_defer_layout_destroy(g_layout);
-    g_primary = g_reflect = Pipe{};
+    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_world_prepare.p);
+    g_primary = g_reflect = g_world_prepare = Pipe{};
     g_layout = VK_NULL_HANDLE;
+    host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,(uint64_t)g_push);g_push=VK_NULL_HANDLE;
   }
   if (!g_push) {
-    VkDescriptorSetLayoutBinding b[kNumBind];
-    for (uint32_t i = 0; i < kNumBind; ++i) b[i] = {kBind[i].binding, kBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    std::vector<VkDescriptorSetLayoutBinding> b;
+    for (const auto& x:kBind) b.push_back({x.binding,x.type,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+    hit_bindings(b);
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    ci.bindingCount = kNumBind;
-    ci.pBindings = b;
+    ci.bindingCount = uint32_t(b.size());
+    ci.pBindings = b.data();
     if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &g_push) != VK_SUCCESS) return g_push = VK_NULL_HANDLE, false;
   }
   if (!g_layout) {
-    VkDescriptorSetLayout sets[2] = {g_push, alpha_layout};
+    VkDescriptorSetLayout sets[4] = {g_push, alpha_layout, g_hit.game_layout, g_hit.sun_layout};
     VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, push_bytes};
     VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    li.setLayoutCount = 2;
+    li.setLayoutCount = hit_active()?4u:2u;
     li.pSetLayouts = sets;
     li.pushConstantRangeCount = 1;
     li.pPushConstantRanges = &pc;
     if (vk.CreatePipelineLayout(dev, &li, nullptr, &g_layout) != VK_SUCCESS) return g_layout = VK_NULL_HANDLE, false;
+    g_hit_game_layout=g_hit.game_layout;g_hit_sun_layout=g_hit.sun_layout;
     g_alpha_layout = alpha_layout;
     g_push_bytes = push_bytes;
   }
+  if(hit_active() && (!g_world_lights && !make_device_buffer(kWorldBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_world_lights, g_world_memory)))return false;
+  if(hit_active() && host->cfg_int("rt_water_hit_shade",0)==2 && !make_pipe(g_world_prepare,"rt/water_light_prepare.hlsl","main",g_layout))return false;
   return make_pipe(g_primary, "rt/water_reflect.hlsl", "water_primary", g_layout) &   // &: both builds start
          make_pipe(g_reflect, rr_hit ? "rt/water_reflect.hlsl?WATER_RR_HIT=1" : "rt/water_reflect.hlsl", "water_reflect", g_layout);
 }
@@ -398,7 +445,7 @@ void maybe_log() {
             "G-buffer %.2f%%, at bed %.2f%%), behind bed %llu (%.4f%% of water hits); rays %.0f/frame: screen hit %.1f%%, "
             "hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; normal fallback "
             "%.2f%%; mean E %.4f, mean screen L %.4f, mean E*L %.5f; shift %s; skipped frames: %s %llu, %s %llu, %s %llu, "
-            "%s %llu, variant %llu, layout %llu, size %llu",
+            "%s %llu, variant %llu, layout %llu, size %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu",
             (unsigned long long)W.frames, (unsigned long long)W.ran, pct(double(w[3]), px),
             W.ran ? px / double(W.ran) : 0.0, pct(double(w[4]), px), pct(double(w[5]), px), pct(double(w[6]), px),
             (unsigned long long)w[7], pct(double(w[7]), double(w[3])), W.ran ? rays / double(W.ran) : 0.0,
@@ -407,7 +454,9 @@ void maybe_log() {
             rays > 0 ? W.sumE / rays : 0.0, w[9] ? W.sumL / double(w[9]) : 0.0, w[9] ? W.sumEL / double(w[9]) : 0.0,
             W.ran && w[23] == W.ran ? "on" : w[23] ? "partial" : "off", kWhy[1], (unsigned long long)W.skip[1], kWhy[2],
             (unsigned long long)W.skip[2], kWhy[3], (unsigned long long)W.skip[3], kWhy[4], (unsigned long long)W.skip[4],
-            (unsigned long long)W.skip_variant, (unsigned long long)W.skip_layout, (unsigned long long)W.skip_size);
+            (unsigned long long)W.skip_variant, (unsigned long long)W.skip_layout, (unsigned long long)W.skip_size,
+            (unsigned long long)w[24],(unsigned long long)w[25],(unsigned long long)w[26],
+            (unsigned long long)w[27],(unsigned long long)w[28],(unsigned long long)w[29],(unsigned long long)w[30],(unsigned long long)w[31]);
   std::vector<float> ms = W.ms;
   std::sort(ms.begin(), ms.end());
   const double med = ms.empty() ? 0.0 : double(ms[ms.size() / 2]);
@@ -467,6 +516,8 @@ bool g_cwritten[kRing] = {};
 uint32_t g_cpasses[kRing] = {};
 // What the composition at the end of the forward water passes needs from this frame's lighting.
 struct Stash {
+  WaterHitInputs hit{};
+  uint64_t hit_identity=0;
   uint64_t frame = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   VkDescriptorSet alpha = VK_NULL_HANDLE;
@@ -483,7 +534,6 @@ struct CWindow {
   double sumC = 0, sumB = 0, sumAL = 0, sumPos = 0, sumNeg = 0, sumBown = 0;
   double sumD = 0, sumRm = 0;   // M5.4: lum(D) and the removed lum((1 - V) D) over sun records
   uint64_t sun_passes = 0, no_sun_records = 0;
-  uint64_t glint_passes = 0;   // rt_water_glint_aa: compose passes with the glint pre-pass
   // M5.4b: lum(F L), removed, lum(F sum) and lum(F L) over checked records, the projector share;
   // passes with the light list (and without: the flag cleared for that pass), buffers without the words.
   double sumLsL = 0, sumLsRm = 0, sumLsChk = 0, sumLsChkL = 0, sumLsBox = 0;
@@ -519,39 +569,15 @@ bool ls_wanted() { return host->cfg_int("rt_water_ls_shadows", 0) != 0 && water_
 bool refr_wanted() { return host->cfg_int("rt_water_refraction", 0) != 0 && water_rf_wanted(); }
 bool gsh_wanted() { return host->cfg_int("rt_water_game_shadow", 0) != 0 && shadows_wanted(); }
 
-Bg3Image g_glint{};   // rt_water_glint_aa: RGBA16F, rgb the sun term D, a valid (water_glint)
-uint32_t g_gw = 0, g_gh = 0;
-bool g_glint_init = false;
-Pipe g_glintp;        // water_glint, the entry before water_compose in the same request
-
 void release_compose_images() {
-  for (Bg3Image* im : {&g_rad, &g_dep, &g_glint}) {
+  for (Bg3Image* im : {&g_rad, &g_dep}) {
     host->defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)im->view);
     host->defer_destroy(BG3_DEFER_IMAGE, (uint64_t)im->image);
     host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)im->memory);
     *im = Bg3Image{};
   }
   g_cw = g_ch = 0;
-  g_gw = g_gh = 0;
   g_cimg_init = false;
-  g_glint_init = false;
-}
-
-bool ensure_glint_image(uint32_t w, uint32_t h) {
-  if (g_glint.image && g_gw == w && g_gh == h) return true;
-  if (g_glint.image) {
-    host->defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)g_glint.view);
-    host->defer_destroy(BG3_DEFER_IMAGE, (uint64_t)g_glint.image);
-    host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_glint.memory);
-    g_glint = Bg3Image{};
-  }
-  g_glint_init = false;
-  if (!host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                         &g_glint))
-    return g_glint = Bg3Image{}, false;
-  g_gw = w, g_gh = h;
-  host->log("[water] glint image %ux%u RGBA16F (rt_water_glint_aa)", w, h);
-  return true;
 }
 
 bool ensure_compose_images(uint32_t w, uint32_t h) {
@@ -579,7 +605,7 @@ constexpr struct { uint32_t binding; VkDescriptorType type; } kCBind[] = {
     {62, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},   {63, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
     {64, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},  {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
     {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    // rt_water_glint_aa (WATER_GLINT_AA only; a stand-in otherwise): the sun term per pixel (water_glint).
+    // Reserved descriptor: valid stand-in, not read by the shader.
     {69, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
     // M5.4b (WATER_LS only, the layout's tail): the water draw's set 2 light list (bg3_lights.hlsli 22..28).
     {22, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},  {23, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
@@ -599,17 +625,15 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   VkDevice dev = host->device;
   if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr || g_cgsh != gsh)) {   // the record layout of the buffer decides the variant
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_glintp.p);
-    g_compose = g_glintp = Pipe{};
+    g_compose = Pipe{};
   }
   const uint32_t nb = refr ? kNumCBindRefr : ls ? kNumCBindLs : kNumCBind;
   if (g_cpush && nb != g_cpush_nb) {   // the push layout differs by the light list and the copy
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_copy.p);
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_glintp.p);
     core_defer_layout_destroy(g_clayout);
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_cpush);
-    g_copy = g_compose = g_glintp = Pipe{};
+    g_copy = g_compose = Pipe{};
     g_clayout = VK_NULL_HANDLE;
     g_cpush = VK_NULL_HANDLE;
     g_cpush_nb = 0;
@@ -639,38 +663,40 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     qi.queryCount = kRing * kCQ;
     if (vk.CreateQueryPool(dev, &qi, nullptr, &g_cqp) != VK_SUCCESS) g_cqp = VK_NULL_HANDLE;
   }
-  if (g_clayout && (g_calpha != alpha_layout || g_cpush_bytes != push_bytes)) {
+  if (g_clayout && (g_calpha != alpha_layout || g_cpush_bytes != push_bytes ||
+      g_chit_game_layout!=g_hit.game_layout || g_chit_sun_layout!=g_hit.sun_layout)) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_copy.p);
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_glintp.p);
     core_defer_layout_destroy(g_clayout);
-    g_copy = g_compose = g_glintp = Pipe{};
+    g_copy = g_compose = Pipe{};
     g_clayout = VK_NULL_HANDLE;
+    host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,(uint64_t)g_cpush);g_cpush=VK_NULL_HANDLE;
   }
   if (!g_cpush) {
-    VkDescriptorSetLayoutBinding b[kNumCBindRefr];
-    for (uint32_t i = 0; i < nb; ++i) b[i] = {kCBind[i].binding, kCBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    std::vector<VkDescriptorSetLayoutBinding> b;
+    for(uint32_t i=0;i<nb;++i) b.push_back({kCBind[i].binding,kCBind[i].type,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+    hit_bindings(b);
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    ci.bindingCount = nb;
-    ci.pBindings = b;
+    ci.bindingCount = uint32_t(b.size());
+    ci.pBindings = b.data();
     if (vk.CreateDescriptorSetLayout(dev, &ci, nullptr, &g_cpush) != VK_SUCCESS) return g_cpush = VK_NULL_HANDLE, false;
     g_cpush_nb = nb;
   }
   if (!g_clayout) {
-    VkDescriptorSetLayout sets[2] = {g_cpush, alpha_layout};
+    VkDescriptorSetLayout sets[4] = {g_cpush, alpha_layout, g_hit.game_layout, g_hit.sun_layout};
     VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, push_bytes};
     VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    li.setLayoutCount = 2;
+    li.setLayoutCount = hit_active()?4u:2u;
     li.pSetLayouts = sets;
     li.pushConstantRangeCount = 1;
     li.pPushConstantRanges = &pc;
     if (vk.CreatePipelineLayout(dev, &li, nullptr, &g_clayout) != VK_SUCCESS) return g_clayout = VK_NULL_HANDLE, false;
+    g_chit_game_layout=g_hit.game_layout;g_chit_sun_layout=g_hit.sun_layout;
     g_calpha = alpha_layout;
     g_cpush_bytes = push_bytes;
   }
   // rt_water_rf_edge: the screen-edge fade constant of the same request.
-  // rt_water_glint_aa: the sun glint filter on the forms with the sun records (takes the place of the edge fade).
   const char* form =
                    refr && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"
                    : ls && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1"
@@ -679,12 +705,32 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
                    : ls        ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1"
                    : sun       ? "rt/water_compose.hlsl?WATER_SHADOWS=1"
                                : "rt/water_compose.hlsl";
-  const bool glint = sun && host->cfg_int("rt_water_glint_aa", 0) != 0;
-  const std::string creq = glint ? bg3::shader_variant::water_glint_request(form, true)
-                                 : bg3::shader_variant::water_rf_edge_request(form, host->cfg_int("rt_water_rf_edge", 0) != 0);
+  const std::string creq = bg3::shader_variant::water_rf_edge_request(form, host->cfg_int("rt_water_rf_edge", 0) != 0);
+
   return make_pipe(g_copy, "rt/water_compose.hlsl", "water_copy", g_clayout) &
-         make_pipe(g_compose, creq.c_str(), "water_compose", g_clayout) &
-         (!glint || make_pipe(g_glintp, bg3::shader_variant::water_glint_prepass(creq).c_str(), "water_glint", g_clayout));
+         make_pipe(g_compose, creq.c_str(), "water_compose", g_clayout);
+}
+
+// The ordinary path remains cached while the experimental path is selected. Most
+// forward passes use previous lighting; those must keep composing with the baseline.
+struct ComposePipelines {
+  VkDescriptorSetLayout push=VK_NULL_HANDLE,alpha=VK_NULL_HANDLE,game=VK_NULL_HANDLE,sun_layout=VK_NULL_HANDLE;
+  VkPipelineLayout layout=VK_NULL_HANDLE;
+  uint32_t bytes=0,nb=0;
+  Pipe copy,compose;
+  bool sun=false,ls=false,refr=false,gsh=false;
+};
+ComposePipelines g_cother;
+bool g_compose_hit_mode=false;
+void select_compose_mode(bool hit) {
+  if(hit==g_compose_hit_mode)return;
+  using std::swap;
+  swap(g_cpush,g_cother.push);swap(g_calpha,g_cother.alpha);swap(g_clayout,g_cother.layout);
+  swap(g_cpush_bytes,g_cother.bytes);swap(g_cpush_nb,g_cother.nb);
+  swap(g_chit_game_layout,g_cother.game);swap(g_chit_sun_layout,g_cother.sun_layout);
+  swap(g_copy,g_cother.copy);swap(g_compose,g_cother.compose);
+  swap(g_csun,g_cother.sun);swap(g_cls,g_cother.ls);swap(g_crr,g_cother.refr);swap(g_cgsh,g_cother.gsh);
+  g_compose_hit_mode=hit;
 }
 
 // Reads the compose slot about to be reused (kRing frames later) into the window.
@@ -698,9 +744,7 @@ void collect_compose(uint32_t slot) {
     using bg3::water::kCsLsRec, bg3::water::kCsLsSumL, bg3::water::kCsLsChkShWithin;
     using bg3::water::kCsRrRec, bg3::water::kCsRrSumGame;
     for (uint32_t i = 0; i < kCStatWords; ++i)   // the counters (the 64-bit sums below)
-      if (i < 16 || (i > 27 && i < bg3::water::kCsSunSumD) || (i >= bg3::water::kCsGshRec && i < bg3::water::kCsGshSumDg) ||
-          (i >= kCsLsRec && i < kCsLsSumL) || i == kCsLsChkShWithin || i == bg3::water::kCsNonFinite ||
-          (i >= kCsRrRec && i < kCsRrSumGame))
+      if (bg3::water::compose_plain_counter(i))
         g_cwin.w[i] += w[i];
     g_cwin.sumC += u64(w, 16) / 4096.0;
     g_cwin.sumB += u64(w, 18) / 4096.0;
@@ -753,7 +797,7 @@ void maybe_log_compose() {
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
             "passes on this frame's lighting %llu, on the previous lighting %llu, refused: no recent lighting %llu, no "
-            "scene %llu; newer scene taken %llu",
+            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu",
             (unsigned long long)W.frames, (unsigned long long)W.ran, W.ran ? double(W.passes) / double(W.ran) : 0.0,
             W.ran ? rec / double(W.ran) : 0.0, pct(own, rec), pct(rec - own, rec), (unsigned long long)w[4],
             pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0,
@@ -762,7 +806,9 @@ void maybe_log_compose() {
             (unsigned long long)w[t1 + 5], pct(own - comp, own), (unsigned long long)w[kCsClamped],
             (unsigned long long)W.no_buffer, (unsigned long long)W.layout, (unsigned long long)W.size,
             (unsigned long long)W.this_frame, (unsigned long long)W.earlier, (unsigned long long)W.no_lighting,
-            (unsigned long long)W.no_scene, (unsigned long long)W.newer_scene);
+            (unsigned long long)W.no_scene, (unsigned long long)W.newer_scene,
+            (unsigned long long)w[57],(unsigned long long)w[58],(unsigned long long)w[59],
+            (unsigned long long)w[60],(unsigned long long)w[61],(unsigned long long)w[62],(unsigned long long)w[63],(unsigned long long)w[55]);
   // Temporal stability (common/water_compose.h ComposeContinuity, pick_scene): the frames whose water
   // passes were all refused show the game's water for one frame (gate: uncomposed 0).
   host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
@@ -814,14 +860,13 @@ void maybe_log_compose() {
               "term %.2f%%, invalid %llu); traced %.2f%% of sun records, occluded %.2f%% of traced (traced shadow share "
               "%.2f%% of sun records), unknown %llu (kept); sun term D %.5f per sun record, removed %.5f = %.2f%% of D; "
               "mean removed over owned %.6f = %.3f%% of mean C; clamped %llu; GPU %.3f ms median, p90 %.3f (the "
-              "compose dispatches with the sun ray + the lighting copy); skipped: records without the sun words %llu; glint "
-              "filter passes %llu (rt_water_glint_aa)",
+              "compose dispatches with the sun ray + the lighting copy); skipped: records without the sun words %llu",
               (unsigned long long)W.frames, (unsigned long long)W.sun_passes, g_csun ? "sun" : "none",
               W.ran ? srec / double(W.ran) : 0.0, pct(srec, own), pct(double(w[kCsSunNone]), own),
               (unsigned long long)w[kCsSunInvalid], pct(straced, srec), pct(socc, straced), pct(socc, srec),
               (unsigned long long)w[kCsSunUnknown], meanD, meanRm, meanD > 0 ? 100.0 * meanRm / meanD : 0.0, removed_own,
               meanC > 0 ? 100.0 * removed_own / meanC : 0.0, (unsigned long long)w[kCsSunClamped], med, p90,
-              (unsigned long long)W.no_sun_records, (unsigned long long)W.glint_passes);
+              (unsigned long long)W.no_sun_records);
   }
   if (g_cgsh || W.no_gsh_records || host->cfg_int("rt_water_game_shadow", 0)) {
     // M5.4c: the game's sun shadow replaced on the FS that sample it (WATER_GSH words, common/water_compose.h).
@@ -916,6 +961,16 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     g_st.frame = 0;
     return maybe_log_compose();
   }
+  const bool want_hit=hit_active();
+  if(want_hit) {
+    // Prewarm the ordinary path: it is the fallback for passes on earlier lighting.
+    const WaterHitInputs saved=g_hit;g_hit=WaterHitInputs{};
+    select_compose_mode(false);
+    const bool base_ready=ensure_compose(alpha_layout,in.push_bytes,sun,ls,refr,gsh);
+    g_hit=saved;
+    if(!base_ready){++g_cwin.layout;g_st.frame=0;return;}
+  }
+  select_compose_mode(want_hit);
   if (!ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh)) {
     ++g_cwin.layout;
     g_st.frame = 0;
@@ -955,6 +1010,8 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   prm.a[3] = sun ? (want_rf ? kFlagRf : 0u) | (want_sun ? kFlagSun : 0u) | (want_ls ? kFlagLs : 0u) | (want_rr ? kFlagRefr : 0u) |
                        (want_gsh ? kFlagGsh : 0u)
                  : 1u;
+  if(hit_active()) prm.a[3]|=kFlagHitShade;
+  g_st.hit=g_hit;g_st.hit_identity=in.hit_identity;
   g_st.flags = prm.a[3];
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
   vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes, sizeof prm, &prm);
@@ -1068,6 +1125,15 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     g_ccont.note(now, false);
     return false;
   }
+  VkDescriptorSet material_alpha=alpha;
+  // Borrowed lighting descriptors may only be read in their frame and against their TLAS.
+  // Otherwise run the cached ordinary composition, including shadows and refraction.
+  const bool shade_pass=g_st.hit.game && hit_shade_frame_ok(use,tlas==g_st.tlas) &&
+      host->rt_hit_material_use && host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
+  select_compose_mode(shade_pass);
+  // Both forms were prewarmed at lighting, using the same record layout.
+  if(!g_compose.p) {++g_cwin.layout;return false;}
+  if(!shade_pass)material_alpha=alpha;
   g_ccont.note(now, true);
   ++(use == LightingUse::kThisFrame ? g_cwin.this_frame : g_cwin.earlier);
   const uint32_t slot = g_st.slot;
@@ -1083,8 +1149,19 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   const bool rr_copy = g_crr && copy_ok && copy && copy->view;
   if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
-    const uint32_t flags = ((ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr)) |
-                           (compose_shift_needed(use, pick) ? kFlagSceneShift : 0u);
+    uint32_t flags = (ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
+    flags |= compose_shift_needed(use, pick) ? kFlagSceneShift : 0u;
+    if(!shade_pass)flags&=~kFlagHitShade;
+    if(shade_pass && g_cls) {
+      // These push bindings also feed the forward water's local shadows. A different
+      // list must never be used to shade hidden hits against the lighting camera.
+      bool same=ls_list;
+      for(uint32_t i=0;i<7 && same;++i) {
+        const auto& a=lights[i];const auto& b=g_st.hit.lights[i+1];
+        same=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
+      }
+      if(!same) flags&=~kFlagHitShade;
+    }
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
     if (g_st.flags & kFlagLs) ++(ls_list ? g_cwin.ls_passes : g_cwin.ls_no_lights);
     if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
@@ -1100,18 +1177,9 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
                                     {g_cdev, cslot_off(slot), kCStatBytes},
                                     {VkBuffer(g_st.buf.buffer), 0, g_st.buf.bytes},
                                     {g_cdev, kCCamOff, kCCamBytes}};
-  // rt_water_glint_aa: the glint image when the compose pipeline is the WATER_GLINT_AA one, else g_rad as the
-  // stand-in the shader never declares.
-  const bool glint = g_glintp.p && g_compose.req.find("WATER_GLINT_AA=1") != std::string::npos &&
-                     g_glintp.req == bg3::shader_variant::water_glint_prepass(g_compose.req) &&
-                     ensure_glint_image(p->width, p->height);
-  if (glint && !g_glint_init) {
-    image_barrier(cmd, g_glint.image, VK_IMAGE_LAYOUT_UNDEFINED, G, kAll, kCS);
-    g_glint_init = true;
-  }
   VkDescriptorImageInfo imgs[4] = {{VK_NULL_HANDLE, g_dep.view, G}, {VK_NULL_HANDLE, g_rad.view, G},
                                    {VK_NULL_HANDLE, p->color_views[0], G},
-                                   {VK_NULL_HANDLE, glint ? g_glint.view : g_rad.view, G}};
+                                   {VK_NULL_HANDLE, g_rad.view, G}};
   VkWriteDescriptorSetAccelerationStructureKHR as{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
   as.accelerationStructureCount = 1;
   as.pAccelerationStructures = &tlas;
@@ -1156,14 +1224,9 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     if (src[i].b == 18) wr[i].pNext = &as;
   }
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, nw, wr);
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &material_alpha, 0, nullptr);
+  if(shade_pass) hit_sources(cmd,g_clayout,g_st.hit,g_cls);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
-  if (glint) {   // the sun term of every owned record before the compose reads its neighbours' (nothing consumed)
-    vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_glintp.p);
-    vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
-    memory_barrier(cmd, kCS, kCS);
-    ++g_cwin.glint_passes;
-  }
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
   if (g_cqp && pass < kMaxComposePasses)
@@ -1182,8 +1245,12 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
 }
 
 void release_compose() {
+  for(Pipe* p:{&g_cother.copy,&g_cother.compose})host->defer_destroy(BG3_DEFER_PIPELINE,(uint64_t)p->p);
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,(uint64_t)g_cother.layout);
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,(uint64_t)g_cother.push);
+  g_cother=ComposePipelines{};g_compose_hit_mode=false;
   release_compose_images();
-  for (Pipe* p : {&g_copy, &g_compose, &g_glintp}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
+  for (Pipe* p : {&g_copy, &g_compose}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
   core_defer_layout_destroy(g_clayout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_cpush);
   g_clayout = VK_NULL_HANDLE;
@@ -1215,142 +1282,6 @@ void release_compose() {
 }  // namespace
 
 bool water_rf_wanted() { return host->cfg_int("rt_water_reflections", 0) != 0; }
-
-// ---- rt_water_rr_mv (shaders/rt/water_mv.hlsl, ABI 26 set_rr_motion_vectors) ----
-// RR's motion vectors: the game's, with the water surface's parallax on the water pixels (the water
-// writes no motion, so the game's vectors there are the bed's). Our own RG16F image (the game's MV
-// format, checked), handed to the layer each frame it is written; FG keeps the game's vectors.
-Pipe g_mvp;
-VkDescriptorSetLayout g_mv_dsl = VK_NULL_HANDLE;
-VkPipelineLayout g_mv_pl = VK_NULL_HANDLE;
-uint32_t g_mv_push = 0;
-Bg3Image g_mvw[2]{};   // by frame parity: DLSS-G may still read last frame's at this frame's lighting
-uint32_t g_mvw_w = 0, g_mvw_h = 0;
-bool g_mvw_init = false, g_mvw_set = false;
-VkBuffer g_mvh = VK_NULL_HANDLE;
-VkDeviceMemory g_mvh_mem = VK_NULL_HANDLE;
-
-void release_mv_image() {
-  if (g_mvw_set && host->set_rr_motion_vectors) host->set_rr_motion_vectors(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_FORMAT_UNDEFINED, 0, 0);
-  g_mvw_set = false;
-  for (Bg3Image& im : g_mvw) {
-    host->defer_destroy(BG3_DEFER_IMAGE_VIEW, (uint64_t)im.view);
-    host->defer_destroy(BG3_DEFER_IMAGE, (uint64_t)im.image);
-    host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)im.memory);
-    im = Bg3Image{};
-  }
-  g_mvw_w = g_mvw_h = 0;
-  g_mvw_init = false;
-}
-
-void release_mv() {
-  release_mv_image();
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_mvp.p);
-  g_mvp = Pipe{};
-  core_defer_layout_destroy(g_mv_pl);
-  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_mv_dsl);
-  g_mv_pl = VK_NULL_HANDLE, g_mv_dsl = VK_NULL_HANDLE, g_mv_push = 0;
-  host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)g_mvh);
-  host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_mvh_mem);
-  g_mvh = VK_NULL_HANDLE, g_mvh_mem = VK_NULL_HANDLE;
-}
-
-// The bindings of water_mv.hlsl: cam, vp, the G-buffer depth, the game's MV, wT, cam2, the camera history, the output.
-constexpr struct { uint32_t binding; VkDescriptorType type; } kMvBind[] = {
-    {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}, {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER}, {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
-    {17, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE}, {63, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}, {65, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
-    {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER}, {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE}};
-constexpr uint32_t kNumMvBind = uint32_t(sizeof kMvBind / sizeof kMvBind[0]);
-constexpr VkDeviceSize kMvHistBytes = 2 * 96;   // water_mv.hlsl kHistBytes, two slots
-
-// After water_reflect (wT of this frame written and visible to compute). False: nothing written this frame.
-bool water_mv(VkCommandBuffer cmd, const WaterRfIn& in) {
-  const VkDeviceFuncs& vk = *host->vk;
-  const bool cam2 = in.cam2.buffer && in.cam2.range >= 224;
-  if (!host->set_rr_motion_vectors || !in.mv_view || !in.mv_image || in.mv_format != VK_FORMAT_R16G16_SFLOAT || !cam2)
-    return false;
-  if (g_mv_pl && g_mv_push != in.push_bytes) release_mv();
-  if (!g_mv_dsl) {
-    VkDescriptorSetLayoutBinding b[kNumMvBind];
-    for (uint32_t i = 0; i < kNumMvBind; ++i) b[i] = {kMvBind[i].binding, kMvBind[i].type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    ci.bindingCount = kNumMvBind;
-    ci.pBindings = b;
-    if (vk.CreateDescriptorSetLayout(host->device, &ci, nullptr, &g_mv_dsl) != VK_SUCCESS) return g_mv_dsl = VK_NULL_HANDLE, false;
-  }
-  if (!g_mv_pl) {
-    VkPushConstantRange pr{VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes};
-    VkPipelineLayoutCreateInfo li{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    li.setLayoutCount = 1;
-    li.pSetLayouts = &g_mv_dsl;
-    li.pushConstantRangeCount = 1;
-    li.pPushConstantRanges = &pr;
-    if (vk.CreatePipelineLayout(host->device, &li, nullptr, &g_mv_pl) != VK_SUCCESS) return g_mv_pl = VK_NULL_HANDLE, false;
-    g_mv_push = in.push_bytes;
-  }
-  if (!g_mvh && !make_device_buffer(kMvHistBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_mvh,
-                                    g_mvh_mem))
-    return false;
-  if (!g_mvw[0].image || !g_mvw[1].image || g_mvw_w != in.w || g_mvw_h != in.h) {
-    release_mv_image();
-    for (Bg3Image& im : g_mvw)
-      if (!host->alloc_image(in.w, in.h, VK_FORMAT_R16G16_SFLOAT,
-                             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, &im)) {
-        release_mv_image();
-        return false;
-      }
-    g_mvw_w = in.w, g_mvw_h = in.h;
-  }
-  const Bg3Image& mo = g_mvw[host->frame_index() & 1u];
-  if (!make_pipe(g_mvp, "rt/water_mv.hlsl", "water_mv", g_mv_pl)) return false;
-  if (!g_mvw_init) {
-    for (const Bg3Image& im : g_mvw) image_barrier(cmd, im.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
-    vk.CmdFillBuffer(cmd, g_mvh, 0, kMvHistBytes, 0);   // frame 0 in both slots: no previous camera yet
-    memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kCS);
-    g_mvw_init = true;
-  }
-  // The game's MVs are sampled in SHADER_READ_ONLY (as the GI passes do, core/gi.cpp).
-  const VkImageLayout RO = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, G = VK_IMAGE_LAYOUT_GENERAL;
-  const bool move = in.mv_layout != RO;
-  if (move) image_barrier(cmd, in.mv_image, in.mv_layout, RO, kAll, kCS);
-  // The previous readers of our image (RR, an earlier command buffer) and of the camera history.
-  memory_barrier(cmd, kAll, kCS);
-  VkDescriptorBufferInfo bufs[4] = {{in.cam.buffer, in.cam.offset, in.cam.range},
-                                    {in.vp.buffer, in.vp.offset, in.vp.range},
-                                    {in.cam2.buffer, in.cam2.offset, 224},
-                                    {g_mvh, 0, kMvHistBytes}};
-  VkDescriptorImageInfo imgs[4] = {{VK_NULL_HANDLE, in.dep.view, in.dep.layout}, {VK_NULL_HANDLE, in.mv_view, RO},
-                                   {VK_NULL_HANDLE, g_t.view, G}, {VK_NULL_HANDLE, mo.view, G}};
-  VkWriteDescriptorSet wr[kNumMvBind];
-  for (uint32_t i = 0; i < kNumMvBind; ++i) {
-    wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    wr[i].dstBinding = kMvBind[i].binding;
-    wr[i].descriptorCount = 1;
-    wr[i].descriptorType = kMvBind[i].type;
-    switch (kMvBind[i].binding) {
-      case 0: wr[i].pBufferInfo = &bufs[0]; break;
-      case 1: wr[i].pBufferInfo = &bufs[1]; break;
-      case 5: wr[i].pImageInfo = &imgs[0]; break;
-      case 17: wr[i].pImageInfo = &imgs[1]; break;
-      case 63: wr[i].pImageInfo = &imgs[2]; break;
-      case 65: wr[i].pBufferInfo = &bufs[2]; break;
-      case 66: wr[i].pBufferInfo = &bufs[3]; break;
-      case 67: wr[i].pImageInfo = &imgs[3]; break;
-    }
-  }
-  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_mvp.p);
-  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_mv_pl, 0, kNumMvBind, wr);
-  vk.CmdPushConstants(cmd, g_mv_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
-  vk.CmdDispatch(cmd, (in.w + 15) / 16, (in.h + 15) / 16, 1);
-  if (move) image_barrier(cmd, in.mv_image, RO, in.mv_layout, kCS, kAll);
-  memory_barrier(cmd, kCS, kAll);   // RR (the DLSS evaluate, later in the frame) reads it
-  host->set_rr_motion_vectors(mo.image, mo.view, VK_FORMAT_R16G16_SFLOAT, in.w, in.h);
-  if (!g_mvw_set) host->log("[water] water motion vectors on (rt_water_rr_mv=%d, rt_water_fg_mv=%d): %ux%u RG16F x2, water pixels get the surface's parallax",
-                             host->cfg_int("rt_water_rr_mv", 0), host->cfg_int("rt_water_fg_mv", 0), in.w, in.h);
-  g_mvw_set = true;
-  return true;
-}
 
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   if (!water_rf_wanted()) return;
@@ -1393,6 +1324,10 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       return skip();
     }
   }
+  g_hit=in.hit;
+  VkDescriptorSet material_alpha=in.alpha;
+  if(hit_active() && (!host->rt_hit_material_use ||
+      !host->rt_hit_material_use(cmd,in.scene_tlas,in.alpha,in.hit_identity,&material_alpha) || !material_alpha)) g_hit=WaterHitInputs{};
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
   g_building = false;
@@ -1415,6 +1350,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   std::memcpy(prm.cam_build, sc.cam, sizeof prm.cam_build);
   prm.f0 = f0_of(sc.reflectance);
   const bool cam2 = in.cam2.buffer && in.cam2.range >= 224;
+  prm.flags[1] = hit_active()?1u:0u;
   prm.flags[0] = (sc.cam_ok ? 1u : 0u) | (cam2 ? 2u : 0u);
   std::memcpy(g_map + param_off(slot), &prm, sizeof prm);
   g_win.draws += sc.draws;
@@ -1485,21 +1421,22 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   const uint32_t gx = (in.w + kGroup - 1) / kGroup, gy = (in.h + kGroup - 1) / kGroup;
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_primary.p);
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 0, kNumBind, wr);
-  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 1, 1, &in.alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_layout, 1, 1, hit_active()?&material_alpha:&in.alpha, 0, nullptr);
+  if(hit_active()) hit_sources(cmd,g_layout,g_hit);
   vk.CmdPushConstants(cmd, g_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
+  if(hit_active() && host->cfg_int("rt_water_hit_shade",0)==2){
+    memory_barrier(cmd,kAll,VK_PIPELINE_STAGE_TRANSFER_BIT);
+    vk.CmdFillBuffer(cmd,g_world_lights,0,kWorldBytes,0);
+    memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,kCS);
+    vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_world_prepare.p);
+    vk.CmdDispatch(cmd,uint32_t((g_hit.lights[2].range/16+63)/64),1,1);
+    memory_barrier(cmd,kCS,kCS);
+    vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_primary.p);
+  }
   vk.CmdDispatch(cmd, gx, gy, 1);
   memory_barrier(cmd, kCS, kCS);
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
   vk.CmdDispatch(cmd, gx, gy, 1);
-  // rt_water_rr_mv: RR's motion vectors with the water surface's (inside the timed region: its cost is
-  // part of "reflections GPU"). Off: the layer gets the game's vectors back.
-  // rt_water_fg_mv: the same image for DLSS-G (layer/streamline.cpp).
-  if (host->cfg_int("rt_water_rr_mv", 0) || host->cfg_int("rt_water_fg_mv", 0)) {
-    memory_barrier(cmd, kCS, kCS);
-    if (!water_mv(cmd, in) && g_mvw_set) release_mv_image();
-  } else if (g_mvw_set) {
-    release_mv_image();
-  }
   if (g_qp) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
   // The views (later passes, other command buffers), the copy of the counters to this slot and
   // its host read kRing frames later.
@@ -1598,17 +1535,16 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
 void water_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_compose();
-  release_mv();
   release_images();
-  for (Pipe* p : {&g_primary, &g_reflect, &g_view}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
+  for (Pipe* p : {&g_primary, &g_reflect, &g_view, &g_world_prepare}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
   core_defer_layout_destroy(g_layout);
   core_defer_layout_destroy(g_view_layout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_push);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_view_dsl);
   g_layout = g_view_layout = VK_NULL_HANDLE;
   g_push = g_view_dsl = g_alpha_layout = VK_NULL_HANDLE;
-  for (VkBuffer* b : {&g_host, &g_rts, &g_dev}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*b), *b = VK_NULL_HANDLE;
-  for (VkDeviceMemory* m : {&g_host_mem, &g_rts_mem, &g_dev_mem})
+  for (VkBuffer* b : {&g_host, &g_rts, &g_dev, &g_world_lights}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*b), *b = VK_NULL_HANDLE;
+  for (VkDeviceMemory* m : {&g_host_mem, &g_rts_mem, &g_dev_mem, &g_world_memory})
     host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*m), *m = VK_NULL_HANDLE;
   g_map = nullptr;
   if (g_qp) host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_qp);

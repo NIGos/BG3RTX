@@ -1194,6 +1194,24 @@ uint occ_kind_of(bool procedural, uint inst, uint id, uint geom, uint prim) {
 #define RT_QUERY_FLAGS 0
 #endif
 
+// GI alone can omit physical hair from closest-hit rays. Hair is the only
+// procedural geometry in this TLAS (bvhsplit.cpp hair_geometry); hardware skips
+// its AABBs before the software intersection/coverage work. Visibility and camera
+// primary/debug queries deliberately retain RT_QUERY_FLAGS.
+#if defined(RT_GI_HAIR_CULL) && defined(RT_NATIVE_HAIR)
+// Enabled only around the GI bounce query, never its hit-material AO rays.
+static bool gHairGiBounceQuery = false;
+#ifdef RT_HAIR_GI_CULL_REFERENCE
+#define RT_HAIR_GI_CULL_ON (RT_HAIR_GI_CULL_REFERENCE != 0)
+#else
+[[vk::constant_id(1017)]] const uint kSpecHairGiCull = 0u;
+#define RT_HAIR_GI_CULL_ON (kSpecHairGiCull != 0u)
+#endif
+#define RT_CLOSEST_QUERY_FLAGS (RT_QUERY_FLAGS | ((RT_HAIR_GI_CULL_ON && gHairGiBounceQuery) ? RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES : 0u))
+#else
+#define RT_CLOSEST_QUERY_FLAGS RT_QUERY_FLAGS
+#endif
+
 // Visibility along [0, tmax] (shadow and occlusion rays): kRtOccluded if an
 // alpha-tested hit was committed, kRtLit if traversal finished without one, kRtUnknown
 // if the candidate cap aborted the query first (a hit committed before the abort is a
@@ -1682,10 +1700,10 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -2040,10 +2058,10 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_HIT_MASK, r);
+  q.TraceRayInline(gScene, RT_CLOSEST_QUERY_FLAGS, RT_HIT_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;

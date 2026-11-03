@@ -156,7 +156,36 @@ def old_requests_waterhair(spec_request):
     return [(a, r) for a, r in old_requests_native(spec_request) if a[1008] == 0]
 
 
-KEYS = {"waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+def old_requests_waterhit(spec_request):
+    # Cross compose shift and hit shading: the combined path must preserve TLAS-space H.
+    compose = split_request(spec_request)[0] == "rt/water_compose.hlsl"
+    out = []
+    for shift in (0, 1) if compose else (0,):
+        for value in (0, 1, 2):
+            assign = {1016: value}
+            reference = spec_request + f";WATER_HIT_SHADE_REFERENCE={value}"
+            if compose:
+                assign[1015] = shift
+                reference += f";WATER_COMPOSE_SHIFT_REFERENCE={shift}"
+            out.append((assign, reference))
+    return out
+
+
+def old_requests_hairgi(spec_request):
+    """Hair absent/present crossed with GI culling off/on; native coverage stays literal in references."""
+    out = []
+    for assign, request in old_requests_native(spec_request):
+        if assign[1008] or assign.get(1009, 0):
+            continue
+        for cull in (0, 1):
+            out.append((assign | {1017: cull}, request +
+                        (";" if "?" in request else "?") + f"RT_HAIR_GI_CULL_REFERENCE={cull}"))
+    return out
+
+
+KEYS = {"hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
+        "waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+        "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
         "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
         "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
         "occ": ("RT_SPEC_OCC_STATS=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OCC_STATS=1", "RT_OCC_STATS=1"), lambda f: 1011)),
@@ -313,6 +342,16 @@ def check_one(tool, tmp, i, spec_path, old_path, assign):
     return differ(canonical(tool, s), canonical(tool, o))
 
 
+def check_baseline(tool, tmp, i, spec_path, old_path, assign, assign_reference):
+    """One independent baseline comparison; each worker owns its reference specialization file."""
+    reference = old_path
+    if assign_reference:
+        reference = opt(tool, old_path, Path(tmp) / f"{i}_baseline-assigned.spv",
+                        "--set-spec-const-default-value=" + " ".join(
+                            f"{k}:{v}" for k, v in sorted(assign.items()) if k != 1017))
+    return check_one(tool, tmp, i, spec_path, reference, assign)
+
+
 def sha(p):
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()[:16]
 
@@ -371,6 +410,8 @@ def main():
                   (args.key != "waterhair" or split_request(r)[0].startswith("rt/water_")))
     if args.key == "watershift":
         spec = [r for r in spec if split_request(r)[0] == "rt/water_compose.hlsl"]
+    if args.key == "hairgi":
+        spec = [r for r in spec if split_request(r)[0].startswith("gi/gi_trace_rt")]
     if not spec:
         say(f"no {marker} request in shaders/variants.txt")
         return 1
@@ -408,14 +449,29 @@ def main():
         try:
             refs = compile_requests(base, pick, tool=tool, cache=Cache(), jobs=args.jobs, label="spec baseline")
             with tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
+                baseline_jobs = []
                 for i, r in enumerate(pick):
                     for e in compiled[r].entries:
-                        newp, oldp = Path(bt) / "new.spv", Path(bt) / "old.spv"
+                        newp, oldp = Path(bt) / f"new_{i}_{e.name}.spv", Path(bt) / f"old_{i}_{e.name}.spv"
                         newp.write_bytes(compiled[r].blob(e.name))
                         oldp.write_bytes(refs[r].blob(e.name))
-                        n = check_one(tool, bt, f"base_{i}_{e.name}", newp, oldp, pairs[r][0][0])
+                        assignments = ([a for a, _ in pairs[r] if a[1017] == 0]
+                                       if args.key == "hairgi" else [pairs[r][0][0]])
+                        for j, assign in enumerate(assignments):
+                            baseline_jobs.append((f"base_{i}_{e.name}_{j}", r, e.name, newp, oldp, assign))
+                with Progress("spec baseline equivalence", len(baseline_jobs), every=30, verb="compared") as prog, \
+                        concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
+                    futs = {pool.submit(check_baseline, tool, bt, i, newp, oldp, assign, args.key == "hairgi"):
+                            (r, entry, assign) for i, r, entry, newp, oldp, assign in baseline_jobs}
+                    for f in concurrent.futures.as_completed(futs):
+                        r, entry, assign = futs[f]
+                        try:
+                            n = f.result()
+                        except Exception as ex:  # noqa: BLE001
+                            n = f"error {ex!r}"
                         baseline_ok &= n == 0
-                        if n: say(f"BASELINE DIFFERENT: {r} [{e.name}]: {n}")
+                        if n: say(f"BASELINE DIFFERENT: {r} [{entry}] {assign}: {n}")
+                        prog.step(failed=bool(n))
             say(f"key-off baseline {args.baseline}: {'PASS' if baseline_ok else 'FAIL'} ({len(pick)} requests)")
         finally:
             base.cleanup()
@@ -443,12 +499,12 @@ def main():
         control_request = (next((r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"), pick[0])
                            if args.key in ("native", "omm") else pick[0])
         control_pairs = pairs[control_request]
-        (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
+        (_, c0), (_, c1) = (control_pairs[-2:] if args.key == "hairgi" else
+                           (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2])
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
         control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
-                         "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
-                         "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else
-                         "water_glint" if args.key == "waterhair" else "main")
+                         "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else
+                         "water_compose" if args.key in ("waterhair", "waterhit") and "water_compose.hlsl" in control_request else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")

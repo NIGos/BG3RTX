@@ -7,11 +7,11 @@
 // request the core can make (tests/shader_variant_test.cpp keeps it equal to these rules;
 // tools/compile_shaders.py compiles all of them).
 #include <cstring>
+#include <cstdint>
 #include <string>
 #include "native_hair_origin.h"
 
 namespace bg3::shader_variant {
-
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
@@ -41,12 +41,20 @@ enum SpecId : unsigned {
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
+  kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
+  kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
 // instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
 // small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
+inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
+// Separate installed slots preserve both warmed cull states during same-run A/B.
+inline constexpr unsigned kHairGiCullSlot = 256u, kPipelineSlots = 512u;
+inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
+  return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
+}
 inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
@@ -122,7 +130,7 @@ inline bool cascade_entry(const char* file) {
 // with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
-inline constexpr const char* kFixedRequests[] = {
+inline constexpr const char* kFixedRequests[] = {"rt/water_light_prepare.hlsl",
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
                                                  "rt/water_reflect.hlsl?WATER_RR_HIT=1",
                                                  // rt_water_rf_edge (core/water.cpp water_rf_edge_request): each compose
@@ -134,38 +142,15 @@ inline constexpr const char* kFixedRequests[] = {
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
-                                                 // rt_water_glint_aa (core/water.cpp water_glint_request): each compose
-                                                 // request with the sun records, with the sun glint footprint filter
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GLINT_AA=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GLINT_AA=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GLINT_AA=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 // its pre-pass (rt/water_glint.hlsl, the compose request's defines)
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1"};
-
-// rt_water_glint_aa: the compose request `req` with the sun glint filter (WATER_GLINT_AA) when `on` and the request
-// has the sun records (WATER_SHADOWS); else `req` unchanged.
-inline std::string water_glint_request(const char* req, bool on) {
-  std::string out = req;
-  if (on && out.find("WATER_SHADOWS=1") != std::string::npos) {
-    const size_t edge = out.find(";WATER_SPEC_RF_EDGE=1");
-    if(edge != std::string::npos) out.erase(edge, std::strlen(";WATER_SPEC_RF_EDGE=1"));
-    out += ";WATER_GLINT_AA=1";
-  }
-  return out;
-}
-// The pre-pass request of a WATER_GLINT_AA compose request: the same defines on rt/water_glint.hlsl.
-inline std::string water_glint_prepass(const std::string& compose_req) {
-  const std::string base = "rt/water_compose.hlsl";
-  return compose_req.compare(0, base.size(), base) == 0 ? "rt/water_glint.hlsl" + compose_req.substr(base.size()) : compose_req;
-}
+                                                 "rt/water_reflect.hlsl?WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1"};
 
 // rt_water_rf_edge: both values share WATER_SPEC_RF_EDGE; core/water.cpp supplies constant 1014.
 inline std::string water_rf_edge_request(const char* req, bool on) {
@@ -183,13 +168,17 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 // water rays see hair as the gi/ passes do. The physical hair origin (RT_HAIR_PHYSICAL_ORIGIN) is a
 // launch-point image of the gi/ receivers (binding 50): water rays start on the water, so it adds nothing.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
+inline std::string water_hit_request(const char* req,bool capable) {
+  std::string out=req;
+  if(capable)out += out.find('?')==std::string::npos ? "?WATER_HIT_SHADE_LAYOUT=1" : ";WATER_HIT_SHADE_LAYOUT=1";
+  return out;
+}
 inline std::string water_request(const char* req, bool cascade, bool scalp = false) {
   std::string out = req;
   (void)cascade;
   (void)scalp;
   if (out.compare(0, sizeof("rt/water_compose.hlsl") - 1, "rt/water_compose.hlsl") != 0 &&
-      out.compare(0, sizeof("rt/water_reflect.hlsl") - 1, "rt/water_reflect.hlsl") != 0 &&
-      out.compare(0, sizeof("rt/water_glint.hlsl") - 1, "rt/water_glint.hlsl") != 0) return out;
+      out.compare(0, sizeof("rt/water_reflect.hlsl") - 1, "rt/water_reflect.hlsl") != 0) return out;
   out += out.find('?') == std::string::npos ? "?WATER_SPEC_CASCADE=1" : ";WATER_SPEC_CASCADE=1";
   out += ";RT_SPEC_NATIVE=1";
   if (out.find("WATER_SHADOWS=1") != std::string::npos) out += ";RT_CASCADE_SUN_HIT=1";

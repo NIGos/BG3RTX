@@ -241,6 +241,16 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  {"exp_water_hit_shade", "Water: hidden-surface reflections",
+   "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
+   Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
+   {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
+    {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
+   {}, {0,0,0,0}, true, {}, false, "Experimental", {}},
+
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
    "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
@@ -290,6 +300,13 @@ inline constexpr Knob kKnobs[] = {
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+
+  {"exp_hair_gi_cull", "Omit hair from indirect rays",
+   "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_gi_cull", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_gi_cull", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
   {"exp_cascade_static_only", "Static roof casters only",
    "Excludes animated and unclassified shadow-map copies from roof sun shadows. "
@@ -565,11 +582,9 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
+    {"rt_water_hit_shade", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
-    {"rt_water_rr_mv", "0"},
-    {"rt_water_fg_mv", "0"},
-    {"rt_water_glint_aa", "0"},
     {"rt_water_compose", "0"},
     {"rt_water_shadows", "0"},
     {"rt_water_ls_shadows", "0"},
@@ -601,6 +616,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_omm_dyn_bake_tris", "131072"},
     {"rt_omm_dyn_mb", "256"},
     {"rt_native_hair", "0"},
+    {"rt_hair_gi_cull", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},

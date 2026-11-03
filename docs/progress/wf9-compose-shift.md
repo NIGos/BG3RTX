@@ -22,3 +22,15 @@
 - GPU delta unmeasured; wf8 compose was 0.10-0.15 ms. Every cost window requires compose GPU ms and stability stats.
 - In game: S8 Water Queens House pool, look for stable column reflections during smooth turns; quality gate pending.
 - No game launched, no real job queued, no commit or git metadata write. git diff --check passes.
+
+## wf9 live result (S8 Water Queens House, 2026-11-03 03:48-03:54, INVALID on a gate, data read; NOT FIXED)
+- Turns were still not smooth. Each 1 px frame-drag post (every 4 rendered frames) gives one ~45-90 deg camera jump, then the camera holds (presents: 1-2 jumps per 16, mean abs diff ~20 vs 0.4-2).
+- Raw debug 25, covered-water tier 1 (static 99100: 14.7-15.4%): the jump frame drops to 0.0-1.2% with shift 1 (99101 f5857, 99103 f8968/f8971) and with shift 0 (99102 f7409/f7413). Held frames: shift 0 12-23%, shift 1 18-26%.
+- Compose stats, hidden (screen hit): static 6.4-6.5% (14.9%) for 0 and 1. Turn cost windows: shift 0 16.7/17.5/18.0/17.1%, shift 1 17.4/17.8/17.7/17.6% (hit 14.3-15.4% for both). Predicted ON 7-10%: not met.
+- Stability: every window composed 120/120, 0 uncomposed, 0 flips. water_reflect hidden also goes from 5.9% to 11.8-14.6% in turns: the turn poses differ (rays/frame 233k -> 400-457k).
+- Energy (water-compose float mean): OFF 0.187359 / 0.187538, ON 0.187707 / 0.187474. The scene-only mean before the water varies by 0.0004 between repeats: unchanged within noise.
+- Compose GPU median: static OFF 0.104, ON 0.099 ms. Turn OFF 0.127-0.131, ON 0.115-0.129 ms. No added cost.
+- Verdict: the shift does not remove the on/off. Tier 1 is lost on the camera-jump frame with both values, so the stale-TLAS translation is not the deciding cause under this input. The fix stays off and unqualified.
+- Next test: the camera must move a little on every rendered frame. The input posts 1 px but the game turns the camera in big steps.
+- INVALID cause: the gate counts a stats line only if the line before it came after the settings read. scene-wait/casters lines come every ~4.0 s (120 frames at 30 fps). In energy-static-3, lines at 52.976 (7 ms before the 52.983 read) and 56.975 (straddles), then the 59.16 trace stalled the next one to 03:50:03.270, after the window ended at 03.008.
+- Job fix: in plans/wf9_s8.json, energy-static-0..3 change "seconds": 10, "motion_start": 10, "motion_end": 10 to 14 / 14 / 14 (2 periods 8 s + 2.3 s trace stall = 10.3 s worst case). In the job file, "estimated_phase_seconds": 281 -> 297.

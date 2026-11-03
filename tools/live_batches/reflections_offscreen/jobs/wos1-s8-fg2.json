@@ -1,0 +1,198 @@
+{
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "repeat": 1,
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[water\\]",
+    "gi: GPU cost",
+    "\\[rrpost\\] exposure (held|probe)",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material\\] buffer reuse",
+    "\\[sl\\] fg_letterbox",
+    "sun stats",
+    "^\\S+\\s+\\[core\\] sun:",
+    "\\[core\\] guard:",
+    "skipped: no variant for",
+    "\\[bvh\\] mesh pool",
+    "\\[hit material pool basis\\]",
+    "\\[cascade\\] buffer full",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[water\\]",
+    "rf: reflection pass",
+    "gi: GPU cost",
+    "\\[pan\\]",
+    "\\[sl\\] capturing \\d+ presented frames",
+    "\\[sl\\] present capture done",
+    "slDLSSGSetOptions",
+    "\\[sl\\] DLSS-G gets"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[water\\] water geometry UNAVAILABLE",
+    "\\[water\\] build submission failed",
+    "\\[water\\] reflections unavailable",
+    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+    "\\[water\\] compose UNAVAILABLE",
+    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+    "\\[water\\] compose: variant pipeline creation failed",
+    "\\[water\\] compose: a water pipeline blends",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[cascade\\] could not allocate",
+    "skipped: no variant for",
+    "sun: WARNING \\d+ roof volumes within",
+    "over kSunMaxVolumes on [1-9]",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hit material pool basis\\] over kBasisCapBytes",
+    "\\[bvh\\] mesh pool full at"
+  ],
+  "stop_on_dump": false,
+  "name": "wos1-s8-fg2",
+  "hold": 90,
+  "timeout": 470,
+  "live_batch": "reflections-offscreen",
+  "window_mode": "visible_unfocused_fg",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_rr_mv=0,rt_water_fg_mv=0,rt_water_glint_aa=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,rt_hit_material_wind_rgb=1,rt_water_hit_shade=0,rf_hit_shade=0,rf_hit_gi=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/reflections_offscreen/plans/wos1_s8.json"
+  ],
+  "energy_fs": "water-compose",
+  "purpose": "S8 one launch Ultra: water hit shading OFF/ON/OFF still + matched turns; post-water energy, GPU ms, device-local tier histogram. Draft only, no authorization.",
+  "estimated_phase_seconds": 183,
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+    "\\[water\\] compose energy",
+    "\\[water\\] reflections GPU",
+    "\\[water\\] compose GPU",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\)"
+  ],
+  "expect_runner": [
+    "\\[motion-plan\\] complete phases=15\\b",
+    "^Run ended: done",
+    "\\[window-mode\\].*visible_unfocused",
+    "\\[motion-trace\\] phase=3 label=shot-off-a repeat=0",
+    "\\[motion-trace\\] phase=5 label=shot-on repeat=0",
+    "\\[motion-trace\\] phase=7 label=shot-off-b repeat=0",
+    "\\[motion-trace\\] phase=8 label=turn-off-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=turn-on repeat=0",
+    "\\[motion-trace\\] phase=12 label=turn-off-b repeat=0"
+  ],
+  "expect_every": [
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "water tier histogram every static cost window",
+      "select": "\\[water\\] compose \\(",
+      "match": "rays [0-9.]+/frame:.*hidden [0-9.]+%.*off screen [0-9.]+%.*miss [0-9.]+%",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "float samples every shot and turn",
+      "select": "\\[trace\\] frame \\d+ written: ",
+      "match": "\\[trace\\] frame \\d+ written: ",
+      "windows": [
+        "shot-off-a",
+        "shot-on",
+        "shot-off-b",
+        "turn-off-a",
+        "turn-on",
+        "turn-off-b"
+      ],
+      "event": true,
+      "min": 2,
+      "settle_s": 1
+    },
+    {
+      "name": "qualified hidden shading in every ON cost window",
+      "select": "\\[water\\] compose \\(",
+      "match": "hit shade attempted [1-9]\\d*, hidden [1-9]\\d*, offscreen \\d+, rejected material/light/sun/invalid \\d+/\\d+/\\d+/\\d+",
+      "windows": [
+        "cost-on"
+      ],
+      "min": 1
+    },
+    {
+      "name": "reflections GPU cost in every static window",
+      "select": "\\[water\\] reflections GPU",
+      "match": "GPU.*[0-9.]+",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "compose GPU cost in every static window",
+      "select": "\\[water\\] compose GPU",
+      "match": "GPU.*[0-9.]+",
+      "windows": [
+        "cost-off-a",
+        "cost-on",
+        "cost-off-b"
+      ],
+      "min": 1
+    }
+  ]
+}

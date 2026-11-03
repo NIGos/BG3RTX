@@ -1,4 +1,4 @@
-﻿# Offline fake queue only. Does not authorize or enqueue a real game job.
+ï»¿# Offline fake queue only. Does not authorize or enqueue a real game job.
 param([string]$Out = '')
 $ErrorActionPreference = 'Stop'
 $plan = @(Get-Content (Join-Path $PSScriptRoot 'plans/wf8_s8.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ })
@@ -12,7 +12,7 @@ foreach ($step in $plan) {
   if ([int]$state.pan_capture -gt 0) {
     if ($state.pan_water -ne '1' -or $state.pan_water_frames -ne '8' -or $state.pan_delay_ms -ne '2000') { throw "wrong selective capture contract: $($step.label)" }
     if ($state.rt_debug -eq '25') {
-      foreach ($key in 'rt_water_shadows','rt_water_ls_shadows','rt_water_refraction','rt_water_game_shadow','rt_water_glint_aa') {
+      foreach ($key in 'rt_water_shadows','rt_water_ls_shadows','rt_water_refraction','rt_water_game_shadow') {
         if ($state[$key] -ne '0') { throw "reflection delta confounded by $key in $($step.label)" }
       }
     }

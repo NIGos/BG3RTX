@@ -1,0 +1,24 @@
+{
+  "status": "PREPARED_OFFLINE; no live permission; no winner yet",
+  "scene": "S8 Water Queens House",
+  "hypothesis": "Legacy drags begin far off centre. Separate relative displacement from centre-offset integration.",
+  "windows": {
+    "legacy": "1 px every 4 renders; expected jump/hold reproducer",
+    "hold_drag": [
+      1,
+      2
+    ],
+    "centre_hold": [
+      1,
+      2
+    ]
+  },
+  "target_degrees_per_second": [
+    15,
+    30
+  ],
+  "gate": "For each candidate speed: positive median unwrapped absolute yaw/frame; max <= 3 * median; median near target_rate / measured_render_fps. Target is a desired angular rate, NOT a px-to-degree calibration. Reject rapid/full rotations and zero-median jump/hold.",
+  "observable": "No per-frame yaw log found. Use scene build GPU camera moving/static sample counts and one delayed 16-present FG capture per subwindow; manual minimap yaw deltas are required to qualify. Counts alone cannot prove smoothness. FG presents are not rendered frames; report both rates and do not use present rate as render rate.",
+  "cost": "No effect/shader change. Existing scene-build GPU ms only; no primary-check diagnostics.",
+  "capture_bound": "80 half-size presents at <=3840x2160 display: <503 MB uncompressed RGB + 1% container allowance; logs <=50 MB; no traces/raw bursts."
+}

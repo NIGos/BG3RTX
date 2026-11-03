@@ -632,7 +632,9 @@ function Send-PlanMouse([int]$message, [int]$buttons, [int]$x, [int]$y) {
 }
 function Release-Rotation {
   if ($script:rotateHeld) {
-    Send-PlanMouse 0x0208 0 $script:rotateX $script:rotateY
+    foreach ($message in @(Get-RotationMouseMessages @{kind='release';x=$script:rotateX;y=$script:rotateY})) {
+      Send-PlanMouse $message.message $message.buttons $message.x $message.y
+    }
     $script:rotateHeld = $false
   }
   $script:rotationInput.stage="released"
@@ -767,21 +769,27 @@ while ((Get-Date) -lt $deadline) {
             }
           } finally { $mf.Dispose() }
         }
+        if ($step.turn_mode -in @('hold_drag','centre_hold') -and $rotationInput.stage -ne 'pressed') {
+          $frameRotation.frame=$motionFrame
+        }
         $sample=Get-FrameRotationSample $frameRotation $sample $step $motionFrame ($rect.Right-$rect.Left)
       }
       $rotationAction=Get-RotationInputAction $rotationInput $sample $planClock.Elapsed.TotalSeconds
       if ($rotationAction) {
         switch ($rotationAction.kind) {
           release { Release-Rotation }
-          reset { Send-PlanMouse 0x0200 0 $rotationAction.x $rotationAction.y }
+          reset { }
           press {
-            Send-PlanMouse 0x0207 0x10 $rotationAction.x $rotationAction.y
             $rotateHeld=$true;$rotateSegment=$sample.segment
             Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex segment=$rotateSegment direction=$($sample.direction) speed_px_s=$($step.pixels_per_second)"
           }
           drag {
-            Send-PlanMouse 0x0200 0x10 $rotationAction.x $rotationAction.y
             if ($step.frame_delta_pixels) { Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [frame-drag] phase=$panIndex label=$($step.label) rendered=$motionFrame x=$($rotationAction.x)" }
+          }
+        }
+        if ($rotationAction.kind -ne 'release') {
+          foreach ($message in @(Get-RotationMouseMessages $rotationAction)) {
+            Send-PlanMouse $message.message $message.buttons $message.x $message.y
           }
         }
         $rotateX=$rotationAction.x;$rotateY=$rotationAction.y

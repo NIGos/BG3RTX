@@ -7,6 +7,12 @@
 using namespace bg3::omm;
 static unsigned checks;static void check(bool b){++checks;if(!b)std::abort();}
 int main(){
+  uint32_t counters[5*64]={};uint64_t sums[5]={};
+  counters[0]=7;counters[63]=2;counters[64]=3;counters[128]=4;counters[192]=50;counters[256]=80;
+  fold_check_stats(sums,counters,false);
+  check(sums[0]==0 && sums[1]==12 && sums[2]==0 && sums[3]==0 && sums[4]==0);
+  fold_check_stats(sums,counters,true);
+  check(sums[0]==9 && sums[1]==15 && sums[2]==4 && sums[3]==50 && sums[4]==80);
   uint64_t scene=21;unsigned calls=0;std::set<unsigned> registered;
   auto validate=[&](unsigned command,bool allowed,bool found,uint64_t id=7){return [&,command,allowed,found,id](uint64_t selected,uint64_t& reference,uint64_t& identity){++calls;check(selected==21);reference=found?11:0;identity=id;if(allowed)registered.insert(command);return allowed;};};
   {SceneBinding scope(scene,false,validate(0,true,true));check(scope.valid());check(scope.state()==BindingState::Ordinary);check(scene==21);}

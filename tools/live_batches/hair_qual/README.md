@@ -67,3 +67,28 @@ No ini, save or default changes.
 Offline check: `powershell -NoProfile -ExecutionPolicy Bypass -File tools\live_batches\hair_qual\dryrun.ps1 -Out <scratch>`.
 Last result 2026-11-02: all checks pass (static, scene-wait and capacity lints, runs A and B); exposure-hold lint ok;
 the new gate regexes match the core's line formats (synthetic lines, pass and fail cases).
+
+## GI hair cost experiment (2026-11-03, offline only)
+
+S8 live 03:55 disproved the original +0 to +0.5 ms prediction: native hair added
+about 2.3 ms to RT passes and 3.2 ms to GI (840 hair records, 0 scalp). Qualification
+remains open. `rt_hair_gi_cull=0` is the baseline; `1` skips procedural hair in GI
+closest queries only. Sun/local shadow coverage stays active. A GI lighting change
+near hair is possible and requires float energy and skin-shadow inspection.
+
+hq1 S8 and hq2 Dialogue1 use `plans/hq_perf_plan.json`: original qualification plus
+`warm-cull-on` (25 s), `shot-cull-off-a/on/off-b` (8 s each), and
+`cost-hair-cull-off-a/on/off-b` (25 s each). Hair, scalp and physical origin stay on
+through these added windows; the cull key is explicitly reset in every phase.
+Both GPU timers must supply complete 300-frame lines in every added cost window,
+with no diagnostics or background builds. The queue discards each first straddling
+line; fewer than two timer lines makes that window INVALID. Compare ON against
+the mean of the two OFF repeats, and report their absolute difference as noise.
+Judge `rt passes` and `gi` independently; frame time is not the cost gate.
+
+The three new shots use held exposure and the existing float scene/character ROI
+workflow; compare cull ON with its OFF neighbours, and inspect hair shadows on skin.
+The original no-hair baseline and < 1.0 ms native-hair budget still apply; GI savings
+alone do not qualify hair. Predictions were updated before these job windows.
+Added plan is 374 s for hq1/hq2; hq3/hq4 stay 250 s. Whole batch estimate with four
+120 s loads: 28.8 min, 26 PNG traces (~728 MB + logs). No live authorization granted.

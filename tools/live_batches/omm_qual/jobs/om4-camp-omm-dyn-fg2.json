@@ -82,7 +82,7 @@
   "\\[omm dyn\\] WARNING",
   "rejected ticket use without live ticket",
   "\\[fault\\] VK_ERROR_DEVICE_LOST",
-  "\\[fault\\] device fault",
+  "\\[fault\\] vkGetDeviceFaultInfoEXT: (?!no fault)",
   "\\[bvh\\] WARNING frame \\d+ slot \\d+: TLAS instance",
   "\\[bvh\\] WARNING frame \\d+: per-draw BLAS vertices"
  ],
@@ -106,6 +106,15 @@
     "cost-ref-a",
     "cost-on",
     "cost-ref-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "scene wait: diag-check traces its own frame's scene (0 timeouts)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "diag-check"
    ],
    "min": 1
   },

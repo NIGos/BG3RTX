@@ -1,0 +1,11 @@
+{
+  "pack": "replay-20261101-142819-1",
+  "water_replay": "NOT_COVERED",
+  "evidence": [
+    "manifest line 2: pass gi_hit_direct",
+    "No water TLAS set 0 binding 64",
+    "No FS records set 0 binding 66",
+    "No water parameters or outputs 60-63"
+  ],
+  "can_verify_water_pixels_or_energy": false
+}

@@ -81,3 +81,24 @@ Dropped from the research stacks as not applicable to main: partial swapchain en
 (1689d65; main's tracker already accepts VK_INCOMPLETE), BVH reset on command buffer reset
 (7c84ceb; main's cmd.cpp calls bvh_cmd_reset on reset, free, begin and pool reuse), EN2 G-buffer
 join wait (0916cff; EN2 hitmat is not on main).
+
+## Local refs deleted 2026-11-03 (user approval 11-02; remote refs kept; recover with git branch <name> <sha>)
+- codex/camera-schema-wip 75e477eed7a5499d329792edae147973d5fae89e
+- codex/en2-audit-preserved-ab8aafd ab8aafd60904b0b44b4ae51a9c2f7df962faf937
+- codex/fg-composite-metadata 06cf9d776158b18af7a512eb775ac33cbf953965
+- codex/fg-vertex-probe bb6e2393790a4ed5b03e1911e6a37626afa48201
+- codex/research-preserved-20261028 929be7ad1957f4efb08f296623fd41d921fb9496
+- codex/p1-pan dbd320c1b896ff2704ee7410a3a82205c7e09c92
+- codex/mv-jitter-optin 9078be6c59e946c2f67bc812855ee330842f9c22
+- codex/m2-foundry-mesh 5d4e922911f3744dd6a6b37af86fb25c9e2f081a
+- codex/native-hit-material a15f5a32cfe5478ed56bdcfa53b1620214059fff
+- codex/native-tileblend-camera c9f5d3e4b1e415817c7c220934fac364df980d6a
+- codex/native-tileblend-shadow b5724890bb5433c071a337e325c06d098b667457
+- codex/native-tileset-coverage 7e47e7ac29d42c1b2ba27a968f91e4bda884de78
+- codex/native-tileset-st-depth 5c17bb5e9d8d9f6193bd6920a79757ee8c6d9a8c
+- codex/p4-omm 8d902d5195e819125187c1c57fe160a954e35acd
+- codex/opaque-two-bounce-reference 3e185b2e2803117f262a673ad2c612a4b45c6441
+- codex/tileblend-gpu 617cdc5622c2cf194a89e10a8ab413e1463bdd1b
+- sup/cascade-alphatest f8a0a0214ab3ebc9291994a320b3c38f28121de7
+- lscheck-fix 48cb758285df7cb3c548316e653fd2258f59ced5
+- Kept: refs checked out in Codex worktrees (C:\Users\quali\.codex\worktrees, not touched).

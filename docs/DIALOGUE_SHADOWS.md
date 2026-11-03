@@ -358,3 +358,11 @@ show wrong hair shadows (run without the native hair keys).
 Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one visible_unfocused_fg job per
 save, 260 s of plan, 22 PNG traces at 1024 px (about 1.9 GB for the batch), every toggle inside one run at
 a static dialogue shot; a `camera moving` line flags that shot (excluded from comparisons, counted; no longer a gate).
+
+### Dialogue result 2026-11-03, 04:14-04:49
+
+Moving shadow not seen by default with fix 2.
+At the port, duplicates by mesh with differing offsets: 16-18 per frame.
+`rt_cascade_static_only=1` removes every cascade caster, equivalent to `rt_cascade_casters=0`; keep it off.
+The static-only toggle hitches about 4 s: the ON shot now holds 12 s and traces at 8 s.
+Short diagnostic views are excluded from 60-frame judged gates; motion triplets are spaced 6 s apart to show a slow band.

@@ -268,6 +268,12 @@ M5.2 traces the same rays in 0.08-0.12 ms, so it was not ray cost.
   `compose GPU 0\.[0-4]\d\d ms median`: the 0.5 ms bound is 4 times M5.2's 0.12 ms for the same rays over
   two full-screen passes. Frame time ON minus OFF should fall from 2.45 ms to within the OFF spread.
 
+2026-11-03 cleanup: retire rt_water_rr_mv, rt_water_fg_mv and rt_water_glint_aa.
+Retain rt_water_rf_edge and rt_water_rr_hitdist off: their whole-water verdicts are invalid
+for reflections (wf8); re-measure with the wf8/wf9 reflection-only metric.
+See [KEY_AUDIT_20261103.md](KEY_AUDIT_20261103.md) for verdict sources and retained candidates.
+The historical measurements remain here; they do not close the reflection-specific defect in M5.3d.
+
 M5.3b screen-edge fade (`rt_water_rf_edge=0`, live, WATER_RF_EDGE on every compose variant, 2026-11-02): the
 compose's choice is binary per pixel and per frame (tier 1: C + A L - B, else C with the probe), with no temporal
 smoothing, and A L matches B only in its weight E, not in radiance (bins 29-31 log L / probe). Under a camera turn the
@@ -616,6 +622,26 @@ Energy is the post-water image (RR colour input) over the exposure, against the 
   The `mm2` expect line requires supported water draws, so a view without water is INVALID.
 - Previous-frame water reuse needs a deformation/flow motion contract; M5.1 measures static only.
 
+## Water hidden-hit reflection extension (branch rt-reflections-offscreen, 2026-11-03)
+
+Design and full source map: [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md), stage A. Candidate
+`rt_water_hit_shade=0` uses native material shading for supported tier 2/3 hits in both the
+geometric diagnostic and the forward-record composition trace. Tier 1 remains the screen
+source. Unknown rows/lighting and sky misses retain the native FS probe. Preserve the geometric
+tier histogram and report shaded/failure counts in existing device-local water statistics.
+
+The image equation remains `C' = max(C + A L - B, 0)`, with A/B and the normal from the actual
+water FS. This prevents double-counting; it does not qualify the inherited RF radiance bias.
+Out-of-frustum light-grid queries remain unsupported, so a later world-light/probe provider is
+required for full off-screen reflections. Directional game-environment sampling is a separate
+stage, guarded against cut roofs and unknown geometry.
+
+Qualification: ordinary key-off water SPIR-V identity; inspect replay inputs before claiming a
+water replay result; one unqueued S8 port still + turn OFF/ON/OFF job, predicted.json first.
+Use floating post-water colour/exposure and compose-delta accounting, never the pre-water dump
+or bloom PNG mean. Incremental GPU cost is unmeasured; the existing water chain is 0.53-0.67 ms.
+Off in every preset pending gates; Ultra only for first promotion. No live test was run here.
+
 ## wf9 compose camera correction (2026-11-03, offline candidate)
 
 wf8 S8 turning lost tier 1 (25% static to 0.4-1.5% of covered water) while compose used the
@@ -624,8 +650,10 @@ SpecId 1015 selects the correction with no request or ABI change. The CPU signal
 stash/stash-kept selections, not newer scenes. water_copy preserves outgoing CameraCB float4 13
 in cCam bytes 400-415 before overwrite, with validity in w; first copy cannot read undefined data.
 Compose binds the existing b64 camera buffer and shifts reflection, sun, local-light and refraction
-origins by current minus build camera. Ray distances are translation invariant; hit reconstruction,
-projection, light vectors and screen radiance stay in current camera space. No history or energy blend.
+origins by current minus build camera. Ray distances are translation invariant; screen hit reconstruction,
+projection, light vectors and screen radiance stay in current camera space. The hidden-hit
+shader receives the translated TLAS-space hit; its descriptor guard still requires frame/TLAS
+identity. Scene shift uses flag 32, hidden-hit eligibility uses flag 64. No history or energy blend.
 The Experimental GUI exposes Water camera correction, off in all presets. See the wf9 progress
 fragment and tools/live_batches/water_flicker_wf9 for offline checks and the unqueued S8 prediction:
 hidden share about 7-10%, covered-water tier 1 near 25%, static float energy within repeat noise.

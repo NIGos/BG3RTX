@@ -18,13 +18,13 @@
     "label": "energy-static-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 14,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 14,
+    "motion_end": 14,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
@@ -36,13 +36,13 @@
     "label": "energy-static-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 14,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 14,
+    "motion_end": 14,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
@@ -54,13 +54,13 @@
     "label": "energy-static-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 14,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 14,
+    "motion_end": 14,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
@@ -72,13 +72,13 @@
     "label": "energy-static-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 10,
+    "seconds": 14,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10,
-    "motion_end": 10,
+    "motion_start": 14,
+    "motion_end": 14,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
@@ -116,7 +116,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "snap-turn-0",
@@ -133,7 +134,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "diag-view-turn-0",
@@ -150,7 +152,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "return-0",
@@ -167,7 +170,8 @@
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "cost-turn-1",
@@ -184,7 +188,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "snap-turn-1",
@@ -201,7 +206,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,fg_snap=16",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "diag-view-turn-1",
@@ -218,7 +224,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,rt_debug=25,pan_capture=99101",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "return-1",
@@ -235,7 +242,8 @@
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "cost-turn-2",
@@ -252,7 +260,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "snap-turn-2",
@@ -269,7 +278,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "diag-view-turn-2",
@@ -286,7 +296,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25,pan_capture=99102",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "return-2",
@@ -303,7 +314,8 @@
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "cost-turn-3",
@@ -320,7 +332,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "snap-turn-3",
@@ -337,7 +350,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,fg_snap=16",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "diag-view-turn-3",
@@ -354,7 +368,8 @@
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1,rt_debug=25,pan_capture=99103",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "return-3",
@@ -371,7 +386,8 @@
     "direction": -1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "frame_interval": 4,
+    "_comment_turn_mode": "After camera_probe selects a winner ONLY: add turn_mode=hold_drag or centre_hold, frame_interval=1 and frame_delta_pixels=1 (or qualified speed). No winner selected; legacy remains active."
   },
   {
     "label": "restore",

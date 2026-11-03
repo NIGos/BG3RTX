@@ -327,6 +327,13 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
   if (stash_frame == now) return LightingUse::kThisFrame;
   return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
 }
+// The hit path borrows lighting descriptor sets only within the exact frame/TLAS.
+// Failure selects ordinary composition; it must not skip water shadows or refraction.
+inline constexpr bool hit_shade_frame_ok(LightingUse use,bool same_tlas) {
+  return use==LightingUse::kThisFrame && same_tlas;
+}
+inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
+
 // Why lighting_use refused (the "[water] compose stability" line): the stash cleared, too old, ahead.
 enum class LightingRefusal : uint32_t { kCleared = 0, kOld, kAhead };
 inline LightingRefusal lighting_refusal(uint64_t stash_frame, uint64_t now) {
@@ -447,7 +454,7 @@ inline constexpr uint32_t kCsSlotWordsLs = 128;   // core/water.cpp kCStatBytes 
 // water draw's colour copy).
 // Bit 4 the game's sun shadow replaced (rt_water_game_shadow, WATER_GSH variants only: with bit 1, a
 // game-shadowed record lit by the traced ray gets C + Dg; clear, the game's Vg stays where the ray is lit).
-inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u, kFlagSceneShift = 32u;
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u, kFlagSceneShift = 32u, kFlagHitShade = 64u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;
@@ -484,6 +491,12 @@ inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, Co
     (i == 0 ? out.copy : out.compose) += double(p[2] - p[0]) * ms_per_tick;
   }
   return pairs != 0 && out.copy + out.compose < 1000.0;
+}
+
+inline constexpr bool compose_plain_counter(uint32_t i) {
+  return i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
+      (i>=kCsLsRec && i<kCsLsSumL) || i==kCsLsChkShWithin || i==kCsNonFinite ||
+      (i==55 || (i>=kCsHitAttempt && i<kCsHitEnd)) || (i>=kCsRrRec && i<kCsRrSumGame);
 }
 
 }  // namespace bg3::water

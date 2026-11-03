@@ -30,7 +30,7 @@ HAIR_START = "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_or
 
 # Every phase writes every toggled key. Hair "on" is the product set: hair + scalp + physical origin.
 BASE = {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "rt_stats": "0",
-        "rt_primary_check": "0", "qa_exposure_hold": "1"}
+        "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_hair_gi_cull": "0"}
 ON = {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_hair_physical_origin": "1"}
 STATS = {"rt_stats": "1", "rt_primary_check": "1"}
 
@@ -94,7 +94,7 @@ def expect_every(kind):
     g = [
         {"name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
          "select": r"\[rt\] scene wait: \d+ frames", "match": r"got this frame's scene, 0 timeouts", "min": 1,
-         "windows": judged},
+         "windows": [w for w in judged if not w.startswith("diag-")]},
         {"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every judged window",
          "select": r"\[geo\] RT capture, last \d+ frames:", "match": r"opaque draws dropped \(buffer full\) 0\.00,",
          "min": 1, "windows": judged},
@@ -196,9 +196,50 @@ def job(name, save, kind, first):
         "estimated_phase_seconds": seconds,
         "expect_every": expect_every(kind),
     }
-    if name != first:
-        j["requires_success_of"] = [first]
     return j
+
+
+# Extra same-run GI traversal A/B in S8 and one dialogue. Prediction is recorded in
+# predicted.json before generating these plans. Every phase writes the new key.
+PERF = [
+    step("warm-cull-on", 25, **dict(ON, rt_hair_gi_cull="1")),
+    step("shot-cull-off-a", SHOT, True, **ON),
+    step("shot-cull-on", SHOT, True, **dict(ON, rt_hair_gi_cull="1")),
+    step("shot-cull-off-b", SHOT, True, **ON),
+    step("cost-hair-cull-off-a", 25, **ON),
+    step("cost-hair-cull-on", 25, **dict(ON, rt_hair_gi_cull="1")),
+    step("cost-hair-cull-off-b", 25, **ON),
+]
+PERF_LABELS = [p["label"] for p in PERF if not p["label"].startswith("warm-")]
+PERF_COST = [p["label"] for p in PERF if p["label"].startswith("cost-")]
+
+
+def perf_job(j, kind):
+    """Keep original qualification; add independently gated GI-cost windows."""
+    phases = plan[:-1] + PERF + plan[-1:]
+    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hq_perf_plan.json"
+    j["set"] += ",rt_hair_gi_cull=0"
+    j["estimated_phase_seconds"] = sum(p["seconds"] for p in phases)
+    j["timeout"] = j["estimated_phase_seconds"] + 300
+    j["expect_runner"] = [r"\[motion-plan\] pointer centred in owned foreground game"]
+    j["expect_runner"] += [rf"\[motion-trace\] phase={i} label={p['label']} repeat=0"
+                           for i, p in enumerate(phases) if p.get("trace_at")]
+    j["expect_runner"] += [rf"\[motion-plan\] complete phases={len(phases)}\b", "^Run ended: done"]
+    # Extend all judged/hair-on gates (including the S8 water gate) to these windows.
+    for g in j["expect_every"]:
+        if g.get("windows") == judged or g.get("windows") == hair_on:
+            g["windows"] = g["windows"] + PERF_LABELS
+    for prefix in ["rt passes", "gi"]:
+        metric = (rf"{prefix}: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)" +
+                  (r"; TLAS this frame [1-9]\d*, previous frame \d+, none 0" if prefix == "rt passes" else ""))
+        j["expect_every"].append({"name": f"{prefix} GPU cost: complete diagnostic-free samples in every GI-cull cost window",
+                                  "select": rf"{prefix}: GPU cost", "match": metric,
+                                  "min": 1, "windows": PERF_COST})
+    j["expect"].append(r"gi: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)")
+    j["purpose"] += (" GI-cost A/B: native hair remains on; warm rt_hair_gi_cull=1, "
+                     "then float energy shots and GPU cost cull off/on/off. Both rt passes and gi complete "
+                     "300-frame lines required per cost window; report remaining native-hair cost against no-hair baseline.")
+    return j, phases
 
 
 def main():
@@ -210,9 +251,12 @@ def main():
     (out / "plans").mkdir(parents=True, exist_ok=True)
     (out / "plans" / "hq_plan.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
     for name, save, kind in SAVES:
-        (out / "jobs" / f"{name}.json").write_text(json.dumps(job(name, save, kind, SAVES[0][0]), indent=1) + "\n",
-                                                   encoding="utf-8")
-    print(f"{len(SAVES)} jobs, plan hq_plan.json: {len(plan)} phases, {seconds} s, {len(traced)} PNG traces per job -> {out}")
+        j = job(name, save, kind, SAVES[0][0])
+        if name in {"hq1-s8-water-fg2", "hq2-dialogue1-fg2"}:
+            j, phases = perf_job(j, kind)
+            (out / "plans" / "hq_perf_plan.json").write_text(json.dumps(phases, indent=1) + "\n", encoding="utf-8")
+        (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
+    print(f"{len(SAVES)} jobs; hq_plan {len(plan)} phases/{seconds} s; hq1/hq2 GI-cull plan {len(plan) + len(PERF)} phases/{seconds + sum(p['seconds'] for p in PERF)} s -> {out}")
 
 
 if __name__ == "__main__":

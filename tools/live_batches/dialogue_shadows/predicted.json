@@ -1,5 +1,12 @@
 {
  "_rule": "Written and committed BEFORE the run (AGENTS.md). Observable: the intrusive shadow on the speaking characters at the held dialogue shot. Character ROI = G-buffer pixels of skin and hair class (RT2.a class bits of the trace; Hair/Scalp/Pubes class 5) in the shot's trace. A shot 'removes' the shadow when the ROI mean of the scene colour before post (dumps.json pass fs 5c3fdabc, 0.2126 r + 0.7152 g + 0.0722 b) rises above its OFF neighbours by more than the spread of shot-off-a..e in that ROI AND the shadow shape is gone in the PNG pair (ab_compare.py diff). 'keeps' = within the OFF spread. Whole-frame energy: every toggle except nosun and nohold only removes occlusion, so ON >= OFF - spread; a darker ON is a defect of the toggle, not attribution.",
+ "_result_20261103": {
+  "run": "2026-11-03 04:14-04:49",
+  "moving_shadow": "Not seen by default with fix 2. This observation does not qualify rt_cascade_static_only.",
+  "port_duplicates": "Duplicates by mesh with differing offsets: 16-18 per frame at the port.",
+  "static_only": "rt_cascade_static_only=1 removes every cascade caster, equivalent to rt_cascade_casters=0. It must stay off; only explicit diagnostic ON windows enable it.",
+  "gate_repairs": "Short diag-view windows are not judged by 60-frame scene/capture gates. The static-only ON shot holds 12 s and traces at 8 s after the roughly 4 s toggle hitch. Motion traces are 6 s apart with a third trace to reveal a slow band."
+},
  "_hypotheses": {
   "H1": "hair/scalp cards captured OPAQUE (rt_native_hair=0 in the user's session: stride 64) cast solid sun and local shadows on faces/necks",
   "H2": "cinematic dialogue lights: D-LS now traces character-owned lights (ls_owners=31), art-unshadowed lights (ls_noshadow=1) and every box light (user ls_box=2), so rig lights the art leaves unshadowed get shadowed by the characters' own heads, hair and shoulders. ls_owners/ls_noshadow act only on lights joined to per-light data (rt_local_shadows.hlsl:153-158); unmatched lights and every box light are always traced, so 'nolocal removes, nobox/charlights/noart keep' = an unmatched (likely dialogue-spawned) point/spot light (ls_debug=9 red/cyan; ls stats 'matched %')",

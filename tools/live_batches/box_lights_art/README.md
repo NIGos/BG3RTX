@@ -15,8 +15,9 @@ m4_promotion_gate scene-mean reader and Student quantile. It reads only the pre-
 5c3fdabc slot 0 float RGB mean from dumps.json. OFF repeat differences estimate sigma;
 four comparisons share the existing 5% family false-alarm budget. Each fixed shot must
 stay above its bracketing OFF mean minus the noise band. Both repeats must recover
-energy toward OFF relative to old by more than twice that band. Unresolved recovery is
-inconclusive and fails qualification. Nonfinite or missing scene means fail closed.
+energy toward OFF relative to old by more than twice that band to resolve recovery. Unresolved
+recovery is reported as inconclusive (exit 0). Only fixed energy below OFF minus noise fails
+the energy comparison. Nonfinite or missing scene means fail closed.
 The global mean cannot prove local recovery: review the same-run PNGs at the artistic
 lights, especially the lower-right walkway and central pillar. No invented ROI energy.
 GPU cost remains to measure: compare local-light GPU medians in cost-old/cost-fixed

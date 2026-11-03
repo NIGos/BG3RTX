@@ -415,8 +415,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 4);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
-  CHECK(dev == (std::vector<std::string>{"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -907,6 +907,13 @@ static void test_apply_modes() {
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
+  const auto& hair_gi_cull = *find_knob("exp_hair_gi_cull");
+  CHECK(hair_gi_cull.dev_only && hair_gi_cull.experimental);
+  CHECK_EQ(code_default("rt_hair_gi_cull"), "0");
+  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "0", "1"));
+  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "1", "0"));
+  for (int preset = 0; preset < kPresetCount; ++preset) CHECK(hair_gi_cull.preset[preset] == 0);
+  for (int choice = 0; choice < 2; ++choice) CHECK(knob_apply(hair_gi_cull, choice) == Apply::Live);
   CHECK(key_change_needs_restart("rt_bvh_split","0","1"));
   CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
   for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);

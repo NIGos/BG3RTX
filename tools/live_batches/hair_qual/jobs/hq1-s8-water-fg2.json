@@ -4,16 +4,16 @@
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 550,
+ "timeout": 674,
  "repeat": 1,
  "live_batch": "hair-qual",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1024,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1024,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0",
  "args": [
   "-RealPresent",
   "-Foreground",
   "-Move",
   "-MovePlan",
-  "captures/live_batches/hair_qual/plans/hq_plan.json"
+  "captures/live_batches/hair_qual/plans/hq_perf_plan.json"
  ],
  "patterns": [
   "\\[hot\\]",
@@ -63,7 +63,8 @@
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
-  "\\[water\\] rt/water_reflect\\.hlsl\\?\\S*RT_SPEC_NATIVE=1\\S* water_reflect: built \\(spec hair=1 edge=\\d+\\)"
+  "\\[water\\] rt/water_reflect\\.hlsl\\?\\S*RT_SPEC_NATIVE=1\\S* water_reflect: built \\(spec hair=1 edge=\\d+\\)",
+  "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",
@@ -93,12 +94,15 @@
   "\\[motion-trace\\] phase=6 label=shot-off-b repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-hair-b repeat=0",
   "\\[motion-trace\\] phase=8 label=shot-off-c repeat=0",
-  "\\[motion-plan\\] complete phases=19\\b",
+  "\\[motion-trace\\] phase=19 label=shot-cull-off-a repeat=0",
+  "\\[motion-trace\\] phase=20 label=shot-cull-on repeat=0",
+  "\\[motion-trace\\] phase=21 label=shot-cull-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=26\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Native hair qualification (docs/progress/worktree-agent-a78f48005e3b350bd.md checklist) at Ultra (smoke_ultra keys) with the hair startup latches: first enable built in the background (no present gap >= 1000 ms, all done by settle-cam; first origin toggle built in toggle-off-a), PNG shots off/hair/off/hair/off for the character float energy (char_energy.py), rt_stats windows (primary check, hair origin), cost OFF/ON/OFF; every judged window: no background build, hair/scalp invalid 0, bounds 0, opaque cutouts 0; water reflections traced with hair on.",
- "estimated_phase_seconds": 250,
+ "purpose": "Native hair qualification (docs/progress/worktree-agent-a78f48005e3b350bd.md checklist) at Ultra (smoke_ultra keys) with the hair startup latches: first enable built in the background (no present gap >= 1000 ms, all done by settle-cam; first origin toggle built in toggle-off-a), PNG shots off/hair/off/hair/off for the character float energy (char_energy.py), rt_stats windows (primary check, hair origin), cost OFF/ON/OFF; every judged window: no background build, hair/scalp invalid 0, bounds 0, opaque cutouts 0; water reflections traced with hair on. GI-cost A/B: native hair remains on; warm rt_hair_gi_cull=1, then float energy shots and GPU cost cull off/on/off. Both rt passes and gi complete 300-frame lines required per cost window; report remaining native-hair cost against no-hair baseline.",
+ "estimated_phase_seconds": 374,
  "expect_every": [
   {
    "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -112,12 +116,15 @@
     "shot-off-b",
     "shot-hair-b",
     "shot-off-c",
-    "diag-rt-hairoff-a",
-    "diag-rt-hairon",
-    "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -137,7 +144,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -157,7 +170,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -177,7 +196,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ],
    "when_present": true
   },
@@ -198,7 +223,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -219,7 +250,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -264,7 +301,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -284,7 +327,13 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   },
   {
@@ -304,7 +353,35 @@
     "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
-    "cost-off-b"
+    "cost-off-b",
+    "shot-cull-off-a",
+    "shot-cull-on",
+    "shot-cull-off-b",
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
+   ]
+  },
+  {
+   "name": "rt passes GPU cost: complete diagnostic-free samples in every GI-cull cost window",
+   "select": "rt passes: GPU cost",
+   "match": "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+   "min": 1,
+   "windows": [
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
+   ]
+  },
+  {
+   "name": "gi GPU cost: complete diagnostic-free samples in every GI-cull cost window",
+   "select": "gi: GPU cost",
+   "match": "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
+   "min": 1,
+   "windows": [
+    "cost-hair-cull-off-a",
+    "cost-hair-cull-on",
+    "cost-hair-cull-off-b"
    ]
   }
  ]

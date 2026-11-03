@@ -41,6 +41,17 @@ So Q3 is answered: BG3 multiplies direct local and sun light by `mix(1, AO, 0.5)
 Our AO fold (RT AO / RT GI visibility into `b6.x`) therefore also darkens direct light
 by half its occlusion. That is the game's own formula, and it is kept.
 
+### 9.1a Water world-query candidate (2026-11-03)
+
+`rt_water_hit_shade=2` queries the current frame's point/spot union by world
+bounding sphere outside the froxel volume (REFLECTIONS_PLAN.md C). Unlisted b25
+slots are stale, not an active full list (ASSET_DB.md: Grymforge 1,182 valid-looking,
+39 listed). Membership/type is built once on GPU; nearest K=32, ties by slot id.
+More than K overlapping spheres retain the native probe and increment device-local,
+group-reduced `world truncated` counters. Sun/roof and global sky reuse native
+sources; world boxes/local probes and never-listed lights remain unsupported.
+Default off; cost and energy gates await an authorized S8 run. ABI unchanged.
+
 ### 9.2 What the pass does
 
 Full resolution, after the lighting and **before** the GI composite (so next frame's

@@ -96,10 +96,11 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar; 1 was rt_scene_rebase).
-  VkPipeline variants[256] = {};
-  uint64_t variant_generations[256] = {};
-  std::string variant_files[256];
+  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
+  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline.
+  VkPipeline variants[bg3::shader_variant::kPipelineSlots] = {};
+  uint64_t variant_generations[bg3::shader_variant::kPipelineSlots] = {};
+  std::string variant_files[bg3::shader_variant::kPipelineSlots];
 };
 
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
@@ -1079,7 +1080,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
   const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
-  const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const bool hair_gi_cull = sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_cull", 0) != 0;
+  const unsigned variant = sv::hair_gi_cull_slot(file, hair_gi_cull) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1127,6 +1129,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
     if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
   }
+  if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();
   const bool known = p.variants[variant] && p.variant_files[variant] == slot_key;
   // Diagnostic callers may ignore the return value: never expose a different specialization while building.
@@ -1411,6 +1414,7 @@ VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
 uint32_t* g_stats_map = nullptr;
 uint32_t g_stats_slot = 0;
 uint64_t g_stats_frame[kStatsRing] = {};
+bool g_stats_scene_current[kStatsRing] = {};
 uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 float g_frame_m4 = 0;     // set0/b0 _m4 (skin shaded white), raw counter 54
@@ -1529,7 +1533,7 @@ bool stats_init() {
 
 // Picks this frame's slot (cleared on the GPU) after folding in the one written
 // kStatsRing - 1 frames ago.
-void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
+void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_current) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
@@ -1581,8 +1585,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
-      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157))
+      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157) && i < int(kOmmCheckFirst))
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
+    bg3::omm::fold_check_stats(g_stats_sum + kOmmCheckFirst, c + kOmmCheckFirst * 64, g_stats_scene_current[slot]);
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     rf_hit_fold(c);
     hit_em_fold(c);
@@ -1598,6 +1603,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   }
   g_stats_slot = slot;
   g_stats_frame[slot] = now;
+  g_stats_scene_current[slot] = scene_current;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   if (!full) {   // only the guards are wanted: the statistics report stays off
@@ -2496,7 +2502,7 @@ bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) 
 // pack must compile what ran (RT_CASCADE_MASKS: GI rays trace 0x01, never the cascade instance).
 std::string pipe_defines(const Pipe& p){
  if(!p.pipeline)return {};
- for(int i=0;i<256;++i)if(p.variants[i]==p.pipeline){
+ for(unsigned i=0;i<bg3::shader_variant::kPipelineSlots;++i)if(p.variants[i]==p.pipeline){
   const std::string& f=p.variant_files[i];const size_t q=f.find('?');
   return q==std::string::npos?std::string():f.substr(q+1);
  }
@@ -2692,7 +2698,8 @@ void ls_timing_collect() {
 // usually stamped one frame earlier. The TLAS and set 1 come as one pair from
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
-VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity) {
+VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current) {
+  *scene_current=false;
   *omm_identity=0;
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
@@ -2713,6 +2720,7 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
     if(!fast)tlas=reference;
   }
   ++(built == now ? g_rt_frames_traced : g_rt_frames_stale);
+  *scene_current=built == now;
   if (host->cfg_int("rt_order_trace", 0) > 0 && now > 600 && now % 600 < uint64_t(host->cfg_int("rt_order_trace", 0)))
     host->log("[order] rt passes cmd %p frame %llu scene built %llu", (void*)cmd, (unsigned long long)now,
               (unsigned long long)built);
@@ -2835,7 +2843,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Track D: the frame's TLAS for the ray-traced passes.
   VkDescriptorSet alpha = VK_NULL_HANDLE;
   s.omm_identity=0;
-  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity);
+  bool scene_current=false;
+  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity, &scene_current);
   b.omm_identity=s.omm_identity;
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
                !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) ||
@@ -2904,7 +2913,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
     // Every traced frame: the out-of-range guards are always counted.
     stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
-                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0));
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0), scene_current);
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -3057,8 +3066,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     memory_barrier(cmd, kCS, kCS);
     if (!ensure_occ() || !refresh(g_occ, "gi/rt_occ_stats.hlsl", g_occ_layout) ||
         !occ_run(cmd, b, pc, (sun_ok ? 1u : 0u) | (s.rt_gi_applied ? 2u : 0u))) {
-      if (!g_occ_logged) host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
-      g_occ_logged = true;
+      if (!g_occ_logged && g_builds.pending() == 0) {
+        host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
+        g_occ_logged = true;
+      }
     }
   } else if (g_occ_win.frames || g_occ_logged) {
     g_occ_win = occ::OccWindow{};   // a later window starts clean
@@ -3231,7 +3242,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
             box = true;
           }
         }
-        if (!box && !g_ls_box_missing_logged) {
+        if (!box && !g_ls_box_missing_logged && g_builds.pending() == 0) {
           host->log("ls box: requested but native set/layout or pipeline unavailable; retaining point/spot pass");
           g_ls_box_missing_logged = true;
         }
@@ -3412,9 +3423,24 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
+    if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
+        bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t))))) {
+      const VkDescriptorSet hs = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
+      if (hs && ((g_sunt_ok && g_sunt.view) || g_ls_nodata.view)) {
+        const Bg3Binding src[] = {s.l_flags,s.l_scale,s.l_clusters,s.l_index,s.l_lights,s.l_consts,s.l_shadows,s.l_atlas,s.l_cam2};
+        std::copy(std::begin(src), std::end(src), win.hit.lights);
+        win.hit_identity=s.omm_identity;
+        win.hit.game = s.game_set1; win.hit.game_layout = s.game_set1_layout;
+        win.hit.sun = hs; win.hit.sun_layout = g_sun_dsl;
+        win.hit.ndyn = s.game_set1_ndyn;
+        std::copy(s.game_set1_dyn, s.game_set1_dyn + s.game_set1_ndyn, win.hit.dyn);
+        bool slots = false;
+        for (uint32_t i=0;i<kSunRing;++i) if (g_sun_sets[i]==hs) slots=g_sun_slots[i];
+        wpc.ls_flags = (wpc.ls_flags & ~1u) | (slots && g_lsl_ok && host->cfg_int("ls_lights",1) ? 1u : 0u);
+        wpc.ls_flags |= g_sunt_ok && g_sunt.view ? (1u<<25) : 0u;
+      }
+    }
     if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
-    if ((host->cfg_int("rt_water_rr_mv", 0) || host->cfg_int("rt_water_fg_mv", 0)) && g_mv_view)   // g_mv_image: RG16F, written this frame (frame start)
-      win.mv_image = g_mv_image, win.mv_view = g_mv_view, win.mv_format = VK_FORMAT_R16G16_SFLOAT, win.mv_layout = g_mv_layout;
     water_rf(cmd, win);
   }
   timestamp(cmd, 3);
