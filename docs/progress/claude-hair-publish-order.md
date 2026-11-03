@@ -6,3 +6,8 @@
   The counts pair with the applied tag. Layer only, no shader change. Build, 147/147 CTests. Not run live: use it if
   the confirming run shows "carry an adjacent frame's tag" lines (A/B: toggle the key live, expect those lines to stop
   and strand draws > 0 in every strand window).
+- Knob exp_hair_primary_order (Developer, dev_only, Live, off in every preset). The 300-frame counted-frame line now
+  reports the counted frames with adjacent-tag pixels and the header order. hv5 gains the header-order A/B after its
+  stages: order-prepass-1/2 (key 0: adjacent-tag frames observed, not gated) and order-gbuffer-1/2 (key 1: no
+  adjacent-tag frame in -2, gated), strand draws gated in all four; predicted.json has the decision. live_flow 5 jobs 0
+  failing; 147/147 CTests.

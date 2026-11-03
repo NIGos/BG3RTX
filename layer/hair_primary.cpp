@@ -74,6 +74,7 @@ struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] =
 CountSeen g_seen;
 uint64_t g_refused_total = 0;
 uint64_t g_misaligned_logged = 0;   // counted frames whose strand pixels all carried an adjacent frame's tag
+uint64_t g_adjacent_window = 0, g_adjacent_total = 0;   // counted frames with any adjacent-tag strand pixel
 // rt_hair_groom_primary_order (common/hair_primary.h pick_publish): the publishes waiting for their G-buffer pass,
 // and what was applied. The header bytes of one publish and the per-groom keys/LODs the count of its frame needs.
 struct StagedHeader {
@@ -215,6 +216,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
     // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
+    if (other_total) ++g_adjacent_window;   // counted frames with adjacent-tag strand pixels (the 300-frame line)
     if (!total && other_total && g_misaligned_logged++ % 300 == 0)
       log("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
           "against another publish): no strike (%llu such frames)", (unsigned long long)s.frame, other_total,
@@ -698,8 +700,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         at += std::snprintf(per + at, sizeof per - at, " %u:%u/LOD%u(%04llx)", k, g_seen.pixels[k], unsigned(g_seen.lods[k]),
                             (unsigned long long)(g_seen.keys[k] >> 48));
     }
+    g_adjacent_total += g_adjacent_window;
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
-        "(session %llu)", (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total);
+        "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
+        (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total,
+        (unsigned long long)g_adjacent_window, (unsigned long long)g_adjacent_total, g_order ? "G-buffer" : "prepass");
+    g_adjacent_window = 0;
   }
   if (now % 300 == 0)
     log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
