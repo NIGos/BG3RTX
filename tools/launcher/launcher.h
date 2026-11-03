@@ -58,6 +58,7 @@ bool launch(const LaunchPlan& p, DWORD* pid, std::wstring* err);
 
 // ---- GPU probe (Vulkan, own process, no layers) ----
 std::vector<bg3::settings::Gpu> probe_gpus(std::wstring* err);
+bool local_grooms_available(const std::wstring& database_directory);
 int best_gpu(const std::vector<bg3::settings::Gpu>& gpus);   // -1 if none
 std::wstring caps_text(unsigned caps);
 

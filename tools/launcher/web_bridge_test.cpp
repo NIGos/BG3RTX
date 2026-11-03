@@ -46,6 +46,8 @@ int main(int argc,char** argv){
   check(json.find("Ray-traced + hidden roofs")!=std::string::npos);
   check(json.find("Far-field sun bounce")==std::string::npos);
   check(json.find("Opacity micromaps")!=std::string::npos);
+  check(json.find("Measured: Not measured")==std::string::npos);
+  check(json.find("\"cost\":\"Not measured\"")!=std::string::npos);
   check(json.find("Physical hair ray origins")==std::string::npos);
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==0);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
@@ -117,6 +119,39 @@ int main(int argc,char** argv){
   written.clear();tb.handle("{\"type\":\"set\",\"id\":\"fps_cap\",\"value\":60}");tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
   bool target_written=false;for(auto& kv:written)target_written|=kv.first=="ab_target";check(!target_written);
 
+  // Unsupported strand activation is rejected independently for every required
+  // device/file capability, and the missing prerequisite is visible on the card.
+  const auto& primary=st::kKnobs[st::knob_index("exp_hair_groom_primary")];
+  for (auto missing : {st::kCapRayQuery, st::kCapLinearSweptSpheres, st::kCapShaderInt64,
+                       st::kCapFragmentStores, st::kCapHairGrooms}) {
+    launcher::State hair;hair.caps=~unsigned(missing);hair.values=st::preset_values(st::kUltra);
+    int calls=0;launcher::web::Hooks hh;hh.save=[&](launcher::State&,const st::KVList&,std::string&){++calls;return true;};
+    launcher::web::Bridge hb(hair,hh);hb.experimental=true;
+    hb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom_primary\",\"value\":1}");
+    check(hair.values[st::knob_index(primary.id)]==0);
+    auto text=hb.state_json();
+    const char* reason=missing==st::kCapLinearSweptSpheres?"linear swept spheres":missing==st::kCapShaderInt64?"shaderInt64":missing==st::kCapFragmentStores?"fragmentStoresAndAtomics":missing==st::kCapHairGrooms?"local hair groom files":"hardware ray queries";
+    check(text.find(reason)!=std::string::npos);
+    hair.values[st::knob_index(primary.id)]=1;
+    hb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");hb.handle("{\"type\":\"confirm\"}");
+    check(calls==0);
+  }
+  launcher::State hair;hair.caps=~0u;hair.base=st::code_defaults();hair.base["sharc_device"]="0";hair.values=st::preset_values(st::kUltra);
+  hair.values[st::knob_index(primary.id)]=1;st::KVList startup;
+  launcher::web::Hooks hh;hh.save=[&](launcher::State&,const st::KVList& keys,std::string&){startup=keys;return true;};
+  launcher::web::Bridge hb(hair,hh);hb.experimental=true;
+  auto hair_preview=hb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");
+  check(hair_preview.find("64-bit shader integers at startup")!=std::string::npos);
+  hb.handle("{\"type\":\"confirm\"}");
+  check(std::find(startup.begin(),startup.end(),std::make_pair(std::string("sharc_device"),std::string("1")))!=startup.end());
+  // Badges follow saved-to-selected frame-generation transitions.
+  for (int from=0;from<4;++from) for(int to=0;to<4;++to){
+    launcher::State fg;fg.caps=~0u;fg.values=st::preset_values(st::kUltra);auto i=st::knob_index("frame_generation");fg.values[i]=from;
+    launcher::web::Bridge fb(fg);fg.values[i]=to;auto text=fb.state_json();auto start=text.find("\"id\":\"frame_generation\"");
+    auto card=text.substr(start,text.find("\"choices\":[",start)-start);
+    check(card.find("\"apply\":\""+std::string(st::apply_label(st::transition_apply(st::kKnobs[i],from,to)))+"\"")!=std::string::npos);
+  }
+
   // Every serialized card uses the current choice's Apply, and every
   // prerequisite is surfaced even when already satisfied.
   for(int i=0;i<st::kKnobCount;++i){
@@ -126,7 +161,7 @@ int main(int argc,char** argv){
       launcher::web::Bridge qb(qs);qb.experimental=true;auto text=qb.state_json();
       auto start=text.find("\"id\":\""+std::string(k.id)+"\"");check(start!=std::string::npos);
       auto end=text.find("\"choices\":[",start);auto card=text.substr(start,end-start);
-      check(card.find("\"apply\":\""+std::string(st::apply_label(st::knob_apply(k,c)))+"\"")!=std::string::npos);
+      check(card.find("\"apply\":\""+std::string(st::apply_label(st::transition_apply(k,c,c)))+"\"")!=std::string::npos);
       for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find("needs "+std::string(st::kKnobs[st::knob_index(n.knob)].label))!=std::string::npos);
       for(auto& n:k.choices[c].need)if(n.knob){
         qs.values[st::knob_index(n.knob)]=0;

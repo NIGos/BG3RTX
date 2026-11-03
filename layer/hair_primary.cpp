@@ -6,7 +6,7 @@
 // matched draw (its index range is in the groom set of the latest build) is drawn with the variant. The strand
 // shader reads the frame record (common/hair_primary.h) through the header address baked as specialization
 // constants 1100/1101; bvhsplit publishes the header after the groom TLAS build (hair_primary_publish).
-// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; the key is a live A/B.
+// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; activation is latched at device creation until hot activation is qualified.
 #include "host.h"
 
 #include <algorithm>
@@ -31,6 +31,7 @@ struct HpBuf {
 };
 
 DeviceData* g_dd = nullptr;
+bool g_startup_enabled = false;        // Restart safety gate; INI reload cannot enable strands.
 bool g_frag_stores = false;            // fragmentStoresAndAtomics enabled by the game
 std::mutex g_mu;
 HpBuf g_header, g_pixels;              // header: fixed (its address is in every variant); pixels: render size
@@ -317,6 +318,7 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_dd) return;
   g_dd = dd;
+  g_startup_enabled = cfg_int("rt_hair_groom_primary", 0) != 0;
   bool stores = ci->pEnabledFeatures && ci->pEnabledFeatures->fragmentStoresAndAtomics;
   for (auto p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext)
     if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
@@ -357,6 +359,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
     *b = HpBuf{};
   }
   g_dd = nullptr;
+  g_startup_enabled = false;
   g_header_tried = false;
 }
 
@@ -464,7 +467,7 @@ void hair_primary_forget_pipeline(VkPipeline p) {
 }
 
 bool hair_primary_wanted() {
-  return cfg_hot(CfgHot::rt_hair_groom_primary) != 0 && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
+  return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
 }
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
