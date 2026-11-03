@@ -171,6 +171,43 @@ def test_quality_options():
     check("dedupe keeps separate strands", convert.dedupe(g3)[1] == 0)
 
 
+def test_run_radii():
+    # Compare against the original per-run definition, including holes and collapsed triangles.
+    rng = np.random.default_rng(15)
+    lengths = rng.integers(1, 12, 300)
+    sid = np.repeat(np.arange(len(lengths)), lengths)
+    hit = np.where(rng.random(len(sid)) < 0.25, -1, 0)
+    width = rng.uniform(1e-6, 0.02, len(sid))
+    width[rng.random(len(sid)) < 0.2] = 0
+    width[rng.random(len(sid)) < 0.1] = np.nan
+    width[rng.random(len(sid)) < 0.1] = np.inf
+    # Odd/even measured counts, 3x median cap, MAX_RADIUS, all-invalid and singleton runs.
+    sid = np.r_[np.repeat(np.arange(300, 306), [5, 4, 4, 2, 1, 4]), sid]
+    hit = np.r_[np.zeros(20, int), hit]
+    width = np.r_[[0.0002, 0.0004, 0.0006, 0, np.nan, 0.0002, 0.0004, 0, np.inf,
+                   0.0001, 0.0001, 0.0001, 0.1, 0, np.inf, 0.1, 0.01, 0.02, 0.03, 0.04], width]
+    want_i, want_n, want_r, dropped = [], [], [], 0
+    a = 0
+    while a < len(sid):
+        b = a + 1
+        while b < len(sid) and sid[b] == sid[a] and (hit[b] >= 0) == (hit[a] >= 0):
+            b += 1
+        if hit[a] >= 0 and b - a >= 2:
+            r = width[a:b] / 2
+            ok = np.isfinite(r) & (r > 0)
+            if ok.any():
+                r = np.where(ok, r, np.median(r[ok]))
+                r = np.minimum(np.minimum(r, 3 * np.median(r)), convert.MAX_RADIUS)
+                want_i.extend(range(a, b)); want_n.append(b - a); want_r.extend(r)
+            else:
+                dropped += 1
+        a = b
+    idx, n, radii, got_dropped = convert.run_radii(hit, sid, width)
+    check("run radii: exact original indices, lengths, medians and caps",
+          np.array_equal(idx, want_i) and np.array_equal(n, want_n) and np.array_equal(radii, want_r)
+          and got_dropped == dropped, (got_dropped, dropped))
+
+
 def test_thin():
     h, w = 256, 64
     m = np.zeros((h, w, 4), np.uint8)
@@ -247,6 +284,15 @@ def test_geom():
     d = np.linalg.norm(pts[:, None] - pts[None], axis=2)
     want = {(i, j) for i, j in zip(*np.nonzero(d < 0.001)) if i < j}
     check("pairs within distance = brute force", got == want and len(want) > 10, (len(got), len(want)))
+    # Include exact cell/distance boundaries and duplicate positions, not just uniform noise.
+    pts = np.r_[rng.integers(-4, 5, (80, 3)).astype(float), np.zeros((4, 3))]
+    for distance in (0.5, 1.0, 1.5, 3.0):
+        pairs = geom.pairs_within(pts, distance)
+        got = {tuple(sorted(x)) for x in pairs.tolist()}
+        delta = pts[:, None] - pts[None]
+        d2 = np.einsum("ijk,ijk->ij", delta, delta)
+        want = {(i, j) for i, j in zip(*np.nonzero(d2 < distance * distance)) if i < j}
+        check(f"pairs grid boundaries and duplicates, distance {distance}", got == want and len(pairs) == len(got))
 
 
 def test_batch_catalogue():
@@ -279,6 +325,27 @@ def test_locate_overlap():
     check("locate hit and miss", list(hit) == [0, -1], hit)
     check("locate counts overlap", list(inside) == [2, 0], inside)
     check("locate barycentrics", np.allclose(bary[0], [0.6, 0.2, 0.2]), bary[0])
+    rng = np.random.default_rng(7)
+    for dtype in (np.float32, np.float64):
+        uv = rng.random((40, 2)).astype(dtype)
+        tris = np.r_[rng.integers(0, len(uv), (30, 3)), [[0, 1, 2], [2, 1, 0], [0, 0, 1]]]
+        points = np.r_[rng.random((200, 2)), uv].astype(dtype)
+        hit = np.full(len(points), -1)
+        bary = np.zeros((len(points), 3))
+        inside = np.zeros(len(points), int)
+        order = np.argsort(points[:, 1])
+        for t, tri in enumerate(tris):
+            v = uv[tri, 1]
+            lo, hi = np.searchsorted(points[order, 1], [v.min() - convert.EPS, v.max() + convert.EPS])
+            idx = order[lo:hi]
+            b = convert.barycentric(uv[tri], points[idx])
+            inside[idx] += np.all(b > convert.EPS, 1)
+            keep = np.all(b >= -convert.EPS, 1) & (hit[idx] < 0)
+            hit[idx[keep]] = t
+            bary[idx[keep]] = b[keep]
+        got = convert.locate(uv, tris, points)
+        check(f"locate batched exact first hits, counts and barycentrics {dtype.__name__}",
+              all(np.array_equal(a, b) for a, b in zip(got, (hit, bary, inside))))
 
 
 def test_render():
@@ -578,7 +645,7 @@ def test_cost():
     check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
 
 
-for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
