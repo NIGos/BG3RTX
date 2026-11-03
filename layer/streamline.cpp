@@ -399,7 +399,9 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
   si.signalSemaphoreCount = 1;
   si.pSignalSemaphores = &S.sem;
   dd->vk.ResetFences(dev, 1, &S.fence);
-  if (dd->vk.QueueSubmit(queue, 1, &si, S.fence) != VK_SUCCESS) return g_snaps_left = 0, false;
+  const VkResult submitted = dd->vk.QueueSubmit(queue, 1, &si, S.fence);
+  fault_on_result(dd, submitted, "present capture submission");
+  if (submitted != VK_SUCCESS) return g_snaps_left = 0, false;
   out = *info;
   wait = S.sem;
   out.waitSemaphoreCount = 1;
@@ -414,7 +416,12 @@ void snap_finish(DeviceData* dd) {
   Snap& S = g_snap;
   if (!S.pending) return;
   S.pending = false;
-  dd->vk.WaitForFences(dd->device, 1, &S.fence, VK_TRUE, 2000000000ull);
+  const VkResult ready = dd->vk.WaitForFences(dd->device, 1, &S.fence, VK_TRUE, 2000000000ull);
+  fault_on_result(dd, ready, "present capture fence wait");
+  if (ready != VK_SUCCESS) {
+    g_snaps_left = 0;
+    return;
+  }
   void* p = nullptr;
   if (dd->vk.MapMemory(dd->device, S.mem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS && p) {
     uint32_t w = g_sc_extent.width, h = g_sc_extent.height;

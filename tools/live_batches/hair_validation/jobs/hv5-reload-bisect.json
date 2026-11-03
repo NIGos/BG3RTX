@@ -4,13 +4,56 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 995.0,
+  "timeout": 1230,
   "repeat": 1,
   "live_batch": "hair-validation",
-  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1,rt_hair_groom_primary=1",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1",
   "live_flow": {
     "startup_only": [
       "rt_hair_groom_primary"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 9.721322099807683,
+        "windows": 94,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 9.590792838861653,
+        "windows": 81,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.024700.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.041437.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.104736.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.134031.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq2-dialogue1-fg2.1.054626.log"
+        ]
+      }
     ]
   },
   "args": [
@@ -87,13 +130,13 @@
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
-    "\\[motion-plan\\] complete phases=23\\b",
+    "\\[motion-plan\\] complete phases=28\\b",
     "^Run ended: done",
     "\\[hair-reload\\] selected save reload complete"
   ],
   "stop_on_dump": true,
   "purpose": "Reload bisect (hv1 device lost after F8): four F8 reloads in one launch with rt_hair_groom_primary latched on: native hair + scalp, then + physical origin, + strand groom (RT and on screen), + the fibre pass, each with a 60 s survival window; the strand stages need strand draws. The first stage without frames after its reload names the culprit.",
-  "estimated_phase_seconds": 337.1,
+  "estimated_phase_seconds": 749.5,
   "expect_every": [
     {
       "name": "frames rendered in every survival window after a reload",
@@ -139,6 +182,29 @@
         "survive-c-strands-3",
         "survive-d-fibre-2",
         "survive-d-fibre-3"
+      ]
+    },
+    {
+      "name": "strands drawn in the header-order A/B",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-prepass-1",
+        "order-prepass-2",
+        "order-gbuffer-1",
+        "order-gbuffer-2"
+      ]
+    },
+    {
+      "name": "G-buffer header order: no counted frame with adjacent-tag pixels",
+      "select": "\\[hair primary\\] counted frame \\d+:",
+      "match": "counted frames with adjacent-tag pixels 0 \\(session \\d+\\), header order G-buffer",
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "order-gbuffer-2"
       ]
     }
   ],

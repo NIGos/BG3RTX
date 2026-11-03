@@ -311,4 +311,57 @@ if subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True).r
           "worktree ids hash raw checkout bytes, including filtered files")
     check(all(si.git_blob_id(head.read(p)) == head.ids[p] for p in shared[:50]),
           "cat-file contents match their ids")
+# Retirement fallback must not hide compile errors, changed arithmetic, invalid
+# modules or entry mismatches; only the three retired constants may be frozen.
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+import tools.hair_retirement_check as hr
+
+asm = '''OpDecorate %1 SpecId 1017
+OpDecorate %2 SpecId 1018
+OpDecorate %3 SpecId 1019
+OpDecorate %4 SpecId 1025
+%1 = OpSpecConstant %9 0
+%2 = OpSpecConstant %9 0
+%3 = OpSpecConstant %9 0
+%4 = OpSpecConstant %9 0
+'''
+with tempfile.TemporaryDirectory() as td:
+    tmp = Path(td)
+    fake_tool = SimpleNamespace(dxc=tmp / 'dxc.exe')
+    with patch.object(hr.subprocess, 'run', return_value=SimpleNamespace(stdout=asm)):
+        hr.retired_off(fake_tool, tmp / 'in.spv', tmp / 'out.spv')
+    frozen = (tmp / 'out.spvasm').read_text()
+    check(all(f'%{i} = OpConstant %9 0' in frozen for i in (1, 2, 3)), 'retired IDs frozen at zero')
+    check('OpDecorate %4 SpecId 1025' in frozen and '%4 = OpSpecConstant %9 0' in frozen,
+          'surviving specialization remains variable')
+    with patch.object(hr.subprocess, 'run', return_value=SimpleNamespace(stdout=asm.replace('%1 = OpSpecConstant %9 0', '%1 = OpSpecConstant %9 1'))):
+        try:
+            hr.retired_off(fake_tool, tmp / 'in.spv', tmp / 'out.spv')
+            check(False, 'nonzero retired default must fail')
+        except RuntimeError:
+            check(True, 'nonzero retired default rejected')
+    module = SimpleNamespace(ok=True, valid=True, entries=[SimpleNamespace(name='main')], blob=lambda e: b'module')
+    check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=False), tmp)), 'compile failure rejected')
+    check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=True, valid=False), tmp)), 'validation failure rejected')
+    check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=True, valid=True, entries=[]), tmp)), 'missing entry rejected')
+    with patch.object(hr, 'retired_off', side_effect=lambda t, s, d: s), \
+         patch.object(hr, 'opt', side_effect=lambda t, s, d, *p: s), \
+         patch.object(hr, 'canonical', side_effect=[([], ['same']), ([], ['same']),
+                                                   ([], ['old arithmetic']), ([], ['new arithmetic'])]):
+        check(not hr.compare_retired(fake_tool, module, module, tmp), 'equivalent modules accepted')
+        check(bool(hr.compare_retired(fake_tool, module, module, tmp)), 'changed arithmetic rejected')
+    rows = [('same', si.SAME, ''), ('changed', 'DIFFERENT', ''), ('broken', 'compile', 'error')]
+    with patch.object(hr, 'compile_requests', return_value={'changed': module}) as compile_mock, \
+         patch.object(hr, 'compare_retired', return_value='') as compare_mock, quiet:
+        proofs = hr.retirement_fallback(rows, SimpleNamespace(label='base'), SimpleNamespace(label='new'), None, None, 'test')
+    check([p['path'] for p in proofs] == ['raw identity', 'retirement equivalence (1017-1019=0)', 'failed'],
+          'only DIFFERENT uses fallback, raw identity and failures retain their paths')
+    check(compare_mock.call_count == 1 and all(c.args[1] == ['changed'] for c in compile_mock.call_args_list),
+          'fallback compiles only differing identical request spellings')
+    with patch.object(hr, 'compile_requests', return_value={'changed': module}), \
+         patch.object(hr, 'compare_retired', return_value='arithmetic differs'), quiet:
+        proofs = hr.retirement_fallback(rows, SimpleNamespace(label='base'), SimpleNamespace(label='new'), None, None, 'test')
+    check(proofs[1]['path'] == 'failed', 'failed retirement proof remains a gate failure')
 print(f"shader_identity_test: {checks} checks passed")

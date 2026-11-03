@@ -20,7 +20,7 @@
     "wait_log": [
       "gi: trace pass .*GPU median"
     ],
-    "wait_log_timeout": 9.0
+    "wait_log_timeout": 9.432000000000698
   },
   {
     "label": "warmup-scaled",
@@ -31,18 +31,18 @@
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "settle-off-a",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 2.2,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
   },
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.2,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -59,13 +59,13 @@
   {
     "label": "settle-on",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 2.2,
     "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
   },
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.2,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -82,13 +82,13 @@
   {
     "label": "settle-off-b",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 2.2,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
   },
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.2,
     "set": "qa_exposure_hold=1"
   },
   {

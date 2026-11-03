@@ -84,21 +84,32 @@ def locate(uv, tris, points):
     triangles contain it strictly inside (> 1 means overlapping UVs within the card)."""
     hit = np.full(len(points), -1)
     bary = np.zeros((len(points), 3))
-    inside_count = np.zeros(len(points), int)
     order = np.argsort(points[:, 1])
     sorted_v = points[order, 1]
-    for t, tri in enumerate(tris):
-        uvt = uv[tri]
-        lo, hi = np.searchsorted(sorted_v, [uvt[:, 1].min() - EPS, uvt[:, 1].max() + EPS])
-        if lo == hi:
-            continue
-        idx = order[lo:hi]
-        b = barycentric(uvt, points[idx])
-        inside = np.all(b >= -EPS, 1)
-        inside_count[idx] += np.all(b > EPS, 1)
-        sel = inside & (hit[idx] < 0)
-        hit[idx[sel]] = t
-        bary[idx[sel]] = b[sel]
+    uvt = uv[tris]
+    v = uvt[:, :, 1]
+    # Match scalar EPS arithmetic on both NumPy 1 (promotion) and 2 (weak scalar typing).
+    dt = np.result_type(v.dtype.type(0) - EPS)
+    bounds = np.searchsorted(sorted_v, np.stack([v.min(1).astype(dt) - EPS, v.max(1).astype(dt) + EPS], 1))
+    n = bounds[:, 1] - bounds[:, 0]
+    t = np.repeat(np.arange(len(tris)), n)
+    idx = order[np.repeat(bounds[:, 0] - np.r_[0, np.cumsum(n)[:-1]], n) + np.arange(n.sum())]
+    # Batch the same barycentric arithmetic over all candidate triangle/sample pairs. Reduce the
+    # triangle indices to keep the first containing triangle, including overlapping card UVs.
+    e0, e1 = uvt[:, 1] - uvt[:, 0], uvt[:, 2] - uvt[:, 0]
+    det = e0[:, 0] * e1[:, 1] - e0[:, 1] * e1[:, 0]
+    det = np.where(np.abs(det).astype(dt) < 1e-12, np.nan, det)
+    d = points[idx] - uvt[t, 0]
+    l1 = (d[:, 0] * e1[t, 1] - d[:, 1] * e1[t, 0]) / det[t]
+    l2 = (e0[t, 0] * d[:, 1] - e0[t, 1] * d[:, 0]) / det[t]
+    b = np.stack([1 - l1 - l2, l1, l2], 1)
+    inside_count = np.bincount(idx[np.all(b > EPS, 1)], minlength=len(points))
+    inside = np.all(b >= -EPS, 1)
+    hit[:] = len(tris)
+    np.minimum.at(hit, idx[inside], t[inside])
+    hit[hit == len(tris)] = -1
+    sel = inside & (hit[idx] == t)
+    bary[idx[sel]] = b[sel]
     return hit, bary, inside_count
 
 
@@ -140,6 +151,40 @@ def tile_strands(mask, tile_grid, step, threshold=128):
     return out, stats
 
 
+def run_radii(hit, sid, width):
+    """Mapped runs with at least two samples: point indices, lengths, radii and widthless count."""
+    ok = hit >= 0
+    brk = np.r_[True, (sid[1:] != sid[:-1]) | (ok[1:] != ok[:-1]), True]
+    bounds = np.flatnonzero(brk)
+    starts, lengths = bounds[:-1], np.diff(bounds)
+    keep = ok[starts] & (lengths >= 2)
+    starts, lengths = starts[keep], lengths[keep]
+    run = np.repeat(np.arange(len(starts)), lengths)
+    idx = np.repeat(starts - np.r_[0, np.cumsum(lengths)[:-1]], lengths) + np.arange(lengths.sum())
+    r = width[idx] / 2
+    # Collapsed world triangles have no measured width: borrow the run's median, or drop a
+    # run with none (the layer refuses r <= 0). Near-degenerate UVs instead need a 3x median cap.
+    measured = np.isfinite(r) & (r > 0)
+    counts = np.bincount(run[measured], minlength=len(starts))
+    keep = counts > 0
+    # Sort measured radii by run then value once. Invalid samples take that median and cannot
+    # move the run's median, so the 3x cap needs no second sort.
+    order = np.lexsort((r[measured], run[measured]))
+    sr = r[measured][order]
+    end = np.cumsum(counts)
+    median = np.zeros(len(starts), r.dtype)
+    mid = end[keep] - counts[keep] // 2 - 1
+    hi = end[keep] - (counts[keep] + 1) // 2
+    values = sr[hi].copy()
+    even = counts[keep] % 2 == 0
+    values[even] = (sr[mid[even]] + values[even]) / 2
+    median[keep] = values
+    r = np.where(measured, r, median[run])
+    r = np.minimum(np.minimum(r, 3 * median[run]), MAX_RADIUS)
+    point_keep = keep[run]
+    return idx[point_keep], lengths[keep], r[point_keep], int((~keep).sum())
+
+
 def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diameter=None,
             depth_offset=None, head_centre=None):
     """Groom + report of one hair mesh with its ID_Depth_Root_Alpha mask (H, W, 4 uint8).
@@ -153,7 +198,7 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
     count, card_of = cards(mesh.tris, len(mesh.positions))
     per_tile, tile_stats = tile_strands(mask, tile_grid, step, threshold)
     H, W = mask.shape[:2]
-    pts, rad, jnt, wgt, root, offsets, card_ids, emb_t, emb_b, emb_n = [], [], [], [], [], [0], [], [], [], []
+    pts, rad, jnt, wgt, root, offsets, card_ids, emb_t, emb_b, emb_n = [], [], [], [], [], [], [], [], [], []
     report = {"cards": int(count), "triangles": int(len(mesh.tris)), "tiles": {f"{k[0]},{k[1]}": v for k, v in tile_stats.items()},
               "cards_spanning_tiles": 0, "uv_overlap_samples": 0, "samples": 0, "unmapped_samples": 0,
               "mixed_winding_cards": 0, "split_strands": 0, "fibres_from_splits": 0}
@@ -184,7 +229,9 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
         # World width: the texture-space cross-section (width * cos(slope), along u)
         # pushed through the triangle's UV -> position Jacobian.
         cos = 1 / np.sqrt(1 + slope ** 2)
-        width = wd * cos * np.linalg.norm(jacobian_u(mesh, tris[np.maximum(hit, 0)]), axis=1)
+        # The Jacobian only depends on the triangle, not the sample placed on it.
+        scale = np.linalg.norm(jacobian_u(mesh, tris), axis=1)
+        width = wd * cos * scale[np.maximum(hit, 0)]
         if max_fibre_diameter:
             widest = np.zeros(len(rows))
             np.maximum.at(widest, sid, np.where(hit >= 0, width, 0))
@@ -218,31 +265,16 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
             p = p + n * normal_offset[:, None]
         j, w = blend_weights(mesh.joints, mesh.weights, tv, bary)
         # Runs of consecutive mapped samples of one painted strand (or fibre) become groom strands.
-        ok = (hit >= 0).astype(np.int8)
-        brk = np.r_[True, sid[1:] != sid[:-1]]
-        starts = np.flatnonzero(ok.astype(bool) & (brk | np.r_[True, ok[:-1] == 0]))
-        for a0 in starts:
-            b0 = a0 + 1
-            while b0 < len(u) and ok[b0] and not brk[b0]:
-                b0 += 1
-            if b0 - a0 < 2:
-                continue
-            # A painted strand keeps its width: samples on near-degenerate UV triangles (LOD1 cards) blow the
-            # UV -> world Jacobian up; cap each at 3x the strand's median radius.
-            r = width[a0:b0] / 2
-            # A sample on a triangle without area in world space (collapsed card vertices) has no width: it takes
-            # the median of the strand's measured samples; a strand with none is dropped (the layer refuses r <= 0).
-            ok_r = np.isfinite(r) & (r > 0)
-            if not ok_r.any():
-                report["strands_without_width"] = report.get("strands_without_width", 0) + 1
-                continue
-            r = np.where(ok_r, r, np.median(r[ok_r]))
-            r = np.minimum(np.minimum(r, 3 * np.median(r)), MAX_RADIUS)
-            pts.append(p[a0:b0]); rad.append(r); jnt.append(j[a0:b0]); wgt.append(w[a0:b0])
-            root.append(rp[a0:b0]); offsets.append(offsets[-1] + b0 - a0); card_ids.append(c)
-            emb_t.append(tri_ids[hit[a0:b0]]); emb_b.append(bary[a0:b0]); emb_n.append(normal_offset[a0:b0])
+        idx, lengths, r, dropped = run_radii(hit, sid, width)
+        if dropped:
+            report["strands_without_width"] = report.get("strands_without_width", 0) + dropped
+        if not len(lengths):
+            continue
+        pts.append(p[idx]); rad.append(r); jnt.append(j[idx]); wgt.append(w[idx])
+        root.append(rp[idx]); offsets.append(lengths); card_ids.append(np.full(len(lengths), c, int))
+        emb_t.append(tri_ids[hit[idx]]); emb_b.append(bary[idx]); emb_n.append(normal_offset[idx])
     groom = Groom(np.concatenate(pts).astype(np.float32), np.concatenate(rad).astype(np.float32),
-                  np.concatenate(jnt), np.concatenate(wgt), np.array(offsets), np.array(card_ids),
+                  np.concatenate(jnt), np.concatenate(wgt), np.r_[0, np.cumsum(np.concatenate(offsets))], np.concatenate(card_ids),
                   np.concatenate(root).astype(np.float32), np.concatenate(emb_t),
                   np.concatenate(emb_b).astype(np.float32), np.concatenate(emb_n).astype(np.float32))
     return groom, report
@@ -265,15 +297,21 @@ def dedupe(groom, distance=0.0005, share=0.8):
     Returns (groom, dropped strand count)."""
     strand_of = np.repeat(np.arange(groom.strands), np.diff(groom.offsets))
     pairs = geom.pairs_within(groom.points, distance)
+    # Same-card neighbours never contribute; discard them before making both directions.
+    other_card = groom.card[strand_of[pairs[:, 0]]] != groom.card[strand_of[pairs[:, 1]]]
+    pairs = pairs[other_card]
     pairs = np.concatenate([pairs, pairs[:, ::-1]])
-    a, b = strand_of[pairs[:, 0]], strand_of[pairs[:, 1]]
-    other_card = groom.card[a] != groom.card[b]
+    b = strand_of[pairs[:, 1]]
     # Each point counts once per neighbouring strand.
-    key = np.unique(np.stack([pairs[other_card, 0], b[other_card]], 1), axis=0)
-    pair_key, counts = np.unique(np.stack([strand_of[key[:, 0]], key[:, 1]], 1), axis=0, return_counts=True)
-    dup = counts > share * np.diff(groom.offsets)[pair_key[:, 0]]
+    n = groom.strands
+    key = np.sort(pairs[:, 0] * np.int64(n) + b)
+    # These keys are mostly unique; sorting avoids NumPy's costly large hash table here.
+    key = key[np.r_[True, key[1:] != key[:-1]]] if len(key) else key
+    pair_key, counts = np.unique(strand_of[key // n] * np.int64(n) + key % n, return_counts=True)
+    dup = counts > share * np.diff(groom.offsets)[pair_key // n]
     keep = np.ones(groom.strands, bool)
-    for s, other in sorted(map(tuple, pair_key[dup].tolist())):
+    for key in pair_key[dup]:
+        s, other = divmod(int(key), n)
         if keep[s] and keep[other] and other < s:
             keep[s] = False
     return select(groom, keep), int((~keep).sum())

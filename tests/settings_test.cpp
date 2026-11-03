@@ -426,8 +426,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 15);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget remain.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_primary_order", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -1011,10 +1011,10 @@ static void test_apply_modes() {
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
-  for (const auto* key : {"rt_hair_visibility", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean"}) {
+  for (const auto* key : {"rt_hair_pool_trim"}) {
     const auto& knob = *find_knob(std::string("exp_") + (key + 3));
     CHECK(knob.experimental == (std::string(key) != "rt_hair_pool_trim"));
-    CHECK(knob.dev_only == (std::string(key)=="rt_hair_visibility" || std::string(key)=="rt_hair_gi_mean"));
+    CHECK(!knob.dev_only);
     CHECK_EQ(code_default(key), "0");
     CHECK(!key_change_needs_restart(key, "0", "1"));
     for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==(std::string(key)=="rt_hair_pool_trim" && preset==3 ? 1 : 0));
@@ -1024,7 +1024,7 @@ static void test_apply_modes() {
   // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
   CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
   for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_hit_shade",
-                         "exp_hair_groom", "exp_hair_cheap"}) {
+                         "exp_hair_groom"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
     CHECK(k.choices[0].apply==Apply::Live || k.choices[0].apply==Apply::Hitch);
@@ -1038,13 +1038,6 @@ static void test_apply_modes() {
     CHECK(!key_change_needs_restart(key,"1","0"));
   }
   CHECK(find_knob("exp_native_coverage")->choices[2].dev);
-  const auto& hair_gi_cull = *find_knob("exp_hair_gi_cull");
-  CHECK(hair_gi_cull.dev_only && hair_gi_cull.experimental);
-  CHECK_EQ(code_default("rt_hair_gi_cull"), "0");
-  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "0", "1"));
-  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "1", "0"));
-  for (int preset = 0; preset < kPresetCount; ++preset) CHECK(hair_gi_cull.preset[preset] == 0);
-  for (int choice = 0; choice < 2; ++choice) CHECK(knob_apply(hair_gi_cull, choice) == Apply::Live);
   CHECK(key_change_needs_restart("rt_bvh_split","0","1"));
   CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
   for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);
@@ -1062,6 +1055,36 @@ static void test_apply_modes() {
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }
 
+static void test_retired_hair_ini() {
+  const char* keys[] = {"rt_hair_gi_cull", "rt_hair_visibility", "rt_hair_cheap", "rt_hair_gi_mean"};
+  const Map defaults = code_defaults();
+  const std::string schema = schema_json();
+  for (const char* key : keys) {
+    CHECK(code_default(key) == nullptr);
+    CHECK(find_knob(std::string("exp_") + (key + 3)) == nullptr);
+    CHECK(schema.find(key) == std::string::npos);
+  }
+  // Legacy overrides, even enabled ones, are inert unknown keys in every preset.
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (const char* value : {"0", "1"}) {
+      const std::string clean = std::string("preset=") + kPresetId[p] + "\ngi_strength=0.63\n";
+      std::string legacy = clean;
+      for (const char* key : keys) legacy += std::string(key) + "=" + value + "\n";
+      Map old = parse_ini(legacy), current = parse_ini(clean);
+      std::vector<std::string> notes;
+      Map loaded = merge_layers({&defaults, &old}, &notes);
+      const Map expected = merge_layers({&defaults, &current});
+      CHECK(notes.empty());
+      CHECK(knob_values(loaded) == knob_values(expected));
+      for (const char* key : keys) {
+        CHECK_EQ(get(loaded, key), value);
+        loaded.erase(key);
+      }
+      CHECK(loaded == expected);
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1069,6 +1092,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_retired_hair_ini();
   test_gui_review_safety();
   test_apply_modes();
   test_product_policy();

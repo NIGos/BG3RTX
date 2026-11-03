@@ -120,10 +120,13 @@ class PairedTest(unittest.TestCase):
             expected = [f'off-{i:02d}',f'on-{i:02d}']
             self.assertEqual(labels[2*i:2*i+2], expected if i%2==0 else expected[::-1])
         total = result['duration']['seconds']+result['duration']['readiness_timeout_seconds']+120
-        self.assertAlmostEqual(total, 818.9)
+        self.assertAlmostEqual(result['duration']['seconds'], job['estimated_phase_seconds'])
         self.assertLess(total, 900)
         self.assertEqual(job['timeout'], 900)
-        self.assertTrue(all(p['seconds']==2.6 for p in plan if p['label'].startswith('rendered-')))
+        # Empirical FPS may change the schedule; captures must still fit every
+        # derived lower bound rather than freeze one corpus's wall-clock total.
+        for window in result['duration']['windows']:
+            self.assertGreaterEqual(window['seconds'], window['minimum_seconds'])
         last_quality = max(i for i,p in enumerate(plan) if p['label'].startswith('energy-'))
         self.assertTrue(all(i>last_quality for i,p in enumerate(plan) if p['label'].startswith('timing-')))
 

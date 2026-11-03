@@ -19,15 +19,15 @@ def main():
         plan += [phase('shot-'+label,11,state,True),phase('cost-'+label,25,state)]
     plan[0]['set'] = plan[0]['set'].replace('qa_exposure_hold=1','qa_exposure_hold=0')
     plan += [phase('restore',5,())]; plan[-1]['set']+=',qa_exposure_hold=0'
-    (HERE/'plans/gpu_opt1.json').write_text(json.dumps(plan,indent=1)+'\n',encoding='utf-8')
     costs=[p['label'] for p in plan if p['label'].startswith('cost-')]
     measured=[p['label'] for p in plan if p['label'].startswith(('shot-','cost-'))]
     for n,save,source in [('go1-camp','Campsite - 27h','m5p3-camp-fg2.json'),('go2-s8','Water Queens House','m5p1-s8-fg2.json')]:
+        plan_name = 'gpu_opt1.json' if n == 'go1-camp' else n + '.json'
         j=json.loads((HERE.parent/'m5_promotion/jobs'/source).read_text())
         j.update(name=n,save=save,live_batch='gpu-opt1',window_mode='visible_unfocused_fg',timeout=sum(p['seconds'] for p in plan)+300,
                  live_flow=dict(expected_fps=30,settings_latency_s=1,trace_stall_s=1),
                  estimated_phase_seconds=sum(p['seconds'] for p in plan),set=j['set']+',dump_shaders=0,dump_preview_f32=1,'+','.join(k+'=0' for k in KEYS),
-                 args=['-RealPresent','-Move','-MovePlan','captures/live_batches/gpu_opt1/plans/gpu_opt1.json'])
+                 args=['-RealPresent','-Move','-MovePlan',f'captures/live_batches/gpu_opt1/plans/{plan_name}'])
         j['expect']=[r'\[auto\] scene ready',r'gi: trace pass .*GPU median',r'gi: GPU cost .*average of 300 frames',r'\[trace\] frame \d+ written',r'\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+',r'\[rrpost\] exposure hold released after [1-9]\d* writes']
         j['patterns']+=['gi: trace pass','gi: GPU cost','gi: background builds','building in the background',r'\[em\]',r'\[geo\]',r'\[rrpost\] exposure','rf: reflection pass','ls: local-light shadow pass']
         gates=[]
@@ -55,7 +55,8 @@ def main():
         j['set']=','.join(k+'='+v for k,v in startup_state.items())
         j['live_flow']['startup_only']=['rt_xfb_mb']
         j['purpose']='Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.'
-        (HERE/'jobs'/f'{n}.json').write_text(json.dumps(j,indent=1)+'\n',encoding='utf-8')
+        (HERE/'plans'/plan_name).write_text(json.dumps(plan,indent=2)+'\n',encoding='utf-8')
+        (HERE/'jobs'/f'{n}.json').write_text(json.dumps(j,indent=2)+'\n',encoding='utf-8')
     predicted={'status':'READY_FOR_LIVE_DRAFT','no_game_launched':True,'keys':{
         KEYS[0]:{'camp_trace_ms_baseline':6.9,'planned_fraction_saved':[.05,.10],'exactness':'same arithmetic, hit normal and light metadata; offline gate first'},
         KEYS[1]:{'alpha_ceiling_ms':5.7,'planned_fraction_saved':[.02,.05],'exactness':'same metadata bits; ray LOD and thresholds unchanged'},
@@ -65,6 +66,7 @@ def main():
         'missing_observable':'Actual GPU cost and image identity; WI empty scene requires follow-up job if camp/S8 have records.'}
     (HERE/'predicted.json').write_text(json.dumps(predicted,indent=1)+'\n',encoding='utf-8')
     print(f'2 jobs, {len(plan)} phases, {sum(p["seconds"] for p in plan)}s per scene')
-if __name__=='__main__': main()
+if __name__=='__main__':
+    main()
     from tools.live_batches.live_flow import tighten_files
     tighten_files(Path(__file__).resolve().parent)

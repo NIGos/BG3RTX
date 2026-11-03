@@ -128,7 +128,19 @@ reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 6
   LOD1 cards merge several LOD0 cards (63 of 205).
 - Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
   cannot follow them (needs a 2-D curve tracer).
-- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only.
+- Companions and orientation (2026-11-03, user: companions first). Companion hair through their templates and the
+  origin presets: Shadowheart, Astarion, Lae'zel, Gale, Karlach, Jaheira, Minthara and the generic origin pass;
+  Halsin was reviewed only for "roots away from the head" (369 of 842 cards) with images within 1-3% of the cards:
+  strands lying along the scalp (radial share 0.20) decided it. The orientation test now counts only strands more
+  radial than tangential (|d_tip - d_root| > chord cos 45, tested); rerun of the 109 reachable styles with that
+  reason: 26 now pass (Halsin LOD0 and LOD1 among them), 63 still have radial reversed cards (hat hair, buns).
+  Gale's beard stays in review (LOD0: coverage +0.11, IoU 0.76; LOD1 reject IoU 0.55): unchanged under six atlas
+  grids (IoU 0.755-0.759), the alpha-weighted width and the texel-size mip. Short beards share it (26 player, 13
+  named NPC): a systematic card/strand difference the reference does not explain; to pass: a card reference that
+  averages the game's dithered alpha test (C5), or an explicit visual review (batch --accept-review).
+  Now: 745 pass, 346 review, 126 reject (reachable: 718 / 244 / 98). Player 354 / 49 / 29, companion 4 / 1 / 1
+  (Gale's beard), named NPC 153 / 32 / 26, generic NPC 8 / 7 / 10, hat variant 167 / 138 / 32, item 32 / 17 / 0. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
@@ -163,6 +175,16 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   within (radius bound 10 mm + segment length / 2) / |cos| of the card surface along the ray, plus the pixel's spread).
   The velocity variant applies the same test. Entries are sealed (`hp_seal`: word 3 mixes the tag with the other
   words), so a torn 16-byte store never pairs this frame's tag with an older key.
+
+- Strike rule (hv5 2026-11-03: every groom of a counted frame struck at once, then every draw kept its cards for the
+  session): a counted frame whose strand pixels carry an adjacent frame's tag is no evidence (the G-buffer ran against
+  another publish: the build is recorded with the prepass, the game may submit the G-buffer in another order); draws
+  sharing an index-range key are summed; a strike retires the draw for 600 frames (doubling to 9600), not the session.
+- `rt_hair_groom_primary_order` (off, live): the header is written in the G-buffer pass's own command buffer (cmd.cpp
+  pass_ready, before the game's begin) from the newest staged publish whose build is recorded earlier in that command
+  buffer or already submitted (`hair_primary::pick_publish`); none: no strand swap that frame, and the next prepass
+  keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
+  the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
@@ -226,3 +248,17 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   (bench: LSS 0.25 ns per ray) + hd_shade (~200 ALU): estimate +0.1-0.3 ms at a close-up.
 - **4:** DoF/RR post check with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per
   character, VRAM.
+
+## 8. Closure plan (2026-11-03, user: "close the implementation properly")
+Order = what blocks shipping first, then visible quality per effort. Every step behind its key, off by default,
+key-off identity, then the smoke_ultra job with the other qualified keys on. Gates are named per step.
+| # | Step | Offline / live | Gate |
+|---|---|---|---|
+| C1 | Stability: hv4 (GPU-AV) + hv5 reload bisect + hair_crowd, all with df2b9567 | live (user batch) | no device loss, no GPU-AV error, frames in every survival window; GPU ms per pass logged |
+| C2 | Strand shadows with transmittance: a shadow ray crossing n fibres passes with a_f^n (forward-scattered fraction of the fibre, tools/hair_groom/dual.py), stochastic per crossing on the existing binary visibility (unbiased mean) | offline, then live | PT reference vs shader on the bench fixture (mean visibility within noise); live: skin/neck under hair not black, energy key-on vs key-off on a static camera |
+| C3 | Sub-pixel coverage and tips: dithered tip opacity from the root channel (the game's own dithered alpha test), DLSS RR hair guides (RR hair resolve candidate) | offline, then live | edge-flicker detector on hair pixels lower than cards in one run; no energy change |
+| C4 | Indirect light on strands: GI irradiance on strand pixels through the dual-scattering multiple-scattering term instead of the Lambert response | offline, then live | furnace test (white fibre, uniform sky: albedo within 3%); live A/B energy |
+| C5 | Style coverage: card reference averaged over the game's dither phases (coverage/radiance gates then meaningful), 2-D curve tracer for curly atlases (HAIR_Afro_B), LOD1 from the LOD0 groom | offline | rerun: pass count up with unchanged gates; 368 reachable left today |
+| C6 | Every view: portraits and small passes, instanced hair (0ca5ee93), reflections/water secondary hits shade strands with the fibre BSDF | offline, then live | per-pass strand participation lines; no card-only pass left in the smoke run |
+| C7 | Qualify: Ultra preset entry, GUI, cost table, user check notes (what to look at, which save) | live | smoke_ultra clean; cost within the user's budget |
+Strand dynamics of their own (collision, wind per strand) stay out: strands follow the game's simulated cards.

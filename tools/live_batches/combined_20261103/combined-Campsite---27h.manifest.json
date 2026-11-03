@@ -85,13 +85,78 @@
           "\\[motion-plan\\] complete phases=7\\b"
         ],
         "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-        "estimated_phase_seconds": 55.5,
+        "estimated_phase_seconds": 102.9,
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
           "trace_stall_s": 1,
           "startup_only": [
             "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
           ]
         }
       },
@@ -117,7 +182,7 @@
             "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
             "\\[auto\\] scene ready"
           ],
-          "wait_log_timeout": 600
+          "wait_log_timeout": 600.0
         },
         {
           "label": "producer-sanity-warmup",
@@ -129,7 +194,7 @@
           "wait_log": [
             "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
           ],
-          "wait_log_timeout": 9.0
+          "wait_log_timeout": 20.86799999998766
         },
         {
           "label": "warmup-off",
@@ -149,19 +214,19 @@
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "observe-on",
           "kind": "static",
           "speed": "static",
-          "seconds": 9.1,
+          "seconds": 32.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 9.1,
-          "motion_end": 9.1,
+          "motion_start": 32.8,
+          "motion_end": 32.8,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
@@ -185,13 +250,13 @@
           "label": "observe-on-repeat",
           "kind": "static",
           "speed": "static",
-          "seconds": 9.1,
+          "seconds": 32.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 9.1,
-          "motion_end": 9.1,
+          "motion_start": 32.8,
+          "motion_end": 32.8,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
@@ -536,7 +601,7 @@
         ],
         "stop_on_dump": true,
         "purpose": "Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.",
-        "estimated_phase_seconds": 289.6,
+        "estimated_phase_seconds": 567.5,
         "window_mode": "visible_unfocused_fg",
         "live_flow": {
           "expected_fps": 30,
@@ -544,6 +609,71 @@
           "trace_stall_s": 1,
           "startup_only": [
             "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
           ]
         }
       },
@@ -579,7 +709,7 @@
             "gi: trace pass .*GPU median",
             "gi: GPU cost .*average of 300 frames"
           ],
-          "wait_log_timeout": 15.0
+          "wait_log_timeout": 29.200000000000728
         },
         {
           "label": "warm-rt_compact_hit_state",
@@ -599,7 +729,7 @@
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "warm-rt_alpha_metadata_cache",
@@ -619,7 +749,7 @@
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "warm-rt_water_empty_tiles",
@@ -639,7 +769,7 @@
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "warm-off",
@@ -659,19 +789,19 @@
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "shot-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -683,13 +813,13 @@
           "label": "cost-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -698,13 +828,13 @@
           "label": "shot-compact",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -716,13 +846,13 @@
           "label": "cost-compact",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -731,13 +861,13 @@
           "label": "shot-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -749,13 +879,13 @@
           "label": "cost-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -764,13 +894,13 @@
           "label": "shot-alpha",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -782,13 +912,13 @@
           "label": "cost-alpha",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -797,13 +927,13 @@
           "label": "shot-off-c",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -815,13 +945,13 @@
           "label": "cost-off-c",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -830,13 +960,13 @@
           "label": "shot-water",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -848,13 +978,13 @@
           "label": "cost-water",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -863,13 +993,13 @@
           "label": "shot-off-d",
           "kind": "static",
           "speed": "static",
-          "seconds": 10.1,
+          "seconds": 21.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 10.1,
-          "motion_end": 10.1,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -881,13 +1011,13 @@
           "label": "cost-off-d",
           "kind": "static",
           "speed": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 21.1,
-          "motion_end": 21.1,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1064,9 +1194,74 @@
           "trace_stall_s": 4,
           "startup_only": [
             "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
           ]
         },
-        "estimated_phase_seconds": 151.0
+        "estimated_phase_seconds": 241.0
       },
       "plan": [
         {
@@ -1090,7 +1285,7 @@
           "wait_log": [
             "gi: trace pass .*GPU median"
           ],
-          "wait_log_timeout": 9.0
+          "wait_log_timeout": 14.680000000000291
         },
         {
           "label": "warmup-scaled",
@@ -1101,24 +1296,24 @@
             "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
             "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
           ],
-          "wait_log_timeout": 180
+          "wait_log_timeout": 180.0
         },
         {
           "label": "settle-off-a",
           "kind": "static",
-          "seconds": 2.1,
+          "seconds": 3.6,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
         },
         {
           "label": "cost-off-a",
           "kind": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
           "label": "shot-off-a",
           "kind": "static",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "trace_at": [
             1,
             6,
@@ -1129,19 +1324,19 @@
         {
           "label": "settle-on",
           "kind": "static",
-          "seconds": 2.1,
+          "seconds": 3.6,
           "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
         },
         {
           "label": "cost-on",
           "kind": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
           "label": "shot-on",
           "kind": "static",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "trace_at": [
             1,
             6,
@@ -1152,19 +1347,19 @@
         {
           "label": "settle-off-b",
           "kind": "static",
-          "seconds": 2.1,
+          "seconds": 3.6,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
         },
         {
           "label": "cost-off-b",
           "kind": "static",
-          "seconds": 21.1,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
           "label": "shot-off-b",
           "kind": "static",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "trace_at": [
             1,
             6,
@@ -1197,7 +1392,7 @@
         "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
         "\\[auto\\] scene ready"
       ],
-      "wait_log_timeout": 600
+      "wait_log_timeout": 600.0
     },
     {
       "label": "b1-cp4-compact-camp-join--producer-sanity-warmup",
@@ -1209,7 +1404,7 @@
       "wait_log": [
         "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
       ],
-      "wait_log_timeout": 9.0
+      "wait_log_timeout": 20.86799999998766
     },
     {
       "label": "b1-cp4-compact-camp-join--warmup-off",
@@ -1229,19 +1424,19 @@
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b1-cp4-compact-camp-join--observe-on",
       "kind": "static",
       "speed": "static",
-      "seconds": 9.1,
+      "seconds": 32.8,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 9.1,
-      "motion_end": 9.1,
+      "motion_start": 32.8,
+      "motion_end": 32.8,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
@@ -1265,13 +1460,13 @@
       "label": "b1-cp4-compact-camp-join--observe-on-repeat",
       "kind": "static",
       "speed": "static",
-      "seconds": 9.1,
+      "seconds": 32.8,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 9.1,
-      "motion_end": 9.1,
+      "motion_start": 32.8,
+      "motion_end": 32.8,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
@@ -1333,7 +1528,7 @@
         "gi: trace pass .*GPU median",
         "gi: GPU cost .*average of 300 frames"
       ],
-      "wait_log_timeout": 15.0
+      "wait_log_timeout": 29.200000000000728
     },
     {
       "label": "b2-go1-camp--warm-rt_compact_hit_state",
@@ -1353,7 +1548,7 @@
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b2-go1-camp--warm-rt_alpha_metadata_cache",
@@ -1373,7 +1568,7 @@
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b2-go1-camp--warm-rt_water_empty_tiles",
@@ -1393,7 +1588,7 @@
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b2-go1-camp--warm-off",
@@ -1413,19 +1608,19 @@
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b2-go1-camp--shot-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1437,13 +1632,13 @@
       "label": "b2-go1-camp--cost-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1452,13 +1647,13 @@
       "label": "b2-go1-camp--shot-compact",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1470,13 +1665,13 @@
       "label": "b2-go1-camp--cost-compact",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1485,13 +1680,13 @@
       "label": "b2-go1-camp--shot-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1503,13 +1698,13 @@
       "label": "b2-go1-camp--cost-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1518,13 +1713,13 @@
       "label": "b2-go1-camp--shot-alpha",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1536,13 +1731,13 @@
       "label": "b2-go1-camp--cost-alpha",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1551,13 +1746,13 @@
       "label": "b2-go1-camp--shot-off-c",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1569,13 +1764,13 @@
       "label": "b2-go1-camp--cost-off-c",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1584,13 +1779,13 @@
       "label": "b2-go1-camp--shot-water",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1602,13 +1797,13 @@
       "label": "b2-go1-camp--cost-water",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1617,13 +1812,13 @@
       "label": "b2-go1-camp--shot-off-d",
       "kind": "static",
       "speed": "static",
-      "seconds": 10.1,
+      "seconds": 21.4,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 10.1,
-      "motion_end": 10.1,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
@@ -1635,13 +1830,13 @@
       "label": "b2-go1-camp--cost-off-d",
       "kind": "static",
       "speed": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 21.1,
-      "motion_end": 21.1,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
@@ -1693,7 +1888,7 @@
       "wait_log": [
         "gi: trace pass .*GPU median"
       ],
-      "wait_log_timeout": 9.0
+      "wait_log_timeout": 14.680000000000291
     },
     {
       "label": "b3-go2-camp-high--warmup-scaled",
@@ -1704,24 +1899,24 @@
         "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
         "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
       ],
-      "wait_log_timeout": 180
+      "wait_log_timeout": 180.0
     },
     {
       "label": "b3-go2-camp-high--settle-off-a",
       "kind": "static",
-      "seconds": 2.1,
+      "seconds": 3.6,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--cost-off-a",
       "kind": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--shot-off-a",
       "kind": "static",
-      "seconds": 15.1,
+      "seconds": 15.2,
       "trace_at": [
         1,
         6,
@@ -1732,19 +1927,19 @@
     {
       "label": "b3-go2-camp-high--settle-on",
       "kind": "static",
-      "seconds": 2.1,
+      "seconds": 3.6,
       "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--cost-on",
       "kind": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--shot-on",
       "kind": "static",
-      "seconds": 15.1,
+      "seconds": 15.2,
       "trace_at": [
         1,
         6,
@@ -1755,19 +1950,19 @@
     {
       "label": "b3-go2-camp-high--settle-off-b",
       "kind": "static",
-      "seconds": 2.1,
+      "seconds": 3.6,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--cost-off-b",
       "kind": "static",
-      "seconds": 21.1,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
       "label": "b3-go2-camp-high--shot-off-b",
       "kind": "static",
-      "seconds": 15.1,
+      "seconds": 15.2,
       "trace_at": [
         1,
         6,

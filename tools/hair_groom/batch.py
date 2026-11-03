@@ -14,7 +14,8 @@ python -m tools.hair_groom.batch --report-dir <dir> [--match Shadowheart Karlach
 4. Verdict per style: pass (asset written), needs-review (asset written only with --accept-review), reject.
    Assets are named by the index-only content ID (common/hair_groom_asset.h); files are only added.
 Incremental and resumable: <report-dir>/state.json keys every style by the SHA-256 of its GR2 + mask + mesh name
-+ converter version; unchanged styles are skipped. Progress at least every 30 s. BelowNormal priority.
++ VERSION; unchanged styles are skipped. Cached grooms depend on CONVERTER_VERSION instead, so validation-only
+changes reuse them. --revalidate skips cache misses without conversion. Progress at least every 30 s. BelowNormal priority.
 Larian-derived data is generated locally from the user's own installation and never shipped.
 """
 from __future__ import annotations
@@ -29,13 +30,16 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import fields
 from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "hair-groom-batch-2"   # 2: asset v2 (UV samples), LOD1, radius caps
+VERSION = "hair-groom-batch-4"   # 4: geometry roots when the mask root channel does not follow rows
+# Bump for converter/mesh/mask interpretation changes; validation-only edits bump VERSION alone.
+CONVERTER_VERSION = "hair-groom-converter-1"
 # Verdict thresholds (derived from the Shadowheart reference: IoU 0.92-0.94 at 0.5 mm, 0.89-0.92 at 2 mm,
 # unmapped samples 0.001%, root/row correlation 0.89-0.96). Cards spanning tiles are reported, not judged: the
 # converter places the strands of every tile a card touches, and IoU / unmapped samples measure the result.
@@ -136,14 +140,92 @@ def head_proxy(hair):
     return np.array([0.0, 1e4, 0.0]), np.array([1e-3, 1e-3, 1e-3])   # no head joints: no proxy
 
 
-def process(style, game, lslib, out_dir, report_dir, accept_review):
-    """Converts and validates one style; returns its report record (never raises)."""
-    from PIL import Image
-    from ..assets.lspk import PackageSet
-    from . import analysis, asset, convert, mesh, render
+def groom_key(gr2, mask, mesh_name):
+    # Length framing keeps adjacent byte strings unambiguous without copying the large inputs.
+    h = hashlib.sha256()
+    for part in (gr2, mask, mesh_name.encode(), CONVERTER_VERSION.encode()):
+        h.update(len(part).to_bytes(8, "little"))
+        h.update(part)
+    return h.hexdigest()
+
+
+def atomic_cache(path, write):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = None
+    try:
+        # Unique sibling files let workers publish the same content safely on Windows too.
+        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as f:
+            tmp = Path(f.name)
+            write(f)
+        os.replace(tmp, path)
+    finally:
+        if tmp is not None and tmp.exists():
+            tmp.unlink()
+
+
+def save_groom_cache(path, groom, hair, rep, dropped, grid, fit, root_corr, head):
+    arrays = {"groom_" + f.name: getattr(groom, f.name) for f in fields(groom)}
+    # Validation and asset writing need the original cards even when no GR2 dump is read.
+    arrays.update({"mesh_" + f.name: np.asarray(getattr(hair, f.name)) for f in fields(hair)})
+    arrays.update(report=np.array(json.dumps(rep)), dropped=np.array(dropped), grid=np.asarray(grid),
+                  fit=np.array(fit), root_corr=np.asarray(root_corr), head=np.asarray(head))
+    # Integers in the smallest type that holds them (bone and triangle indices, offsets), compressed: Halsin 112 ->
+    # about 15 MB. The original dtype is restored on load (the groom must be bit-identical to a fresh conversion).
+    packed = {}
+    for k, v in arrays.items():
+        v = np.asarray(v)
+        if np.issubdtype(v.dtype, np.integer) and v.size:
+            packed["dtype_" + k] = np.array(v.dtype.str)
+            v = v.astype(np.result_type(np.min_scalar_type(int(v.min())), np.min_scalar_type(int(v.max()))))
+        packed[k] = v
+    atomic_cache(path, lambda f: np.savez_compressed(f, **packed))
+
+
+def _unpack(z, name):
+    v = z[name]
+    return v.astype(np.dtype(str(z["dtype_" + name].item()))) if "dtype_" + name in z.files else v
+
+
+def load_groom_cache(path):
+    from . import convert, mesh
+    try:
+        with np.load(path, allow_pickle=False) as z:
+            groom = convert.Groom(**{f.name: _unpack(z, "groom_" + f.name) for f in fields(convert.Groom)})
+            values = {f.name: _unpack(z, "mesh_" + f.name) for f in fields(mesh.Mesh)}
+            values["joint_names"] = values["joint_names"].tolist()
+            hair = mesh.Mesh(**values)
+            # Dataclasses do not validate array shapes; reject damage before it can affect the verdict.
+            p, s, v = len(groom.points), groom.strands, len(hair.positions)
+            shapes = ((groom.points, (p, 3)), (groom.radii, (p,)), (groom.joints, (p, groom.joints.shape[1])),
+                      (groom.weights, groom.joints.shape), (groom.offsets, (s + 1,)), (groom.card, (s,)),
+                      (groom.root_param, (p,)), (groom.triangle, (p,)), (groom.bary, (p, 3)),
+                      (groom.normal_offset, (p,)), (hair.positions, (v, 3)), (hair.uv, (v, 2)),
+                      (hair.joints, (v, 4)), (hair.weights, (v, 4)), (hair.tris, (len(hair.tris), 3)),
+                      (hair.joint_positions, (len(hair.joint_names), 3)))
+            if any(a.shape != shape for a, shape in shapes) or groom.offsets[0] != 0 or groom.offsets[-1] != p:
+                return None
+            if not np.issubdtype(groom.offsets.dtype, np.integer) or np.any(np.diff(groom.offsets) < 2):
+                return None
+            rep = json.loads(str(z["report"].item()))
+            for key in ("unmapped_samples", "samples", "cards", "triangles", "mixed_winding_cards", "uv_overlap_samples"):
+                float(rep[key])
+            grid = tuple(int(x) for x in z["grid"])
+            head = z["head"]
+            if len(grid) != 2 or min(grid) < 1 or head.shape != (2, 3) or z["root_corr"].ndim != 1:
+                return None
+            return groom, hair, rep, int(_unpack(z, "dropped").item()), grid, float(z["fit"].item()), z["root_corr"].tolist(), head
+    except Exception:  # noqa: BLE001  cache damage must never become a style's verdict
+        return None
+
+
+def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=False):
+    """Returns a report record (never raises), or None on a validation-only cache miss."""
     t0 = time.monotonic()
     rec = dict(style)
     try:
+        from PIL import Image
+        from ..assets.lspk import PackageSet
+        from . import analysis, asset, convert, mesh, render
         ps = PackageSet(game)
         gr2 = ps.read(style["gr2"])
         if not style["mask"] or style["mask"] not in ps:
@@ -151,24 +233,53 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
         dds = ps.read(style["mask"])
         rec["key"] = hashlib.sha256(gr2 + dds + style["mesh"].encode() + VERSION.encode()).hexdigest()[:24]
         mask = np.asarray(Image.open(BytesIO(dds)).convert("RGBA"))
-        with tempfile.TemporaryDirectory(prefix="b3hg-") as tmp:
-            src = Path(tmp) / "in.gr2"
-            src.write_bytes(gr2)
-            gr2_dump(lslib, src, Path(tmp) / "out.bin")
-            hair = mesh.load_gr2_dump(Path(tmp) / "out.bin", style["mesh"])
-            # LOD1 cards merge several LOD0 cards (span several tiles): the atlas grid comes from the LOD0 mesh of the
-            # same GR2 (same mask) when it exists.
-            ref = hair
-            if style.get("lod", 0) and style["mesh"].endswith("_LOD1"):
-                try:
-                    ref = mesh.load_gr2_dump(Path(tmp) / "out.bin", style["mesh"][:-5])
-                except KeyError:
-                    pass
-        grid, fit = convert.detect_tile_grid(ref)
-        root_corr = analysis.root_channel_check(mask, grid)
-        groom, rep = convert.convert(hair, mask, tile_grid=grid)
-        groom, dropped = convert.dedupe(groom)
-        head = head_proxy(hair)
+        cache = report_dir / "cache" / "groom" / (groom_key(gr2, dds, style["mesh"]) + ".npz")
+        cached = load_groom_cache(cache)
+        if cached is None:
+            if revalidate:
+                return None
+            dump = report_dir / "cache" / "gr2" / (hashlib.sha256(gr2).hexdigest() + ".bin")
+
+            def read_cards(path):
+                hair = mesh.load_gr2_dump(path, style["mesh"])
+                # LOD1 spans multiple tiles: detect the atlas grid from LOD0 when available.
+                ref = hair
+                if style.get("lod", 0) and style["mesh"].endswith("_LOD1"):
+                    try:
+                        ref = mesh.load_gr2_dump(path, style["mesh"][:-5])
+                    except KeyError:
+                        pass
+                return hair, ref
+
+            try:
+                hair, ref = read_cards(dump)
+            except Exception:  # noqa: BLE001  a corrupt dump is replaced just like a missing dump
+                with tempfile.TemporaryDirectory(prefix="b3hg-") as tmp:
+                    src, dst = Path(tmp) / "in.gr2", Path(tmp) / "out.bin"
+                    src.write_bytes(gr2)
+                    gr2_dump(lslib, src, dst)
+                    hair, ref = read_cards(dst)
+                    try:
+                        atomic_cache(dump, lambda f: f.write(dst.read_bytes()))
+                    except OSError:
+                        pass
+            grid, fit = convert.detect_tile_grid(ref)
+            root_corr = analysis.root_channel_check(mask, grid)
+            groom, rep = convert.convert(hair, mask, tile_grid=grid)
+            groom, dropped = convert.dedupe(groom)
+            head = head_proxy(hair)
+            try:
+                save_groom_cache(cache, groom, hair, rep, dropped, grid, fit, root_corr, head)
+            except OSError:
+                pass   # An unavailable cache must not discard a successful conversion.
+        else:
+            groom, hair, rep, dropped, grid, fit, root_corr, head = cached
+        bad_root = bool(root_corr) and np.median(root_corr) < ROOT_REJECT
+        geometry_root = bad_root and head[1][0] > 0.01
+        if geometry_root:
+            decided = analysis.orientation(groom, head[0])["strands_decided"]
+            groom, reversed_ = analysis.reorient(groom, head[0])
+            rec.update(root_source="geometry", root_reversed_strands=reversed_, root_decided_strands=decided)
         orient = analysis.orientation(groom, head[0]) if head[1][0] > 0.01 else {}
         unmapped = rep["unmapped_samples"] / max(rep["samples"], 1)
         rec.update(tile_grid=list(grid), cards=rep["cards"], triangles=rep["triangles"], cards_in_one_tile=round(fit, 4),
@@ -179,13 +290,20 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
         ious, cover, light = [], [], []
         report_dir.mkdir(parents=True, exist_ok=True)
         for name, (view, light_dir) in bbox_views(hair.positions, 0.002).items():
-            img_c, cov_c = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v), view, light_dir, head)
+            # Coverage and silhouette against the cards as the fibre layers they paint (render.card_fragments fibres:
+            # a tilted card's fibres keep their width); mean radiance against the plain cards, the reference its
+            # tolerance was derived on (the fibre factor in the light view darkens the cards' self-shadow by up to 34%
+            # on Shadowheart, a shadow-model difference, not a colour one).
+            fibre_cards, plain_cards = render.card_fragment_builders(hair.positions, hair.uv, hair.tris, mask)   # one raster
+            _, cov_c = render.render(fibre_cards, view, light_dir, head)
+            img_c, cov_p = render.render(plain_cards, view, light_dir, head)
             img_g, cov_g = render.render(lambda v: render.strand_fragments(groom.points, groom.radii, groom.offsets, groom.root_param, v),
                                          view, light_dir, head)
             px = (cov_c > 0.02) | (cov_g > 0.02)
             ious.append(float(((cov_c > 0.5) & (cov_g > 0.5)).sum() / max(((cov_c > 0.5) | (cov_g > 0.5)).sum(), 1)))
             cover.append(float(cov_g[px].mean() - cov_c[px].mean()) if px.any() else 0.0)
-            light.append(float(img_g[px].mean() / max(img_c[px].mean(), 1e-9) - 1) if px.any() else 0.0)
+            pxr = (cov_p > 0.02) | (cov_g > 0.02)
+            light.append(float(img_g[pxr].mean() / max(img_c[pxr].mean(), 1e-9) - 1) if pxr.any() else 0.0)
             if name == "front":
                 safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in style["name"])
                 png = report_dir / f"{safe}_front.png"
@@ -197,8 +315,10 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
         reasons, review = [], []
         if groom.strands == 0:
             reasons.append("no strands")
-        if root_corr and np.median(root_corr) < ROOT_REJECT:
+        if bad_root and not geometry_root:
             reasons.append(f"root channel does not run along the rows (median corr {np.median(root_corr):.2f})")
+        if geometry_root and decided < groom.strands / 2:
+            review.append(f"root from geometry (mask root channel does not run along the rows, median corr {np.median(root_corr):.2f})")
         if min(ious) < IOU_REJECT:
             reasons.append(f"silhouette IoU {min(ious):.2f}")
         if max(abs(x) for x in cover) > COVER_REVIEW:
@@ -251,6 +371,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--jobs", type=int, default=max(1, min(4, (os.cpu_count() or 2) // 4)))
     ap.add_argument("--accept-review", action="store_true", help="also write the assets of needs-review styles")
+    ap.add_argument("--revalidate", action="store_true", help="validate changed styles from cached grooms only; skip cache misses without converting")
     args = ap.parse_args()
     sys.path.insert(0, str(ROOT))
     from tools.low_priority import lower_priority
@@ -259,9 +380,9 @@ def main():
     game = args.game or game_data()
     lslib = args.lslib or lslib_tools()
     catalogue = args.catalogue or find_catalogue()
-    if not game or not lslib or not catalogue:
+    if not game or (not lslib and not args.revalidate) or not catalogue:
         ap.error(f"missing input: game Data {game or '?'}, LSLib Tools {lslib or '?'} (BG3RTX_LSLIB), catalogue {catalogue or '?'}")
-    if not (Path(lslib) / "granny2.dll").exists():
+    if not args.revalidate and not (Path(lslib) / "granny2.dll").exists():
         ap.error(f"{lslib} has no granny2.dll (copy it next to LSLib.dll from LSLib's ExportTool package)")
     out_dir = args.out_dir or Path(catalogue).parent / "hair_grooms"
     todo = styles(catalogue, args.match)
@@ -274,7 +395,7 @@ def main():
     state_path = args.report_dir / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     # Incremental: a style is redone only when its inputs changed: the pak entries of its GR2 and mask (owner
-    # package, offset, size: a game patch moves them), its mesh name and the converter version.
+    # package, offset, size: a game patch moves them), its mesh name and the verdict version.
     from tools.assets.lspk import PackageSet
     ps = PackageSet(game)
 
@@ -298,13 +419,17 @@ def main():
             if old and old.get("inputs") == s["inputs"] and s["name"] not in redo:
                 skipped += 1
                 continue
-            futs[pool.submit(process, s, game, lslib, out_dir, args.report_dir, args.accept_review)] = s
+            futs[pool.submit(process, s, game, lslib, out_dir, args.report_dir, args.accept_review, args.revalidate)] = s
         total = len(futs)
         pending = set(futs)
         while pending:
             finished, pending = concurrent.futures.wait(pending, timeout=30, return_when=concurrent.futures.FIRST_COMPLETED)
             for f in finished:
                 rec = f.result()
+                if rec is None:
+                    skipped += 1
+                    done += 1
+                    continue
                 rec["version"] = VERSION
                 state[rec["name"]] = rec
                 done += 1

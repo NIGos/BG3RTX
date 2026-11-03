@@ -34,6 +34,21 @@ $inventory = Get-Content -LiteralPath $noticeDoc -Raw
 $requiredSection = [regex]::Match($inventory, '(?ms)^## Required notice files\r?\n(.*?)(?=^## |\z)')
 $required = [regex]::Matches($requiredSection.Groups[1].Value, '(?m)^- `([^`]+)`\r?$')
 if (-not $requiredSection.Success -or $required.Count -eq 0) { throw "no required notice files listed in $noticeDoc" }
+# One manifest owns every copied third-party binary and its notice dependencies.
+$thirdParty = Get-Content -LiteralPath (Join-Path $PSScriptRoot "package-third-party.json") -Raw | ConvertFrom-Json
+$destinations = @{}
+foreach ($entry in @($thirdParty.binaries) + @($thirdParty.compiled_components)) {
+  if (@($entry.licences).Count -eq 0) { throw "third-party component has no licences" }
+  foreach ($file in $entry.licences) {
+    if ($file -notin @($required | ForEach-Object { $_.Groups[1].Value })) { throw "unlisted third-party licence: $file" }
+  }
+}
+foreach ($entry in $thirdParty.binaries) {
+  if ($entry.destination -notmatch '^bin/(sl/)?[A-Za-z0-9_.-]+\.dll$' -or $destinations.ContainsKey($entry.destination)) {
+    throw "invalid or duplicate third-party destination: $($entry.destination)"
+  }
+  $destinations[$entry.destination] = $true
+}
 $missing = @()
 foreach ($entry in $required) {
   $file = $entry.Groups[1].Value
@@ -137,15 +152,14 @@ foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "fr
   $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
 }
 foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
-foreach ($f in @("sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll",
-                 "nvngx_dlssg.dll", "NvLowLatencyVk.dll", "nvngx_dlss.dll", "nvngx_dlssd.dll")) {
-  Copy-To (Join-Path $bin "sl\$f") "bin\sl\$f"
+# Only the manifest can add a third-party binary to the payload.
+foreach ($entry in $thirdParty.binaries) {
+  $source = Join-Path $root $entry.destination
+  if ($entry.destination -eq "bin/dxcompiler.dll" -and -not (Test-Path $source)) {
+    $source = Join-Path "$env:VULKAN_SDK" "Bin\dxcompiler.dll"
+  }
+  Copy-To $source $entry.destination
 }
-# The layer compiles its HLSL at run time (layer/shaders.cpp): DXC beside it.
-$dxc = @((Join-Path $bin "dxcompiler.dll"), (Join-Path "$env:VULKAN_SDK" "Bin\dxcompiler.dll")) |
-       Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $dxc) { throw "dxcompiler.dll not found (bin\ or VULKAN_SDK\Bin)" }
-Copy-To $dxc "bin\dxcompiler.dll"
 
 # Shaders, and the common\ headers they include (transitively; -I shaders as in layer/shaders.cpp).
 Copy-Item -Recurse (Join-Path $root "shaders") (Join-Path $out "shaders")

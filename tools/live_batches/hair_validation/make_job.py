@@ -36,11 +36,15 @@ def phase(label, seconds=7, on=False, trace=False, turn=0, wheel=0):
 # rt_hair_groom_primary is latched on at startup (main 8df7978d), so the groom stage is also the strands-on-screen
 # stage; the last stage adds the fibre pass (rt_hair_fibre, a live core key).
 STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_physical_origin="0", rt_hair_groom="0",
-                            rt_hair_groom_primary="1", rt_hair_fibre="0")),
+                            rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="0")),
           ("b-origin", dict(rt_hair_physical_origin="1")),
           ("c-strands", dict(rt_hair_groom="1")),
           ("d-fibre", dict(rt_hair_fibre="1"))]
 STRAND_STAGES = ("c-strands", "d-fibre")   # strands on screen: their survival windows need strand draws
+# After the stages, the header-order A/B (docs/RTX_HAIR_PRIMARY.md 5b, predicted.json strike_rule_20261103): the strand
+# header written in the prepass's command buffer (order 0) then in the G-buffer's (order 1), two windows each (each
+# holds a whole 300-frame line at the unfocused 30 fps).
+ORDER = [("order-prepass", "0"), ("order-gbuffer", "1")]
 SURVIVE = [1, 2, 3]   # 3 adjacent same-key 20 s windows: uninterrupted 60 s > 25 s failure.
 
 
@@ -57,6 +61,7 @@ def make_bisect():
         every.update(more)
     # Warm every value the stages use before the first judged window (pipelines, groom uploads), then stage A.
     plan = [stage_phase("warmup", PRIMARY_LOG_FRAMES / UNFOCUSED_FPS, every),
+            stage_phase("warm-order", 10, dict(every, rt_hair_groom_primary_order="1")),   # both A/B values warmed
             stage_phase("warm-settle", 10, dict(STAGES[0][1]))]
     for name, more in STAGES:
         keys.update(more)
@@ -64,6 +69,10 @@ def make_bisect():
         plan.append(dict(stage_phase(f"reload-{name}", 5, keys), reload_selected=True))
         # The strand stages' windows hold a whole 300-frame strand line at the unfocused 30 fps (> 21 s, live_flow).
         plan += [stage_phase(f"survive-{name}-{i}", 25 if name in STRAND_STAGES else 20, keys) for i in SURVIVE]
+    for name, value in ORDER:
+        keys["rt_hair_groom_primary_order"] = value
+        plan += [stage_phase(f"{name}-{i}", 25, keys) for i in (1, 2)]
+    keys["rt_hair_groom_primary_order"] = "0"
     plan.append(stage_phase("restore", 5, keys))
     return plan
 
@@ -166,6 +175,16 @@ def bisect_job(name, save, plan):
                                   match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
                                   windows=[l for l in survive if any(l.startswith("survive-" + s) for s in STRAND_STAGES)
                                            and not l.endswith("-1")]))
+    # The header-order A/B: strand draws in all four windows; with the G-buffer order (its second window, after the
+    # switch settles) no counted frame carries an adjacent frame's tag. The prepass windows decide the hypothesis
+    # (predicted.json: adjacent-tag frames > 0 there if it holds), they are not gated.
+    order_windows = [f"{n}-{i}" for n, _ in ORDER for i in (1, 2)]
+    j["expect_every"].append(dict(name="strands drawn in the header-order A/B", select=r"\[hair primary\] frame \d+:",
+                                  match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES, windows=order_windows))
+    j["expect_every"].append(dict(name="G-buffer header order: no counted frame with adjacent-tag pixels",
+                                  select=r"\[hair primary\] counted frame \d+:",
+                                  match=r"counted frames with adjacent-tag pixels 0 \(session \d+\), header order G-buffer",
+                                  min=1, period_frames=PRIMARY_LOG_FRAMES, windows=["order-gbuffer-2"]))
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
                           r"\[hair-reload\] selected save reload complete"]
     j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch with rt_hair_groom_primary "

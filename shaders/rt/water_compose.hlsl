@@ -197,7 +197,16 @@ static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (32 
 #endif
 groupshared uint gsStat[kGsWords];
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
-groupshared uint gsSurface[2];
+groupshared uint gsSurface[12];
+bool surface_diagnostics() { return (cp.a.w & 128u) != 0u; }
+void surface_stat(uint reason, bool cond) {
+  const uint n = WaveActiveCountBits(cond);
+  if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsSurface[reason], n);
+}
+void surface_flush(uint gi) {
+  if (surface_diagnostics() && gi < 12u && gsSurface[gi] != 0u)
+    cStats.InterlockedAdd((gi < 8u ? 120u + gi : 91u + gi - 8u)*4u, gsSurface[gi]);
+}
 #endif
 #ifndef BG3RTX_GPU_OPT_LEGACY
 groupshared uint gsWaterPresent;
@@ -255,7 +264,7 @@ bool is_sum_lo(uint w) { return w >= 16u && w <= 26u && (w & 1u) == 0u; }   // 1
 void cstat_flush(uint gi) {
   GroupMemoryBarrierWithGroupSync();
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
-  if (WATER_SURFACE_FRESNEL_ON && gi < 2u && gsSurface[gi] != 0u) cStats.InterlockedAdd((120u + gi)*4u,gsSurface[gi]);
+  surface_flush(gi);
 #endif
   for (uint w = gi; w < kGsWords; w += 64u) {
     if (w == 0u) continue;   // word 0: one add per dispatch
@@ -274,7 +283,7 @@ void cstat_flush(uint gi) {
 void cstat_flush(uint gi) {
   GroupMemoryBarrierWithGroupSync();
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
-  if (WATER_SURFACE_FRESNEL_ON && gi < 2u && gsSurface[gi] != 0u) cStats.InterlockedAdd((120u + gi)*4u,gsSurface[gi]);
+  surface_flush(gi);
 #endif
   if (gi >= 1u && gi < kGsWords) {
     const uint s = gsStat[gi];
@@ -369,7 +378,7 @@ bool same_encoded(float c, float t, int mbits) {
 void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
-  if (WATER_SURFACE_FRESNEL_ON && gi < 2u) gsSurface[gi]=0u;
+  if (surface_diagnostics() && gi < 12u) gsSurface[gi]=0u;
 #endif
 
   const uint2 fp = tid.xy;
@@ -423,7 +432,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const float rough = float(r1.w >> 16) / 65535.0;
   const float3 Ct = has ? target[fp] : 0.0.xxx;
 #ifdef WATER_SPEC_RF_EDGE
-  const bool surface_fresnel = WATER_SURFACE_FRESNEL_ON && (r1.w & 65535u) > 0u && (r1.w & 65535u) < 49151u;
+  const bool surface_fresnel = WATER_SURFACE_FRESNEL_ON && (r1.w & 49160u) == 32768u;
 #endif
   const bool own = has && same_encoded(Crec.r, Ct.r, 6) && same_encoded(Crec.g, Ct.g, 6) && same_encoded(Crec.b, Ct.b, 5);
   const float ln = length(N);
@@ -765,9 +774,23 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const float3 Cn = chg && cfin ? max(Cu, 0.0) : Ct;
   cstat(56, chg && !cfin);
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
-  if (WATER_SURFACE_FRESNEL_ON) {
-    cstat(120, own && surface_fresnel);
-    cstat(121, own && surface_fresnel && (!valid || !cfin));
+  if (surface_diagnostics()) {
+    const uint marker = r1.w & 65535u;
+    const bool marked = (marker & 49152u) == 32768u;
+    const uint coverage = (marker >> 6u) & 255u;
+    const float cleanOwned = WaveActiveSum(own && surface_fresnel ? float(255u-coverage)/255.0 : 0.0);
+    if (WaveIsFirstLane()) InterlockedAdd(gsSurface[0], uint(round(cleanOwned)));
+    surface_stat(1u, own && surface_fresnel && (!valid || !cfin || (marker & 1u) != 0u));
+    surface_stat(2u, own && marked && coverage == 0u);
+    surface_stat(3u, own && marked && coverage > 0u && coverage < 255u);
+    surface_stat(4u, own && marked && coverage == 255u);
+    surface_stat(5u, own && marker == 65535u);
+    surface_stat(6u, own && marker != 65535u && !marked);
+    surface_stat(7u, own && marked && (marker & 8u) != 0u);
+    surface_stat(8u, own && !WATER_SURFACE_FRESNEL_ON);
+    surface_stat(9u, own && marked);
+    surface_stat(10u, own && marked && (marker & 16u) != 0u);
+    surface_stat(11u, own && marked && (marker & 32u) != 0u);
   }
 #endif   // kCsNonFinite
   const float d = lum(Cn) - lum(Ct);

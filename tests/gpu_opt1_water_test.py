@@ -36,23 +36,8 @@ class EmptyWaterTiles(unittest.TestCase):
                             stats[1]+=1
                 return struct.pack('<64I',*out),struct.pack('<64I',*rec),stats
             self.assertEqual(execute(False),execute(True))
-    def test_hair_cards_warmed_before_measured_shots(self):
-        import importlib.util
-        path=Path(__file__).resolve().parents[1]/'tools/live_batches/hair_qual/make_job.py'
-        spec=importlib.util.spec_from_file_location('hair_qual_gpu_opt1_test',path)
-        mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
-        for name,save,kind in mod.SAVES:
-            job,plan=mod.cost2_job(name,save,kind)
-            labels=[p['label'] for p in plan]
-            self.assertLess(labels.index('warm-cards'),labels.index('shot-cards'))
-            self.assertLess(labels.index('warm-full'),labels.index('shot-cards'))
-            warm=plan[labels.index('warm-cards')]
-            shot=plan[labels.index('shot-cards')]
-            self.assertEqual(warm['set'],shot['set'])
-            self.assertGreaterEqual(warm['seconds'],25)
-            gates=[g for g in job['expect_every'] if g['name'].startswith('no background build')]
-            self.assertEqual(len(gates),1)
-            self.assertIn('shot-cards',gates[0]['windows'])
+    # test_hair_cards_warmed_before_measured_shots retired with the hair_qual cost2 plans (hair-cards-retire:
+    # rt_hair_cheap / rt_hair_gi_mean / rt_hair_visibility were removed; hair_qual no longer generates jobs).
 
     def test_live_identity_accepts_exact_static_outputs(self):
         import sys

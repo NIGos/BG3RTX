@@ -168,12 +168,13 @@ int main() {
     CHECK(g.allow_prepass(k) && g.allow_velocity(k));
     g.publish(&k, 1);   // a frame without the G-buffer variant: the prepass stops at once
     CHECK(!g.allow_prepass(k));
-    // Feedback: strand pixels keep it; kStrikes counted frames with the variant and no strand pixel fail it for good.
+    // Feedback: strand pixels keep it; kStrikes counted frames with the variant and no strand pixel retire it.
     CHECK(!g.feedback(k, true, 500));
     CHECK(!g.feedback(k, false, 0));   // the variant did not run that frame: no evidence
     CHECK(!g.feedback(k, true, 0));
     CHECK(!g.feedback(k, true, 7));    // a strand pixel resets the strikes
     CHECK(!g.feedback(k, true, 0));
+    CHECK(!g.feedback(k, true, 0, 900));   // hv5: the pixels carry an adjacent frame's tag: no evidence, no strike
     CHECK(g.feedback(k, true, 0));     // the second strike in a row
     g.gbuffer_drew(k);
     g.publish(&k, 1);
@@ -182,7 +183,16 @@ int main() {
     g.clear();
     g.publish(&k, 1);
     g.publish(&k, 1);
-    CHECK(!g.allow_gbuffer(k));   // failed for the session, also across a reset
+    CHECK(!g.allow_gbuffer(k));   // retired, also across a reset, until its retry frame
+    for (uint64_t f = 0; f < hair_primary::kRetryFrames; ++f) g.publish(&k, 1);
+    CHECK(g.allow_gbuffer(k));    // retried after kRetryFrames (a draw off screen or behind another groom comes back)
+    CHECK(!g.feedback(k, true, 0) && g.feedback(k, true, 0));
+    CHECK(g.failed[k].wait == 2 * hair_primary::kRetryFrames);   // a second failure waits twice as long
+    for (int i = 0; i < 8; ++i) {
+      for (uint64_t f = 0; f < g.failed[k].wait; ++f) g.publish(&k, 1);
+      CHECK(!g.feedback(k, true, 0) && g.feedback(k, true, 0));
+    }
+    CHECK(g.failed[k].wait == hair_primary::kRetryMaxFrames);   // capped
     // A key that leaves the published set stops at once in every pass.
     const uint64_t k2 = 0x99;
     g.publish(&k2, 1);
@@ -192,6 +202,37 @@ int main() {
     CHECK(g.allow_prepass(k2));
     g.publish(nullptr, 0);
     CHECK(!g.allow_gbuffer(k2) && !g.allow_prepass(k2));
+  }
+  {   // A whole counted frame (hv5 2026-11-03: every draw of a counted frame struck at once).
+    hair_primary::SwapGate g;
+    const uint64_t a = 0xA, b = 0xB;
+    const bool drew[3] = {true, true, true};
+    // Two characters with the same hairstyle share one index-range key: one on screen, one not. Summed: no strike.
+    const uint64_t shared[3] = {a, a, b};
+    const uint32_t px[3] = {0, 1200, 800}, none[3] = {0, 0, 0};
+    for (int f = 0; f < 4; ++f) CHECK(g.feedback_frame(shared, drew, px, none, 3).empty());
+    // Every groom 0 with the counted tag but pixels with an adjacent tag (the G-buffer ran against another publish).
+    const uint64_t keys[3] = {a, b, 0xC};
+    const uint32_t zero[3] = {0, 0, 0}, adjacent[3] = {700, 0, 300};
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3).empty());
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3) == std::vector<uint64_t>{b});   // only b: no pixel at all
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3).empty());
+    CHECK(g.retired(b) && !g.retired(a) && !g.retired(0xC));
+    // Genuinely no strand pixel anywhere, twice: every drawn key is retired.
+    hair_primary::SwapGate h;
+    CHECK(h.feedback_frame(keys, drew, zero, zero, 3).empty());
+    CHECK(h.feedback_frame(keys, drew, zero, zero, 3).size() == 3);
+  }
+  {   // rt_hair_groom_primary_order: the header the G-buffer pass applies (newest publish ordered before it on the GPU)
+    using hair_primary::Staged;
+    const Staged st[3] = {{10, 100, 0xA}, {11, 101, 0xB}, {12, 102, 0xC}};
+    auto none = [](uint64_t) { return false; };
+    auto upto101 = [](uint64_t r) { return r <= 101; };
+    CHECK(hair_primary::pick_publish(st, 3, 0xC, none) == 2);      // this frame's build recorded in the same command buffer
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, upto101) == 1);   // another buffer: the newest already submitted
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, none) == -1);     // nothing ordered before it: no strand swap
+    const Staged empty[2] = {};
+    CHECK(hair_primary::pick_publish(empty, 2, 0, upto101) == -1);
   }
   {   // level reload (hv1 2026-11-03 18:40, device lost after F8): LoadGuard + SwapGate as hair_primary_publish uses them
     hair_primary::LoadGuard load;

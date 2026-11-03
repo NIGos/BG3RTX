@@ -135,7 +135,7 @@ def job(name, save):
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 300, "repeat": 1,
         "live_batch": LIVE,
-        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},rt_hair_gi_cull=0,{hg.GROOM_START},"
+        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},{hg.GROOM_START},"
                f"{PRIMARY_START}",
         "live_flow": {"startup_only": ["rt_hair_groom_primary"]},
         "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/hp_plan.json"],
