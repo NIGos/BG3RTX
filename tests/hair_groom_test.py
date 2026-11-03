@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, geom, mesh, primary, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, dual, geom, mesh, primary, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -423,7 +423,24 @@ def test_primary():
     check("tracer: G-buffer tangent decodes to +x", np.allclose(primary.oct12_decode(gb["rt3"][rows[0], 32]), [1, 0, 0], atol=1e-3))
 
 
-for t in (test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_dual():
+    # Dual scattering (Zinke 2008, paper densities 0.7) vs a path-traced slab of random fibres, retro direction.
+    # Measured 2026-11-03: CHAR_Hair colour dual/ref 0.71/0.76/0.80, single scattering 0.27/0.35/0.46.
+    c, r = bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]
+    ref = dual.slab_retro_reference(c, r, n=4000)
+    ds, ss = dual.slab_retro_dual(c, r, n=60000), dual.slab_retro_dual(c, r, n=60000, single_only=True)
+    check("dual scattering recovers most of the path-traced hair radiance (0.6..1.05 of it)",
+          np.all(ds / ref > 0.6) and np.all(ds / ref < 1.05), ds / ref)
+    # The 4000-path reference has a few % noise: compare the two models on it, with a 0.2 margin.
+    check("single scattering alone stays well below dual scattering", np.all(ss / ref < ds / ref - 0.2), (ss / ref, ds / ref))
+    hue = lambda v: v / v.sum()
+    check("dual scattering keeps the hue closer than single scattering",
+          np.abs(hue(ds) - hue(ref)).max() < np.abs(hue(ss) - hue(ref)).max(), (hue(ds), hue(ss), hue(ref)))
+    av = dual.averages((1, 1, 1), r, n=100000)
+    check("white fibre: forward + backward fractions ~1 (energy)", np.all(np.abs(av.a_f + av.a_b - 1) < 0.03), av.a_f + av.a_b)
+
+
+for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

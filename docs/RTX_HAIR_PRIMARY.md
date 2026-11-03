@@ -96,7 +96,15 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   **3a (done offline):** `shaders/rt/hair_bsdf.hlsli` (Chiang 2016 R/TT/TRT + residual, d'Eon M_p, sigma_a from
   the colour, `hb_eval_pixel` = mean over four fibre offsets), GPU vs `bsdf.py` in `hair_primary_gpu_test`
   (16k samples, 4 colour/roughness cases: relative error p99 4e-6, max 1.5e-5).
-  **3b (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
+  **3b-1 (done offline):** `tools/hair_groom/dual.py`, dual scattering (Zinke 2008, paper densities d_f = d_b =
+  0.7) from fibre averages integrated over `bsdf.evaluate`. Validation: radiance toward the light from a
+  semi-infinite slab of random fibres, path traced (next-event estimates, all orders) vs the visible fibre shaded
+  by the model. Ratio model/reference: CHAR_Hair colour single scattering 0.27/0.35/0.46, dual 0.71/0.76/0.80;
+  (0.6, 0.45, 0.3) 0.13-0.19 vs 0.76-0.78; brighter hair is underestimated (white 0.40, held-out light
+  colours 0.47-0.93). Fitting d_f/d_b ends at the grid edge (d_f 1.0): the model's structure is the limit, so
+  the paper constants stay; next refinement: a per-channel correction table (absorption, roughness) from the
+  path tracer. CTest `hair_groom_test` (test_dual).
+  **3b-2 (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
   (hb_eval_pixel - the game's class-5 term, bg3_materials/bg3_sun) x radiance x our visibility, behind its own
   key; Hair_Color from the strand's RT1 (the native material output). Open: single-scatter Chiang is pale
   (RTX_HAIR_INTEGRATION 4), so 3b needs the dual-scattering term (Zinke 2008: forward transmittance and
