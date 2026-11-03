@@ -266,7 +266,7 @@ inline constexpr Knob kKnobs[] = {
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
     {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
-   {}, {0,0,0,0}, true, {}, false, "Experimental", {}},
+   {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
 
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
@@ -306,21 +306,21 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rr_hair_resolve", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}},
 
   {"rr_post", "RR order",
    "Moves RR before/after game post-processing. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured.",
    Kind::Choice, Apply::Live, "live", false,
    {{"before", "Before post (default)", 0, {{"rr_post", "1"}}, {}, {}, false, false, false, Apply::Live},
     {"after", "After post", kCapDlss, {{"rr_post", "0"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
 
   {"exp_water_compose_shift", "Water camera correction",
    "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_water_compose_shift", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_water_compose_shift", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
 
   {"exp_native_coverage", "Native hair + scalp",
    "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
@@ -330,7 +330,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Live},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Advanced", {}},
 
   {"exp_hair_gi_cull", "Omit hair from indirect rays",
    "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
@@ -344,7 +344,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live; supported LSS hardware and local groom files required", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
@@ -358,14 +358,14 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
 
   {"exp_hair_cheap", "Single-sample hair coverage",
    "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_cheap", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_cheap", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
 
   {"exp_hair_gi_mean", "Mean hair coverage for GI",
    "Uses stored empirical strand coverage probabilities for GI bounce rays. Indirect energy and cost remain unqualified.",
