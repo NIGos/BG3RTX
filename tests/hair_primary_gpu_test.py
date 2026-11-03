@@ -20,7 +20,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import primary  # noqa: E402
+from tools.hair_groom import bsdf, primary  # noqa: E402
 
 FAILS = []
 
@@ -118,6 +118,48 @@ def compare(g, ref, gb, strict):
     return rep
 
 
+def bsdf_check(exe, spv, n=4000, seed=11):
+    """hb_eval (float32, GPU) against bsdf.evaluate (float64) on random fibre frames, offsets, colours, roughness."""
+    rng = np.random.default_rng(seed)
+
+    def unit(k):
+        v = rng.normal(size=(k, 3))
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+    cases = [(bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]), ((0.6, 0.45, 0.3), 0.25), ((0.9, 0.9, 0.9), 0.7),
+             ((0.05, 0.03, 0.02), 0.35)]
+    rows, want = [], []
+    for color, rough in cases:
+        t, wo, wi = unit(n), unit(n), unit(n)
+        h = rng.uniform(-0.99, 0.99, n)
+        want.append(bsdf.evaluate(t, wo, wi, h, color, rough))
+        block = np.zeros((n, 16), "<f4")
+        block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, h, wo, rough
+        block[:, 8:11], block[:, 12:15] = wi, color
+        rows.append(block)
+    want = np.concatenate(want)
+    with tempfile.TemporaryDirectory() as d:
+        inp, out = Path(d) / "s.bin", Path(d) / "o.bin"
+        inp.write_bytes(np.concatenate(rows).tobytes())
+        p = subprocess.run([str(exe), "bsdf", str(inp), str(spv), str(out)], capture_output=True, text=True)
+        print(p.stdout.strip())
+        if p.returncode == 77:
+            return
+        if p.returncode:
+            print(p.stderr)
+            check("BSDF GPU check ran", False, p.returncode)
+            return
+        got = np.frombuffer(out.read_bytes(), "<f4").reshape(-1, 4)[:, :3].astype(np.float64)
+    # Relative to the sample's own value, floored at 1e-3 of the lobe peak scale (float32 exp/log of tiny tails).
+    err = np.abs(got - want) / np.maximum(np.abs(want), 1e-3 * np.abs(want).max())
+    rep = {"samples": len(want), "rel_err_p99": float(np.percentile(err, 99)), "rel_err_max": float(err.max()),
+           "finite": bool(np.all(np.isfinite(got)))}
+    print(json.dumps(rep))
+    check("BSDF GPU values finite", rep["finite"])
+    # float32 against float64: measured p99 4e-6, max 1.5e-5 (RTX 5090); 10x margin.
+    check("BSDF GPU vs CPU: 99% of samples within 4e-5 relative", rep["rel_err_p99"] < 4e-5, rep["rel_err_p99"])
+    check("BSDF GPU vs CPU: every sample within 2e-4 relative", rep["rel_err_max"] < 2e-4, rep["rel_err_max"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -125,6 +167,7 @@ def main():
     ap.add_argument("--groom", type=Path)
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--distance", type=float, default=0.9)
+    ap.add_argument("--bsdf-spv", type=Path, help="also compare shaders/rt/hair_bsdf.hlsli with tools/hair_groom/bsdf.py")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -139,6 +182,8 @@ def main():
     if g is not None:
         ref = primary.trace(pts, rad, offs, cam)
         compare(g, ref, primary.gbuffer(ref, cam), strict=a.groom is None)
+    if a.bsdf_spv:
+        bsdf_check(a.exe, a.bsdf_spv)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")
     sys.exit(1 if FAILS else 0)
 

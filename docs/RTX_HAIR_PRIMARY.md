@@ -93,5 +93,13 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 - **1c (layer):** variant pipelines for matched hair draws, per-pixel record, key; live job Dialogue1:
   groom primary on/off in one run, full-resolution PNG pairs, prepass GPU ms, hair temporal variance.
 - **2 (done offline):** previous points + velocity variant; `primary.motion_vector` twin (CTest).
-  **3:** fibre BSDF in our lighting. **4:** DoF/RR post check
+  **3a (done offline):** `shaders/rt/hair_bsdf.hlsli` (Chiang 2016 R/TT/TRT + residual, d'Eon M_p, sigma_a from
+  the colour, `hb_eval_pixel` = mean over four fibre offsets), GPU vs `bsdf.py` in `hair_primary_gpu_test`
+  (16k samples, 4 colour/roughness cases: relative error p99 4e-6, max 1.5e-5).
+  **3b (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
+  (hb_eval_pixel - the game's class-5 term, bg3_materials/bg3_sun) x radiance x our visibility, behind its own
+  key; Hair_Color from the strand's RT1 (the native material output). Open: single-scatter Chiang is pale
+  (RTX_HAIR_INTEGRATION 4), so 3b needs the dual-scattering term (Zinke 2008: forward transmittance and
+  spread from the strand count along the shadow ray) before it can be judged; until then the game's class-5
+  lighting with the exact strand tangent stays the default. **4:** DoF/RR post check
   with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per character, VRAM.

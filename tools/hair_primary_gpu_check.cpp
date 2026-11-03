@@ -2,6 +2,8 @@
 // game), pixel-centre camera rays through tools/hair_primary_gpu_check.hlsl, per pixel the words the G-buffer variant
 // derives from the hit. tests/hair_primary_gpu_test.py writes the input from tools/hair_groom/primary.py and compares.
 //   hair_primary_gpu_check <input.bin> <check.spv> <output.bin>
+//   hair_primary_gpu_check bsdf <samples.bin> <bsdf.spv> <output.bin>   (tools/hair_bsdf_gpu_check.hlsl: 16 floats
+//                                                                       in, 4 floats out per sample; no geometry)
 // input.bin: "HPGC", version 1, points, segments, width, height, 2 x 0, then the 128-byte push block, float3 points,
 // float radii, uint segment starts. output.bin: 8 uint32 per pixel. Exits 77 without linear swept spheres.
 #undef VK_NO_PROTOTYPES
@@ -89,23 +91,94 @@ static std::vector<char> read_file(const char* path) {
   return std::vector<char>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
+// "bsdf" mode: one compute dispatch over the samples (bindings 1 in, 3 out; push: the sample count).
+static int run_bsdf(const std::vector<char>& in, const std::vector<char>& spv, const char* out_path, const char* gpu) {
+  const uint32_t n = uint32_t(in.size() / 64);
+  Buf src = make(in.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, in.data());
+  Buf dst = make(VkDeviceSize(n) * 16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  VkDescriptorSetLayoutBinding binds[2] = {{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                           {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+  VkDescriptorSetLayoutCreateInfo dslci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  dslci.bindingCount = 2;
+  dslci.pBindings = binds;
+  VkDescriptorSetLayout dsl;
+  CHECK(vkCreateDescriptorSetLayout(dev, &dslci, nullptr, &dsl));
+  VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 4};
+  VkPipelineLayoutCreateInfo plci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  plci.setLayoutCount = 1;
+  plci.pSetLayouts = &dsl;
+  plci.pushConstantRangeCount = 1;
+  plci.pPushConstantRanges = &pcr;
+  VkPipelineLayout layout;
+  CHECK(vkCreatePipelineLayout(dev, &plci, nullptr, &layout));
+  VkShaderModuleCreateInfo smci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  smci.codeSize = spv.size();
+  smci.pCode = reinterpret_cast<const uint32_t*>(spv.data());
+  VkShaderModule sm;
+  CHECK(vkCreateShaderModule(dev, &smci, nullptr, &sm));
+  VkComputePipelineCreateInfo cpci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  cpci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, sm, "main"};
+  cpci.layout = layout;
+  VkPipeline pipe;
+  CHECK(vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpci, nullptr, &pipe));
+  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
+  VkDescriptorPoolCreateInfo dpci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  dpci.maxSets = 1;
+  dpci.poolSizeCount = 1;
+  dpci.pPoolSizes = &size;
+  VkDescriptorPool dpool;
+  CHECK(vkCreateDescriptorPool(dev, &dpci, nullptr, &dpool));
+  VkDescriptorSetAllocateInfo dsai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  dsai.descriptorPool = dpool;
+  dsai.descriptorSetCount = 1;
+  dsai.pSetLayouts = &dsl;
+  VkDescriptorSet set;
+  CHECK(vkAllocateDescriptorSets(dev, &dsai, &set));
+  VkDescriptorBufferInfo bi[2] = {{src.b, 0, VK_WHOLE_SIZE}, {dst.b, 0, VK_WHOLE_SIZE}};
+  VkWriteDescriptorSet w[2];
+  for (uint32_t i = 0; i < 2; ++i) {
+    w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, set, binds[i].binding, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+    w[i].pBufferInfo = &bi[i];
+  }
+  vkUpdateDescriptorSets(dev, 2, w, 0, nullptr);
+  submit([&](VkCommandBuffer cmd) {
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);
+    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 4, &n);
+    vkCmdDispatch(cmd, (n + 63) / 64, 1, 1);
+  });
+  std::ofstream o(out_path, std::ios::binary);
+  o.write(static_cast<const char*>(dst.map), std::streamsize(size_t(n) * 16));
+  if (!o) { std::fprintf(stderr, "cannot write %s\n", out_path); return 1; }
+  std::printf("{\"gpu\":\"%s\",\"bsdf_samples\":%u}\n", gpu, n);
+  return 0;
+}
+
 int main(int argc, char** argv) {
-  if (argc < 4) {
-    std::fprintf(stderr, "usage: hair_primary_gpu_check <input.bin> <check.spv> <output.bin>\n");
+  const bool bsdf = argc >= 5 && std::strcmp(argv[1], "bsdf") == 0;
+  if (argc < 4 || (argc >= 5 && !bsdf)) {
+    std::fprintf(stderr, "usage: hair_primary_gpu_check [bsdf] <input.bin> <check.spv> <output.bin>\n");
     return 2;
   }
+  if (bsdf) ++argv;
   const std::vector<char> in = read_file(argv[1]);
-  uint32_t hdr[8];
-  if (in.size() < 32 + 128) { std::fprintf(stderr, "short input\n"); return 1; }
-  std::memcpy(hdr, in.data(), 32);
-  if (std::memcmp(hdr, "HPGC", 4) || hdr[1] != 1) { std::fprintf(stderr, "not an HPGC v1 input\n"); return 1; }
-  const uint32_t np = hdr[2], ns = hdr[3], width = hdr[4], height = hdr[5];
-  const size_t need = 32 + 128 + size_t(np) * 16 + size_t(ns) * 4;
-  if (in.size() != need || !np || !ns || !width || !height) { std::fprintf(stderr, "bad input size\n"); return 1; }
-  const char* push = in.data() + 32;
-  const char* points = push + 128;
-  const char* radii = points + size_t(np) * 12;
-  const char* starts = radii + size_t(np) * 4;
+  uint32_t hdr[8] = {};
+  uint32_t np = 0, ns = 0, width = 0, height = 0;
+  const char *push = nullptr, *points = nullptr, *radii = nullptr, *starts = nullptr;
+  if (bsdf) {
+    if (in.empty() || in.size() % 64) { std::fprintf(stderr, "bad samples size\n"); return 1; }
+  } else {
+    if (in.size() < 32 + 128) { std::fprintf(stderr, "short input\n"); return 1; }
+    std::memcpy(hdr, in.data(), 32);
+    if (std::memcmp(hdr, "HPGC", 4) || hdr[1] != 1) { std::fprintf(stderr, "not an HPGC v1 input\n"); return 1; }
+    np = hdr[2], ns = hdr[3], width = hdr[4], height = hdr[5];
+    const size_t need = 32 + 128 + size_t(np) * 16 + size_t(ns) * 4;
+    if (in.size() != need || !np || !ns || !width || !height) { std::fprintf(stderr, "bad input size\n"); return 1; }
+    push = in.data() + 32;
+    points = push + 128;
+    radii = points + size_t(np) * 12;
+    starts = radii + size_t(np) * 4;
+  }
   const std::vector<char> spv = read_file(argv[2]);
   if (spv.size() < 20 || spv.size() % 4) { std::fprintf(stderr, "bad spv\n"); return 1; }
 
@@ -177,6 +250,7 @@ int main(int argc, char** argv) {
   VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &asp};
   vkGetPhysicalDeviceProperties2(phys, &p2);
   const VkDeviceSize al = asp.minAccelerationStructureScratchOffsetAlignment;
+  if (bsdf) return run_bsdf(in, spv, argv[3], props.deviceName);
 
   // ---- groom BLAS (the layer's geometry: bvhsplit groom_geometry) and a one-instance TLAS ----
   const VkBufferUsageFlags as_in = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
