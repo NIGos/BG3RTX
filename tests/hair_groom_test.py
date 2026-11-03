@@ -10,7 +10,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -578,7 +578,62 @@ def test_cost():
     check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
 
 
-for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_sample():
+    state, rows = {}, []
+
+    def add(name, reason=None, lod=0, category="player", **extra):
+        state[name] = dict(gr2=name + ".gr2", lod=lod, reasons=[reason] if reason else [], **extra)
+        rows.append(dict(name=name, category=category))
+
+    for name in "abcde":
+        add("coverage_" + name, "coverage differs by +0.10")
+    add("coverage_0_lod1", "coverage differs by +0.10", lod=1)
+    add("coverage_unused", "coverage differs by +0.10", category="unused")
+    add("coverage_cv", "coverage differs by +0.10", category="CV only")
+    for name, reason in (("silhouette", "silhouette IoU 0.50"), ("radiance", "mean radiance differs by +20%"),
+                         ("roots away", "2 cards with the root away from the head"),
+                         ("root channel", "root channel does not run along the rows"),
+                         ("mirrored UV", "3 cards with mirrored UV triangles"), ("error", "ValueError: no mesh")):
+        add(name, reason, lod=1)
+    state["silhouette"]["reasons"].append("coverage differs by -0.30")
+    for name in ("draw_a", "draw_b"):
+        add(name, triangles=10)
+    add("uv_join", triangles=20)
+    add("uploaded", asset="ABCDEF0123456789.hgrm")
+    add("catalogue_only", triangles=30, asset="0000000000000001.hgrm")
+    add("companion_category", category="companion")
+    for name in sample.COMPANIONS:
+        add("hair_" + name.upper(), category="unused")
+    add("draw_lod1", lod=1)
+    state["draw_lod1"]["gr2"] = state["draw_a"]["gr2"]
+    add("draw_lod2", lod=2)
+    state["draw_lod2"]["gr2"] = state["draw_a"]["gr2"]
+    log = ("[hair groom] unmatched hair draw: 30 indices (10 triangles): no groom\n"
+           "[hair groom] UV join 60 indices: matched; uv0 ...\n"
+           "[hair groom] abcdef0123456789 LOD 1 uploaded: 10 strands\n"
+           "[hair groom] indexed 0000000000000001.hgrm: index id 0000000000000001, 90 indices\n"
+           "[other] unmatched hair draw: 90 indices\n"
+           "[hair groom] unmatched hair draw: 30 indices (10 triangles): repeated\n")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "live.log"
+        path.write_text(log, encoding="utf-8")
+        with path.open(encoding="utf-8") as f:
+            indices, ids = sample.log_draws(f)
+    check("sample parses draw counts and upload IDs, ignores catalogue", indices == {30, 60} and ids == {"abcdef0123456789"})
+    reach = {"rows": rows}
+    names, sources, classes = sample.select(state, reach, indices, ids)
+    check("sample maps all count collisions and upload IDs", sources["logs"] == {"draw_a", "draw_b", "uv_join", "uploaded"})
+    check("sample coverage evenly spaced, LOD0 preferred, reachable only", classes["coverage"] == {"coverage_a", "coverage_c", "coverage_e"}, classes)
+    check("sample first reason determines class, LOD1 fills missing LOD0", all(classes[k] == {k} for k in sample.CLASSES if k != "coverage"))
+    check("sample includes category and case-insensitive companion names", len(sources["companions"]) == 11)
+    check("sample adds LOD siblings by GR2", sources["LOD siblings added"] == {"draw_lod1"} and "draw_lod2" not in names)
+    check("sample deterministic regardless of input order", sample.select(dict(reversed(list(state.items()))), {"rows": rows[::-1]}, indices, ids)[0] == names == sorted(set(names)))
+    check("sample configurable quota", sample.pick_classes(state, reach, 1)["coverage"] == {"coverage_c"} and
+          not any(sample.pick_classes(state, reach, 0).values()))
+    check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
+
+
+for t in (test_sample, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
