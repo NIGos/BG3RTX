@@ -1,5 +1,7 @@
 # Dialogue character shadows batch (live_batch dialogue-shadows), NOT authorized
 
+Historical: Solved attribution: the dialogue shadow band is fixed and the user accepts AO self-occlusion. Native-hair and static-cascade attribution controls are not candidates for the next series. Preserve these jobs and predictions as the original investigation; do not queue them for qualification.
+
 Question (user, 2026-11-02): in dialogue scenes intrusive shadows appear on the characters themselves. Which RT
 term casts them? Code reading and ranked hypotheses: [docs/DIALOGUE_SHADOWS.md](../../../docs/DIALOGUE_SHADOWS.md)
 "Attribution batch 2026-11-02". Predictions (committed before the run): [predicted.json](predicted.json).

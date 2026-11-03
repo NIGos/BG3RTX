@@ -695,3 +695,22 @@ ray rebasing and delta stats. A synthetic dual-layout capture fixture now checks
 zero static delta and exact translated delta through the ring/copy layout. Static
 ON windows must report average delta < 0.01 m. Key remains off; live cost and
 quality after this correction are unmeasured. No ABI or variant request change.
+
+### F-1 query ownership follow-up (rt-continuity, 2026-11-03)
+The 15:07-15:10 user trial had 73.7M reflection hit attempts but zero in compose:
+the host rejected F-1 material registration before the tuple correction could run.
+Borrow only an existing query for the same slot/generation at exactly F-1; its
+original camera validation remains authoritative. Register every borrowing recording
+as both a slot and query owner; collect query storage only after all users retire.
+Keep ordinary two-set and hit four-set pipeline caches separate before layout validation.
+Native tileset changes remain saved for restart, while hair/scalp remain live.
+ABI and shader requests unchanged. READY_FOR_LIVE after offline gates; restart the
+layer and check S8 compose hit attempts with hit shade 1/2 and compose shift 1.
+GPU cost and visible quality remain unmeasured; no game launch in this task.
+
+### gpu-opt1 exact empty compose tiles (2026-11-03, unmeasured)
+
+`rt_water_empty_tiles` is off by default, specialization constant 1023, no request delta.
+The compose workgroup reduces its exact existing `has` validity predicate; only when all 64 lanes have no valid record does the whole group return before ray/material work. Dispatch padding participates in both barriers. Header dispatch count and compose camera forwarding still execute. The native target is neither loaded nor stored by an empty group; nonempty groups execute the same path, including record consumption, ownership and all debug outputs. No CPU stale-record inference or altered water copy is used.
+
+`tests/gpu_opt1_water_test.py` checks the integer/bit control model (1065 empty, single-lane, mixed and padded groups); it is not GPU replay evidence. Production compose replay now passes exact native target, record, camera and statistics bytes for empty, mixed, debug and invalid fixtures, each key and combined. Empty native packed colour is independently checked. Mixed: 39 owned records, 26 rays; invalid: 39 invalid records. Key-off gate passes against HEAD across all 173 requests/194 entries after specialization and removal of unused capabilities. Live cost remains required before qualification. Planning: WI compose 0.313 ms, hoped empty-view saving 0.08-0.16 ms; guaranteed saving 0 ms. Camp/S8 draft in `tools/live_batches/gpu_opt1`, static OFF/ON/OFF and isolated cost states. No game was launched. Verify native colour in an empty view and unchanged populated water; actual GPU cost is pending live evidence.

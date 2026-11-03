@@ -44,5 +44,41 @@ int main(){
   for(unsigned j=0;j<selected.count;++j)check(selected.ids[j]==oracle[j].second);
  }
  auto s=wl_empty();wl_insert(s,0,nan);wl_insert(s,0,-1);check(s.count==0 && s.candidates==0);
+ // Culling agrees with the incident reference for point/spot cones, boundaries,
+ // channels and malformed records. Positive subnormal values must survive.
+ HdLight l{};l.position={0,0,0};l.color={1,1,1};l.direction={0,0,1};
+ l.inverse_radius=.125f;l.channels=1;l.cos_outer=.5f;l.cos_inner=.75f;
+ l.global_selector=1;l.falloff_exponent=2;l.falloff_bias=0;
+ for(bool spot:{false,true})for(unsigned channel:{0u,1u,32u})for(int x=-16;x<=16;++x){
+  auto i=hd_native_incident(l,spot,{float(x),0,4},channel,1);
+  auto fast=wl_incident(l,spot,{float(x),0,4},channel,1);
+  check(fast.status==i.status);
+  check(fast.radiance.x==i.radiance.x && fast.radiance.y==i.radiance.y && fast.radiance.z==i.radiance.z);
+ }
+ // Independent cone oracle: light axis +Z, hit at +Z is inside; -Z outside.
+ check(wl_known_zero(wl_incident(l,true,{0,0,-4},0,1)));
+ check(!wl_known_zero(wl_incident(l,true,{0,0,4},0,1)));
+ for(unsigned trial=0;trial<10000;++trial){
+  auto test=l;test.color={float(rng()%100),float(rng()%100),float(rng()%100)};
+  test.falloff_exponent=float(rng()%8);test.falloff_bias=float(int(rng()%5)-2);
+  test.cos_outer=float(int(rng()%200)-100)/100;test.cos_inner=test.cos_outer+(1-test.cos_outer)*.5f;
+  test.global_selector=trial%2?-1.f:1.f;
+  HdVec3 point={float(int(rng()%32)-16),float(int(rng()%32)-16),float(int(rng()%32)-16)};
+  if(trial%13==0)test.direction={0,0,0};
+  if(trial%17==0)test.cos_inner=nan;
+  if(trial%19==0)test.color.x=-1;
+  auto ref=hd_native_incident(test,trial%2,point,trial%3,2);
+  auto fast=wl_incident(test,trial%2,point,trial%3,2);
+  check(ref.status==fast.status);
+  if(ref.status==HdOk)check(ref.radiance.x==fast.radiance.x && ref.radiance.y==fast.radiance.y && ref.radiance.z==fast.radiance.z);
+ }
+ HdIncident incident{};incident.status=HdInvalid;check(!wl_known_zero(incident));
+ incident.status=HdOk;check(wl_known_zero(incident));
+ incident.radiance.x=std::numeric_limits<float>::denorm_min();check(!wl_known_zero(incident));
+ for(unsigned n:{0u,1u,31u,32u,33u,4096u}){
+  auto a=wl_empty();for(unsigned j=0;j<n;++j)wl_append(a,j,float(j));
+  check(a.count==std::min(n,WlK) && a.candidates==n);
+  for(unsigned j=0;j<a.count;++j)check(a.ids[j]==j);
+ }
  std::puts("world culling and nearest selection passed");
 }

@@ -1,30 +1,34 @@
-# Water hidden-hit shading: S8 draft
+# Water hit cost draft
 
-One Water Queens House launch, Ultra water, visible_unfocused_fg. Not queued.
-Static and smooth turn windows toggle rt_water_hit_shade 0/2/0/2 with
-rt_water_compose_shift=1. Turns use held E (direction +1) and held Q on equal opposite returns
-with `turn_mode=keys`, following the 120/120 moving samples in the 10:08 probe. Cost windows have no diagnostics.
-Every ON window requires hidden > 0 AND offscreen > 0 in BOTH extended water
-stats lines. Mode 2 queries sphere-culled nearest lights outside the grid.
-Only the current frame's froxel membership union certifies active point/spot
-slots and their types. Raw unlisted slots are stale (docs/ASSET_DB.md).
-A hit may be off-screen even when its lights also illuminate the camera volume.
-Lights absent from all current froxels and world local-probe queries remain gaps.
-At most 32 local lights; truncation retains the probe and is counted in both logs.
-Warmup enables rt_water_hit_shade=2 so its pipelines compile before the first OFF shot.
-No gate or RF bias threshold was relaxed.
-Record compose GPU median/p90 and reflection GPU ms versus OFF; cost is unknown. Added median and p90 GPU budget: 1.0 ms.
-Hit shading accepts F or F-1 lighting only with the same TLAS and lighting list.
-F-1 additionally requires compose shift into its lighting camera space; mismatches keep the probe.
+No game launch or queue submission. One S8 Water Queens House launch, Ultra,
+visible_unfocused_fg, fixed rt_water_hit_shade=2 and rt_water_compose_shift=1.
+The four groups independently compare rt_water_hit_cost 0/1/0/1 (sparse),
+0/2/0/2 (cone/zero), 0/4/0/4 (candidate order), and 0/7/0/7 (combined).
+All values 0/1/2/4/7 warm before the first capture. Each group takes four static float-energy windows
+(two captures each), then four static diagnostic-free cost windows (14 s each; exclusive lint minimum > 13 s).
+This isolates hit cost from camera motion and the pending compose-shift issue.
+Energy uses water-compose float pre-post scene plus same-frame delta and exposure,
+with separate OFF-repeat/encoding bands per group. Every ON must preserve energy,
+coverage, zero invalid hits and zero world truncation. No radiance gain correction.
 
-Energy: 16 s shot phases with trace_at [4,7,10], 3 static traces per state, no motion before all four shots. The job
-automatically runs the existing energy analyzer with post_gate=true; to inspect:
-`py -3 tools/m4_promotion_gate.py --batch water_offscreen --pool run`
-The job selects water-compose: pre-post scene float mean plus in-frame compose
-delta, exposure-normalized. Require BOTH ON means within the OFF-repeat noise
-and encoding band. Never use PNG/bloom energy or rescale radiance. Commit the
-prediction before an authorized live run; read-only Git prevents that here.
+Judge cost ONLY on [water] reflections GPU median and p90; report compose GPU
+separately. Discard the first GPU report after each toggle; use the last complete
+120-sample report within the cost window (two reports required). Do not use frame
+time, total RT time or traced capture windows for cost.
+The goal is lower than mode 2's supplied 0.8-2.4 ms median / up to 3.3 ms p90.
+Budgets are optimization targets, never hard stops. Report all measured numbers.
+Existing m4 energy post gate checks every ON; cost reporting is separate (no budget gate).
+Mode 1 shares cone/zero culling, but sparse/order only affect out-of-grid mode 2;
+mode 1 remains covered by offline specialization checks, not claimed live-qualified.
 
-`./tools/live_batches/water_offscreen/dryrun.ps1` uses a fake scratch queue only.
-Estimated plan 249 s plus loading (7 min dryrun budget), 12 traces, no float bursts, under 1 GB. Final restore clears
-the experimental keys and exposure hold; runner restores per-run overrides.
+461 s phases + loading (9.7 min dryrun estimate), 32 PNG traces, no float bursts,
+1930 MB conservative estimate. Final restore clears experimental keys/exposure;
+runner restores per-run overrides. Run dryrun.ps1 for synthetic queue verification.
+The synthetic receipt grants no live authorization. Commit predicted.json through
+the coordinator before an authorized run (Git metadata is read only here).
+
+Lint assumptions: 30 rendered FPS, 1 s settings latency, 1 s per trace stall.
+Energy shots last 12 s (exclusive minimum > 11 s); cost windows last 14 s
+(two retained GPU reports after the skipped first line). Load-time roof overflow
+and mesh-pool warnings are rejected with zero tolerance in measured windows.
+No generator exists for this batch; checked-in plan and trace indices are updated directly.

@@ -4,6 +4,10 @@
 """
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tools.live_batches.live_flow import repair_known_forbids
 
 HERE = Path(__file__).resolve().parent
 CYCLES = 22            # 22 x 110 s + 20 s warmup = 41 min of plan
@@ -113,5 +117,6 @@ job = {
 (HERE / "plans").mkdir(exist_ok=True)
 (HERE / "jobs").mkdir(exist_ok=True)
 (HERE / "plans" / "ls1_camp.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
+repair_known_forbids(job, plan)
 (HERE / "jobs" / "ls1-long-session-camp-fg2.json").write_text(json.dumps(job, indent=1) + "\n", encoding="utf-8")
 print(f"{len(plan)} phases, {plan_s} s ({plan_s / 60:.1f} min), {len(expect_every)} expect_every entries")

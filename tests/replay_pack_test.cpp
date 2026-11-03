@@ -249,6 +249,15 @@ int main() {
       check(!over && cache_kept && lighting_kept && d.size() == 100 - (3300 - 976 - 2053 - 60) / 4,
             "fill_budget: S8 + lighting inputs keeps the hit cache and the lighting images, probe cubes fill the rest");
     }
+    {   // Offline water adapter keeps native format and extends, rather than changes, GI.
+      const auto* water = rp::find_pass("water_compose_fixture");
+      const auto* gi = rp::find_pass("gi_hit_direct");
+      const auto* target = water ? rp::find_slot(*water, 0, 67) : nullptr;
+      check(water && target && target->kind == rp::kStorage && target->storage_format == 122 &&
+            water->set_count == gi->set_count && water->push_bytes == gi->push_bytes &&
+            !rp::find_slot(*gi, 0, 67) && rp::find_slot(*water, 0, 61)->kind == rp::kSsbo,
+            "water fixture adapter: native target and side-effect buffers, ordinary GI contract unchanged");
+    }
     {   // Lighting contract: every set 2-3 slot but the declared sampler has a game source, sources name slots.
       const rp::Pass& gp = *rp::find_pass("gi_hit_direct");
       bool ok = gp.set_count == 4;

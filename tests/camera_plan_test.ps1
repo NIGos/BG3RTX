@@ -196,4 +196,28 @@ Check (-not (Test-CameraPlanReady $readyStep "temporal spec mv=0 pg=0, pipeline`
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline") 'all matching specializations release capture'
 Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($step.trace_at -and')) 'runner checks readiness before any phase trace'
 Check ($runner -match '(?s)phaseWaitAt -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
+Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline`nunrelated later line") 'unchanged cached spec releases a later phase'
+Check (-not (Test-CameraPlanReady @{wait_log=@('temporal.*trace')} "temporal`ntrace")) 'readiness cannot match across log lines'
+Assert-CameraPlanFields @{wait_log=@('ready');wait_log_timeout=60;recenter=$true}
+foreach ($bad in @(@{wait_logs=@('ready')}, @{wait_log=@('ready')},
+                   @{wait_log=@('[');wait_log_timeout=1}, @{recenter='true'})) {
+  $rejected=$false
+  try { Assert-CameraPlanFields $bad } catch { $rejected=$true }
+  Check $rejected 'unknown or invalid readiness/recenter fields fail closed'
+}
+# Execute the actual runtime wait block with a synthetic log and clock, no game.
+$begin=$runner.IndexOf('      if ($step.wait_log -and -not $phaseReady)')
+$end=$runner.IndexOf('      if ($step.recenter', $begin)
+$waitBlock=[scriptblock]::Create($runner.Substring($begin,$end-$begin))
+$log=Join-Path $scratch 'ready.log'
+[IO.File]::WriteAllText($log, "ready cached in an earlier phase`nunrelated latest line")
+$step=@{label='cached';wait_log=@('ready cached');wait_log_timeout=5}
+$planClock=@{Elapsed=@{TotalSeconds=20;TotalMilliseconds=20000}}
+$phaseReady=$false;$phaseWaitAt=$null;$panCaptureSent=$true;$panIndex=3;$elapsed=4;$after=$false
+while ($true) { . $waitBlock; $after=$true; break }
+Check ($after -and $phaseReady -and $elapsed -eq 0 -and $phaseStartMs -eq 20000) 'cached readiness resumes phase clock at zero'
+$step.wait_log=@('missing');$phaseReady=$false;$phaseWaitAt=10;$after=$false;$result=''
+while ($true) { . $waitBlock; $after=$true; break }
+Check (-not $after -and $result -eq 'pipeline readiness timed out: cached') 'actual runtime timeout exits before downstream capture'
+Check ($runner -match '(?s)if \(\$step.recenter.*?Send-PlanMouse 0x0200 0.*?\[motion-recenter\]') 'recenter posts pointer centre and emits marker'
 Write-Host "$count camera-input and permission checks passed"

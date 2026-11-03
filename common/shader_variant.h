@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 // GI shader requests and specialization constants (replaces the per-flag wrapper trees that were
 // shaders/{native_tileset,hair_origin,omm,sun_current,native_scalp}/.../gi/{cascade/}).
 // A request is "<file>?NAME=VALUE;NAME=VALUE": Bg3HostApi::get_shader (ABI 23) passes each
@@ -15,7 +16,7 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kSpecCascade = 1u << 16 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kTraceHalf = 1u << 17, kSpecCascade = 1u << 16 };
 // kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
@@ -45,6 +46,10 @@ enum SpecId : unsigned {
   kSpecIdHairCheap = 1018,           // rt_hair_cheap: physical secondary coverage
   kSpecIdHairGiMean = 1019,          // rt_hair_gi_mean: stored hard-coverage probability
   kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
+  kSpecIdWaterHitCost = 1021,        // rt_water_hit_cost: sparse scan / zero incident / unordered K
+  kSpecIdCompactHitState = 1024,     // gpu-opt1: exact hit-state lifetime
+  kSpecIdAlphaMetadataCache = 1022,  // gpu-opt1: query-local immutable alpha metadata
+  kSpecIdWaterEmptyTiles = 1023,     // gpu-opt1: exact empty compose tiles
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
@@ -54,7 +59,7 @@ enum SpecId : unsigned {
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
 // Separate installed slots preserve both warmed cull states during same-run A/B.
-inline constexpr unsigned kHairGiCullSlot = 256u, kHairCheapSlot = 512u, kHairGiMeanSlot = 1024u, kHairGroomSlot = 2048u, kPipelineSlots = 4096u;
+inline constexpr unsigned kHairGiCullSlot = 256u, kHairCheapSlot = 512u, kHairGiMeanSlot = 1024u, kHairGroomSlot = 2048u, kCompactHitStateSlot = 4096u, kAlphaMetadataCacheSlot = 8192u, kTraceHalfSlot = 16384u, kPipelineSlots = 32768u;
 inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
   return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
 }
@@ -220,22 +225,14 @@ inline unsigned allowed(const char* file) {
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   if (occ_stats_entry(file)) f |= kOccStats;
+  if (std::strncmp(file,"gi/rt_reflections",17)==0) f |= kTraceHalf;
   return f;
 }
 
-// The keys under which the water passes (core/water.cpp) have no variant and skip: each changes the
-// alpha set or the scene's primitives that the gi/ passes follow with refresh()'s flags. Counted as
-// "variant" in the [water] reflections line and logged "[water] reflections skipped: no variant for
-// <keys>" (the convention for every such skip; smoke_ultra forbids "skipped: no variant for").
-// `defines`: what a water variant would add. tests/variant_matrix_test.cpp builds those requests
-// (tools/shader_identity.py compiled all 24 on 2026-11-01), so routing them is the fix. A key added
-// here without updating that test's expected skips fails it.
+// Water supports native tilesets/scalp/hair via RT_SPEC_NATIVE (1008/1010).
+// It traces the same-generation OMM reference TLAS with the host's superset alpha layout.
 struct NoVariant { const char* key; const char* defines; };
-inline constexpr NoVariant kWaterNoVariant[] = {
-    {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
-// Water deliberately traces the same-generation OMM reference TLAS. Its alpha
-// layout is the host's superset layout; unused OMM bindings need no shader variant.
-// rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).
+inline constexpr std::array<NoVariant, 0> kWaterNoVariant{};
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
@@ -288,12 +285,20 @@ inline std::string request(const char* file, unsigned flags) {
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
   if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
+  if (flags & kTraceHalf) add("RT_TRACE_HALF=1"); // extra storage binding 31: layout variant
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
 
 // The value of specialization constant kSpecCascadeId for a request built with kSpecCascade: 1 when the
 // pass would have had RT_CASCADE_MASKS (kCascade allowed for the file), else 0.
+// Consumers of rt_common, including the reference passes outside the cascade set.
+inline bool gpu_opt_entry(const char* file) {
+  return cascade_entry(file) || std::strcmp(file, "gi/rt_hit_two_bounce.hlsl") == 0 ||
+         std::strcmp(file, "gi/rt_local_shadows_match.hlsl") == 0 ||
+         std::strcmp(file, "gi/rt_local_shadows_native_full.hlsl") == 0;
+}
+
 inline unsigned spec_cascade_value(const char* file, unsigned flags) {
   return (flags & kCascade) && (allowed(file) & kCascade) ? 1u : 0u;
 }

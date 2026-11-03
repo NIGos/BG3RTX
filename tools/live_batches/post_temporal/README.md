@@ -40,3 +40,5 @@ Peak batch disk bound: 2,070,977,920 bytes (<2 GiB), including 70 MB for small
 float previews, logs and summaries. Analyze each scene before the next and delete
 analysed raw captures, retaining reports. The dryrun enforces the extent limits
 used by the runtime edge capture. No test changes saves or game configuration.
+
+Registration policy remains per-window-exclude-cuts. It is analysis metadata, not a camera-plan field. Timing assumptions: 30 rendered FPS, 1 s settings latency and 1 s trace stall budget.

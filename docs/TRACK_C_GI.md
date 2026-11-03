@@ -430,3 +430,44 @@ along the view ray by at most
 - `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
   (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
   ao_direct=1); the GI bounce and the reflections stay.
+
+### gpu-opt1: exact state and immutable metadata candidate (2026-11-03)
+
+`rt_compact_hit_state` is off by default (specialization constant 1024). Closest-hit
+transform retrieval moves after traversal, groom selection and barycentric extraction.
+Only proven non-pool instances omit the query transform: every transform consumer
+uses object-to-world only for pool geometry. Out-of-range instance metadata retains
+the original query transform and existing consumer guards. Pool matrices retain all
+float32 operations, including scene rebase. This is a limited lifetime reduction;
+removing the pool matrix across projection needs a separate transform source and is
+not implemented. GI reuses the same hit normal for direct, sun and AO, and lazily
+caches read-only light descriptor ranges and b13[0] across this invocation's rays.
+No lighting, ray, material, alpha, precision or sampling policy changes.
+Offline equivalence and camp/S8 OFF/ON/OFF cost/identity results are recorded in
+`docs/progress/gpu-opt1.md`; no GPU saving or qualification is claimed before them.
+
+GPU fixtures: lit/dark GI, 4,096 rigidly transformed pool hits and real solid/clear alpha candidates pass exact giRaw, depth and statistics bytes for each candidate and combined. This is fixture coverage, not full-scene or cost qualification.
+
+Key-off gate: all 173 requests/194 entries match HEAD after specialization; SPIR-V validation passes. GPU ms remain unmeasured. Camp/S8 live drafts and the static identity analyzer are in `tools/live_batches/gpu_opt1`.
+
+## Lower-preset spatial budget (gpu-opt2, 2026-11-03)
+`rt_trace_scale` is 0.5 in Low/Medium, 1.0 in High/Ultra. High is unchanged because
+PERF_AUDIT_GPU supplies an experiment, not quality evidence for promoting half resolution.
+Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-sample temporal
+weight, and existing depth-aware `gather_history` before full-grid AO/composite and dense RR guides.
+Reflection half-grid traces write a dedicated RGBA16F delta/hit-distance target through
+the unused GI raw slot (set 0 binding 8), preserving D-RF's 32-descriptor push layout.
+A full-grid depth/normal/material-guided resolve applies deltas to native destination lighting,
+with hit distance from the strongest guide sample (never averaged with the no-hit sentinel).
+Diagnostic reflection debug/validation retains full resolution. Non-RR uses the spatial resolve;
+Low keeps reflections off and preserves its screen-space GI budget.
+The alternate output uses the existing `RT_TRACE_HALF` variant; no on/off define product
+for unchanged GI. Manifest 145 -> 163 requests (+18); full-grid modules stay byte-identical.
+Far/bounce/emission remain off below Ultra; existing levels are unchanged and tested.
+Offline estimator check: `python tools/gpu_trace_scale_check.py`; real-scene and reflection
+replay coverage remain missing. Synthetic estimator agreement alone is not a quality pass.
+Prepared batch: `tools/live_batches/gpu_opt2` (camp High, S8 Medium, one launch each).
+Each has 1.0/0.5/1.0 cost windows and static energy repeats; no live run is authorized here.
+Expected saving 0.4-1.3 ms is the audit's hypothesis; actual pass cost is UNMEASURED.
+Synthetic corrected 32-frame GI trace check: mean -3.94% within +/-10.16% (4 paired SE),
+matched trace pixels exact; the wide band does not qualify composed or reflection energy.

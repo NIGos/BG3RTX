@@ -1,0 +1,383 @@
+{
+  "status": "COMPLETE_OFFLINE_CATALOGUE; JOINS_UNPROVED",
+  "branch": "cov-paks2",
+  "commit": null,
+  "constraints": {
+    "game_launched": false,
+    "git_metadata_written": false,
+    "shared_assetdb": "additions only",
+    "shader_request_delta": 0,
+    "abi_delta": 0,
+    "gpu_cost_ms": null
+  },
+  "summary": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\data\\assetdb\\mesh_paks_cov_paks2_full_v1.json",
+  "counts": {
+    "candidates": 41815,
+    "color_rows": 6091,
+    "decoded": 40983,
+    "done": 21712,
+    "failures": 832,
+    "hits": 0,
+    "joined": 0,
+    "native_decoded": 40983,
+    "rejected_metadata": 3541,
+    "rejected_rows": 832,
+    "source_failed_rows": 0,
+    "total_sources": 21712,
+    "unprocessed": 0,
+    "unprocessed_sources": 0,
+    "offline_material_candidates": 40983,
+    "proven_runtime_joined": 0,
+    "gr2_decoded": 21712
+  },
+  "count_definitions": {
+    "native_decoded": "eligible VisualBank rows whose named native mesh was decoded",
+    "decoded": "usable identity candidates after geometry/group validation",
+    "joined": "proven new runtime material rows; not geometry matches",
+    "failures": "error records; source errors may affect multiple rows"
+  },
+  "rejected_metadata": {
+    "metadata_rejected": 3541,
+    "failure_modes": {
+      "conflicting source/name material assignments": 3541
+    }
+  },
+  "decoder_failure_modes": {
+    "native mesh name absent from GR2": 832
+  },
+  "native_name_rejection_probe": {
+    "case": {
+      "error": "'WALL_City_CastleTower_Foundation_Dirty_A_1D_9H_1W_E_Piece_D_Tilingbrick_mesh_Pack'",
+      "object_id": "WALL_City_CastleTower_Foundation_Dirty_A_1D_9H_1W_E_Piece_D.WALL_City_CastleTower_Foundation_Dirty_A_1D_9H_1W_E_Piece_D_Tilingbrick_mesh_Pack.1",
+      "source": "Generated/Public/Shared/Assets/Tilesets/City/Castlewall/Resources/WALL_City_CastleTower_Foundation_1D_9H_1W_E_Piece_D.GR2"
+    },
+    "native_mesh_names": [
+      "WALL_City_CastleTower_Foundation_1D_9H_1W_E_Piece_D_Tilingbrick_mesh_Pack_LOD1",
+      "WALL_City_CastleTower_Foundation_1D_9H_1W_E_Piece_D_Tilingbrick_mesh_Pack",
+      "WALL_City_CastleTower_Foundation_1D_9H_1W_E_Piece_D_Occl"
+    ],
+    "readers_byte_identical": true
+  },
+  "families": {
+    "ENV_Lava.lsf": {
+      "candidates": 19,
+      "color_rows": 0
+    },
+    "VFX_Model_AlphaTest_DefaultLit_PBR_Lava_EmissiveFresnel_01.lsf": {
+      "candidates": 1,
+      "color_rows": 0
+    },
+    "FLUID_Lava_Plane_Flowmap.lsf": {
+      "candidates": 20,
+      "color_rows": 20
+    },
+    "FLUID_Lava_Plane_Flowing.lsf": {
+      "candidates": 1,
+      "color_rows": 1
+    },
+    "ENV_Lava_AlphaTest_Flowmap_Bounce_VT.lsf": {
+      "candidates": 4,
+      "color_rows": 4
+    },
+    "Engine_Default_HLOD_VT.lsf": {
+      "candidates": 22034,
+      "color_rows": 0
+    },
+    "Engine_Default_HLOD_GM_VT.lsf": {
+      "candidates": 2441,
+      "color_rows": 0
+    },
+    "Engine_Default_HLOD_TwoSided_VT.lsf": {
+      "candidates": 9863,
+      "color_rows": 0
+    },
+    "Engine_Default_HLOD_GM_Translucency_VT.lsf": {
+      "candidates": 457,
+      "color_rows": 0
+    },
+    "Engine_Default_HLOD_TwoSided_VertColorAlbedo_VT.lsf": {
+      "candidates": 711,
+      "color_rows": 711
+    },
+    "ENV_Tileset_MultipleTextures.lsf": {
+      "candidates": 3419,
+      "color_rows": 3417
+    },
+    "ENV_Tileset_MultipleTextures_Dirty.lsf": {
+      "candidates": 561,
+      "color_rows": 493
+    },
+    "ENV_Tileset_MultipleTextures_RGBA.lsf": {
+      "candidates": 665,
+      "color_rows": 665
+    },
+    "ENV_Tileset_MultipleTextures_RGB_Dirty.lsf": {
+      "candidates": 306,
+      "color_rows": 306
+    },
+    "ENV_Tileset_MultipleTextures_AlphaTest.lsf": {
+      "candidates": 392,
+      "color_rows": 391
+    },
+    "ENV_Tileset_MultipleTextures_BGM_MaskedShadows.lsf": {
+      "candidates": 75,
+      "color_rows": 75
+    },
+    "ENV_Tileset_Dirty.lsf": {
+      "candidates": 6,
+      "color_rows": 0
+    },
+    "ENV_Tileset_MultipleTextures_MSK.lsf": {
+      "candidates": 6,
+      "color_rows": 6
+    },
+    "ENV_Tileset_Tattered.lsf": {
+      "candidates": 2,
+      "color_rows": 2
+    }
+  },
+  "digest_candidate_inventory": {
+    "geometry_digests": 40759,
+    "potential_disputed_contracts": 79,
+    "qualification": "Digest grouping only; not runtime candidate lookup or equality proof"
+  },
+  "shards": {
+    "count": 218,
+    "bytes": 33386148680,
+    "largest_bytes": 494532784,
+    "cpp_parser": "all accepted",
+    "runtime_aggregate_cap_bytes": 2147483648,
+    "runtime_manifest_published": false
+  },
+  "replay_row_tables_preserved": true,
+  "reader_parity": {
+    "candidates": 40,
+    "with_color": 25,
+    "result": "all geometry/UV/COLOR/content IDs equal to retained PowerShell reference"
+  },
+  "tests": {
+    "catalogue_cases": 14,
+    "replay_audit_cases": 8,
+    "result": "PASS"
+  },
+  "replay_packs": [
+    {
+      "pack": "replay-20261102-035919-1",
+      "frame": 33862,
+      "instances": 1090,
+      "geometry_inventory_not_hit_weighted": {
+        "pool with row": {
+          "instances": 90,
+          "triangles": 341866
+        },
+        "pool without row": {
+          "instances": 925,
+          "triangles": 1170703
+        },
+        "soup": {
+          "instances": 75,
+          "triangles": 616894
+        }
+      },
+      "row_table_sha256": "512d3e40dfb1514b0c4622490e086a8655b2de90ac38cf805930c6e6210affdb",
+      "active_rows": 134,
+      "active_rows_sha256": "71378134273bf1fb739325be6103dfa1279fcfb526381ce991173bf856b29706",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "pak_geometry_candidates": {
+        "scope": "pool only; bit-exact ordered position3/UV2; not hit weighted",
+        "examined": 1015,
+        "no_uv": 0,
+        "unsupported": 0,
+        "missing": 1015,
+        "unique_candidate": 0,
+        "ambiguous": 0,
+        "candidate_triangles": 0,
+        "proven_joined_rows": 0,
+        "joined_coverage_estimate": null,
+        "reason": "No native texture UUID-to-view bridge or per-draw COLOR/cull/basis proof in these packs"
+      },
+      "scene": "S6 Adamantine Forge"
+    },
+    {
+      "pack": "replay-20261102-013545-2",
+      "frame": 4112,
+      "instances": 1040,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 251,
+          "triangles": 264682
+        },
+        "pool with row": {
+          "instances": 220,
+          "triangles": 327332
+        },
+        "soup": {
+          "instances": 569,
+          "triangles": 2627205
+        }
+      },
+      "row_table_sha256": "868411ffb65039b6202f2be841ddaae2ca50021557ccc4e8f8800b6aa22eb7a2",
+      "active_rows": 174,
+      "active_rows_sha256": "f6f09c0ac8296089873916ed99b4700623e0d8c791ff914b48159992716bec27",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "existing_hm_blockers": {
+        "qualified": 0,
+        "base": 0,
+        "row": 0,
+        "other": 0,
+        "available": false,
+        "instance_limit": 1024
+      },
+      "historical_replay_not_current_presets": {
+        "attempted": 530538,
+        "qualified": 69236,
+        "qualified_percent": 13.050149093938606,
+        "base_missing": 84112
+      },
+      "pak_geometry_candidates": {
+        "scope": "pool only; bit-exact ordered position3/UV2; not hit weighted",
+        "examined": 471,
+        "no_uv": 0,
+        "unsupported": 0,
+        "missing": 471,
+        "unique_candidate": 0,
+        "ambiguous": 0,
+        "candidate_triangles": 0,
+        "proven_joined_rows": 0,
+        "joined_coverage_estimate": null,
+        "reason": "No native texture UUID-to-view bridge or per-draw COLOR/cull/basis proof in these packs"
+      },
+      "scene": "camp"
+    },
+    {
+      "pack": "replay-20261101-142819-1",
+      "frame": 4175,
+      "instances": 875,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 173,
+          "triangles": 437007
+        },
+        "pool with row": {
+          "instances": 429,
+          "triangles": 354878
+        },
+        "soup": {
+          "instances": 273,
+          "triangles": 1258387
+        }
+      },
+      "row_table_sha256": "a1b68ee492d004318c631d3315022f854885c5ca5d6c8e33fb472c1b8475d638",
+      "active_rows": 114,
+      "active_rows_sha256": "77de982bb462c6166455cd96719a19be11652d9da2e6497710ffb18db458e2d8",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "historical_replay_not_current_presets": {
+        "attempted": 280660,
+        "qualified": 148243,
+        "qualified_percent": 52.81942563956388,
+        "base_missing": 58301
+      },
+      "pak_geometry_candidates": {
+        "scope": "pool only; bit-exact ordered position3/UV2; not hit weighted",
+        "examined": 602,
+        "no_uv": 0,
+        "unsupported": 0,
+        "missing": 602,
+        "unique_candidate": 0,
+        "ambiguous": 0,
+        "candidate_triangles": 0,
+        "proven_joined_rows": 0,
+        "joined_coverage_estimate": null,
+        "reason": "No native texture UUID-to-view bridge or per-draw COLOR/cull/basis proof in these packs"
+      },
+      "scene": "S8 Water Queens House"
+    }
+  ],
+  "tools": {
+    "lslib": {
+      "version": "1.20.4",
+      "file_version": "0.0.0.0",
+      "license": "MIT, Norbyte 2015",
+      "license_source": "https://github.com/Norbyte/lslib/blob/v1.20.4/LICENSE"
+    },
+    "granny2": {
+      "version": "2.11.8.0",
+      "vendor": "RAD Game Tools, Inc.",
+      "license": "proprietary local dependency; never redistributed"
+    },
+    "powershell": {
+      "version": "7.6.9",
+      "license": "MIT"
+    },
+    "dotnet": {
+      "version": "10.0.14",
+      "license": "MIT runtime"
+    },
+    "python": {
+      "version": "3.11.16",
+      "license": "PSF"
+    },
+    "numpy": {
+      "version": "2.4.3",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+    },
+    "lz4": {
+      "version": "4.4.5",
+      "license": "BSD-3-Clause Python wrapper"
+    },
+    "zstandard": {
+      "version": "0.25.0",
+      "license": "BSD-3-Clause"
+    },
+    "binaries": {
+      "LSLib.dll": {
+        "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\external\\lslib-1.20.4\\ExportTool\\Packed\\LSLib.dll",
+        "sha256": "5dfe246b93cbc95531e011dbf18478c665a9de4f922f8b4a2b73da5a865c76d0",
+        "bytes": 768000
+      },
+      "granny2.dll": {
+        "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\external\\lslib-1.20.4\\ExportTool\\Packed\\granny2.dll",
+        "sha256": "93e29135af0f8cb08a9cf95bad69f7b6a13acee82d689d1086312fe1135f2af6",
+        "bytes": 803328
+      },
+      "Divine.exe": {
+        "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\external\\lslib-1.20.4\\ExportTool\\Packed\\Tools\\Divine.exe",
+        "sha256": "65c47a5050e55f686b55484a901a01d0f1a1d5ba0e776f65fec71d3e1b2a16b7",
+        "bytes": 151552
+      },
+      "ExportTool-v1.20.4.zip": {
+        "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\external\\lslib-1.20.4\\ExportTool-v1.20.4.zip",
+        "sha256": "5e02368fb8acafda9b45acba37a3f3bf507fc3d65a083a159abbeab06337190e",
+        "bytes": 5792327
+      },
+      "pwsh.exe": {
+        "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a0c9be1ab336eae1a\\build\\cov-paks-pwsh\\pwsh.exe",
+        "sha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+        "bytes": 301360
+      }
+    }
+  },
+  "limitations": [
+    "No qualified-share or energy/GPU improvement established.",
+    "Full catalogue exceeds runtime aggregate cap; offline summary only.",
+    "Animated lava recipes and native per-draw resources/cull/COLOR/basis proof remain open.",
+    "Replay geometry test requires bit-exact UVs; runtime permits 1e-3 UV tolerance. Zero strict matches is not proof of zero runtime coverage.",
+    "Native ExportOrder/LOD and animated lava recipes remain unverified; candidate counts are not qualified rows."
+  ],
+  "generation_elapsed_seconds": 1485.2
+}

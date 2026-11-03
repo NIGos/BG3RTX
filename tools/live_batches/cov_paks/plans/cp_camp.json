@@ -1,6 +1,21 @@
 [
   {
-    "label": "warmup",
+    "label": "warmup-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 10,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 10,
+    "motion_end": 10,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hit_material_paks=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0"
+  },
+  {
+    "label": "diag-off-a",
     "kind": "static",
     "speed": "static",
     "seconds": 20,
@@ -12,10 +27,55 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
   },
   {
-    "label": "cost-hitmat-off-a",
+    "label": "gap-diag-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hit_material_paks=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
+  },
+  {
+    "label": "diag-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 25,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 25,
+    "motion_end": 25,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hit_material_paks=1,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
+  },
+  {
+    "label": "gap-diag-off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
+  },
+  {
+    "label": "diag-off-b",
     "kind": "static",
     "speed": "static",
     "seconds": 20,
@@ -27,10 +87,10 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
   },
   {
-    "label": "cost-hitmat-on-a",
+    "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
     "seconds": 20,
@@ -42,10 +102,10 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=1,perf_hook_state=0,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
   },
   {
-    "label": "cost-hitmat-off-b",
+    "label": "cost-on",
     "kind": "static",
     "speed": "static",
     "seconds": 20,
@@ -57,10 +117,10 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
   },
   {
-    "label": "cost-hitmat-on-b",
+    "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
     "seconds": 20,
@@ -72,127 +132,61 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=1,perf_hook_state=0,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
   },
   {
-    "label": "cost-hooks-off-a",
+    "label": "shot-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 35,
+    "seconds": 8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      5
+    ]
   },
   {
-    "label": "cost-hooks-on-a",
+    "label": "shot-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 35,
+    "seconds": 8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=1,perf_submit_batch=0"
+    "set": "rt_hit_material_paks=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      5
+    ]
   },
   {
-    "label": "cost-hooks-off-b",
+    "label": "shot-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 35,
+    "seconds": 8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
-  },
-  {
-    "label": "cost-hooks-on-b",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 35,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=1,perf_submit_batch=0"
-  },
-  {
-    "label": "cost-submit-off-a",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 35,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
-  },
-  {
-    "label": "cost-submit-on-a",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 35,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=1"
-  },
-  {
-    "label": "cost-submit-off-b",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 35,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0"
-  },
-  {
-    "label": "cost-submit-on-b",
-    "kind": "static",
-    "speed": "static",
-    "seconds": 35,
-    "repeat_ms": 0,
-    "scan": 16,
-    "capture_at": 0,
-    "serial": 0,
-    "motion_start": 35,
-    "motion_end": 35,
-    "pixels_per_second": 0,
-    "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=1"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1",
+    "trace_at": [
+      5
+    ]
   },
   {
     "label": "restore",
@@ -207,6 +201,6 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0,cpu_timing=0,watchdog_s=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0"
   }
 ]
