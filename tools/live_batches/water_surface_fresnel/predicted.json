@@ -15,8 +15,38 @@
   "gpu": "ON evaluates a second complete native FS. Previous +0.01-0.05 ms estimate withdrawn. Report compose/copy/dispatch and whole water pass cost, ON minus adjacent OFF; actual cost unmeasured. No builds during live cost windows. Existing compose timing excludes the added forward FS evaluation; report that measurement limit explicitly if no forward-pass timer is available.",
   "motion": "Hold E for cost-turn-0/1 and Q for cost-turn-2/3. Keep pool rim in view. One launch, visible_unfocused_fg; occlusion invalidates presented/frame-time judgement, use GPU ms and float/log evidence.",
   "smoke_ultra": "All windows use real Ultra with qualified water, OMM, box and off-screen bounce settings retained. No isolated preset substitutions.",
-  "budget": "127.4 s scheduled phases (static windows 11.1 s, capture-free E/Q windows 12 s), plus one load; 8 traces, about 490 MB. Static cadence minimum >11 s = 1 s apply + 2 s trace stalls + two 120-frame intervals at 30 fps. Restore kept 5 s for existing fake-runner phase-size contract.",
+  "budget": "127.8 s scheduled phases (static windows 11.9 s, capture-free E/Q windows 12 s), plus one load and bounded readiness waits; 8 traces, about 490 MB. Static cadence minimum >11.864 s = 1 s apply + 2 s trace stalls + two 120-frame intervals at observed 27.0758 FPS. Shared live_flow adds producer sanity and derives 1.1 s restore.",
   "restore": "Last phase resets candidate 0 and releases exposure hold; serial queue restores original INI after job. Startup candidate=1 provisions FS before live toggles, no restart within batch.",
   "reference_limit": "Runtime FS partition check independently checks c+(1-c)*(E+(1-E)*a+(1-E)*(1-a)); float post gate rejects missing or nonfinite full-resolution RR colour evidence. Algebra/log validity does not qualify image quality or prove a measured physical reference match. No additional diagnostic launch is needed to establish exact-zero impossibility.",
-  "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c."
+  "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c.",
+  "sun_glint_step_1": {
+    "status": "BLOCKED_OFFLINE_REFERENCE",
+    "job": "wsg1-s8-sun-glint",
+    "key": "rt_water_surface_glint",
+    "implementation": "Not implemented: dense native peak-lobe footprint reference rejects 32x32 quadrature in 5/12 fixtures (7/12 pass); 16x16 passes only 1/12. No production setting or specialization exists. This is a future protocol only; do not submit it.",
+    "fixed": "rt_water_surface_fresnel=1; real Ultra; no reflection trace or roughness change",
+    "prediction": "Broader direct sun footprint, fewer isolated flashing glints, unchanged integrated lobe energy. No measured improvement claimed.",
+    "energy": "All 12 static shots: full-resolution post-water RR float luminance / valid held exposure. Every ON shot must match zero energy change within same-run OFF SD and existing family-wise Student t bound; no PNG/bloom means.",
+    "motion": "Two OFF and two ON K8 raw water bursts for each held E and Q. Residual is mean absolute second difference inside each burst, restricted to common exact water record coverage. Every ON residual must improve beyond same-direction OFF/OFF spread. No cross-pan pixel subtraction or physical correspondence claimed; smooth-turn residual is a proxy, reject changed framing.",
+    "cost": "Separate capture-free 120-frame cost windows. Compose timing excludes forward FS filter cost; report that limit. Original +0.02-0.10 ms estimate is unmeasured and may be exceeded by extra normal taps.",
+    "duration": {
+      "fps": 30,
+      "producer_frames": 120,
+      "settings_latency_s": 1,
+      "trace_stall_s": 1,
+      "static_s": 12.9,
+      "static_derivation": "strictly exceed 1 + 2*(120 / observed FPS) + 3*1; shared live_flow uses recent valid state-matched FPS corpus",
+      "burst_s": 5,
+      "burst_derivation": "2 s delay + 9/30 s records + writer allowance, no cost judgement",
+      "cost_s": 9.9,
+      "cost_derivation": "strictly exceed 1 + 2*(120 / observed FPS); no capture stalls in cost phases",
+      "total_s": 163.4,
+      "traces": 12,
+      "raw_bursts": 8,
+      "approximate_disk_mb": 1800,
+      "readiness": "Shared generator adds producer sanity after warmup and explicit prefetch/scene waits; timeout includes those bounded readiness waits."
+    },
+    "limits": "Reference/encoding bound comes from dependent offline native-BRDF footprint tests; runtime residual alone cannot qualify the model. Missing/invalid inputs or zero ownership means INVALID, not an improvement.",
+    "restore": "Last phase sets glint=0, Fresnel=0, exposure hold=0 and releases capture preparation; serial queue restores original INI."
+  }
 }

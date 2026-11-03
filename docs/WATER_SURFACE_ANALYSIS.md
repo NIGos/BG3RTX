@@ -147,3 +147,41 @@ ON's second FS evaluation adds unmeasured forward-pass cost, which the existing 
 GPU timer excludes; the earlier incremental estimate is withdrawn.
 The only prepared live is wsf1, outside the watched inbox, with same-run float shots and cost
 windows. No diagnostic launch is needed to decide whether an exact-zero mask can participate.
+
+## Direct sun footprint gate (water-glint, 2026-11-03)
+
+Step 1 remains blocked offline; no production filter, setting or specialization was added.
+The pool's six normal samples (SSA 479/496/524/541/577/600) are animated phases and
+layers, not a spatial footprint distribution. Their differences cannot establish slope
+moments. Implicit mip sampling and pre-normalization vector lengths alone also do not
+prove unresolved variance without the normal-mip construction contract.
+
+The bounded alternative explicitly samples the normal field over a pixel and averages
+the full native sun-specular kernel, retaining the game's representative solar disc,
+F(L.H), visibility and centre-sun N.L. Positive normalized weights preserve spatial
+integration; this does not prove that low-order quadrature converges at a sharp glint.
+Changing GGX width alone, or convolving only D while freezing F and visibility, does
+not establish the required full native-BRDF reference or its integral.
+
+The independent reference uses decoded native ENV_Tileable_Noise_Waterfall_NM.DDS
+mip 6 and bilinear sampling, including the native wzy decode/flip/normalization.
+These are isolated actual normal-input fixtures, not captured S8 material instances
+or measured image energy. With the view and sun aligned to a glint, deriving the
+native derivative-AA roughness from adjacent pixel centres leaves 10/12 footprints
+at .09; two rise to .113987 and .166004. Only 1/12 footprints pass at 16 x 16
+and 7/12 at 32 x 32 under the reference convergence plus separated-half encoding bound.
+At texel centre (12.7, 8.2), width 4, native r=.09: 32 x 32 gives .4113870204,
+128 x 128 gives .4216939854. Error .010306965 also exceeds a looser combined
+bound: |128 x 128 - 64 x 64| + one coarsest B10G11R11 channel ULP + one
+separated-half record ULP = .0083762013.
+No arbitrary percentage tolerance is used. See tools/water_glint_reference.py and
+its regression fixture for reproduction without package access or a game launch.
+
+Even 4 x 4 would require 96 extra normal fetches and 16 native sun evaluations per
+water pixel; its cost is unmeasured and the earlier +.02-.10 ms estimate is not
+applicable. Brute-force higher counts are not a validated small moment filter.
+The next implementation must supply proven filterable slope moments and a closure
+that passes the full-kernel reference, or a bounded convergent spatial integration.
+The generated wsg1 S8 static/held Q/E draft is blocked by this offline gate and must
+not be queued. Production patch words, shaders, record layout and step 2 remain
+unchanged; variants.txt request delta is 0. No quality or live pass is claimed.

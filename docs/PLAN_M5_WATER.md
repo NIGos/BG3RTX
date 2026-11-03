@@ -606,6 +606,8 @@ Every candidate first passes CPU algebra/encoding tests and dependent offline FS
 All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, not timing gates.
 
 1. Direct sun-glint footprint: `rt_water_surface_glint=0`, FS patch, expected +0.02-0.10 ms.
+   Offline water-glint attempt is blocked, with no production key installed: fixed spatial
+   quadrature fails the native-BRDF convergence/encoding gate (WATER_SURFACE_ANALYSIS.md).
    The game already has r>=.09 and capped ddx/ddy(N) AA; preserve recorded N, E and reflection roughness.
    Filter only direct specular with slope moments from normal samples/mips; prove the moment inputs first.
    Keep sun clouds/visibility; rebuild R and any affected local-sum BRDF inputs if extending beyond sun.
