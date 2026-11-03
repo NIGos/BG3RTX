@@ -1,139 +1,130 @@
-# BG3RTX progress - 2026-11-02 evening (ABI 26)
-
-Current summaries below. Full folded text, verbatim: [evening archive](archive/PROGRESS_20261102_evening.md).
-Earlier history: [morning archive](archive/PROGRESS_20261102_morning.md), [11-01 evening](archive/PROGRESS_20261101_evening.md),
-[11-01](archive/PROGRESS_20261101.md), [11-01 Codex](archive/PROGRESS_CODEX_2026-11-01.md), [10-31 Codex](archive/PROGRESS_CODEX_2026-10-31.md).
-Branches write `docs/progress/<branch>.md`; fold only after verifying ancestry against main.
-Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
-
-## Report 2026-11-03 morning (main e8984b6, blackout ~06:20: ds2/ds3, ba1, om4 re-run) - stages 2-3 closed, 4 in progress
-- Stage 2 done: spec-constant migration on main; live scc1 valid (0 DXC on every converted toggle, rt 1.86 ms, gi 5.0 ms S8). Variants 2946 -> 147.
-- Dialogue moving shadow (port): fixed by default. Second fix (cascade identity without per-draw allocations) now matches 16-18 duplicates/frame at the port (was 0); no band in any motion pair (block change at RT-sun-off noise). rt_cascade_static_only must stay OFF: it drops every cascade caster (same as casters off).
-- AO / hair at camp confirmed: gi_ao=0 brightens faces +10..22%; native hair +4..14%.
-- Water on/off reflections while turning: cause in our compose (tier 1 25% -> 1% on camera-jump frames). Compose shift (rt_water_compose_shift) did not remove it; test confounded by jumpy turn input (45-90 deg per frame). Smooth turn modes + camera probe job prepared (bundle 2).
-- Native hair: +2.3..4.5 ms rt / +3.4..6.9 ms GI (S8, camp dialogues): stays off. rt_hair_gi_cull saves 1.2-2.3 ms but brightens characters +9..20% (not equivalent). Bug: Dialogue3 with hair fills the mesh pool (2047 MB), scene then skipped. Branch hair-cost2: pool fix, cheaper coverage, near-only hair.
-- Characters in dialogues: RT AO darkening is self-occlusion (50% of character pixels, 99% self-hits under 5 cm). User 11-03: this is fine, no AO change; only the moving shadow mattered (fixed).
-- Box lights: honour the game's shadow flag (88 Grymforge box lights have it off): fixed mode is closer to OFF energy, +0.13 ms. Still off (your visual check, question below).
-- OMM om4: check window confounded by scene-wait timeouts; gate fixed, rerun pending. rt passes -0.4..0.5 ms with OMM.
-- Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa (147 -> 135 variants). rf_edge / rr_hitdist kept (old metric invalid).
-- New, off: water hidden/off-screen hit shading with world-space lights (rt_water_hit_shade 1/2), mesh content ids (rt_mesh_content_id).
-- Try in game: port dialogue (Dialogue3 save): the shadow band on the still character should be gone with Roof sun shadows on. Grymforge with Box light shadows = All: are the art lights back? If yes, it can go to Ultra.
-
-## Report 2026-11-02 19:30 (main 7929040, ABI 26) - consolidation paused, PC freed for the user
-- Merged: stream caps + source trim (-0.4 GB VRAM), NaN GI history fix, OMM option B + VT alpha masks (game-wide catalogue 1,677 materials, generated on the user's PC), recipe rows from the asset DB, water RR/FG motion vectors, preprocessed-text shader cache (header-only edit: 2892 compiles to 0, 35 s), AGENTS.md compile rules. All new keys off.
-- Rejected / stays off: IP grass (+1.9 ms, +1.5 GB, +3 points share), generated recipe rows (+2.3 points camp), every water flicker key. rf_hit_gi off (hit AO matches the screen offline; gap is in instanced hits, needs a pack with instanced rows).
-- Water flicker at the port: closed, it is the game's own water (wf3-wf7: our compose, RR, sun-shadow ray, glints and FG all excluded; with RT the water is calmer, 0.54 vs 0.77-0.86).
-- Dialogue shadows: RT AO darkens characters most (AO off +18..42%); at the port opaque hair cards add to it (native hair +27%). Hair cards are not alpha-tested in RT at all (no CHAR_Hair shader in alpha_fs.txt).
-- OMM: live upper bound camp ~5.7-6.3 ms (forced opaque). Masks cover ~97% of camp alpha candidates. Dynamic micromap bake built (rt_omm_dyn, worktree-agent-a53f0b584fa39317b), not yet run: om4 waits.
-- In progress (user rule: finish the build improvement before more big compiles): spec-constant migration on `variant-migration` (G guards + S2a done; 2986 requests on main to ~980; target ~100-180). Then one merge-green, live scc1, then rebase and run: occ diagnostic + dialogue batch, native hair (async compile, water hair) + hair_qual, om4, m4_generated rerun.
-- Try in game: S8 port courtyard pool is darker with RT (our sun shadow removes glints in shade): say if you prefer a softer water shadow edge. Native hair at the port dialogue should brighten characters (first enable still compiles until the hair branch lands).
-- Questions: see below (ls_box=2 visual check, GUI_AUDIT_20261102 five yes/no, project licence, NVIDIA notification).
-
-## Report 2026-11-02 04:10 (main fe8f75d)
-- Done: stage 1 live (smoke_ultra valid with every Ultra key; scene wait 0 timeouts in gated windows; water 120/120 composed; shader cache 2nd launch 44 read 0 compiled; FG letterbox 2560x1440 in 3840x1600 swapchain FG 2.00 -> fg_letterbox automatic). Stage 2 GUI: Experimental 28 -> 5 entries, levels for water/materials.
-- Fixed: traced frames skipped the hit-material capture (layer/geocapture.cpp), so all earlier traced energies of hit features measured them off; re-measured after the fix.
-- Ultra now: + Bounce, Emission at ray hits (Hidden hits), Far-field sun bounce 6 m (gi_far: S8 -2.01% vs predicted -2.0%, camp -2.42%; +3.2-3.7 ms GI trace). smoke_ultra with all: valid, median frame 16.65 ms (was 13.75).
-- M6 step 1: native ambient / PT reference S8 1.44, camp 0.84, inn 0.78: not consistent, no global correction.
-- M4: S6 diagnostic: GI hit shading adds light (+1.6% pack invariant), no darkening. Alpha-tested static meshes get material rows (rt_hit_material_pool_alpha, live-tested S6).
-- Box lights ls_box=2: energy within band, +0.32 ms S6 / +0.20 ms S7. Needs your visual check (question below).
-- Open: rf_hit_shade stays experimental (bias); lava flowmap and camp grass coverage; SHaRC; release hardening (stage 6).
-- Try in game: Ultra preset at Water Queens House (S8) and camp: softer far-field bounce darkening under roofs/foliage, emissive lava light in the Adamantine Forge.
-- Question: ls_box=2 in the S6 save (Adamantine Forge): the lower-right walkway right of the front disc and the central pillar should darken slightly (ledge shadow). OK to turn it on in Ultra?
+# BG3RTX progress - 2026-11-03 afternoon (main dc3ef899, ABI 26)
 
 ## User questions and decisions
 
-- Open: **ls_box=2 in Ultra?** (question above). Until you answer, Box light shadows stay Off in every preset.
-- Open: **GUI_AUDIT_20261102** five yes/no decisions; **project licence**; **NVIDIA notification** (Streamline/NGX).
-- Open (look): water sun-shadow edge: soften (more rays / temporal visibility) or keep game glint in shade?
-- Decided 11-02: OMM path delegated (option B); assetdb and VT masks generated on the user's PC, not shipped;
-  gi_reproj guards live approved (now as spec constants); dropped Codex refs may be deleted; packaging paused;
-  no compile time on work a planned build improvement makes unnecessary.
-- Open (not blocking): **`rt_hit_emission` 1 or 2** (1 = hidden hits only, 2 = also screen hits). Ultra uses 1;
-  2 is developer only.
-- Decided: **`rf_hit_shade` stays Experimental until its bias is within the game's own spread** (tier (a)
-  L_b / L_a S8 0.925, S6 1.089, camp 1.097). The threshold is not lowered.
-- Decided: **`ls_k` stays off** in every preset (developer only).
-- Decided: GUI audit approved (docs/GUI_AUDIT_20261101.md): levels instead of single keys; emission writes `rt_emissive`.
-- Decided: crash dumps stay off for players. Later a diagnostic mode builds a package (logs, effective settings,
-  GPU info, crash dump) with a save the user picks, copied read-only; it never reads saves on its own.
-- Decided: disk: keep what a test or comparison still reads; delete superseded packs and analysed raw dumps.
+- Open: GUI_AUDIT_20261102 decisions, project licence and NVIDIA notification (Streamline/NGX).
+- Open look: soften the S8 water sun-shadow edge or keep the game's glint suppression in shade?
+- Open, not blocking: rt_hit_emission 1 or 2? Ultra keeps 1 (hidden hits); 2 stays developer only.
+- Next live batches need fresh explicit steering after their dependent offline checks. None is authorized here.
+- Decided: box shadows qualify for Ultra; dialogue AO is acceptable; rr_hair_resolve and CPU perf keys rejected.
+
+## Report 2026-11-03 afternoon
+
+- Stages 2 and 3 done; water fix still pending qualification. Ultra OMM and box lights (honour shadow flag) qualified; smoke valid.
+- Dialogue moving shadow fixed by default; cascade identity finds 16-18 duplicates/frame (was 0). Keep rt_cascade_static_only off.
+- Water camera correction looks right to the user; corrected wf9 qualification and GPU cost remain pending.
+- RTX Hair groom: converted styles work in game at about 40% less cost than native hair cards; native card path stays off (+2.3-6.3 ms RT).
+- Hair/DoF shimmer cause found: replayed DoF/bloom weights flip each frame. rr_post_temporal fix awaits live qualification.
+- rr_hair_resolve rejected by the user. CPU perf keys rejected. Neither is qualified for presets.
+- Null water keys removed: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa. Reflection-only keys remain off pending valid evidence.
+- Launcher fixed: experimental toggles now appear in Advanced; only Lighting/Surfaces/Performance/Memory/Advanced are shown.
+- Try Ultra at S6 Grymforge and camp for box lights/OMM; Dialogue3 for the fixed shadow band; S8 pool with Q/E for water correction.
+
+Full pre-consolidation text and 59 ancestry-verified fragments, verbatim: [11-03 archive](archive/PROGRESS_20261103.md).
+Earlier history: [11-02 evening](archive/PROGRESS_20261102_evening.md) and its linked archives.
+Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
+Fragments describe their original evidence; this summary records later decisions and supersedes stale pending verdicts.
 
 ## Ultra preset and GUI (stages 1-3 done)
 
-- Ultra: RT water "+ Refraction", hidden-surface shading "+ Bounce", emission "Hidden hits", far-field bounce 6 m.
-- Costs: water chain 0.53-0.67 ms; hit emission +0.08 ms; gi_far +3.2 ms S8 / +3.7 ms camp GI trace.
-- smoke_ultra: every-window gates pass, water 120/120 composed, scene wait 0 timeouts; median frame 16.65 ms.
+- Ultra: RT water + Refraction, hidden-surface shading + Bounce, emission Hidden hits, far-field bounce 6 m.
+- Ultra also enables rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod and ls_box=2.
+- ls_box_honour_shadow remains 1; High/lower presets and base defaults retain their existing choices.
+- OMM om4 camp: 1.17 billion rays compared, 0 not compared, 0 violations.
+- OMM RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms (about 1 ms saved).
+- Box ba1 S6: energy within noise, signed difference 0.0; unshadowed traces 0 vs old mode 369 million/120 frames.
+- Box local-light pass 0.45 -> 0.58 ms (+0.13 ms, RTX 5090); unshadowed art lights preserved.
+- Integrated smoke valid with qualified OMM and box lights; OMM/water variant skip fixed with a pinned reference tuple.
+- Earlier water chain 0.53-0.67 ms; hit emission +0.08 ms; gi_far GI trace +3.2 ms S8 / +3.7 ms camp.
 - Automatic: hit-material recycle, unlocked capture, lean hooks, scene wait, FG letterbox and pool alpha rows.
-- GUI: Experimental 28 -> 5 entries; water, shading, emission and far-field use levels. Old user INIs migrate.
-- Box shadows, + Reflections, native coverage, hair origins, OMM and cutout spill remain outside Ultra.
+- Launcher categories: Lighting, Surfaces, Performance, Memory, Advanced. Experimental controls live in Advanced.
+- Launcher category validation now rejects categories the UI cannot show. Old INIs migrate through the settings model.
 
-## Hit-material coverage and memory (stage 4)
+## Dialogue shadows and RTX Hair
 
-- Traced frames now retain hit-material capture. Earlier traced energies measured these features off.
-- Pool alpha rows are automatic: S6 qualified 14.8% -> 52.1%, energy +1.06% / -0.38%, GI trace +0.46 ms.
-- Wind RGB S8: bit-exact, rejected 0%; qualified 45.0% -> 63.5% with all three instanced families;
-  energy -0.00% (band 1.30%), trace +0.67 ms. Kept in Ultra.
-- Mask rows: S8 +0.65 points qualified, energy +0.04%, trace +0.006 ms. Inn re-gated valid: +12.1 points
-  (above predicted 0.5-6), energy -0.80% (band 1.20%), trace +0.92 ms. No promotion recorded.
-- Stream caps follow capture size: Ultra source 384 MB, deferred 13 x 32 MB, query basis 768 MB; allocated by use.
-- Retired source copies return to the pool; consolidation report records about 0.4 GB saved.
-- IP grass stays off: +3 points qualified, energy +0.19% (band 2.19%), +1.9 ms and about +1.5 GB after trim.
-- Generated recipe rows stay off (+2.3 points camp); bush pairing / two-sided rerun pending in the unmerged lane.
-- Inn capture split now follows alpha/opaque demand when reserves do not fit: 541 / 483 MB in the failing case.
-- Missing recipes: animated lava flowmap, Tileset vertex COLOR, HeightGradient world height; see PLAN_M4_REFLECTIONS_GI.md.
+- Moving shadow band fixed: cascade identity no longer depends on per-draw allocations; matches 16-18 duplicates/frame.
+- Motion pairs show no band above RT-sun-off noise. rt_cascade_static_only drops every caster and stays off.
+- User accepts dialogue AO self-occlusion: 50% of character pixels, 99% self-hits under 5 cm. No AO correction planned.
+- Native hair cards remain off: +2.3-6.3 ms RT; earlier GI cost +3.4-6.9 ms. GI cull brightens +9-20% and was rejected.
+- Groom conversion works for converted styles in game, about 40% cheaper than native cards; full style coverage is unfinished.
+- Dialogue1 groom run: 5 instances, 1,500 matches/300 frames; RT 9.07 vs cards 10.2-10.57 ms.
+- GI 12.51 vs cards 14.1-14.3 ms; refit +0.57 ms. These are scene measurements, not a universal cost promise.
+- Converter: Shadowheart LOD0 656 cards/40,090 triangles -> 86,000 strands, 855,000 LSS segments; IoU 0.92-0.94.
+- Groom uses procedural secondary queries; primary cards remain. UV joins support draws without mapped indices.
+- Pool is capped at one quarter of the mesh pool; selected LOD loads on demand, unused entries evict after 120 frames.
+- Fibre BSDF is an offline prototype; current Lambert GI is 3-6 times darker than the Chiang reference.
+- Remaining groom work: converter quality, coverage and fibre scattering; no blanket preset promotion recorded.
 
-## Reflection shading and GI history
+## Hair/DoF shimmer
 
-- rf_hit_shade stays Experimental: bias above the game's spread, +1.4-1.8 ms. rf_hit_gi remains off.
-- Offline S6 light visibility did not change with alpha footprint x1/x16/x256 (55.8% lit); no visibility fix justified.
-- Reflection replay is unavailable. Prepared rf_hit_gi_ab measures S6/S8 ratios, energy and cost in one run per scene.
-- GI history NaN/Inf fix selects the fresh sample directly; non-finite reprojection is rejected before integer conversion.
-- NGX motion-vector scales update only when both are finite. Finite inputs retain the same behavior; layer needs restart.
-- Motion at the depth sample and off-screen previous-radiance rejection were not recovered; they need gated A/B work.
+- Cause: replayed DoF/bloom weights flip each frame after RR. Fix candidate is rr_post_temporal on post-temporal.
+- Reprojects and clamps DoF weights, resolve term and bloom; rejection uses fresh input; RR stays before post.
+- READY_FOR_LIVE, off everywhere: 133 CTests and QA detectors pass; key-off identity 236/236, new entries 2/2 valid.
+- Six fp32 history images cost about 250 MiB at 2560 x 1067; GPU ms and visible quality remain unmeasured.
+- Prepared Dialogue3 and static S8 Ultra 0/1/0/1 batch checks both ON windows, linear energy and clean timing.
+- User rejected rr_hair_resolve; older ef2/ef3 candidate verdicts in the archive are superseded.
+- rr_post=0 changes post ordering and is diagnostic, not the selected fix.
 
-## Water and dialogue shadows
+## Water reflections
 
-- Water flicker attribution is closed by the top report. Every experimental water flicker key stays off.
-- rt_water_rr_hitdist was null in the corrected same-direction test; rt_water_rf_edge worsened water flicker by 42%.
-- wf3 VALID: compose off 3.53% transient rate, between OFF repeats 3.38% / 3.61%; compose cost 0.41 ms, 0 when off.
-- Water energy uses the pre-water scene plus the in-frame compose delta; the earlier dump preceded compose.
-- Dialogue AO and opaque hair findings are in the top report. Native hair async compilation and water variants await their lane.
-- In game: S8 pool columns reflect and the bed shifts with the view; S3 pond has tree shadows. Compare via Ctrl+Shift+F9.
+- Whole-water wf2-wf7 metrics were dominated by native glints; they cannot decide reflection-only quality.
+- wf8 located the turning defect in compose: stale camera-relative TLAS makes screen hits fail depth matching.
+- First shift used the wrong camera copy; the next subtracted incompatible camera buffers (static delta 294.8 m).
+- Corrected rt_water_compose_shift subtracts cam2 bytes 208..223 on both sides; fixture static delta 0.
+- User says correction looks right. Keep qualification pending until corrected wf9 static and Q/E windows pass.
+- wf9 requires static average build-camera delta < 0.01 m, nonzero samples and every-window gates.
+- Earlier compose cost 0.10-0.15 ms is not a measurement of the corrected candidate's cost.
+- Mouse turns never produce smooth input here; use held Q/E. Compare toggles within one run.
+- Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa; requests 147 -> 135.
+- rt_water_rf_edge and rt_water_rr_hitdist remain unknown/off; old whole-water verdicts were invalid.
+- rt_water_hit_shade 1/2 adds world-space lighting to hidden/off-screen hits; remains experimental/off.
+- Retained F-1 TLAS/material/light tuple supports compose; invalid retention preserves ordinary compose.
+- water-hit-cost proposes equivalent sparse membership/cone/zero culling; live GPU savings pending.
 
-## Local lights
+## Material coverage and memory (stage 4)
 
-- ls_box=2 stays off pending the user's S6 visual check. S6/S7 cost +0.32 / +0.20 ms; energy within each repeat band.
-- S6: 5.45% of lit luminance removed, 18.0% of 369M rays occluded. Look at the lower-right walkway and central pillar.
-- ls_k stays off. em_forge sliced check max 0.026 ms (<1 ms); a rerun would supply a formal receipt only.
+- Traced frames retain hit-material capture; earlier traced energies had measured hit features off.
+- Automatic pool alpha rows: S6 qualified 14.8% -> 52.1%, energy +1.06%/-0.38%, GI trace +0.46 ms.
+- Wind RGB S8: bit-exact, rejected 0%; qualified 45.0% -> 63.5%, energy -0.00%, trace +0.67 ms. Kept in Ultra.
+- Mask rows: S8 +0.65 points, +0.04% energy, +0.006 ms; inn +12.1 points, -0.80% energy, +0.92 ms.
+- Generated rows stay off; genrows-gate fixes missing depth-source publication during parallel recording before rerun.
+- IP grass stays off: +3 points qualified, +1.9 ms and about +1.5 GB. No promotion from the old metric.
+- cov-paks2 adds COLOR_0/Tileset storage and device-local UV join; 41,815 eligible meshes, catalogue blocked on LSLib DLLs.
+- Remaining exact-data gaps: animated lava flowmap, Tileset vertex colour, HeightGradient world height, HLOD two-sided.
+- Mesh content identity and VT alpha hit-material work are on main; dependent qualifications remain separate.
+- Stream caps: Ultra source 384 MB, deferred 13 x 32 MB, query basis 768 MB; allocate by use.
+- Source-copy retirement saved about 0.4 GB. Capture reserves, mesh pool and AS policies are on main.
+- Caster allocations survive zero-demand windows; shrink only after active smaller samples; VRAM guard still caps growth.
+- Long-session VRAM was flat from cycle 13 (18.2-18.7 GB), records 411-417; not a release qualification.
+- AS fragmentation remains: 4.2 GB retained for 0.25-1.4 GB live AS. Keep the existing trend baseline cycles 12-14.
 
-## Far field, SHaRC and ray count (stage 5)
+## Reflections, GI and performance (stage 5)
 
-- No global ambient correction: native/PT ratios S8 1.44, camp 0.84, inn 0.78 are inconsistent.
-- gi_far 6 m stays in Ultra: S8 -2.01% vs predicted -2.0%; camp -2.42%. gi_debug=2 saturates; do not use for energy.
-- SHaRC sh1 failed: energy -0.86% vs predicted +1.5%; 23.8% found, 10.1% occluded-cell hits, about +0.75 ms total.
-- SHaRC stays off: cache radiance undercuts qualified hidden hits. Offline single-frame packs lack its history.
-- One GI ray: energy +0.11% (band 1.47%), trace 4.32 -> 2.02 ms. Flicker comparison INVALID: OFF/OFF null failed.
-- sh2 rerun prepared with six traces per state. Keep two rays in Ultra until the null and excess-noise gates pass.
+- rf_hit_shade stays Experimental: native-ratio bias S8 0.925, S6 1.089, camp 1.097; +1.4-1.8 ms.
+- rf_hit_gi stays off. Hit AO matches offline screen data; instanced-hit gap needs a suitable replay pack.
+- No global ambient correction: native/PT S8 1.44, camp 0.84, inn 0.78 are inconsistent.
+- gi_far 6 m: S8 -2.01% vs predicted -2.0%, camp -2.42%. Use float energy; gi_debug=2 saturates.
+- GI NaN/Inf history fix falls back to fresh samples; non-finite motion is rejected before integer conversion.
+- GI reprojection guards still need qualification; finite NGX motion-scale validation is on main (layer restart).
+- SHaRC sh1 failed: energy -0.86% vs predicted +1.5%; 23.8% found, 10.1% occluded-cell hits, +0.75 ms total.
+- SHaRC stays off; M6 proceeds only if it beats the PT reference without losing energy.
+- One GI ray: 4.32 -> 2.02 ms, energy +0.11%; flicker comparison invalid (OFF/OFF null failed). Ultra keeps two rays.
+- CPU perf keys rejected; no preset promotion or further qualification queue for these keys.
+- gpu-opt1: compact GI hit state, alpha metadata cache, empty water-tile skip; all off, 36 byte-exact replay comparisons.
+- rt-continuity and gpu-opt2 are open lanes at main dc3ef899; no implementation or live result recorded yet.
+- GPU candidates need energy/coverage equivalence, clean pass timing and a real Ultra smoke before promotion.
 
-## OMM and game data
+## Tooling and release (stage 6)
 
-- VT masks: 65 masks / 79.2 MB added for camp; 99.4% VT triangles, about 97% shadow / 98% visibility candidates covered.
-- Offline alpha agreement 99.05%; two sub-tile textures (13,092 triangles) retain the page cache.
-- va1 VALID: masks alone neutral, energy +0.24% (band 1.95%), unchanged GPU cost; coarser-page share did not fall.
-- Catalogue: 1,677 materials, 125 templates, 1,174 textures; 1.3-1.7 GB generated on the user's PC, not shipped.
-- rt_vt_alpha_miss_log ranks missing masks. First-install design: P4_OMM.md 11.2h.
-- OMM stays off. Guard checks moved out of per-ray host atomics; dynamic bake om4 still pending, as reported above.
-- GAME_DATA_AUDIT.md ranks exact-data gaps: masks, generated rows, caster roofs, vertex COLOR and class 4 transmission.
-
-## Gates, tooling and release (stage 6)
-
-- Snapshot gates are events with 1 s settle; layer stats print on the first completed query per 120-frame window.
-- Every ON window must pass. smoke_ultra forbids variant skips, roof warnings, guards, basis overflow and pool-full lines.
-- Long-session read: VRAM flat from cycle 13 (18.2-18.7 GB); records 411-417; no unbounded leak observed.
-- AS chunks retain 4.2 GB for 0.25-1.4 GB live AS: fragmentation remains open. Trend baseline now uses cycles 12-14.
-- Preprocessed cache: header comment edit 2892 compiles -> 0 in 35 s; self-check 4/4 identical. Prune cap follows protected size.
-- Settings generation omits the conflicting key-count comment; tables unchanged. No shader request changes in this fold.
-- A/B latency logs toggle to present of frame F+2; ab_off exposes the same toggle to queue jobs.
-- Release still needs long-session qualification, acts 2-3, installer checks, README, licences and diagnostic packaging.
-- release.ini forces rt_emissive=0; revisit with ls_box now that emission is in Ultra. DXC licence text remains missing.
-- Pending lives need explicit batch steering after their dependent offline checks. Nothing here grants live permission.
+- Shader migration done: 2,946 -> 147 variants before null-key cleanup; scc1 valid, 0 DXC on converted toggles.
+- scc1 S8 RT 1.86 ms, GI 5.0 ms. New keys use specialization constants unless bindings/layout change.
+- Preprocessed cache: header comment edit 2,892 compiles -> 0 in 35 s; self-check 4/4 identical.
+- Heavy DXC runs serialize machine-wide; do not compile work that a planned build improvement makes unnecessary.
+- Every ON window must pass; snapshot gates are events with 1 s settle. Give every job patterns and expect.
+- No main commits during merge-green. No lives during merge-green or builds/compiles during cost windows.
+- Release still needs keyboard/Narrator, high contrast/DPI, installer lifecycle, long sessions and acts 2-3.
+- Diagnostics collects allowlisted sanitized snapshots for exact preview and user-chosen local ZIP export.
+- Game data (1,677 materials, 125 templates, 1,174 textures) is generated on the user's PC, not shipped.
+- Licence/package checks remain open; preserve the archive's historical receipts without treating them as release approval.
+- Six fragments remain unfurled because their heading branches are not ancestors of main; docs/progress/README.md stays.
+- This consolidation changes documentation only: no shader requests, ABI, game launch, git metadata writes or commits.

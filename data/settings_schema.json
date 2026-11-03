@@ -247,16 +247,16 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_temporal": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
-     "description": "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
+     "category": "Surfaces", "summary": "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
+     "cost": {"status": "Measured", "gpu": "+0.00 ms (compose 0.12 ms on and off) S8", "vram": "Unknown", "provenance": "RTX 5090; wf9 2026-11-03: turning screen hits 7% -> 17%, hidden 25% -> 15.5%, static delta 0 m, energy within noise"},
      "required_on": {},
      "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_compose_shift": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_compose_shift": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_compose_shift": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_native_coverage", "label": "Native hair + scalp",
      "description": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",

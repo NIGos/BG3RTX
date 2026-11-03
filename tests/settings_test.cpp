@@ -421,7 +421,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 10);   // Includes the default-off RR hair coverage resolve candidate, the temporal post candidate and strand hair on screen.
+  CHECK(user_exp == 9);   // Includes the default-off RR hair coverage resolve candidate, the temporal post candidate and strand hair on screen.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -955,7 +955,9 @@ static void test_apply_modes() {
     for(int choice=0;choice<2;++choice)CHECK(knob_apply(knob,choice)==Apply::Live);
   }
   // Player trial toggles are visible, default-off and live in both directions.
-  for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_compose_shift", "exp_water_hit_shade",
+  // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
+  CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
+  for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_hit_shade",
                          "exp_native_coverage", "exp_hair_groom", "exp_hair_pool_trim", "exp_hair_cheap"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
