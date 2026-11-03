@@ -168,7 +168,7 @@ enum : uint32_t {
   OpConstantComposite = 44, OpConstantNull = 46, OpFunction = 54, OpFunctionEnd = 56, OpVariable = 59, OpLoad = 61, OpStore = 62,
   OpAccessChain = 65, OpDecorate = 71, OpMemberDecorate = 72, OpCompositeConstruct = 80,
   OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToF = 112, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128,
-  OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpFDiv = 136, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalAnd = 167,
+  OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpFDiv = 136, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalOr = 166, OpLogicalAnd = 167,
   OpSelect = 169, OpBitwiseAnd = 199,
   OpULessThan = 176, OpPhi = 245, OpLabel = 248, OpKill = 252, OpReturn = 253, OpTerminateInvocation = 4416,
   OpDemoteToHelperInvocation = 5380,
@@ -427,15 +427,27 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   std::map<uint32_t,uint32_t> surface_remap;
   uint32_t clean=0, clean3=0;
   if(surface) {
-    for(uint32_t v: {751u,2803u,3323u})
-      if(!is(v,v==751u?t_float:t_v3)) return PatchStatus::kIdMismatch;
+    for(uint32_t v: {742u,751u,809u,814u,873u,878u,2803u,3323u})
+      if(!is(v,v<2803u?t_float:t_v3)) return PatchStatus::kIdMismatch;
     for(const auto& q:splits)
       if(!is(q.product,t_v3)||!is(q.fresnel,t_v3)||(q.accum&&!is(q.accum,t_v3))) return PatchStatus::kIdMismatch;
     for(const Ins& x:ins) {
       const uint32_t* w=code+x.at;
       if(x.n<3) continue;
-      if(w[2]==751) {
-        clean=op2(OpLogicalAnd,t_bool,{surface_spec,op2(180 /*OpFOrdEqual*/,t_bool,{751,surface_zero})});
+      if(w[2]==878) {
+        // The game floors abs(raw foam) to 1e-4 before pow: even zero
+        // coverage has a positive final weight (template: ~3.19e-8).
+        // Test exact zero BEFORE that numerical floor, independently for
+        // colour, F0 and roughness. Keep all native weights/normal inputs;
+        // no epsilon admits real edge/flow foam. Final zero also covers a
+        // runtime multiplier of zero, as the original predicate did.
+        clean=surface_spec;
+        for(const auto& mask : {std::pair<uint32_t,uint32_t>{742,751}, {809,814}, {873,878}}) {
+          const uint32_t absent=op2(OpLogicalOr,t_bool,{
+              op2(180 /*OpFOrdEqual*/,t_bool,{mask.first,surface_zero}),
+              op2(180 /*OpFOrdEqual*/,t_bool,{mask.second,surface_zero})});
+          clean=op2(OpLogicalAnd,t_bool,{clean,absent});
+        }
         clean3=op2(OpCompositeConstruct,surface_bool3,{clean,clean,clean});
         surface_insert[x.at+x.n]=body; body.clear();
       }

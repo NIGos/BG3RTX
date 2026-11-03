@@ -624,7 +624,15 @@ All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, no
    Gate: white-furnace/planar dielectric reference, energy partition including roughness and a=0/1;
    model brightness may change. Live S8 pool static/Q/E A/B and Ultra smoke required.
    Status 2026-11-03: READY_FOR_LIVE, restricted pool candidate on water-shader-analysis; no quality pass.
-   Candidate is restricted to pool FS c4e92ccdb08dd777 with foam mask SSA 751 exactly zero;
+   Candidate is restricted to pool FS c4e92ccdb08dd777 with absent foam in all three samples:
+   pre-floor SSA 742/809/873 exactly zero, or their final weights 751/814/878 zero.
+   The native max(abs(signal), 1e-4) before pow makes final zero impossible for positive
+   multipliers/exponents even with absent foam (~3.19e-8 at template values). Keep the native
+   floor residue, normals and BRDF inputs; no tolerance accepts nonzero edge/flow coverage.
+   wsf1 provisioned this FS and selected 120 draws/window with missing 0, yet counted clean 0.
+   Predict clean owned > 0 in both ON windows, invalid 0; a fully clean pool would be ~20%
+   of water records (old 2.05% view estimate / live ~10.1% records). Runtime masks were not
+   captured: this share is a conditional prediction, requiring fresh live evidence after restart;
    every other family and foam-bearing pixel retains native surface shading. SpecId 1025;
    original FS patch words and record sizes unchanged when not provisioning the candidate.
    Ordinary water requests require raw byte identity against main. Changed capability requests
