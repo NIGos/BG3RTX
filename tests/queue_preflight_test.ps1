@@ -12,7 +12,8 @@ function python {
   $script:lintCalls++
   if($args -notcontains '--preflight'){throw 'preflight flag missing'}
   $global:LASTEXITCODE=$script:lintExit
-  if($script:lintExit){'windows: impossible gate'}else{'expected duration: 90 s'}
+  'synthetic: expected duration 749.5 s after load; minimum 700 s; readiness timeout allowance 360 s'
+  if($script:lintExit){'windows: impossible gate'}
 }
 # A py launcher, if installed elsewhere, must use this same harmless stand-in.
 function py { python @args }
@@ -37,6 +38,43 @@ $run=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinit
 $status=$run.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text -match '^if \(\(Test-Path -LiteralPath \$statusFile\)'},$true)
 $scratch=Join-Path $env:TEMP ('bg3-status-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $scratch | Out-Null
+# Real result writers, scratch paths only. Refusals remain pending and are not
+# duplicated on polling; edited jobs and changed reasons get their own record.
+foreach($name in @('Write-Record','Write-QueueRefusal')) {
+ Invoke-Expression ($ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true).Extent.Text)
+}
+$jsonl=Join-Path $scratch 'results.jsonl';$md=Join-Path $scratch 'results.md'
+$script:refusedQueueRecords=@{};$script:lastRefusal=$null
+$file=New-Item -ItemType File (Join-Path $scratch 'synthetic.json')
+$job=[pscustomobject]@{name='hv5-reload-bisect';args=@('-MovePlan','synthetic-plan.json')}
+$job | ConvertTo-Json | Set-Content $file.FullName
+function Get-InboxDirs { $scratch }
+function ConvertTo-QueueWindowJob($job) { $job }
+function Get-QueuePermissionBlock { $null }
+function Get-QueueDependencyBlock { $null }
+function Get-QueueBuildIdentity { 'synthetic-build' }
+function Stamp { 'synthetic-build' }
+Invoke-Expression $selector
+$script:blockedQueueMessages=@{}
+$script:lintExit=1
+if(Get-NextJob){throw 'refused lint selected a job'}
+if(Get-NextJob){throw 'refused lint selected a job on repeated poll'}
+$records=@(Get-Content $jsonl | ForEach-Object {$_ | ConvertFrom-Json})
+if($records.Count -ne 1 -or $records[0].valid -or $records[0].completed -or $records[0].expected_seconds -ne 1109.5 -or $records[0].cap_seconds -ne 900){throw 'lint refusal record/dedup/duration failed'}
+if($records[0].outcome -notmatch '^REFUSED \(preflight\): .*impossible gate' -or (Get-Content $md -Raw) -notmatch '1109.5 s; cap 900 s'){throw 'refusal outcome missing evidence'}
+$block=Get-QueuePreflightBlock $file ([pscustomobject]@{timeout=901})
+Write-QueueRefusal $file $job $block
+if(@(Get-Content $jsonl).Count -ne 2 -or $script:lastRefusal -notmatch 'expected duration 901 s; cap 900 s'){throw 'duration refusal not recorded'}
+if(-not(Test-Path $file.FullName)){throw 'refusal consumed job'}
+$script:lintExit=0
+if(-not(Get-NextJob)){throw 'accepted job not selected'}
+$startLine=$ast.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.Extent.Text -like 'Write-Host*expected duration*cap*'},$true)
+$name=$job.name
+$startOutput=Invoke-Expression ($startLine.Extent.Text+' 6>&1')
+if("$startOutput" -notmatch 'hv5-reload-bisect: expected duration 1109.5 s; cap 900 s'){throw 'accepted start duration not printed'}
+$last=$ast.EndBlock.Statements[-1]
+$lastOutput=Invoke-Expression $last.Extent.Text
+if($lastOutput -cne $script:lastRefusal){throw 'last stdout line hides refusal'}
 $statusFile=Join-Path $scratch 'run-status.json'; $logs=$scratch; $name='synthetic'; $i=1; $t0=(Get-Date).AddSeconds(-1); $completed=$true
 @{completed=$false;failed_check='producer silent: expected';failed_phase=3;slice_failures=@(@{phase=3;check='producer silent: expected';slice=0;next_phase=5})} | ConvertTo-Json -Depth 5 | Set-Content $statusFile
 Invoke-Expression $status.Extent.Text

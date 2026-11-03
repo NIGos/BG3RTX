@@ -128,7 +128,23 @@ function Get-Nv153($tree, [datetime]$since) {
 
 function Get-Dumps($tree, [datetime]$since) {
   @(Get-ChildItem -Path (Join-Path $tree "captures\aftermath\*.nv-gpudmp"), (Join-Path $tree 'captures\crash\*.dmp') -ErrorAction SilentlyContinue |
-    Where-Object LastWriteTime -gt $since | ForEach-Object Name)
+    Where-Object LastWriteTime -gt $since | ForEach-Object FullName)
+}
+
+function Get-QueueCrashOutcome($r) {
+  $hits = @(if ($r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
+    Select-String -LiteralPath $r.keptLog -Pattern 'VK_ERROR_DEVICE_LOST|\[aftermath\] device lost: waiting|\[crash\] exception 0x|\[crash\] first-chance fatal minidump.*\.dmp' | ForEach-Object Line
+  })
+  if (-not $hits -and -not $r.dumps) { return $null }
+  $kind = if ($hits -match 'VK_ERROR_DEVICE_LOST|device lost: waiting') { 'device lost' } else { 'game crash' }
+  $at = 'unknown time'; $phase = $r.failed_phase
+  if ($hits -and $hits[0] -match '\b\d{2}:\d{2}:\d{2}\b') { $at = $Matches[0] }
+  if ($r.status -and (Test-Path -LiteralPath $r.status)) {
+    $status = Get-Content -LiteralPath $r.status -Raw | ConvertFrom-Json
+    if ($null -ne $status.last_phase) { $phase = $status.last_phase }
+  }
+  if ($null -eq $phase -or $phase -lt 0) { $phase = 'unknown' }
+  "CRASH: $kind at $at (phase $phase)$(if ($r.dumps) { ', dump ' + ($r.dumps -join ', ') })$(if ($hits) { '; ' + ($hits -join ' | ') })"
 }
 
 # Jobs without a "tree" run on the test tree (scripts/test-tree.ps1: a checkout of main kept
@@ -517,6 +533,7 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
 function Run-Job($file) {
   $job = ConvertTo-QueueWindowJob (Get-Content $file.FullName -Raw | ConvertFrom-Json)
   $name = if ($job.name) { $job.name } else { $file.BaseName }
+  Write-Host "${name}: expected duration $($script:preflightDuration.expected_seconds) s; cap $($script:preflightDuration.cap_seconds) s"
   $tree = Get-JobTree $job
   $repeat = if ($job.repeat) { [int]$job.repeat } else { 1 }
   $traces = if ($null -ne $job.traces) { [int]$job.traces } else { 2 }
@@ -572,7 +589,9 @@ function Run-Job($file) {
     }
     # "expect": log lines that prove the run tested what it meant to (the feature switched on,
     # the asset DB loaded, the level loaded). A run missing any is INVALID, never a pass.
+    $crashOutcome = Get-QueueCrashOutcome $r
     $missing = @()
+    if ($crashOutcome) { $r.completed = $false; $missing += 'crash evidence' }
     if (-not $r.completed) { $missing += 'successful terminal state' }
     if ($r.runner_missing) { $missing += @($r.runner_missing) }
     if ($job.expect -and $r.keptLog -and (Test-Path $r.keptLog)) {
@@ -611,6 +630,7 @@ function Run-Job($file) {
       $r.outcome = "INVALID (missing: $($missing -join ' | ')); $($r.outcome)"
       $lines += "INVALID: expected log lines not found: $($missing -join ' | ')"
     }
+    if ($crashOutcome) { $r.outcome = $crashOutcome }
     $after = Stamp $tree
     $rec = [ordered]@{ job = $name; run = $i; start = $t0.ToString('s'); sec = [int]((Get-Date) - $t0).TotalSeconds
                        valid = (-not $missing)
@@ -642,7 +662,10 @@ function Get-InboxDirs {
 }
 
 $script:blockedQueueMessages=@{}
+$script:refusedQueueRecords=@{}
+$script:lastRefusal=$null
 function Get-QueuePreflightBlock($file, $job) {
+  $script:preflightDuration=@{expected_seconds=$null;cap_seconds=$(if($null -ne $job.max_minutes){[double]$job.max_minutes*60}else{900.0})}
   # Non-plan commands have only their deadline as a bound. A session also needs
   # its per-run trace waits (60 s write + 30 s completion), gaps and hold.
   if (@($job.args) -notcontains '-MovePlan') {
@@ -654,6 +677,7 @@ function Get-QueuePreflightBlock($file, $job) {
       $seconds += $warmup + $traces*90 + [Math]::Max(0,$traces-1)*$gap + [double]$job.hold
     }
     $minutes=if($null -ne $job.max_minutes){[double]$job.max_minutes}else{15.0}
+    $script:preflightDuration.expected_seconds=$seconds
     if([double]::IsNaN($minutes) -or [double]::IsInfinity($minutes) -or $minutes -le 0){return 'live-flow preflight: max_minutes must be finite and positive'}
     if([double]::IsNaN($seconds) -or [double]::IsInfinity($seconds) -or $seconds -le 0){return 'live-flow preflight: duration must be finite and positive'}
     if($seconds -gt $minutes*60){return "live-flow preflight: expected duration ${seconds} s exceeds $minutes minutes; split launch or declare max_minutes"}
@@ -671,9 +695,29 @@ function Get-QueuePreflightBlock($file, $job) {
     $output = @(& $python @pythonArgs $lint $file.FullName --preflight --tree (Get-JobTree $job) 2>&1)
     $exit = $LASTEXITCODE
   } finally { $ErrorActionPreference = $eap }
+  foreach ($line in $output) {
+    if ([string]$line -match 'expected duration ([\d.eE+-]+) s after load;.*readiness timeout allowance ([\d.eE+-]+) s') {
+      $script:preflightDuration.expected_seconds=[double]::Parse($Matches[1],[cultureinfo]::InvariantCulture)+[double]::Parse($Matches[2],[cultureinfo]::InvariantCulture)
+    }
+  }
   if ($exit -ne 0) { return 'live-flow preflight: ' + ($output -join ' | ') }
   foreach ($line in $output) { Write-Host $line }
   return $null
+}
+
+function Write-QueueRefusal($file, $job, $reason) {
+  $signature="$($file.LastWriteTimeUtc.Ticks)|$reason"
+  if ($script:refusedQueueRecords[$file.FullName] -eq $signature) { return }
+  $name=if($job.name){$job.name}else{$file.BaseName}
+  $duration=$script:preflightDuration
+  $expected=if($null -ne $duration.expected_seconds){"$($duration.expected_seconds) s"}else{'unavailable'}
+  $outcome="REFUSED (preflight): $reason; expected duration $expected; cap $($duration.cap_seconds) s"
+  [ordered]@{job=$name;run=0;start=(Get-Date -Format s);sec=0;valid=$false;completed=$false;outcome=$outcome;expected_seconds=$duration.expected_seconds;cap_seconds=$duration.cap_seconds} |
+    ConvertTo-Json -Compress | Write-Record $jsonl
+  "- ${name}: $outcome" | Write-Record $md
+  $script:refusedQueueRecords[$file.FullName]=$signature
+  $script:lastRefusal="${name}: $outcome"
+  Write-Host $script:lastRefusal
 }
 
 function Get-NextJob {
@@ -685,7 +729,11 @@ function Get-NextJob {
       $tree=Get-JobTree $job
       $blocked=Get-QueuePermissionBlock $job $root $tree (Get-QueueBuildIdentity $tree) $PermissionSession $script:permissionRunner
       if(-not $blocked){$blocked=Get-QueueDependencyBlock $job $root (Stamp $tree)}
-      if(-not $blocked){$blocked=Get-QueuePreflightBlock $next $job}
+      if(-not $blocked){
+        try { $blocked=Get-QueuePreflightBlock $next $job }
+        catch { $blocked='live-flow preflight: '+$_.Exception.Message }
+        if($blocked){Write-QueueRefusal $next $job $blocked}
+      }
     } catch {$blocked='Invalid queued job: '+$_.Exception.Message}
     if(-not $blocked){return $next}
     # Leave blocked files untouched. At most one message per unchanged reason in
@@ -747,4 +795,4 @@ try {
   foreach($contextFile in $script:childContextFiles){Remove-Item -LiteralPath $contextFile -ErrorAction SilentlyContinue}
   Remove-Item Env:BG3RTX_QUEUE_CONTEXT_FILE -ErrorAction SilentlyContinue
 }
-"queue empty"
+if ($script:lastRefusal) { $script:lastRefusal } else { "queue empty" }
