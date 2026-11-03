@@ -1,0 +1,14 @@
+{
+ "status": "READY_FOR_LIVE; not authorized or queued",
+ "scene": "S6 Adamantine Forge, WLD_Main_A",
+ "hypothesis": "Legacy mode 2 shadows artistic boxes with runtime _m8 bit 0 clear. Fixed mode 2 leaves their contribution unchanged.",
+ "prediction": {
+  "fixed_unshadowed_traced": 0,
+  "legacy_unshadowed_traced": "> 0",
+  "energy_source": "dumps.json pass_fs 5c3fdabc, slot 0, RGB float mean luminance",
+  "noise": "same-run static OFF repeats; sigma from consecutive OFF pair differences; no tuned brightness tolerance",
+  "accept": "Every fixed shot >= its bracketing OFF mean minus OFF repeat noise; fixed closer to OFF than legacy beyond that noise. Inconclusive if legacy loss or recovery does not exceed noise.",
+  "scope": "Whole-frame energy is necessary but does not localize artistic lights. Review same-run PNGs at lower-right walkway and central pillar; no ROI float claim from a global mean.",
+  "cost": "Report local-light GPU ms fixed minus old and OFF in diagnostic-free windows; no measured delta yet."
+ }
+}

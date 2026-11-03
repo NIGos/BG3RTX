@@ -110,6 +110,7 @@ static bool compute_refresh(Compute& c, const char* file) {
 // ---- callbacks ----
 
 static void on_frame(uint64_t frame) {
+  gi_on_frame(frame);   // the background pipeline builds' status lines
   compute_refresh(g_probe, "probe.hlsl");
   int* census_req = static_cast<int*>(host->persist("core.census_request", sizeof(int)));
   int want = host->cfg_int("census_dump", 0);

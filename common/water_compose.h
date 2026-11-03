@@ -361,6 +361,12 @@ ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t b
   return keep_stash() ? ScenePick::kStashKept : ScenePick::kNone;
 }
 
+// Only the earlier stash pair needs the outgoing lighting camera. A newer pair
+// was built for the camera now; refused scenes never dispatch.
+inline bool compose_shift_needed(LightingUse use, ScenePick pick) {
+  return use == LightingUse::kEarlier && (pick == ScenePick::kStash || pick == ScenePick::kStashKept);
+}
+
 // Composed / uncomposed per frame index of the water passes: a frame with a refused pass and no
 // composed one is uncomposed (the game's probe term and unshadowed water on screen); right after a
 // composed frame it is an on/off flip. Gate: 0 uncomposed frames in every window with water.
@@ -448,7 +454,7 @@ inline constexpr uint32_t kCsSlotWordsLs = 128;   // core/water.cpp kCStatBytes 
 // water draw's colour copy).
 // Bit 4 the game's sun shadow replaced (rt_water_game_shadow, WATER_GSH variants only: with bit 1, a
 // game-shadowed record lit by the traced ray gets C + Dg; clear, the game's Vg stays where the ray is lit).
-inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u;
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u, kFlagSceneShift = 32u, kFlagHitShade = 64u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;

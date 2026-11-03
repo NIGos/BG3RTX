@@ -16,13 +16,18 @@
 //       add one-bounce radiance into the diffuse buffer before SSS and fog,
 //       and keep the lit radiance for next frame's ray hits.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 #include "../common/native_hair_origin.h"
 #include "../common/shader_variant.h"
+#include "../common/pipeline_async.h"
+#include "../common/pipeline_specs.h"
+#include <chrono>
 #include "../common/ls_exact_k.h"
+#include "../common/occ_stats.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -96,6 +101,55 @@ struct Pipe {
   uint64_t variant_generations[256] = {};
   std::string variant_files[256];
 };
+
+// Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
+// gi_release (before FreeLibrary: never from the DLL's static destructors).
+extern "C" __declspec(dllimport) void* __stdcall GetCurrentThread();
+extern "C" __declspec(dllimport) int __stdcall SetThreadPriority(void* thread, int priority);
+bg3::pipe_async::Builds g_builds(
+    2, [](const bg3::pipe_async::Result& r) { host->defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
+    [] { SetThreadPriority(GetCurrentThread(), -1); });   // THREAD_PRIORITY_BELOW_NORMAL
+// A pipeline layout a background build may still read is destroyed once none does.
+void defer_layout_destroy(uint64_t layout) {
+  if (!layout) return;
+  g_builds.park(layout, [layout] { host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, layout); });
+}
+// On a worker: the SPIR-V (the layer's cache or DXC) and the compute pipeline of `req` for `layout`.
+using bg3::pipe_async::PipelineSpecs;
+bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& specs) {
+  bg3::pipe_async::Result r{};
+  Bg3ShaderBlob blob{};
+  if (!host->get_shader(req.c_str(), entry.c_str(), "cs_6_6", &blob)) return r;
+  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  mci.codeSize = blob.size_bytes;
+  mci.pCode = blob.code;
+  // A real module: chaining VkShaderModuleCreateInfo with a null module needs
+  // maintenance5, which the game's device does not enable (VUID-...-stage-08771).
+  VkShaderModule mod = VK_NULL_HANDLE;
+  if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
+    host->log("gi: %s shader module creation failed", req.c_str());
+    return r;
+  }
+  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry.c_str(),
+               nullptr};
+  pci.layout = layout;
+  const VkSpecializationInfo info{specs.count, specs.entries, specs.count * sizeof(uint32_t), specs.data};
+  if (specs.count) pci.stage.pSpecializationInfo = &info;
+  VkPipeline np = VK_NULL_HANDLE;
+  const auto t_pipe = std::chrono::steady_clock::now();
+  const VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  r.pipeline_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
+  host->vk->DestroyShaderModule(host->device, mod, nullptr);
+  if (pr != VK_SUCCESS) {
+    host->log("gi: %s pipeline creation failed (%d)", req.c_str(), int(pr));
+    return r;
+  }
+  r.pipeline = uint64_t(np);
+  r.generation = blob.generation;
+  r.ok = true;
+  return r;
+}
 
 // Bound pipeline capability, including a first-frame capability publication race.
 std::unordered_set<VkPipeline> g_omm_pipelines;
@@ -248,6 +302,24 @@ constexpr uint32_t kLsBoxXCount = 32;   // rt_local_shadows.hlsl kBxN
 constexpr VkDeviceSize kLsBoxXBytes = VkDeviceSize(kLsBoxXCount) * 64 * 4;
 VkBuffer g_bx_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_bx_mem = VK_NULL_HANDLE;
+// rt_occ_stats (common/occ_stats.h, docs/DIALOGUE_SHADOWS.md): the occluder counters, device-local,
+// set 4 binding 1 of the box layout and of g_occ_layout (the same set as the box statistics); zeroed
+// before gi/rt_occ_stats.hlsl, copied into a host ring after the D-LS pass (outside both timed
+// regions), read kOccRing - 1 frames later and logged once per 60 frames ("occ stats").
+namespace occ = bg3::occ_stats;
+constexpr uint32_t kOccRing = 8;
+constexpr VkDeviceSize kOccBytes = occ::kOccBytes;
+VkBuffer g_occ_buf = VK_NULL_HANDLE, g_occ_host = VK_NULL_HANDLE;
+VkDeviceMemory g_occ_mem = VK_NULL_HANDLE, g_occ_host_mem = VK_NULL_HANDLE;
+const uint32_t* g_occ_map = nullptr;
+uint64_t g_occ_frame[kOccRing] = {};
+uint32_t g_occ_slot = 0;
+uint64_t g_occ_armed = 0;   // the frame whose counters the D-LS pass adds to (0: none)
+occ::OccWindow g_occ_win;
+bool g_occ_logged = false;
+VkPipelineLayout g_occ_layout = VK_NULL_HANDLE;
+Pipe g_occ;               // gi/rt_occ_stats.hlsl: the sun and AO occluders
+Pipe g_ls_full_box_occ;   // gi/rt_local_shadows_full_box.hlsl (constant 1011 = 1): the point/spot and box occluders
 VkDescriptorSetLayout g_bx_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_bx_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_bx_set = VK_NULL_HANDLE;
@@ -279,19 +351,17 @@ Pipe g_rf;
 // rf_hit_shade (M4.2 tier b, common/native_hit_rf_bindings.h): D-RF's push set, the material
 // AlphaDSL as set 1, the game's lighting set 1 as set 2, the D-LS sun set as set 3 (+ SHaRC set 4).
 // Built over g_rf_set_layout and g_rf_game_layout: ensure_rf_layout drops them with those.
-Pipe g_rf_shade, g_rf_shade_sharc;
-VkPipelineLayout g_rf_shade_layout = VK_NULL_HANDLE, g_rf_shade_sharc_layout = VK_NULL_HANDLE;
 bool g_rf_hit_logged = false, g_rf_hit_contract_logged = false;
 // rt_hit_emission (M4.4, rt/native_hit_emission.hlsli): the hit-GI and rf_hit_shade variants with the
 // host's D-EM emissive scene (Bg3HostApi::rt_emissive) as one more set: GI set 2 (the empty one),
 // D-RF set 5. Index: GI [2 x sun + sharc], D-RF [sharc]. Built over the host's emissive set layout
 // (g_hit_em_dsl): dropped if it changes, and the D-RF ones with ensure_rf_layout's.
-Pipe g_hit_gi_em[4], g_rf_shade_em[2];
-VkPipelineLayout g_hit_gi_em_layout[4] = {}, g_rf_shade_em_layout[2] = {};
+Pipe g_hit_gi_em[4];
+VkPipelineLayout g_hit_gi_em_layout[4] = {};
 VkDescriptorSetLayout g_hit_em_dsl = VK_NULL_HANDLE;
 bool g_hit_em_logged = false;
 // rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the rf_hit_shade passes compiled
-// with RF_HIT_GI=1 (common/shader_variant.h kRfHitGi), index [2 x emission + sharc]; layout: rf_hit_shade's
+// with RF_SPEC_HIT_GI=1 (constant 1013), index [2 x emission + sharc]; layout: rf_hit_shade's
 // sets 0-3, set 4 SHaRC's or empty, set 5 the emissive scene or empty, set 6 the device-local counters
 // (ensure_rg; common/native_hit_rf_bindings.h kSetRfGi). Dropped with the rf_hit_shade / emission layouts.
 Pipe g_rf_shade_gi[4];
@@ -311,14 +381,14 @@ void rf_gi_drop() {
     p = Pipe{};
   }
   for (VkPipelineLayout& l : g_rf_shade_gi_layout) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)l);
+    defer_layout_destroy(uint64_t(l));
     l = VK_NULL_HANDLE;
   }
 }
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
-Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F, startup opt-in only.
+Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resolution at startup opt-in, otherwise 1x1.
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
@@ -563,9 +633,9 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
-  if(ok && g_hair_origin_cap) {
-    ok=host->alloc_image(w,h,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
-    if(ok)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
+  if(ok) {
+    ok=host->alloc_image(g_hair_origin_cap?w:1u,g_hair_origin_cap?h:1u,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
+    if(ok && g_hair_origin_cap)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
   }
   if (!ok) {
     host->log("gi: image allocation failed");
@@ -600,7 +670,7 @@ bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLa
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) b[n++] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   for (const ExtraBinding& x : kExtras)
     if (x.layouts & mask) b[n++] = {x.binding, x.type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-  if(g_hair_origin_cap && mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+  if(mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   sci.bindingCount = n;
@@ -636,7 +706,7 @@ bool ensure_current_sun_layout(VkDescriptorSetLayout materials) {
   if(g_current_sun_layout && g_current_sun_host_layout==materials) return true;
   for(auto pipeline:g_rt_shadow_current.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(pipeline));
   g_rt_shadow_current=Pipe{};
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  defer_layout_destroy(uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;
   g_current_sun_host_layout=materials;
@@ -652,23 +722,15 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
   if (!game || !host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_rf_layout) {
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf.pipeline);
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_layout);
+    defer_layout_destroy(uint64_t(g_rf_layout));
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
     g_rf = Pipe{};
     g_rf_layout = VK_NULL_HANDLE;
     g_rf_set_layout = VK_NULL_HANDLE;
     host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_rf_sharc.pipeline);
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
+    defer_layout_destroy(uint64_t(g_rf_sharc_layout));
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
-    for (Pipe* p : {&g_rf_shade, &g_rf_shade_sharc, &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
-      for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
-      *p = Pipe{};
-    }
-    for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout, &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
-      host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
-      *l = VK_NULL_HANDLE;
-    }
     rf_gi_drop();
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
@@ -763,6 +825,27 @@ bool ensure_bx() {
   const VkDeviceFuncs& vk = *host->vk;
   const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
   if (!d || d->version < 1) return false;
+  if (!g_occ_buf) {   // rt_occ_stats: set 4 binding 1 (40 KB, always present so the set is complete)
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = kOccBytes;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (vk.CreateBuffer(host->device, &bci, nullptr, &g_occ_buf) != VK_SUCCESS) return g_occ_buf = VK_NULL_HANDLE, false;
+    VkMemoryRequirements req;
+    vk.GetBufferMemoryRequirements(host->device, g_occ_buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+      if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        mai.memoryTypeIndex = i;
+    if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &g_occ_mem) != VK_SUCCESS ||
+        vk.BindBufferMemory(host->device, g_occ_buf, g_occ_mem, 0) != VK_SUCCESS) {
+      vk.DestroyBuffer(host->device, g_occ_buf, nullptr);
+      if (g_occ_mem) vk.FreeMemory(host->device, g_occ_mem, nullptr);
+      g_occ_buf = VK_NULL_HANDLE, g_occ_mem = VK_NULL_HANDLE;
+      return false;
+    }
+  }
   if (!g_bx_buf) {
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bci.size = kLsBoxXBytes;
@@ -785,14 +868,16 @@ bool ensure_bx() {
     }
   }
   if (!g_bx_dsl) {
-    VkDescriptorSetLayoutBinding b{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    // b0 the box statistics, b1 the rt_occ_stats counters (rt/occ_stats.hlsli occStats)
+    VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
     VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    sci.bindingCount = 1;
-    sci.pBindings = &b;
+    sci.bindingCount = 2;
+    sci.pBindings = b;
     if (vk.CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_bx_dsl) != VK_SUCCESS) return g_bx_dsl = VK_NULL_HANDLE, false;
   }
   if (!g_bx_pool) {
-    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
     VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pci.maxSets = 1;
     pci.poolSizeCount = 1;
@@ -804,14 +889,16 @@ bool ensure_bx() {
   ai.descriptorSetCount = 1;
   ai.pSetLayouts = &g_bx_dsl;
   if (vk.AllocateDescriptorSets(host->device, &ai, &g_bx_set) != VK_SUCCESS) return g_bx_set = VK_NULL_HANDLE, false;
-  VkDescriptorBufferInfo bi{g_bx_buf, 0, kLsBoxXBytes};
-  VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-  w.dstSet = g_bx_set;
-  w.dstBinding = 0;
-  w.descriptorCount = 1;
-  w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  w.pBufferInfo = &bi;
-  vk.UpdateDescriptorSets(host->device, 1, &w, 0, nullptr);
+  VkDescriptorBufferInfo bi[2] = {{g_bx_buf, 0, kLsBoxXBytes}, {g_occ_buf, 0, kOccBytes}};
+  VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+  for (uint32_t i = 0; i < 2; ++i) {
+    w[i].dstSet = g_bx_set;
+    w[i].dstBinding = i;
+    w[i].descriptorCount = 1;
+    w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w[i].pBufferInfo = &bi[i];
+  }
+  vk.UpdateDescriptorSets(host->device, 2, w, 0, nullptr);
   return true;
 }
 
@@ -879,6 +966,36 @@ bool ensure_rg() {
 // ls_box: D-LS's push set 0, the host's set 1, the sun set 2, the game's layout of the
 // lighting's set 1 as set 3, and the device-local box statistics as set 4 (ensure_bx). A
 // different game layout rebuilds the box pipelines.
+// rt_occ_stats: the host ring and the sun/AO pass's layout (the RT push set 0, the host's set 1,
+// empty sets 2-3, the box statistics set 4 whose binding 1 is the occluder counters).
+bool ensure_occ() {
+  if (g_occ_layout && g_occ_host) return true;
+  if (!ensure_rt_layout() || !ensure_bx() || !host->alloc_host_buffer) return false;
+  if (!g_occ_host) {
+    void* m = nullptr;
+    if (!host->alloc_host_buffer(kOccBytes * kOccRing, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_occ_host, &g_occ_host_mem, &m))
+      return g_occ_host = VK_NULL_HANDLE, false;
+    g_occ_map = static_cast<const uint32_t*>(m);
+    std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+  }
+  if (!g_empty_dsl) {
+    VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    if (host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) != VK_SUCCESS) return false;
+  }
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkDescriptorSetLayout sets[5] = {g_rt_set_layout, host_layout, g_empty_dsl, g_empty_dsl, g_bx_dsl};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 5;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &g_occ_layout) != VK_SUCCESS) return g_occ_layout = VK_NULL_HANDLE, false;
+  return true;
+}
+
 bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   if (!game || !ensure_ls_layout() || !ensure_bx()) return false;
   if (g_ls_box_layout && g_ls_box_game == game) return true;
@@ -886,11 +1003,11 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_ls_box_layout) {
-    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box, &g_ls_box_k, &g_ls_full_box_k}) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box, &g_ls_box_k, &g_ls_full_box_k, &g_ls_full_box_occ}) {
       host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
       *p = Pipe{};
     }
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+    defer_layout_destroy(uint64_t(g_ls_box_layout));
     g_ls_box_layout = VK_NULL_HANDLE;
     host->log("ls: the lighting's set 1 layout changed (%p -> %p); rebuilding the box-light pipelines",
               (void*)g_ls_box_game, (void*)game);
@@ -913,10 +1030,8 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 // rf_hit_shade: D-RF's push set 0, the host alpha layout (the material AlphaDSL has it) as set 1,
 // the game's lighting layout as set 2, the sun set 3 (g_sun_dsl), the SHaRC set 4. The push set
 // is D-RF's own: the contract's push table must be exactly what binding_type() builds.
-bool ensure_rf_hit_layout(bool sharc) {
+bool ensure_rf_hit_contract() {
   namespace rfh = bg3::native_hit_rf;
-  VkPipelineLayout& out = sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  if (out) return true;
   if (!g_rf_set_layout || !g_rf_game_layout || !ensure_ls_layout() || !g_sun_dsl) return false;
   for (const auto& b : rfh::push) {
     const VkDescriptorType t = b.binding < kRfBindings ? binding_type(b.binding)
@@ -928,23 +1043,6 @@ bool ensure_rf_hit_layout(bool sharc) {
       return false;
     }
   }
-  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
-  VkDescriptorSet unused;
-  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
-  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : VK_NULL_HANDLE;
-  if (sharc && !sh) return false;
-  VkDescriptorSetLayout sets[5] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh};
-  static_assert(rfh::kSetPush == 0 && rfh::kSetMaterial == 1 && rfh::kSetGame == 2 && rfh::kSetSun == 3 && rfh::kSetSharc == 4);
-  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
-  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-  lci.setLayoutCount = rfh::set_count(sharc);
-  lci.pSetLayouts = sets;
-  lci.pushConstantRangeCount = 1;
-  lci.pPushConstantRanges = &pc;
-  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &out) != VK_SUCCESS) {
-    out = VK_NULL_HANDLE;
-    return false;
-  }
   return true;
 }
 
@@ -953,14 +1051,19 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
   // (RT_CASCADE_MASKS, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
-  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0;
+  // ls_box_cascade_old=1 (diagnostic A/B, live): the box passes trace 0xFF again, as before the 2026-11-02 fix, so
+  // the stale cascade copy shadows local/box lights (rt_occ_stats "cascade" kind under local/box shows it).
+  const bool box_old = std::strncmp(file, "gi/rt_local_shadows", 19) == 0 && std::strstr(file, "_box") &&
+                       host->cfg_int("ls_box_cascade_old", 0) != 0;
+  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0 && !box_old;
   // Include box/native/check helpers too: each may reach rt_common through
   // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
   const bool sun_current = &p == &g_rt_shadow_current;
-  // rf_hit_gi: its own Pipes (like the current-caster sun), not a slot.
-  const bool rf_gi = &p >= g_rf_shade_gi && &p < g_rf_shade_gi + 4;
+  // Constant 1013 selects the hit GI program; its value joins the pipeline key.
+  const bool occ_stats = &p == &g_ls_full_box_occ;
+  const bool rf_gi = sv::rf_hit_gi_entry(file) && host->cfg_int("rf_hit_gi", 0) > 0;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
@@ -977,50 +1080,90 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
   const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
+  // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
+  // Not the current-caster sun pipe (its request keeps the cascade defines).
+  const bool spec_cascade = sv::cascade_entry(file) && !sun_current;   // the only cascade path since qualification
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
-                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) | (pool_2s ? unsigned(sv::kHitPool2s) : 0u));
-  // Never retain an ordinary shader on compilation failure with kind3 records.
-  // Some diagnostic callers intentionally ignore refresh's boolean result.
-  if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
-  Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
-  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
-    p.pipeline = p.variants[variant]; p.generation = blob.generation;
-    return true;
+                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) | (pool_2s ? unsigned(sv::kHitPool2s) : 0u) |
+                                                 (spec_cascade ? unsigned(sv::kSpecCascade) : 0u));
+  // Step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample / gi_prev_radiance_guard
+  // (docs/TRACK_C_GI.md "Reprojection guards", live, off) are constants 1001 / 1002 of their files' one module. The
+  // values join the slot key, so a toggle recreates the slot's pipeline (driver compile only, no DXC).
+  const bool guards = sv::guard_entry(file);
+  const uint32_t mv_sample = sv::temporal_mv_entry(file) && host->cfg_int("gi_temporal_mv_sample", 0) != 0 ? 1u : 0u;
+  const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
+  std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
+  if(sv::occ_stats_entry(file)) slot_key += occ_stats ? "#occ=1" : "#occ=0";
+  if(sv::rf_hit_gi_entry(file)) slot_key += rf_gi ? "#rfgi=1" : "#rfgi=0";
+  // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
+  const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
+  if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
+  // A request never built in this slot compiles and creates its pipeline on a worker (common/pipeline_async.h):
+  // the pass skips until it is ready (never a pipeline of another request: kind3 records, other layouts).
+  // A built one asks the layer for its generation (in memory: no compile here; hot reload rebuilt it already)
+  // and a new generation is built in the background too, the current pipeline kept meanwhile.
+  const VkPipelineLayout lay = layout ? layout : g_layout;
+  const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
+  PipelineSpecs specs;
+  if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
+  if (sv::rf_hit_gi_entry(file)) specs.add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
+  if (spec_cascade) specs.add(sv::kSpecIdCascade, spec_value);
+  if (sv::temporal_mv_entry(file)) specs.add(sv::kSpecIdTemporalMv, mv_sample);
+  if (sv::prev_radiance_entry(file)) specs.add(sv::kSpecIdPrevRadiance, prev_guard);
+  if (hit_family) {
+    specs.add(sv::kSpecIdHitInstanced, instanced ? 1u : 0u);
+    specs.add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
+    specs.add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
   }
-  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-  mci.codeSize = blob.size_bytes;
-  mci.pCode = blob.code;
-  // A real module: chaining VkShaderModuleCreateInfo with a null module needs
-  // maintenance5, which the game's device does not enable (VUID-...-stage-08771).
-  VkShaderModule mod = VK_NULL_HANDLE;
-  if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
-    host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+  // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
+  // value keeps its own slot and pipeline, as the cascade constant does.
+  if (sv::gi_far_entry(file)) specs.add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (std::strncmp(file, "gi/", 3) == 0) {
+    specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
+    specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
+    if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
   }
-  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
-               nullptr};
-  pci.layout = layout ? layout : g_layout;
-  VkPipeline np = VK_NULL_HANDLE;
-  VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
-  host->vk->DestroyShaderModule(host->device, mod, nullptr);
-  if (pr != VK_SUCCESS) {
-    host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+  slot_key += specs.key();
+  const bool known = p.variants[variant] && p.variant_files[variant] == slot_key;
+  // Diagnostic callers may ignore the return value: never expose a different specialization while building.
+  p.pipeline = known ? p.variants[variant] : VK_NULL_HANDLE;
+  if (known) {
+    Bg3ShaderBlob blob{};
+    if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
+      p.pipeline = p.variants[variant];
+      return true;
+    }
+    if (p.variant_generations[variant] == blob.generation) {
+      p.pipeline = p.variants[variant]; p.generation = blob.generation;
+      return true;
+    }
+  }
+  bg3::pipe_async::Result r{};
+  const std::string key = slot_key + "|" + std::to_string(uint64_t(lay));
+  const auto st = g_builds.poll(key, uint64_t(lay), [req = selected, lay, specs] { return build_pipeline(req, "main", lay, specs); }, &r);
+  if (st == bg3::pipe_async::State::kStarted)
+    host->log("gi: %s building in the background (%s)", selected.c_str(),
+              known ? "hot reload: the current pipeline meanwhile" : "the pass waits");
+  if (st != bg3::pipe_async::State::kReady) {
+    if (known) p.pipeline = p.variants[variant];
+    return known;
   }
   g_omm_pipelines.erase(p.variants[variant]);
-  if(omm)g_omm_pipelines.insert(np);
+  if(omm)g_omm_pipelines.insert(VkPipeline(r.pipeline));
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
-  p.variants[variant] = np;
-  p.variant_generations[variant] = blob.generation;
-  p.variant_files[variant] = selected;
-  p.pipeline = np;
-  p.generation = blob.generation;
-  host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
+  p.variants[variant] = VkPipeline(r.pipeline);
+  p.variant_generations[variant] = r.generation;
+  p.variant_files[variant] = slot_key;
+  p.pipeline = p.variants[variant];
+  p.generation = r.generation;
+  host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
+            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
+            guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
+            r.pipeline_ms);
   return true;
 }
 
@@ -1070,7 +1213,7 @@ bool gather_hit_gi_writes(const Bound&,VkWriteDescriptorSet*,uint32_t&,bool refe
 // The extras' descriptors, with fallbacks when the game did not bind a source
 // (the shaders are told through Push::mat_classes bits 1-3).
 void bind_extras(Bound& b, const Snapshot& s) {
-  if(g_hair_origin_cap){
+  {
     b.hair_origin_image={VK_NULL_HANDLE,g_hair_origin.view,VK_IMAGE_LAYOUT_GENERAL};
     b.hair_origin_write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};b.hair_origin_write.dstBinding=50;
     b.hair_origin_write.descriptorCount=1;b.hair_origin_write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -1129,7 +1272,7 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) out[n++] = b.w[i];
   for (uint32_t i = 0; i < kNumExtras; ++i)
     if (kExtras[i].layouts & mask) out[n++] = b.xw[i];
-  if(g_hair_origin_cap && mask!=1u)out[n++]=b.hair_origin_write;
+  if(mask!=1u)out[n++]=b.hair_origin_write;
   return n;
 }
 
@@ -1929,10 +2072,12 @@ Push make_push() {
   // rf_hit_shade hits follow D-LS's light policy (lights it leaves to the game unshadowed, stop
   // short by max(R, ls_clear)). Only those variants read it.
   pc.ls_flags |= host->cfg_int("hit_ls_policy", 1) ? (1u << 24) : 0u;
-  // Bit 27: ls_box=2 (rt_local_shadows.hlsl ls_box_all_lights): the box lights without a game shadow map
-  // are traced too (to the end of their light-side fade-in), and the shadow-mapped ones only over the
-  // segment their game shadow view covers. Only the LS_BOX variants read it.
+  // Bit 27: ls_box=2 bounded segments (shadow-view near plane, or the legacy fixture limit).
+  // Bit 29 separately permits legacy unshadowed boxes in LS_BOX variants only.
   pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 ? (1u << 27) : 0u;
+  // Bit 29: legacy unshadowed-box tracing for the within-run art-intent A/B only.
+  pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 && !host->cfg_int("ls_box_honour_shadow", 1)
+                     ? (1u << 29) : 0u;
   // Bit 28: rt_omm_reference (live A/B, rt/omm_scene_guard.hlsli): RT_OMM_SCENE variants keep the scene
   // guard but trace the reference scene (no micromaps). Only those variants read it.
   {
@@ -2095,13 +2240,12 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
 
 // ---- rt_hit_emission (M4.4): the emissive scene set for the hit-GI / rf_hit_shade variants ----
 void hit_em_drop() {
-  for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3], &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
+  for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3]}) {
     for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
     *p = Pipe{};
   }
-  for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3],
-                              &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+  for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3]}) {
+    defer_layout_destroy(uint64_t(*l));
     *l = VK_NULL_HANDLE;
   }
   g_hit_em_dsl = VK_NULL_HANDLE;
@@ -2159,33 +2303,17 @@ bool ensure_empty_dsl() {
   return host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) == VK_SUCCESS;
 }
 
-// rf_hit_shade + emission: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene.
-bool ensure_rf_hit_em_layout(bool sharc) {
-  namespace rfh = bg3::native_hit_rf;
-  static_assert(rfh::kSetEmissive == 5);
-  VkPipelineLayout& out = g_rf_shade_em_layout[sharc ? 1 : 0];
-  if (out) return true;
-  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
-  VkDescriptorSet unused;
-  if (!g_hit_em_dsl || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
-      !host->rt_alpha(&host_layout, &unused) || !host_layout)
-    return false;
-  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
-  if (!sh) return false;
-  VkDescriptorSetLayout sets[6] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh, g_hit_em_dsl};
-  return make_em_layout(sets, 6, out);
-}
-
 // rf_hit_gi: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene (or empty), set 6
 // the device-local counters.
 bool ensure_rf_hit_gi_layout(bool sharc, bool em) {
   namespace rfh = bg3::native_hit_rf;
-  static_assert(rfh::kSetRfGi == 6);
+  static_assert(rfh::kSetPush == 0 && rfh::kSetMaterial == 1 && rfh::kSetGame == 2 && rfh::kSetSun == 3 &&
+                rfh::kSetSharc == 4 && rfh::kSetEmissive == 5 && rfh::kSetRfGi == 6);
   VkPipelineLayout& out = g_rf_shade_gi_layout[(em ? 2 : 0) + (sharc ? 1 : 0)];
   if (out) return true;
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
-  if ((em && !g_hit_em_dsl) || !ensure_rg() || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
+  if ((em && !g_hit_em_dsl) || !ensure_rg() || !ensure_rf_hit_contract() || !ensure_empty_dsl() || !host->rt_alpha ||
       !host->rt_alpha(&host_layout, &unused) || !host_layout)
     return false;
   VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
@@ -2206,41 +2334,34 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
       !bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))))
     return false;
   const bool sharc = s.rf_sharc;
-  if (!ensure_rf_hit_layout(sharc)) return false;
-  // rt_hit_emission: the same pass with the emissive scene as set 5; any missing piece runs it without.
-  const unsigned ei = sharc ? 1u : 0u;
+  // Every hit-shade module has set 6, including specialization 1013 = 0.
   VkDescriptorSet em = hit_em_set(cmd);
-  if (em && !(ensure_rf_hit_em_layout(sharc) &&
-              refresh(g_rf_shade_em[ei], sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl",
-                      g_rf_shade_em_layout[ei])))
+  auto select = [&](bool with_em) -> Pipe* {
+    if(!ensure_rf_hit_gi_layout(sharc, with_em)) return nullptr;
+    const unsigned gk = (with_em ? 2u : 0u) + (sharc ? 1u : 0u);
+    const char* gf = with_em ? (sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl")
+                            : (sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl");
+    return refresh(g_rf_shade_gi[gk], gf, g_rf_shade_gi_layout[gk]) ? &g_rf_shade_gi[gk] : nullptr;
+  };
+  Pipe* selected = em ? select(true) : nullptr;
+  if(!selected) {
     em = VK_NULL_HANDLE;
-  VkPipelineLayout layout = em ? g_rf_shade_em_layout[ei] : sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  Pipe* pp = em ? &g_rf_shade_em[ei] : sharc ? &g_rf_shade_sharc : &g_rf_shade;
-  // rf_hit_gi (1 the estimator at every hit, 2 the tier (a) check from the screen's GI): the RF_HIT_GI twin
-  // with the counter set 6; a twin that cannot be built leaves the variant above (logged once).
+    selected = select(false);
+  }
+  if(!selected) return false;
+  const unsigned gk = (em ? 2u : 0u) + (sharc ? 1u : 0u);
+  VkPipelineLayout layout = g_rf_shade_gi_layout[gk];
+  Pipe& p = *selected;
   const uint32_t gi_mode = uint32_t((std::min)((std::max)(host->cfg_int("rf_hit_gi", 0), 0), 2));
-  g_rg_ran = false;
-  if (gi_mode) {
-    const unsigned gk = (em ? 2u : 0u) + ei;
-    const char* gf = em ? (sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl")
-                        : (sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl");
-    g_rg_ran = ensure_rf_hit_gi_layout(sharc, em != VK_NULL_HANDLE) && refresh(g_rf_shade_gi[gk], gf, g_rf_shade_gi_layout[gk]);
-    if (g_rg_ran) {
-      layout = g_rf_shade_gi_layout[gk];
-      pp = &g_rf_shade_gi[gk];
-    }
-    if (g_rg_logged != int(gi_mode * 2 + (g_rg_ran ? 1 : 0))) {
-      g_rg_logged = int(gi_mode * 2 + (g_rg_ran ? 1 : 0));
-      host->log("rf hit gi: mode %u %s (sharc %d, emission %d)", gi_mode,
-                g_rg_ran ? "active" : "UNAVAILABLE, rf_hit_shade without it", sharc, em != VK_NULL_HANDLE);
-    }
-  } else if (g_rg_logged > 0) {
+  g_rg_ran = gi_mode != 0;
+  if(gi_mode && g_rg_logged != int(gi_mode * 2 + 1)) {
+    g_rg_logged = int(gi_mode * 2 + 1);
+    host->log("rf hit gi: mode %u %s (sharc %d, emission %d)", gi_mode,
+              "active", sharc, em != VK_NULL_HANDLE);
+  } else if(!gi_mode && g_rg_logged > 0) {
     g_rg_logged = 0;
     host->log("rf hit gi: off");
   }
-  Pipe& p = *pp;
-  if (!em && !g_rg_ran && !refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout))
-    return false;
   auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
   if (!traversal.valid()) return false;
   VkDescriptorSet material_alpha = b.alpha;
@@ -2255,7 +2376,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   if (em) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetEmissive, 1, &em, 0, nullptr);
-  if (g_rg_ran) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetRfGi, 1, &g_rg_set, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetRfGi, 1, &g_rg_set, 0, nullptr);
   // The hit light policy reads the per-light data from the sun set's b7 (ls_flags bit 0) when that
   // set holds the image and a join has run.
   Push hp = pc;
@@ -2598,6 +2719,61 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
   return tlas;
 }
 
+// rt_occ_stats: the window over the read-back slots (the slot written kOccRing - 1 frames ago is
+// folded before this frame reuses it), one "occ stats" line per 60 frames read.
+void occ_fold_slot(uint64_t now) {
+  const uint32_t slot = uint32_t(now % kOccRing);
+  if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
+    occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
+    // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
+    if (g_occ_win.frames >= uint32_t((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1))) {
+      host->log("%s", occ::occ_format(g_occ_win).c_str());
+      g_occ_win = occ::OccWindow{};
+    }
+  }
+  g_occ_frame[slot] = 0;
+  g_occ_slot = slot;
+}
+
+// The counters of this frame into its host slot (after the passes that add to them).
+void occ_copy(VkCommandBuffer cmd) {
+  memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
+  const VkBufferCopy cp{0, VkDeviceSize(g_occ_slot) * kOccBytes, kOccBytes};
+  host->vk->CmdCopyBuffer(cmd, g_occ_buf, g_occ_host, 1, &cp);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+}
+
+// gi/rt_occ_stats.hlsl over this frame's TLAS, after the sun pass and the GI trace (outside the timed
+// RT region). flags: bit 0 rtVis holds this frame's sun trace, bit 1 giRaw this frame's RT GI.
+bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
+  const VkDeviceFuncs& vk = *host->vk;
+  const uint64_t now = host->frame_index();
+  occ_fold_slot(now);
+  auto traversal = prepare_omm_traversal(cmd, b, g_occ.pipeline, true);
+  if (!traversal.valid()) return false;
+  memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);   // the previous frame's copy out of it first
+  vk.CmdFillBuffer(cmd, g_occ_buf, 0, kOccBytes, 0);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS, kCS);
+  Push pc = base;
+  pc.bounce_spec = flags;   // unused by every other pass (gi_common.hlsli)
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ.pipeline);
+  VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 0, gather_writes(b, kRtBindings, wr), wr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 1, 1, &b.alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 4, 1, &g_bx_set, 0, nullptr);
+  vk.CmdPushConstants(cmd, g_occ_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  occ_copy(cmd);   // complete without D-LS; the D-LS pass's copy (run_post) replaces it
+  g_occ_frame[g_occ_slot] = now;
+  g_occ_armed = now;
+  if (!g_occ_logged) {
+    g_occ_logged = true;
+    host->log("occ stats: active (sun traced %u, RT GI %u; D-LS occluders need ls_box > 0; the sun replica needs "
+              "rt_sun_cascade_current=0)", flags & 1u, (flags >> 1) & 1u);
+  }
+  return true;
+}
+
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   initialize_hair_origin();
   if(!g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0) && !g_hair_origin_warned){g_hair_origin_warned=true;host->log("[hair origin] enable rejected: restart with rt_hair_physical_origin=1 and rt_native_hair=1 to reserve resources");}
@@ -2626,7 +2802,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     VkClearColorValue zero{};
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     for (Bg3Image* im : all_images) host->vk->CmdClearColorImage(cmd, im->image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &range);
-    if(g_hair_origin_cap){
+    {
       image_layout(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
       VkClearColorValue invalid{};invalid.float32[3]=0.0f;
       host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);
@@ -2874,6 +3050,21 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     g_rt_slot = (g_rt_slot + 1) % kRing;
   }
   timestamp(cmd, 1);
+  // rt_occ_stats (diagnostic windows only): after the timed region, on this frame's TLAS.
+  g_occ_armed = 0;
+  if (tlas && host->cfg_int("rt_occ_stats", 0)) {
+    const bool sun_ok = s.rt_sun && !host->cfg_int("rt_sun_cascade_current", 0);
+    memory_barrier(cmd, kCS, kCS);
+    if (!ensure_occ() || !refresh(g_occ, "gi/rt_occ_stats.hlsl", g_occ_layout) ||
+        !occ_run(cmd, b, pc, (sun_ok ? 1u : 0u) | (s.rt_gi_applied ? 2u : 0u))) {
+      if (!g_occ_logged) host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
+      g_occ_logged = true;
+    }
+  } else if (g_occ_win.frames || g_occ_logged) {
+    g_occ_win = occ::OccWindow{};   // a later window starts clean
+    std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+    g_occ_logged = false;
+  }
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   return true;
 }
@@ -3001,7 +3192,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 1);
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
-    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
+    // rt_occ_stats: the every-mode box pass with the occluder counters (RT_OCC_STATS), this frame armed.
+    const bool occ_on = g_occ_armed == host->frame_index() && g_occ_buf && host->cfg_int("ls_box", 0);
+    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats || occ_on;
     VkPipeline lsp = g_ls.pipeline;
     bool box = false, kv = false, k_ran = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
@@ -3023,7 +3216,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     } else {
       // ls_k > 0 (TRACK_D_LOCAL_LIGHTS.md 9.11): the LS_K twin of the variant below; ls_k=0 never builds it.
       // A twin that fails to build leaves the every-light variant (same expected output, logged).
-      kv = bg3::ls_exact_k::use_variant(host->cfg_int("ls_k", 0), int(lp.ls_samples), int(lp.ls_debug), 0, 1, false);
+      kv = !occ_on && bg3::ls_exact_k::use_variant(host->cfg_int("ls_k", 0), int(lp.ls_samples), int(lp.ls_debug), 0, 1, false);
       if (kv) lp.ls_kmode = bg3::ls_exact_k::kmode(host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1));
       if (host->cfg_int("ls_box", 0)) {
         if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
@@ -3032,7 +3225,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
             lsp = kvariant.pipeline;
             box = k_ran = true;
           }
-          Pipe& variant = full ? g_ls_full_box : g_ls_box;
+          Pipe& variant = full ? (occ_on ? g_ls_full_box_occ : g_ls_full_box) : g_ls_box;
           if (!box && refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
             lsp = variant.pipeline;
             box = true;
@@ -3076,6 +3269,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       host->pan_capture(cmd, "local", &im);
     }
     ls_timestamp(cmd, 2);
+    if (occ_on && ls_box_applied && lsp == g_ls_full_box_occ.pipeline) occ_copy(cmd);   // outside the timed region
     if (bx_stats && ls_box_applied) {   // after the end timestamp: outside the timed region
       memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
       const VkBufferCopy cp{0, VkDeviceSize(g_stats_slot) * kStatsSlot + VkDeviceSize(kLsBoxXFirst) * 64 * 4, kLsBoxXBytes};
@@ -3379,9 +3573,25 @@ void gi_on_pass_begin(VkCommandBuffer cmd, const Bg3PassInfo* p) {
 
 void gi_on_cmd_end(VkCommandBuffer cmd) { flush(cmd); }
 
-void gi_on_frame(uint64_t) {}
+// The background builds' status (common/pipeline_async.h Monitor): a line every rt_timing_frames presents and
+// one when a burst of builds is done (the gates of tools/live_batches/hair_qual).
+void gi_on_frame(uint64_t) {
+  static bg3::pipe_async::Monitor mon;
+  const double now = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  bg3::pipe_async::Monitor::Window w;
+  bg3::pipe_async::Monitor::Burst b;
+  const int frames = host->cfg_int("rt_timing_frames", 120);
+  const unsigned ev = mon.tick(g_builds.pending(), g_builds.started_total(), now, unsigned(frames > 0 ? frames : 120), &w, &b);
+  if (ev & bg3::pipe_async::Monitor::kWindow)
+    host->log("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,
+              w.pending, w.started);
+  if (ev & bg3::pipe_async::Monitor::kBurst)
+    host->log("gi: background builds done: %u builds in %.0f ms over %llu presents, longest present interval %.0f ms",
+              b.builds, b.ms, (unsigned long long)b.frames, b.longest_ms);
+}
 
 void gi_release() {
+  g_builds.join();   // the background builds read the layouts released below; their unclaimed pipelines are discarded
   g_omm_pipelines.clear();
   bg3::omm::release_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   std::lock_guard<std::mutex> lock(g_mu);
@@ -3390,13 +3600,13 @@ void gi_release() {
   g_lsl_ok = false;
   sunt_release();
   g_sunt_ok = false;
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_current_sun_layout));
+  defer_layout_destroy(uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
-                  &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k,
-                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_rf_shade, &g_rf_shade_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
+                  &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
+                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
     *p = Pipe{};
@@ -3404,15 +3614,11 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rf_queries);
   g_rf_queries = VK_NULL_HANDLE;
   g_rf_ms.clear();
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_layout);
+  defer_layout_destroy(uint64_t(g_rf_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rf_set_layout);
   g_rf_layout = VK_NULL_HANDLE;
   g_rf_set_layout = VK_NULL_HANDLE;
   g_rf_game_layout = VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
-    *l = VK_NULL_HANDLE;
-  }
   g_rf_hit_logged = g_rf_hit_contract_logged = false;
   rf_gi_drop();
   g_rg_logged = -1;
@@ -3435,11 +3641,11 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_ls_queries);
   g_ls_queries = VK_NULL_HANDLE;
   g_ls_ms.clear();
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_layout);
+  defer_layout_destroy(uint64_t(g_ls_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_ls_set_layout);
   g_ls_layout = VK_NULL_HANDLE;
   g_ls_set_layout = VK_NULL_HANDLE;
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_ls_box_layout);
+  defer_layout_destroy(uint64_t(g_ls_box_layout));
   g_ls_box_layout = VK_NULL_HANDLE;
   g_ls_box_game = VK_NULL_HANDLE;
   g_ls_box_active = g_ls_box_missing_logged = false;
@@ -3449,6 +3655,15 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_bx_mem);
   g_bx_pool = VK_NULL_HANDLE, g_bx_dsl = VK_NULL_HANDLE, g_bx_buf = VK_NULL_HANDLE, g_bx_mem = VK_NULL_HANDLE;
   g_bx_set = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_occ_layout);
+  for (VkBuffer* bf : {&g_occ_buf, &g_occ_host}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*bf), *bf = VK_NULL_HANDLE;
+  for (VkDeviceMemory* m : {&g_occ_mem, &g_occ_host_mem}) host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*m), *m = VK_NULL_HANDLE;
+  g_occ_layout = VK_NULL_HANDLE;
+  g_occ_map = nullptr;
+  g_occ_armed = 0;
+  g_occ_win = occ::OccWindow{};
+  g_occ_logged = false;
+  std::memset(g_occ_frame, 0, sizeof g_occ_frame);
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets
@@ -3462,9 +3677,9 @@ void gi_release() {
   g_stats_mem = VK_NULL_HANDLE;
   g_stats_map = nullptr;
   std::memset(g_stats_frame, 0, sizeof g_stats_frame);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_layout);
+  defer_layout_destroy(uint64_t(g_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_set_layout);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rt_layout);
+  defer_layout_destroy(uint64_t(g_rt_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rt_set_layout);
   g_layout = VK_NULL_HANDLE;
   g_set_layout = VK_NULL_HANDLE;
@@ -3473,7 +3688,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_gi_set_layout));g_hit_gi_set_layout=VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hit_reference_set_layout));g_hit_reference_set_layout=VK_NULL_HANDLE;
   for (VkPipelineLayout* l : {&g_hit_reference_layout, &g_hit_gi_plain_layout, &g_hit_gi_layout, &g_hit_gi_sun_layout, &g_hit_gi_sun_sharc_layout, &g_rt_sharc_layout, &g_rf_sharc_layout}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
+    defer_layout_destroy(uint64_t(*l));
     *l = VK_NULL_HANDLE;
   }
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_empty_dsl);
@@ -3482,3 +3697,29 @@ void gi_release() {
   g_sharc_logged = g_sharc_missing_logged = g_sharc_paused_logged = g_sharc_em_logged = false;
   g_pending.clear();
 }
+
+// The background builds for the other core passes (core.h; core/water.cpp make_pipe).
+int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout layout, VkPipeline* out, uint64_t* generation,
+                        const VkSpecializationInfo* specialization) {
+  bg3::pipe_async::Result r{};
+  PipelineSpecs specs;
+  if (specialization) {
+    for (uint32_t i = 0; i < specialization->mapEntryCount; ++i) {
+      const auto& m = specialization->pMapEntries[i];
+      uint32_t value;
+      std::memcpy(&value, static_cast<const char*>(specialization->pData) + m.offset, sizeof(value));
+      specs.add(m.constantID, value);
+    }
+  }
+  const std::string q = req, e = entry;
+  const std::string key = q + specs.key() + "|" + e + "|" + std::to_string(uint64_t(layout));
+  const auto st = g_builds.poll(key, uint64_t(layout), [q, e, layout, specs] { return build_pipeline(q, e, layout, specs); }, &r);
+  if (st == bg3::pipe_async::State::kStarted) host->log("%s %s: building in the background", req, entry);
+  if (st == bg3::pipe_async::State::kReady) {
+    *out = VkPipeline(r.pipeline);
+    *generation = r.generation;
+    return 1;
+  }
+  return st == bg3::pipe_async::State::kFailed ? -1 : 0;
+}
+void core_defer_layout_destroy(VkPipelineLayout layout) { defer_layout_destroy(uint64_t(layout)); }

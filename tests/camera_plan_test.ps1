@@ -83,4 +83,18 @@ Check ([bool](Get-QueueDependencyBlock $dependency $scratch)) 'unexpected exit b
 Check (-not (Get-QueueDependencyBlock $dependency $scratch)) 'completed prerequisite permits rotation'
 Check ([bool](Get-QueueDependencyBlock $dependency $scratch 'another build')) 'stale prerequisite build blocks rotation'
 # Temporary files are retained for inspection; this test never deletes a checkout.
+
+
+$frameState=@{label='';frame=0;offset=0;segment=0}
+$frameStep=@{label='wf9';frame_delta_pixels=1;direction=1}
+function FrameSample($f) { Get-FrameRotationSample $frameState @{kind='rotate';active=$true;segment=0;x=0;y=540} $frameStep $f 1920 }
+$x0=(FrameSample 10).x
+Check ((FrameSample 10).x -eq $x0) 'no new frame means no new delta'
+Check ((FrameSample 11).x -eq $x0+1) 'one pixel per observed rendered frame'
+Check ((FrameSample 200).x -eq $x0+2) 'stalled input never catches up with a jump'
+Check ((FrameSample 200).x -eq $x0+2) 'duplicate marker never moves twice'
+
+$frameStep.frame_interval=4
+Check ((FrameSample 203).x -eq $x0+2) 'interval waits for four frames'
+Check ((FrameSample 204).x -eq $x0+3) 'interval emits one pixel after four frames'
 Write-Host "$count camera-input and permission checks passed"

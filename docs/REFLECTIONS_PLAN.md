@@ -65,13 +65,18 @@ results keep the original probe. Do not turn unknown radiance into black. Preser
 geometric histogram and add attempted/shaded/material/lighting failure counts to the existing
 device-local water statistics, with group reduction and readback outside timed regions.
 
-The runtime switch is a Vulkan specialization constant, provisional SpecId 1100 registered in
-`common/shader_variant.h`. This main snapshot precedes the spec migration; reconcile the ID with
-its final registry before merging. `WATER_HIT_SHADE_LAYOUT=1` supplies the additional material,
-game set 2, sun set 3 and push descriptors; this is a descriptor contract, not an on/off define.
-The capability adds 18 water requests including cascade forms, rather than multiplying all GI
-requests. The ordinary key-off water requests must remain
-byte-identical; freeze/fold the specialization at zero when checking a module that contains it.
+The runtime switch is Vulkan SpecId 1016 in `common/shader_variant.h`, after compose shift
+1015. Cascade 1000, native hair 1008/1010, edge 1014, shift 1015 and hit shading 1016
+share one pipeline specialization map and cache key. `WATER_HIT_SHADE_LAYOUT=1` adds
+material bindings 21-29, borrowed game set 2 and sun set 3, so it remains a layout define.
+This capability adds 9 requests to the bundle's 147 (156 total), not an on/off cross product.
+Ordinary requests remain unchanged with the key off. The compose reflection ray starts at
+`compose_scene_origin(o)`; hit shading receives `compose_scene_origin(H)` in that same TLAS
+camera space. Screen projection still uses the current-space H. The capability histogram
+uses eager pure predicates so specialization matches the fixed-key reference without changing
+the tier counts. Compose flag 64 controls
+hit shading separately from shift flag 32. Borrowed descriptors still require exact frame/TLAS
+identity: earlier-lighting passes retain ordinary composition, never stale lighting sets.
 
 Keep water's `C' = C + A L - B` equation. Never add `A L` without removing `B`, never apply E
 or exposure twice, and never rescale L to force the image mean. If `A L == B`, replacement is
@@ -87,9 +92,9 @@ Do not manufacture water rays or claim an opaque GI replay is a water result. In
 `replay-20261101-142819-1` reports **NOT_COVERED**: its GI-direct manifest has no water TLAS
 binding 64 or forward-record binding 66. It cannot run or qualify this water candidate.
 
-The live draft is in `tools/live_batches/reflections_offscreen`, outside watched inboxes.
+The live draft is in `tools/live_batches/water_offscreen`, outside watched inboxes.
 Dependent implementation/identity checks must pass before marking it READY_FOR_LIVE.
-Prepare, without queueing, one S8 port launch with static OFF/ON/OFF repeats and matched
+Prepare, without queueing, one S8 port launch with static OFF/ON/OFF/ON repeats and matched
 turns with the key toggled inside that launch. Write `predicted.json` first. Measure the
 post-water RR colour input in floating point with its exposure scale, and check the in-frame
 water compose delta. The pre-water lighting dump and bloom PNGs are not energy observables.

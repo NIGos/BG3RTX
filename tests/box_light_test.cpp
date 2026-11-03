@@ -115,6 +115,13 @@ static Out our_box(float3 m9, float3 V, float3 N, float a, float3 f0, float3 alb
 }
 
 int main() {
+  // Exercise real atlas-slot bits too: only bit 0 authorizes shadows in the fixed policy.
+  for (uint32_t slot = 0; slot < 1024; ++slot) {
+    check(!bl_shadow_selected(slot << 2, false), "art-unshadowed box stays untraced");
+    check(bl_shadow_selected((slot << 2) | 1u, false), "shadow-mapped box traced");
+    check(bl_shadow_selected(slot << 2, true), "legacy all override traces unshadowed box");
+    check(bl_shadow_selected((slot << 2) | 1u, true), "legacy preserves shadowed box");
+  }
   std::mt19937 rng(20261101u);
   std::uniform_real_distribution<float> U(0.0f, 1.0f);
   auto u = [&](float lo, float hi) { return lo + (hi - lo) * U(rng); };

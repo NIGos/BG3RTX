@@ -1,0 +1,20 @@
+{
+ "_rule": "Revised AFTER the 01:39 run for the merged always-on design; not a pre-run prediction for that run. One module per file and remaining layout define set (165 variants). No retired rt_spec_cascade switch. Same-state migration energy and GPU ms delta predicted zero within OFF-OFF spread. Changing a functional key can change energy/work: do not judge migration equivalence from different key states. Historical repeated states supply repeat stability only.",
+ "scc1-spec-cascade-s8-fg2": {
+  "dxc_compiles_after_warmup": 0,
+  "converted_keys": [
+   "rt_cascade_casters",
+   "gi_temporal_mv_sample",
+   "gi_prev_radiance_guard",
+   "gi_far",
+   "rf_hit_gi",
+   "rt_water_rf_edge"
+  ],
+  "pipeline_creation_per_toggle": "every live toggle but gi_far-0, which reuses its startup variant slot (core/gi.cpp refresh: far_on is variant bit 128, a reuse logs nothing)",
+  "pipeline_ms": null,
+  "energy_delta_same_state": 0.0,
+  "gpu_ms_delta_same_state": 0.0,
+  "band": "absolute OFF-a minus OFF-b spread at identical functional settings; dumps.json pre-post float mean for energy, per-pass GPU medians for cost",
+  "not_live_toggleable": "Startup capabilities, need separate startup fixtures, not covered by this run: RT_HIT_POOL_2S; rt_hit_material_instanced/_wind_rgb/_ip_grass (constants 1003-1005 follow the layer's startup capability words, core/gi.cpp refresh); rt_native_hair/_scalp/_tileset (sticky capability words, common/native_scalp_capability.h, native_tileset_capability.h; restart keys); rt_hair_physical_origin (needs the scalp capability; off->on needs restart). All four native keys stay 0 here: water has no variant for them (shader_variant::kWaterNoVariant, core/water.cpp water_rf skip), so with them on water never traces."
+ }
+}

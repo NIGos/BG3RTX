@@ -38,6 +38,10 @@
 // the game's own shadows, as D-LS does) + projector lights + Tp, and the residual
 // b11 − local − Tp must be 0 where no projector light is listed.
 #include "gi_common.hlsli"
+#include "../rt/spec_rf_gi.hlsli"
+#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
+#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
+#endif
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"
@@ -321,10 +325,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
           g_hd_pbase = 316u;   // policy / AO counters (core/gi.cpp kHitPolicyFirst + 4)
           g_hd_bin = (fp.x >> 3) * 7u + (fp.y >> 3) * 13u;
 #if RF_HIT_GI
+          float3 hg_screen_b = 0;
+  if(RF_GI_ON) {
           // Tier (a): the camera sees the hit at qp, so the screen's own terms there are known: its GI
           // history (this frame's, as gi_composite gathers it) and b6 as the lighting read it. With
           // rf_hit_gi=2 the check shades from them (exact screen terms); with 1 they are only counted.
-          float3 hg_screen_b = 0;
           if (tier == 1) {
             const int2 qg = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
             const float4 gh = gather_history(uint2(qg), gDepth.Load(int3(qg, 0)));
@@ -332,6 +337,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
             g_hg_screen = float4(hg_screen_b, lgAO.Load(int3(qg, 0)).x);
             g_hg_use_screen = pc.rf_so == 2u;
           }
+  }
 #endif
           NativeHitShade hs = native_hit_shade(hh, o + dir * t, -dir, cone.f0 + cone.spread * t, uint3(fp, pc.frame));
           // Hit-material reasons (253+status, 127) for the normal stats windows; run_post's push
@@ -356,9 +362,11 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
               hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
 #if RF_HIT_GI
+  if(RF_GI_ON) {
               hg_gi = lum(hs.gi);
               hg_screen_gi = lum(hg_screen_b * hs.dcol * pc.strength);
               hg_from_screen = g_hg_use_screen;
+  }
 #endif
             }
           } else {
@@ -381,7 +389,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_Lb = hs.radiance;
               hs_box = hs.box;
 #if RF_HIT_GI
+  if(RF_GI_ON) {
               hg_gi = lum(hs.gi);
+  }
 #endif
             }
           }
@@ -543,6 +553,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     stat_addv(384, shaded ? fxh(lum(hs_box)) : 0u, bin);
 #endif
 #if RF_HIT_GI
+  if(RF_GI_ON) {
     // core/gi.cpp kRfGiFirst (the device-local set 6 counters; hs_checked is 0 under any rf_debug).
     rg_add(0u, hs_checked);
     rg_add(1u, hs_checked != 0u ? fxh(hg_gi) : 0u);
@@ -552,6 +563,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     rg_add(5u, g_hg_hits);
     rg_add(6u, g_hg_screen_src);
     rg_add(7u, g_hg_cache_src);
+  }
 #endif
   }
 }
@@ -559,10 +571,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if RF_HIT_GI
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
+  if(RF_GI_ON) {
   if (gi < kRgN) gsRg[gi] = 0u;
   GroupMemoryBarrierWithGroupSync();
+  }
   rf_pixel(tid);
+  if(RF_GI_ON) {
   GroupMemoryBarrierWithGroupSync();
   if (pc.rf_stats != 0u) rg_flush(gi, gid.xy);
+  }
 }
 #endif

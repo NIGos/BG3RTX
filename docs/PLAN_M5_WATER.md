@@ -305,6 +305,25 @@ M5.3c water energy audit (2026-11-02, offline on the kept S8 traces of m5w3 1216
   the removed glints (dump max 904 -> 222). Not yet checked: the traced visibility against the game's cascade on the
   opaque pixels next to the water (the M5.4c comparison).
 
+M5.3d reflection-specific flicker attribution (wf8, 2026-11-03, prepared offline; no live run):
+- The user's repeated report is reflections switching on/off while turning. wf2-wf7 whole-water transient and
+  presented residual rates include native sun glints and do not establish a reflection-specific cause or exclusion.
+- Existing rt_debug 25 encodes signed relative delta (composed minus probe-only divided by C luminance) and tier 1
+  versus unresolved. Disable water sun/local shadows, refraction, game shadows and glint AA from startup: d includes
+  every water change, so leaving those enabled would confound the reflection delta again. Same-frame record markers
+  distinguish covered tier-1 zero delta from untouched black. No new shader requests or DXC work.
+- wf8 captures three 8-frame diagnostic bursts (static calibration, two same-direction turns), two 8-frame native
+  compose-off bursts, and five 16-present beauty windows in one S8 launch; tools/live_batches/water_flicker_wf8.
+  The metric derives the threshold from native encoding plus static adjacent-frame noise and counts contribution
+  on/off events, including tier 1 -> unresolved and unresolved -> tier 1. Tiers 2-6 are grouped by the existing view;
+  water_reflect's different tier decision must not substitute for the compose decision.
+- Beauty comparisons use the diagnostic reflection-support union mask, not the whole-water mask. Native compose-off
+  water-output switching is a proxy: SSR is not isolated from probes, animated normals, refraction and glints. RR-off
+  is attribution only. No result has been measured; old aggregate nulls cannot close these candidates.
+- No qualified cheap stabilizer exists. Temporal tier hysteresis would need reprojected tier and radiance history,
+  disocclusion/age validation and an off-by-default specialization constant. It is described, not implemented while
+  shader compiles are busy. See predicted.json for candidate outcomes and README for budget and exact commands.
+
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 
 #### Design (2026-11-01, from the three S8/S1 FS dumps, spirv-dis --raw-id)
@@ -616,3 +635,20 @@ water replay result; one unqueued S8 port still + turn OFF/ON/OFF job, predicted
 Use floating post-water colour/exposure and compose-delta accounting, never the pre-water dump
 or bloom PNG mean. Incremental GPU cost is unmeasured; the existing water chain is 0.53-0.67 ms.
 Off in every preset pending gates; Ultra only for first promotion. No live test was run here.
+
+## wf9 compose camera correction (2026-11-03, offline candidate)
+
+wf8 S8 turning lost tier 1 (25% static to 0.4-1.5% of covered water) while compose used the
+previous lighting TLAS in about 95% of passes. `rt_water_compose_shift=0` remains the default;
+SpecId 1015 selects the correction with no request or ABI change. The CPU signals only earlier
+stash/stash-kept selections, not newer scenes. water_copy preserves outgoing CameraCB float4 13
+in cCam bytes 400-415 before overwrite, with validity in w; first copy cannot read undefined data.
+Compose binds the existing b64 camera buffer and shifts reflection, sun, local-light and refraction
+origins by current minus build camera. Ray distances are translation invariant; screen hit reconstruction,
+projection, light vectors and screen radiance stay in current camera space. The hidden-hit
+shader receives the translated TLAS-space hit; its descriptor guard still requires frame/TLAS
+identity. Scene shift uses flag 32, hidden-hit eligibility uses flag 64. No history or energy blend.
+The Experimental GUI exposes Water camera correction, off in all presets. See the wf9 progress
+fragment and tools/live_batches/water_flicker_wf9 for offline checks and the unqueued S8 prediction:
+hidden share about 7-10%, covered-water tier 1 near 25%, static float energy within repeat noise.
+GPU delta remains unmeasured (wf8 compose 0.10-0.15 ms). This is READY_FOR_LIVE, not a quality pass.

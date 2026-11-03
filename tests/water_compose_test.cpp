@@ -156,6 +156,7 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  CHECK((kFlagSceneShift & kFlagHitShade) == 0u);
   // Hidden-hit shading can fail independently of the ordinary water chain.
   for(auto use:{LightingUse::kNone,LightingUse::kEarlier,LightingUse::kThisFrame})
     for(bool same:{false,true})CHECK(hit_shade_frame_ok(use,same)==(use==LightingUse::kThisFrame && same));
@@ -744,6 +745,15 @@ int main(int argc, char** argv) {
     CHECK(!compose_writes(true, o3));
     CHECK(kCsNonFinite >= kCsGshWords && kCsNonFinite < kCsLsRec && kCsGsWordsMin == 57);
   }
+
+  // wf9: scene selection and camera rebasing are independent of the image terms.
+  for (auto use : {LightingUse::kNone, LightingUse::kThisFrame, LightingUse::kEarlier}) {
+    for (auto pick : {ScenePick::kStash, ScenePick::kNewer, ScenePick::kStashKept, ScenePick::kNone}) {
+      CHECK(compose_shift_needed(use, pick) ==
+            (use == LightingUse::kEarlier && (pick == ScenePick::kStash || pick == ScenePick::kStashKept)));
+    }
+  }
+  CHECK((kFlagSceneShift & (kFlagRf | kFlagSun | kFlagLs | kFlagRefr | kFlagGsh)) == 0);
 
   // 4d3. Uncomposed frames and on/off flips per frame index.
   {

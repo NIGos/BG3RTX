@@ -1,0 +1,17 @@
+{
+  "_rule": "Written before dryrun; uncommitted because Git metadata is read only. No live authorization.",
+  "wo1-s8-hit-shade": {
+    "shot-on-a": {
+      "predicted": 0.0,
+      "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
+      "cost_gpu_ms": null,
+      "coverage": "Every ON window requires hidden > 0 AND offscreen > 0 in both extended stats lines. Current native_hit_cluster rejects truly out-of-frustum hits, so offscreen is predicted zero and this requested gate is expected to fail until a world-light provider exists. No threshold relaxation."
+    },
+    "shot-on-b": {
+      "predicted": 0.0,
+      "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
+      "cost_gpu_ms": null,
+      "coverage": "Every ON window requires hidden > 0 AND offscreen > 0 in both extended stats lines. Current native_hit_cluster rejects truly out-of-frustum hits, so offscreen is predicted zero and this requested gate is expected to fail until a world-light provider exists. No threshold relaxation."
+    }
+  }
+}

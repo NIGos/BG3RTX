@@ -1,3 +1,6 @@
+#ifdef WATER_SPEC_CASCADE
+#define RT_SPEC_CASCADE 1
+#endif
 // M5.2 water reflections (rt_water_reflections=1, docs/PLAN_M5_WATER.md M5.2, core/water.cpp).
 // Two entries, after the tiled lighting (run_post, after the GI composite: gDiffuse +
 // gSpecular are the frame's final lit opaque radiance, pre-fog, pre-SSS):
@@ -301,7 +304,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #ifdef WATER_HIT_SHADE_LAYOUT
   const bool resolved=tier==1u || shaded;
 #else
-#define resolved (tier == 1u)
+#define resolved tier == 1u
 #endif
   // wT is only read here (the neighbours' hits): the tier goes into wOut.a.
   if (inside) wOut[fp] = resolved ? float4(L, E) : float4(0, 0, 0, -float(tier));

@@ -14,14 +14,16 @@ inline bool capability(uint32_t* state,bool requested) {
  value.compare_exchange_strong(expected,requested?2u:1u,std::memory_order_acq_rel);
  return value.load(std::memory_order_acquire)==2u;
 }
-inline bool binding_enabled(bool capability,unsigned mask,unsigned binding){return !(capability&&mask==8u&&binding==12u);}
+// S3: reserve Hair50 and omit the unused reflection AO12 for both capability values.
+inline bool binding_enabled(bool /*capability*/,unsigned mask,unsigned binding){return !(mask==8u&&binding==12u);}
 inline bool alternate_entry(const char* file) {
  const char* names[]={"gi/rt_origin.hlsl","gi/rt_shadow.hlsl","gi/gi_trace_rt.hlsl","gi/gi_trace_rt_sharc.hlsl","gi/gi_trace_rt_hit_direct.hlsl","gi/gi_trace_rt_sharc_hit_direct.hlsl",
  "gi/rt_reflections.hlsl","gi/rt_reflections_sharc.hlsl","gi/rt_reflections_hit_shade.hlsl","gi/rt_reflections_sharc_hit_shade.hlsl",
  "gi/gi_trace_rt_hit_direct_em.hlsl","gi/gi_trace_rt_sharc_hit_direct_em.hlsl","gi/rt_reflections_hit_shade_em.hlsl","gi/rt_reflections_sharc_hit_shade_em.hlsl","gi/rt_local_shadows.hlsl","gi/rt_local_shadows_full.hlsl",
  "gi/rt_local_shadows_box.hlsl","gi/rt_local_shadows_full_box.hlsl","gi/rt_local_shadows_native_full.hlsl",
  "gi/rt_local_shadows_native_full_box.hlsl","gi/rt_local_shadows_ref.hlsl","gi/rt_local_shadows_check.hlsl","gi/rt_local_shadows_full_check.hlsl",
- "gi/rt_local_shadows_k.hlsl","gi/rt_local_shadows_box_k.hlsl","gi/rt_local_shadows_full_k.hlsl","gi/rt_local_shadows_full_box_k.hlsl"};
+ "gi/rt_local_shadows_k.hlsl","gi/rt_local_shadows_box_k.hlsl","gi/rt_local_shadows_full_k.hlsl","gi/rt_local_shadows_full_box_k.hlsl",
+ "gi/rt_occ_stats.hlsl"};
  for(const char* name:names)if(std::strcmp(name,file)==0)return true;return false;
 }
 struct OriginVec3 {float x,y,z;};

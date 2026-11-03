@@ -95,6 +95,75 @@ becomes "key off = the same program": the module specialized with the constants 
 through the same passes, compared up to id numbering (canonical() in tools/spec_constant_proto.py, ~3 s
 per module). A replay pack run (bit-identical outputs) is the end-to-end check per family.
 
+### Migration plan (user decision 2026-11-02: reach the final variant set first, then compile once)
+
+Owner: the spec-cascade agent. Every step lives on one integration branch `variant-migration` (from main after
+S1 merges), each step its own commit. Constant ids come from the one registry `bg3::shader_variant::SpecId`
+(common/shader_variant.h); flag bits 12-15 stay free for the pending branches (kSpecCascade is bit 16).
+
+| Step | Defines -> constants (id) | Host work | Requests after (base files + variants.txt; S2-S5 estimated) |
+|---|---|---|---|
+| S1 | RT_CASCADE_MASKS (+ RT_CASCADE_SUN in rt_shadow) (1000) | none: done, core only | 2986 + 1348 spec (branch spec-cascade-s1) |
+| S1-default | the spec build is the only cascade path | none (branch spec-cascade-s1-default) | 1674 |
+| G | GI_TEMPORAL_MV_SAMPLE (1001), GI_PREV_RADIANCE_GUARD (1002): pure switches | none; gi-reproj-guards must land as constants, never as defines (+2192 requests as defines) | 1674 (no growth) |
+| S2 | RT_HIT_INSTANCED (1003), RT_HIT_WIND_RGB (1004), RT_HIT_IP_GRASS (1005), RT_HIT_POOL_2S (1006, hm-recipe-rows), RT_GI_FAR (1007) | none: private struct fields, counters, gs_far_stat stays declared | ~660 |
+| S3 | RT_NATIVE_TILESET (1008), RT_HAIR_PHYSICAL_ORIGIN (1009), RT_NATIVE_SCALP + RT_NATIVE_HAIR (1010, incl. the water passes the native hair branch adds), RT_OCC_STATS (1011) | layer: set 1 b19 tileset samplers always in the alpha layout (alphatest.cpp:614/1518, dummy samplers); core: set 0 b50 rtHairOrigin always in g_layout (gi.cpp:603, dummy image); the occ statistics set always bound (dummy buffer); RayQuery<RT_SKIP_PROCEDURAL> template flag -> TraceRayInline flags | ~180 |
+| S4 | RT_OMM_SCENE (1012 reserved; define retained) | aliased stamp candidate rejected by full equivalence; stamp and optional OMM layouts unchanged (review below) | 170 (53 bases) |
+| S5 | RF_HIT_GI (1013), WATER_RF_EDGE (1014) | set 6 (rfGiStats) always in all rf hit-shade layouts, including GI off | 150 (53 bases; actual, -20 from S3) |
+
+S4 review (2026-11-02, offline): the RO/coherent RW stamp aliases compile and validate for Vulkan 1.3.
+The minimal probe specializes to the exact old program for both values (0 differing lines).
+There is a second interface constraint: `layer/alphatest.cpp` creates and writes set 1 bindings 10/11
+only with `g_omm_layout`; `layer/omm_backend.cpp::available_for` requires `rt_omm` on. A union module
+retains the reference AS and epoch buffer in its interface even when constant 1012 defaults to 0.
+Shipping that union requires permanent extra descriptors and writes when OMM is off. It cannot simply
+reuse today's ordinary layout. Under the requested zero-cost condition, keep `RT_OMM_SCENE` as a define.
+`tools/spec_omm_alias_probe.py` preserves the alias experiment without changing runtime layouts.
+The first control chose the non-tracing gi_ao_apply and was blind; the rerun selected gi_hit_direct.
+The full candidate failed the unchanged equivalence checker: 18/54 requests passed, 63/108
+assignments differed, control 78,906 lines. For example gi_hit_direct differed by 19,899 lines at 0
+and 2 lines at 1. No extra canonicalization was added; the candidate was reverted. Log: `s4-omm-control.log`.
+Aliasing itself is permitted by the [Vulkan shader resource interface rules](https://docs.vulkan.org/spec/latest/chapters/interfaces.html#interfaces-resources);
+the minimal probe's success is not a proof about the full scene consumer.
+
+S5 uses one `RF_SPEC_HIT_GI` module per hit-shade file and remaining define set; constant 1013 and the
+pipeline key carry `rf_hit_gi > 0`. All four emission/SHaRC layout combinations always include set 6,
+with the existing 2 KB device-local stats buffer bound even when GI is off. Both shader barriers and
+stats work are guarded by 1013, around one shared pixel call (duplicating the ray body caused a DXC ICE).
+Material colour is copied outside the composition branch to avoid a
+redundant float3 shuffle in the specialized on program. No ABI or preset changes.
+Water's seven record layouts use `WATER_SPEC_RF_EDGE`, constant 1014 and one request for both key values.
+The key stays off; glint-filter requests keep their existing path. The whole unfaded sum preserves
+`C + A * L - B` (left-associative), including the clipping statistic; `C + (A * L - B)` was rejected by
+equivalence. Control comparisons use the water_compose entry, and equivalence still checks water_copy too.
+
+Defines that stay (they change layouts, record strides or descriptor sets, and are few): RT_SUN_CURRENT with
+RT_CASCADE_TMIN(_REL) (its own pipe and sets b12-b16; 12 requests), WATER_SHADOWS / WATER_LS / WATER_REFR /
+WATER_GSH (40/96/104-byte records and the refraction binding b68), WATER_RR_HIT (b30 output), and the replay-only
+HM_BLOCKERS. The OMM bake (worktree-agent-a53f0b584fa39317b) and wf5 add no variant: rebase only. OMM: only
+RT_OMM_SCENE is a request define; it becomes a constant at S4 (or stays, ~60 requests, if the aliased stamp
+binding costs anything). Occ diag: RT_OCC_STATS at S3 (its stats set always bound); until then it must not enter
+the cross product (diagnostic: one request per pass, not x every capability). Hair: RT_NATIVE_SCALP/HAIR and
+RT_HAIR_PHYSICAL_ORIGIN at S3, the water hair variants of worktree-agent-a78f48005e3b350bd included.
+
+Offline verification per step, cheap (no full compile): `tools/spec_cascade_check.py` generalized to every key of
+the registry (`--key <name>`): sample = each file once + 24 random requests; for each old request, the new module
+specialized with the constants its defines imply, frozen, folded and -O, must be the same program (canonical
+compare with reference-order blocks and parallel phi declarations grouped by type) as the old request's module; a control pair must differ; the old modules are
+mostly cached already (~60-100 DXC compiles per step: the new modules of the sample). Plus one replay per touched
+family (gi_hit_direct S8 pack; the rf / ls packs once they exist) bit-identical per value, and `pp-diff` against the
+step's base: every request that keeps its spelling preprocesses to the same text (default path byte-identical).
+Host steps (S3 layouts, S4 aliasing) also get the descriptor-interface checkers of compile_shaders.py.
+
+One merge-green at the end: yes. Each step's checks run on its own commit with sampled compiles; the integration
+branch then merges once with one merge-green, which compiles the final set (~100-180 modules, ~5-10 min idle)
+instead of each intermediate set (S1 alone would add 1348). Then the live `spec_cascade` job (scc1, extended with
+one window per step's key: toggling it with the constant must compile nothing and keep energy and GPU ms), then
+the pending branches rebase: gi-reproj-guards (as constants 1001/1002), the occ diag (1011), hm-recipe-rows
+(1006), native hair (water hair variants as 1010), OMM bake and wf5 (no variants). Risk: a step whose sampled
+check passes but an unsampled combination differs; mitigation: `--all` on the final set before the merge-green
+(it compiles each new module once, which the merge-green then takes from the cache).
+
 ## 2. Prototype: RT_SPEC_CASCADE on gi_trace_rt_hit_direct
 
 - `shaders/rt/rt_common.hlsli`: with `RT_SPEC_CASCADE` (no request sets it) the masks come from constant
@@ -216,3 +285,36 @@ Generation on the user's machine (never inside the game folder; read-only paks):
 - Asset DB: is shipping `bg3rtx_assetdb.bin` (light positions, colours, names, UUIDs derived from the
   game's paks) acceptable for the beta, or must it be generated on the player's machine from day one?
   Conservative default here: generate it (frozen Python tool), like the VT masks.
+
+### SCC1 re-gate against the merged design (2026-11-03)
+
+The always-on design has 165 variants; one module per file and remaining layout define set.
+`rt_spec_cascade` is gone. The revised batch in tools/live_batches/spec_cascade rejects only actual
+DXC `compiled in` events (cache reads are allowed), including water, after warmup and on every
+converted-key toggle. Same-state energy and GPU ms predictions stay zero within OFF-OFF spread.
+The 01:39 run fails this gate: cascade-off caused water_compose:water_compose to compile at
+01:41:31.120 (1640 ms). core/water.cpp make_pipe -> shader_variant::water_request still varies
+RT_CASCADE_MASKS / RT_CASCADE_SUN_HIT. Both requests are listed; cascade specialization missed
+this water path. GI GPU repeats also exceed their own spread. The ignored retired key provides
+no old/new equivalence measurement. Additional converted-key windows are absent from that run;
+startup-latched hit/native capabilities need effective switching or startup fixtures, not INI-only
+claims. See the batch README and regate_013945.json. No live or shader compile was run for this audit.
+
+### SCC1 missed water cascade path (2026-11-03, offline candidate)
+
+Water compose, reflect and the glint prepass now always request `WATER_SPEC_CASCADE=1`, which
+selects the existing `RT_SPEC_CASCADE` implementation and registry id 1000. `RT_CASCADE_SUN_HIT`
+is a fixed marker of the sun-record layouts; its sun-ray state is guarded by constant 1000.
+`core/water.cpp::make_pipe` supplies cascade and edge (1014) in one specialization map and
+includes their values in the pipeline key. View and motion-vector requests stay plain.
+The glint prepass includes compose and keeps the same specialization suffix as its compose pipe.
+Variants fall from 165 to 145 (-20). No ABI, setting, preset or descriptor-layout changes.
+`spec_cascade_check.py --key watercasc --sample 16` compares legacy define paths for both values
+and all sampled entries: 19/19 requests, 66/66 comparisons; control 5,862 differing lines.
+`--key cascade --sample 8`: 44/44 requests, 88/88 comparisons; control 1 differing line.
+`--key wateredge --sample 8`: all 7/7 requests, 28/28 comparisons; control 7,316 lines.
+`shader_identity.py --pp-diff main`: all 209 unchanged requests agree (206 identical inputs,
+3 preprocessed-identical), zero compiles needed. This is offline equivalence, not a live pass.
+Build succeeded; all 117 CTests passed across the full run and targeted reruns after correcting
+the progress fragment's existing BOM and an unchanged header's checkout line endings.
+The zero-DXC toggle, energy and GPU-cost gates still require an authorized SCC1 run in game.

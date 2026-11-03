@@ -26,6 +26,17 @@ int main() {
   if(!check(!missing.complete()))return 1;
   auto duplicate=complete;duplicate.add(101,"final",2000);
   if(!check(!duplicate.complete()))return 1;
+  WaterPanSamples water{100,8,true};
+  for(uint64_t frame=101;frame<=108;++frame)for(auto name:{"water_game","water_coverage","water_compose_debug"})
+    water.add(frame,name,frame);
+  if(!check(water.complete() && !water.retained(100) && water.retained(108) && !water.retained(109)))return 1;
+  auto water_missing=water;water_missing.masks[3]&=~2;
+  if(!check(!water_missing.complete()))return 1;
+  auto water_dup=water;water_dup.add(103,"water_game",103);
+  if(!check(!water_dup.complete()))return 1;
+  WaterPanSamples game{100,8,false};
+  for(uint64_t frame=101;frame<=108;++frame)for(auto name:{"water_game","water_coverage"})game.add(frame,name,frame);
+  if(!check(game.complete()))return 1;
   std::puts("pan epoch and explicit warmup/K16 completeness checks passed");
   return 0;
 }

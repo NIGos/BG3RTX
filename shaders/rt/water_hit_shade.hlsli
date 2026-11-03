@@ -2,7 +2,11 @@
 // The ordinary requests do not include any of this code (key-off byte identity).
 #pragma once
 #ifdef WATER_HIT_SHADE_LAYOUT
-[[vk::constant_id(1100)]] const uint kWaterHitShade = 0u;
+#ifdef WATER_HIT_SHADE_REFERENCE
+static const uint kWaterHitShade = WATER_HIT_SHADE_REFERENCE;
+#else
+[[vk::constant_id(1016)]] const uint kWaterHitShade = 0u;
+#endif
 #include "bg3_lights.hlsli"
 #include "bg3_ambient.hlsli"
 #define BG3_SUN_SET 3

@@ -1,3 +1,20 @@
+#ifdef WATER_SPEC_CASCADE
+#define RT_SPEC_CASCADE 1
+#endif
+// The reference override is offline-only; runtime requests never vary with this key.
+#ifdef WATER_COMPOSE_SHIFT_REFERENCE
+#define WATER_COMPOSE_SHIFT_ON (WATER_COMPOSE_SHIFT_REFERENCE != 0)
+#else
+[[vk::constant_id(1015)]] const uint kSpecWaterComposeShift = 0;
+#define WATER_COMPOSE_SHIFT_ON (kSpecWaterComposeShift != 0u)
+#endif
+#ifdef WATER_SPEC_RF_EDGE
+[[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
+#define WATER_RF_EDGE 1
+#define WATER_EDGE_ON (kSpecWaterRfEdge != 0u)
+#else
+#define WATER_EDGE_ON true
+#endif
 // M5.3 water composition (rt_water_compose=1, docs/PLAN_M5_WATER.md M5.3, core/water.cpp).
 // Replaces the forward water FS's probe reflection term with the ray-traced reflection where
 // the ray resolves, exactly, with the FS's own factors (common/water_compose.h: the patched FS
@@ -105,7 +122,7 @@
 
 struct ComposeParams {
   uint4 a;    // x pitch (records per row), y capacity (records), z rt_debug, w flags (bit 0 apply)
-  float4 b;   // x roughness above which the probe stays (rf_mirror_rough)
+  float4 b;   // x roughness above which the probe stays; y outgoing camera valid (copy only)
 };
 [[vk::binding(60, 0)]] ConstantBuffer<ComposeParams> cp;
 [[vk::binding(61, 0)]] RWByteAddressBuffer cStats;
@@ -134,6 +151,20 @@ static const uint kHeaderBytes = 64u, kRecordBytes = 40u;   // common/water_comp
 static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_compose.h
 #endif
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
+
+// Spare camera-buffer slot, after the 400-byte CameraCB and before ViewportCB.
+// Copy reads the outgoing camera before overwriting it. The TLAS stash uses that
+// lighting's camera; the current camera/depth/radiance remain in the first slots.
+static const uint kBuildCamOffset = 400u;
+float3 compose_scene_origin(float3 origin) {
+  if (WATER_COMPOSE_SHIFT_ON && (cp.a.w & 32u) != 0u) {
+    const float4 build = asfloat(cCam.Load4(kBuildCamOffset));
+    if (build.w == 0.0) return origin;
+    const float3 d = cam.x[3].xyz - build.xyz;
+    if (all(isfinite(d)) && all(abs(d) <= 1e6)) return origin + d;
+  }
+  return origin;
+}
 
 // Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
 // wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
@@ -284,6 +315,11 @@ void water_copy(uint3 tid : SV_DispatchThreadID) {
     const float4 c[25] = {cam.v0, cam.v1, cam.v2, cam.m6_r0, cam.m6_r1, cam.m6_r2, cam.m6_r3, cam.ray0, cam.ray1,
                           cam.ray2, cam.x[0], cam.x[1], cam.x[2], cam.x[3], cam.x[4], cam.x[5], cam.x[6], cam.x[7],
                           cam.x[8], cam.x[9], cam.x[10], cam.x[11], cam.x[12], cam.x[13], cam.x[14]};
+    if (WATER_COMPOSE_SHIFT_ON) {
+      // No outgoing camera on the first copy; avoid even reading its uninitialized words.
+      const uint3 previous = cp.b.y != 0.0 ? cCam.Load3(13u * 16u) : uint3(0, 0, 0);
+      cCam.Store4(kBuildCamOffset, uint4(previous, asuint(cp.b.y)));
+    }
     [unroll] for (uint i = 0; i < 25u; ++i) cCam.Store4(i * 16u, asuint(c[i]));
     cCam.Store4(kVpOffset, asuint(float4(vp.scale, vp.bias)));
   }
@@ -405,9 +441,14 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #endif
 #ifdef WATER_RF_EDGE
   float rf_w = 1.0;   // the screen-edge fade of the traced term (D-RF's rf_edge)
-#define WATER_RF_TERM rf_w * (A * L - B)
+#define WATER_RF_TERM (WATER_EDGE_ON ? rf_w * (A * L - B) : A * L - B)
 #else
 #define WATER_RF_TERM A * L - B
+#endif
+#ifdef WATER_SPEC_RF_EDGE
+// The old unfaded macro expands C + A * L - B, with left-associative
+// addition/subtraction. Select the whole sum to preserve its rounding.
+#define WATER_RF_ADD(C) (WATER_EDGE_ON ? (C) + rf_w * (A * L - B) : (C) + A * L - B)
 #endif
   if (trace) {
     const float3 R = reflect(-V, N);
@@ -420,14 +461,15 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
       tier = 6u;
     } else {
       #ifdef WATER_HIT_SHADE_LAYOUT
-      RtHit hh=rt_closest_hit(o,R,pc.rf_tmax,cone);
+      RtHit hh=rt_closest_hit(compose_scene_origin(o),R,pc.rf_tmax,cone);
       const float th=hh.t; aborted=hh.aborted;
 #else
-      const float th = rt_closest(o, R, pc.rf_tmax, cone, aborted);
+      const float th = rt_closest(compose_scene_origin(o), R, pc.rf_tmax, cone, aborted);
 #endif
       if (aborted) tier = 5u;
       else if (th < 0.0) tier = 4u;
       else {
+        // Translation preserves th; reconstruct in this frame for screen depth/radiance.
         const float3 H = o + R * th;
         float2 quv;
         float qd;
@@ -447,16 +489,18 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
               L = rq.rgb;
               tier = 1u;
 #ifdef WATER_RF_EDGE
+              if(WATER_EDGE_ON) {
               const float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
               rf_w = saturate(min(e.x, e.y));
+              }
 #endif
             }
           }
         }
 #ifdef WATER_HIT_SHADE_LAYOUT
-        if(kWaterHitShade!=0u && (cp.a.w & 32u)!=0u && (tier==2u || tier==3u)) {
+        if(kWaterHitShade!=0u && (cp.a.w & 64u)!=0u && (tier==2u || tier==3u)) {
           shade_attempt=true;
-          shade_reason=water_hit_shade(hh,H,R,cone,fp,L);
+          shade_reason=water_hit_shade(hh,compose_scene_origin(H),R,cone,fp,L);
           shaded=shade_reason==0u;
         }
 #endif
@@ -512,11 +556,15 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     const float3 so = P + N * (t * spa);   // the scene TLAS has no water: one footprint clears the surface
     RtCone scone = {t * spa, spa};
     if (all(isfinite(so)) && all(isfinite(sdir))) {
-#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+      if (RT_CASCADE_ON) g_rt_cascade_ray = true;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
       g_rt_cascade_ray = true;   // rt_cascade_casters: the sun ray (only) sees the cascade's casters
 #endif
-      sv = rt_visibility(so, sdir, pc.rt_tmax, scone);
-#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+      sv = rt_visibility(compose_scene_origin(so), sdir, pc.rt_tmax, scone);
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+      if (RT_CASCADE_ON) g_rt_cascade_ray = false;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
       g_rt_cascade_ray = false;
 #endif
       straced = true;
@@ -618,7 +666,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
       const float tmax = dist - pc.ls_clear;
       if (!(tmax > 0.0) || !all(isfinite(lo))) continue;   // the light at the surface: lit
       ++nTr;
-      const uint lv = rt_visibility(lo, tl / dist, tmax, lcone);
+      const uint lv = rt_visibility(compose_scene_origin(lo), tl / dist, tmax, lcone);
       if (lv == kRtOccluded) {
         ++nOcc;
         lsRem += ck;
@@ -661,10 +709,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (!all(isfinite(P)) || !all(isfinite(Tdir))) {
       rtier = 6u;
     } else {
-      const float th = rt_closest(P, Tdir, pc.rf_tmax, rcone, raborted);
+      const float th = rt_closest(compose_scene_origin(P), Tdir, pc.rf_tmax, rcone, raborted);
       if (raborted) rtier = 5u;
       else if (th < 0.0) rtier = 4u;
       else {
+        // th is invariant under the scene-origin translation.
         const float3 H = P + Tdir * th;
         float2 quv;
         float qd;
@@ -703,7 +752,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool chg = composed || sunchg;
 #endif
 #else
+#ifdef WATER_SPEC_RF_EDGE
+  const float3 Cu = WATER_RF_ADD(Ct);
+#else
   const float3 Cu = Ct + WATER_RF_TERM;
+#endif
   const bool chg = composed;
 #endif
   // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
@@ -720,14 +773,23 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   cstat(7, trace && tier != 6u);
   // Tiers 1..6 at words 8..13 (common/water_compose.h kCsTier1). Was 6 + k: tier 1 went into the
   // ray count (7) and every logged tier was the next one (m5w3: "off screen 66%" were sky misses).
+#ifdef WATER_HIT_SHADE_LAYOUT
+  // Eager pure predicates keep histogram reduction independent of specialization folding.
+  [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace & (tier == k));
+#else
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
+#endif
   cstat(14, trace && tier == 2u && skin);
 #ifdef WATER_HIT_SHADE_LAYOUT
   cstat(57,shade_attempt); cstat(58,shaded && tier==2u); cstat(59,shaded && tier==3u);
   [unroll] for(uint reason=1u;reason<=4u;++reason) cstat(59u+reason,shade_attempt && shade_reason==reason);
 #endif
 #ifdef WATER_SHADOWS
+#ifdef WATER_SPEC_RF_EDGE
+  cstat(15, composed && any(WATER_RF_ADD(Ct) < 0.0));
+#else
   cstat(15, composed && any(Ct + WATER_RF_TERM < 0.0));
+#endif
 #else
   cstat(15, composed && any(Cu < 0.0));
 #endif

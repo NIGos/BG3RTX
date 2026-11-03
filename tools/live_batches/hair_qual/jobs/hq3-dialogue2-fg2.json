@@ -1,0 +1,315 @@
+{
+ "name": "hq3-dialogue2-fg2",
+ "save": "Test Dialogue2",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 550,
+ "repeat": 1,
+ "live_batch": "hair-qual",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1024,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/hair_qual/plans/hq_plan.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "gi: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "failed",
+  "rt stats",
+  "\\[cascade\\] casters",
+  "\\[geo\\]",
+  "\\[alpha hair\\]",
+  "\\[alpha scalp\\]",
+  "\\[hair origin\\]",
+  "gi: background builds",
+  "building in the background",
+  "\\[water\\]",
+  "skipped: no variant for",
+  "\\[bvh\\]",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[core\\] guard:",
+  "sun: WARNING"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)",
+  "\\[hair origin\\] startup auxiliary capability 1",
+  "\\[alpha hair\\] native coverage records \\d+; invalid/missing native state \\d+",
+  "gi: background builds done: [1-9]\\d* builds in \\d+ ms",
+  "gi: background builds \\(\\d+ frames\\):",
+  "rt stats \\(\\d+ frames, alpha test on\\): primary-ray check match",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "skipped: no variant for",
+  "\\[water\\] reflections unavailable",
+  "pipeline creation failed",
+  "shader module creation failed",
+  "\\[geo\\] rt_native_hair rejected",
+  "\\[alpha hair\\] rt_native_hair requires restart",
+  "\\[hair origin\\] enable rejected",
+  "sun: WARNING \\d+ roof volumes within",
+  "over kSunMaxVolumes on [1-9]",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[bvh\\] mesh pool full at",
+  "\\[cascade\\] could not allocate"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=4 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-hair-a repeat=0",
+  "\\[motion-trace\\] phase=6 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-hair-b repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-off-c repeat=0",
+  "\\[motion-plan\\] complete phases=19\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Native hair qualification (docs/progress/worktree-agent-a78f48005e3b350bd.md checklist) at Ultra (smoke_ultra keys) with the hair startup latches: first enable built in the background (no present gap >= 1000 ms, all done by settle-cam; first origin toggle built in toggle-off-a), PNG shots off/hair/off/hair/off for the character float energy (char_energy.py), rt_stats windows (primary check, hair origin), cost OFF/ON/OFF; every judged window: no background build, hair/scalp invalid 0, bounds 0, opaque cutouts 0; hair and scalp records > 0 with hair on.",
+ "estimated_phase_seconds": 250,
+ "expect_every": [
+  {
+   "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every judged window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "opaque cutouts 0: no alpha-tested draw made opaque (region full 0.00) in every judged window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full in every judged window",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "no background build in any measured window (0 waiting, 0 pending, 0 started in every status line)",
+   "select": "gi: background builds \\(\\d+ frames\\):",
+   "match": ": 0 frames waiting, 0 pending, 0 started",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "no 'building in the background' line in any measured window (a pass skipped there)",
+   "select": "building in the background",
+   "match": "(?!)",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "first enable (startup): no build pending in settle-cam (all passes appeared within load + warmup 25 s)",
+   "select": "gi: background builds \\(\\d+ frames\\):",
+   "match": ", 0 pending, 0 started",
+   "min": 1,
+   "windows": [
+    "settle-cam"
+   ]
+  },
+  {
+   "name": "first toggle: the non-origin variants build in the background in toggle-off-a",
+   "select": "building in the background",
+   "match": "building in the background",
+   "min": 1,
+   "event": true,
+   "windows": [
+    "toggle-off-a"
+   ]
+  },
+  {
+   "name": "no freeze: every burst's longest present interval < 1000 ms (startup and first toggle)",
+   "select": "gi: background builds done: ",
+   "match": "longest present interval \\d{1,3} ms",
+   "min": 2
+  },
+  {
+   "name": "hair: invalid/missing native state 0 and retired bounds-invalid 0 in every judged window",
+   "select": "\\[alpha hair\\] native coverage records \\d+;",
+   "match": "; invalid/missing native state 0; unsupported native interfaces total \\d+; retired bounds-invalid primitives 0;",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "scalp: invalid/missing native state 0 in every judged window",
+   "select": "\\[alpha scalp\\] native hard records \\d+;",
+   "match": "; invalid/missing native state 0;",
+   "min": 1,
+   "windows": [
+    "toggle-off-b",
+    "shot-off-a",
+    "shot-hair-a",
+    "shot-off-b",
+    "shot-hair-b",
+    "shot-off-c",
+    "diag-rt-hairoff-a",
+    "diag-rt-hairon",
+    "diag-rt-hairoff-b",
+    "cost-off-a",
+    "cost-hair",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "hair participation: native coverage records > 0 in every hair-on window",
+   "select": "\\[alpha hair\\] native coverage records \\d+;",
+   "match": "native coverage records [1-9]\\d*;",
+   "min": 1,
+   "windows": [
+    "shot-hair-a",
+    "shot-hair-b",
+    "diag-rt-hairon",
+    "cost-hair"
+   ]
+  },
+  {
+   "name": "scalp participation: hard or camera-dither records > 0 in every hair-on window",
+   "select": "\\[alpha scalp\\] native hard records \\d+;",
+   "match": "native hard records (?:[1-9]\\d*; native camera dither records \\d+|\\d+; native camera dither records [1-9]\\d*);",
+   "min": 1,
+   "windows": [
+    "shot-hair-a",
+    "shot-hair-b",
+    "diag-rt-hairon",
+    "cost-hair"
+   ]
+  }
+ ],
+ "requires_success_of": [
+  "hq1-s8-water-fg2"
+ ]
+}

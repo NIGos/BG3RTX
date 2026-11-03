@@ -1,5 +1,26 @@
 # Dialogue shadows and distant casters - 2026-10-30
 
+## Moving band isolated to legacy cascades (2026-11-03)
+
+New decisive user A/B: disabling Roof sun shadows (`rt_cascade_casters=0`) stops
+the band across a still character in port/camp dialogue, with RT sun still on.
+This supersedes the earlier lack of a causal A/B for this temporal symptom.
+Code admits skinned opaque cascade draws when the camera copy has a different
+placement-buffer offset: full draw-key dedupe misses; mesh-only dedupe applies to
+discarding draws only. The admitted copy is F-1/F-2, so it can shadow the current pose.
+Native dumped cascade VS 1cf36b97d3067b6c fails the affine-instance test (skinned);
+646a930e41f002bb passes (static), and wind VS 50fbfceb06192473 fails.
+These fixtures verify the filter's classification, not which draw hit the face.
+
+Candidate `rt_cascade_static_only=0`, off in presets: exclude dynamic/unclassified
+legacy copies; preserve camera geometry and raw Current Sun. No shader change.
+Design/limits: [TRACK_D_SUN.md](TRACK_D_SUN.md#dialogue-legacy-cascade-filter-2026-11-03-ready_for_live).
+Status READY_FOR_LIVE, not a visible-quality pass. Planned port/camp A/B, counters,
+roof protection and cost checks: [progress/fix-cascade-dialogue.md](progress/fix-cascade-dialogue.md).
+No game launch; the attribution branch and its prepared jobs were not edited.
+
+## Earlier investigation
+
 The user separates two new symptoms from the resolved UI blue-block issue:
 - STATIC face shadows, hairstyle-dependent; not face flicker.
 - Distant shadow changes, suspected trees near cull/LOD distance. Camp and other
@@ -235,30 +256,74 @@ ls_debug=9 shows unknown visual lights on the face). H7 moving shadows: the PNG 
 fold, so the folded mask is not in the trace: PNG/ROI numbers stay coarse. A per-pixel occluder diagnostic is the
 next step (planned, not built). Gates fixed for ds2/ds3 (see the batch README).
 
-### Occluder-kind diagnostic (requested 2026-11-02, designed, not built)
+### ds1-ds3 result (batch dsh-20261102h, 13:46-13:58; INVALID only on the static-camera gate)
 
-No existing view names the occluder: rt_debug 1/2 give visibility and game-vs-traced mask, ls_debug 2/9 the removed
-light and the light owner, rt_stats has no free index range. Smallest design, key `rt_occ_stats` (0 default, diag
-windows only), its own device-local buffer, variant define `RT_OCC_STATS` so the ordinary SPIR-V stays identical:
-- At the commit points of rt_visibility (rt_common.hlsli: procedural hair commit, cascade commit, alpha commit,
-  RT_HAS_COMMITTED) store the committed instance index / id and hit t in statics.
-- Kind from what InstInfo already holds (rt_common.hlsli:497-516): cascade copy (id kRtCascadeId), cached static mesh
-  (kInfoPool), dynamic opaque (per-draw BLAS: characters, wind foliage, other skinned), dynamic alpha by AlphaRec kind
-  (table cutout / scalp 3 / hair 4), native hair procedural (kInfoHair); "near" = hit t < 0.5 m as the stand-in for
-  self-shadowing (no per-object identity exists in the TLAS). Held (rt_dyn_hold) needs one InstInfo meta bit set in
-  layer/bvhsplit.cpp for fd.held (layer change: restart, no ABI change).
-- Receivers: character px (G-buffer class 3 skin / 5 hair). Sources: sun (rt_shadow.hlsl), each D-LS light
-  (point/spot vs box) in rt_local_shadows*.hlsl, AO (gi_trace_rt). Counters [source][kind], per-workgroup
-  groupshared reduce, one atomic per group into the device-local buffer, copied after the timed region (host
-  atomics lint); log per window: "occ (60 frames): character px darkened by sun x%, local y%, box z%, AO w%;
-  occluder kinds sun [...] local [...] AO [...]".
-- Float energy of the character mask per shot: the trace dumps are PNG previews (dump_raw=1 writes every target);
-  a core-side reduce of the pre-post colour over the class mask in the same diag window gives it without disk.
-Scope: about 6 shaders + core buffer/log + one layer bit, shader identity and GPU gates: its own work item.
+Shots whose window had a `camera moving` scene build are discarded; each toggle against its two nearest static OFF
+shots; ROI = skin + hair class px. OFF ROI spread: ds1 12.9%, ds2 15.1%, ds3 12.5%.
+- ds1 camp: noao +42% (frame +5.9%); everything else within the spread (nohold +10.5%, hairorigin +13.3% borderline).
+- ds2 camp: noao +31.6% (frame +13.6%); hair +19.5%, hair+origin +30.9%; nosun +13.8% at the spread.
+- ds3 port, under a roof: hair+origin +26.9% (hair alone +32.5% but its window moved); noao +18.3%; nocascade,
+  noart +9% within the spread.
+Verdict: the character darkening is the RT AO (1-ray ambient visibility at gi_ao=1) and, under the port roof, the
+opaque hair cards (native hair coverage brightens the characters by about 20-30%). No local-light, box,
+art-unshadowed, held-draw or cascade toggle exceeds the spread. The camp "moving shadow" is not resolved by these
+shots (the PNG pairs are 3 frames apart). Next: rt_occ_stats per occluder kind for AO and sun on character px.
+
+### Occluder-kind diagnostic `rt_occ_stats` (built 2026-11-02, READY_FOR_LIVE)
+
+Key `rt_occ_stats` (0, live, diag windows only). Layout and log line: common/occ_stats.h (unit test
+tests/occ_stats_test.cpp). Receivers: character px (G-buffer class 3 skin / 5 hair). One "occ stats (N frames)" line
+per 60 frames read back: per source (sun, local point/spot, box, AO) the px evaluated per frame, darkened %, mean
+darkening %, rays / occluded / unknown, on-screen hair/skin share of the occluded rays (the hit is the visible surface
+at its pixel), per kind `rays % [near %] dark %`, and the occluder distance histogram (<0.05 ... >=5 m, dark % and rays).
+- Kinds: unknown (aborted), cascade copy (id 0xFFFFFC..), static (pool, opaque), moving (soup, opaque: characters,
+  skinned, wind-animated opaque), cutout-static (pool + alpha record), cutout-moving (soup + alpha record: wind foliage),
+  scalp (alpha kind 3), hair (alpha kind 4 or native procedural), held (rt_dyn_hold copy: InstInfo meta bit 31,
+  layer/bvhsplit.cpp kInfoHeld; layer change, restart, no ABI change). "near" = t <= 0.5 m (self-shadow proxy).
+- With diagnostic constant 1011 on, shadow rays find the CLOSEST occluder (no accept-first; same visibility).
+- Sun and AO: gi/rt_occ_stats.hlsl, its own pass after the timed RT region (so no rt_shadow/GI variant doubles). Sun:
+  the darkening is the real pass's (rtVis g x (1 - r)), the kind from a replica of rt_shadow's ray (same seed, disc
+  sample, origin; mismatches counted); not valid with rt_sun_cascade_current=1. AO: the darkening is the real
+  1 - giRaw.a, the kinds from replica rays (same seed, directions, origin, gi_rt_radius fade; after the first ray the
+  hit-material passes draw other random numbers, so same distribution, not the same rays; gi_far not replicated).
+- Local/box: the every-mode box pass with RT_SPEC_OCC_STATS (SpecId 1011, its own Pipe g_ls_full_box_occ);
+  ls_box=0 gives no local numbers. Per ray darkening = removed light / the pixel's lit diffuse + specular.
+- Counters: device-local g_occ_buf at set 4 binding 1 (the box statistics set), groupshared reduce, one atomic per
+  counter and group, copied into a host ring after the D-LS pass; read 7 frames later (host atomics lint classified).
+- Migration: set 4 binding 1 is always bound. RT_OCC_STATS is retained as the checker reference and in the
+  standalone sun/AO diagnostic; the full-box production request uses constant 1011 for both values.
+  Key-off equivalence is checked after specialization, freezing and optimization (spec_cascade_check --key occ).
+- Found while wiring it: the box D-LS variants (rt_local_shadows*_box*.hlsl) are not in shader_variant.h
+  cascade_entry, so with rt_cascade_casters=1 they trace 0xFF and the F-1/F-2 cascade copy shadows local and box
+  lights (rt_visibility g_rt_class 1: its unknown alpha is solid). FIXED 2026-11-02: the five box files are cascade
+  entries (constant 1000: trace 0x01). Both mask values share the migrated module. Live A/B: ls_box_cascade_old=1 restores the old 0xFF box passes (diag-occ-boxold, shot-boxold-on);
+  the 'cascade' kind under local/box must be > 0 there and 0 in diag-occ-base.
+- Float energy of the character mask per shot: dump_preview_f32=1 (layer/dump.cpp) writes the 5c3fdabc scene colour
+  as float32 at the preview grid (~10 MB per trace); tools/live_batches/dialogue_shadows/char_energy.py takes its mean
+  over the RT2 class mask (tests/char_energy_test.py).
+- Cost: an extra full-res pass (1 sun ray + gi rays per character px) and the every-mode D-LS box pass; GPU ms not
+  measured yet (diag windows only, never in cost windows).
+- Scenes (save_index.py, read-only): Dialogue1/2 WLD_Main_A (camp, moving shadow), Dialogue3 CTY_Main_A (port, very
+  dark under a roof). Predictions per save: tools/live_batches/dialogue_shadows/predicted.json ("occ").
+
+### Port moving band (user screens docs/dialogue_user_screens/7-9.webp, Test Dialogue3, 2026-11-03)
+
+A dark band moves over the left character's face/torso between frames in bright sun; the other character does not
+move. Ranked (predicted.json ds3 "port-moving-band"): held/stale or mismatched dynamic geometry (rt_dyn_hold pose, a
+per-draw BLAS of another animation frame or of the previous camera cut), moving foliage/cloth/rope/crane in the sun
+path, his own animated hair/cape/strap, then the static other character. Windows in the first held shot:
+`diag-view-occ-first`, then `diag-occ-frames-hold4` / `-hold0` with `rt_occ_stats_frames=4` (a line per 4 frames:
+kind and distance changing line to line = a moving occluder; 'held' vanishing with hold 0 = stale geometry).
+Not yet: fixed face/chest probe pixels (shader change, after the spec-constant migration).
+If a static character-on-character sun shadow turns out to be the cause (physically right, absent from the game's
+cascade in dialogue framing), options: keep RT (correct) but soften by the true penumbra (sun_radius already does);
+take character-on-character sun occlusion from the game's own cascade (min with the game's mask for character
+receivers hit by 'moving' occluders); or exclude character casters from character receivers in dialogue only. None
+chosen; the A/B decides.
 
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).
 
 Batch: tools/live_batches/dialogue_shadows (README, predicted.json): one visible_unfocused_fg job per
 save, 260 s of plan, 22 PNG traces at 1024 px (about 1.9 GB for the batch), every toggle inside one run at
-a static dialogue shot; a `camera moving` line in any shot makes the run INVALID.
+a static dialogue shot; a `camera moving` line flags that shot (excluded from comparisons, counted; no longer a gate).

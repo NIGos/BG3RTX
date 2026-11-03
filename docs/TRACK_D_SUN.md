@@ -156,3 +156,53 @@ and what the trust did with them (`sun stats`, 600-frame windows):
 private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
 Design, tests and remaining material/LOD/volume gates: docs/SUN_CURRENT_SCENE.md.
 This is not a passing exploration-shadow gate; zero certified pixels is INVALID.
+
+## Dialogue legacy cascade filter (2026-11-03, READY_FOR_LIVE)
+
+The user isolated a moving face/torso shadow to `rt_cascade_casters`: disabling it
+stops the band while RT sun remains on. Opaque dedupe requires the complete draw
+key, including placement UBO/instance-stream offset (`common/cascade_casters.h`,
+`cascade_draw_id` / `cascade_pre_draw` in `layer/geocapture.cpp`). Different offsets
+leave a second pose of the same character in the legacy F-1/F-2 soup
+(`layer/rtscene.cpp`, `rt_add_cascade`). This is a proven admission defect, not
+identification of the particular ray hit in the user's dialogue.
+
+`rt_cascade_static_only=0` is the new off-by-default CPU filter, exposed as
+Developer / Static roof casters only, with Live apply modes for both choices.
+It requires Sun shadows / Ray-traced + hidden roofs. ON admits only the existing class-A affine
+instance position path with a known vertex buffer without STORAGE_BUFFER usage.
+Skinning SSBO, wind/cloth displacement, per-draw transforms and unknown paths are
+excluded. Known static roofs use the same existing conversion and origin rebase.
+Unknown static roofs can also be omitted. Class A proves no VS deformation, not
+an immutable instance transform or CPU-uploaded vertex stream; those remain limits.
+Camera capture and the raw Current Sun proof stream are unchanged. When Current
+Sun also captures the legacy layer, only the compacted legacy ranges are filtered.
+Allow two frames after toggles for old captures to drain. No ABI or shader edits;
+variant request delta 0. No hysteresis without evidence of static membership churn.
+
+The `[cascade] casters` line adds legacy dynamic/unclassified added/excluded per
+frame and set changes per window. Membership ignores draw order; identities include
+placement offsets, so ring-buffer offset churn is not proof of cascade re-fitting.
+The first sample, frame gaps and policy toggles seed the comparison. Counters are CPU
+only; existing captured-pass GPU median and `gpu` lines supply live cost, unmeasured.
+CPU regression, native static/skin/wind fixtures and settings gates pass. Dialogue A/B
+and smoke_ultra roof/interior gates are specified in `progress/fix-cascade-dialogue.md`.
+
+## Dialogue duplicate identity correction (2026-11-03, offline verified candidate)
+
+The default admission path now also checks the camera draw set of the same frame
+by mesh, material binding and instance. Audited class-B per-draw shaders compare
+model contents and pulled vertex stream/index instead of UBO allocation offsets.
+Model translations are rebased using each pass origin; matching uncertainty is
+derived from the half-ULP errors of the float translation and origin inputs.
+Different transforms, materials and instance ranges remain distinct. Unknown or
+unreadable inputs retain exact matching; class-A stream ranges stay unchanged.
+This preserves off-camera roofs and does not filter the raw Current Sun proof
+stream. Its compacted legacy soup uses the corrected duplicate policy.
+
+The `[cascade] casters` line reports `duplicates by mesh (offset differs)` per
+frame. `rt_cascade_static_only` remains an optional fallback. No ABI/shader change;
+variant request delta 0, no new GPU pass. CPU regressions cover duplicate removal,
+distinct instances and differing origins. Visual roof coverage and dialogue
+confirmation remain pending; no game was launched. Validation details are in
+[the branch progress](progress/fix-cascade-dialogue.md).

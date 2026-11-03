@@ -618,6 +618,8 @@ $phaseTraceIndex=0
 $wheelSent = 0; $wheelNext = [datetime]::MinValue   # step.wheel: mouse-wheel notches posted at the phase start
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
+$frameRotation = @{label="";frame=0;offset=0;segment=0}
+$motionFrame=0L; $motionLogPos=0L
 $rotationInput = @{stage="released";at=[double]::NegativeInfinity;segment=-1;x=0;y=0}
 $pointerCentred = $false
 $planHoverNext = [datetime]::MinValue
@@ -745,6 +747,28 @@ while ((Get-Date) -lt $deadline) {
         Send-MoveKey $true $moving; $moving = $true
         $panNextKey = (Get-Date).AddMilliseconds($step.repeat_ms)
       }
+      if ($step.frame_delta_pixels) {
+        # Independent short-lived log reader: leave Read-NewLog's cursor untouched.
+        # fg_state_every=1 supplies one marker per rendered frame, including FG runs.
+        if (Test-Path $log) {
+          $mf=[IO.File]::Open($log,'Open','Read','ReadWrite,Delete')
+          try {
+            if ($mf.Length -lt $motionLogPos) { $motionLogPos=0L }
+            [void]$mf.Seek($motionLogPos,'Begin')
+            $mr=New-Object IO.StreamReader($mf)
+            $mt=$mr.ReadToEnd()
+            $lastNewline=$mt.LastIndexOf("`n")
+            if ($lastNewline -ge 0) {
+              $complete=$mt.Substring(0,$lastNewline+1)
+              $motionLogPos += [Text.Encoding]::UTF8.GetByteCount($complete)
+              foreach ($match in [regex]::Matches($complete,'\[sl\] DLSS-G frame (\d+):')) {
+                $motionFrame=[Math]::Max($motionFrame,[long]$match.Groups[1].Value)
+              }
+            }
+          } finally { $mf.Dispose() }
+        }
+        $sample=Get-FrameRotationSample $frameRotation $sample $step $motionFrame ($rect.Right-$rect.Left)
+      }
       $rotationAction=Get-RotationInputAction $rotationInput $sample $planClock.Elapsed.TotalSeconds
       if ($rotationAction) {
         switch ($rotationAction.kind) {
@@ -755,7 +779,10 @@ while ((Get-Date) -lt $deadline) {
             $rotateHeld=$true;$rotateSegment=$sample.segment
             Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [rotation-input] phase=$panIndex segment=$rotateSegment direction=$($sample.direction) speed_px_s=$($step.pixels_per_second)"
           }
-          drag { Send-PlanMouse 0x0200 0x10 $rotationAction.x $rotationAction.y }
+          drag {
+            Send-PlanMouse 0x0200 0x10 $rotationAction.x $rotationAction.y
+            if ($step.frame_delta_pixels) { Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [frame-drag] phase=$panIndex label=$($step.label) rendered=$motionFrame x=$($rotationAction.x)" }
+          }
         }
         $rotateX=$rotationAction.x;$rotateY=$rotationAction.y
       }

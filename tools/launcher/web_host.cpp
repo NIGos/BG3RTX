@@ -64,7 +64,7 @@ void send(Host& h,const std::string& json) {if(h.view)h.view->PostWebMessageAsJs
 void refresh(Host& h) {
   if(h.busy||!h.bridge)return;
   auto session=session_token();
-  if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart_needed(false);}
+  if(session!=h.session){h.session=session;h.baseline=effective(h.state);h.bridge->set_restart_count(0);}
   h.bridge->set_mod_status(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?"Mod files present":"Mod files missing");
   h.bridge->set_can_play(!h.no_game&&valid_game_dir(h.game)&&!game_running());
   send(h,h.bridge->state_json());
@@ -140,7 +140,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         bool pending=game_running()&&ui_state::restart(h.baseline,after);std::wstring err;
         if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)||!write_file_atomic(user_ini_path(),text,&err)){error=narrow(err);return false;}
         candidate.user_text=text;candidate.user=st::parse_ini(text);candidate.loaded=candidate.values;
-        h.bridge->set_restart_needed(pending);return true;
+        h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,after):0);return true;
       };
       hooks.play=[&h](std::string& error){
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder containing bin\\bg3.exe (Vulkan), or wait for the running game to close.";return false;}
@@ -167,7 +167,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       hooks.recheck=[](){return inspect_graphics();};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
       h.bridge->set_game_path(narrow(h.game));
-      h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_needed(pending);
+      h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
       h.bridge->set_status(valid_game_dir(h.game)?"Saved settings apply on next launch. Select the adapter used by the game.":"Choose the game folder containing bin\\bg3.exe (Vulkan). Settings remain available.");
     }
     WNDCLASSW cls{};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));RegisterClassW(&cls);

@@ -38,3 +38,26 @@ struct PanBurstSamples {
   }
   bool complete() const {if(invalid)return false;for(const auto& f:frames)if(f.mask!=1023)return false;return true;}
 };
+
+// Reflection-only bursts keep the same explicit warmup, with a smaller sample set.
+struct WaterPanSamples {
+  uint64_t warmup;
+  uint32_t count;
+  bool debug;
+  std::array<uint8_t,16> masks{};
+  bool invalid=false;
+  bool retained(uint64_t frame) const { return frame>warmup && frame-warmup<=count; }
+  void add(uint64_t frame,std::string_view name,uint64_t recording) {
+    if(!retained(frame))return;
+    uint8_t bit=name=="water_game"?1:name=="water_coverage"?2:name=="water_compose_debug"?4:0;
+    if(!bit)return;
+    auto& mask=masks[frame-warmup-1];
+    if(!recording || (mask&bit))invalid=true;
+    mask|=bit;
+  }
+  bool complete() const {
+    if(invalid || count<2 || count>16)return false;
+    for(uint32_t i=0;i<count;++i)if(masks[i]!=(debug?7:3))return false;
+    return true;
+  }
+};

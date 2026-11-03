@@ -94,7 +94,7 @@ static std::vector<std::string> expand_args(int argc,char**argv){
  return out;
 }
 int main(int argc,char**argv){
- check(descriptor_count(false)==20 && descriptor_count(true)==21,"bounded plain/Hair union");
+ check(descriptor_count(false)==21 && descriptor_count(true)==21,"bounded plain/Hair union");
  check(!find(47,true),"roof volumes come from the sun set b8, not the push set");
  check(kSetSun==3 && sun.size()==8 && find_sun(0)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && find_sun(6)->type==VK_DESCRIPTOR_TYPE_SAMPLER && !find_sun(7)
        && find_sun(8)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,"gi_hit_sun sun set 0-6 and the roof volumes 8");
@@ -103,7 +103,7 @@ int main(int argc,char**argv){
  check(find(46,false)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && !find(46,false,true),"hit light policy per-light data (GI only)");
  for(bool hair:{false,true}){uint32_t n=0;for(const auto& b:bindings)if(enabled(b,hair)){check(find(b.binding,hair)==&b,"layout and write iteration identical");n+=b.count;}check(n<=32,"host push descriptor count");}
  for(uint32_t i:{8u,11u,13u,17u}){check(find(i,false)!=nullptr,"regression: required GI binding omitted by old LS contraction");check(!(i<=7 || i==12 || i==16 || i==18 || i>=20),"old LS filter really omitted GI input/output");}
- check(find(48,false)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"rebase and SHaRC camera input");check(!find(50,false)&&find(50,true),"physical Hair conditional descriptor");
+ check(find(48,false)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"rebase and SHaRC camera input");check(find(50,false)&&find(50,true),"physical Hair always-bound descriptor");
  check(!find(27,true)&&!find(28,true)&&!find(41,true),"unused LS shadow/class extras excluded");
  check(descriptor_count(false,true)==18 && descriptor_count(true,true)==18,"bounded dedicated reference union");
  check(find(48,false,true)->type==VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,"reference rebase camera retained");
