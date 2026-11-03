@@ -490,3 +490,40 @@ Standalone MSVC C++20 /W4 /WX /fp:strict test: 178,522 checks, including 43,191
 higher precision shadow-reference and 2,826 dither-reference decisions, derived
 rounding envelopes, real raw-alpha counterexamples and binding/failure tests.
 CTest target registered. No GPU jobs; GPU cost and in-game appearance unmeasured.
+
+## GI traversal cost candidate (2026-11-03, hair-anyhit-perf)
+
+S8 hq1 at 03:55 disproved the +0..0.5 ms prediction: native hair cost
+rt passes 5.80..5.94 -> 8.10..8.18 ms and GI 6.97..7.11 -> 10.27..10.30 ms,
+with 840 native hair records per frame and zero scalp. The < 1 ms keep gate failed.
+
+This is procedural AABB work, not ordinary triangle any-hit: bvhsplit builds
+native hair AABBs; each candidate runs hair_intersect, sidecar triangle/strand
+reads, native mask/noise coverage and texture sampling. SpecId 1010 enables
+procedural traversal throughout the native-capable shaders. Shadow visibility
+already accepts the first hit except the intentional occluder-attribution diagnostic.
+
+Experimental live key `rt_hair_gi_cull=0` (GUI: Omit hair from indirect rays)
+uses SpecId 1016 in GI trace entries only. On adds SKIP_PROCEDURAL_PRIMITIVES
+to closest-hit queries before hardware traversal. Hair is currently the TLAS's
+only procedural family. Every GI ray keeps its origin, direction and length;
+all hair procedural candidates, intersections and coverage reads on those rays
+become zero. Each valid physical coverage evaluation avoided saves three texture
+samples (one noise and two mask samples, each with a dimensions lookup), plus
+primitive, strand and material reads. At Ultra two rays per half-resolution GI pixel means up to
+2 * ceil(width/2) * ceil(height/2) queries per frame omit hair. Work saved depends
+on AABB overlap, not the 840 record count; no candidate count is inferred from it.
+
+Primary/debug/origin, sun/local visibility, GI-hit shadow rays, AO and reflections
+retain hair. Capture, AABB builds and bounds validation also remain. No ABI,
+instance mask, preset or manifest request change. The existing async pipeline key
+and owned specialization payload include 1016, so toggles can warm then reuse both
+states in one run. Key-off equivalence must be checked after freezing the new spec.
+
+This removes GI hair occlusion/bounce and can change indirect brightness: it is
+an approximation requiring the same-run character/whole-frame energy gates.
+Prediction: reduce the measured +3.2 ms GI overhead, magnitude unmeasured;
+no promised reduction of the +2.3 ms separate RT-pass overhead. The overall
+< 1 ms keep gate remains in force. Inspect S8 and Test Dialogue1 hair/skin shadows
+and float scene-colour energy, with hair enabled throughout the cull A/B windows.
+Status: offline candidate; live permission and quality/cost qualification pending.
