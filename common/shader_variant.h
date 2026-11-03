@@ -7,10 +7,15 @@
 // request the core can make (tests/shader_variant_test.cpp keeps it equal to these rules;
 // tools/compile_shaders.py compiles all of them).
 #include <cstring>
+#include <cstdint>
 #include <string>
 #include "native_hair_origin.h"
 
 namespace bg3::shader_variant {
+// Provisional SpecId registry before the main migration lands. 1000 is the cascade prototype.
+// WATER_HIT_SHADE_LAYOUT changes descriptor bindings; the on/off key is this constant, not a define.
+inline constexpr uint32_t kSpecWaterHitShade = 1100u;
+
 
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
@@ -120,7 +125,16 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_compose.hlsl?WATER_SH
                                                  "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GLINT_AA=1",
                                                  "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_GLINT_AA=1",
                                                  "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_GLINT_AA=1",
-                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1"};
+                                                 "rt/water_glint.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_GLINT_AA=1",
+                                                 "rt/water_reflect.hlsl?WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_HIT_SHADE_LAYOUT=1"};
 
 // rt_water_glint_aa: the compose request `req` with the sun glint filter (WATER_GLINT_AA) when `on` and the request
 // has the sun records (WATER_SHADOWS); else `req` unchanged.
@@ -147,6 +161,11 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 // compose's sun ray (WATER_SHADOWS) sees them too (RT_CASCADE_SUN_HIT: g_rt_cascade_ray around it),
 // as gi_hit_sun's sun ray at a GI hit. Off: the request unchanged.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
+inline std::string water_hit_request(const char* req,bool capable) {
+  std::string out=req;
+  if(capable)out += out.find('?')==std::string::npos ? "?WATER_HIT_SHADE_LAYOUT=1" : ";WATER_HIT_SHADE_LAYOUT=1";
+  return out;
+}
 inline std::string water_request(const char* req, bool cascade) {
   std::string out = req;
   if (!cascade) return out;

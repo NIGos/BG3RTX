@@ -237,6 +237,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  {"exp_water_hit_shade", "Water: hidden-surface reflections",
+   "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
+   Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
+   {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}},
+    {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true}},
+   {}, {0,0,0,0}, true, {}, false, "Experimental", {}},
+
   // M4 hidden-surface bundle (docs/PLAN_M4_REFLECTIONS_GI.md "Promotion", m4_promotion without rf_hit_shade): Advanced,
   // before the Experimental section; "+ Bounce" and Emission "Hidden hits" in Ultra, Off elsewhere.
   {"exp_hidden_surface", "Hidden-surface shading",
@@ -538,6 +546,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
+    {"rt_water_hit_shade", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_rr_mv", "0"},
     {"rt_water_fg_mv", "0"},

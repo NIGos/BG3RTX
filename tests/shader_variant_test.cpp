@@ -17,6 +17,9 @@ int main(int argc, char** argv) {
   const std::filesystem::path root = argv[1];
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
+  CHECK(water_hit_request("rt/water_compose.hlsl",false)=="rt/water_compose.hlsl");
+  CHECK(water_request(water_hit_request("rt/water_compose.hlsl?WATER_SHADOWS=1",true).c_str(),true)==
+      "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_HIT_SHADE_LAYOUT=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
   // Fixed spellings: the ordinary path is untouched, defines keep the old wrapper order.
   CHECK(request("gi/rt_shadow.hlsl", 0) == "gi/rt_shadow.hlsl");
   CHECK(request("probe.hlsl", kTileset | kOmm) == "probe.hlsl");
@@ -91,7 +94,7 @@ int main(int argc, char** argv) {
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
   for (const char* r : kFixedRequests) {
     if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE") ||
-        std::strstr(r, "WATER_GLINT_AA"))
+        std::strstr(r, "WATER_GLINT_AA") || std::strstr(r,"WATER_HIT_SHADE_LAYOUT"))
       continue;
     const std::string e = water_rf_edge_request(r, true);
     bool listed = false;

@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // Qualified memory management is automatic; five user-facing experimental entries remain.
+  // Qualified memory management is automatic; six user-facing experimental entries remain.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(user_exp == 6);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
   CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){

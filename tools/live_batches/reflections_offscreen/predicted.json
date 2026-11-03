@@ -1,0 +1,15 @@
+{
+  "_rule": "Prepared before any run. Git metadata read-only: uncommitted, no live quality pass.",
+  "wos1-s8-fg2": {
+    "shot-on": {
+      "predicted": null,
+      "target_relative_energy": 0.0,
+      "source": "Post-water water-compose float mean / exposure. Cnew = Cold + A Lhit - Bprobe only on fully qualified tier 2/3 hits. Unsupported hits unchanged. ON mean must equal OFF within OFF repeat noise; no gain correction. Unknown hit radiance prevents a numerical prediction offline.",
+      "cost_gpu_ms": null,
+      "cost_source": "Measure reflections GPU and compose GPU medians vs OFF. Full-frame rf shade 2.3-2.7 ms is context, not a water estimate.",
+      "coverage": "Native shaded hidden > 0 in every ON cost window. Off-screen may stay zero: native_hit_cluster rejects outside the frustum. Unsupported rows/light sources retain probes.",
+      "visual": "Static and matched forward turns: reflected hidden geometry appears while native lighting supports the hit. Full outside-frustum shading requires later world-light provider.",
+      "written": "2026-11-03"
+    }
+  }
+}

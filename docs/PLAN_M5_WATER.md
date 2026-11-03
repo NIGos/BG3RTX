@@ -596,3 +596,23 @@ Energy is the post-water image (RR colour input) over the exposure, against the 
 - S1 QuickSave_3784 is labelled the foundry (TEST_SCENES) but COVERAGE measured the sea there.
   The `mm2` expect line requires supported water draws, so a view without water is INVALID.
 - Previous-frame water reuse needs a deformation/flow motion contract; M5.1 measures static only.
+
+## Water hidden-hit reflection extension (branch rt-reflections-offscreen, 2026-11-03)
+
+Design and full source map: [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md), stage A. Candidate
+`rt_water_hit_shade=0` uses native material shading for supported tier 2/3 hits in both the
+geometric diagnostic and the forward-record composition trace. Tier 1 remains the screen
+source. Unknown rows/lighting and sky misses retain the native FS probe. Preserve the geometric
+tier histogram and report shaded/failure counts in existing device-local water statistics.
+
+The image equation remains `C' = max(C + A L - B, 0)`, with A/B and the normal from the actual
+water FS. This prevents double-counting; it does not qualify the inherited RF radiance bias.
+Out-of-frustum light-grid queries remain unsupported, so a later world-light/probe provider is
+required for full off-screen reflections. Directional game-environment sampling is a separate
+stage, guarded against cut roofs and unknown geometry.
+
+Qualification: ordinary key-off water SPIR-V identity; inspect replay inputs before claiming a
+water replay result; one unqueued S8 port still + turn OFF/ON/OFF job, predicted.json first.
+Use floating post-water colour/exposure and compose-delta accounting, never the pre-water dump
+or bloom PNG mean. Incremental GPU cost is unmeasured; the existing water chain is 0.53-0.67 ms.
+Off in every preset pending gates; Ultra only for first promotion. No live test was run here.
