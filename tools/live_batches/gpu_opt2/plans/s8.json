@@ -2,10 +2,11 @@
   {
     "label": "warmup",
     "kind": "static",
-    "seconds": 1.1,
+    "seconds": 30.0,
     "set": "qa_exposure_hold=0,rt_trace_scale=1.0",
     "wait_log": [
-      "\\[shaders\\] cache: prefetched "
+      "\\[shaders\\] cache: prefetched ",
+      "\\[auto\\] scene ready"
     ],
     "wait_log_timeout": 180.0
   },
@@ -24,7 +25,7 @@
   {
     "label": "warmup-scaled",
     "kind": "static",
-    "seconds": 1.1,
+    "seconds": 5.0,
     "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",

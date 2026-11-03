@@ -19,6 +19,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from scripts.queue_gates import phase_states, _apply
 
+# Recent VALID logs, scene-ready -> both a zero-timeout scene interval and
+# a watch interval with zero pipeline builds. See LIVE_FLOW.md for timestamps.
+# ceil(max observed seconds) + the one-second settings/observation alignment.
+SCENE_SETTLE_SECONDS = {"Water Queens House": 17, "Test Dialogue3": 19,
+                        "Test Dialogue1": 16, "Campsite - 27h": 29}
+
 
 def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
@@ -467,8 +473,20 @@ def duration_budget(job, plan):
             if state.get("rr_post_temporal") == "1":
                 frames = max(frames, math.ceil(math.log(1/1024)/math.log(15/16)))
             minimum = max(minimum, latency + frames/fps)
-        if not phase.get("wait_log") and bare_label.startswith(("warm", "prefetch")):
-            unresolved.append("pipeline readiness has no completion signal")
+        # Readiness is not scene settling. Prefetch/GI creation can complete
+        # before streaming, exposure and the first stable BVH windows. Preserve
+        # the declared observation bound even when a wait_log is present.
+        if bare_label.startswith(("warm", "prefetch")):
+            if not phase.get("wait_log"):
+                unresolved.append("pipeline readiness has no completion signal")
+            unresolved.append("scene/pipeline settle bound retained; not a producer cadence")
+            minimum = max(minimum,current)
+        # Survival and reload regressions are measured in wall-clock time, not
+        # in the number of periodic log lines. Hair failures were observed at
+        # 2 s after enable and 25 s after reload (HAIR_VALIDATION.md).
+        if (bare_label.startswith(("survive-", "set-", "toggle-")) or phase.get("reload_selected")
+                or "after-reload" in bare_label or bare_label == "validation-strands"):
+            unresolved.append("failure-latency observation bound retained")
             minimum = max(minimum,current)
         motion_endpoint = phase.get("kind") not in (None,"static") and minimum == float(phase.get("motion_end",phase.get("seconds",0)))
         minimum = minimum if unresolved or motion_endpoint else math.floor(minimum * 10 + 1e-7) / 10 + .1
@@ -573,11 +591,24 @@ def tighten_files(directory):
     reports = []
     for path in job_files(directory):
         job, plan, plan_path = load_job(path)
+        first_warm = next((p for p in plan if p.get("label", "").startswith(("warm", "prefetch"))), None)
+        if first_warm is not None:
+            old = float(first_warm["seconds"])
+            first_warm["seconds"] = max(old, SCENE_SETTLE_SECONDS.get(job.get("save"), old))
+            for key in ("motion_start", "motion_end"):
+                if first_warm.get(key) == old:
+                    first_warm[key] = first_warm["seconds"]
         # Cold-start prefetch is a completion signal, unlike a fixed sleep.
         for phase in plan:
             if phase.get("label", "").startswith(("warm", "prefetch")) and not phase.get("wait_log"):
                 phase.update(wait_log=[r"\[shaders\] cache: prefetched ",
                                        r"gi: gi/[^ ]+ generation "], wait_log_timeout=180)
+        if first_warm is not None:
+            patterns = first_warm.get("wait_log", [])
+            if isinstance(patterns, str):
+                patterns = [patterns]
+            first_warm["wait_log"] = list(dict.fromkeys(
+                [p for p in patterns if p != r"\[auto\] scene ready"] + [r"\[auto\] scene ready"]))
         startup_producers(job, plan)
         reports.append(tighten(job, plan))
         for target, value in ((plan_path, plan), (path, job)):

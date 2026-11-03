@@ -53,7 +53,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "combined-Campsite---27h",
   "live_batch": "combined",
-  "timeout": 2743,
+  "timeout": 2871,
   "args": [
     "-RealPresent",
     "-Move",
@@ -864,7 +864,7 @@
       }
     }
   ],
-  "estimated_phase_seconds": 370.2000000000001,
+  "estimated_phase_seconds": 498.30000000000035,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,

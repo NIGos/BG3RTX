@@ -133,7 +133,7 @@
   ],
   "stop_on_dump": false,
   "purpose": "Water hit cost: sparse, cone, unordered and combined 0/value/0/value at fixed hit shading 2, Ultra; static energy and diagnostic-free reflection GPU windows. Draft only.",
-  "estimated_phase_seconds": 490.9,
+  "estimated_phase_seconds": 525.4,
   "expect_every": [
     {
       "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",

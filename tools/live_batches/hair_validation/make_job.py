@@ -17,6 +17,7 @@ spec.loader.exec_module(hp)
 UNFOCUSED_FPS = 30
 PRIMARY_LOG_FRAMES = 300  # layer/hair_primary.cpp:560
 COST_FRAMES = 750  # Two 300-frame lines, settings latency and alignment margin.
+POST_RELOAD_SECONDS = 26.1  # Observed 25 s failure + 1 s apply + exclusive endpoint.
 
 
 def phase(label, seconds=7, on=False, trace=False, turn=0, wheel=0):
@@ -37,7 +38,7 @@ STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_phy
           ("b-origin", dict(rt_hair_physical_origin="1")),
           ("c-groom", dict(rt_hair_groom="1")),
           ("d-primary", dict(rt_hair_groom_primary="1"))]
-SURVIVE = [1, 2, 3]   # 20 s windows after each reload
+SURVIVE = [1, 2, 3]   # 3 adjacent same-key 20 s windows: uninterrupted 60 s > 25 s failure.
 
 
 def stage_phase(label, seconds, keys, trace=False):
@@ -84,12 +85,12 @@ def make(validation=False):
     # Captures are separate from judged GPU-cost windows; disable recorder there.
     cost_seconds = COST_FRAMES / UNFOCUSED_FPS
     cost = [phase("cost-cards-a", cost_seconds), phase("cost-strands", cost_seconds, True), phase("cost-cards-b", cost_seconds)]
-    reload = [dict(phase("reload-selected", 5, True), reload_selected=True), phase("cost-after-reload", cost_seconds, True)]
+    reload = [dict(phase("reload-selected", 5, True), reload_selected=True), phase("cost-after-reload", POST_RELOAD_SECONDS, True)]
     restore = [phase("restore", 5)]
     for p in cost + reload + restore:
         p["set"] += ",pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
     # hv4: the same reload under GPU-AV, so validation names a bad access across the load boundary.
-    vreload = [dict(phase("validation-reload", 5, True), reload_selected=True), phase("validation-after-reload", cost_seconds, True)]
+    vreload = [dict(phase("validation-reload", 5, True), reload_selected=True), phase("validation-after-reload", POST_RELOAD_SECONDS, True)]
     for p in vreload:
         p["set"] += ",pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
     plan = combine([warm, shots, motion, toggles, temporal, cost, reload, restore] if not validation else

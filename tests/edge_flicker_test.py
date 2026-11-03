@@ -215,7 +215,12 @@ class EdgeFlickerTest(unittest.TestCase):
         material = np.rint(self.m*255).astype('u1')
         edge, _ = masks([self.d], [self.m])
         def stamp(t):
-            return f'{int(t//3600):02}:{int(t//60)%60:02}:{int(t)%60:02}.{round(t%1*1000):03}'
+            # Fractional plan durations accumulate float error near a whole
+            # second; carry rounded milliseconds before formatting the clock.
+            ms = round(t*1000)
+            seconds, ms = divmod(ms, 1000)
+            return f'{seconds//3600:02}:{seconds//60%60:02}:{seconds%60:02}.{ms:03}'
+        self.assertEqual(stamp(1037.9999999999998), '00:17:18.000')
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             game = ['00:00:00.000 [auto] scene ready', '00:00:00.001 [hot] core generation 1 loaded',

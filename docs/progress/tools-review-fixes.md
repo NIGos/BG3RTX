@@ -16,3 +16,7 @@
 - Derived window budgets and startup producer checks refresh active generators; post 173 -> 92.5 s, GPU2 176 -> 118.2 s; all job deltas: tools/live_batches/duration_review.json.
 - Offline checks: 18 active lints, 3 combined dryruns, 32 flow + 2 generator + 15 guard + 17 hair tests pass; available queue/restore PowerShell tests pass.
 - No game, real queue writes or Git metadata changes; cancellation/native py and child-permission/pwsh checks remain environment-blocked; shared-marker Git-writing test skipped.
+- Review fix: retain scene-settle bounds (su1 45 s), measured first-load floors 16-29 s, hair toggles 5 s, post-reload 26.1 s and hv5 60 s per reload.
+- Fixed edge fixture millisecond carry; readiness, survival and continuous-window regression checks added; duration review and active artifacts regenerated.
+- Full build and all 146 CTests pass; 19 active live-flow lints and all 3 combined dryrun manifests pass. Shader request delta 0.
+- Defender history flags the main-checkout diagnostics executable; no triggering behavior found, freshly rebuilt worktree fixture passes. No security changes, game launch, commits or Git metadata writes.

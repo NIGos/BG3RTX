@@ -3,110 +3,957 @@
     {
       "job": "hv1-dialogue1",
       "before_seconds": 297.0,
-      "after_seconds": 189.2,
-      "unresolved": []
+      "after_seconds": 247.7,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-strands",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "toggle-0",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-4",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-5",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-selected",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "cost-after-reload",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        }
+      ]
     },
     {
       "job": "hv2-camp",
       "before_seconds": 297.0,
-      "after_seconds": 189.2,
-      "unresolved": []
+      "after_seconds": 260.7,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-strands",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "toggle-0",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-4",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-5",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-selected",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "cost-after-reload",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        }
+      ]
     },
     {
       "job": "hv3-s8",
       "before_seconds": 297.0,
-      "after_seconds": 189.2,
-      "unresolved": []
+      "after_seconds": 248.7,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-strands",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "toggle-0",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-4",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "toggle-5",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-selected",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "cost-after-reload",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        }
+      ]
     },
     {
       "job": "hv4-gpuav",
       "before_seconds": 50.0,
-      "after_seconds": 25.5,
-      "unresolved": []
+      "after_seconds": 84.3,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-strands",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "validation-strands",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "validation-reload",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "validation-after-reload",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        }
+      ]
     },
     {
       "job": "pt-dialogue3",
       "before_seconds": 173,
-      "after_seconds": 92.5,
-      "unresolved": []
+      "after_seconds": 130.3,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "pt-s8",
       "before_seconds": 173,
-      "after_seconds": 92.5,
-      "unresolved": []
+      "after_seconds": 130.3,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "cp4-compact-camp-join",
       "before_seconds": 80,
-      "after_seconds": 23.7,
-      "unresolved": []
+      "after_seconds": 55.5,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "go1-camp",
       "before_seconds": 321,
-      "after_seconds": 226.1,
-      "unresolved": []
+      "after_seconds": 289.6,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_compact_hit_state",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_alpha_metadata_cache",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_water_empty_tiles",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "go2-s8",
       "before_seconds": 321,
-      "after_seconds": 226.1,
-      "unresolved": []
+      "after_seconds": 289.6,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_compact_hit_state",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_alpha_metadata_cache",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rt_water_empty_tiles",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "go2-camp-high",
       "before_seconds": 176,
-      "after_seconds": 118.2,
-      "unresolved": []
+      "after_seconds": 151.0,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-scaled",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "go2-s8-medium",
       "before_seconds": 176,
-      "after_seconds": 118.2,
-      "unresolved": []
+      "after_seconds": 151.0,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-scaled",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "wo1-s8-hit-shade",
       "before_seconds": 557,
-      "after_seconds": 490.9,
-      "unresolved": []
+      "after_seconds": 525.4,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "prefetch-sparse",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "prefetch-cone",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "prefetch-order",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "prefetch-combined",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "wf9-s8-compose-shift",
       "before_seconds": 302,
-      "after_seconds": 257.3,
-      "unresolved": []
+      "after_seconds": 280.1,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "prefetch-shift-on",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "su1-ultra-s8-fg2",
       "before_seconds": 221,
-      "after_seconds": 105.4,
-      "unresolved": []
+      "after_seconds": 156.7,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-diagnostic-settings",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-cost-settings",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "ef1-dialogue3-attribution",
       "before_seconds": 220,
-      "after_seconds": 86.8,
-      "unresolved": []
+      "after_seconds": 155.8,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-fg-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-ao-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-sun-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-gi-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-rr-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-cbt-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-post-late",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-base-return",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "combined-Campsite---27h",
       "before_seconds": 587.0,
-      "after_seconds": 370.2,
-      "unresolved": []
+      "after_seconds": 498.3,
+      "unresolved": [
+        {
+          "window": "b1-cp4-compact-camp-join--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b1-cp4-compact-camp-join--warmup-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go1-camp--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go1-camp--warm-rt_compact_hit_state",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go1-camp--warm-rt_alpha_metadata_cache",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go1-camp--warm-rt_water_empty_tiles",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go1-camp--warm-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b3-go2-camp-high--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b3-go2-camp-high--warmup-scaled",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "combined-Test-Dialogue3",
       "before_seconds": 398.0,
-      "after_seconds": 180.4,
-      "unresolved": []
+      "after_seconds": 287.2,
+      "unresolved": [
+        {
+          "window": "b1-pt-dialogue3--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b1-pt-dialogue3--warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-fg-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-ao-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-sun-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-gi-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-rr-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-cbt-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-post-late",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--warm-base-return",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
     },
     {
       "job": "combined-Water-Queens-House",
       "before_seconds": 1775.0,
-      "after_seconds": 1295.9,
-      "unresolved": []
+      "after_seconds": 1538.6,
+      "unresolved": [
+        {
+          "window": "b1-su1-ultra-s8-fg2--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b1-su1-ultra-s8-fg2--warmup-diagnostic-settings",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b1-su1-ultra-s8-fg2--warmup-cost-settings",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go2-s8--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go2-s8--warm-rt_compact_hit_state",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go2-s8--warm-rt_alpha_metadata_cache",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go2-s8--warm-rt_water_empty_tiles",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-go2-s8--warm-off",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b3-go2-s8-medium--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b3-go2-s8-medium--warmup-scaled",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b4-wo1-s8-hit-shade--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b4-wo1-s8-hit-shade--prefetch-sparse",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b4-wo1-s8-hit-shade--prefetch-cone",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b4-wo1-s8-hit-shade--prefetch-order",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b4-wo1-s8-hit-shade--prefetch-combined",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b5-wf9-s8-compose-shift--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b5-wf9-s8-compose-shift--prefetch-shift-on",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b6-pt-s8--warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b6-pt-s8--warmup-camera",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        }
+      ]
+    },
+    {
+      "job": "hv5-reload-bisect",
+      "before_seconds": 307.1,
+      "after_seconds": 307.1,
+      "unresolved": [
+        {
+          "window": "warmup",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "warm-settle",
+          "reasons": [
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "set-a-native",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-a-native",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-a-native-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-a-native-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-a-native-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "set-b-origin",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-b-origin",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-b-origin-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-b-origin-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-b-origin-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "set-c-groom",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-c-groom",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-c-groom-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-c-groom-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-c-groom-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "set-d-primary",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-d-primary",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-d-primary-1",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-d-primary-2",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "survive-d-primary-3",
+          "reasons": [
+            "failure-latency observation bound retained"
+          ]
+        }
+      ]
     }
   ],
   "absent_batches": [

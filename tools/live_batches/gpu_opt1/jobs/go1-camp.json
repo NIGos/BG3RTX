@@ -316,7 +316,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.",
-  "estimated_phase_seconds": 226.1,
+  "estimated_phase_seconds": 289.6,
   "window_mode": "visible_unfocused_fg",
   "live_flow": {
     "expected_fps": 30,

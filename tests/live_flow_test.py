@@ -28,6 +28,35 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_readiness_does_not_replace_scene_settle_or_failure_latency(self):
+        j, p = fixture()
+        p[0].update(seconds=45, wait_log=["pipelines ready"])
+        p += [phase("toggle-1", 5), phase("survive-native-1", 20), phase("validation-after-reload", 26.1)]
+        # Prefetch readiness does not cover scene/exposure/BVH settling. The
+        # post-reload bound covers the observed 25 s failure plus apply latency.
+        f.tighten(j, p)
+        self.assertEqual(p[0]["seconds"], 45)
+        # The source's 5 s toggle observation covers the reported 2 s enable
+        # failure plus 1 s apply; 1.1 s would disable hair before that failure.
+        self.assertEqual(p[-3]["seconds"], 5)
+        self.assertEqual(p[-2]["seconds"], 20)
+        self.assertEqual(p[-1]["seconds"], 26.1)
+
+    def test_reload_bisect_observes_failure_latency_without_resets(self):
+        from tools.live_batches.hair_validation.make_job import make_bisect, STAGES
+        j, _ = fixture()
+        plan = make_bisect()
+        f.tighten(j, plan)
+        # The reported 2 s enable / 25 s reload failures need continuous time,
+        # not one producer cadence or a sum across separate reloads.
+        for name, _ in STAGES:
+            start = next(i for i,p in enumerate(plan) if p["label"] == "survive-"+name+"-1")
+            windows = plan[start:start+3]
+            self.assertEqual([p["seconds"] for p in windows], [20, 20, 20])
+            self.assertEqual(len({p["set"] for p in windows}), 1)
+            self.assertFalse(any(p.get("reload_selected") for p in windows))
+            self.assertGreater(sum(p["seconds"] for p in windows), 25+1)
+
     def test_duration_ignores_absence_gates_and_uses_period_counts(self):
         j, p = fixture()
         j["expect_every"].append(dict(select="failure", match="(?!)", event=True, min=0, windows=["cost-off"]))

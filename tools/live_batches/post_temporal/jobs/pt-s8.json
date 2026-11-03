@@ -315,7 +315,7 @@
     "\\[motion-trace\\] phase=15 label=energy-off-b repeat=0",
     "\\[motion-trace\\] phase=20 label=energy-on-b repeat=0"
   ],
-  "estimated_phase_seconds": 92.5,
+  "estimated_phase_seconds": 130.3,
   "purpose": "READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized.",
   "framing_status": "PROPOSED_STATIC_S8_REQUIRES_VERIFICATION"
 }

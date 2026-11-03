@@ -109,7 +109,7 @@
   ],
   "stop_on_dump": false,
   "purpose": "S8 compose camera-space shift 0/1/0/1; static energy calibration then smooth turns; no live authorization.",
-  "estimated_phase_seconds": 257.3,
+  "estimated_phase_seconds": 280.1,
   "expect_every": [
     {
       "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
