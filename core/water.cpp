@@ -66,6 +66,8 @@
 #include <vector>
 
 #include "core.h"
+#include "../common/pipeline_async.h"
+#include "../common/native_tileset_capability.h"
 #include "../common/water_compose.h"
 #include "../common/water_policy.h"
 #include "../common/water_scene.h"
@@ -263,7 +265,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const bool native_spec = req.find("RT_SPEC_NATIVE=1") != std::string::npos;
   const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
   const bool shift_spec = cascade_spec && (req.find("rt/water_compose.hlsl") == 0);
-  const uint32_t values[] = {0u, native_spec && scalp_on() ? 1u : 0u,
+  const uint32_t values[] = {native_spec && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key, sizeof(uint32_t)))) ? 1u : 0u, native_spec && scalp_on() ? 1u : 0u,
                             edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u,
                             cascade_value,
                             shift_spec && host->cfg_int("rt_water_compose_shift", 0) != 0 ? 1u : 0u, hit ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_shade",0),0,2)) : 0u,
@@ -280,7 +282,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   if (shift_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterComposeShift, 4 * sizeof(uint32_t), sizeof(uint32_t)};
   if (hit) entries[count++] = {bg3::shader_variant::kSpecWaterHitShade, 5 * sizeof(uint32_t), sizeof(uint32_t)};
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
-  const std::string pipe_key = req + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
+  const std::string pipe_key = req + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]) + "#haircheap=" + std::to_string(values[6]);
   // Specialization toggles retain their pipelines until the owning layout is retired.
   if (p.req != pipe_key) {
@@ -290,8 +292,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
     }
   }
   // A built request asks the layer for its generation (in memory, no compile: hot reload rebuilt it);
-  // a new request or generation is built in the background (core_pipeline_async), the pass skipping a
-  // new request meanwhile and keeping the current pipeline of the same request.
+  // a replacement builds in the background while the previous specialization keeps running.
   const bool known = p.p != VK_NULL_HANDLE && p.req == pipe_key;
   if (known) {
     Bg3ShaderBlob blob{};
@@ -302,7 +303,8 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const int st = core_pipeline_async(file, entry, layout, &np, &gen, &info);
   if (st <= 0) {
     if (st == 0 && !known) g_building = true;   // a failure is logged by the build (and the layer's compile)
-    return known;
+    p.p = bg3::pipe_async::select_pipeline(st < 0 ? bg3::pipe_async::State::kFailed : bg3::pipe_async::State::kBuilding, VkPipeline{}, p.p);
+    return p.p != VK_NULL_HANDLE;
   }
   if (known) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
   else if (p.p) p.cached.push_back({p.p, p.gen, p.req});
@@ -364,7 +366,7 @@ bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     g_push_bytes = push_bytes;
   }
   if(hit_active() && (!g_world_lights && !make_device_buffer(kWorldBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_world_lights, g_world_memory)))return false;
-  if(hit_active() && host->cfg_int("rt_water_hit_shade",0)==2 && !make_pipe(g_world_prepare,"rt/water_light_prepare.hlsl","main",g_layout))return false;
+  if(hit_active() && !make_pipe(g_world_prepare,"rt/water_light_prepare.hlsl","main",g_layout))return false;
   return make_pipe(g_primary, "rt/water_reflect.hlsl", "water_primary", g_layout) &   // &: both builds start
          make_pipe(g_reflect, rr_hit ? "rt/water_reflect.hlsl?WATER_RR_HIT=1" : "rt/water_reflect.hlsl", "water_reflect", g_layout);
 }
@@ -1013,17 +1015,22 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     g_st.frame = 0;
     return maybe_log_compose();
   }
-  const bool want_hit=hit_active();
-  if(want_hit) {
-    // Prewarm ordinary composition for passes without a consistent lighting frame.
-    const WaterHitInputs saved=g_hit;g_hit=WaterHitInputs{};
-    select_compose_mode(false);
-    const bool base_ready=ensure_compose(alpha_layout,in.push_bytes,sun,ls,refr,gsh);
-    g_hit=saved;
-    if(!base_ready){++g_cwin.layout;g_st.frame=0;return;}
+  const WaterHitInputs reflection_hit = g_hit;
+  g_hit = in.hit;
+  const bool want_hit = host->cfg_int("rt_water_hit_shade", 0) != 0 && hit_active();
+  bool hit_ready = false;
+  if (hit_active()) {
+    select_compose_mode(true);
+    hit_ready = ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh);
   }
-  select_compose_mode(want_hit);
-  if (!ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh)) {
+  g_hit = WaterHitInputs{};
+  select_compose_mode(false);
+  const bool base_ready = ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh);
+  if (want_hit && hit_ready) {
+    g_hit = in.hit;
+    select_compose_mode(true);
+  } else if (!base_ready) {
+    g_hit = reflection_hit;
     ++g_cwin.layout;
     g_st.frame = 0;
     return maybe_log_compose();
@@ -1422,29 +1429,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
     ++g_win.skip[u];
     return skip();
   }
-  // rt_cascade_casters selects constant 1000 in make_pipe. The keys of
-  // shader_variant::kWaterNoVariant change the alpha set or the scene's primitives (core/gi.cpp
-  // Pipe variants) and have no water variant: counted, logged once per change ("skipped: no
-  // variant for", the convention smoke_ultra forbids), never traced with the wrong layout.
-  {
-    const auto& kNo = bg3::shader_variant::kWaterNoVariant;
-    constexpr unsigned kN = unsigned(sizeof kNo / sizeof kNo[0]);
-    static_assert(kN <= 32, "one bit per key");
-    static unsigned s_logged = 0;
-    unsigned on = 0;
-    std::string names;
-    for (unsigned i = 0; i < kN; ++i)
-      if (host->cfg_int(kNo[i].key, 0))
-        on |= 1u << i, names += names.empty() ? kNo[i].key : std::string(", ") + kNo[i].key;
-    if (on != s_logged) {
-      s_logged = on;
-      if (on) host->log("[water] reflections skipped: no variant for %s", names.c_str());
-    }
-    if (on) {
-      ++g_win.skip_variant;
-      return skip();
-    }
-  }
+  // Native tilesets use constant 1008 in the existing RT_SPEC_NATIVE water module.
   // Use the immutable same-generation reference for primary/reflection rays
   // and the lighting stash. The host AlphaDSL is a compatible superset: OMM
   // bindings 10/11 remain unused by these ordinary water shaders.
@@ -1457,13 +1442,28 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   VkDescriptorSet material_alpha=in.alpha;
   if(hit_active() && (!host->rt_hit_material_use ||
       !host->rt_hit_material_use(cmd,in.scene_tlas,in.alpha,in.hit_identity,&material_alpha) || !material_alpha)) g_hit=WaterHitInputs{};
-  select_reflection_mode(hit_active());
+  const WaterHitInputs available_hit = g_hit;
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
   g_building = false;
-  if (!in.scene_tlas || !in.alpha || !host->rt_alpha || !host->rt_alpha(&alpha_layout, &alpha_any) || !alpha_layout ||
-      !ensure_buffers() || !ensure_layouts(alpha_layout, in.push_bytes, in.rf_hit != VK_NULL_HANDLE)) {
-    ++g_win.skip_layout;   // also while a new variant builds in the background (no "unavailable" line then)
+  bool ready = false;
+  if (in.scene_tlas && in.alpha && host->rt_alpha && host->rt_alpha(&alpha_layout, &alpha_any) && alpha_layout && ensure_buffers()) {
+    // Prepare both layouts at the first lighting, even when hit shading is off.
+    // Preserve the ordinary pass until the hit layout's pipelines are ready.
+    const bool want_hit = host->cfg_int("rt_water_hit_shade", 0) != 0 && hit_active();
+    bool hit_ready = false;
+    if (hit_active()) {
+      select_reflection_mode(true);
+      hit_ready = ensure_layouts(alpha_layout, in.push_bytes, in.rf_hit != VK_NULL_HANDLE);
+    }
+    if (!want_hit || !hit_ready) {
+      g_hit = WaterHitInputs{};
+      select_reflection_mode(false);
+      ready = ensure_layouts(alpha_layout, in.push_bytes, in.rf_hit != VK_NULL_HANDLE);
+    } else ready = true;
+  }
+  if (!ready) {
+    ++g_win.skip_layout;
     if (!g_failed_logged && !g_building)
       g_failed_logged = true, host->log("[water] reflections unavailable (layout, buffers or pipelines)");
     return skip();
@@ -1577,8 +1577,10 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   g_written[slot] = true;
   g_out_frame = now;
   g_out_w = in.w, g_out_h = in.h;
-  if (compose_wanted() || shadows_wanted() || ls_wanted() || refr_wanted())
-    compose_at_lighting(cmd, in, alpha_layout);   // M5.3, M5.4, M5.4b, M5.5
+  if (compose_wanted() || shadows_wanted() || ls_wanted() || refr_wanted()) {
+    in.hit = available_hit;
+    compose_at_lighting(cmd, in, alpha_layout);
+  }   // M5.3, M5.4, M5.4b, M5.5
   maybe_log();
 }
 

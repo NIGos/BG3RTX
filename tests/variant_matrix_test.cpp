@@ -42,7 +42,7 @@ static unsigned key_flags(const std::string& k) {
 
 // Water traces the OMM reference tuple (ordinary shaders with the host superset
 // AlphaDSL). Tileset remains unsupported; scalp/hair are routed since 2026-11-02.
-static const char* const kExpectedWaterSkips[] = {"rt_native_tileset"};
+static const std::array<const char*, 0> kExpectedWaterSkips{};
 
 int main(int argc, char** argv) {
   CHECK(argc >= 2);

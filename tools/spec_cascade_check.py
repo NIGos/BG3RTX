@@ -152,8 +152,8 @@ def two(olds, id_of):
 # OMM remains a layout define (RT_OMM_SCENE), not constant 1012: S4 was rejected
 # in BUILD_AND_PACKAGE_EFFICIENCY.md. It has no specialization request to check.
 def old_requests_waterhair(spec_request):
-    # Water has no tileset route or receiver-origin image: reuse 1008=0 / 1010=hair.
-    return [(a, r) for a, r in old_requests_native(spec_request) if a[1008] == 0]
+    # Water routes both tileset coverage (1008) and scalp/hair (1010).
+    return old_requests_native(spec_request)
 
 
 def old_requests_waterhit(spec_request):
