@@ -108,8 +108,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 - Target 2-5 minutes per scene.
 - The window may take focus when the user allows it (removes the unfocused 30 fps cap).
 - When the user is at the PC, run jobs with `"window_mode": "visible_unfocused_fg"`: the game never takes
-  focus (PostMessage input, FG kept); a fully covered or minimised game window aborts the run. Judge GPU ms
-  and energy there, not frame time.
+  focus (PostMessage input, FG kept). A covered window is only counted (`unfocused_occluded_checks`), not
+  fatal: DWM may throttle its presents, so judge GPU ms, energy and log lines there, never frame time or
+  presented (FG) captures from occluded checks. Minimising is still discouraged (presents may stop).
 - Don't run builds, shader compiles or GPU tests during a live batch's cost windows: CPU/GPU contention
   moved the inn frame time by 3.4 ms on 2026-11-01. If they overlap, judge only the GPU ms lines.
 - Energy is the float mean of the pre-post scene colour in `dumps.json`, never PNG previews or bloom
