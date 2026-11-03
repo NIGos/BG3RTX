@@ -32,7 +32,7 @@ bool hf_strand(uint2 fp, float d, out float3 T) {
   const uint tag = hf_ld(rec), width = hf_ld(rec + 4u), height = hf_ld(rec + 8u), grooms = hf_ld(rec + 12u);
   if (tag == 0u || grooms == 0u || any(fp >= uint2(width, height))) return false;
   const uint4 e = vk::RawBufferLoad<uint4>(hf_addr(rec + 32u) + uint64_t(fp.y * width + fp.x) * hair_primary_pixel_bytes, 16);
-  if (e.w != tag || e.x == hair_primary_no_strand || (e.x >> 24) >= grooms) return false;
+  if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand || (e.x >> 24) >= grooms) return false;
   if (abs(asfloat(e.z) - d) > 1e-6 * max(abs(d), 1e-6)) return false;   // something else won this pixel
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + (e.x >> 24) * 16u, 16);
   const uint64_t pool = hf_addr(rec + 24u);
