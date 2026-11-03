@@ -1,6 +1,6 @@
 # Card-to-strand groom experiment (Shadowheart hair)
 
-2026-11-03, offline only (no game, GPU, runtime, shader, ABI or settings change). CTest `hair_groom_test`.
+2026-11-03, offline (no game, runtime, layer shader, ABI or settings change). CTest `hair_groom_test`.
 `python -m tools.hair_groom --gltf <LSLib export of HAIR_HUM_F_Shadowheart_Spring.GR2> --out <new dir>`.
 
 **Verdict: approximate.** The strands reproduce the cards' silhouette, density and root/tip layout,
@@ -35,8 +35,29 @@ Usable for RT secondary rays (shadows, GI, reflections); not for strand simulati
 - 86,196 strands, length p5/p50/p95 2/14/71 mm; radius 0.054/0.125/0.35 mm (clumps, ~3x a hair); ~6 s/style.
 - Memory at 2 mm: LSS positions+radii 15.1 MB (16 B/point), indices 3.4 MB, embedding 11 MB; cards
   today 2.9 MB captured vertices (88 B) + 0.5 MB indices.
-- Per frame and character: 15.1 MB written (8.6 at 4 mm), 857k (451k) LSS primitives refit = 11..21x
-  the card primitives. DOTS fallback (4 triangles/segment) not viable. GPU refit/trace ms NOT measured.
+- DOTS fallback (4 triangles/segment) not viable.
+
+## GPU cost gate (2026-11-03, RTX 5090, driver 621.01, standalone device, no game)
+`tools/hair_lss_bench.cpp` + `.hlsl` (CMake option `BG3RTX_HAIR_LSS_BENCH`; input from
+`python -m tools.hair_groom.bench_data`). 3,686,400 rays (2560x1440) per batch, all starting on random
+card points: worst case, every pixel's ray leaves the hair. Same rays for every scene; median of 9.
+| ms per batch | shadow | AO 0.5 m | GI 10 m | BLAS MB | refit | frame update |
+|---|---:|---:|---:|---:|---:|---:|
+| Cards, 3-sample candidate test | 1.83 | 1.64 | 2.99 | 2.3 | 0.104 | 0.108 |
+| Cards opaque (no alpha, floor) | 0.60 | 0.60 | 1.31 | 2.3 | 0.100 | 0.103 |
+| Groom 2 mm (857k LSS) | **0.90** | **0.75** | **1.28** | 73.0 | 0.104 | 0.115 |
+| Groom 4 mm (451k) | 1.12 | 0.93 | 1.66 | 38.4 | 0.055 | 0.061 |
+| Groom 8 mm (249k) | 1.74 | 1.52 | 2.99 | 21.2 | 0.035 | 0.041 |
+- Frame update = card deform + embedding point update (0.008 ms) + refit. Full LSS build 1.3 ms
+  (fast-build 1.1 ms): refit is the per-frame path.
+- 2 mm traces 2.0..2.3x faster than the card candidate test; longer segments trace slower (looser
+  bounds). Hit share: groom 0.74..0.80, cards with alpha 0.73..0.77 (same coverage), opaque cards 0.90+.
+- Plain `RayQuery` with opaque LSS needs no new SPIR-V instruction for hit/miss and distance; the
+  device needs the NV extension (+ `VK_KHR_ray_tracing_pipeline`) and the `linearSweptSpheres` feature.
+- Keep rule (< 1 ms over no-hair): cost scales with the share of rays that reach the hair. At 25% of
+  the screen with one shadow + AO + GI ray each: groom ~0.7 ms + 0.1 ms refit vs cards ~1.6 ms. The
+  game's card path (procedural AABBs + intersection) costs more than this triangle stand-in.
+- Cost: 73 MB BLAS per character at 2 mm (38 MB at 4 mm); 4 mm is the VRAM-saving option.
 
 ## Visual check (CPU renderer `tools/hair_groom/render.py`; left cards, right groom)
 Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: mask alpha, strands: coverage.
@@ -47,13 +68,8 @@ Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: ma
 - Same partings, bangs, braid and bun; continuous fibres instead of texel steps; the card-gap dashes
   (side view) stay, as they are in the asset; no strands between sheets; fragment tips add some frizz.
 
-## Production path (if pursued; estimate 2..3 weeks to the first gate)
-1. Convert every CHAR_Hair visual (mask from the mesh_materials catalogue).
-2. Layer: enable `VK_NV_ray_tracing_linear_swept_spheres`; per character `point = bary . captured
-   deformed triangle`, LSS BLAS refit, opaque (no any-hit). Needs the visual-to-capture join (unproven).
-3. The four ray-query consumers handle LSS hits and a hair BSDF; raster cards stay primary. Gate: LSS
-   refit+trace ms (geo_blas_bench style) vs today's +2.3..4.5 ms rt from any-hit texture sampling,
-   which LSS removes; keep rule < 1 ms.
+## Production path
+Integration design: docs/RTX_HAIR_INTEGRATION.md.
 
 ## Licence
 No RTXCR/NVIDIA SDK code or data used; LSS layout from the Khronos extension spec. Later RTXCR code or

@@ -492,6 +492,28 @@ add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
 add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
 set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
+# Hair cost gate (docs/RTX_HAIR_GROOM_EXPERIMENT.md): alpha-tested cards vs an LSS strand groom on a
+# standalone device. Needs VK_NV_ray_tracing_linear_swept_spheres and an input from
+# python -m tools.hair_groom.bench_data, so it is a manual tool, not a CTest.
+option(BG3RTX_HAIR_LSS_BENCH "Build the standalone hair LSS vs card cost bench" OFF)
+if(BG3RTX_HAIR_LSS_BENCH)
+  set(HAIR_LSS_SPV_DIR ${CMAKE_BINARY_DIR}/hair_lss_bench_spv)
+  set(HAIR_LSS_SPVS)
+  foreach(entry trace_opaque trace_alpha deform update)
+    add_custom_command(OUTPUT ${HAIR_LSS_SPV_DIR}/${entry}.spv
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${HAIR_LSS_SPV_DIR}
+      COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_lss_bench.hlsl -spirv -fspv-target-env=vulkan1.3
+              -HV 2021 -T cs_6_6 -E ${entry} -O3 -Fo ${HAIR_LSS_SPV_DIR}/${entry}.spv
+      DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_lss_bench.hlsl VERBATIM)
+    list(APPEND HAIR_LSS_SPVS ${HAIR_LSS_SPV_DIR}/${entry}.spv)
+  endforeach()
+  add_custom_target(hair_lss_bench_spv ALL DEPENDS ${HAIR_LSS_SPVS})
+  add_executable(hair_lss_bench tools/hair_lss_bench.cpp)
+  target_include_directories(hair_lss_bench PRIVATE ${VULKAN_SDK}/Include)
+  target_link_directories(hair_lss_bench PRIVATE ${VULKAN_SDK}/Lib)
+  add_dependencies(hair_lss_bench hair_lss_bench_spv)
+endif()
+
 # Offline frame replay (tools/frame_replay.md): loads a replay pack, rebuilds
 # the TLAS, dispatches the REAL production pass shader (compiled from this checkout's shaders/ at run
 # time with the layer's DXC flags). The test writes a synthetic pack and replays it twice.

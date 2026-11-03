@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, convert, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, bench_data, convert, mesh, render, strands2d  # noqa: E402
 
 FAILS = []
 
@@ -179,7 +179,28 @@ def test_mesh_loader():
               m.joint_positions)
 
 
-for t in (test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_bench_data():
+    starts = bench_data.segment_starts(np.array([0, 3, 5, 9]))
+    check("segment starts skip strand ends", starts.tolist() == [0, 1, 3, 5, 6, 7], starts)
+    h, w = 64, 16
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y: 8.0], 2)
+    card = card_mesh()
+    groom, _ = convert.convert(card, m, tile_grid=(1, 1), step=16)
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "b.bin"
+        bench_data.write(path, card, m, [(16, groom)])
+        raw = path.read_bytes()
+    hdr = struct.unpack("<4s7I", raw[:32])
+    check("bench header", hdr[0] == b"HLSB" and hdr[2:7] == (10, 8, w, h, 1), hdr)
+    at = 32 + 10 * 12 + 10 * 8 + 8 * 12 + h * w * 4
+    step, points, segments, strands = struct.unpack("<4I", raw[at:at + 16])
+    check("bench groom counts", (step, points, segments, strands) == (16, len(groom.points), groom.segments, groom.strands))
+    end = at + 16 + points * (12 + 4) + segments * 4 + points * (4 + 12)
+    check("bench file size", len(raw) == end, (len(raw), end))
+
+
+for t in (test_bench_data, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
