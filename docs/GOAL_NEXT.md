@@ -3,26 +3,27 @@
 Short form of the /goal text. AGENTS.md is binding. Work in this order; each stage ends with a short consolidation.
 
 1. DONE 01:24: smoke_ultra with every default valid (0 RT capture drops, VRAM in budget).
-2. Shader migration: merge `variant-migration` (150 variants) with main, all spec checks N/N, one merge-green,
-   live scc1 extended to the converted keys.
-3. Visible defects first:
-   - moving sun shadow in dialogues (port and camp): cause is the cascade casters (GUI "Roof sun shadows" =
-     rt_cascade_casters; user: off = static); fix branch fix-cascade-dialogue (static casters only), check camp
-     canopies too; dialogue batch with the occluder diagnostic
-     confirms and checks AO / hair darkening;
-   - water reflections switching on/off while turning: wf8 reflection-only metric decides ours vs game SSR,
-     then the fix (temporal hysteresis of the screen-hit decision, then hit shading for hidden/off-screen hits).
-4. Qualify what is ready: native hair (hair_qual), OMM om4, CPU perf A/Bs, gi reprojection guards, m4_generated.
-   Pass = default on or in Ultra; fail = remove or keep off with the reason written down.
-5. Effects: true off-screen reflections (REFLECTIONS_PLAN: water hidden/off-screen hits shaded, sky in the exact
-   direction, replace or blend the game's SSR); M4 material coverage (mesh-to-material from the paks, vertex
-   colour in the capture for lava/Tileset, HLOD two-sided), hit-AO gap; M6 SHaRC only if it beats
-   the PT reference; GPU optimisations from PERF_AUDIT_GPU (lower-preset trace scale, compact hit state).
-7. Backlog to close (in dead time, smallest first): remove null/rejected keys (water flicker keys, glint, IP grass
-   if still useless, generated rows if superseded), delete the dropped Codex refs (user approved), clean merged
-   worktrees and dead captures (test-main captures ~39 GB), fold progress fragments, S8 ambient ratio 1.44
+2. DONE: shader specialization migration merged; scc1 valid, 0 DXC on converted toggles. Variants 2,946 -> 147
+   before null-key cleanup; full merge-green passed.
+3. DONE: visible-defect fixes implemented. Dialogue moving sun shadow fixed by default (cascade identity);
+   user accepts AO self-occlusion. Water camera correction looks right to the user; water flicker fix pending
+   corrected wf9 qualification (static delta and smooth Q/E windows), not yet a quality pass.
+4. Qualification partly done: OMM and box lights (honour shadow flag) qualified in Ultra, integrated smoke valid.
+   Converted RTX Hair grooms work in game at about 40% less cost than native cards; native card path stays off
+   (+2.3-6.3 ms RT). CPU perf keys and rr_hair_resolve rejected by the user. GI reprojection guards and generated
+   rows still await valid gates (genrows-gate). Hair/DoF cause found: replayed DoF/bloom weights flip per frame;
+   rr_post_temporal on post-temporal is READY_FOR_LIVE, off pending energy/quality/cost checks.
+5. Effects IN PROGRESS: water hidden/off-screen hit shading is on main, experimental/off; water-hit-cost adds
+   equivalent sparse-light/culling optimisation. M4 cov-paks2 adds COLOR_0/Tileset publication and UV joins;
+   incremental catalogue generation is blocked on LSLib DLLs. Lava/HeightGradient/HLOD and hit-AO gaps remain.
+   M6 SHaRC stays off until it beats the PT reference without losing energy. gpu-opt1 has compact hit state,
+   alpha metadata cache and empty water-tile skip, all off pending qualification. rt-continuity and gpu-opt2
+   are open lanes at main, with no implementation/result recorded yet.
+7. Backlog to close (in dead time, smallest first): null water MV/glint keys removed; audit remaining rejected keys (CPU perf,
+   rr_hair_resolve, IP grass if still useless, generated rows if superseded), delete the dropped Codex refs (user approved), clean merged
+   worktrees and dead captures (test-main captures ~39 GB), fold merged progress fragments (59 folded on 11-03), S8 ambient ratio 1.44
    question, inn material records, lava, rf_hit_gi AO gap (needs a pack with instanced rows), dynamic/cascade BLAS
-   relocation, ls_box=2 (waits for the user's visual check), M5.5 steps 2-4, every READY_FOR_LIVE branch run.
+   relocation, ls_box=2 (qualified in Ultra), M5.5 steps 2-4, every READY_FOR_LIVE branch run.
 6. Release: launcher QA (apply-mode badges, keyboard, high contrast, DPI), installer in a disposable VM, missing
    licence texts (DXC, Vulkan-Headers), data generated on the user's PC, long sessions and acts 2-3.
 
@@ -39,4 +40,6 @@ Efficiency rules:
   PROGRESS ~150, clean merged worktrees and dead captures.
 - Report: 10 lines at the top of PROGRESS_CODEX after each stage (done, merged, open, what to try in game and
   where); questions there, keep working meanwhile.
+- No main commits during merge-green. Camera turns use held Q/E; mouse turns are never smooth here.
+- Launcher categories are Lighting/Surfaces/Performance/Memory/Advanced; experimental controls use Advanced.
 - Never: saves, backups, history rewrite, force-push, snapshot tags.
