@@ -1,6 +1,4 @@
 #include "../common/native_hair.h"
-#include "../common/native_hair_probability.h"
-#include "../common/native_hair_visibility.h"
 #include "../layer/spirv_xfb.h"
 #include <cstdio>
 #include <cstdlib>
@@ -11,60 +9,6 @@ using namespace bg3::native_hair;
 unsigned count=0;
 void check(bool v){++count;if(!v){std::fprintf(stderr,"check%u failed\n",count);std::exit(1);}}
 int main(){
- // Every estimate of the 512-sample offline quadrature is binary-exact.
- // A stratified uniform sweep must preserve its expected hard-hit count,
- // including both endpoints; no scene-energy equivalence is inferred.
- using namespace bg3::native_hair_probability;
- check(nh_probability(0,0)==-1.0f);
- check(nh_probability(1,0)==-1.0f);
- check(nh_probability(513,512)==-1.0f);
- for(unsigned hits=0;hits<=512;++hits) {
-  const float p=nh_probability(hits,512);
-  check(double(p)==double(hits)/512.0);
-  unsigned accepted=0;
-  for(unsigned bin=0;bin<512;++bin)
-   accepted+=unsigned(nh_bernoulli(p,bin*32768u+16384u));
-  check(accepted==hits);
- }
- check(!nh_bernoulli(0.0f,0u));
- check(nh_bernoulli(1.0f,0xffffffu));
- check(nh_bernoulli(0.5f,0x7fffffu));
- check(!nh_bernoulli(0.5f,0x800000u));
- check(!nh_bernoulli(-1.0f,0u));
- check(!nh_bernoulli(2.0f,0u));
- check(!nh_bernoulli(std::numeric_limits<float>::quiet_NaN(),0u));
- check(!nh_bernoulli(1.0f,0x1000000u));
-
- {
-  namespace hv=bg3::hair_visibility;
-  // Perspective x/z,y/z camera at zero; independent projected-box fixtures.
-  const float vp[16]={1,0,0,0, 0,1,0,0, 0,0,1,1, 0,0,0,0};
-  const float model[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
-  check(hv::model_valid(model));
-  float tiny_model[16];std::memcpy(tiny_model,model,sizeof model);
-  tiny_model[0]=tiny_model[5]=tiny_model[10]=1e-30f;
-  check(!hv::model_valid(tiny_model));
-  float ill_model[16];std::memcpy(ill_model,model,sizeof model);ill_model[10]=1e-30f;
-  check(!hv::model_valid(ill_model));
-  hv::Bounds invalid_model_box;const float origin_vertex[3]={0,0,0};
-  check(!hv::add(invalid_model_box,origin_vertex,tiny_model));
-  hv::Bounds tiny;const float a[3]={-0.001f,-0.001f,10},b[3]={0.001f,0.001f,10};
-  check(hv::add(tiny,a,model));check(hv::add(tiny,b,model));
-  check(hv::select(tiny,vp,1000,1000,1)==hv::Decision::Cards);
-  check(hv::select(tiny,vp,1000,1000,12)==hv::Decision::Native);
-  hv::Bounds large=tiny;large.lo[0]=-1;large.hi[0]=1;
-  check(hv::select(large,vp,1000,1000,1)==hv::Decision::Native);
-  float bad[16]{};check(hv::select(tiny,bad,1000,1000,1)==hv::Decision::Unknown);
-  check(hv::select(hv::Bounds{},vp,1000,1000,1)==hv::Decision::Unknown);
-  check(hv::select(tiny,vp,0,1000,1)==hv::Decision::Unknown);
-  auto windy=tiny;check(hv::expand(windy,hv::wind(10,1,1,1)));
-  check(hv::select(windy,vp,1000,1000,1)==hv::Decision::Native);
-  const auto calm=hv::wind(0,1,1,1);check(calm[0]==0 && calm[1]==0 && calm[2]==0);
-  auto behind=tiny;behind.lo[2]=-10;behind.hi[2]=-9;
-  check(hv::select(behind,vp,1000,1000,1)==hv::Decision::Unknown);
-  auto nan=tiny;nan.lo[0]=std::numeric_limits<double>::quiet_NaN();
-  check(hv::select(nan,vp,1000,1000,1)==hv::Decision::Unknown);
- }
  for(const auto& r:recipes){
   Captured c;unsigned calls=0,seen=0;
   check(capture(r.hash,[&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes){

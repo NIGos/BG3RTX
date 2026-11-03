@@ -404,14 +404,6 @@ int cfg_int(const char* key, int fallback) {
   bool have = cfg_raw(key, v, &d);
   if (d && d->numeric && d->i != fallback) cfg_check_literal(key, *d, std::to_string(fallback));
   const int value = have ? std::atoi(v.c_str()) : fallback;
-  // Quarantine every host/core consumer, including allocation and scene-header
-  // publication. Disabling only SpecId 1019 would still run the suspect dispatch.
-  if (std::strcmp(key, "rt_hair_gi_mean") == 0) {
-    static std::atomic<bool> warned{false};
-    if (value != 0 && !warned.exchange(true))
-      log("[hair mean] rt_hair_gi_mean ignored: disabled pending GPU device-loss root-cause repair");
-    return 0;
-  }
   return value;
 }
 

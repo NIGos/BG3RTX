@@ -27,7 +27,7 @@ GROOM_START = "rt_hair_groom=1"
 FULL_RES = "dump_png_width=0"
 
 BASE = {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_hair_physical_origin": "1", "rt_stats": "0",
-        "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_hair_gi_cull": "0", "rt_hair_groom": "0"}
+        "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_hair_groom": "0"}
 GROOM = {"rt_hair_groom": "1"}
 NO_HAIR = {"rt_native_hair": "0", "rt_native_scalp": "0", "rt_hair_physical_origin": "0"}
 
@@ -147,7 +147,7 @@ def job(name, save):
     runner += [rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done"]
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 300, "repeat": 1,
-        "live_batch": LIVE, "set": f"{hq.ULTRA.replace('dump_png_width=1024', FULL_RES)},{hq.HAIR_START},rt_hair_gi_cull=0,{GROOM_START}",
+        "live_batch": LIVE, "set": f"{hq.ULTRA.replace('dump_png_width=1024', FULL_RES)},{hq.HAIR_START},{GROOM_START}",
         "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/hg_plan.json"],
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "gi: GPU cost", r"\[rt\] scene wait", r"\[rt\] scene build GPU",

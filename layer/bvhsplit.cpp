@@ -1881,12 +1881,6 @@ bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_spl
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
-  static int held_visibility_policy = 0;
-  const int visibility_policy = geo_native_hair_enabled() ? cfg_int("rt_hair_visibility",0) : 0;
-  if (visibility_policy != held_visibility_policy) {
-    ++g_hold_epoch;
-    held_visibility_policy = visibility_policy;
-  }
   const bool content_on = cfg_int("rt_mesh_content_id", 0) != 0;
   if (g_content_on) {
     if (g_content_captures == 2 || g_content_captures % 120 == 0 || !content_on)
@@ -2109,7 +2103,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
-  const bool compact_holds_requested = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 0) != 0 &&
+  const bool compact_holds_requested = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 1) != 0 &&
                                        hold_frames && !moving;
   const bool compact_holds = compact_holds_requested && ensure_hold_pack_pipeline();
   if (compact_holds_requested && !compact_holds) ++g_st.hold_pack_unavailable;
@@ -2385,17 +2379,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if(hair && !ensure_hair_pipeline()){
       log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
     }
-    // Mean mode needs eight trailing bytes after the active AABBs. Key-off
-    // retains the original allocation sizes (the Vulkan AABB stride is 24).
-    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail){
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u){
       if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
       s.hair_bounds_size=0;
-      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u+hair_mean_tail;
+      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u;
       if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
       s.hair_bounds_size=bytes;
     }
-    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
+    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",1) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
       // procedural sidecar otherwise never expires with the inactive slot LRU.
       g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
@@ -2520,7 +2511,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       hp.stride=stride;hp.camera=hair_record.channel;
       float bounded{};std::memcpy(&bounded,data+188,4);hp.bounded=bounded==1.0f;
       if(s.hair_bounds_off>UINT32_MAX || s.hair_bounds_size>UINT32_MAX ||
-         !alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off),uint32_t(s.hair_bounds_size),fd.prims))return false;
+         !alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off)))return false;
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
@@ -3385,8 +3376,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_ACCESS_MEMORY_READ_BIT);
   fault_checkpoint(cmd, kCkBvhTlas, uint32_t(rec));
-  // Include the gated post-alpha empirical-coverage dispatch in scene GPU cost.
-  if(!(geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0)))stamp(cmd, 3);
+  stamp(cmd, 3);
   const size_t batch_swaps = batch.swaps.size();
   if (n_status || !batch.swaps.empty()) g_batches.push_back(std::move(batch));
 
@@ -4117,7 +4107,7 @@ void bvh_on_present() {
   // the BLAS cache's 120-frame lifetime, although no hold can use it after four
   // absent frames by default. Trim ownership, then use the SAME deferred range
   // retirement as eviction; no live TLAS or bounds read can see reused storage.
-  const bool hair_pool_trim = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 0) != 0;
+  const bool hair_pool_trim = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 1) != 0;
   const uint32_t hold_horizon = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   for (auto it = g_dyn.begin(); it != g_dyn.end();) {
     if (hair_pool_trim && it->second.hold_size && dyn_hold_expired(now, it->second.last_used, hold_horizon)) {

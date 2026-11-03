@@ -97,9 +97,9 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
-  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline; so do both rt_hair_groom
-  // states (kHairGroomSlot). Sparse: a pass builds a handful of the kPipelineSlots indices.
+  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 2048 hair groom.
+  // Bit 1 was rt_scene_rebase. Both rt_hair_groom states retain their warmed pipeline
+  // (kHairGroomSlot). Sparse: a pass builds a handful of the kPipelineSlots indices.
   struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
   std::unordered_map<unsigned, Variant> variants;
 };
@@ -1100,11 +1100,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
   const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
-  const bool hair_gi_cull = sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_cull", 0) != 0;
-  const bool hair_cheap = scalp && host->cfg_int("rt_native_hair", 0) != 0 && host->cfg_int("rt_hair_cheap", 0) != 0;
-  const bool hair_gi_mean = scalp && sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_mean", 0) != 0;
   const bool hair_groom = scalp && host->cfg_int("rt_hair_groom", 0) != 0;
-  const unsigned variant = (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const unsigned variant = sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1155,11 +1152,6 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // secondary queries; nothing changes until the layer publishes a groom TLAS in the scene stamp.
     specs.add(sv::kSpecIdHairGroom, hair_groom ? 1u : 0u);
   }
-  if (std::strncmp(file, "gi/", 3) == 0) {
-    specs.add(sv::kSpecIdHairCheap, hair_cheap ? 1u : 0u);
-    specs.add(sv::kSpecIdHairGiMean, hair_gi_mean ? 1u : 0u);
-  }
-  if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();
   Pipe::Variant& slot = p.variants[variant];
   const bool known = slot.pipeline && slot.file == slot_key;

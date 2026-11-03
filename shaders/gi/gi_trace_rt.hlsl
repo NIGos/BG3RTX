@@ -35,7 +35,6 @@
 #include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
 #endif
 // Limit the experiment to GI closest rays; sun/local visibility stays unchanged.
-#define RT_GI_HAIR_CULL 1
 #include "../rt/rt_common.hlsli"
 #if RT_HIT_GI_DIRECT
 #include "../rt/native_hit_material.hlsli"
@@ -242,9 +241,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   for (uint r = 0; r < pc.rays; ++r) {
     float3 dir = cosine_hemisphere(N, rand01(seed), rand01(seed));
     float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, dist * pa, dir);
-#ifdef RT_NATIVE_HAIR
-    gHairGiBounceQuery = true;
-#endif
 #if SHARC_QUERY_PASS || RT_HIT_GI_DIRECT
     RtHit hh = rt_closest_hit(o, dir, R, cone);
     float t = hh.t;
@@ -252,9 +248,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #else
     bool aborted;
     float t = rt_closest(o, dir, R, cone, aborted);
-#endif
-#ifdef RT_NATIVE_HAIR
-    gHairGiBounceQuery = false;
 #endif
     // Aborted: the closest hit is somewhere in [0, min(t, R)] (t: a committed hit, possibly
     // farther than the true one; -1: none yet). Its occlusion weight is then the fade's mean
