@@ -239,6 +239,16 @@ Specification source: Vulkan SDK 1.4.357.0 `vulkan_core.h`, `vk.xml`,
   timeline values are never changed. Failed application submits release pins;
   failed private signals, stale generations or foreign-queue submissions keep
   resources until device idle.
+- `perf_submit_batch=1` (off by default): for valid pinned tickets on the graphics
+  queue, ordinary extension-free submits append that empty signal entry to the
+  same driver call (Submit2 also requires flags 0). Game entries stay separate;
+  their waits, signals and extension chains are unchanged. A serial lock covers
+  reservation through driver acceptance. Success stamps tickets before unpin;
+  failure poisons retirement until idle. Unknown extensions, protected submits,
+  foreign queues and stale generations retain the separate-signal path. Emissive
+  and water builds do not use OMM tickets and keep their independent slot fences.
+  The application fence also covers the private signal. CPU-only validation and
+  the unexecuted live plan: [codex-perf-submit2](progress/codex-perf-submit2.md).
 - `mark_submitted(ticket, serial)`, then `retire(ticket)` once no scene can use it,
   then `collect(completedSerial)` destroys only retired, completed resources. Serials
   are timeline values, never frame indices. `discard_unsubmitted` only after the

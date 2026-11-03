@@ -12,4 +12,6 @@ inline constexpr const char* instanced_capability_key="native-hit-instanced-v1";
 inline constexpr const char* wind_rgb_capability_key="native-hit-wind-rgb-v1";
 // rt_hit_material_ip_grass at startup: the instanced consumers also get RT_HIT_IP_GRASS=1 (kHitIpGrass).
 inline constexpr const char* ip_grass_capability_key="native-hit-ip-grass-v1";
+// rt_hit_material_generated at startup with two-sided generated pool rows: RT_HIT_POOL_2S=1 (kHitPool2s).
+inline constexpr const char* pool_2s_capability_key="native-hit-pool-2s-v1";
 }

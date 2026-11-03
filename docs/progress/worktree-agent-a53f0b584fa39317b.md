@@ -17,3 +17,20 @@
   candidates 30-50% fewer, rt passes 1.5-3 ms lower (upper bound 5.7-6.3 ms), energy equal.
 - Memory: backend micro-map storage 64 B per baked triangle (+ build scratch), ours 24 B per triangle after the
   bake, index ranges 5 B per masked triangle in the mesh pool; all logged on the [omm dyn] line.
+
+## Main integration (offline, 2026-11-03)
+- Resolved settings defaults with the generator; retained main VRAM guard, BLAS retirement/compaction and CPU perf work.
+- Micromap per-draw BLAS keep attachment-aware size queries and now allocate through the VRAM guard in lifetime arena 1.
+- Main specialization migration retained; RT_OMM_SCENE remains a define (coherent stamp + optional OMM bindings; S4 rejected).
+- rt_omm_dyn is a host-side dispatch/BLAS switch, not a shader define; no new SpecId or shader on/off key is needed.
+- Regenerated variants with shader_variant_test --write: 165 variants of 53 bases, delta 0 vs merge target. ABI unchanged.
+- CMake build passed; CTests 120/120, 301.11 s (OMM SDK probes enabled).
+- pp-diff main f0b0ccbb2733: 251 requests = 57 identical inputs + 149 pp-same + 45 changed; all changes use RT_OMM_SCENE=1.
+- Spec sample 8: cascade 44/44, guards 26/26, hitfam 23/23, gifar 12/12, hitinst 23/23, native 61/61, rfgi 12/12, wateredge 9/9.
+- All assignments passed (same order): 88, 52, 92, 24, 115, 312, 24, 36; no checker changes.
+- Controls (same order): 1, 436, 17,633, 99,045, 52,940, 54,005, 129,768, 7,302 lines; all non-zero.
+- Key-off identity (RT_OMM_SCENE absent): 197/197 byte-identical to MERGE_HEAD f0b0ccbb2733; bake/check 2/2 compiled and Vulkan-valid.
+- Main advanced during verification to 6e69f90632e0 (now 145 variants); this resolves the existing merge of f0b0ccbb2733 only.
+- Latest main shared key-off requests: 155/155 identical; pp-diff 209 = 57 identical inputs + 107 pp-same + 45 changed.
+- Logs: omm-merge-*.log. No new shader constant, so no new-key sample-16 gate applies.
+- No Git metadata writes or game launch. om4 remains READY_FOR_LIVE; GPU cost and live quality remain unmeasured.

@@ -148,14 +148,31 @@ target_include_directories(pipeline_stats PRIVATE ${VULKAN_SDK}/Include)
 target_link_directories(pipeline_stats PRIVATE ${VULKAN_SDK}/Lib)
 
 # Player settings and launcher: bin/BG3RTX.exe (tools/launcher, docs/USER_SETTINGS.md).
-add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp)
+enable_language(RC)
+set(BG3RTX_WEBVIEW2_SDK "$ENV{USERPROFILE}/.nuget/packages/microsoft.web.webview2/1.0.4258.31/build/native" CACHE PATH "WebView2 NuGet build/native directory (headers and static loader)")
+if(NOT EXISTS "${BG3RTX_WEBVIEW2_SDK}/include/WebView2.h" OR NOT EXISTS "${BG3RTX_WEBVIEW2_SDK}/x64/WebView2LoaderStatic.lib")
+  message(FATAL_ERROR "WebView2 SDK missing. Set BG3RTX_WEBVIEW2_SDK to microsoft.web.webview2/1.0.4258.31/build/native (include/WebView2.h and x64/WebView2LoaderStatic.lib required).")
+endif()
+add_executable(bg3rtx_launcher WIN32 tools/launcher/main.cpp tools/launcher/launch.cpp tools/launcher/gpu.cpp
+  tools/launcher/diagnostics.cpp tools/launcher/compatibility.cpp tools/launcher/web_bridge.cpp
+  tools/launcher/web_host.cpp tools/launcher/launcher.rc)
 set_target_properties(bg3rtx_launcher PROPERTIES OUTPUT_NAME BG3RTX)
-target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include)
+target_include_directories(bg3rtx_launcher PRIVATE ${VULKAN_SDK}/Include "${BG3RTX_WEBVIEW2_SDK}/include" "${CMAKE_SOURCE_DIR}/tools/launcher")
 target_compile_definitions(bg3rtx_launcher PRIVATE UNICODE _UNICODE)
-target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 user32 gdi32)
+target_link_libraries(bg3rtx_launcher PRIVATE comctl32 ole32 shell32 advapi32 user32 gdi32 comdlg32 shlwapi version "${BG3RTX_WEBVIEW2_SDK}/x64/WebView2LoaderStatic.lib")
+add_custom_target(bg3rtx_launcher_ui
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/tools/launcher/ui" "$<TARGET_FILE_DIR:bg3rtx_launcher>/ui"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets/fonts" "$<TARGET_FILE_DIR:bg3rtx_launcher>/ui/fonts"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets/branding" "$<TARGET_FILE_DIR:bg3rtx_launcher>/ui/branding")
+add_dependencies(bg3rtx_launcher bg3rtx_launcher_ui)
 
 # Settings model unit tests (common/settings.h): bin/settings_test.exe, also via ctest.
 enable_testing()
+add_executable(perf_hook_state_test tests/perf_hook_state_test.cpp)
+add_test(NAME perf_hook_state_test COMMAND perf_hook_state_test)
+add_executable(submit_batch_test tests/submit_batch_test.cpp)
+target_include_directories(submit_batch_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME submit_batch_test COMMAND submit_batch_test)
 add_executable(native_hit_gi_bindings_test tests/native_hit_gi_bindings_test.cpp)
 target_include_directories(native_hit_gi_bindings_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME native_hit_gi_bindings_test COMMAND native_hit_gi_bindings_test)
@@ -172,6 +189,8 @@ add_executable(native_hit_order_test tests/native_hit_order_test.cpp)
 add_test(NAME native_hit_order_test COMMAND native_hit_order_test)
 add_executable(native_hit_join_test tests/native_hit_join_test.cpp)
 add_test(NAME native_hit_join_test COMMAND native_hit_join_test)
+add_executable(native_hit_batch_test tests/native_hit_batch_test.cpp)
+add_test(NAME native_hit_batch_test COMMAND native_hit_batch_test)
 add_executable(native_hit_recycle_test tests/native_hit_recycle_test.cpp)
 add_test(NAME native_hit_recycle_test COMMAND native_hit_recycle_test)
 add_executable(native_hit_abi_test tests/native_hit_abi_test.cpp)
@@ -235,6 +254,15 @@ add_executable(native_hair_test tests/native_hair_test.cpp)
 add_test(NAME native_hair_test COMMAND native_hair_test)
 add_executable(rt_capture_budget_test tests/rt_capture_budget_test.cpp)
 add_test(NAME rt_capture_budget_test COMMAND rt_capture_budget_test)
+add_executable(rt_capture_elastic_test tests/rt_capture_elastic_test.cpp)
+add_test(NAME rt_capture_elastic_test COMMAND rt_capture_elastic_test)
+add_executable(as_chunk_alloc_test tests/as_chunk_alloc_test.cpp)
+add_test(NAME as_chunk_alloc_test COMMAND as_chunk_alloc_test)
+add_executable(vram_compact_test tests/vram_compact_test.cpp)
+add_test(NAME vram_compact_test COMMAND vram_compact_test)
+
+add_executable(vram_guard_test tests/vram_guard_test.cpp)
+add_test(NAME vram_guard_test COMMAND vram_guard_test)
 add_executable(native_fur_test tests/native_fur_test.cpp)
 add_test(NAME native_fur_test COMMAND native_fur_test)
 add_executable(native_tileset_coverage_test tests/native_tileset_coverage_test.cpp)
@@ -307,13 +335,29 @@ add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
+add_executable(launcher_ui_state_test tools/launcher/ui_state_test.cpp)
+add_test(NAME launcher_ui_state_test COMMAND launcher_ui_state_test)
+add_executable(launcher_web_bridge_test tools/launcher/web_bridge_test.cpp
+  tools/launcher/web_bridge.cpp tools/launcher/compatibility.cpp)
+target_compile_definitions(launcher_web_bridge_test PRIVATE UNICODE _UNICODE)
+add_test(NAME launcher_web_bridge_test COMMAND launcher_web_bridge_test)
+add_executable(launcher_diagnostics_test tests/launcher_diagnostics_test.cpp
+  tools/launcher/diagnostics.cpp tools/launcher/compatibility.cpp tools/launcher/gpu.cpp)
+target_include_directories(launcher_diagnostics_test PRIVATE ${VULKAN_SDK}/Include)
+target_compile_definitions(launcher_diagnostics_test PRIVATE UNICODE _UNICODE)
+target_link_libraries(launcher_diagnostics_test PRIVATE user32)
 # Offline Python tooling checks (no build products): host-visible atomics lint, every-window
 # queue gates, the lean-batch energy gates, progress fragments, the coverage HANDLING table, the native ambient
 # table, the gi_hit_direct replay invariant (tools/gi_hit_invariant.py), the shader compile cache keys
 # (tools/shader_identity.py).
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate hit_material_generated)
+  add_test(NAME launcher_web_bridge_json COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_SOURCE_DIR}/tests/launcher_web_bridge_json_test.py $<TARGET_FILE:launcher_web_bridge_test>)
+  add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
+    ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant spec_cascade_check shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate hit_material_generated vram_motion_gate package_licences diagnostics_package release_install)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -472,3 +516,6 @@ elseif(BG3RTX_SHARC_EM STREQUAL "ON")
 endif()
 # A fixed PDB name would stay locked by a debugger attached to the old copy.
 set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")
+
+add_executable(native_hit_recording_test tests/native_hit_recording_test.cpp)
+add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)

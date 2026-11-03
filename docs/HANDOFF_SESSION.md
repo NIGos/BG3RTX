@@ -1,63 +1,57 @@
-# Session handoff - 2026-11-02 morning
+# Session handoff - 2026-11-02 evening
 
-Main fe8f75d + this docs commit, ABI 25. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next (report and
-questions at the top), then [GOAL_NEXT.md](GOAL_NEXT.md) for the stage order. History: [archive/](archive/).
+Main e9f2098, ABI 26. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next (report and questions at the top),
+then [GOAL_NEXT.md](GOAL_NEXT.md) for the stage order. History: [archive/](archive/).
 
 ## Rules (read before any work)
 
 - [../AGENTS.md](../AGENTS.md): never touch saves, `D:\BG3_Tools`, snapshot tags; never launch the game
   outside `scripts/test-queue.ps1`; never hold `captures/queue/results.md` open.
 - Remove worktrees only with `scripts/remove-worktree.ps1 -Name <folder>` (junctions to `external/`,
-  `data/assetdb`; shared file count must stay 994 = external 992 + assetdb 2).
+  `data/assetdb`; check the shared file count before and after).
 - Live tests need explicit user steering for the batch. Prepare jobs outside every `pending` inbox.
-- Gates hold in every ON window (`expect_every`); capacity, scene-wait and exposure-hold lints in every dryrun.
-- Branches write `docs/progress/<branch>.md`, never PROGRESS; the coordinator folds them.
-- Agents run `git merge main` before gates or long tools (main has the cached, fastest tools).
-- Merge only with `scripts/merge-green.ps1` (shader step cached: ~1-5 min); features off until their gates pass.
+- Gates hold in every ON window (`expect_every`); snapshot lines are `"event": true` with a 1 s `settle_s`.
+- Shader compile rules (AGENTS.md "Measuring correctly"): new on/off keys are specialization constants; heavy
+  DXC runs one at a time; don't spend compile time a planned improvement makes unnecessary.
+- The coordinator's scratchpad `PAUSE` flag was set at 19:50 to free the PC: remove it before the next batch.
 
 ## State
 
-- Stages 1-3 done: bugfix round live-checked (smoke_ultra valid, scene wait 0, water 120/120 composed, shader
-  cache, fg_letterbox automatic); GUI levels (Experimental 5 entries); RT water "+ Refraction" in Ultra.
-- Ultra also has Hidden-surface shading "+ Bounce", Emission at ray hits "Hidden hits", Far-field sun bounce 6 m.
-  smoke_ultra with all of it: valid, median frame 16.65 ms (was 13.75).
-- Trace fix 385efd1 (layer/geocapture.cpp): traced frames keep the hit-material capture. Energies measured
-  before it are invalid for hit features.
-- M6 step 1 done: ambient ratio not consistent across scenes (S8 1.44, camp 0.84, inn 0.78): no global correction.
-- `rt_hit_material_pool_alpha` default 1 (S6 qualified 14.8% -> 52.1%, +0.46 ms GI trace).
-- Off, waiting: `ls_box=2` (user visual check, question in PROGRESS), `rt_hit_material_mask` (live `m4_hit_mask` ready), `rf_hit_shade` / `rf_hit_gi` (Experimental, bias).
+- Stages 1-3 done (morning). Ultra: RT water + refraction, + Bounce, Emission at hits, gi_far 6 m.
+- Today merged (all new keys off): stream caps, source trim (-0.4 GB), NaN GI fix, OMM option B and VT masks
+  (catalogue of 1,677 materials, generated on the user's PC), recipe rows, water RR/FG motion keys (null),
+  preprocessed shader cache, settings generator without the key count.
+- Closed: port water flicker is the game's own water (wf3-wf7). IP grass and generated rows stay off (cost/gain).
+- Dialogue shadows: RT AO darkens characters most; opaque hair cards at the port. Native hair is the fix.
 
-## Next
+## Next (in this order)
 
-Stage 4 rest (M4):
-1. Coverage: S6 lava discs FLUID_Lava_Plane_Flowmap (animated flowmap recipe: time, vertex colour, world position);
-   camp grass IP_Wind_GrassFlowers (per-draw rows like wind RGB). Rank: `tools/hit_material_blockers.py`.
-2. `rf_hit_gi`: measure tier (a) L_b / L_a at S8 / S6 after the trace fix; then the S6 visibility suspect
-   (lit 71% of rf light rays vs 56% in the GI). rf_hit_shade stays Experimental until in the spread.
-3. `ls_box=2` into Ultra if the user approves; then smoke_ultra once.
-4. Decide the `rt_hit_material_mask` default from its live numbers.
+1. Spec-constant migration on `variant-migration` (worktree agent-a0dba2e726bdabdad), on top of
+   `spec-cascade-s1-default`. Verified: G, S2a. Unverified code: S2b (gi_far), S2c (instanced), S3a host.
+   Commands per step: `docs/progress/variant-migration.md`. Then S3 rest, S4, S5; one merge-green of the final
+   set (~100-180 modules); live `scc1` (extend it with windows for G, S2).
+2. Rebase on it, cheap identity, then their lives:
+   - occ diagnostic `worktree-agent-a0c9be1ab336eae1a` + `dialogue_shadows` batch (numeric occluders, box cascade fix);
+   - native hair `worktree-agent-a78f48005e3b350bd` (async compile, water hair) + `hair_qual`;
+   - OMM bake `worktree-agent-a53f0b584fa39317b` + `omm_qual` om4;
+   - `hm-recipe-rows` + `m4_generated` rerun (bush pairing, two-sided).
+3. Consolidation: smoke_ultra with everything qualified, gate audit, remove null keys (water flicker keys),
+   fold `docs/progress/`, clean merged worktrees and dead captures (test-main captures were 39 GB).
+4. Stage 4 rest (lava flowmap, mesh rows S8), stage 5 SHaRC, stage 6 release hardening.
 
-Stage 5 (M6): SHaRC (radiance cache) behind a key, off; first an offline replay comparison against the PT reference.
-Why S8's native ambient is brighter than the reference (1.44) while camp and inn are darker.
+## Codex
 
-Stage 6: release hardening for a Nexus beta: release.ini vs the new Ultra keys (rt_emissive forced 0 there),
-long sessions, acts 2-3, installer, README, licences; later the diagnostic package (save picked by the user, read-only).
+The user may let the coordinator run Codex CLI agents (`codex exec`, workspace-write sandbox, never `resume`)
+for verifiable offline tasks. Pending: the user's login choice, then a pilot task. Plan in the transcript of
+2026-11-02: one worktree per task, structured report via `--output-schema`, independent re-run and review.
 
-Consolidation after each stage: non-regression batch + smoke_ultra, gate audit, remove superseded keys,
-HANDOFF <= 80 lines, PROGRESS ~150 (fold fragments), clean worktrees and dead captures.
+## Open user questions
 
-## Branches not merged (ignoring codex/*)
-
-| Branch | What | Status |
-|---|---|---|
-| worktree-agent-a9e0aabd4d7f18008 | old M4 bundle preset | superseded by m4-preset (merged); keep |
-| worktree-agent-a14b8f58ffc130189 | old water preset | superseded by ultra-water-preset (merged); keep |
-| lscheck-fix, sup/cascade-alphatest | old (10-27 / 10-30) | stale; keep |
-| worktree-agent-a2212c228ec492214, -a814985dd663a9b89, -a8b7cb486c1434ebd, -a94065fdd50bc8494 | old 10-27 WIP | stale; keep |
+ls_box=2 visual check (S6); GUI_AUDIT_20261102 five yes/no; project licence; NVIDIA notification;
+water sun-shadow edge look at the S8 pool.
 
 ## Working pattern
 
-- One hypothesis, the smallest change behind an ini key, A/B within one run, keep or revert.
+- One hypothesis, the smallest change behind a key, A/B within one run, keep or revert.
 - New logic in `core/` (hot reload). ABI changes rare and merged early.
-- Report the GPU ms of every new pass from the `gpu` log lines.
-- Keep this file under ~80 lines and PROGRESS_CODEX under ~150; archive older sections.
+- Report the GPU ms of every new pass. Keep this file under ~80 lines, PROGRESS under ~150.

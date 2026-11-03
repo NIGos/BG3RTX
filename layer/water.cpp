@@ -518,6 +518,9 @@ bool compose_buffer() {
 
 }  // namespace
 
+// rt_vram_guard breakdown: the soup buffer (present thread, read only).
+uint64_t water_vram_bytes() { return g_soup.size; }
+
 // ================= entry points =================
 
 void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, size_t bytes) {

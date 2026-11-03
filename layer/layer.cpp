@@ -4,10 +4,14 @@
 #include <cstring>
 #include <vector>
 #include "host.h"
+#include "perf_submit.h"
+#include "../common/submit_batch.h"
 #include "omm_submit.h"
 #include "omm_backend.h"
 #include "omm_content.h"
 #include "hit_material_submit.h"
+#include "hit_material.h"
+#include "../common/vram_guard.h"
 #include "../common/material_submit_stages.h"
 #include "assetdb.h"
 #include "sebridge.h"
@@ -449,33 +453,52 @@ static VKAPI_ATTR VkResult VKAPI_CALL WaitForPresentKHR(VkDevice device, VkSwapc
   return device_of(device)->vk.WaitForPresentKHR(device, sc, id, timeout);
 }
 
+struct SubmitScratch {
+  std::vector<VkCommandBuffer> commands, entry;
+  std::vector<VkSubmitInfo> legacy;
+  std::vector<VkSubmitInfo2> modern;
+};
+static thread_local submit_batch::Scratch<SubmitScratch> t_submit_scratch;
+
 static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits,
                                                   VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  std::vector<VkCommandBuffer> cmds;
+  SubmitCpuTimer timer(DIAG_SUBMIT_US);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  submit_batch::Scratch<SubmitScratch>::Lease scratch(t_submit_scratch,batch);
+  auto& work=scratch.get();
+  auto& cmds=work.commands;cmds.clear();
   for (uint32_t i = 0; i < count; ++i)
-    cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
+    if(submits[i].commandBufferCount) cmds.insert(cmds.end(), submits[i].pCommandBuffers, submits[i].pCommandBuffers + submits[i].commandBufferCount);
   if (trace_recording()) trace_on_submit(cmds);
   SunSubmitBatch sun;
   sun_prepare_submit(dd,queue,count,submits,&sun);
   if(sun.modified) {submits=sun.legacy.data();cmds=sun.commands;}
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
-  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
-  pan_on_submit(cmds);
-  sl_note_submit(cmds);
+  if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  if(!batch || !cmds.empty()) pan_on_submit(cmds);
+  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
   const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
+  omm::CompletionBatch completion;
+  if(batch && submit_batch::appendable(submits,count)) completion=omm::prepare_completion(dd,queue,ommWork);
+  submit_batch::PrivateSignal signal(completion.semaphore,completion.value);
+  if(completion.attached) {
+    signal.append(work.legacy,submits,count);submits=work.legacy.data();++count;
+  }
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
+  omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
+  if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM: the emissive scene of this batch's effects passes
   if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1: the water scene of this batch's forward passes
-  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS, completion.attached);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
@@ -485,7 +508,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
                                                    VkFence fence) {
   DeviceData* dd = device_of(queue);
   diag(DIAG_SUBMIT);
-  std::vector<VkCommandBuffer> cmds;
+  SubmitCpuTimer timer(DIAG_SUBMIT_US);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  submit_batch::Scratch<SubmitScratch>::Lease scratch(t_submit_scratch,batch);
+  auto& work=scratch.get();
+  auto& cmds=work.commands;cmds.clear();
   for (uint32_t i = 0; i < count; ++i)
     for (uint32_t j = 0; j < submits[i].commandBufferInfoCount; ++j)
       cmds.push_back(submits[i].pCommandBufferInfos[j].commandBuffer);
@@ -497,7 +524,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   // must cover those reads, and signals must not release resources before they
   // finish. Keep the existing OMM signal-only policy for entries without them.
   native_hit::SubmitStages content;
-  std::vector<VkCommandBuffer> entry;
+  auto& entry=work.entry;entry.clear();
   for(uint32_t i=0;i<count;++i) {
     const auto& s=submits[i];entry.clear();bool material=false,terrain=false;
     for(uint32_t j=0;j<s.commandBufferInfoCount;++j){
@@ -511,20 +538,28 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   submits=content.data_or(submits);
   order_log_submit("submit", cmds);
   if (geo_submit_wanted()) geo_on_submit(cmds);
-  bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
-  pan_on_submit(cmds);
-  sl_note_submit(cmds);
+  if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
+  if(!batch || !cmds.empty()) pan_on_submit(cmds);
+  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
   const auto terrainWork=terrain_capture_before_submit(cmds);
   const auto materialWork=native_hit::before_submit(queue,cmds);
   const auto ommWork=omm::before_submit(dd,cmds);
+  omm::CompletionBatch completion;
+  if(batch && submit_batch::appendable(submits,count)) completion=omm::prepare_completion(dd,queue,ommWork);
+  submit_batch::PrivateSignal signal(completion.semaphore,completion.value);
+  if(completion.attached) {
+    signal.append(work.modern,submits,count);submits=work.modern.data();++count;
+  }
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
+  omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
+  if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit2");
   if (r == VK_SUCCESS) em_after_submit(dd, queue, cmds);   // D-EM (our build goes through vkQueueSubmit)
   if (r == VK_SUCCESS) water_after_submit(dd, queue, cmds);   // M5.1 (likewise)
-  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS);
+  omm::after_submit(dd, queue, ommWork, r==VK_SUCCESS, completion.attached);
   native_hit::after_submit(materialWork,queue,r==VK_SUCCESS);
   terrain_capture_after_submit(terrainWork,queue,r==VK_SUCCESS);
   return r;
@@ -532,9 +567,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
 
 // VRAM of this process on the device-local heaps (VK_EXT_memory_budget), next to each [pace] line: the
 // long-session growth gate (tools/live_batches/long_session). Physical-device query only; nothing is enabled.
-static void log_memory_budget(DeviceData* dd) {
+static bool query_memory_budget(DeviceData* dd, uint64_t* used, uint64_t* avail, uint64_t* size) {
   InstanceData* id = dd ? dd->inst : nullptr;
-  if (!id || !dd->physical || !id->GetPhysicalDeviceMemoryProperties2 || !id->EnumerateDeviceExtensionProperties) return;
+  if (!id || !dd->physical || !id->GetPhysicalDeviceMemoryProperties2 || !id->EnumerateDeviceExtensionProperties) return false;
   static int supported = -1;
   if (supported < 0) {
     uint32_t n = 0;
@@ -545,19 +580,157 @@ static void log_memory_budget(DeviceData* dd) {
     for (const VkExtensionProperties& e : ext) supported |= strcmp(e.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0;
     if (!supported) log("[mem] VK_EXT_memory_budget not supported: no VRAM lines");
   }
-  if (!supported) return;
+  if (!supported) return false;
   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
   VkPhysicalDeviceMemoryProperties2 props{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, &budget};
   id->GetPhysicalDeviceMemoryProperties2(dd->physical, &props);
-  double used = 0, avail = 0, size = 0;
+  *used = *avail = *size = 0;
   for (uint32_t h = 0; h < props.memoryProperties.memoryHeapCount; ++h) {
     if (!(props.memoryProperties.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)) continue;
-    used += double(budget.heapUsage[h]);
-    avail += double(budget.heapBudget[h]);
-    size += double(props.memoryProperties.memoryHeaps[h].size);
+    *used += budget.heapUsage[h];
+    *avail += budget.heapBudget[h];
+    *size += props.memoryProperties.memoryHeaps[h].size;
   }
+  return true;
+}
+
+static void log_memory_budget(DeviceData* dd) {
+  uint64_t used = 0, avail = 0, size = 0;
+  if (!query_memory_budget(dd, &used, &avail, &size)) return;
   log("[mem] device-local VRAM of this process: used %.0f MB, budget %.0f MB, heaps %.0f MB", used / 1048576.0,
       avail / 1048576.0, size / 1048576.0);
+}
+
+// ---- rt_vram_guard (common/vram_guard.h): headroom state, refusals, yields, the [mem] ours line ----
+// Lock order: a module's own lock (bvhsplit g_mu, ...) -> g_vg_mu. The tick reads the modules' breakdown
+// before it takes g_vg_mu, never inside it.
+static std::mutex g_vg_mu;
+static vram_guard::Guard g_vg;                               // under g_vg_mu
+static uint64_t g_vg_real_budget = 0;                       // same sample as g_vg.used, before test override
+static std::atomic<bool> g_vg_on{false};
+static std::atomic<uint64_t> g_vg_budget{0};
+static std::atomic<uint64_t> g_vg_ask[vram_guard::kYieldCount];
+struct VgRefusal : vram_guard::RefusedRequests { const char* first = nullptr; bool logged = false; };
+static VgRefusal g_vg_ref[vram_guard::kConsumerCount];      // this window, under g_vg_mu
+static std::atomic<bool> g_vg_refused_new{false};           // a first refusal this window: breakdown at the next tick
+
+bool vram_guard_on() { return g_vg_on.load(std::memory_order_relaxed); }
+
+uint64_t vram_cap(int consumer, uint64_t fallback) {
+  if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return fallback;
+  return vram_guard::cap(vram_guard::Consumer(consumer), g_vg_budget.load(std::memory_order_relaxed));
+}
+
+bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap) {
+  if (!vram_guard_on() || consumer < 0 || consumer >= vram_guard::kConsumerCount) return true;
+  std::lock_guard<std::mutex> lock(g_vg_mu);
+  const bool capture = consumer == vram_guard::kRtCapture;
+  if (capture ? g_vg.allow_capture(bytes, g_vg_real_budget) : !over_cap && g_vg.allow(bytes)) return true;
+  VgRefusal& r = g_vg_ref[consumer];
+  r.note(bytes);
+  if (!r.first) r.first = what;
+  if (!r.logged) {   // once per window and consumer; the window line has the totals
+    r.logged = true;
+    g_vg_refused_new = true;
+    log("[vram] guard: refused %s, %.0f MB (%s): used %.0f MB, budget %.0f MB, margin %.0f MB%s",
+        vram_guard::kConsumerName[consumer], double(bytes) / 1048576.0, what ? what : "?", double(g_vg.used) / 1048576.0,
+        double(capture ? g_vg_real_budget : g_vg.budget) / 1048576.0, double(g_vg.margin_now()) / 1048576.0,
+        capture ? "; full RT replacement exceeds real budget (including outstanding grants)" :
+        over_cap ? "; over this consumer's cap for the budget" : g_vg.low ? "; low headroom" : "; would not fit");
+  }
+  return false;
+}
+
+uint64_t vram_take_ask(int yield) {
+  if (yield < 0 || yield >= vram_guard::kYieldCount) return 0;
+  return g_vg_ask[yield].exchange(0, std::memory_order_relaxed);
+}
+
+static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint64_t rtcap, uint64_t alpha,
+                          uint64_t cascade, uint64_t recycled, uint64_t em, uint64_t water, bool low, const char* why) {
+  const double mb = 1.0 / 1048576.0;
+  const uint64_t ours = b.as_reserved + b.pool + b.pool_pending + rtcap + cascade + recycled + em + water;
+  log("[mem] ours (%s): BLAS chunks %.0f MB reserved in %u chunks (%.0f live, %.0f empty), mesh pool %.0f MB "
+      "(%.0f used, %.0f copy/retirement, %llu repacks; %llu cached BLAS relocated), "
+      "RT capture %.0f MB (alpha region %.0f), cascade capture %.0f MB, hit-material recycled %.0f MB, em soup %.0f MB, "
+      "water soup %.0f MB; tracked %.0f MB of used %.0f MB (rest: game, core GI/RR images, untracked %.0f MB), "
+      "budget %.0f MB (%s); guard %s",
+      why, double(b.as_reserved) * mb, b.chunks, double(b.as_live) * mb, double(b.as_empty) * mb, double(b.pool) * mb,
+      double(b.pool_used) * mb, double(b.pool_pending) * mb, (unsigned long long)b.pool_repacks, (unsigned long long)b.blas_relocated,
+      double(rtcap) * mb, double(alpha) * mb, double(cascade) * mb, double(recycled) * mb, double(em) * mb,
+      double(water) * mb, double(ours) * mb, double(used) * mb, double(used > ours ? used - ours : 0) * mb,
+      double(budget) * mb, used <= budget ? "within budget" : "OVER budget",
+      !vram_guard_on() ? "off" : low ? "LOW (cache growth refused, yielding)" : "normal");
+}
+
+// Present thread (g_main), every frame: sample every 16 frames (one physical-device query), the
+// breakdown line every rt_timing window, on a state change and after a window's first refusal. With the
+// key off only the window breakdown runs (our share vs the game's, for the guard-off A/B).
+static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
+  static uint64_t s_window_start = 0;
+  const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  const bool window_end = frame >= s_window_start + uint64_t(every);
+  if ((frame & 15) != 0 && !window_end) return;
+  const bool on = cfg_int("rt_vram_guard", 0) != 0;
+  const bool was_on = g_vg_on.exchange(on);
+  if (was_on != on) log("[vram] guard %s (rt_vram_guard=%d)", on ? "on" : "off", on ? 1 : 0);
+  if (!on) for (auto& a : g_vg_ask) a = 0;
+  if (!on && !window_end) return;
+  uint64_t used = 0, avail = 0, size = 0;
+  if (!query_memory_budget(dd, &used, &avail, &size)) {
+    if (window_end) s_window_start = frame;
+    return;
+  }
+  const uint64_t real_budget = avail;
+  // Test budget (rt_vram_guard_budget_mb > 0, a test key): the guard, its caps and the [mem] ours line use
+  // min(driver budget, this), so a fresh launch reproduces the pressure of a long session or a smaller card
+  // (vg1 2026-11-02: 18.6 of 31.4 GB, the user's 31.7 GB event did not reproduce in a 4-minute run).
+  if (const int test_mb = cfg_int("rt_vram_guard_budget_mb", 0); test_mb > 0)
+    avail = (std::min)(avail, uint64_t(test_mb) << 20);
+  // Breakdown and yield sizes first (each module's own lock; not under g_vg_mu).
+  BvhVram b;
+  bvh_vram(&b);
+  const uint64_t recycled = native_hit::recycled_bytes();
+  bool changed = false, low = false;
+  uint64_t need = 0, margin = 0;
+  if (on) {
+    std::lock_guard<std::mutex> lock(g_vg_mu);
+    g_vg_real_budget = real_budget;
+    changed = g_vg.sample(used, avail);
+    low = g_vg.low;
+    need = g_vg.trim_need();
+    margin = g_vg.margin_now();
+    g_vg_budget = avail;
+    const uint64_t have[vram_guard::kYieldCount] = {b.as_empty, recycled, b.lru};
+    uint64_t ask[vram_guard::kYieldCount] = {};
+    vram_guard::plan_trim(need, have, ask);
+    for (int i = 0; i < vram_guard::kYieldCount; ++i) g_vg_ask[i] = ask[i];
+    if (changed)
+      log("[vram] guard: headroom %s: used %.0f MB, budget %.0f MB, margin %.0f MB; asking %.0f MB (%s %.0f, %s %.0f, "
+          "%s %.0f)",
+          low ? "LOW, cache growth refused" : "back, growth allowed", used / 1048576.0, avail / 1048576.0,
+          double(margin) / 1048576.0, double(need) / 1048576.0, vram_guard::kYieldName[0], ask[0] / 1048576.0,
+          vram_guard::kYieldName[1], ask[1] / 1048576.0, vram_guard::kYieldName[2], ask[2] / 1048576.0);
+  }
+  const bool refused = g_vg_refused_new.exchange(false);
+  if (changed || refused || window_end) {
+    uint64_t rtcap = 0, alpha = 0, cascade = 0;
+    geo_vram(&rtcap, &alpha, &cascade);
+    log_vram_ours(used, avail, b, rtcap, alpha, cascade, recycled, em_vram_bytes(), water_vram_bytes(), low,
+                  changed ? "guard state" : refused ? "refusal" : "window");
+  }
+  if (window_end) {
+    s_window_start = frame;
+    std::lock_guard<std::mutex> lock(g_vg_mu);
+    for (int c = 0; c < vram_guard::kConsumerCount; ++c) {
+      VgRefusal& r = g_vg_ref[c];
+      if (r.count)
+        log("[vram] guard window: %llu growth attempts of %s refused (peak allocation %.0f MB; first: %s)", (unsigned long long)r.count,
+            vram_guard::kConsumerName[c], double(r.peak) / 1048576.0, r.first ? r.first : "?");
+      r = VgRefusal{};
+    }
+    g_vg.new_window();
+  }
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* info) {
@@ -578,6 +751,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
   }
   cfg_poll();
   if (dd == g_main) {
+    vram_guard_tick(dd, frame);
     // Rendered-frame pacing (the game's own presents, before frame generation):
     // median and 99th-percentile frame time and the 1% low, every 600 frames.
     static LARGE_INTEGER freq{}, last{};

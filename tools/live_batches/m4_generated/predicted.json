@@ -1,35 +1,22 @@
 {
- "_rule": "Committed BEFORE the run (2026-11-02). Scene colour before post (5c3fdabc float mean) shot-on vs shot-off-a/b; the qualified share (diag-on minus the diag-off mean, points of all hit lookups); the GI trace pass GPU median cost-on minus the cost-off mean.",
+ "_rule": "Committed BEFORE the run. Scene colour before post (5c3fdabc float mean) shot-on vs shot-off-a/b; the qualified share (diag-on minus the diag-off mean, points of all hit lookups); the GI trace pass GPU median cost-on minus the cost-off mean. Rerun 2 (after 145058/145500): 11 generated rows (+ Base_2S_VT 2d815e2a and Base_AlphaTest_2s_Translucency 80d6fb8f as two-sided pool rows, RT_HIT_POOL_2S; + ATM_Wind_Vertex_R_AlphaTest 0289a872/55592de4 in the wind RGB family), the IP grass family pairing lines logged.",
  "hgn1-generated-camp-fg2": {
-  "shot-on": {
-   "predicted": null,
-   "basis": "camp shows no measurable energy per qualified point (hig1 IP grass +0.19% in a 2.19% band; the + Bounce bundle at 24% qualified +0.02%): null"
-  },
+  "shot-on": {"predicted": null, "basis": "run 1: -0.12% in a 1.85% band"},
   "qualified_share_points": {
-   "predicted": 12,
-   "range": [3, 25],
-   "basis": "camp pack 013545-2 (instanced off) blocked lookups by depth FS: f9ab595d bushes 20.2% (27ef2b49/2e34c667 is 8 of the 10 bush G-buffer draws in trace 140840; 6561beef/ce81ffaa and the ColorVar pair stay rejected) + 2f1b0ffd 5.4% (IP_AlphaTest(_2S)_VT 0de1b186/641822a7; shared with IP_GM_PlayerPosition, not generated) + a small wind RGB 9cc7094f part of 0d91554d (1 draw in 140840) = about 25 points upper bound; x about 0.5 for the bit-exact clip pass rate of rows whose VS pair is only proven textually equal (the audited wind RGB pair was 100% live) and the bush instance 977 (16% alone) in or out of view"
+   "predicted": 2.5,
+   "range": [1.5, 4.0],
+   "basis": "run 1 (145058): +2.3 (26.9 -> 29.2), the 2S family rows; 80d6fb8f is 1 of 873 camp G-buffer draws (trace 140840) and 0289a872 is not traced at camp: +0.2 at most. The bushes stay unmapped unless the pairing line shows a cause this run cannot fix (it is diagnostic): no gain predicted from them"
   },
-  "gi_trace_ms": {
-   "predicted": 1.0,
-   "range": [0.2, 2.5],
-   "basis": "per-hit work on newly qualified foliage hits, as IP grass (+1.9 ms for its rows at camp, hm-source-trim): scaled by the predicted share"
-  }
+  "gi_trace_ms": {"predicted": 0.6, "range": [0.3, 1.0], "basis": "run 1: +0.58 ms"},
+  "bushes_pairing": {"predicted": null, "basis": "diagnostic: the `[hit material instanced] ... IP grass since the last line: pairs ...` outcome (same frame / other frame / camera / placement / wind inputs / unread) and the IP grass prepass count name why 9 bush draws are captured and 0 mapped"}
  },
  "hgn2-generated-inn-fg2": {
-  "shot-on": {
-   "predicted": null,
-   "basis": "same mechanism, fewer rows: null"
-  },
+  "shot-on": {"predicted": null, "basis": "run 1: -0.10% in a 1.23% band"},
   "qualified_share_points": {
-   "predicted": 1.5,
-   "range": [0.3, 4.0],
-   "basis": "inn trace 084429: the generated pool pairs 651863a6 (7) + b0ecc292 (2) of the 219 'other pair' pool draws (hmm2 [hit material pool] line) x 44% 'pool without row' lookups (inn pack 013914-3) = about 1.8 points; IP_AlphaTest and the bushes block 0.0% of the inn pack's lookups (its 0de1b186/641822a7 draws are mostly the opaque IP_Base_VT, whose depth pass has no alpha record to pair with). The inn's 30.1% will not move much: its blockers are the pool pairs without a recipe (3b346b42 HLOD two-sided, ColorVar, SSS) the generator rejects"
+   "predicted": 0.3,
+   "range": [0.0, 1.0],
+   "basis": "run 1 (145500): +0.12. Base_2S_VT 2d815e2a is 1 of the 219 'other pair' pool draws (trace 084429) x 44% 'pool without row' lookups = +0.2; the inn's large two-sided blocker HLOD_TwoSided 3b346b42 (19 draws) is still rejected: its RT2 mixes 0.5 with a sample whose page decode differs from 81657854's normal-mix (the generator's RT2 canon), so it needs an audited recipe, not the flip"
   },
-  "gi_trace_ms": {
-   "predicted": 0.1,
-   "range": [0.0, 0.5],
-   "basis": "few new rows"
-  }
+  "gi_trace_ms": {"predicted": 0.05, "range": [0.0, 0.3], "basis": "run 1: +0.03 ms"}
  }
 }

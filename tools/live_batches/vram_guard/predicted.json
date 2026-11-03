@@ -1,0 +1,101 @@
+{
+ "_rule": "Written BEFORE the vg2 run (2026-11-02 21:00), not queued. vg1 (20:48, INVALID): peaked at 18.6 of 31.4 GB; the user's 31.7 GB came after a ~600 m move (camera (-718,-56,-838) at 20:02-20:03 to (-213,12,-186) at 20:04, [core] ls camera lines; mesh cache 549 -> 210 meshes then 789 new in 6 s): two areas resident, about 3.1 GB ours (+43 BLAS chunks, cascade +351 MB) and about 6.6 GB the game's. A fresh S8 launch starts at (-218,15,-197), within 10 m of that pose, but input cannot replay the travel: vg2 gives the guard a 16 GB card's budget instead (rt_vram_guard_budget_mb=15640). vg1 measured: game share 10.3-11.3 GB, ours 3.0-7.6 GB (BLAS 2560 MB reserved for 211 live, mesh pool 2047 for 467 used, cascade 3 x 560 for 169 demand).",
+ "vg2-s8-low-long-view-fg2": {
+  "on_windows_within_test_budget": {
+   "predicted": true,
+   "basis": "Hypothesis for iteration 3, not a measured pass: process <= 15640 MiB in measured ON windows after reserves shrink; copies and retained allocations count. vg2 21:38 reached 15178 MiB before restore; restore deliberately disables the bundle and restored cascade 1056 -> 1632 MiB."
+  },
+  "refusals_on_turn": {
+   "predicted": ">0",
+   "basis": "vg1's turn grew the pool 512 -> 2047 MB and BLAS 12 -> 43 chunks: both pass the 16 GB caps (pool 1018, BLAS 2102 MB)"
+  },
+  "off_turn_over_test_budget": {
+   "predicted": true,
+   "basis": "report: guard off, vg1 reached 18.6 GB"
+  },
+  "recover_on_within_test_budget": {
+   "predicted": true,
+   "basis": "Mesh pool repacking and sparse cached-BLAS evacuation plus elastic capture replacement should return unused reserves after GPU retirement. recover-settle-on allows 25 s (750 presents at 30 fps, exceeding the 254-frame pool watchdog and 72-frame cascade observation); every complete recover-on line must then be within 15640 MB. Failure to retire is a failed candidate, not an excused window."
+  },
+  "streamline_over_100ms_on_windows": {
+   "predicted": 0,
+   "basis": "vg1 had 7 in the run, at load and around the shot toggles; none expected in the view/turn ON windows"
+  },
+  "energy_shot_on_vs_off_pct": {
+   "predicted": 0.0,
+   "range": [
+    -0.92,
+    0.92
+   ],
+   "basis": "static camera: the guard evicts only meshes unused for 8 frames and refuses growth a static view does not ask; 2 x the S8 OFF-OFF sigma 0.458% (GATE_AUDIT_20261101). Energy = pre-post scene colour mean of dumps.json, exposure held"
+  },
+  "rt_capture_opaque_drops": {
+   "predicted": ">0 in turns, on and off",
+   "basis": "Report, not a pass: RT replacement now detaches submitted producers but true growth can still be budget-refused. A capped buffer cannot cover all turn demand. Inspect drops, energy and actual replacement evidence."
+  },
+  "disk_mb": {
+   "predicted": 190,
+   "basis": "3 PNG traces x 60 MB + the log"
+  },
+  "per_consumer_mb_after_retirement": {
+   "mesh_pool": {
+    "predicted": 1312.5,
+    "basis": "vg2 21:38 recovery used 1049.9 MiB of 2047. With 25% headroom and >=25% savings, 1050 MiB rounds to 1312.5 MiB (16-byte alignment), about 734.5 MiB released after retirement. Retain the maximum target throughout the 254-frame qualification window; safety blockers can still defer."
+   },
+   "cascade_capture": {
+    "per_buffer": 352,
+    "buffers": 3,
+    "predicted": 1056,
+    "basis": "vg2 recovery demand 272.5 MiB x 1.25 rounded to 16 MiB = 352. Rolling 24-sample peak survives replacement; reserve-only pressure cannot immediately regrow. Key off deliberately returns to legacy 3 x 544 MiB."
+   },
+   "blas_chunks": {
+    "predicted_upper_bound": 2102,
+    "chunk_mb": 64,
+    "basis": "Card-scaled cap at 15640 MB; actual 64 MB chunks fit <= 2048 MB for new allocations. Existing above-cap chunks require complete evacuation and retirement; live/pinned ownership can prevent release. No exact shrink amount promised."
+   },
+   "rt_capture": {
+    "predicted_upper_bound": 1024,
+    "basis": "Existing simulated-card cap remains 1024 MiB; demand-dependent target. vg2 recovery physically held 624 MiB and refused requests around 960 MiB. Peak retry allocation is reported separately from attempt count, under RT capture rather than cascade. No guaranteed turn coverage."
+   },
+   "hit_material_recycled": {
+    "predicted_upper_bound": 254,
+    "basis": "512 x 15640 / 31419 floored to MiB; guard yields idle buffers, ideally 0 under pressure."
+   },
+   "em_soup_water_soup_and_rest": {
+    "predicted": "Measured, no fixed reserve target",
+    "basis": "Use actual [mem] fields; rest includes game and core GI/RR images. vg1 rest 10300-11300 MB. At that rest the total tracked allowance is 4340-5340 MB; the consumer caps are NOT a simultaneously affordable allocation."
+   },
+   "overlap": {
+    "mesh_pool_copy_retirement_predicted": 0,
+    "basis": "At the final vg2 ON snapshot, shrinking pool 2047 -> 1312.5 MiB alone predicts process 15178 -> about 14443.5 MiB after retirement, assuming other allocations unchanged. Replacement overlap temporarily raises usage; it is not a steady-state saving. No budget guarantee for arbitrary game streaming."
+   }
+  }
+ },
+ "vg3-s8-low-long-view-fg2": {
+  "_rule": "Iteration 4 predictions written before vg3 job/plan generation. No live execution authorized. Real driver budget; no simulated override.",
+  "motion_quality": {
+   "predicted": "No extra opaque drops or alpha fallback in either matched ON turn",
+   "tolerance": "Compare turn-wide peak and mean of complete 120-frame summaries separately for each direction/metric. For each statistic tolerance=abs(OFF-a statistic - OFF-b statistic)+0.02 draws/frame (two rounded hundredths). ON statistic <= max(OFF-a statistic,OFF-b statistic)+tolerance. Require equal summary counts >=2; missing/mismatched evidence fails. No ordinal camera-angle alignment is claimed.",
+   "basis": "OFF-a / ON / OFF-b identical right-left cycles in one launch. A 10 s static reset before each cycle allows retirement/cadence settling. Opposite turns return camera; stochastic animation remains."
+  },
+  "energy_shot_on_vs_off_pct": {
+   "predicted": 0.0,
+   "range": [
+    -0.92,
+    0.92
+   ],
+   "basis": "Pre-post scene float RGB, static exposure-held OFF/ON/OFF. Existing S8 2 x OFF-OFF sigma 0.458%; also report current OFF-OFF spread."
+  },
+  "vram": {
+   "predicted": "Every measured ON snapshot within real driver budget",
+   "basis": "Count retained/copy buffers and all process memory. Report every consumer, BLAS reserved/live/pending, tracked/rest/process/budget. No exact MB target. Recovery repack not mandatory without pressure."
+  },
+  "gpu_cost": {
+   "predicted": "Report existing RT passes and GI GPU ms by complete window; no new pass"
+  },
+  "disk_mb": {
+   "predicted": 190,
+   "basis": "3 PNG traces x 60 MB + log; no float burst"
+  }
+ }
+}

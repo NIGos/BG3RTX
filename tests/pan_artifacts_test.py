@@ -4,6 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 import numpy as np
+from PIL import Image
 from scripts.qa.pan_artifacts import (transient, reproject, camera, decode, load_burst,
                                      scene_camera_origin, texture_compatible, static_camera,
                                      calibration_noise, storage_quantum, positive_control_status,
@@ -163,6 +164,30 @@ class PanTests(unittest.TestCase):
         moved = (*c[:3],np.array([0,.1,0]))
         _,ix,_,_,_ = reproject(d,c,moved)
         np.testing.assert_array_equal(ix[:,1:],x[:,1:]-1)
+
+    def test_peaks_are_the_same_rule_on_negated_luma(self):
+        seq = np.full((8, 1, 2), 0.5, 'f4')
+        seq[3, 0, 0] = 0.9   # one-frame flash up at pixel 0; pixel 1 steady
+        flags, n = transient(-seq, np.ones(seq.shape, bool), np.full((1, 2), 0.01, 'f4'))
+        self.assertEqual(n, 1)
+        self.assertTrue(flags[3, 0, 0] and not flags[:, 0, 1].any())
+        dips, m = transient(seq, np.ones(seq.shape, bool), np.full((1, 2), 0.01, 'f4'))
+        self.assertEqual(m, 0)   # the dip rule never saw it
+
+    def test_present_flicker_parity(self):
+        from scripts.qa.fg_present_flicker import analyse
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for t in range(9):
+                a = np.full((20, 40, 3), 100, 'u1')
+                a[:, :20] = 160 if t % 2 else 100   # left half (the water) switches on every odd present
+                Image.fromarray(a).save(d / f'p{t:02d}.png')
+            mask = np.zeros((20, 40, 3), 'u1')
+            mask[:, :20] = (0, 255, 0)
+            r = analyse(d, mask)
+            self.assertEqual(r['water_pixels'], 400)
+            self.assertGreater(r['water_even']['mean'] + r['water_odd']['mean'], 50)
+            self.assertEqual(r['rest_even']['mean'] + r['rest_odd']['mean'], 0)
 
     def test_coverage_mask_codes_only(self):
         # rt_debug 21: green / blue traced water; yellow (at the bed), red (behind) and game colours are not.

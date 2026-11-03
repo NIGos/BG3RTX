@@ -113,7 +113,27 @@ PreparedSubmit before_submit(DeviceData* dd,std::span<const VkCommandBuffer> com
   prepared.tickets.assign(tickets.begin(),tickets.end());prepared.valid=valid;
   reserve_submissions(prepared.tickets);return prepared;
 }
-void after_submit(DeviceData* dd,VkQueue queue,const PreparedSubmit& prepared,bool success) {
+// The appended empty entry follows all game entries. Its signal covers every
+// registered OMM build/traversal in the pinned graph. Emissive/water auxiliary
+// builds do not use OMM tickets and retain their own fences. The app fence now
+// also covers this private signal; app waits/signals/pNext are unchanged.
+CompletionBatch prepare_completion(DeviceData* dd,VkQueue queue,const PreparedSubmit& prepared) {
+  CompletionBatch batch;
+  if(!active.load(std::memory_order_acquire) || dd!=owner || queue!=dd->graphics_queue ||
+     prepared.tickets.empty() || !prepared.valid)return batch;
+  batch.lock=std::unique_lock<std::mutex>(serialMutex);
+  if(serial.poisoned || !serial.candidate()) {batch.lock.unlock();return batch;}
+  batch.semaphore=timeline;batch.value=serial.candidate();batch.attached=true;
+  return batch;
+}
+void finish_completion(const PreparedSubmit& prepared,CompletionBatch& batch,bool success) {
+  if(!batch.attached)return;
+  if(!serial.signal(batch.value,success)) poison("batched timeline submit failed");
+  else for(auto ticket:prepared.tickets)
+    if(!mark_submitted(ticket,batch.value)) {poison("batched ticket use after retirement or absent ticket");break;}
+  batch.lock.unlock();
+}
+void after_submit(DeviceData* dd,VkQueue queue,const PreparedSubmit& prepared,bool success,bool completionAttached) {
   if(!active.load(std::memory_order_acquire) || dd!=owner)return;
   struct Unpin {const PreparedSubmit& p;~Unpin(){release_submissions(p.tickets);}} unpin{prepared};
   if(!success)return;
@@ -126,7 +146,7 @@ void after_submit(DeviceData* dd,VkQueue queue,const PreparedSubmit& prepared,bo
   std::lock_guard lock(serialMutex);
   if(serial.poisoned)return;
   if(!prepared.valid && !tickets.empty()){poison("stale command generation");return;}
-  if(!tickets.empty()) {
+  if(!tickets.empty() && !completionAttached) {
     const uint64_t value=serial.candidate();
     if(!value){poison("serial overflow");return;}
     VkTimelineSemaphoreSubmitInfo values{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};

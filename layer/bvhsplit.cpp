@@ -1,3 +1,4 @@
+#include "../common/perf_hook_state.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
@@ -38,6 +39,9 @@
 #include "../common/dyn_hold.h"
 #include "../common/cascade_casters.h"
 #include "../common/rt_capture_budget.h"
+#include "../common/vram_guard.h"
+#include "../common/as_chunk_alloc.h"
+#include "../common/vram_compact.h"
 #include "omm_native_plain.h"
 #include "omm_submit.h"
 #include "../common/omm_material_cache.h"
@@ -169,57 +173,14 @@ uint64_t mix(uint64_t h, uint64_t v) {
   return h * 1099511628211ull;
 }
 
-// ---- a first-fit range allocator ----
-struct RangeAlloc {
-  VkDeviceSize cap = 0, used = 0;
-  std::map<VkDeviceSize, VkDeviceSize> free;   // offset -> size
-  void init(VkDeviceSize c) {
-    cap = c;
-    used = 0;
-    free.clear();
-    if (c) free[0] = c;
-  }
-  bool alloc(VkDeviceSize size, VkDeviceSize align, VkDeviceSize* off) {
-    for (auto it = free.begin(); it != free.end(); ++it) {
-      VkDeviceSize s0 = it->first, e0 = it->first + it->second, a = (s0 + align - 1) / align * align;
-      if (a + size > e0) continue;
-      free.erase(it);
-      if (a > s0) free[s0] = a - s0;
-      if (a + size < e0) free[a + size] = e0 - (a + size);
-      *off = a;
-      used += size;
-      return true;
-    }
-    return false;
-  }
-  void release(VkDeviceSize off, VkDeviceSize size) {
-    used -= (std::min)(used, size);
-    auto next = free.lower_bound(off);
-    if (next != free.end() && off + size == next->first) {
-      size += next->second;
-      next = free.erase(next);
-    }
-    if (next != free.begin()) {
-      auto prev = std::prev(next);
-      if (prev->first + prev->second == off) {
-        prev->second += size;
-        return;
-      }
-    }
-    free[off] = size;
-  }
-  void grow(VkDeviceSize ncap) {
-    if (ncap <= cap) return;
-    VkDeviceSize old = cap;
-    cap = ncap;
-    used += ncap - old;   // release() subtracts it again
-    release(old, ncap - old);
-  }
-};
+using as_chunks::RangeAlloc;
 
 // ---- acceleration structure storage: suballocated chunks ----
-struct AsChunk { Buf buf; RangeAlloc ra; };
+struct AsChunk { Buf buf; as_chunks::ChunkRanges ra; };
+uint64_t g_chunks_freed = 0, g_chunk_bytes_freed = 0;
 std::vector<AsChunk> g_chunks;
+uint64_t g_relocated = 0, g_relocated_bytes = 0;
+int g_relocating_chunk = -1; // do not refill a source awaiting old-TLAS retirement
 struct AsAlloc {
   int chunk = -1;
   VkDeviceSize off = 0, size = 0;
@@ -237,61 +198,84 @@ std::vector<PendingFree> g_pending_free;
 // destroys AS objects at run time (compaction, new-range builds, the emissive
 // capture), while the legacy build, which never does, never faults. Kept handles
 // are destroyed at device destruction; above rt_as_keep_max the oldest go.
-std::deque<VkAccelerationStructureKHR> g_kept_as;
+struct KeptAs { VkAccelerationStructureKHR as; int chunk; };
+std::deque<KeptAs> g_kept_as;
 uint64_t g_kept_dropped = 0;
-void retire_as(VkAccelerationStructureKHR as) {
+void retire_as(VkAccelerationStructureKHR as, int chunk) {
   if (!as) return;
   if (!cfg_int("rt_as_keep", 0)) {
     defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(as));
     return;
   }
-  g_kept_as.push_back(as);
+  g_kept_as.push_back({as, chunk});
+  if (chunk >= 0) ++g_chunks[chunk].ra.kept;
   const size_t cap = size_t((std::max)(cfg_int("rt_as_keep_max", 200000), 1000));
   while (g_kept_as.size() > cap) {
-    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_kept_as.front()));
+    defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_kept_as.front().as));
+    if (g_kept_as.front().chunk >= 0) --g_chunks[g_kept_as.front().chunk].ra.kept;
     g_kept_as.pop_front();
     if (g_kept_dropped++ == 0) log("[bvh] more than %zu released BLAS handles kept: the oldest are destroyed", cap);
   }
 }
 
-bool as_create(VkDeviceSize size, AsAlloc& out) {
-  out = AsAlloc{};
-  size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
-  int ci = -1;
-  VkDeviceSize off = 0;
-  for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
-    if (g_chunks[i].buf.b && g_chunks[i].ra.alloc(size, kAsAlign, &off)) ci = int(i);
-  if (ci < 0) {
-    VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
-    AsChunk c;
-    if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
-      return false;
-    c.ra.init(cs);
-    c.ra.alloc(size, kAsAlign, &off);
-    g_chunks.push_back(std::move(c));
-    ci = int(g_chunks.size() - 1);
-  }
-  VkAccelerationStructureCreateInfoKHR ci2{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
-  ci2.buffer = g_chunks[ci].buf.b;
-  ci2.offset = off;
-  ci2.size = size;
-  ci2.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-  if (g_dd->vk.CreateAccelerationStructureKHR(g_dd->device, &ci2, nullptr, &out.as) != VK_SUCCESS) {
-    g_chunks[ci].ra.release(off, size);
-    out = AsAlloc{};
-    return false;
+VkDeviceSize as_reserved() {
+  VkDeviceSize n = 0;
+  for (const AsChunk& c : g_chunks) n += c.buf.size;
+  return n;
+}
+
+// guard_what: a new chunk for this BLAS is a growth rt_vram_guard may refuse (new cached meshes, per-draw
+// BLAS: the geometry is then left out of the frame, logged by the guard). nullptr: never refused (compaction
+// copies, which give memory back, and the scene's own cascade/sun BLAS).
+bool as_handle(VkDeviceSize size, int ci, VkDeviceSize off, AsAlloc& out) {
+  VkAccelerationStructureCreateInfoKHR info{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+  info.buffer = g_chunks[ci].buf.b;info.offset = off;info.size = size;
+  info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  if (g_dd->vk.CreateAccelerationStructureKHR(g_dd->device, &info, nullptr, &out.as) != VK_SUCCESS) {
+    g_chunks[ci].ra.cancel(off, size);out = {};return false;
   }
   VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
   ai.accelerationStructure = out.as;
   out.addr = g_dd->vk.GetAccelerationStructureDeviceAddressKHR(g_dd->device, &ai);
-  out.chunk = ci;
-  out.off = off;
-  out.size = size;
-  return true;
+  out.chunk = ci;out.off = off;out.size = size;return true;
+}
+bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr, uint32_t arena = 0) {
+  out = AsAlloc{};
+  size = (size + kAsAlign - 1) / kAsAlign * kAsAlign;
+  VkDeviceSize off = 0;
+  // Small persistent compaction destinations must not pin holes left by large
+  // per-draw/cascade rebuilds. Keep their retirement/reuse domains separate.
+  // Key off retains the ordinary mixed allocator; ownership is recorded always.
+  const uint32_t allocation_arena = cfg_int("rt_vram_compact", 0) ? arena : UINT32_MAX;
+  int ci = as_chunks::allocate_fullest(g_chunks, size, kAsAlign, &off, g_relocating_chunk, allocation_arena);
+  if (ci < 0) {
+    VkDeviceSize cs = (std::max)(VkDeviceSize(cfg_int("rt_mesh_chunk_mb", 64)) << 20, size);
+    if (guard_what && vram_guard_on() &&
+        !vram_allow(vram_guard::kAsChunks, cs, guard_what,
+                    as_reserved() + cs > vram_cap(vram_guard::kAsChunks, UINT64_MAX)))   // over the budget's share
+      return false;
+    AsChunk c;
+    if (!make_buf(c.buf, cs, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "BLAS chunk (mesh/per-draw BLAS)"))
+      return false;
+    c.ra.init(cs);
+    c.ra.arena = arena;
+    c.ra.alloc(size, kAsAlign, &off);
+    // A retired empty slot (buf.b null, no range in it) is reused: chunk indices stay stable.
+    for (size_t i = 0; i < g_chunks.size() && ci < 0; ++i)
+      if (!g_chunks[i].buf.b) g_chunks[i] = std::move(c), ci = int(i);
+    if (ci < 0) {
+      g_chunks.push_back(std::move(c));
+      ci = int(g_chunks.size() - 1);
+    }
+  }
+  return as_handle(size, ci, off, out);
 }
 
 void as_destroy(AsAlloc& a) {
-  if (a.chunk >= 0) g_pending_free.push_back({frame_index(), a.chunk, a.off, a.size, a.as});
+  if (a.chunk >= 0) {
+    g_chunks[a.chunk].ra.mark_pending(a.size);
+    g_pending_free.push_back({frame_index(), a.chunk, a.off, a.size, a.as});
+  }
   else if (a.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.as));
   a = AsAlloc{};
 }
@@ -312,8 +296,26 @@ VkDeviceSize g_basis_bytes = 0;     // pool ranges holding hit-material UV/basis
 // first passes 1, 2, 4, ... ("over kBasisCapBytes", smoke_ultra forbids it); 2026-11-01 ran at 240 of 256 MB.
 uint64_t g_basis_over = 0, g_basis_over_logged = 0;
 VkDeviceSize g_basis_over_bytes = 0;
+struct PoolMove { uint64_t key, gen; VkDeviceSize position, basis, position_size, basis_size; };
+struct PoolHoldMove { uint64_t key; VkDeviceSize source, destination, bytes; };
+struct PoolCopy {
+  Buf target;
+  RangeAlloc ranges;
+  std::vector<PoolMove> meshes;
+  std::vector<PoolHoldMove> holds;
+  uint64_t frame = 0, rec = 0;
+  uint32_t done_slot = 0;
+};
+PoolCopy g_pool_copy;
+Buf g_compact_status; // private completion words; never aliased by the legacy status ring
+struct OldPool { Buf buf; uint64_t frame; };
+std::vector<OldPool> g_old_pools;
+vram_compact::QuietWindow g_pool_quiet;
+bool g_pool_snapshots = false;
+uint64_t g_pool_repacks = 0, g_pool_saved = 0;
 
 bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
+  if (g_pool_copy.target.b) return false; // immutable source until copy confirmation
   if (g_pool.b && g_pool_ra.alloc(size, 16, off)) return true;
   // Below 2^31 bytes and within maxStorageBufferRange (common/rt_capture_budget.h mesh_pool_capacity:
   // at 2048 MB set 1 read the pool out of range). Full: the mesh stays uncached, logged once per size.
@@ -323,9 +325,11 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     g_dd->inst->GetPhysicalDeviceProperties(g_dd->physical, &p);
     s_range = p.limits.maxStorageBufferRange;
   }
+  // rt_vram_guard: the cap also follows the device budget (vram_guard::cap; 2047 MB on the 32 GB reference).
+  const VkDeviceSize cfg_max = (std::min)(VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20,
+                                          VkDeviceSize(vram_cap(vram_guard::kMeshPool, UINT64_MAX)));
   const VkDeviceSize cap = capture_budget::mesh_pool_capacity(
-      g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20,
-      VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_max_mb", 3072), 64)) << 20, s_range);
+      g_pool.size, size, VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20, cfg_max, s_range);
   if (!cap) {
     if (s_full_logged != g_pool.size) {
       s_full_logged = g_pool.size;
@@ -334,6 +338,8 @@ bool pool_alloc(VkCommandBuffer cmd, VkDeviceSize size, VkDeviceSize* off) {
     }
     return false;
   }
+  // The new pool is allocated while the old one is still alive (copied, freed deferred): the step is `cap`.
+  if (!vram_allow(vram_guard::kMeshPool, cap, "mesh pool grow (new meshes stay uncached)")) return false;
   Buf nb;
   if (!make_buf(nb, cap,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
@@ -497,6 +503,8 @@ enum RecState : uint8_t { kRecPending, kRecSubmitted, kRecDropped };
 uint64_t g_rec_next = 0;
 std::unordered_map<VkCommandBuffer, std::vector<uint64_t>> g_rec_cmd;   // not yet submitted
 std::unordered_map<uint64_t, RecState> g_rec_state;
+vram_compact::RecordPins g_compact_records; // under g_fix_mu; pending copies cannot lose drop detection
+vram_compact::UncertainCommands g_pool_uncertain; // under g_fix_mu
 sun_coverage::CommandOwners g_rec_owners;
 uint64_t g_rec_dropped = 0, g_rec_dropped_logged = 0;
 
@@ -520,6 +528,10 @@ int rec_state(uint64_t id) {   // -1: unknown (0, or pruned: never trusted)
   return it == g_rec_state.end() ? -1 : int(it->second);
 }
 bool rec_submitted(uint64_t id) { return rec_state(id) == kRecSubmitted; }
+void compact_record_pin(uint64_t id, bool pin) {
+  std::lock_guard<std::mutex> lock(g_fix_mu);
+  if (pin) g_compact_records.retain(id); else g_compact_records.release(id);
+}
 
 // ---- GPU-side bookkeeping ----
 Buf g_status;                 // host-visible validation results
@@ -534,7 +546,7 @@ struct Job { uint64_t key, gen; uint32_t status; JobKind kind; bool cross_instan
 struct CompactRead { uint64_t key, gen; uint32_t slot; };
 // A compaction copy: the mesh switches to `c` only once the batch's done word shows
 // the copy executed (a dropped command buffer never wrote it).
-struct Swap { uint64_t key, gen; AsAlloc c; };
+struct Swap { uint64_t key, gen; AsAlloc c; bool relocation = false; AsAlloc source; };
 struct JobBatch {
   uint64_t frame;
   uint32_t done_slot;
@@ -542,6 +554,8 @@ struct JobBatch {
   std::vector<CompactRead> compact;
   std::vector<Swap> swaps;
   uint64_t rec = 0;   // build record of the command buffer (dropped: the batch is lost at once)
+  bool relocation = false;
+  uint64_t command = 0;
 };
 constexpr uint32_t kDoneMagic = 0x42564844u;   // the batch's done word
 std::vector<JobBatch> g_batches;
@@ -1121,6 +1135,189 @@ uint32_t status_slots(uint32_t n) {
   std::memset(g_status.map + VkDeviceSize(s) * 16, 0, size_t(n) * 16);
   return s;
 }
+bool compact_status_ready() {
+  return g_compact_status.b || make_buf(g_compact_status, 32, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       true, "VRAM compact completion");
+}
+
+void pool_repack_begin(VkCommandBuffer cmd, uint64_t rec, uint64_t now) {
+  const VkDeviceSize initial = VkDeviceSize((std::max)(cfg_int("rt_mesh_pool_mb", 256), 16)) << 20;
+  VkDeviceSize target = vram_compact::pool_target(g_pool_ra.used, g_pool.size, initial);
+  // Outlast the existing 240-frame build-result watchdog, plus the scene ring
+  // and six-present range retirement. Demand must remain low for the full window.
+  const bool quiet = g_pool_quiet.ready(now, cfg_int("rt_vram_compact", 0) && target,
+                                         240 + kSceneSlots + 6, target);
+  if (!cfg_int("rt_vram_compact",0) || !target) return;
+  static uint64_t next_log=0;
+  auto deferred=[&](const char* why){
+    if(now>=next_log){
+      next_log=now+240+kSceneSlots+6;
+      log("[bvh] mesh pool shrink deferred: %s (%.1f / %.0f MB, target %.1f MB)",why,
+          double(g_pool_ra.used)/1048576.0,double(g_pool.size)/1048576.0,double(target)/1048576.0);
+    }
+  };
+  if (!quiet) {deferred("low-demand window");return;}
+  target = (std::max)(target, VkDeviceSize(g_pool_quiet.peak_target));
+  if (g_pool_copy.target.b || !g_old_pools.empty()) {deferred("copy or old scene retirement");return;}
+  if (geo_native_hair_enabled()) {deferred("native hair ranges");return;}
+  {
+    std::lock_guard<std::mutex> fl(g_fix_mu);
+    if (!g_pool_uncertain.empty()) {deferred("uncertain pool recording");return;}
+    // Never copy ahead of another command's registered but unsubmitted pool
+    // work, including legacy batches whose watchdog already discarded results.
+    for (const auto& [other, records] : g_rec_cmd)
+      if (other != cmd && !records.empty()) {deferred("unsubmitted pool work");return;}
+  }
+  // Never copy data an outstanding extraction/basis/hold job can still write.
+  if (!g_batches.empty()) {deferred("outstanding build results");return;}
+  for (const auto& p : g_pending_free) if (p.chunk < 0) {deferred("pending pool ranges");return;}
+  for (const auto& [key, d] : g_dyn) if (d.hair_bounds_size) {deferred("hair bounds ranges");return;}
+  for (const auto& [key, m] : g_meshes) if (m.state != kReady) {deferred("unverified mesh");return;}
+  if (!compact_status_ready() || !native_hit::pool_compact_freeze()) {deferred("material jobs or completion allocation");return;}
+  PoolCopy copy;
+  copy.ranges.init(target);
+  std::vector<VkBufferCopy> regions;
+  bool fits = true;
+  for (const auto& [key, m] : g_meshes) {
+    uint64_t position = 0, basis = 0;
+    if ((m.pool_size && !copy.ranges.alloc(m.pool_size, 16, &position)) ||
+        (m.basis_size && !copy.ranges.alloc(m.basis_size, 16, &basis))) { fits = false; break; }
+    copy.meshes.push_back({key, m.gen, position, basis, m.pool_size, m.basis_size});
+    if (m.pool_size) regions.push_back({m.pool_off, position, m.pool_size});
+    if (m.basis_size) regions.push_back({m.basis_off, basis, m.basis_size});
+  }
+  // Dynamic hold snapshots are live pool allocations too, even with no new
+  // meshes. Copy them rather than waiting forever for a static view to release them.
+  for (const auto& [key,d] : g_dyn) if(d.hold_size){
+    uint64_t destination=0;
+    if(!copy.ranges.alloc(d.hold_size,16,&destination)){fits=false;break;}
+    copy.holds.push_back({key,d.hold_off,destination,d.hold_size});
+    regions.push_back({d.hold_off,destination,d.hold_size});
+  }
+  if (!fits || copy.ranges.used != g_pool_ra.used ||
+      !vram_compact::pool_shrink_overlap(target,g_pool.size) ||
+      !make_buf(copy.target, target, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "mesh pool repack")) {
+    deferred("range accounting or replacement allocation failed");
+    native_hit::pool_compact_thaw();g_pool_quiet = {};return;
+  }
+  copy.frame = now;copy.rec = rec;copy.done_slot = 0;
+  std::memset(g_compact_status.map, 0, 16);
+  barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, kRW, kXfer, kRW);
+  if (!regions.empty()) g_dd->vk.CmdCopyBuffer(cmd, g_pool.b, copy.target.b, uint32_t(regions.size()), regions.data());
+  barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT);
+  g_dd->vk.CmdFillBuffer(cmd, g_compact_status.b, 0, 4, kDoneMagic);
+  barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+  g_pool_copy = std::move(copy);
+  compact_record_pin(rec, true);
+}
+
+void pool_repack_poll(uint64_t now) {
+  if (g_pool_copy.target.b) {
+    auto& copy = g_pool_copy;
+    const bool done = *reinterpret_cast<const volatile uint32_t*>(g_compact_status.map) == kDoneMagic;
+    const bool dropped = rec_state(copy.rec) == kRecDropped;
+    // No elapsed-frame timeout: an unsubmitted/stalled copy cannot be published
+    // or freed while the command buffer may still run later.
+    const auto outcome = vram_compact::copy_outcome(done, dropped, cfg_int("rt_vram_compact", 0) != 0);
+    if (outcome != vram_compact::CopyOutcome::Wait) {
+      const bool commit = outcome == vram_compact::CopyOutcome::Publish;
+      if (commit) {
+        const auto before = g_pool.size;
+        ++g_pool_epoch;
+        for (const auto& move : copy.meshes) {
+          auto it = g_meshes.find(move.key);
+          if (it == g_meshes.end() || it->second.gen != move.gen) {
+            if (move.position_size) copy.ranges.release(move.position, move.position_size);
+            if (move.basis_size) copy.ranges.release(move.basis, move.basis_size);
+            continue;
+          }
+          auto& m = it->second;m.pool_off = move.position;m.basis_off = move.basis;
+          native_hit::pool_compact_rebase(m.geo_key, m.gen, m.pool_off, m.basis_off, g_pool_epoch);
+        }
+        for(const auto& move:copy.holds){
+          auto it=g_dyn.find(move.key);
+          if(it!=g_dyn.end() && vram_compact::hold_move_matches(it->second.hold_off,it->second.hold_size,move.source,move.bytes))
+            it->second.hold_off=move.destination;
+          else copy.ranges.release(move.destination,move.bytes);
+        }
+        // Evictions during the copy belong to the old allocator. Its complete
+        // buffer remains retained until every old scene and GPU fence retires.
+        std::erase_if(g_pending_free, [](const PendingFree& p) { return p.chunk < 0; });
+        g_old_pools.push_back({g_pool, now});
+        g_pool = copy.target;copy.target = {};g_pool_ra = std::move(copy.ranges);
+        g_pool_snapshots = true;++g_pool_repacks;g_pool_saved += before - g_pool.size;
+        log("[bvh] mesh pool capacity: repacked %.1f / %.0f -> %.0f MB, epoch %llu; old pool waits for scene retirement",
+            double(g_pool_ra.used) / 1048576.0, double(before) / 1048576.0,
+            double(g_pool.size) / 1048576.0, (unsigned long long)g_pool_epoch);
+      } else {
+        g_old_pools.push_back({copy.target, now});copy.target = {};
+        log("[bvh] mesh pool capacity: repack discarded (%s), original pool retained", dropped ? "dropped recording" : "key off");
+      }
+      compact_record_pin(copy.rec, false);
+      copy = {};native_hit::pool_compact_thaw();g_pool_quiet = {};
+    }
+  }
+  for (auto it = g_old_pools.begin(); it != g_old_pools.end();) {
+    if (!as_chunks::retired(it->frame, now, life_gpu_done(), rt_scene_oldest_live())) { ++it;continue; }
+    free_buf(it->buf);it = g_old_pools.erase(it);
+  }
+}
+
+void relocate_cached_blas(VkCommandBuffer cmd, JobBatch& batch) {
+  if (!cfg_int("rt_vram_compact", 0) || g_relocating_chunk >= 0 || !batch.swaps.empty() ||
+      !batch.jobs.empty() || !batch.compact.empty()) return;
+  if (!compact_status_ready()) return;
+  for (const auto& b : g_batches) if (!b.swaps.empty()) return;
+  const size_t budget = size_t((std::max)(cfg_int("rt_mesh_compact_per_frame", 256), 0));
+  std::vector<size_t> order;
+  for (size_t i = 0; i < g_chunks.size(); ++i)
+    if (g_chunks[i].ra.live && !g_chunks[i].ra.kept) order.push_back(i);
+  std::sort(order.begin(), order.end(), [](size_t a, size_t b) {
+    const double x = double(g_chunks[a].ra.live) / double(g_chunks[a].ra.cap);
+    const double y = double(g_chunks[b].ra.live) / double(g_chunks[b].ra.cap);
+    return x != y ? x < y : a < b;
+  });
+  for (size_t source : order) {
+    std::vector<uint64_t> keys, sizes;
+    for (const auto& [key, m] : g_meshes)
+      if (m.as.chunk == int(source) && m.state == kReady && (m.compacted || !cfg_int("rt_mesh_compact", 1))) {
+        keys.push_back(key);sizes.push_back(m.as.size);
+      }
+    if (keys.empty() || keys.size() > budget) continue;
+    std::vector<vram_compact::Move> plan;
+    if (!vram_compact::evacuation(g_chunks, source, sizes, plan)) continue;
+    std::vector<Swap> swaps;
+    bool ok = true;
+    for (const auto& move : plan) {
+      auto& m = g_meshes.at(keys[move.item]);
+      VkDeviceSize off = 0;
+      AsAlloc target;
+      if (!g_chunks[move.chunk].ra.alloc(m.as.size, kAsAlign, &off)) { ok = false;break; }
+      if (!as_handle(m.as.size, int(move.chunk), off, target)) { ok = false;break; }
+      swaps.push_back({keys[move.item], m.gen, target, true, m.as});
+    }
+    if (!ok) { for (auto& s : swaps) as_destroy(s.c);return; }
+    // CLONE accepts both already compacted BLAS and builds with no compaction
+    // saving. Destinations have the exact aligned source size; no new chunk.
+    barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, kRW, kAS, kRW);
+    for (const auto& s : swaps) {
+      VkCopyAccelerationStructureInfoKHR ci{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
+      ci.src = g_meshes.at(s.key).as.as;ci.dst = s.c.as;ci.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_KHR;
+      g_dd->vk.CmdCopyAccelerationStructureKHR(cmd, &ci);
+    }
+    barrier(cmd, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
+    batch.swaps.insert(batch.swaps.end(), swaps.begin(), swaps.end());
+    // This batch has no validation/query payload. A dedicated done word cannot
+    // be recycled by the normal status ring during an arbitrarily long stall.
+    batch.relocation = true;
+    std::memset(g_compact_status.map + 16, 0, 16);
+    compact_record_pin(batch.rec, true);
+    g_relocating_chunk = int(source);
+    return;
+  }
+}
 
 }  // namespace
 
@@ -1183,10 +1380,17 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (JobBatch& b : g_batches)
     for (Swap& s : b.swaps) as_destroy(s.c);
   g_batches.clear();
+  if (g_pool_copy.target.b) free_buf(g_pool_copy.target);
+  g_pool_copy = {};
+  { std::lock_guard<std::mutex> fl(g_fix_mu);g_compact_records.clear();g_pool_uncertain.clear(); }
+  for (auto& old : g_old_pools) free_buf(old.buf);
+  g_old_pools.clear();native_hit::pool_compact_thaw();g_pool_quiet = {};
+  g_pool_snapshots = false;g_pool_repacks = g_pool_saved = 0;
+  g_relocated = g_relocated_bytes = 0;g_relocating_chunk = -1;
   for (const PendingFree& p : g_pending_free)
     if (p.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(p.as));
   g_pending_free.clear();
-  for (VkAccelerationStructureKHR a : g_kept_as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a));
+  for (const KeptAs& a : g_kept_as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.as));
   g_kept_as.clear();
   g_meshes.clear();
   g_dyn.clear();
@@ -1199,7 +1403,8 @@ void bvh_device_destroyed(DeviceData* dd) {
   for (auto& c : g_chunks)
     if (c.buf.b) free_buf(c.buf);
   g_chunks.clear();
-  for (Buf* b : {&g_pool, &g_ring, &g_status, &g_scratch})
+  g_chunks_freed = g_chunk_bytes_freed = 0;
+  for (Buf* b : {&g_pool, &g_ring, &g_status, &g_scratch, &g_compact_status})
     if (b->b) free_buf(*b);
   for (TlasSlot& ts : g_tlas) {
     if (ts.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(ts.as));
@@ -1222,6 +1427,28 @@ void bvh_device_destroyed(DeviceData* dd) {
   g_dsl = VK_NULL_HANDLE;
   g_on = false;
   g_dd = nullptr;
+}
+
+// rt_vram_guard breakdown and yield sizes (present thread, under this module's lock).
+void bvh_vram(BvhVram* out) {
+  *out = BvhVram{};
+  if (!g_on) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const uint64_t now = frame_index();
+  for (const AsChunk& c : g_chunks) {
+    if (!c.buf.b) continue;
+    out->as_reserved += c.buf.size;
+    out->as_live += c.ra.live;
+    out->as_empty += c.ra.reclaimable() ? c.buf.size : 0;
+    ++out->chunks;
+  }
+  for (const auto& [k, m] : g_meshes)
+    if (m.last_used + 8 < now) out->lru += m.as.size;
+  out->pool = g_pool.size;
+  out->pool_used = g_pool_ra.used;
+  out->pool_pending = g_pool_copy.target.size;
+  for (const auto& old : g_old_pools) out->pool_pending += old.buf.size;
+  out->pool_repacks = g_pool_repacks;out->blas_relocated = g_relocated;
 }
 
 bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_split) != 0; }
@@ -1469,6 +1696,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       (cfg_int("rt_mesh_compact", 1) ? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR : 0);
   const uint64_t new_budget = uint64_t((std::max)(cfg_int("rt_mesh_new_tris", 4000000), 1000));
   g_pool_grew = false;
+  pool_repack_begin(cmd, rec, now);
 
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
@@ -1516,7 +1744,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
-      if (!as_create(sz.accelerationStructureSize, m.as)) {
+      if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
         continue;
       }
@@ -1748,7 +1976,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       uint32_t cap_prims = fd.prims + fd.prims / 4;
       VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):
           omm_want ? blas_sizes_omm(cap_prims, stride, slot_flags, &omm_cap_attach) : blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
-      if (!as_create(sz.accelerationStructureSize, s.as)) {
+      // Micromap attachments change sizes, not the per-draw BLAS lifetime domain.
+      if (!as_create(sz.accelerationStructureSize, s.as, "BLAS chunk for a per-draw BLAS (draw left out this frame)", 1)) {
         if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
         if (s.omm_index_size) g_pending_free.push_back({now, -1, s.omm_index_off, s.omm_index_size});
@@ -1794,7 +2023,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     s.rec = rec;
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
-    if (hold_frames && !moving && fd.prims <= hold_max_prims) {
+    if (!g_pool_copy.target.b && hold_frames && !moving && fd.prims <= hold_max_prims) {
       const VkDeviceSize bytes = VkDeviceSize(fd.prims) * tri_bytes;
       if (s.hold_size && (s.hold_size != bytes || s.hold_stride != stride)) {
         g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
@@ -1961,7 +2190,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if (g_casc_as.as) as_destroy(g_casc_as);
       const VkAccelerationStructureBuildSizesInfoKHR sz =
           blas_sizes(cap.cascade_tris, cap.cascade_stride, false, casc_flags);
-      ok = as_create(sz.accelerationStructureSize, g_casc_as);
+      ok = as_create(sz.accelerationStructureSize, g_casc_as, nullptr, 2);
       casc_scratch = sz.buildScratchSize;
       g_casc_update_scratch = casc_refit_on ? sz.updateScratchSize : 0;
       g_casc_sig = cap.cascade_sig;
@@ -2111,6 +2340,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dd->vk.CmdCopyBuffer(cmd, g_omm_dyn_stats.b, g_omm_dyn_readback.b, 1, &copy);
   }
   JobBatch batch{now, 0, {}, {}, {}, rec};
+  batch.command = reinterpret_cast<uint64_t>(cmd);
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
   // done word (written by a transfer after all of them).
   const bool compact = cfg_int("rt_mesh_compact", 1) != 0;
@@ -2318,10 +2548,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       batch.compact.push_back({mesh_builds[k].key, m.gen, sslot});
     }
     g_compact_next = (g_compact_next + n_cq) % kCompactSlots;
+    // All fallible build allocations have succeeded. A recorded relocation
+    // must reach g_batches, even if an earlier scratch allocation would fail.
+    if (ext.empty() && !n_cq) relocate_cached_blas(cmd, batch);
     {   // the done word, after every job, compaction copy and BLAS build of this batch
       barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, kXfer,
               VK_ACCESS_TRANSFER_WRITE_BIT);
-      dd->vk.CmdFillBuffer(cmd, g_status.b, VkDeviceSize(batch.done_slot) * 16, 16, kDoneMagic);
+      dd->vk.CmdFillBuffer(cmd, batch.relocation ? g_compact_status.b : g_status.b,
+                          batch.relocation ? 16 : VkDeviceSize(batch.done_slot) * 16, 16, kDoneMagic);
       barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
     }    stamp(cmd, 2);
 
@@ -2422,6 +2656,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->info_bytes = VkDeviceSize((std::max)(n, 1u)) * 16;
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
+  if (cfg_int("rt_vram_compact", 0) || g_pool_snapshots) {
+    g_pool_snapshots = true;native_hit::pool_compact_scene(slot);
+  }
   out->rec = rec;
   out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec, g_ring_transfer_source};
 
@@ -2593,7 +2830,7 @@ bool bvh_build_sun_clone(VkCommandBuffer cmd,uint32_t slot,const BvhSunBase& bas
     const auto& soup=cascades[layer].soup;
     bsz[layer]=blas_sizes(soup.tris,soup.stride,false,flags);
     scratch_bytes=(std::max)(scratch_bytes,bsz[layer].buildScratchSize);
-    if(!as_create(bsz[layer].accelerationStructureSize,s.cascade[layer])) return false;
+    if(!as_create(bsz[layer].accelerationStructureSize,s.cascade[layer],nullptr,2)) return false;
   }
   const VkDeviceSize instance_bytes=VkDeviceSize(count)*sizeof(VkAccelerationStructureInstanceKHR);
   if(!make_buf(s.instances,instance_bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|
@@ -2674,7 +2911,7 @@ uint64_t bvh_rec_register(VkCommandBuffer cmd) {
   g_rec_owners.record(id,reinterpret_cast<uint64_t>(cmd));
   if (g_rec_state.size() > 8192)   // forget old records (an unknown one is never trusted)
     for (auto it = g_rec_state.begin(); it != g_rec_state.end();)
-      if(it->first + 4096 < g_rec_next) {g_rec_owners.forget(it->first);it=g_rec_state.erase(it);} else ++it;
+      if(it->first + 4096 < g_rec_next && !g_compact_records.contains(it->first)) {g_rec_owners.forget(it->first);it=g_rec_state.erase(it);} else ++it;
   return id;
 }
 
@@ -2692,6 +2929,7 @@ bool bvh_rec_matches_command(uint64_t id,VkCommandBuffer command) {
 // see submitted never runs.
 void bvh_cmd_reset(VkCommandBuffer cmd) {
   std::lock_guard<std::mutex> fl(g_fix_mu);
+  g_pool_uncertain.reset(reinterpret_cast<uint64_t>(cmd));
   g_rec_owners.reset(reinterpret_cast<uint64_t>(cmd));
   g_fixups.erase(cmd);   // matrices for a recording that will never run (the ring slot may be reused)
   auto it = g_rec_cmd.find(cmd);
@@ -2728,46 +2966,52 @@ void bvh_on_submit(const std::vector<VkCommandBuffer>& cmds) {
   if (g_fixups.empty()) return;
   const double t_fix0 = now_ms();
   uint64_t applied = 0, late = 0, bad = 0;
+  const bool reuse = cfg_hot(CfgHot::perf_hook_state) != 0;
+  perf::SubmitMatrices matrices; // destroyed before return; never reused across submits
+  uint64_t unique = 0, build_count = 0;
   for (VkCommandBuffer c : cmds) {
     auto it = g_fixups.find(c);
     if (it == g_fixups.end()) continue;
+    if (!it->second.empty()) ++build_count;
     for (const Fixup& f : it->second) {
       for (uint32_t i = 0; i < f.count; ++i) {
         uint8_t* d = f.dst + VkDeviceSize(i) * f.dst_stride;
         float m[12];
-        for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
+        bool ok;
+        if (reuse) {
+          perf::MatrixSource source;
+          for (int k = 0; k < 3; ++k) source.rows[k] = f.src[k] + VkDeviceSize(i) * f.src_stride[k];
+          const auto& value = matrices.get(source, load_mapped16);
+          std::memcpy(m, value.rows.data(), sizeof m); ok = value.valid;
+        } else {
+          for (int k = 0; k < 3; ++k) load_mapped16(m + 4 * k, f.src[k] + VkDeviceSize(i) * f.src_stride[k]);
+          ok = perf::valid_matrix(m);
+          ++unique;
+        }
         if (i == 0 && f.instance && std::memcmp(f.sample, m, 48)) ++late;
         if (i == 0 && f.log_key)
           log("[bvh-draw] frame %llu mesh %016llx VS %016llx tris %u firstInstance %u instanceCount %u translation %.6f %.6f %.6f instance %u",
               (unsigned long long)f.log_frame, (unsigned long long)f.log_key, (unsigned long long)f.log_vs, f.log_tris, f.log_first, f.count,
               m[3], m[7], m[11], f.log_instance);
-        bool ok = true;
-        for (float v : m) ok = ok && v > -1e7f && v < 1e7f;
-        if (ok) {
-          float det = m[0] * (m[5] * m[10] - m[6] * m[9]) - m[1] * (m[4] * m[10] - m[6] * m[8]) +
-                      m[2] * (m[4] * m[9] - m[5] * m[8]);
-          ok = std::fabs(det) > 1e-12f;
-        }
         if (!ok) ++bad;
-        if (f.instance) {
-          std::memcpy(d, m, 48);
-          d[51] = ok ? 0xFF : 0;   // mask (the high byte of instanceCustomIndex:24 | mask:8)
-        } else {
-          if (!ok) m[0] = std::numeric_limits<float>::quiet_NaN();   // the job sees an invalid matrix
-          std::memcpy(d, m, 48);
-        }
+        perf::scatter_matrix(d, m, ok, f.instance);
       }
       applied += f.count;
     }
     g_fixups.erase(it);
   }
-  if (applied) {   // cpu_timing: the submit-time matrix copies read the game's mapped instance stream
-    static double ms = 0; static uint64_t calls = 0, mats = 0;
-    ms += now_ms() - t_fix0; mats += applied;
-    if (++calls >= 300) {
+  { // cpu_timing: fresh samples after each mode/timing transition
+    static double ms = 0; static uint64_t calls = 0, mats = 0, sources = 0, builds = 0;
+    static int mode = -1;
+    const bool timing = cfg_int("cpu_timing", 0) != 0;
+    if (!timing || mode != int(reuse)) { ms = 0; calls = mats = sources = builds = 0; mode = int(reuse); }
+    if (applied && timing) {
+      ms += now_ms() - t_fix0; builds += build_count; mats += applied; sources += reuse ? matrices.size() : unique;
+    }
+    if (applied && timing && ++calls >= 300) {
       if (cfg_int("cpu_timing", 0))
-        log("[cpu] submit-time instance matrix copies: %.3f ms per build (%.0f matrices)", ms / calls, double(mats) / calls);
-      ms = 0; calls = mats = 0;
+        log("[cpu] submit-time instance matrix copies: %.3f ms per build (%.0f matrices); unique %.0f; builds %llu; submits %llu; perf_hook_state %d", ms / builds, double(mats) / builds, double(sources) / builds, (unsigned long long)builds, (unsigned long long)calls, int(reuse));
+      ms = 0; calls = mats = sources = builds = 0;
     }
   }
   std::lock_guard<std::mutex> sl(g_st_mu);
@@ -2947,6 +3191,7 @@ void bvh_on_present() {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = frame_index();
+  pool_repack_poll(now);
   // Ranges of evicted meshes and slots, once no frame in flight can use them:
   // the GPU must have finished frame + 2 (as defer_tick), not just 6 presents
   // passed. Reusing a range a trace still reads was the intermittent device
@@ -2958,11 +3203,14 @@ void bvh_on_present() {
     size_t w = 0;
     for (size_t i = 0; i < g_pending_free.size(); ++i) {
       const PendingFree& p = g_pending_free[i];
-      if (now < p.frame + 6 || (p.frame + 2 > gpu_done && now < p.frame + 240) || p.frame >= oldest_live) {
+      bool copy_reads = false;
+      for (const auto& b : g_batches) for (const auto& s : b.swaps)
+        copy_reads = copy_reads || (s.relocation && p.as && s.source.as == p.as);
+      if (copy_reads || !as_chunks::retired(p.frame, now, gpu_done, oldest_live)) {
         g_pending_free[w++] = p;
         continue;
       }
-      retire_as(p.as);
+      retire_as(p.as, p.chunk);
       if (p.chunk < 0) g_pool_ra.release(p.off, p.size);
       else if (size_t(p.chunk) < g_chunks.size()) g_chunks[p.chunk].ra.release(p.off, p.size);
     }
@@ -2974,13 +3222,19 @@ void bvh_on_present() {
     JobBatch& b = g_batches[bi];
     // The done word is zeroed at record time and filled after the batch's jobs:
     // unlike a query's availability, it cannot be a previous use's.
-    const bool done = *reinterpret_cast<const volatile uint32_t*>(g_status.map + VkDeviceSize(b.done_slot) * 16) == kDoneMagic;
+    const auto* done_word = b.relocation ? g_compact_status.map + 16 : g_status.map + VkDeviceSize(b.done_slot) * 16;
+    const bool done = *reinterpret_cast<const volatile uint32_t*>(done_word) == kDoneMagic;
     const int res = 0;
     // Its command buffer dropped without a submit: nothing of it ran, lost at once.
     const bool dropped = !done && rec_state(b.rec) == kRecDropped;
-    if (!done && !dropped && now < b.frame + 240) {
+    const bool relocation = b.relocation;
+    if (vram_compact::batch_wait(done, dropped, now >= b.frame + 240, relocation)) {
       ++bi;
       continue;
+    }
+    if (!done && !dropped && !b.jobs.empty()) {
+      std::lock_guard<std::mutex> fl(g_fix_mu);
+      if (g_rec_owners.matches(b.rec, b.command)) g_pool_uncertain.note(b.rec, b.command);
     }
     for (const Job& j : b.jobs) {
       auto it = g_meshes.find(j.key);
@@ -3047,6 +3301,7 @@ void bvh_on_present() {
     for (Swap& s : b.swaps) {
       auto it = g_meshes.find(s.key);
       if (done && it != g_meshes.end() && it->second.gen == s.gen) {
+        if (s.relocation) { ++g_relocated;g_relocated_bytes += s.c.size; }
         as_destroy(it->second.as);   // the original: released once no live slot can reference it
         it->second.as = s.c;
       } else {
@@ -3071,7 +3326,15 @@ void bvh_on_present() {
         if (it != g_meshes.end() && it->second.gen == c.gen && !it->second.compacted && size)
           it->second.compact_size = size;
       }
+    if (relocation) compact_record_pin(b.rec, false);
     g_batches.erase(g_batches.begin() + bi);
+  }
+  if (g_relocating_chunk >= 0) {
+    bool pending = false;
+    for (const auto& b : g_batches) for (const auto& s : b.swaps) pending = pending || s.relocation;
+    // A dropped/evicted copy retains original ownership; allow retry. A fully
+    // evacuated source stays excluded until its pending ranges retire below.
+    if (!pending && g_chunks[g_relocating_chunk].ra.live) g_relocating_chunk = -1;
   }
   // Per-draw BLAS not seen for a while; the mesh cache over its memory budget (LRU).
   for (auto it = g_dyn.begin(); it != g_dyn.end();) {
@@ -3105,6 +3368,36 @@ void bvh_on_present() {
       ++g_st.evict_lru;
     }
   }
+  // Empty chunks always go, independent of guard state/cap. used still owns
+  // pending ranges until BOTH the fence and all old TLAS slots retire above.
+  // free_buf uses the existing deferred destruction queue, after retired AS
+  // handles. Retained diagnostic handles pin only their own backing chunks.
+  (void)vram_take_ask(vram_guard::kYieldEmptyChunks);
+  for (AsChunk& c : g_chunks) {
+    if (!c.buf.b || !c.ra.reclaimable()) continue;
+    ++g_chunks_freed;
+    g_chunk_bytes_freed += c.buf.size;
+    free_buf(c.buf);
+    c.ra = as_chunks::ChunkRanges{}; // keep the vector slot: AsAlloc indices stay stable
+  }
+  if (g_relocating_chunk >= 0 && !g_chunks[g_relocating_chunk].buf.b) g_relocating_chunk = -1;
+  if (const VkDeviceSize ask = vram_take_ask(vram_guard::kYieldMeshLru)) {
+    std::vector<std::pair<uint64_t, uint64_t>> old;   // last used, key
+    for (auto& [k, m] : g_meshes)
+      if (m.last_used + 8 < now) old.push_back({m.last_used, k});
+    std::sort(old.begin(), old.end());
+    VkDeviceSize freed = 0;
+    uint32_t n = 0;
+    for (auto& [lu, k] : old) {
+      if (freed >= ask) break;
+      freed += g_meshes[k].as.size;
+      evict(k);
+      ++g_st.evict_lru;
+      ++n;
+    }
+    if (n) log("[vram] guard: evicted %u LRU meshes (%.0f MB of BLAS ranges; asked %.0f MB)", n,
+               double(freed) / 1048576.0, double(ask) / 1048576.0);
+  }
   for (auto it = g_rejected.begin(); it != g_rejected.end();)
     it = now > it->second.until + 72000 ? g_rejected.erase(it) : std::next(it);
 
@@ -3128,18 +3421,31 @@ void bvh_on_present() {
       (unsigned long long)s.builds, s.cached_draws / nb, s.static_inst / nb, s.static_tris / nb * 1e-6, s.dyn_draws / nb,
       s.dyn_tris / nb * 1e-6, s.dyn_refit / nb, s.dyn_rebuild / nb, s.dyn_new / nb, 100.0 * s.tlas_refit / nb, s.not_inst_pattern / nb,
       s.not_inst_stream / nb, s.not_inst_count / nb);
+  size_t chunks = 0;
+  VkDeviceSize live = 0;
+  for (const AsChunk& c : g_chunks) {
+    chunks += c.buf.b != VK_NULL_HANDLE;
+    live += c.ra.live;
+  }
   log("[bvh] mesh cache: %zu meshes (%zu ready, %.2fM triangles), pool %.1f / %.0f MB, AS %.1f MB in %zu chunks; this "
       "window: %llu new (%.2fM triangles, %llu deferred by the per-build budget), %llu verified, %llu checks ok, "
       "%llu audits ok, rejected %llu/%llu/%llu (%s/%s/%s), %llu results lost (%llu timed out), max accepted error %.3f x tolerance; "
-      "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB)",
+      "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB); "
+      "chunks reserved/live/pending %.1f/%.1f/%.1f MB, freed %llu (%.1f MB), relocated %llu (%.1f MB); "
+      "pool repacks %llu (-%.1f MB)",
       g_meshes.size(), size_t(ready), double(mesh_tris) * 1e-6, double(g_pool_ra.used) / 1048576.0,
-      double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, g_chunks.size(), (unsigned long long)s.new_meshes,
+      double(g_pool.size) / 1048576.0, double(as_bytes()) / 1048576.0, chunks, (unsigned long long)s.new_meshes,
       s.new_tris * 1e-6, (unsigned long long)s.budget_deferred, (unsigned long long)s.ready,
       (unsigned long long)s.checks_ok, (unsigned long long)s.audits_ok, (unsigned long long)s.rejected[0],
       (unsigned long long)s.rejected[1], (unsigned long long)s.rejected[2], kRejectName[0], kRejectName[1],
       kRejectName[2], (unsigned long long)s.lost, (unsigned long long)s.lost_timeout, s.err_max_ok, (unsigned long long)s.evict_destroy,
       (unsigned long long)s.evict_write, (unsigned long long)s.evict_lru, (unsigned long long)s.compactions,
-      double(s.compact_saved) / 1048576.0);
+      double(s.compact_saved) / 1048576.0, double(as_reserved()) / 1048576.0,
+      double(live) / 1048576.0, double(as_bytes() - live) / 1048576.0,
+      (unsigned long long)g_chunks_freed, double(g_chunk_bytes_freed) / 1048576.0,
+      (unsigned long long)g_relocated, double(g_relocated_bytes) / 1048576.0,
+      (unsigned long long)g_pool_repacks, double(g_pool_saved) / 1048576.0);
+  g_chunks_freed = g_chunk_bytes_freed = 0;
   log("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,

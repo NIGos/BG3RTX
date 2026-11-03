@@ -1,0 +1,56 @@
+{
+  "status": "READY_FOR_LIVE",
+  "key": "perf_hook_state",
+  "default": 0,
+  "live_authorized": false,
+  "queued": false,
+  "scenes": [
+    "S3 camp",
+    "S8 Water Queens House"
+  ],
+  "windows": {
+    "sequence": [
+      0,
+      1,
+      0,
+      1
+    ],
+    "steady_frames_each": 900,
+    "minimum_complete_hook_windows_each": 2,
+    "minimum_matrix_submit_samples_each": 300,
+    "cpu_timing": 1,
+    "diagnostics_build": true
+  },
+  "predictions": [
+    {
+      "observable": "[cpu] capture hooks: pre-draw + draw bookkeeping ms/frame",
+      "candidate_minus_baseline_ms": [
+        -0.3,
+        -0.1
+      ],
+      "condition": "Repeated command-state and pipeline lookups are material; attribution is unmeasured. Zero gain or regression remains possible."
+    },
+    {
+      "observable": "[cpu] submit-time instance matrix copies: ms per build",
+      "candidate_minus_baseline_ms": [
+        -0.3,
+        -0.1
+      ],
+      "condition": "20-50% of source matrix triples repeat. No saving is predicted if ranges do not repeat; hash/allocation overhead can regress it."
+    },
+    {
+      "observable": "unique / matrices on the matrix timing line",
+      "candidate": "At most 1; below 1 only for exact repeated source row triples within a submit."
+    }
+  ],
+  "invariants": [
+    "Same current-frame geometry and material coverage",
+    "Same per-destination matrix late/invalid counters under matched work",
+    "No added scene-wait timeouts, capacity drops or previous-frame RT passes",
+    "GPU scene build, GI, LS, RF and water costs within OFF repeat noise",
+    "Static pre-post scene float mean from dumps.json within OFF repeat noise"
+  ],
+  "decision": "Require every ON window to pass coverage/current-frame/energy gates. Derive CPU and GPU tolerances from repeated OFF windows; claim a saving only if its interval excludes zero. Do not sum rank 2 and rank 3 estimates into presented-frame savings.",
+  "shader_request_delta": 0,
+  "abi_change": false
+}

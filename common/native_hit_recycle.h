@@ -96,6 +96,15 @@ class Pool {
     }
     entries_.resize(w);
   }
+  // rt_vram_guard: a new cap (the device budget's share); over it the oldest go to `evict`.
+  void set_cap(uint64_t capBytes, std::vector<H>& evict) {
+    cap_ = capBytes;
+    while (retained_ > cap_ && !entries_.empty()) {
+      retained_ -= entries_.front().key.bytes;
+      evict.push_back(entries_.front().handle);
+      entries_.erase(entries_.begin());
+    }
+  }
   void clear(std::vector<H>& evict) {
     for (const auto& e : entries_) evict.push_back(e.handle);
     entries_.clear();

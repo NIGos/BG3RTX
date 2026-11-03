@@ -31,6 +31,9 @@
 // (r cache, g screen, b no radiance: fallback), as fractions of the rays; sharc_debug=6 the
 // cache's contribution split by the leak test (r occluded cell, g clean, b thin surface).
 #include "gi_common.hlsli"
+#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
+#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
+#endif
 #include "../rt/rt_common.hlsli"
 #if RT_HIT_GI_DIRECT
 #include "../rt/native_hit_material.hlsli"
@@ -89,7 +92,16 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 }
 #endif
 
+#if defined(RT_SPEC_GI_FAR)
+// Variant migration step S2b (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): one module for both gi_far
+// values, specialization constant 1007 (core/gi.cpp refresh: gi_far). The far code below is compiled in and
+// selected by the constant; the RT_GI_FAR blocks keep the old define build (the equivalence reference).
 #if RT_GI_FAR
+#error RT_SPEC_GI_FAR replaces RT_GI_FAR
+#endif
+[[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
+#endif
+#if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
 // the gi_hit_sun files): rays of Push::radius (gi_far_m) instead of gi_rt_radius, the per-ray rule of
 // gi_far.hlsli. Needs RT_HIT_GI_DIRECT (the qualified-hit code below). Push::radius is gi_trace's screen
@@ -140,7 +152,11 @@ void gi_trace_px(uint3 tid);
 void main(uint3 tid : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gix : SV_GroupIndex) {
   for (uint k = 0; k < kGiFarStatCount; ++k) g_far_stat[k] = 0u;
   gi_trace_px(tid);
+#if defined(RT_SPEC_GI_FAR)
+  if (pc.rt_stats != 0u && kSpecGiFar != 0u) {   // uniform (a push constant and the constant)
+#else
   if (pc.rt_stats != 0u) {   // uniform (a push constant): the barriers are reached by the whole group
+#endif
     if (gix < kGiFarStatCount) gs_far_stat[gix] = 0u;
     GroupMemoryBarrierWithGroupSync();
     for (uint k = 0; k < kGiFarStatCount; ++k) {
@@ -189,6 +205,20 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #else
   const float RB = max(pc.gi_rt_radius, 0.01);      // the base radius (gi_rt_radius)
 #endif
+#elif defined(RT_SPEC_GI_FAR)
+  float R;
+  float RB = 0.0;
+  // Keep far-only arithmetic inside the specialization branch so it disappears when frozen off.
+  if (kSpecGiFar != 0u) {
+    R = max(pc.radius, pc.gi_rt_radius);
+#if SHARC_QUERY_PASS
+    RB = max(shc.gi_base_radius, 0.01);
+#else
+    RB = max(pc.gi_rt_radius, 0.01);
+#endif
+  } else {
+    R = pc.gi_rt_radius;
+  }
 #else
   const float R = pc.gi_rt_radius;
 #endif
@@ -231,6 +261,15 @@ void main(uint3 tid : SV_DispatchThreadID) {
       g_far_stat[0] += 1u;
       if (t >= 0.0 || aborted) far_stat(6u, fr.w0);   // the old rule occludes every hit with w0
     }
+#elif defined(RT_SPEC_GI_FAR)
+    GiFarRay fr = (GiFarRay)0;
+    if (kSpecGiFar != 0u) {
+      fr = gi_far_ray(t, aborted, R, RB);
+      if (pc.rt_stats != 0u) {
+        g_far_stat[0] += 1u;
+        if (t >= 0.0 || aborted) far_stat(6u, fr.w0);
+      }
+    }
 #endif
     float2 quv;
     float qd;
@@ -251,8 +290,12 @@ void main(uint3 tid : SV_DispatchThreadID) {
           seen += L;
           nseen += 1.0;
           visible = true;
-#if RT_GI_FAR
+#if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
+#if defined(RT_SPEC_GI_FAR)
+          if (kSpecGiFar != 0u && pc.rt_stats != 0u) {
+#else
           if (pc.rt_stats != 0u) {
+#endif
             far_stat(7u, gi_far_luminance(L * w));
             if (t <= RB) far_stat(8u, gi_far_luminance(L * fr.w0));
             else g_far_stat[1] += 1u;
@@ -319,7 +362,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
         continue;
       }
       tiers.z += 1.0;
-#if !RT_GI_FAR
+#if defined(RT_SPEC_GI_FAR)
+      if (kSpecGiFar == 0u) {
+        const float k0 = saturate(t / R0);
+        w = 1.0 - k0 * k0;
+        if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
+      }
+#elif !RT_GI_FAR
       const float k0 = saturate(t / R0);
       w = 1.0 - k0 * k0;
       if (w <= 0.0) continue;   // beyond the base radius: a miss, as before
@@ -355,10 +404,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // declared 0 and the sun alone lights the hit (gi_far.hlsli kGiFarLocalOutside).
         const uint far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
         if(far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
+#elif defined(RT_SPEC_GI_FAR)
+        uint far_local=kGiFarLocalUnknown;
+        if(kSpecGiFar!=0u){
+          far_local=direct.status==HdOk?kGiFarLocalKnown:(!onscreen && direct.status==kHitDirectSource)?kGiFarLocalOutside:kGiFarLocalUnknown;
+          if(far_local==kGiFarLocalOutside){direct.radiance=0;direct.native=0;direct.lights=0u;}
+        }
 #endif
         if(pc.rt_stats!=0u)stat_add(284u,direct.status==HdOk,hit_bin);
 #if RT_GI_FAR
         if(far_local!=kGiFarLocalUnknown){
+#elif defined(RT_SPEC_GI_FAR)
+        if(kSpecGiFar!=0u ? far_local!=kGiFarLocalUnknown : direct.status==HdOk){
 #else
         if(direct.status==HdOk){
 #endif
@@ -426,6 +483,36 @@ void main(uint3 tid : SV_DispatchThreadID) {
           }
           // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
           // the sun): the fallback below, with the base fade.
+#elif defined(RT_SPEC_GI_FAR)
+          if(kSpecGiFar!=0u){
+#if RT_HIT_GI_SUN
+          // Beyond R0 the hit needs the sun (gi_far_hit) and a roof-clear ray: else the fallback.
+          const bool far_roof=t>RB && sun_ok && !gi_far_roof_clear(o,dir,t);
+          if(pc.rt_stats!=0u && far_roof)g_far_stat[10]+=1u;
+          const bool far_sun=sun_ok && !far_roof;const float3 far_sun_l=sun_l;
+#else
+          const bool far_sun=false;const float3 far_sun_l=0.0.xxx;
+#endif
+          const float far_rho=gi_far_luminance(material.scattering.value.Rd);
+          const GiFarHit fh=gi_far_hit(fr,t,RB,far_local,direct.radiance,far_sun,far_sun_l,far_rho);
+          if(fh.radiance && gi_hit_term_ok(fh.bounce,hit_bin)){
+            if(pc.rt_stats!=0u){
+              far_stat(5u,fh.occ);far_stat(7u,gi_far_luminance(fh.bounce));far_stat(9u,fr.w*saturate(far_rho));
+              if(t>RB){g_far_stat[2]+=1u;g_far_stat[3]+=far_local==kGiFarLocalOutside?1u:0u;}
+              // The old rule's bounce on this ray: the complete local term (+ the sun) within R0, with w0.
+              else if(far_local==kGiFarLocalKnown)far_stat(8u,gi_far_luminance((direct.radiance+far_sun_l)*fr.w0));
+            }
+            bounce+=fh.bounce;occ+=fh.occ;continue;
+          }
+          // No known radiance (sun unsupported beyond R0, or the local term outside the froxels without
+          // the sun): the fallback below, with the base fade.
+          }else{
+#if RT_HIT_GI_SUN
+          if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;}
+#else
+          if(gi_hit_term_ok(direct.radiance,hit_bin)){bounce+=direct.radiance*w;occ+=w;continue;}
+#endif
+          }
 #elif RT_HIT_GI_SUN
           if(gi_hit_term_ok(direct.radiance+sun_l,hit_bin)){bounce+=(direct.radiance+sun_l)*w;occ+=w;continue;}
 #else
@@ -447,6 +534,26 @@ void main(uint3 tid : SV_DispatchThreadID) {
       if (pc.rt_stats != 0u) {
         far_stat(5u, fr.w0);
         g_far_stat[4] += !aborted && t > RB ? 1u : 0u;
+      }
+    }
+#elif defined(RT_SPEC_GI_FAR)
+    if (kSpecGiFar != 0u) {
+      if (visible) {
+        occ += w;
+        if (pc.rt_stats != 0u) far_stat(5u, w);
+      } else if (pc.gi_rt_fallback != 1) {
+        occ += fr.w0;
+        wfall += fr.w0;
+        if (pc.rt_stats != 0u) {
+          far_stat(5u, fr.w0);
+          g_far_stat[4] += !aborted && t > RB ? 1u : 0u;
+        }
+      }
+    } else {
+      if (visible) occ += w;
+      else if (pc.gi_rt_fallback != 1) {
+        occ += w;
+        wfall += w;
       }
     }
 #else

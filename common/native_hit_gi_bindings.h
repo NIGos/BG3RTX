@@ -51,7 +51,8 @@ inline constexpr std::array<Binding,8> sun={{
 inline constexpr const Binding* find_sun(uint32_t slot){for(const auto& b:sun)if(b.binding==slot)return &b;return nullptr;}
 inline constexpr std::span<const Binding> slots(bool reference=false){return reference?std::span<const Binding>(reference_bindings):std::span<const Binding>(bindings);}
 inline constexpr uint32_t push_bytes=256;
-inline constexpr bool enabled(const Binding& b,bool hair){return b.binding!=50u || hair;}
+// S3: Hair50 is always present; startup-off binds the 1x1 RGBA32F dummy.
+inline constexpr bool enabled(const Binding& /*b*/,bool /*hair*/){return true;}
 inline constexpr const Binding* find(uint32_t slot,bool hair,bool reference=false){for(const auto& b:slots(reference))if(b.binding==slot && enabled(b,hair))return &b;return nullptr;}
 inline constexpr uint32_t descriptor_count(bool hair,bool reference=false){uint32_t count=0;for(const auto& b:slots(reference))if(enabled(b,hair))count+=b.count;return count;}
 static_assert(descriptor_count(true)<=32);

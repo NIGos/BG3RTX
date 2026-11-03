@@ -16,6 +16,7 @@
 //       add one-bounce radiance into the diffuse buffer before SSS and fog,
 //       and keep the lit radiance for next frame's ray hits.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -279,19 +280,17 @@ Pipe g_rf;
 // rf_hit_shade (M4.2 tier b, common/native_hit_rf_bindings.h): D-RF's push set, the material
 // AlphaDSL as set 1, the game's lighting set 1 as set 2, the D-LS sun set as set 3 (+ SHaRC set 4).
 // Built over g_rf_set_layout and g_rf_game_layout: ensure_rf_layout drops them with those.
-Pipe g_rf_shade, g_rf_shade_sharc;
-VkPipelineLayout g_rf_shade_layout = VK_NULL_HANDLE, g_rf_shade_sharc_layout = VK_NULL_HANDLE;
 bool g_rf_hit_logged = false, g_rf_hit_contract_logged = false;
 // rt_hit_emission (M4.4, rt/native_hit_emission.hlsli): the hit-GI and rf_hit_shade variants with the
 // host's D-EM emissive scene (Bg3HostApi::rt_emissive) as one more set: GI set 2 (the empty one),
 // D-RF set 5. Index: GI [2 x sun + sharc], D-RF [sharc]. Built over the host's emissive set layout
 // (g_hit_em_dsl): dropped if it changes, and the D-RF ones with ensure_rf_layout's.
-Pipe g_hit_gi_em[4], g_rf_shade_em[2];
-VkPipelineLayout g_hit_gi_em_layout[4] = {}, g_rf_shade_em_layout[2] = {};
+Pipe g_hit_gi_em[4];
+VkPipelineLayout g_hit_gi_em_layout[4] = {};
 VkDescriptorSetLayout g_hit_em_dsl = VK_NULL_HANDLE;
 bool g_hit_em_logged = false;
 // rf_hit_gi (docs/TRACK_D_REFLECTIONS.md 14 "Indirect diffuse at hits"): the rf_hit_shade passes compiled
-// with RF_HIT_GI=1 (common/shader_variant.h kRfHitGi), index [2 x emission + sharc]; layout: rf_hit_shade's
+// with RF_SPEC_HIT_GI=1 (constant 1013), index [2 x emission + sharc]; layout: rf_hit_shade's
 // sets 0-3, set 4 SHaRC's or empty, set 5 the emissive scene or empty, set 6 the device-local counters
 // (ensure_rg; common/native_hit_rf_bindings.h kSetRfGi). Dropped with the rf_hit_shade / emission layouts.
 Pipe g_rf_shade_gi[4];
@@ -318,7 +317,7 @@ void rf_gi_drop() {
 bool g_rf_logged = false, g_rf_missing_logged = false;
 Bg3Image g_rf_hit{};   // R16F specular hit distance for RR (world units; 65504 = no traced hit)
 Bg3Image g_raw{}, g_hist[2]{}, g_raw_depth{}, g_hist_depth[2]{}, g_prev_radiance{}, g_rt_vis{};
-Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F, startup opt-in only.
+Bg3Image g_hair_origin{}; // Physical normal + radial tBase, RGBA32F; full resolution at startup opt-in, otherwise 1x1.
 Bg3Image g_origin{}, g_aux{};   // extras 40 and 44 (full resolution, RGBA16F)
 Bg3Image g_ls_nodata{};          // extra 46 when there is no per-light data: 1x1 RGBA32UI (the shaders' type)
 bool g_x_logged = false;
@@ -563,9 +562,9 @@ bool ensure_images(uint32_t w, uint32_t h) {
             host->alloc_image(w, h, VK_FORMAT_R16G16B16A16_SFLOAT, use, &g_aux) &&
             host->alloc_image(1, 1, VK_FORMAT_R32G32B32A32_UINT, use, &g_ls_nodata) &&
             host->alloc_image(w, h, VK_FORMAT_R16_SFLOAT, use | VK_IMAGE_USAGE_SAMPLED_BIT, &g_rf_hit);
-  if(ok && g_hair_origin_cap) {
-    ok=host->alloc_image(w,h,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
-    if(ok)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
+  if(ok) {
+    ok=host->alloc_image(g_hair_origin_cap?w:1u,g_hair_origin_cap?h:1u,VK_FORMAT_R32G32B32A32_SFLOAT,use,&g_hair_origin);
+    if(ok && g_hair_origin_cap)host->log("[hair origin] auxiliary image %ux%u, %llu bytes (16 bytes/pixel); GPU cost pending",w,h,(unsigned long long)(uint64_t(w)*h*16));
   }
   if (!ok) {
     host->log("gi: image allocation failed");
@@ -600,7 +599,7 @@ bool make_layout(uint32_t count, VkDescriptorSetLayout* set_layout, VkPipelineLa
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) b[n++] = {i, binding_type(i), 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
   for (const ExtraBinding& x : kExtras)
     if (x.layouts & mask) b[n++] = {x.binding, x.type, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-  if(g_hair_origin_cap && mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
+  if(mask!=1u)b[n++]={50,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr};
   VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   sci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   sci.bindingCount = n;
@@ -661,14 +660,6 @@ bool ensure_rf_layout(VkDescriptorSetLayout game) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_rf_sharc_layout);
     g_rf_sharc = Pipe{};
     g_rf_sharc_layout = VK_NULL_HANDLE;
-    for (Pipe* p : {&g_rf_shade, &g_rf_shade_sharc, &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
-      for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
-      *p = Pipe{};
-    }
-    for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout, &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
-      host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
-      *l = VK_NULL_HANDLE;
-    }
     rf_gi_drop();
     host->log("rf: the lighting's set 1 layout changed (%p -> %p); rebuilding", (void*)g_rf_game_layout, (void*)game);
   }
@@ -913,10 +904,8 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
 // rf_hit_shade: D-RF's push set 0, the host alpha layout (the material AlphaDSL has it) as set 1,
 // the game's lighting layout as set 2, the sun set 3 (g_sun_dsl), the SHaRC set 4. The push set
 // is D-RF's own: the contract's push table must be exactly what binding_type() builds.
-bool ensure_rf_hit_layout(bool sharc) {
+bool ensure_rf_hit_contract() {
   namespace rfh = bg3::native_hit_rf;
-  VkPipelineLayout& out = sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  if (out) return true;
   if (!g_rf_set_layout || !g_rf_game_layout || !ensure_ls_layout() || !g_sun_dsl) return false;
   for (const auto& b : rfh::push) {
     const VkDescriptorType t = b.binding < kRfBindings ? binding_type(b.binding)
@@ -927,23 +916,6 @@ bool ensure_rf_hit_layout(bool sharc) {
       g_rf_hit_contract_logged = true;
       return false;
     }
-  }
-  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
-  VkDescriptorSet unused;
-  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
-  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : VK_NULL_HANDLE;
-  if (sharc && !sh) return false;
-  VkDescriptorSetLayout sets[5] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh};
-  static_assert(rfh::kSetPush == 0 && rfh::kSetMaterial == 1 && rfh::kSetGame == 2 && rfh::kSetSun == 3 && rfh::kSetSharc == 4);
-  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
-  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-  lci.setLayoutCount = rfh::set_count(sharc);
-  lci.pSetLayouts = sets;
-  lci.pushConstantRangeCount = 1;
-  lci.pPushConstantRanges = &pc;
-  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &out) != VK_SUCCESS) {
-    out = VK_NULL_HANDLE;
-    return false;
   }
   return true;
 }
@@ -959,8 +931,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
   const bool sun_current = &p == &g_rt_shadow_current;
-  // rf_hit_gi: its own Pipes (like the current-caster sun), not a slot.
-  const bool rf_gi = &p >= g_rf_shade_gi && &p < g_rf_shade_gi + 4;
+  // Constant 1013 selects the hit GI program; its value joins the pipeline key.
+  const bool rf_gi = sv::rf_hit_gi_entry(file) && host->cfg_int("rf_hit_gi", 0) > 0;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   const bool physical_origin=scalp && g_hair_origin_frame && bg3::hair_origin::alternate_entry(file);
@@ -974,18 +946,36 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool wind_rgb=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::wind_rgb_capability_key,sizeof(uint32_t))));
   // rt_hit_material_ip_grass at startup: the fourth family's field and counters (RT_HIT_IP_GRASS), as wind RGB.
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
+  // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
+  const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
   const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
+  // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
+  // Not the current-caster sun pipe (its request keeps the cascade defines).
+  const bool spec_cascade = sv::cascade_entry(file) && !sun_current;   // the only cascade path since qualification
   // The base file plus the variant's defines (common/shader_variant.h, shaders/variants.txt).
   const std::string selected = sv::request(file, (variant & 63u) | (instanced ? unsigned(sv::kHitInstanced) : 0u) |
                                                  (far_on ? unsigned(sv::kGiFar) : 0u) | (sun_current ? unsigned(sv::kSunCurrent) : 0u) |
                                                  (rf_gi ? unsigned(sv::kRfHitGi) : 0u) | (wind_rgb ? unsigned(sv::kHitWindRgb) : 0u) |
-                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u));
+                                                 (ip_grass ? unsigned(sv::kHitIpGrass) : 0u) | (pool_2s ? unsigned(sv::kHitPool2s) : 0u) |
+                                                 (spec_cascade ? unsigned(sv::kSpecCascade) : 0u));
+  // Step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample / gi_prev_radiance_guard
+  // (docs/TRACK_C_GI.md "Reprojection guards", live, off) are constants 1001 / 1002 of their files' one module. The
+  // values join the slot key, so a toggle recreates the slot's pipeline (driver compile only, no DXC).
+  const bool guards = sv::guard_entry(file);
+  const uint32_t mv_sample = sv::temporal_mv_entry(file) && host->cfg_int("gi_temporal_mv_sample", 0) != 0 ? 1u : 0u;
+  const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
+  std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
+  if(sv::rf_hit_gi_entry(file)) slot_key += rf_gi ? "#rfgi=1" : "#rfgi=0";
+  // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
+  const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
+  if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
   // Never retain an ordinary shader on compilation failure with kind3 records.
   // Some diagnostic callers intentionally ignore refresh's boolean result.
   if (scalp || omm || tileset || instanced || sv::gi_far_entry(file)) p.pipeline = p.variants[variant];
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == selected;
-  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == selected) {
+  if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) return p.pipeline && p.variant_files[variant] == slot_key;
+  if (p.variants[variant] && p.variant_generations[variant] == blob.generation && p.variant_files[variant] == slot_key) {
     p.pipeline = p.variants[variant]; p.generation = blob.generation;
     return true;
   }
@@ -997,28 +987,60 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   VkShaderModule mod = VK_NULL_HANDLE;
   if (host->vk->CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) {
     host->log("gi: %s shader module creation failed; keeping the previous pipeline", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == slot_key;
   }
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
                nullptr};
   pci.layout = layout ? layout : g_layout;
+  const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
+  uint32_t spec_data[12];
+  VkSpecializationMapEntry spec_entries[12];
+  uint32_t n_spec = 0;
+  auto spec_add = [&](uint32_t id, uint32_t v) {
+    spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
+    spec_data[n_spec++] = v;
+  };
+  if (sv::rf_hit_gi_entry(file)) spec_add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
+  if (spec_cascade) spec_add(sv::kSpecIdCascade, spec_value);
+  if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
+  if (sv::prev_radiance_entry(file)) spec_add(sv::kSpecIdPrevRadiance, prev_guard);
+  if (hit_family) {
+    spec_add(sv::kSpecIdHitInstanced, instanced ? 1u : 0u);
+    spec_add(sv::kSpecIdWindRgb, wind_rgb ? 1u : 0u);
+    spec_add(sv::kSpecIdIpGrass, ip_grass ? 1u : 0u);
+  }
+  // Step S2b: gi_far of the gi_hit_sun files (RT_SPEC_GI_FAR); far_on is in the variant index (bit 128), so each
+  // value keeps its own slot and pipeline, as the cascade constant does.
+  if (sv::gi_far_entry(file)) spec_add(sv::kSpecIdGiFar, far_on ? 1u : 0u);
+  if (std::strncmp(file, "gi/", 3) == 0) {
+    spec_add(sv::kSpecIdTileset, tileset ? 1u : 0u);
+    spec_add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
+    if (bg3::hair_origin::alternate_entry(file)) spec_add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
+  }
+  const VkSpecializationInfo spec_info{n_spec, spec_entries, n_spec * sizeof(uint32_t), spec_data};
+  if (n_spec) pci.stage.pSpecializationInfo = &spec_info;
   VkPipeline np = VK_NULL_HANDLE;
+  const auto t_pipe = std::chrono::steady_clock::now();   // driver compile on this thread (logged below)
   VkResult pr = host->vk->CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
+  const double pipe_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_pipe).count();
   host->vk->DestroyShaderModule(host->device, mod, nullptr);
   if (pr != VK_SUCCESS) {
     host->log("gi: %s pipeline creation failed; keeping the previous one", file);
-    return p.pipeline && p.variant_files[variant] == selected;
+    return p.pipeline && p.variant_files[variant] == slot_key;
   }
   g_omm_pipelines.erase(p.variants[variant]);
   if(omm)g_omm_pipelines.insert(np);
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
   p.variants[variant] = np;
   p.variant_generations[variant] = blob.generation;
-  p.variant_files[variant] = selected;
+  p.variant_files[variant] = slot_key;
   p.pipeline = np;
   p.generation = blob.generation;
-  host->log("gi: %s generation %llu", selected.c_str(), (unsigned long long)blob.generation);
+  host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)blob.generation,
+            spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
+            guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
+            pipe_ms);
   return true;
 }
 
@@ -1068,7 +1090,7 @@ bool gather_hit_gi_writes(const Bound&,VkWriteDescriptorSet*,uint32_t&,bool refe
 // The extras' descriptors, with fallbacks when the game did not bind a source
 // (the shaders are told through Push::mat_classes bits 1-3).
 void bind_extras(Bound& b, const Snapshot& s) {
-  if(g_hair_origin_cap){
+  {
     b.hair_origin_image={VK_NULL_HANDLE,g_hair_origin.view,VK_IMAGE_LAYOUT_GENERAL};
     b.hair_origin_write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};b.hair_origin_write.dstBinding=50;
     b.hair_origin_write.descriptorCount=1;b.hair_origin_write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -1127,7 +1149,7 @@ uint32_t gather_writes(const Bound& b, uint32_t count, VkWriteDescriptorSet* out
     if ((mask != 4u || ls_uses(i)) && bg3::hair_origin::binding_enabled(g_hair_origin_cap,mask,i)) out[n++] = b.w[i];
   for (uint32_t i = 0; i < kNumExtras; ++i)
     if (kExtras[i].layouts & mask) out[n++] = b.xw[i];
-  if(g_hair_origin_cap && mask!=1u)out[n++]=b.hair_origin_write;
+  if(mask!=1u)out[n++]=b.hair_origin_write;
   return n;
 }
 
@@ -2093,12 +2115,11 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
 
 // ---- rt_hit_emission (M4.4): the emissive scene set for the hit-GI / rf_hit_shade variants ----
 void hit_em_drop() {
-  for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3], &g_rf_shade_em[0], &g_rf_shade_em[1]}) {
+  for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3]}) {
     for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
     *p = Pipe{};
   }
-  for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3],
-                              &g_rf_shade_em_layout[0], &g_rf_shade_em_layout[1]}) {
+  for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3]}) {
     host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
     *l = VK_NULL_HANDLE;
   }
@@ -2157,33 +2178,17 @@ bool ensure_empty_dsl() {
   return host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) == VK_SUCCESS;
 }
 
-// rf_hit_shade + emission: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene.
-bool ensure_rf_hit_em_layout(bool sharc) {
-  namespace rfh = bg3::native_hit_rf;
-  static_assert(rfh::kSetEmissive == 5);
-  VkPipelineLayout& out = g_rf_shade_em_layout[sharc ? 1 : 0];
-  if (out) return true;
-  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
-  VkDescriptorSet unused;
-  if (!g_hit_em_dsl || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
-      !host->rt_alpha(&host_layout, &unused) || !host_layout)
-    return false;
-  VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
-  if (!sh) return false;
-  VkDescriptorSetLayout sets[6] = {g_rf_set_layout, host_layout, g_rf_game_layout, g_sun_dsl, sh, g_hit_em_dsl};
-  return make_em_layout(sets, 6, out);
-}
-
 // rf_hit_gi: rf_hit_shade's sets 0-3, set 4 SHaRC's (or empty), set 5 the emissive scene (or empty), set 6
 // the device-local counters.
 bool ensure_rf_hit_gi_layout(bool sharc, bool em) {
   namespace rfh = bg3::native_hit_rf;
-  static_assert(rfh::kSetRfGi == 6);
+  static_assert(rfh::kSetPush == 0 && rfh::kSetMaterial == 1 && rfh::kSetGame == 2 && rfh::kSetSun == 3 &&
+                rfh::kSetSharc == 4 && rfh::kSetEmissive == 5 && rfh::kSetRfGi == 6);
   VkPipelineLayout& out = g_rf_shade_gi_layout[(em ? 2 : 0) + (sharc ? 1 : 0)];
   if (out) return true;
   VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
   VkDescriptorSet unused;
-  if ((em && !g_hit_em_dsl) || !ensure_rg() || !ensure_rf_hit_layout(sharc) || !ensure_empty_dsl() || !host->rt_alpha ||
+  if ((em && !g_hit_em_dsl) || !ensure_rg() || !ensure_rf_hit_contract() || !ensure_empty_dsl() || !host->rt_alpha ||
       !host->rt_alpha(&host_layout, &unused) || !host_layout)
     return false;
   VkDescriptorSetLayout sh = sharc ? sharc_set_layout() : g_empty_dsl;
@@ -2204,41 +2209,34 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
       !bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))))
     return false;
   const bool sharc = s.rf_sharc;
-  if (!ensure_rf_hit_layout(sharc)) return false;
-  // rt_hit_emission: the same pass with the emissive scene as set 5; any missing piece runs it without.
-  const unsigned ei = sharc ? 1u : 0u;
+  // Every hit-shade module has set 6, including specialization 1013 = 0.
   VkDescriptorSet em = hit_em_set(cmd);
-  if (em && !(ensure_rf_hit_em_layout(sharc) &&
-              refresh(g_rf_shade_em[ei], sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl",
-                      g_rf_shade_em_layout[ei])))
+  auto select = [&](bool with_em) -> Pipe* {
+    if(!ensure_rf_hit_gi_layout(sharc, with_em)) return nullptr;
+    const unsigned gk = (with_em ? 2u : 0u) + (sharc ? 1u : 0u);
+    const char* gf = with_em ? (sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl")
+                            : (sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl");
+    return refresh(g_rf_shade_gi[gk], gf, g_rf_shade_gi_layout[gk]) ? &g_rf_shade_gi[gk] : nullptr;
+  };
+  Pipe* selected = em ? select(true) : nullptr;
+  if(!selected) {
     em = VK_NULL_HANDLE;
-  VkPipelineLayout layout = em ? g_rf_shade_em_layout[ei] : sharc ? g_rf_shade_sharc_layout : g_rf_shade_layout;
-  Pipe* pp = em ? &g_rf_shade_em[ei] : sharc ? &g_rf_shade_sharc : &g_rf_shade;
-  // rf_hit_gi (1 the estimator at every hit, 2 the tier (a) check from the screen's GI): the RF_HIT_GI twin
-  // with the counter set 6; a twin that cannot be built leaves the variant above (logged once).
+    selected = select(false);
+  }
+  if(!selected) return false;
+  const unsigned gk = (em ? 2u : 0u) + (sharc ? 1u : 0u);
+  VkPipelineLayout layout = g_rf_shade_gi_layout[gk];
+  Pipe& p = *selected;
   const uint32_t gi_mode = uint32_t((std::min)((std::max)(host->cfg_int("rf_hit_gi", 0), 0), 2));
-  g_rg_ran = false;
-  if (gi_mode) {
-    const unsigned gk = (em ? 2u : 0u) + ei;
-    const char* gf = em ? (sharc ? "gi/rt_reflections_sharc_hit_shade_em.hlsl" : "gi/rt_reflections_hit_shade_em.hlsl")
-                        : (sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl");
-    g_rg_ran = ensure_rf_hit_gi_layout(sharc, em != VK_NULL_HANDLE) && refresh(g_rf_shade_gi[gk], gf, g_rf_shade_gi_layout[gk]);
-    if (g_rg_ran) {
-      layout = g_rf_shade_gi_layout[gk];
-      pp = &g_rf_shade_gi[gk];
-    }
-    if (g_rg_logged != int(gi_mode * 2 + (g_rg_ran ? 1 : 0))) {
-      g_rg_logged = int(gi_mode * 2 + (g_rg_ran ? 1 : 0));
-      host->log("rf hit gi: mode %u %s (sharc %d, emission %d)", gi_mode,
-                g_rg_ran ? "active" : "UNAVAILABLE, rf_hit_shade without it", sharc, em != VK_NULL_HANDLE);
-    }
-  } else if (g_rg_logged > 0) {
+  g_rg_ran = gi_mode != 0;
+  if(gi_mode && g_rg_logged != int(gi_mode * 2 + 1)) {
+    g_rg_logged = int(gi_mode * 2 + 1);
+    host->log("rf hit gi: mode %u %s (sharc %d, emission %d)", gi_mode,
+              "active", sharc, em != VK_NULL_HANDLE);
+  } else if(!gi_mode && g_rg_logged > 0) {
     g_rg_logged = 0;
     host->log("rf hit gi: off");
   }
-  Pipe& p = *pp;
-  if (!em && !g_rg_ran && !refresh(p, sharc ? "gi/rt_reflections_sharc_hit_shade.hlsl" : "gi/rt_reflections_hit_shade.hlsl", layout))
-    return false;
   auto traversal = prepare_omm_traversal(cmd, b, p.pipeline);
   if (!traversal.valid()) return false;
   VkDescriptorSet material_alpha = b.alpha;
@@ -2253,7 +2251,7 @@ bool rf_hit_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Pus
                            s.game_set1_ndyn ? s.game_set1_dyn : nullptr);
   if (sharc) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 4, 1, &s.sh.set, 0, nullptr);
   if (em) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetEmissive, 1, &em, 0, nullptr);
-  if (g_rg_ran) vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetRfGi, 1, &g_rg_set, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, bg3::native_hit_rf::kSetRfGi, 1, &g_rg_set, 0, nullptr);
   // The hit light policy reads the per-light data from the sun set's b7 (ls_flags bit 0) when that
   // set holds the image and a join has run.
   Push hp = pc;
@@ -2624,7 +2622,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     VkClearColorValue zero{};
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     for (Bg3Image* im : all_images) host->vk->CmdClearColorImage(cmd, im->image, VK_IMAGE_LAYOUT_GENERAL, &zero, 1, &range);
-    if(g_hair_origin_cap){
+    {
       image_layout(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
       VkClearColorValue invalid{};invalid.float32[3]=0.0f;
       host->vk->CmdClearColorImage(cmd,g_hair_origin.image,VK_IMAGE_LAYOUT_GENERAL,&invalid,1,&range);
@@ -3217,7 +3215,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
     if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
-    if (host->cfg_int("rt_water_rr_mv", 0) && g_mv_view)   // g_mv_image: RG16F, written this frame (frame start)
+    if ((host->cfg_int("rt_water_rr_mv", 0) || host->cfg_int("rt_water_fg_mv", 0)) && g_mv_view)   // g_mv_image: RG16F, written this frame (frame start)
       win.mv_image = g_mv_image, win.mv_view = g_mv_view, win.mv_format = VK_FORMAT_R16G16_SFLOAT, win.mv_layout = g_mv_layout;
     water_rf(cmd, win);
   }
@@ -3377,7 +3375,7 @@ void gi_release() {
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k,
-                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_rf_shade, &g_rf_shade_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
+                  &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
     *p = Pipe{};
@@ -3390,10 +3388,6 @@ void gi_release() {
   g_rf_layout = VK_NULL_HANDLE;
   g_rf_set_layout = VK_NULL_HANDLE;
   g_rf_game_layout = VK_NULL_HANDLE;
-  for (VkPipelineLayout* l : {&g_rf_shade_layout, &g_rf_shade_sharc_layout}) {
-    host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)*l);
-    *l = VK_NULL_HANDLE;
-  }
   g_rf_hit_logged = g_rf_hit_contract_logged = false;
   rf_gi_drop();
   g_rg_logged = -1;

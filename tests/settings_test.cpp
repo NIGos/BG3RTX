@@ -366,7 +366,7 @@ static const char* const kOldKnobKeys[] = {
     "gi_hit_direct", "gi_hit_sun", "gi_far", "gi_far_m", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission",
     "rt_hit_reference", "rt_omm", "rt_water_geometry", "rt_water_reflections", "rt_water_compose",
     "rt_water_shadows", "rt_water_ls_shadows", "rt_water_refraction", "rt_water_game_shadow",
-    "rt_sun_cascade_current"};
+    "rt_sun_cascade_current", "rt_vram_guard", "rt_vram_compact", "rt_capture_elastic"};
 
 // The old knob ids, each with the one key its "On" wrote.
 static const char* const kOldOn[][2] = {
@@ -382,7 +382,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // 7 user-facing experimental entries (RT water left for Ultra); developer-only: the lighting reference, exact-k, current cascade sun.
+  // Qualified memory management is automatic; five user-facing experimental entries remain.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -415,8 +415,15 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // 7 before the M4 bundle (Hidden-surface shading, Emission at ray hits) and gi_far left; +exp_vt_alpha_masks 2026-11-02
-  CHECK(dev == (std::vector<std::string>{"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(dev == (std::vector<std::string>{"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
+  if(submit_batch){
+    CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
+    for(int p=0;p<kPresetCount;++p) CHECK(submit_batch->preset[p]==0);
+    CHECK_EQ(code_default("perf_submit_batch"),"0");
+    CHECK(knob_value(*submit_batch,parse_ini("perf_submit_batch=1\n"))==1);
+  }
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
   CHECK(!dev_mode("0"));
@@ -505,6 +512,9 @@ static void test_gui_levels() {
     CHECK(code_default(key) != nullptr);
   }
   CHECK(find_knob("exp_fg_letterbox") == nullptr);
+  for (const char* id : {"exp_vram_guard", "exp_vram_compact", "exp_capture_elastic"})
+    CHECK(find_knob(id) == nullptr);
+  CHECK_EQ(code_default("rt_vram_guard_budget_mb"), "0");
   // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
   for (const char* k : kAutomaticKeys) {
     CHECK(!is_knob_key(k));
@@ -764,6 +774,110 @@ static void test_ultra_water() {
   CHECK(iw < first_exp);
 }
 
+static void test_product_policy() {
+  // CPU perf experiments remain hidden from players, including their Off choices.
+  for (const char* id : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+    const Knob& k = *find_knob(id);
+    CHECK(k.dev_only);
+    CHECK(!knob_visible(k, false));
+    CHECK(knob_visible(k, true));
+    CHECK_EQ(code_default(id), "0");
+    for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
+    for (int c = 0; c < choice_count(k); ++c) {
+      CHECK(!choice_visible(k, c, false));
+      CHECK_EQ(choice_maturity(k, c), "developer");
+    }
+  }
+  const auto& emission = *find_knob("exp_hit_emission");
+  Map legacy = code_defaults();
+  apply_layer(legacy, parse_ini("preset=ultra\ndev=0\nrt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n"));
+  CHECK(knob_value(emission, legacy) == 2);
+  CHECK(!choice_visible(emission, 2, false));
+  CHECK(choice_visible(emission, 2, true));
+  auto presented = presentation_values(legacy, false);
+  CHECK(presented[knob_index(emission.id)] == -1);
+  Map saved = parse_ini(render_user_ini("rt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n", kUltra, presented));
+  CHECK_EQ(get(saved, "rt_hit_emission"), "2");
+  CHECK_EQ(get(saved, "unknown_future_key"), "kept");
+  Map reloaded = code_defaults(); apply_layer(reloaded, saved);
+  CHECK(knob_value(emission, reloaded) == 2);
+  CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 3), "experimental");
+  CHECK(!choice_available(*find_knob("exp_hidden_surface"), 3, false, false, ~0u));
+  CHECK(choice_available(*find_knob("exp_hidden_surface"), 3, false, true, ~0u));
+  CHECK_EQ(choice_maturity(*find_knob("exp_hidden_surface"), 2), "qualified");
+  CHECK_EQ(choice_maturity(*find_knob("box_lights"), 2), "awaiting_qualification");
+  CHECK_EQ(find_knob("exp_water")->category, "Surfaces");
+  CHECK_EQ(find_knob("reflex")->category, "Performance");
+  CHECK_EQ(find_knob("exp_water")->cost.status, "Estimate");
+  CHECK_EQ(find_knob("exp_omm")->cost.gpu, "Unknown");
+  CHECK_EQ(find_knob("exp_water")->choices[3].label, "Reflections + shadows + refraction");
+
+  auto edited = preset_values(kMedium);
+  edited[knob_index("rr")] = 0;
+  edited[knob_index("reflex")] = 0;
+  const auto original = edited;
+  auto lowered = preview_dependencies(edited, code_defaults(), ~0u, false);
+  CHECK(edited == original); // Preview has no side effects.
+  CHECK(lowered.values[knob_index("local_shadows")] == 0);
+  CHECK(lowered.values[knob_index("frame_generation")] == 0);
+  auto enabled = preview_dependencies(edited, code_defaults(), ~0u, true);
+  CHECK(enabled.blocked.empty());
+  CHECK(enabled.values[knob_index("rr")] == 1);
+  CHECK(enabled.values[knob_index("reflex")] == 1);
+  CHECK(enabled.changed.size() == 2);
+  CHECK(enabled.required_keys.empty());
+  edited[knob_index("local_shadows")] = 2;
+  CHECK(unmet_need(*find_knob("local_shadows"), 2, edited).empty()); // Full does not require RR.
+  edited[knob_index("rr")] = -1;
+  edited[knob_index("local_shadows")] = 1;
+  CHECK(!preview_dependencies(edited, code_defaults(), ~0u, true).blocked.empty());
+  CHECK(!preview_dependencies(original, code_defaults(), kCapRayQuery, true).blocked.empty());
+
+  // Startup preview lists raw adjustments, but does not duplicate geometry's own keys.
+  auto water = preset_values(kHigh);
+  water[knob_index("exp_water")] = 3;
+  Map startup = code_defaults(); startup["rt"] = "0"; startup["sharc_device"] = "0";
+  auto preview = preview_dependencies(water, startup, ~0u, true);
+  CHECK(preview.required_keys.size() == 2);
+  CHECK_EQ(startup["rt"], "0");
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (unsigned caps : {0u, unsigned(kCapRayQuery), unsigned(kCapRayQuery | kCapDlss), ~0u}) {
+      auto values = preset_values_for(p, caps);
+      for (int i = 0; i < kKnobCount; ++i) {
+        CHECK(unmet_need(kKnobs[i], values[i], values).empty());
+        CHECK(choice_supported(kKnobs[i], values[i], caps));
+        if (kKnobs[i].kind == Kind::Choice)
+          CHECK_EQ(choice_maturity(kKnobs[i], values[i]), kKnobs[i].dev_only ? "developer" : "qualified");
+      }
+    }
+  }
+  auto chain = preset_values(kLow);
+  chain[knob_index("exp_gi_far")] = 1;
+  Map raw = code_defaults(); raw["gi_rt_fallback"] = "1";
+  auto transitive = preview_dependencies(chain, raw, ~0u, true);
+  CHECK(transitive.blocked.empty());
+  CHECK(transitive.values[knob_index("exp_hidden_surface")] == 2);
+  CHECK(transitive.values[knob_index("rt_geometry")] == 2);
+  CHECK(transitive.values[knob_index("gi")] == 2);
+  CHECK(transitive.changed.size() == 3);
+  CHECK(transitive.required_keys.size() == 1);
+  CHECK_EQ(transitive.required_keys[0].first, "gi_rt_fallback");
+  CHECK_EQ(transitive.required_keys[0].second, "0");
+  CHECK_EQ(choice_maturity(emission, -1), "custom");
+  CHECK(!choice_visible(emission, -1, false));
+  CHECK(!choice_visible(emission, 99, true));
+  CHECK(!preview_dependencies({}, raw, ~0u, true).blocked.empty());
+  // Old partial water files migrate to a complete level; unmatched custom sliders survive saving.
+  Map old = code_defaults(); apply_layer(old, parse_ini("preset=high\nrt_water_refraction=1\ngi_strength=0.63\nls_strength=0.71\n"));
+  CHECK(knob_value(*find_knob("exp_water"), old) == 3);
+  auto custom = presentation_values(old, false);
+  CHECK(custom[knob_index("rt_intensity")] == -1);
+  auto retained = parse_ini(render_user_ini("gi_strength=0.63\nls_strength=0.71\n", kHigh, custom));
+  CHECK_EQ(get(retained, "gi_strength"), "0.63");
+  CHECK_EQ(get(retained, "ls_strength"), "0.71");
+  CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -771,6 +885,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_product_policy();
   test_parse();
   test_preset_expansion();
   test_layering();

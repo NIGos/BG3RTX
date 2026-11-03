@@ -43,7 +43,8 @@
   "\\[hit material pool basis\\]",
   "\\[cascade\\] buffer full",
   "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-  "\\[ab\\]"
+  "\\[ab\\]",
+  "\\[mem\\] ours \\("
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -64,7 +65,8 @@
   "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
   "\\[ab\\] ab_off: ray tracing OFF",
   "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
-  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON"
+  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+  "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)"
  ],
  "expect_every": [
   {
@@ -162,6 +164,22 @@
     "static-b"
    ],
    "min": 1
+  },
+  {
+   "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+   "select": "\\[mem\\] ours \\(",
+   "match": "\\(within budget\\); guard (normal|LOW)",
+   "event": true,
+   "settle_s": 1,
+   "min": 1,
+   "windows": [
+    "static-a",
+    "pan-q",
+    "pan-e",
+    "rotate-r",
+    "rotate-l",
+    "static-b"
+   ]
   }
  ],
  "forbid": [
@@ -197,6 +215,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Ultra smoke at S8 Water Queens House: preset ultra with every qualified experimental key on at launch (rt_hit_material, rt_hit_material_instanced, gi_hit_direct, gi_hit_sun, rt_emissive + rt_hit_emission=1, ls_box=2, the 6 water keys, rt_xfb_mb=1024, rt_cascade_mb=427, rt_cascade_casters=1 as Ultra sets it), exposure held from phase 1; static, pan Q/E and rotation windows. Gates in every window: RT capture capacity 0 drops, cascade buffer never full, scene-wait timeouts 0, water reflections traced > 0. Expected to FAIL today on the water gate: the water reflections are skipped while rt_cascade_casters=1; the job is the regression check for that fix. Then ab-off / ab-on (ab_off=1 / 0, 8 s each): the A/B toggle from the settings, gated on the \"[ab] toggle latency\" lines (time to the first frame recorded entirely in the new state).",
+ "purpose": "Ultra smoke at S8 Water Queens House: preset ultra with every qualified experimental key on at launch (rt_hit_material, rt_hit_material_instanced, gi_hit_direct, gi_hit_sun, rt_emissive + rt_hit_emission=1, ls_box=2, the 6 water keys, rt_xfb_mb=1024, rt_cascade_mb=427, rt_cascade_casters=1 as Ultra sets it), exposure held from phase 1; static, pan Q/E and rotation windows. Gates in every window: RT capture capacity 0 drops, cascade buffer never full, scene-wait timeouts 0, water reflections traced > 0. Expected to FAIL today on the water gate: the water reflections are skipped while rt_cascade_casters=1; the job is the regression check for that fix. Then ab-off / ab-on (ab_off=1 / 0, 8 s each): the A/B toggle from the settings, gated on the \"[ab] toggle latency\" lines (time to the first frame recorded entirely in the new state). VRAM guard, compaction and elastic capture use their automatic defaults (all 1; no test budget override). Every smoke window also gates [mem] ours within the driver budget; the existing opaque-drop tolerance remains 0.00.",
  "estimated_phase_seconds": 136
 }

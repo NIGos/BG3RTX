@@ -131,6 +131,15 @@ inline DeferredQualify deferred_qualify(bool exact_pipeline, uint32_t kind, uint
   if (!exact_pipeline || kind > 1 || !instances || stride < kStaticMinStride) return DeferredQualify::PipelineDeclined;
   return DeferredQualify::Accept;
 }
+// IP_Base_VT shares IP_AlphaTest's deferred pair but has no alpha record. Generated
+// and IP grass draws may reserve XFB space only after an alpha source was noted.
+// The caller supplies only current-frame sources; the final pairing certificate
+// and GPU clip/UV checks remain mandatory. Other audited families are unchanged.
+inline bool capture_source_ok(Family family, bool generated, const DrawJoin* source, const DrawKey& key) {
+  if (!generated && family != IpGrass) return true;
+  uint32_t record = UINT32_MAX;
+  return source && source->unique_source(key, record);
+}
 // The gather (shaders/rt/hit_material_gather.hlsl) reads the 8995 engine layout: v[4] p0 @64, v[5] p1
 // @80, words.y tile-set index @100, words.z channel @104, and the 1:1 x @0 of a separate binding. The
 // STI engine bytes (p0 @transform, p1 @+16, index and channel at the recipe's offsets) and the 1:1

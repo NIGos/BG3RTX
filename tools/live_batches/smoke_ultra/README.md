@@ -17,3 +17,8 @@ One job, `su1-ultra-s8-fg2`, S8 Water Queens House, one launch, 7 phases, 120 s 
 - Expected today: FAIL on the water gate (water reflections are skipped while rt_cascade_casters=1). That is
   the point: the job is the regression check for that fix and for the scene-wait fix.
 - Offline: `powershell -NoProfile -ExecutionPolicy Bypass -File tools\live_batches\smoke_ultra\dryrun.ps1`.
+
+- Qualified VRAM management is automatic: `rt_vram_guard`, `rt_vram_compact`, `rt_capture_elastic`
+  default to 1; the job and plan leave them at those defaults. `rt_vram_guard_budget_mb=0`
+  uses the real driver budget. Every smoke window requires `[mem] ours` within budget
+  (event snapshots, 1 s settle); opaque capture drops must still be 0.00.

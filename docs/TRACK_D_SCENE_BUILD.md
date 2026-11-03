@@ -873,3 +873,194 @@ Full rt_stats parity windows raise RT GPU cost from 1.03 to ~19.4 ms: never incl
 them in speed gates. Check: inn save, static view, toggle rt_alpha_stream live, compare
 [cpu] pre-draw/capture and rendered fps with all stats off. See PROGRESS_CODEX and
 docs/evidence/perf-base-20261030.json; job sup-perf-game-uncapped.
+
+### BLAS chunk reclamation (2026-11-02, codex-as-compact, offline candidate)
+
+- Each chunk tracks live bytes separately from occupied bytes. Occupied bytes include
+  pending frees until at least 6 presents, the frame + 2 GPU fence, and retirement of
+  every old scene slot. The 240-present timeout no longer releases these ranges.
+- Every wholly empty chunk goes through the existing deferred buffer/memory destruction
+  queue on present, regardless of `rt_vram_guard` or its low/cap state. Slots stay in the
+  vector and are reused in place; chunk indices never move. Diagnostic kept AS handles
+  pin their own chunk, including after `rt_as_keep` is switched off, until destroyed.
+- New BLAS ranges use first-fit within chunks tried from fullest to emptiest (occupied /
+  capacity; stable index tie break). Pending bytes count as occupied, but cannot be reused.
+  This concentrates future allocations and lets draining chunks empty without GPU copies.
+- General relocation is deferred: the existing COMPACT copy/swap completion path owns
+  cached meshes only. Dynamic refit BLAS, cascade and sun clone owners share this allocator;
+  moving them needs ownership and recorded-copy lifetime handling beyond the small fix.
+  No reserved/live trigger ratio is introduced for this permitted fallback.
+- TLAS instance records take current mesh/dynamic/cascade addresses each build. The BLAS
+  address enters the TLAS signature; a changed signature forces BUILD instead of UPDATE.
+  Older TLAS slots still need the retirement checks above. Existing one-time mesh
+  compaction remains unchanged and benefits from the new placement policy.
+- `[bvh] mesh cache` reports active chunk count, reserved/live/pending MB and window freed
+  chunk count/MB, plus `relocated 0` (general relocation). Existing compactions stay separate.
+  Freed means handed to deferred destruction; physical heap release follows that queue.
+  `[mem] ours` live now excludes pending ranges; diagnostic-pinned chunks are not yieldable.
+- No key, ABI, shader or variant changes (request delta 0). No added GPU commands. GPU ms
+  and actual reclaimed VRAM remain unmeasured: no game or GPU test was run. Restart the
+  game for the layer change, then compare these counters in a separately authorized run
+  of the S8 low long view, including a scene transition and a GPU backlog window.
+
+### Cached mesh VRAM compaction (2026-11-02, codex-mesh-pool, offline candidate)
+
+- `rt_vram_compact=0` by default, including every preset. Experimental GUI entry
+  "Compact ray-tracing caches". Host-layer change needs a restart to load the code;
+  the key itself is live. No host/core ABI or shader change; variant request delta 0.
+- Pool growth doubles capacity. Shrink qualification is therefore used <= reserved / 4,
+  with target max(start capacity, 2 x used), aligned for pool copies. This frees at
+  least half while retaining one doubling step of headroom. Demand must remain low
+  for 240 + 8 scene slots + 6 retirement presents = 254 frames, beyond the existing
+  build-result watchdog and retirement interval. A failed allocation resets the window.
+- Repack requires ready meshes, no outstanding BVH batch/pending pool range, no dynamic
+  hold/hair pool range, and no native material basis jobs. Native hair capability
+  disables pool repacking, because newly visible procedural bounds require pool writes.
+  These restrictions leave BLAS chunk relocation available independently.
+- GPU copies include every live vertex and material-basis range. While copying,
+  allocations and basis captures pause; existing cached geometry remains usable, and
+  new geometry keeps the ordinary per-draw soup path. Confirmation is a dedicated
+  private status word, separate from the ordinary status ring. Dropped recordings discard the candidate; stalled recordings
+  never publish on a timeout. The old allocator remains active until confirmation.
+  Timed-out BVH/native-basis pool users conservatively block repacking until their
+  command resets; another command's registered unsubmitted BVH work also blocks it.
+- Commit rebases surviving mesh generations, material rows (including offscreen ones),
+  and the pool epoch. Each scene keeps its own material offsets, so an old scene's
+  pool descriptor and rows agree. Evicted snapshot ranges are released in the new
+  allocator; old pending frees stay with the retained original buffer. Old/cancelled
+  buffers wait for the GPU frame + 2 fence, oldest live scene, and six presents before
+  entering deferred destruction. A key toggle cancels publication, not retirement.
+- BLAS relocation plans complete evacuation of the emptiest eligible chunk into
+  fuller existing chunks, largest mesh first. No new chunk or increased reservation
+  is allowed. Exact aligned sizes and allocator holes are used, not aggregate free
+  bytes. Only verified cached meshes participate, after ordinary compaction resolves;
+  the existing per-frame compaction count bounds a complete evacuation. CLONE copies
+  use the existing completion/swap path; future TLAS builds read the new addresses.
+- The source stays excluded from allocation until emptied ranges retire. Its AS
+  ranges remain pinned if meshes are evicted before the copy completes. Relocation
+  batches wait for completion or explicit recording drop without a 240-frame timeout.
+  Dynamic, cascade, current-sun and OMM-owned BLAS are not relocated; diagnostic kept
+  handles pin their chunks. A chunk with any such live owner is ineligible.
+- `[mem] ours` reports active pool used/capacity, candidate/retained buffer bytes,
+  repack count and successful cached BLAS moves. The existing mesh-cache capacity
+  line reports relocation MB, freed chunks and pool savings. Handed-off deferred
+  buffers are excluded once their explicit scene retirement has completed.
+- Supplied vg1 S8 evidence: pool 467 / 2047 MB predicts 934 MB target, 1113 MB less
+  active reservation after retirement. BLAS 211 / 2560 MB does not predict exact
+  savings without the cached/dynamic owner distribution. CPU sizing/planning tests
+  cover hysteresis, watchdog window, fragmentation, pinned ranges and no-growth moves.
+  Validation: 94 / 94 permitted CTests passed (21.44 s); final layer rebuild and
+  5 / 5 targeted CTests passed after lifetime safeguards. CPU compaction test: 68 checks.
+  GPU cost and visual/energy invariance remain unmeasured; no game was launched.
+
+### BLAS motion fragmentation (2026-11-02, codex-vram-motion, offline candidate)
+
+- vg2 at 21:55:12: 62 chunks, 4077.7 MB reserved, 867.3 MB live and 588.3 MB
+  pending. The other 2622.1 MB is free space inside pinned chunks, not pending
+  retirement. Existing freed-range suballocation and fence retirement already work.
+- The fullest-chunk policy mixes short-lived rebuilds with cached compacted meshes.
+  A small mesh placed in a rebuild chunk's tail keeps the entire chunk alive after
+  the large range retires. A slightly larger next rebuild cannot fit its old hole.
+  Per-draw, cascade and sun rebuilds all used that same allocation domain. The log
+  does not identify every chunk owner; the exact contribution awaits vg3.
+- With rt_vram_compact on, allocations now use three chunk arenas: cached mesh and
+  compaction, per-draw, cascade/sun. Cached relocation destinations also stay in the
+  cached arena. Sizes, chunk granularity and all retirement fences stay unchanged.
+  There is no extra GPU command and no unsafe in-place full BLAS rebuild.
+- Turning the key on does not move existing mixed allocations. They drain through
+  ordinary ownership/retirement or verified cached relocation. Turning it off restores
+  mixed placement; a chunk's arena records its original allocation class.
+- CPU regression: 96 frames of increasing rebuild demand plus small persistent
+  compaction destinations, with six-present/GPU/scene retirement. Segregated reserve
+  stays at most 448 MB; mixed reserve reaches 1344 MB. Both finish with 354.8 MB
+  occupied (including retirement) and 24.0 MB live. This reproduces fragmentation,
+  not the exact game workload or an expected 3x runtime gain.
+  Tests also preserve pending fences and exclude dynamic/cascade relocation targets.
+- No shader/ABI change, variants delta 0. Keep the key off by default. Actual motion
+  coverage, physical reserve and GPU ms require the separately authorized vg3 batch
+  at S8 low long view; no game was launched for this change.
+
+### VRAM defaults qualified (2026-11-02, vram-default-on)
+
+vg3 at the S8 port passed real-budget OFF/ON/OFF motion, energy and budget gates.
+`rt_vram_guard`, `rt_vram_compact` and `rt_capture_elastic` now default to 1, automatic
+without GUI entries; the test-only budget override stays 0. This supersedes the
+default-off candidate status above. All presets inherit the automatic defaults.
+
+Opaque drop peaks right 1.78 / 0.39 / 1.20, left 1.10 / 0.64 / 1.77 draws/frame;
+ON energy +0.1836% within +/-0.92%; ON usage at most 21,860 / 31,419 MB.
+Complete-turn RT-pass GPU intervals OFF-a / ON / OFF-b: right
+5.363 / 5.464 / 5.657 ms, left 5.321 / 5.269 / 5.287 ms (whole-pass costs,
+no isolated compaction timer). smoke_ultra retains opaque drops 0.00 and adds
+every-window `[mem] ours` within budget. Check a long low-camera view and turns at
+S8 Water Queens House port: `[mem] ours` within budget, no new stutter/flicker.
+Full gate numbers, GI costs and source log: [progress/vram-default-on.md](progress/vram-default-on.md).
+
+### Elastic primary capture drop regression (2026-11-02, fix-elastic-drops, offline candidate)
+
+su1-ultra-s8-fg2.1.223616 is INVALID: pan-e and rotate-r violate the every-window
+zero opaque-drop gate. At 22:38:10-12 primary capture grows 544 -> 720 -> 912 MiB;
+the following 120-frame summary reports opaque peak 394.2 MiB, alpha demand
+118.5 MiB, final alpha region 364 MiB and final capacity 912 MiB. Peak demand
+already includes rejected opaque bytes. Comparing it to final capacity hides
+the smaller allocations/partitions earlier in the window. Growth after a
+completed capture cannot recover draws already rejected during that capture.
+
+The primary capture now retains at least effective rt_xfb_mb (1024 MiB for
+Ultra's 64-byte layout). Predicting an arbitrary next draw from past frames
+cannot safely permit a smaller buffer; replacing it mid-recording would need
+to preserve existing Vulkan commands, geometry and published offsets. This
+conservative floor gives up primary shrink savings below the fixed baseline.
+Cascade shrinking remains unchanged. Primary growth restores the 25% reserve
+at the next safe producer boundary, before observed demand exhausts capacity.
+Demand includes the actual alpha reservation and physical opaque placement.
+The rolling maximum plus margin persists for 120 captures, across replacement;
+a lower card cap cannot force a shrink below reserve already allocated.
+
+A separate fixed-capacity alpha hysteresis state bounds the elastic split so
+both streams retain at least their fixed-path room. This also covers the inn
+proportional-split threshold: 1024 -> 1040 MiB could otherwise reduce opaque
+room from 483 -> 413 MiB. Lifetime fences and allocation guards are unchanged.
+Defaults remain on. No shader/ABI changes; variant request delta 0. No added
+GPU commands; cost and live coverage remain unmeasured. Layer restart required.
+S8 smoke_ultra must pass buffer-full 0.00 in every pan/rotation window before
+qualification. No game launched. Unapplied, independently tested default-OFF
+alternative: [patch](alternatives/fix-elastic-drops-default-off.patch).
+
+### CPU hit-material lists candidate (2026-11-02, codex-perf-hitmat)
+
+`perf_hitmat_lists=0` preserves the existing path. On: prepass writers use a
+command-recording-owned candidate list with a recording-local leaf mutex. Other
+recordings no longer share the pending mutex on each candidate. Scene preparation
+seals an immutable list and releases the pending registry mutex before allocation
+and copy recording. The mode is latched at prepass begin, so a live toggle cannot
+split one recording between registries. Duplicate keys and opaque limits are kept.
+
+Queries pin finalized packet metadata and an immutable source snapshot under the
+provider mutex, add the query recording to source owners, and do CPU pairing without
+the provider mutex. Relocking revalidates command/source recording, frame,
+generation, descriptor set, attached/prepared state, packet uniqueness/validity,
+query capacity, and material resource currency before GPU recording. Allocation,
+mutable counters, remap and submit-order publication remain under their old locks.
+The existing CPU hit-material window line includes mutex wait ms and query record
+ms, both per frame across the reported window. Query record starts at row upload
+and includes join, remap and pool gather recording. See
+[progress/codex-perf-hitmat.md](progress/codex-perf-hitmat.md) for the unqueued camp
+A/B plan. No live performance or energy claim is qualified by offline tests.
+### CPU hook state and submit matrix reuse (2026-11-02, codex-perf-hooks, READY_FOR_LIVE)
+- `perf_hook_state=0` controls CPU audit ranks 2 and 3 together; Experimental GUI control, off in presets.
+  Internal queries accept the resolved recording state but always re-read current descriptors/offsets and
+  retain lifetime validation. No command pointer cache, host ABI change, shader edit or request delta.
+- Immutable pipeline snapshots/eligibility are cached per thread by handle and registry generation;
+  create/destroy invalidates all entries, including recycled handles. Classification also keys on shader
+  hashes, capture stride and tileset capture mode. Runtime material enable and diagnostics stay live.
+- Submit-local matrix keys are the three exact 16-byte source row addresses after stride/index resolution.
+  Load and validate each triple once, then scatter raw rows to instances (invalid mask 0) and jobs (invalid
+  first float NaN). Preserve per-destination late-write logging and invalid counts. Never reuse next submit.
+- Existing hook CPU line reports draw bookkeeping and key state over 300 frames; matrix line reports
+  ms/build, matrices, unique sources, builds and submits over 300 submit samples. Toggle changes discard
+  partial samples. A nonempty submitted fixup list is one build, matching its replacement at record time.
+- Explicit C++ build passed; 100/100 permitted CTests passed. No live performance, GPU cost or visual gate
+  measured. Conditional estimates only: 0.1-0.3 ms/frame hooks, 0.1-0.3 ms/build with repeated matrices.
+  A/B: S3 camp and S8 Water Queens House, OFF/ON/OFF/ON in one session per save, qualified Ultra keys on.
+  Plan and gate details: [codex-perf-hooks](progress/codex-perf-hooks.md); nothing queued.

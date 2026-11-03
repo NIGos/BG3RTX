@@ -13,6 +13,8 @@
 #include <vector>
 
 #include "../../common/settings.h"
+#include "compatibility.h"
+#include "diagnostics.h"
 
 namespace launcher {
 

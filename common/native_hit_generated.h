@@ -14,18 +14,24 @@ inline constexpr Row kRows[]={
  {{0x4f3ec0c7a75082e7ull,0x9cc7094f4a674c1aull,0,32,36,native_vt::ReflectanceUbo,20,native_vt::CaptureDraw,native_vt::LayoutBase,false},0xea8f4071c5a3c181ull,3u,1u},
  // Atmosphere/ATM_Wind_Vertex_RGB_AlphaTest_2S_VT: = 923131c7 (same); CaptureDraw, family WindRgb, depth VS ea8f4071
  {{0x4464f4425bbb62aeull,0x9cc7094f4a674c1aull,0,32,36,native_vt::ReflectanceUbo,20,native_vt::CaptureDraw,native_vt::LayoutBase,true},0xea8f4071c5a3c181ull,3u,1u},
+ // Atmosphere/ATM_Wind_Vertex_R_AlphaTest_VT: = 14678345 (out2 as 14678345c10aefbc); CaptureDraw, family WindRgb, depth VS f8314c4a
+ {{0x55592de41668308aull,0x0289a87268b7023cull,0,32,36,native_vt::ReflectanceUbo,12,native_vt::CaptureDraw,native_vt::LayoutBase,false},0xf8314c4af7a3bc58ull,3u,1u},
  // Base/BASE_AlphaTest_FX_VT: = 14678345 (same); CaptureDraw, family AlphaTest2s, depth VS 106a0550
  {{0x9d925bfd131f33c9ull,0x1e9145e4b621a5e0ull,0,44,48,native_vt::ReflectanceUbo,0,native_vt::CaptureDraw,native_vt::LayoutBase,false},0x106a055077bc19d6ull,2u,1u},
  // Base/BASE_GM_Pulse_AlphaTest_FX_VT: = 3da860be (same); CaptureDraw, family AlphaTest2s, depth VS 106a0550
  {{0xe4ade32941af03daull,0x1e9145e4b621a5e0ull,0,44,48,native_vt::ReflectanceConstant,0,native_vt::CaptureDraw,native_vt::LayoutBase,false},0x106a055077bc19d6ull,2u,1u},
+ // Base/Base_2S_VT: = 923131c7 (same); CapturePool
+ {{0x2d815e2ab9046501ull,0x2d2ac3c38992b7f0ull,0,32,36,native_vt::ReflectanceUbo,0,native_vt::CapturePool,native_vt::LayoutBase,true},0x0ull,0u,1u},
+ // Base/Base_AlphaTest_2s_Translucency_VT: = 83831811 (out2 as 838318119b2f43d8); CapturePool
+ {{0x80d6fb8f5cf0c271ull,0x2d2ac3c38992b7f0ull,0,32,36,native_vt::ReflectanceUbo,0,native_vt::CapturePool,native_vt::LayoutBase,true},0x0ull,0u,1u},
  // Base/Base_BGM_MaskedShadows_VT: = 3df678c0 (same); CapturePool
  {{0x651863a6ff4825d7ull,0x2d2ac3c38992b7f0ull,0,32,36,native_vt::ReflectanceConstant,0,native_vt::CapturePool,native_vt::LayoutBase,false},0x0ull,0u,1u},
- // Engine_Default_HLOD_GM_VT: = 3df678c0 (flag); CapturePool
+ // Engine_Default_HLOD_GM_VT: = 14678345 (out2 as 3da860bebbe9133b); CapturePool
  {{0xb0ecc292e8661561ull,0x2d2ac3c38992b7f0ull,0,32,36,native_vt::ReflectanceConstant,0,native_vt::CapturePool,native_vt::LayoutBase,false},0x0ull,0u,1u},
  // InstancePaint/IP_AlphaTest_2S_VT: = 35a18400 (reflectance); CaptureDraw, family AlphaTest2s, depth VS 106a0550
  {{0x641822a7f6dd36ecull,0x0de1b186f155904full,0,44,48,native_vt::ReflectanceUbo,8,native_vt::CaptureDraw,native_vt::LayoutBase,false},0x106a055077bc19d6ull,2u,2u},
 };
-inline constexpr uint32_t kRowCount=8u;
+inline constexpr uint32_t kRowCount=11u;
 // The generated row of a G-buffer pair (nullptr: none).
 inline const Row* row(uint64_t vs,uint64_t fs){for(uint32_t i=0;i<kRowCount;++i)if(kRows[i].recipe.fs==fs && kRows[i].recipe.vs==vs)return &kRows[i];return nullptr;}
 inline const Row* row_of(const native_vt::Recipe* r){for(uint32_t i=0;i<kRowCount;++i)if(&kRows[i].recipe==r)return &kRows[i];return nullptr;}

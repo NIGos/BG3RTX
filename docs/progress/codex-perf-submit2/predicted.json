@@ -1,0 +1,86 @@
+{
+  "status": "READY_FOR_LIVE; not executed or queued",
+  "branch": "codex-perf-submit2",
+  "key": "perf_submit_batch",
+  "default": 0,
+  "hypothesis": "Batch compatible host work without changing game submit entries, descriptor contents, geometry, energy or completion ownership.",
+  "predicted": {
+    "pre_post_scene_float_mean_relative_delta": 0,
+    "geometry_material_coverage_and_matrix_invalid_delta": 0,
+    "shader_request_delta": 0,
+    "cpu_ms_per_frame": null,
+    "cpu_basis": "Ranks 6 and 7 each estimate 0 to 0.1 ms, overlap and are unmeasured. Zero saving is credible. No positive target or sum is asserted.",
+    "gpu_ms_delta": null,
+    "gpu_basis": "Same GPU command streams except eligible private completion signal shares a driver call. No pass saving predicted; compare to OFF repeat noise.",
+    "hit_clone_descriptor_calls_with_appended_tables": {
+      "off": 2,
+      "on": 1
+    },
+    "sun_clone_descriptor_calls": {
+      "off": "2 + native_sampler_write + nonempty_texture_write + nonempty_cache_write",
+      "on": 2
+    },
+    "tracker_exclusive_write_locks_per_nonempty_update": {
+      "off": "one per decoded nonempty write",
+      "on": 1
+    },
+    "omm_internal_signal_driver_calls_per_eligible_ticket_batch": {
+      "off": 1,
+      "on": 0
+    },
+    "omm_ineligible_batches": "No reduction. Extension chains, protected flags, invalid generations and foreign queues keep the original path.",
+    "water_emissive_fence_and_submit_delta": 0
+  },
+  "plan": {
+    "scenes": [
+      "S8 Water Queens House",
+      "S3 camp (foliage pressure / real Ultra smoke)"
+    ],
+    "window_mode": "visible_unfocused_fg",
+    "preset": "Ultra with all qualified keys unchanged; diagnostics build and cpu_timing=1",
+    "cost_windows": [
+      "off-a",
+      "on-a",
+      "off-b",
+      "on-b"
+    ],
+    "minimum_rendered_frames_per_window": 600,
+    "hold_seconds_per_window": 90,
+    "note": "The four 90 s windows take about 6 minutes per save, exceeding the usual 2-5 minute target to satisfy per-window stats and pacing minima. Use one launch per save, repeat the same static/pan/rotation route. Do not shorten required windows to fit a time target.",
+    "baseline_noise": "Derive uncertainty and energy/GPU tolerances from matching OFF repeats in the same session. If savings include zero, report no proven gain.",
+    "timing": "watchdog_s=1. Discard watchdog intervals crossing a toggle and the first fully settled interval. Require multiple complete same-state lines; divide interval totals by presents. Existing CPU matrix-copy and capture/query lines remain controls.",
+    "patterns": [
+      "[watch]",
+      "[pace]",
+      "[cpu]",
+      "[rt] scene wait",
+      "[rt] scene build GPU",
+      "[gpu]",
+      "[geo]",
+      "[omm]",
+      "[water]"
+    ],
+    "expect": [
+      "watch line with submit CPU, descriptor tracker CPU, alpha descriptor ms/calls, auxiliary signals coalesced; nonzero presents; cpu_timing=1"
+    ],
+    "expect_every": {
+      "windows": [
+        "on-a",
+        "on-b"
+      ],
+      "required": [
+        "same-state watch timing samples",
+        "scene wait: zero timeouts/skips",
+        "all RT consumers use current-frame TLAS",
+        "zero capture/stream/basis/mesh capacity drops",
+        "unchanged material/alpha coverage",
+        "no OMM completion-proof-loss or private-signal failure",
+        "water composed/uncomposed and non-finite gates unchanged",
+        "GPU scene build and GI/LS/RF/water costs within OFF repeat noise"
+      ]
+    },
+    "quality_windows": "Separate short primary-reference/coverage captures with stats, never in cost windows. Compare static float pre-post scene mean from dumps.json to OFF repeat noise. PNG/bloom means do not decide energy.",
+    "omm_coverage": "Only in a separately authorized OMM-capable batch with validated tickets. Require auxiliary signals coalesced > 0 in each ON window. With rt_omm off, zero is expected and the coalescing path remains unvalidated. Also exercise extension/Submit2 fallback and confirm no early retirement with validation diagnostics.",
+    "restoration": "Queue owner must restore perf_submit_batch=0 and all diagnostic overrides after the authorized session, including failure paths. No runner or pending inbox is touched here."
+  }
+}
