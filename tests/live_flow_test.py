@@ -53,7 +53,8 @@ class FlowTests(unittest.TestCase):
             start = next(i for i,p in enumerate(plan) if p["label"] == "survive-"+name+"-1")
             windows = plan[start:start+3]
             # The primary stage's windows hold a whole 300-frame strand line at 30 fps (its strand-draw gate).
-            want = 25 if name == "d-primary" else 20
+            from tools.live_batches.hair_validation.make_job import STRAND_STAGES
+            want = 25 if name in STRAND_STAGES else 20
             self.assertEqual([p["seconds"] for p in windows], [want, want, want])
             self.assertEqual(len({p["set"] for p in windows}), 1)
             self.assertFalse(any(p.get("reload_selected") for p in windows))
