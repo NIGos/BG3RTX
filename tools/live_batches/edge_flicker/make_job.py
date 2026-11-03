@@ -23,7 +23,7 @@ def make():
         plan.append(dict(label=label, kind='static', speed='static', seconds=seconds,
                          repeat_ms=0, scan=16, capture_at=0, serial=0,
                          motion_start=seconds, motion_end=seconds, pixels_per_second=0,
-                         direction=0, set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
+                         direction=0, registration_policy='per-frame-exclude-unregistered', set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
 
     step('warmup', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
     step('warmup-camera', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
