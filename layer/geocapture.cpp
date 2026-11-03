@@ -347,6 +347,7 @@ struct Capture {
   uint64_t c_legacy_sig=1469598103934665603ull;
   capture_budget::CascadeElasticWindow elastic;
   capture_budget::RtElasticWindow rt_elastic;
+  capture_budget::CaptureHeadroom headroom;
   uint64_t elastic_target=0;
   Buf elastic_old;
   uint64_t elastic_detached=0;
@@ -486,7 +487,7 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   }
   // Never lower a sampled target below its live need after a budget change.
   // Shrinks already obey the sampled cap; a new cap only restricts growth.
-  if(wanted>c.xfb.size)wanted=(std::min)(wanted,elastic_cap(cascade));
+  if(wanted>c.xfb.size)wanted=(std::max)(c.xfb.size,(std::min)(wanted,elastic_cap(cascade)));
   if(wanted==c.xfb.size)return;
   if(wanted>c.xfb.size && !vram_allow(cascade?vram_guard::kCascade:vram_guard::kRtCapture,wanted,
                      cascade?"elastic cascade capture":"elastic RT capture")){
@@ -1595,12 +1596,16 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
   if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current) && c->xfb.b){
     const uint64_t cap=elastic_cap(true);
-    const uint64_t wanted=capture_budget::elastic_capacity(c->cursor+c->c_over,g_storage_range,cap);
+    const uint64_t demand=c->cursor+c->c_over;
+    // Ignore inactive captures, just as the shrink window does. Preserve the
+    // learned movement reserve across inactivity and allocation replacement.
+    const uint64_t wanted=demand?c->headroom.capacity(demand,g_storage_range,cap,3,
+        uint64_t(cascade_mb())<<20,c->xfb.size):c->xfb.size;
     const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
     if(target!=c->elastic_target && target!=c->xfb.size)
       log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
           double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
-          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::ElasticWindow::samples);
+          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::CascadeElasticWindow::samples);
     c->elastic_target=target;
   }
   if ((!cfg_int("rt_capture_elastic",0) || cfg_hot(CfgHot::rt_sun_cascade_current)) && c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
@@ -2331,11 +2336,12 @@ void rt_capture_stats(const Capture& c) {
         floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
         c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
         uint64_t(c.cursor+c.opaque_overflow_bytes);
-    const uint64_t wanted=capture_budget::elastic_rt_capacity(demand,g_storage_range,
-        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+    const uint64_t predicted=g_scratch.headroom.capacity(demand,g_storage_range,elastic_cap(false),1,
+        uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+    const uint64_t wanted=(std::max)(predicted,capture_budget::elastic_rt_capacity(demand,g_storage_range,
+        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size));
     // rt_capture_stats runs only for the main (non-minor) scene capture.
-    // Restore reserve before the next frame reaches capacity. Unlike cascade
-    // overflow recovery, primary capture must not wait for a dropped draw.
+    // Both streams restore reserve before the next frame reaches capacity.
     const uint64_t target=g_scratch.rt_elastic.observe(c.xfb.size,wanted,demand,true);
     if(target!=g_scratch.elastic_target && target!=c.xfb.size)
       log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
