@@ -204,6 +204,41 @@ def dual_check(exe, spv, n=3000, seed=13):
     check("dual GPU vs CPU: every sample within 1e-3 relative", rep["rel_err_max"] < 1e-3, rep["rel_err_max"])
 
 
+def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
+    """Strand crossings per ray on the GPU (tools/hair_shadow_gpu_check.hlsl): the candidates of one non-opaque query
+    and successive closest hits, against the CPU count of capsules the ray enters (docs/RTX_HAIR_PRIMARY.md C2: the
+    shadow transmittance a_f^n needs n)."""
+    g = run(exe, spv, pts, rad, offs, cam)
+    if g is None:
+        return
+    w, h = cam.size
+    s0, s1 = primary.segments(pts, rad, offs)
+    a, b2 = pts[s0].astype(np.float64), pts[s1].astype(np.float64)
+    r = (rad[s0] + rad[s1]).astype(np.float64) / 2
+    rays = cam.rays().reshape(h, w, 3)
+    rng = np.random.default_rng(seed)
+    hit_px = np.argwhere(g[..., 1] > 0)
+    pick = hit_px[rng.choice(len(hit_px), min(n_rays, len(hit_px)), replace=False)]
+    cpu = np.zeros(len(pick), int)
+    for i, (y, x) in enumerate(pick):
+        t, _ = primary.capsule_hits(np.broadcast_to(cam.position, (len(a), 3)), np.broadcast_to(rays[y, x], (len(a), 3)), a, b2, r)
+        # One crossing per run of adjacent segments of a strand (chained end caps: the joint between two segments
+        # is one surface, so a ray through it enters one capsule, not two).
+        hit = np.flatnonzero(np.isfinite(t))
+        cpu[i] = int(len(hit) - np.sum((np.diff(hit) == 1) & (s1[hit[:-1]] == s0[hit[1:]]))) if len(hit) else 0
+    col = lambda c: g[pick[:, 0], pick[:, 1], c].astype(int)
+    rep = {"rays": len(pick), "cpu_mean": float(cpu.mean())}
+    for name, c in (("candidates", 0), ("successive", 1), ("candidates_dedup", 2), ("successive_dedup", 3)):
+        v = col(c)
+        rep[name] = {"mean": round(float(v.mean()), 3), "equal": round(float((v == cpu).mean()), 4),
+                     "over": round(float((v > cpu).mean()), 4), "under": round(float((v < cpu).mean()), 4)}
+    print(json.dumps(rep))
+    check("shadow: one non-opaque query, adjacent segments once, counts the strands crossed (>= 98% of rays)",
+          rep["candidates_dedup"]["equal"] >= 0.98, rep["candidates_dedup"])
+    check("shadow: successive closest hits deduplicated count the same (>= 98%)", rep["successive_dedup"]["equal"] >= 0.98,
+          rep["successive_dedup"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -213,6 +248,7 @@ def main():
     ap.add_argument("--distance", type=float, default=0.9)
     ap.add_argument("--bsdf-spv", type=Path, help="also compare shaders/rt/hair_bsdf.hlsli with tools/hair_groom/bsdf.py")
     ap.add_argument("--dual-spv", type=Path, help="also compare shaders/rt/hair_dual.hlsli with tools/hair_groom/dual.py")
+    ap.add_argument("--shadow-spv", type=Path, help="also count strand crossings per ray (tools/hair_shadow_gpu_check.hlsl)")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -231,6 +267,8 @@ def main():
         bsdf_check(a.exe, a.bsdf_spv)
     if a.dual_spv:
         dual_check(a.exe, a.dual_spv)
+    if a.shadow_spv:
+        shadow_check(a.exe, a.shadow_spv, pts, rad, offs, cam)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")
     sys.exit(1 if FAILS else 0)
 

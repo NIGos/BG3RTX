@@ -61,6 +61,23 @@ bool hp_segment(uint64_t pool, uint pool_bytes, uint4 row, uint seg, out uint i0
 // Byte address of element i (size bytes) of the pool array at offset off (after hp_segment accepted i0).
 uint64_t hp_at(uint64_t pool, uint off, uint i, uint size) { return pool + uint64_t(off) + uint64_t(i) * size; }
 
+// Strand crossings of one ray from the candidates of a non-opaque groom query (arbitrary order): a strand's chained
+// segments meet in one joint that both report, so a candidate whose neighbour segment (same instance, primitive +- 1)
+// was already seen is the same crossing. The last kHpSeen candidates are kept (a shadow ray crosses few strands).
+static const uint kHpSeen = 8u;
+struct HpCrossings { uint inst[kHpSeen]; uint prim[kHpSeen]; uint n; };
+HpCrossings hp_crossings_init() { HpCrossings c = (HpCrossings)0; c.n = 0u; return c; }
+bool hp_crossing(inout HpCrossings c, uint inst, uint prim) {
+  bool fresh = true;
+  [unroll] for (uint i = 0; i < kHpSeen; ++i)
+    if (i < min(c.n, kHpSeen) && c.inst[i] == inst && (c.prim[i] + 1u == prim || prim + 1u == c.prim[i])) fresh = false;
+  const uint slot = c.n % kHpSeen;
+  c.inst[slot] = inst;
+  c.prim[slot] = prim;
+  ++c.n;
+  return fresh;
+}
+
 // Largest strand radius a groom file may hold (common/hair_groom_asset.h rejects radii >= 10 mm).
 static const float hair_primary_max_radius = 0.01;
 
