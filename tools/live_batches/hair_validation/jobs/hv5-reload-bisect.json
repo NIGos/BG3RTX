@@ -88,7 +88,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "Reload bisect (hv1 device lost after F8): four F8 reloads in one launch, native hair + scalp, then + physical origin, + strand groom, + strands on screen, each with a 60 s survival window. The first stage without frames after its reload names the culprit.",
-  "estimated_phase_seconds": 305.0,
+  "estimated_phase_seconds": 307.1,
   "expect_every": [
     {
       "name": "frames rendered in every survival window after a reload",

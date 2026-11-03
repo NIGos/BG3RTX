@@ -1,4 +1,5 @@
 """tools/hair_groom (card -> strand groom experiment) on synthetic cards and masks (CTest hair_groom_test)."""
+import dataclasses
 import json
 import struct
 import sys
@@ -9,7 +10,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, dual, geom, mesh, primary, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -186,6 +187,15 @@ def test_asset():
             check("asset never overwrites", False)
         except FileExistsError:
             check("asset never overwrites", True)
+        # A LOD the layer would refuse (a zero radius) raises before the file exists: no header-only stub.
+        bad = [(k, g) for k, g in lods]
+        bad[1] = (bad[1][0], dataclasses.replace(bad[1][1], radii=np.where(np.arange(len(bad[1][1].radii)) == 0, 0.0,
+                                                                         bad[1][1].radii).astype(np.float32)))
+        try:
+            asset.write(Path(d) / "bad.hgrm", 0x1234, card, bad)
+            check("refused LOD writes no file", False)
+        except ValueError:
+            check("refused LOD writes no file", not (Path(d) / "bad.hgrm").exists())
     magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
     check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 2, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
     uvs = np.frombuffer(raw, "<f4", 64, 40).reshape(32, 2)
@@ -483,7 +493,28 @@ def test_dual():
     check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
 
 
-for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_cost():
+    h, w = 256, 64
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 60, 4.0)], 2)
+    m[..., 2] = np.linspace(0, 255, h)[:, None].astype(np.uint8)
+    card = card_mesh()
+    lods = asset.build(card, m)
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "x.hgrm"
+        asset.write(path, 0x1234, card, lods)
+        indices, got = cost.lods_of(path)
+        rows = cost.report(d)
+    want = [(g.points.shape[0], g.segments) for _, g in lods]
+    check("cost: LOD headers give every LOD's points and segments", indices == 24 and [(p, s) for _, p, s in got] == want, (got, want))
+    check("cost: one row per file", len(rows) == 1 and len(rows[0]["lods"]) == len(lods))
+    c = cost.groom_cost(100, cost.BENCH_SEGMENTS, 0)
+    check("cost: the bench groom costs the bench numbers (60 MB BLAS, 0.10 ms refit)",
+          abs(c["refit_ms"] - 0.10) < 1e-9 and abs(c["instance_mb"] - (60.0 + 1200e-6)) < 1e-6, c)
+    check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
+
+
+for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

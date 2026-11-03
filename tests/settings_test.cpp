@@ -426,7 +426,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 13);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading remain.
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget remain.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -539,6 +539,26 @@ static void test_gui_levels() {
   CHECK(find_knob("local_shadows")->choices[3].dev);
   CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
   CHECK(find_knob("exp_water")->apply == Apply::Restart);
+  const auto* water_fresnel = find_knob("water_surface_fresnel");
+  CHECK(water_fresnel != nullptr);
+  if (water_fresnel) {
+    CHECK_EQ(water_fresnel->category, "Surfaces");
+    CHECK(!water_fresnel->dev_only && !water_fresnel->experimental);
+    CHECK(knob_visible(*water_fresnel, false));
+    CHECK(knob_apply(*water_fresnel, 0) == Apply::Live);
+    CHECK(knob_apply(*water_fresnel, 1) == Apply::Restart);
+    CHECK(water_fresnel->choices[1].awaiting_qualification);
+    CHECK_EQ(code_default("rt_water_surface_fresnel"), "0");
+    for (int p = 0; p < kPresetCount; ++p) {
+      CHECK(water_fresnel->preset[p] == 0);
+      Map m; for (const auto& kv : expand_preset(p)) m[kv.first] = kv.second;
+      CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0");
+    }
+    CHECK(key_change_needs_restart("rt_water_surface_fresnel", "0", "1"));
+    CHECK(!key_change_needs_restart("rt_water_surface_fresnel", "1", "0"));
+    CHECK(!key_change_needs_restart("rt_water_surface_fresnel", "1", "1"));
+  }
+
   CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);   // 88-byte capture layout is startup-only
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 

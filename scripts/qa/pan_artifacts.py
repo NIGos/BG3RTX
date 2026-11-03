@@ -17,6 +17,8 @@ REQUIRED = {'depth','normal','albedo','material','primary','sun','local','gi','f
 def decode(path, entry):
     w, h, fmt = entry['width'], entry['height'], entry['format']
     data = path.read_bytes()
+    if fmt == 13:  # R8_UINT: exact FS written marker, packed by the layer
+        return np.frombuffer(data, 'u1').reshape(h, w, 1)
     if fmt in (97, 83):  # RGBA16F, RG16F
         return np.frombuffer(data, '<f2').reshape(h, w, 4 if fmt == 97 else 2).astype('f4')
     if fmt == 109:  # RGBA32F temporal post history

@@ -105,8 +105,12 @@ def make():
     for path, value in [(HERE / "plans/compact_camp.json", plan),
                         (HERE / "jobs/cp4-compact-camp-join.json", job)]:
         path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
-    return job, plan
+    from tools.live_batches.live_flow import tighten_files, read
+    tighten_files(HERE)
+    return read(HERE / "jobs/cp4-compact-camp-join.json"), read(HERE / "plans/compact_camp.json")
 
 
 if __name__ == "__main__":
     make()
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(Path(__file__).resolve().parent)

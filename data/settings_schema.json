@@ -158,6 +158,18 @@
        {"id": "shadows", "label": "Reflections + shadows", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
        {"id": "refraction", "label": "Reflections + shadows + refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "water_surface_fresnel", "label": "Water interface Fresnel",
+     "description": "Separates clean-water reflection from column opacity. Pending qualification; compare shallow pool reflections at S8 Water Queens House.",
+     "apply": "restart", "apply_note": "on: restart; off: live", "advanced": true, "experimental": false, "developer": false,
+     "category": "Surfaces", "summary": "Separates clean-water reflection from column opacity. Pending qualification; compare shallow pool reflections at S8 Water Queens House.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_surface_fresnel": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On (unqualified)", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_surface_fresnel": "1"}, "needs": {"exp_water": 1}, "migrate_from": ["rt_water_surface_fresnel"], "developer": false, "maturity": "awaiting_qualification"}
+     ]},
     {"id": "exp_omm", "label": "Opacity micromaps",
      "description": "Accelerates cutout shadows with locally prepared foliage masks on compatible hardware. About 1 ms faster at camp on RTX 5090; requires a restart.",
      "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": false, "developer": false,
@@ -380,6 +392,19 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_hair_groom_crowd", "label": "Strand hair crowd budget",
+     "description": "Caps the strand groom work of a crowd: the largest characters get the finest strands, far ones coarser strands or cards. Refit and memory scale with it.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Performance", "summary": "Caps the strand groom work of a crowd: the largest characters get the finest strands, far ones coarser strands or cards. Refit and memory scale with it.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_crowd_ksegments": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "large", "label": "4 close characters", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "3500"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
+       {"id": "small", "label": "2 close characters", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "1800"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_hair_visibility", "label": "Subpixel distant hair cards",
      "description": "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",

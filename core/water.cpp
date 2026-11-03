@@ -275,8 +275,9 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
                             empty_spec && host->cfg_int("rt_water_empty_tiles",0) != 0 ? 1u : 0u,
                             std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_compact_hit_state",0) != 0 ? 1u : 0u,
                             std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_alpha_metadata_cache",0) != 0 ? 1u : 0u,
-                            cost_spec ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_cost",0),0,7)) : 0u};
-  VkSpecializationMapEntry entries[11]{};
+                            cost_spec ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_cost",0),0,7)) : 0u,
+                            edge_spec && host->cfg_int("rt_water_surface_fresnel",0) != 0 ? 1u : 0u};
+  VkSpecializationMapEntry entries[12]{};
   uint32_t count = 0;
   if (native_spec) {
     entries[count++] = {bg3::shader_variant::kSpecIdTileset, 0, sizeof(uint32_t)};
@@ -293,10 +294,11 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
     entries[count++] = {bg3::shader_variant::kSpecIdAlphaMetadataCache, 9 * sizeof(uint32_t), sizeof(uint32_t)};
   }
   if (cost_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterHitCost, 10 * sizeof(uint32_t), sizeof(uint32_t)};
+  if(edge_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterSurfaceFresnel,11*sizeof(uint32_t),sizeof(uint32_t)};
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
   const std::string pipe_key = req + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]) + "#haircheap=" + std::to_string(values[6]) + "#empty=" + std::to_string(values[7])
-      + "#compact=" + std::to_string(values[8]) + "#alphacache=" + std::to_string(values[9]) + "#hitcost=" + std::to_string(values[10]);
+      + "#compact=" + std::to_string(values[8]) + "#alphacache=" + std::to_string(values[9]) + "#hitcost=" + std::to_string(values[10]) + "#surface=" + std::to_string(values[11]);
   // Specialization toggles retain their pipelines until the owning layout is retired.
   if (p.req != pipe_key) {
     for (auto& v : p.cached) if (v.req == pipe_key) {
@@ -537,7 +539,7 @@ constexpr uint32_t kMaxComposePasses = 4;                 // timed compose dispa
 constexpr uint32_t kCQ = 2 + 2 * kMaxComposePasses;      // timestamps per frame slot
 // 32 M5.3 words + the M5.4 sun words + the M5.4b local-light words (64..90) + the M5.5 refraction words
 // (96..119) of a 128-word slot.
-constexpr uint32_t kCStatWords = bg3::water::kCsRrWords;
+constexpr uint32_t kCStatWords = 122; // M5.6 counters after the existing refraction table
 constexpr VkDeviceSize kCStatBytes = 512, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
 static_assert(kCStatBytes == bg3::water::kCsSlotWordsLs * 4 && kCStatWords * 4 <= kCStatBytes, "the slot holds every word");
 constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
@@ -899,6 +901,8 @@ void maybe_log_compose() {
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
             (unsigned long long)w[kCsNonFinite]);
+  host->log("[water] surface partition: clean owned %llu, invalid %llu; reference CPU energy partition, model mean may change",
+            (unsigned long long)w[120],(unsigned long long)w[121]);
   g_ccont.reset_counts();
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
   host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
@@ -1639,10 +1643,11 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
     host->pan_capture(cmd,"water_game",&pan_target);
     bg3::water::ComposeBuffer records{};
     if (bg3::water::read_buffer(static_cast<const bg3::water::ComposeBuffer*>(host->persist(bg3::water::kComposeKey,sizeof records)),records) &&
-        bg3::water::stride_of(records)==32 && uint64_t(p->width)*p->height<=records.capacity) {
+        uint64_t(p->width)*p->height<=records.capacity &&
+        bg3::water::buffer_bytes(records.capacity,bg3::water::stride_of(records))<=records.bytes) {
       Bg3Binding coverage{};
       coverage.buffer=VkBuffer(records.buffer); coverage.offset=bg3::water::kHeaderBytes;
-      coverage.range=uint64_t(p->width)*p->height*32;
+      coverage.range=uint64_t(p->width)*p->height*bg3::water::stride_of(records);
       coverage.width=p->width; coverage.height=p->height; coverage.format=VK_FORMAT_R8_UINT;
       host->pan_capture(cmd,"water_coverage",&coverage);
       if (!comp) {
@@ -1651,7 +1656,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
         host->vk->CmdFillBuffer(cmd,coverage.buffer,bg3::water::kHeaderBytes,records.bytes-bg3::water::kHeaderBytes,0);
         memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,kAll);
       }
-    } else host->log("[pan] water capture REFUSED: coverage requires 32 B records covering the render target");
+    } else host->log("[pan] water capture REFUSED: coverage requires complete records covering the render target");
   }
   const bool composed = comp && compose_at_pass_end(cmd, p, lights, lights_ok, &copy, copy_ok);
   if (pan_water && composed && view==25) host->pan_capture(cmd,"water_compose_debug",&pan_target);

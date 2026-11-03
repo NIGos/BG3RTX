@@ -76,6 +76,8 @@ WATER_AFTER_FS = "423e0548"
 # end_pass dumps, then calls the core). The water FS's own output cancels: its sun glints (dump max 640..1584 on S8,
 # one 1000 px moves the frame mean ~0.8%) made the plain after-water mean swing 2.5% between keys that change no
 # water pixel (m5p1 off -> rt_water_reflections measured: +2.5%), and m5w3's "compose -2%" was that noise.
+# New traces provide an explicit post_core readback paired with the same pass, since the image may never be
+# attached again. Only legacy traces use the following attachment dump; missing readbacks remain invalid.
 WATER_COMPOSE = "water-compose"
 _WATER_FS = None
 
@@ -90,7 +92,7 @@ def water_fs_prefixes():
 
 
 def water_compose_colour(cap: Path, dumps: dict):
-    """(luminance of SCENE_FS + sum over water passes of (next scene-image dump - the water pass's dump), nonfinite of
+    """(luminance of SCENE_FS + sum over water passes of (post-core scene dump - the water pass's dump), nonfinite of
     those dumps) or (reason, path). Pass order from frame.json (pass, draws, end with its dump ids)."""
     lum = lambda d: 0.2126 * d["mean"][0] + 0.7152 * d["mean"][1] + 0.0722 * d["mean"][2]  # noqa: E731
     scene = [(int(k[1:]), d) for k, d in dumps.items()
@@ -102,7 +104,7 @@ def water_compose_colour(cap: Path, dumps: dict):
     img = s["image"]
     water = water_fs_prefixes()
     frame = json.loads(fj.read_text(encoding="utf-8"))
-    ends = []   # (water pass?, the scene image's slot-0 dump of the pass or None), in order
+    ends = []   # (water pass?, pre-core dump, explicit post-core dump or None), in order
     fs_seen = set()
     for sub in frame.get("submits", []):
         for c in sub.get("cmds", []):
@@ -115,16 +117,25 @@ def water_compose_colour(cap: Path, dumps: dict):
                 elif op == "end":
                     hit = [dumps[k] for k in e.get("dumps", []) if k in dumps and dumps[k].get("image") == img and
                            dumps[k].get("slot") == 0 and dumps[k].get("mean")]
-                    ends.append((bool(fs_seen & water), hit[0] if hit else None))
+                    ends.append((bool(fs_seen & water), hit[0] if hit else None, None))
+                elif op == "post_core" and ends:
+                    hit = [dumps[k] for k in e.get("dumps", []) if k in dumps and dumps[k].get("image") == img and
+                           dumps[k].get("slot") == 0 and dumps[k].get("mean")]
+                    is_w, before, _ = ends[-1]
+                    if is_w and before is not None and len(hit) != 1:
+                        return ("missing or ambiguous post-core water scene dump", str(cap))
+                    ends[-1] = (is_w, before, hit[0] if hit else None)
     delta, nf, n = 0.0, int(s.get("nonfinite", 0) or 0), 0
-    for i, (is_w, d) in enumerate(ends):
+    for i, (is_w, d, post) in enumerate(ends):
         if not is_w or d is None:
             continue
-        nxt = next((x for x in ends[i + 1:] if x[1] is not None), None)
-        if nxt is None or nxt[0]:
-            return ("water pass without a non-water scene dump after it", str(cap))
-        delta += lum(nxt[1]) - lum(d)
-        nf += int(nxt[1].get("nonfinite", 0) or 0)
+        if post is None:
+            nxt = next((x for x in ends[i + 1:] if x[1] is not None), None)
+            if nxt is None or nxt[0]:
+                return ("water pass without a non-water scene dump after it", str(cap))
+            post = nxt[1]  # legacy traces that contain the required following attachment
+        delta += lum(post) - lum(d)
+        nf += int(d.get("nonfinite", 0) or 0) + int(post.get("nonfinite", 0) or 0)
         n += 1
     if not n:
         return ("no water pass on the scene image", str(cap))

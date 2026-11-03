@@ -4,8 +4,8 @@ Offline drafts only. Nothing is queued and no game launch is authorized.
 
 | Save | Source order | Launches | Phase seconds |
 | --- | --- | --- | --- |
-| S8 / Water Queens House | smoke_ultra, gpu_opt1 S8, gpu_opt2 Medium, water_offscreen, wf9 | 5 -> 1 | 1465 |
-| Campsite - 27h | cov_paks_compact, gpu_opt1 camp, gpu_opt2 High | 3 -> 1 | 551 |
+| S8 / Water Queens House | smoke_ultra, gpu_opt1 S8, gpu_opt2 Medium, water_offscreen, wf9, post_temporal S8 | 6 -> 1 | 1775 |
+| Campsite - 27h | cov_paks_compact, gpu_opt1 camp, gpu_opt2 High | 3 -> 1 | 587 |
 | Test Dialogue3 | post_temporal, edge_flicker | 2 -> 1 | 398 |
 
 These full combinations exceed the usual 2-5 minute scene target; windows and

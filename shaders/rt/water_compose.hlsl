@@ -18,6 +18,12 @@
 #define WATER_COMPOSE_SHIFT_ON (kSpecWaterComposeShift != 0u)
 #endif
 #ifdef WATER_SPEC_RF_EDGE
+#ifndef WATER_SURFACE_FRESNEL_REFERENCE
+[[vk::constant_id(1025)]] const uint kSpecWaterSurfaceFresnel = 0;
+#define WATER_SURFACE_FRESNEL_ON (kSpecWaterSurfaceFresnel != 0u)
+#else
+#define WATER_SURFACE_FRESNEL_ON (WATER_SURFACE_FRESNEL_REFERENCE != 0)
+#endif
 [[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
 #define WATER_RF_EDGE 1
 #define WATER_EDGE_ON (kSpecWaterRfEdge != 0u)
@@ -190,12 +196,20 @@ static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (kCs
 static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (32 words, kCsNonFinite 56)
 #endif
 groupshared uint gsStat[kGsWords];
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+groupshared uint gsSurface[2];
+#endif
 #ifndef BG3RTX_GPU_OPT_LEGACY
 groupshared uint gsWaterPresent;
 #endif
 void cstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
-  if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsStat[word], n);
+  if (WaveIsFirstLane() && n != 0u) {
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+    if (word >= 120u) { InterlockedAdd(gsSurface[word - 120u], n); return; }
+#endif
+    InterlockedAdd(gsStat[word], n);
+  }
 }
 void csum64(uint word, float v, bool cond) {
   const uint q = cond ? uint(clamp(v, 0.0, 1e4) * 4096.0 + 0.5) : 0u;
@@ -240,6 +254,9 @@ bool is_sum_lo(uint w) { return w >= 16u && w <= 26u && (w & 1u) == 0u; }   // 1
 // 91 words over 64 lanes: each lane flushes its words gi, gi + 64.
 void cstat_flush(uint gi) {
   GroupMemoryBarrierWithGroupSync();
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+  if (WATER_SURFACE_FRESNEL_ON && gi < 2u && gsSurface[gi] != 0u) cStats.InterlockedAdd((120u + gi)*4u,gsSurface[gi]);
+#endif
   for (uint w = gi; w < kGsWords; w += 64u) {
     if (w == 0u) continue;   // word 0: one add per dispatch
     const uint s = gsStat[w];
@@ -256,6 +273,9 @@ void cstat_flush(uint gi) {
 #else
 void cstat_flush(uint gi) {
   GroupMemoryBarrierWithGroupSync();
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+  if (WATER_SURFACE_FRESNEL_ON && gi < 2u && gsSurface[gi] != 0u) cStats.InterlockedAdd((120u + gi)*4u,gsSurface[gi]);
+#endif
   if (gi >= 1u && gi < kGsWords) {
     const uint s = gsStat[gi];
     if (s != 0u) {
@@ -348,6 +368,10 @@ bool same_encoded(float c, float t, int mbits) {
 [numthreads(8, 8, 1)]
 void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+  if (WATER_SURFACE_FRESNEL_ON && gi < 2u) gsSurface[gi]=0u;
+#endif
+
   const uint2 fp = tid.xy;
   if (all(fp == 0)) {
     cStats.InterlockedAdd(0, 1u);
@@ -398,6 +422,9 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const float t = asfloat(r1.z);
   const float rough = float(r1.w >> 16) / 65535.0;
   const float3 Ct = has ? target[fp] : 0.0.xxx;
+#ifdef WATER_SPEC_RF_EDGE
+  const bool surface_fresnel = WATER_SURFACE_FRESNEL_ON && (r1.w & 65535u) > 0u && (r1.w & 65535u) < 49151u;
+#endif
   const bool own = has && same_encoded(Crec.r, Ct.r, 6) && same_encoded(Crec.g, Ct.g, 6) && same_encoded(Crec.b, Ct.b, 5);
   const float ln = length(N);
   const bool valid = own && all(isfinite(A)) && all(isfinite(B)) && all(A >= 0.0) && all(B >= 0.0) && t > 0.0 &&
@@ -618,6 +645,15 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
       float d2, nol;
       if (!bg3_light_eval(lg, spot, sf, dd, ss, Ld, d2, nol)) continue;
       ++nEval;
+#ifdef WATER_SPEC_RF_EDGE
+      if (surface_fresnel) {
+        const float3 H0 = sf.V + Ld;
+        const float3 H = H0 * rsqrt(max(dot(H0,H0),1.0e-10));
+        const float loh = saturate(dot(Ld,H));
+        // Native Schlick uses L.H, independently of the environment's DFG E.
+        dd *= 1.0 - (sf.f0 + (1.0 - sf.f0) * bg3_pow5(1.0-loh));
+      }
+#endif
       const float3 ck = dd + ss;
       if ((lg.flags & 1u) != 0u) {   // a game shadow map: its atlas term, kept as the FS's
         ++nSh;
@@ -727,7 +763,13 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
   const bool cfin = all(isfinite(Cu));
   const float3 Cn = chg && cfin ? max(Cu, 0.0) : Ct;
-  cstat(56, chg && !cfin);   // kCsNonFinite
+  cstat(56, chg && !cfin);
+#if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
+  if (WATER_SURFACE_FRESNEL_ON) {
+    cstat(120, own && surface_fresnel);
+    cstat(121, own && surface_fresnel && (!valid || !cfin));
+  }
+#endif   // kCsNonFinite
   const float d = lum(Cn) - lum(Ct);
   cstat(1, has);
   cstat(2, own);
