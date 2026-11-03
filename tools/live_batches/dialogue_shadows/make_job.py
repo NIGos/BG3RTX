@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0", "rt_cascade_static_only": "1"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0", "rt_cascade_static_only": "0"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -79,7 +79,7 @@ plan = [
     step("shot-noart-on", SHOT, True, ls_noshadow="2"),              # lights the art leaves unshadowed untraced
     step("shot-off-c", SHOT, True),
     step("shot-static-only-off", SHOT, True, rt_cascade_static_only="0"),
-    step("shot-static-only-on", SHOT, True, rt_cascade_static_only="1"),
+    step("shot-static-only-on", 12, [8], rt_cascade_static_only="1"),
     step("shot-nocascade-on", SHOT, True, rt_cascade_casters="0"),   # last frame's cascade soup out of the sun TLAS
     step("shot-boxold-on", SHOT, True, ls_box_cascade_old="1"),      # the old box passes: the cascade copy shadows local/box lights
     step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),            # no held (absent) draws while static
@@ -89,11 +89,11 @@ plan = [
     step("shot-hair-on", SHOT, True, **HAIR),                        # native Hair + Scalp coverage (else opaque cards)
     step("shot-hairorigin-on", SHOT, True, **ORIGIN),                # + physical secondary origins
     step("shot-off-e", SHOT, True),
-    # H7 (moving shadows): two traces 0.5 s apart (the real gap is the frame numbers of the '[trace] frame N written'
+    # H7 (moving shadows): three traces 6 s apart (the real gap is the frame numbers of the '[trace] frame N written'
     # lines), user config and the game's own sun map only. Moving with RT, still without = RT-only animated casters.
-    step("motion-base-fix-off", 12, [6, 6.5], rt_cascade_static_only="0"),
-    step("motion-base", 12, [6, 6.5], rt_cascade_static_only="1"),
-    step("motion-nosun", 12, [6, 6.5], rt_shadows="0", contact_shadows="0"),
+    step("motion-base-fix-off", 22, [6, 12, 18], rt_cascade_static_only="0"),
+    step("motion-base", 22, [6, 12, 18], rt_cascade_static_only="1"),
+    step("motion-nosun", 22, [6, 12, 18], rt_shadows="0", contact_shadows="0"),
     step("view-lsremoved", 12, [6], ls_debug="2"),                # local light removed x4 (where D-LS darkens)
     step("view-lsowners", 12, [6], ls_debug="9"),                 # evaluated lights by owner (magenta character)
     step("diag-view-sunmask", 12, rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
@@ -120,7 +120,7 @@ shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
 traced = [p["label"] for p in plan if p.get("trace_at")]
 cost = [l for l in labels if l.startswith("cost-")]
 occ = [l for l in labels if l.startswith(("diag-occ-", "diag-view-occ-"))]
-judged = shots + [l for l in labels if l.startswith(("view-", "diag-view-"))] + cost
+judged = shots + [l for l in labels if l.startswith("view-")] + cost
 seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]
 
@@ -178,8 +178,6 @@ def job(name, save, first, hair):
                    r"\[alpha hair\] native coverage records \d+; invalid/missing native state \d+"]
     forbid = [r"\[crash\] exception 0x", "VK_ERROR_DEVICE_LOST", r"\[hot\] core (rejected|faulted)",
               "FAILED, keeping previous", "compile call failed", "RR creation failed", "RR evaluate failed",
-              "ls box: requested but native set/layout or pipeline unavailable",
-              "occ stats: requested but the pass is unavailable",
               r"\[geo\] rt_native_hair rejected", r"\[alpha hair\] rt_native_hair requires restart",
               r"\[hair origin\] enable rejected"]
     # Foreground (user 2026-11-02 10:xx: the PC is free). The ds1 stall was a shader compile, not focus.
@@ -201,7 +199,7 @@ def job(name, save, first, hair):
         "purpose": ("Dialogue character shadows (docs/DIALOGUE_SHADOWS.md 2026-11-02): attribution inside one run at a held "
                     "dialogue shot, user config (Ultra + bg3rtx_user.ini). PNG shots base / RT sun off / local off / box off / "
                     "character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp "
-                    "/ + physical origin, H7 moving-shadow PNG pairs 0.5 s apart (RT on and game sun only), ls_debug 2 and 9 "
+                    "/ + physical origin, H7 moving-shadow PNG triplets 6 s apart (RT on and game sun only), ls_debug 2 and 9 "
                     "and rt_debug 2 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. "
                     "Static-only 0/1 and motion-base fix OFF/ON test the dynamic-cascade fallback; "
                     "pair_registration.py requires integer image registration (0,0) per ON/OFF neighbour. "

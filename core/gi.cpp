@@ -3063,8 +3063,10 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     memory_barrier(cmd, kCS, kCS);
     if (!ensure_occ() || !refresh(g_occ, "gi/rt_occ_stats.hlsl", g_occ_layout) ||
         !occ_run(cmd, b, pc, (sun_ok ? 1u : 0u) | (s.rt_gi_applied ? 2u : 0u))) {
-      if (!g_occ_logged) host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
-      g_occ_logged = true;
+      if (!g_occ_logged && g_builds.pending() == 0) {
+        host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
+        g_occ_logged = true;
+      }
     }
   } else if (g_occ_win.frames || g_occ_logged) {
     g_occ_win = occ::OccWindow{};   // a later window starts clean
