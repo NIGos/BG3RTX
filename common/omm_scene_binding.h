@@ -1,6 +1,15 @@
 #pragma once
 #include <cstdint>
 namespace bg3::omm {
+// Fold the five same-ray counters (64 bins each) only against this frame's scene.
+// Generation-valid previous scenes may be traversed, but cannot qualify a comparison.
+inline void fold_check_stats(uint64_t* sum,const uint32_t* counters,bool scene_current){
+  for(unsigned i=0;i<5;++i)
+    for(unsigned b=0;b<64;++b){
+      if(scene_current)sum[i]+=counters[i*64+b];
+      else if(i<2)sum[1]+=counters[i*64+b];
+    }
+}
 // A per-dispatch scope, not a per-frame cache. Each actual traversal command
 // must register its own ticket references, even if a prior command succeeded.
 enum class BindingState {Ordinary,Accelerated,Reference,Unavailable};

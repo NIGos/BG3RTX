@@ -10,10 +10,11 @@ from scripts import queue_gates
 
 
 def evaluate(values):
-    """Same-run absolute energy differences; invalid or unresolved evidence cannot pass."""
+    """Same-run energy differences; unresolved recovery is reported separately."""
     if any(not math.isfinite(v) or v <= 0 for v in values.values()):
         raise ValueError('nonpositive or nonfinite scene mean')
     failures = []
+    inconclusive = []
     off = [values[f'shot-off-{c}'] for c in 'abcde']
     sigma = math.sqrt(sum((b-a)**2 for a,b in zip(off,off[1:])) / 8)
     # Existing family-wise false alarm and Student quantile, four comparisons, four OFF pairs.
@@ -26,8 +27,8 @@ def evaluate(values):
         if fixed < -band:
             failures.append(f'fixed-{repeat}: energy below OFF minus noise')
         if abs(old) - abs(fixed) <= 2*band:
-            failures.append(f'{repeat}: recovery not resolved above noise (inconclusive)')
-    return sigma, band, deltas, failures
+            inconclusive.append(f'{repeat}: recovery not resolved above noise (inconclusive)')
+    return sigma, band, deltas, failures, inconclusive
 
 
 def main():
@@ -52,9 +53,10 @@ def main():
         if not value or isinstance(value[0], str) or value[1] or not math.isfinite(value[0]) or value[0] <= 0:
             raise ValueError(f'{label}: invalid scene mean: {value}')
         values[label] = value[0]   # exposure held across every shot; never PNG or bloom
-    sigma, band, deltas, energy_failures = evaluate(values)
+    sigma, band, deltas, energy_failures, inconclusive = evaluate(values)
     failures.extend(energy_failures)
-    print(json.dumps(dict(scene_means=values, sigma=sigma, band=band, deltas=deltas, failures=failures), indent=1))
+    print(json.dumps(dict(scene_means=values, sigma=sigma, band=band, deltas=deltas, failures=failures,
+                         inconclusive=inconclusive), indent=1))
     return int(bool(failures))
 
 

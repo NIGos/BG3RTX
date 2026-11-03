@@ -101,6 +101,8 @@ footprint-bounded mip domain and a device-local guard first.
   invocation (first active lane, `WaveReadLaneFirst`), not five per-lane atomics
   per query; the content-epoch buffer prefers BAR VRAM (DEVICE_LOCAL|HOST_VISIBLE|
   HOST_COHERENT; the host only memsets it once), logged `device_local=1`.
+- CPU readback also retains whether each slot traced this frame's scene. Previous-frame
+  comparisons count as not compared; their violations and candidate counts are excluded.
 Only an explicitly authorized queue batch may test it, with automated A/B/settings,
 input/captures/restoration. No manual INI/toggles are requested.
 
