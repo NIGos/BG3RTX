@@ -994,6 +994,36 @@ static void test_apply_modes() {
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }
 
+static void test_retired_hair_ini() {
+  const char* keys[] = {"rt_hair_gi_cull", "rt_hair_visibility", "rt_hair_cheap", "rt_hair_gi_mean"};
+  const Map defaults = code_defaults();
+  const std::string schema = schema_json();
+  for (const char* key : keys) {
+    CHECK(code_default(key) == nullptr);
+    CHECK(find_knob(std::string("exp_") + (key + 3)) == nullptr);
+    CHECK(schema.find(key) == std::string::npos);
+  }
+  // Legacy overrides, even enabled ones, are inert unknown keys in every preset.
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (const char* value : {"0", "1"}) {
+      const std::string clean = std::string("preset=") + kPresetId[p] + "\ngi_strength=0.63\n";
+      std::string legacy = clean;
+      for (const char* key : keys) legacy += std::string(key) + "=" + value + "\n";
+      Map old = parse_ini(legacy), current = parse_ini(clean);
+      std::vector<std::string> notes;
+      Map loaded = merge_layers({&defaults, &old}, &notes);
+      const Map expected = merge_layers({&defaults, &current});
+      CHECK(notes.empty());
+      CHECK(knob_values(loaded) == knob_values(expected));
+      for (const char* key : keys) {
+        CHECK_EQ(get(loaded, key), value);
+        loaded.erase(key);
+      }
+      CHECK(loaded == expected);
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1001,6 +1031,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_retired_hair_ini();
   test_apply_modes();
   test_product_policy();
   test_parse();

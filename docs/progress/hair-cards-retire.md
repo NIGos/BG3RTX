@@ -1,12 +1,8 @@
 ## Native hair card cleanup (branch hair-cards-retire, VERIFIED, 2026-11-03)
-- hq1-hq4 13:32-14:10, S8 and Dialogue1-3: visibility 0 eligible everywhere; removed as null.
-- Cheap saved up to about 1 ms in two dialogues but S8 character light +36%; removed (energy fail).
-- GI cull +9..20% character light; removed (energy fail). Mean device-loss cause remains unknown.
-- Removed quarantined mean and hair_mean precompute; RTX Hair groom supersedes the card shortcuts.
-- Pool trim kept, default 1 in INI/all presets/host fallbacks: used pool -26-50%, neutral cost/light.
-- Removed rejected settings/GUI/schema, shaders, tests and executable hair_qual plans; README historical.
-- SpecIds 1017-1019 retired permanently; ABI unchanged; variants 145 -> 145 (delta 0).
-- Full build and 134/134 CTests passed (111.93 s); generated defaults/schema and diff check passed.
-- Main b19b600c: 132/235 requests raw-identical; remaining 103: 122/122 modules equivalent with retired IDs 0; both 272/272 validated.
-- PP main: 236 listed (235 unique), 63 input-identical/173 changed, 0 failures; final input hashes verified.
-- No game launch, commit or Git metadata writes; mean device-loss cause remains unknown, path removed.
+- Retired visibility (null), cheap and GI cull (energy failures), quarantined mean; retained settings/presets match main exactly.
+- Main 71f92bd3: 139/260 surviving requests byte-identical; all other 121 requests / 140 modules equivalent with retired SpecIds 1017-1019 fixed at 0, other constants preserved (shared spec_cascade_check canonical comparator).
+- Both sides: 297/297 module entries validated, zero errors; retired IDs never reused, ABI unchanged.
+- shaders/variants.txt: 165 -> 165 requests (delta 0); total unique requests 261 -> 260 only because rt/hair_mean.hlsl was deleted.
+- Defaults regenerated and checked; retired keys absent from defaults/GUI/schema; legacy INIs with all four keys 0 or 1 load unchanged in every preset (settings_test: 3,865 checks, 0 failed).
+- Full build passed; 145/145 CTests passed in 154.70 s, BelowNormal and serial; VS Installer directory added to PATH for vcvars discovery.
+- Evidence: build/hair-retire-identity.json, build/hair-retire-identity-current.log, build/hair-retire-final-build-test.log. No game launch, commit or git metadata writes; mean device-loss cause remains unknown.
