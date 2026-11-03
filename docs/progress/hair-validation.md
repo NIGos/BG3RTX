@@ -11,3 +11,7 @@
 - Historical 17:01/17:04 reports both FAIL: device-fault indicators, CPU exception and pool exhaustion.
 - Missing runtime-owned mask/MV/fresh/FG/PT evidence and observed 1/5/10 cohorts block qualification.
 - See docs/HAIR_VALIDATION.md; no game, hair runtime, saves or Git metadata changes. No commit.
+- Offline job repair: removed capped-pool forbids; declared the producer's 300-frame cadence and warmed both primary values before shots.
+- Kept 600 warmup frames and 750 frames per cost window; regenerated all four jobs/plans with no duration increase.
+- Dryrun exposed the missing reload_selected schema field; added boolean validation and focused reload parser checks, all passing.
+- Verification: 36 Python tests PASS; live-flow 4 jobs, 0 failing (was 4); dryrun all checks PASS, 4 expected INVALID negatives/4 valid positives, 1,480 MB. No live qualification.

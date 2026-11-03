@@ -5,6 +5,15 @@ does not claim the current dump transport can supply every requested observable.
 See `docs/HAIR_VALIDATION.md` for the missing runtime-owned data. No game launch
 is authorized by generating jobs or by passing a fake-queue dryrun.
 
+The strand participation producer logs every 300 rendered frames
+(`layer/hair_primary.cpp:560-564`, `now % 300 == 0`). Gates declare
+`period_frames: 300`. At visible-unfocused 30 FPS, each 750-frame cost window
+(25 s in the runner schema) permits a complete interval after the skipped first
+line and settings latency. Before any measurement, both primary values run for
+300 frames each (cards, then strands), preserving the 600-frame warmup budget.
+Mesh-pool-full lines describe a normal capped pool and remain collected in
+`patterns`; they are not global job forbids.
+
 `RUN.json` uses paths relative to itself and these fields:
 
 ```json
