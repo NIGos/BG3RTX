@@ -152,9 +152,7 @@ static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_comp
 #endif
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
 
-// Spare camera-buffer slot, after the 400-byte CameraCB and before ViewportCB.
-// Copy reads the outgoing camera before overwriting it. The TLAS stash uses that
-// lighting's camera; the current camera/depth/radiance remain in the first slots.
+// Host copies the selected TLAS build-camera ring entry here before each dispatch.
 static const uint kBuildCamOffset = 400u;
 float3 compose_scene_origin(float3 origin) {
   if (WATER_COMPOSE_SHIFT_ON && (cp.a.w & 32u) != 0u) {
@@ -315,11 +313,6 @@ void water_copy(uint3 tid : SV_DispatchThreadID) {
     const float4 c[25] = {cam.v0, cam.v1, cam.v2, cam.m6_r0, cam.m6_r1, cam.m6_r2, cam.m6_r3, cam.ray0, cam.ray1,
                           cam.ray2, cam.x[0], cam.x[1], cam.x[2], cam.x[3], cam.x[4], cam.x[5], cam.x[6], cam.x[7],
                           cam.x[8], cam.x[9], cam.x[10], cam.x[11], cam.x[12], cam.x[13], cam.x[14]};
-    if (WATER_COMPOSE_SHIFT_ON) {
-      // No outgoing camera on the first copy; avoid even reading its uninitialized words.
-      const uint3 previous = cp.b.y != 0.0 ? cCam.Load3(13u * 16u) : uint3(0, 0, 0);
-      cCam.Store4(kBuildCamOffset, uint4(previous, asuint(cp.b.y)));
-    }
     [unroll] for (uint i = 0; i < 25u; ++i) cCam.Store4(i * 16u, asuint(c[i]));
     cCam.Store4(kVpOffset, asuint(float4(vp.scale, vp.bias)));
   }
@@ -344,7 +337,15 @@ bool same_encoded(float c, float t, int mbits) {
 void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
   const uint2 fp = tid.xy;
-  if (all(fp == 0)) cStats.InterlockedAdd(0, 1u);
+  if (all(fp == 0)) {
+    cStats.InterlockedAdd(0, 1u);
+    if (WATER_COMPOSE_SHIFT_ON) {
+      const float4 build = asfloat(cCam.Load4(kBuildCamOffset));
+      const float3 d = cam.x[3].xyz - build.xyz;
+      const bool valid = build.w != 0.0 && all(isfinite(d)) && all(abs(d) <= 1e6);
+      cCam.Store4(416u, asuint(float4(valid ? d : 0.0.xxx, valid ? 1.0 : 0.0)));
+    }
+  }
 #ifdef WATER_LS
   for (uint gw = gi; gw < kGsWords; gw += 64u) gsStat[gw] = 0u;
 #else

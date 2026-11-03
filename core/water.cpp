@@ -57,6 +57,7 @@
 // shadow removed (Dg) and its Vg; the ;WATER_GSH=1 compose variant gives a record lit by the traced sun ray
 // C + Dg (occluded R and unknown C as M5.4): the game's Vg replaced by V. Without the words those FS record no
 // sun term (the sun step skips them). "[water] game shadow" every rt_timing_frames; rt_debug 26 shows it.
+#include "../common/water_build_camera.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -557,7 +558,7 @@ uint32_t g_cpasses[kRing] = {};
 struct Stash {
   WaterHitInputs hit{};
   uint64_t hit_identity=0;
-  uint64_t frame = 0;
+  uint64_t frame = 0, build_frame = 0;
   VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
   VkDescriptorSet alpha = VK_NULL_HANDLE;
   std::vector<uint8_t> push;
@@ -596,6 +597,8 @@ struct CWindow {
   // build older than this frame, the newer pair unavailable), and the stash's pair kept (pick_scene).
   uint64_t nl_cleared = 0, nl_old = 0, nl_ahead = 0;
   uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0;
+  uint64_t camera_samples = 0, camera_missing = 0, tlas_age_sum = 0, tlas_age_max = 0, tlas_age_samples = 0;
+  double camera_delta_sum = 0, camera_delta_max = 0;
 };
 CWindow g_cwin;
 bg3::water::ComposeContinuity g_ccont;   // across windows (the counts reset with each line)
@@ -778,6 +781,13 @@ void collect_compose(uint32_t slot) {
   g_cwritten[slot] = false;
   const uint32_t* w = reinterpret_cast<const uint32_t*>(g_cmap + cslot_off(slot));
   if (w[0]) {
+    float camera[4]{};
+    std::memcpy(camera, g_cmap + cslot_off(slot) + kCStatBytes, sizeof camera);
+    if (camera[3] != 0) {
+      const double delta = std::sqrt(double(camera[0])*camera[0] + double(camera[1])*camera[1] + double(camera[2])*camera[2]);
+      ++g_cwin.camera_samples; g_cwin.camera_delta_sum += delta;
+      g_cwin.camera_delta_max = (std::max)(g_cwin.camera_delta_max, delta);
+    }
     ++g_cwin.ran;
     g_cwin.passes += w[0];
     using bg3::water::kCsLsRec, bg3::water::kCsLsSumL, bg3::water::kCsLsChkShWithin;
@@ -836,7 +846,7 @@ void maybe_log_compose() {
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
             "passes on this frame's lighting %llu, on the previous lighting %llu, refused: no recent lighting %llu, no "
-            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu",
+            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu; TLAS age avg/max %.2f/%llu frames (%llu samples, camera missing %llu); build-camera delta avg/max %.6f/%.6f m (%llu last-pass samples)",
             (unsigned long long)W.frames, (unsigned long long)W.ran, W.ran ? double(W.passes) / double(W.ran) : 0.0,
             W.ran ? rec / double(W.ran) : 0.0, pct(own, rec), pct(rec - own, rec), (unsigned long long)w[4],
             pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0,
@@ -847,7 +857,10 @@ void maybe_log_compose() {
             (unsigned long long)W.this_frame, (unsigned long long)W.earlier, (unsigned long long)W.no_lighting,
             (unsigned long long)W.no_scene, (unsigned long long)W.newer_scene,
             (unsigned long long)w[57],(unsigned long long)w[58],(unsigned long long)w[59],
-            (unsigned long long)w[60],(unsigned long long)w[61],(unsigned long long)w[62],(unsigned long long)w[63],(unsigned long long)w[55]);
+            (unsigned long long)w[60],(unsigned long long)w[61],(unsigned long long)w[62],(unsigned long long)w[63],(unsigned long long)w[55],
+            W.tlas_age_samples ? double(W.tlas_age_sum)/W.tlas_age_samples : 0.0,
+            (unsigned long long)W.tlas_age_max, (unsigned long long)W.tlas_age_samples, (unsigned long long)W.camera_missing,
+            W.camera_samples ? W.camera_delta_sum/W.camera_samples : 0.0, W.camera_delta_max, (unsigned long long)W.camera_samples);
   // Temporal stability (common/water_compose.h ComposeContinuity, pick_scene): the frames whose water
   // passes were all refused show the game's water for one frame (gate: uncomposed 0).
   host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
@@ -1035,9 +1048,8 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   const uint32_t header[4] = {in.w, cb.capacity, 0, 0};
   vk.CmdUpdateBuffer(cmd, rb, 0, sizeof header, header);
   vk.CmdFillBuffer(cmd, g_cdev, cslot_off(slot), kCStatBytes, 0);    // the shader's counters
-  vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes, 0);   // the readback, if no pass copies
+  vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes + 16, 0);   // the readback, if no pass copies
   ComposeParams prm{};
-  prm.b[1] = g_st.frame ? 1.0f : 0.0f;   // outgoing camera exists (first copy must not read uninitialized data)
   prm.a[0] = in.w;
   prm.a[1] = cb.capacity;
   prm.a[2] = uint32_t((std::max)(host->cfg_int("rt_debug", 0), 0));
@@ -1097,6 +1109,11 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   g_cpasses[slot] = 0;
   g_st.frame = host->frame_index();
   g_st.tlas = in.scene_tlas;
+  g_st.build_frame = 0;
+  if (auto* ring = static_cast<bg3::water::BuildCameraRing*>(host->persist(bg3::water::kBuildCameraKey, sizeof(bg3::water::BuildCameraRing)))) {
+    bg3::water::BuildCameraLock lock(*ring);
+    g_st.build_frame = bg3::water::find_build_camera(*ring, uint64_t(in.scene_tlas), g_st.frame).frame;
+  }
   g_st.alpha = in.alpha;
   g_st.push.assign(static_cast<const uint8_t*>(in.push), static_cast<const uint8_t*>(in.push) + in.push_bytes);
   g_st.w = in.w, g_st.h = in.h, g_st.slot = slot;
@@ -1199,7 +1216,24 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
       pick=ScenePick::kStashKept;previous_hit=shade_pass=true;
     }
   }
-  const bool shifted = shift_on && compose_shift_needed(use,pick);
+  BuildCameraEntry build_camera{};
+  uint64_t camera_buffer = 0;
+  {
+    if (auto* ring = static_cast<BuildCameraRing*>(host->persist(kBuildCameraKey, sizeof(BuildCameraRing)))) {
+      BuildCameraLock lock(*ring);
+      const uint64_t selected_build = pick == ScenePick::kNewer ? built : g_st.build_frame;
+      if (selected_build) build_camera = find_build_camera(*ring, uint64_t(tlas), now, selected_build);
+      camera_buffer = ring->buffer;
+    }
+    if (!camera_buffer || !build_camera.frame) { if (shift_on) ++g_cwin.camera_missing; }
+    else {
+      const uint64_t age = now - build_camera.frame;
+      ++g_cwin.tlas_age_samples; g_cwin.tlas_age_sum += age;
+      g_cwin.tlas_age_max = (std::max)(g_cwin.tlas_age_max, age);
+    }
+  }
+  const bool shifted = shift_on && camera_buffer && build_camera.frame && compose_shift_needed(use,pick);
+  if (previous_hit && !shifted) { previous_hit = false; shade_pass = false; }
   if(!previous_hit)shade_pass=want_hit &&
       hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted) &&
       host->rt_hit_material_use && host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
@@ -1225,7 +1259,13 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
     uint32_t flags = (apply_ls ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
-    flags |= compose_shift_needed(use, pick) ? kFlagSceneShift : 0u;
+    flags |= shifted ? kFlagSceneShift : 0u;
+    if (shift_on) {
+      if (camera_buffer && build_camera.frame) {
+        const VkBufferCopy camera{build_camera_index(build_camera.frame) * kBuildCameraBytes, kCCamOff + 400, 16};
+        vk.CmdCopyBuffer(cmd, VkBuffer(camera_buffer), g_cdev, 1, &camera);
+      } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + 400, 16, 0);
+    }
     if(!shade_pass)flags&=~kFlagHitShade;
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
     if (g_st.flags & kFlagLs) ++(apply_ls ? g_cwin.ls_passes : g_cwin.ls_no_lights);
@@ -1302,6 +1342,10 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // timed region); the last pass's copy holds every pass's counts when the host reads it kRing later.
   const VkBufferCopy sc{cslot_off(slot), cslot_off(slot), kCStatBytes};
   vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &sc);
+  if (shift_on) {
+    const VkBufferCopy camera{kCCamOff + 416, cslot_off(slot) + kCStatBytes, 16};
+    vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &camera);
+  }
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
   if (g_csun) ++g_cwin.sun_passes;
   if (from != G) image_barrier(cmd, p->color_images[0], G, from, kCS, kAll);
