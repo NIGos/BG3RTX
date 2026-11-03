@@ -1,29 +1,27 @@
 {
- "_rule": "Committed BEFORE the run (2026-11-02). Offline: each RT_SPEC_CASCADE module specialized to 0/1 is the same program as the old plain / RT_CASCADE_MASKS module (tools/spec_cascade_check.py 60/60 + 76/76), and the S8 gi_hit_direct replay is bit-identical. So the image and the GPU work are those of the off windows: every delta 0, judged against the off-a vs off-b spread of the same run (noise), never a tuned threshold.",
+ "_rule": "Revised AFTER the 01:39 run for the merged always-on design; not a pre-run prediction for that run. One module per file and remaining layout define set (165 variants). No retired rt_spec_cascade switch. Same-state migration energy and GPU ms delta predicted zero within OFF-OFF spread. Changing a functional key can change energy/work: do not judge migration equivalence from different key states. Historical repeated states supply repeat stability only.",
  "scc1-spec-cascade-s8-fg2": {
-  "shot-c1-on": {
-   "predicted": 0.0,
-   "basis": "scene colour (dumps.json float mean) vs shot-c1-off-a/b: same program"
-  },
-  "shot-c0-on": {
-   "predicted": 0.0,
-   "basis": "same, casters off"
-  },
-  "gpu_ms_delta@cost-c1-on": {
-   "predicted": 0.0,
-   "basis": "gi / rf / ls / rt passes medians vs the mean of cost-c1-off-a/b; within their spread"
-  },
-  "gpu_ms_delta@cost-c0-on": {
-   "predicted": 0.0,
-   "basis": "same, casters off"
-  },
-  "dxc_compiles@toggle-spec-c0": {
-   "predicted": 0,
-   "basis": "the request string does not change with rt_cascade_casters"
-  },
-  "pipeline_ms@toggle-spec-c0": {
-   "predicted": null,
-   "basis": "first measurement: driver compile per cascade pass, on the render thread (NVIDIA disk cache cold: a few 100 ms each, estimate)"
-  }
+  "dxc_compiles_after_warmup": 0,
+  "converted_keys": [
+   "rt_cascade_casters",
+   "gi_temporal_mv_sample",
+   "gi_prev_radiance_guard",
+   "rt_hit_material_instanced",
+   "rt_hit_material_wind_rgb",
+   "rt_hit_material_ip_grass",
+   "gi_far",
+   "rt_native_hair",
+   "rt_native_scalp",
+   "rt_native_tileset",
+   "rt_hair_physical_origin",
+   "rf_hit_gi",
+   "rt_water_rf_edge"
+  ],
+  "pipeline_creation_per_toggle": true,
+  "pipeline_ms": null,
+  "energy_delta_same_state": 0.0,
+  "gpu_ms_delta_same_state": 0.0,
+  "band": "absolute OFF-a minus OFF-b spread at identical functional settings; dumps.json pre-post float mean for energy, per-pass GPU medians for cost",
+  "not_live_toggleable": "RT_HIT_POOL_2S is startup capability, not an INI toggle; separate startup fixture needed, not covered by this run"
  }
 }

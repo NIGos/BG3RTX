@@ -57,6 +57,15 @@ def old_requests(spec_request):
     return join(plain), join(casc)
 
 
+def old_requests_watercasc(spec_request):
+    """Water cascade off/on: sun-hit is a fixed pass marker in the union only."""
+    file, defs = split_request(spec_request)
+    plain = [d for d in defs if d not in ("WATER_SPEC_CASCADE=1", "RT_CASCADE_SUN_HIT=1")]
+    on = ["RT_CASCADE_MASKS=1"] + (["RT_CASCADE_SUN_HIT=1"] if "WATER_SHADOWS=1" in defs else [])
+    join = lambda ds: file + ("?" + ";".join(ds) if ds else "")
+    return join(plain), join(plain + on)
+
+
 GUARDS = "GI_SPEC_GUARDS=1"
 
 
@@ -146,6 +155,7 @@ def old_requests_waterhair(spec_request):
 
 
 KEYS = {"waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+        "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
         "omm": ("RT_SPEC_OMM=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OMM=1", "RT_OMM_SCENE=1"), lambda f: 1012)),
         "rfgi": ("RF_SPEC_HIT_GI=1", two(lambda r: old_requests_swap(r, "RF_SPEC_HIT_GI=1", "RF_HIT_GI=1"), lambda f: 1013)),
         "wateredge": ("WATER_SPEC_RF_EDGE=1", two(lambda r: old_requests_swap(r, "WATER_SPEC_RF_EDGE=1", "WATER_RF_EDGE=1"), lambda f: 1014)),
@@ -412,7 +422,7 @@ def main():
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
-        control_entry = ("water_compose" if args.key == "wateredge" else
+        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc") else
                          "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
                          "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else
                          "water_glint" if args.key == "waterhair" else "main")

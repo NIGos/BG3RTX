@@ -1,3 +1,6 @@
+#ifdef WATER_SPEC_CASCADE
+#define RT_SPEC_CASCADE 1
+#endif
 #ifdef WATER_SPEC_RF_EDGE
 [[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
 #define WATER_RF_EDGE 1
@@ -497,11 +500,15 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     const float3 so = P + N * (t * spa);   // the scene TLAS has no water: one footprint clears the surface
     RtCone scone = {t * spa, spa};
     if (all(isfinite(so)) && all(isfinite(sdir))) {
-#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+      if (RT_CASCADE_ON) g_rt_cascade_ray = true;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
       g_rt_cascade_ray = true;   // rt_cascade_casters: the sun ray (only) sees the cascade's casters
 #endif
       sv = rt_visibility(so, sdir, pc.rt_tmax, scone);
-#if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
+#if defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+      if (RT_CASCADE_ON) g_rt_cascade_ray = false;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
       g_rt_cascade_ray = false;
 #endif
       straced = true;

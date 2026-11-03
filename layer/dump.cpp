@@ -538,6 +538,7 @@ struct PanSample {
   uint64_t recorded = 0, submitted = UINT64_MAX, built = UINT64_MAX;
   uint64_t time_ms = 0;
   uint64_t recording = 0;
+  bool coverage=false;
 };
 std::mutex pan_mu;
 std::vector<PanSample> pan_samples;
@@ -546,37 +547,51 @@ uint32_t pan_frames = 0;
 uint32_t pan_target = PanBurstSamples::raw_frames;
 uint64_t pan_first = 0, pan_last = 0, pan_bytes = 0;
 bool pan_finished = true, pan_invalid = false;
+bool pan_water_mode=false, pan_water_debug=false;
+int pan_delay_serial=0;
+uint64_t pan_request_ms=0;
 std::string pan_dir;
 }
 
 bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
-  if (cfg_hot(CfgHot::pan_capture) <= 0 || !r || !r->image) return false;
+  if (cfg_hot(CfgHot::pan_capture) <= 0 || !r || (!r->image && !(r->buffer && std::strcmp(name,"water_coverage")==0))) return false;
   std::lock_guard<std::mutex> lock(pan_mu);
   CmdState* state = cmd_state(cmd);
   if (!state) return false;
   uint64_t now = frame_index();
   const int serial = cfg_hot(CfgHot::pan_capture);
+  const bool water_mode=cfg_int("pan_water",0)!=0;
+  if (water_mode && std::strcmp(name,"depth")!=0 && std::strncmp(name,"water_",6)!=0) return false;
+  if (water_mode && uint64_t(r->width)*r->height > uint64_t(2560)*1440) {
+    if (!pan_invalid) log("[pan] water capture REFUSED: render exceeds 2560x1440 pixel budget");
+    pan_invalid=true; return false;
+  }
   if (std::strcmp(name, "depth") == 0) {
     state->pan_epoch.clear();
     if (serial != pan_serial && pan_finished) {
+      if (serial != pan_delay_serial) { pan_delay_serial=serial; pan_request_ms=GetTickCount64(); }
+      if (GetTickCount64()-pan_request_ms < uint64_t((std::max)(0,cfg_int("pan_delay_ms",0)))) return false;
       pan_serial = serial;
+      pan_water_mode=water_mode;
+      pan_water_debug=water_mode && cfg_int("rt_debug",0)==25;
       pan_frames = 0;
       // Native tonemap (even without pan_inputs) can precede depth on another
       // thread. Omit one explicit warmup, then require 16 complete frames.
-      pan_target = PanBurstSamples::raw_frames;
+      pan_target = water_mode ? uint32_t((std::max)(2,(std::min)(16,cfg_int("pan_water_frames",8))))+1 : PanBurstSamples::raw_frames;
       pan_bytes = 0;
       pan_first = now;
       pan_finished = pan_invalid = false;
       pan_dir = root_dir() + "\\captures\\pan-" + capture_stamp() + "-" + std::to_string(serial);
-      log("[pan] burst %d armed at record frame %llu, K=16 plus 1 omitted warmup", serial, (unsigned long long)now);
+      log("[pan] burst %d armed at record frame %llu, K=%u plus 1 omitted warmup%s", serial, (unsigned long long)now,pan_target-1,water_mode?" (water-only)":"");
     }
     if (pan_finished || pan_frames >= pan_target) return false;
     if (pan_frames && now != pan_last + 1) pan_invalid = true;
     pan_last = now;
     ++pan_frames;
     state->pan_epoch.bind(state->recording, now, serial);
+    if (water_mode) return false; // Arm at lighting; skip its heavyweight image/pose/primary captures.
   } else if (std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
-             std::strncmp(name, "fg_", 3) == 0) {
+             std::strncmp(name, "fg_", 3) == 0 || std::strncmp(name,"water_",6)==0) {
     // The tonemap pass is recorded in another command buffer than the lighting one: no
     // shared epoch. Its record frame, inside the burst's frames, identifies it.
     // It can be recorded before the lighting command buffer of its own frame (another thread):
@@ -587,7 +602,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
     now = state->pan_epoch.frame;
   }
   const bool is_final = std::strcmp(name, "final") == 0 || std::strncmp(name, "rr_", 3) == 0 ||
-                        std::strncmp(name, "fg_", 3) == 0;
+                        std::strncmp(name, "fg_", 3) == 0 || std::strncmp(name,"water_",6)==0;
   if (pan_finished || !pan_frames || now < pan_first || (!is_final && now > pan_last)) return false;
   PanSample p;
   p.name = name;
@@ -603,12 +618,36 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   ImageRec rec{};
   rec.ci.format = r->format;
   rec.ci.extent = {r->width, r->height, 1};
-  const uint64_t bytes = uint64_t(r->width) * r->height * texel_size(r->format, p.dump.depth);
+  p.coverage=std::strcmp(name,"water_coverage")==0;
+  const uint64_t bytes = p.coverage ? r->range : uint64_t(r->width) * r->height * texel_size(r->format, p.dump.depth);
   if (!bytes || pan_bytes + bytes > (uint64_t(6) << 30)) {
     pan_invalid = true;
     return false;
   }
-  if (!record_copy(cmd, device_of(cmd), r->image, r->layout, rec, p.dump.depth, p.dump)) {
+  bool copied=false;
+  if(p.coverage) {
+    DeviceData* dd=device_of(cmd);
+    Dump& d=p.dump; d.w=r->width; d.h=r->height; d.size=bytes; d.texel=32;
+    VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    ci.size=bytes; ci.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    copied=dd->vk.CreateBuffer(dd->device,&ci,nullptr,&d.buffer)==VK_SUCCESS;
+    if(copied) {
+      VkMemoryRequirements req{};dd->vk.GetBufferMemoryRequirements(dd->device,d.buffer,&req);
+      VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+      ai.allocationSize=req.size;ai.memoryTypeIndex=host_memory_type(dd,req.memoryTypeBits);
+      copied=ai.memoryTypeIndex!=UINT32_MAX && dd->vk.AllocateMemory(dd->device,&ai,nullptr,&d.memory)==VK_SUCCESS;
+      if(copied)copied=dd->vk.BindBufferMemory(dd->device,d.buffer,d.memory,0)==VK_SUCCESS;
+    }
+    if(copied) {
+      VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+      barrier.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+      dd->vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
+      VkBufferCopy copy{r->offset,0,bytes};dd->vk.CmdCopyBuffer(cmd,r->buffer,d.buffer,1,&copy);
+    } else {
+      defer_destroy(BG3_DEFER_BUFFER,uint64_t(d.buffer));defer_destroy(BG3_DEFER_MEMORY,uint64_t(d.memory));
+    }
+  } else copied=record_copy(cmd,device_of(cmd),r->image,r->layout,rec,p.dump.depth,p.dump);
+  if (!copied) {
     pan_invalid = true;
     return false;
   }
@@ -652,7 +691,7 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
 }
 
 void pan_pass_end(VkCommandBuffer cmd, CmdState* s) {
-  if (cfg_hot(CfgHot::pan_capture) <= 0) return;
+  if (cfg_hot(CfgHot::pan_capture) <= 0 || cfg_int("pan_water",0)) return;
   // The game's final, hudless HDR image is the tonemap output (FRAME_MAP
   // step 16), before the UI composite. Streamline can present through an
   // interposed image which is never a native render-pass attachment.
@@ -695,16 +734,18 @@ void pan_on_present(VkQueue queue) {
   if (dd->graphics_queue != queue && dd->vk.QueueWaitIdle(dd->graphics_queue) != VK_SUCCESS) pan_invalid = true;
   PanBurstSamples completeness{pan_first};
   for(const auto& p:pan_samples)completeness.add(p.recorded,p.name,p.recording);
-  if(!completeness.complete())pan_invalid=true;
+  WaterPanSamples water_complete{pan_first,pan_target-1,pan_water_debug};
+  for(const auto& p:pan_samples)water_complete.add(p.recorded,p.name,p.recording);
+  if(pan_water_mode ? !water_complete.complete() : !completeness.complete())pan_invalid=true;
   make_dirs(pan_dir);
   std::string manifest = "{\"version\":2,\"serial\":" + std::to_string(pan_serial) +
-      ",\"K\":16,\"raw_record_frames\":17,\"omitted_warmup_record_frame\":"+std::to_string(pan_first)+
+      ",\"K\":"+std::to_string(pan_target-1)+",\"raw_record_frames\":"+std::to_string(pan_target)+",\"water_only\":"+(pan_water_mode?"true":"false")+",\"omitted_warmup_record_frame\":"+std::to_string(pan_first)+
       ",\"final_stage\":\"native_tonemap_hudless\",\"samples\":[";
   bool first = true;
   unsigned ordinal = 0;
   for (auto& p : pan_samples) {
     Dump& d = p.dump;
-    if(!completeness.retained(p.recorded)){
+    if(!(pan_water_mode ? water_complete.retained(p.recorded) : completeness.retained(p.recorded))){
       defer_destroy(BG3_DEFER_BUFFER,uint64_t(d.buffer));
       defer_destroy(BG3_DEFER_MEMORY,uint64_t(d.memory));
       continue;
@@ -713,7 +754,14 @@ void pan_on_present(VkQueue queue) {
     void* ptr = nullptr;
     bool saved = p.submitted != UINT64_MAX && dd->vk.MapMemory(dd->device, d.memory, 0, VK_WHOLE_SIZE, 0, &ptr) == VK_SUCCESS;
     if (saved) {
-      write_file(pan_dir + "\\" + file, ptr, size_t(d.size));
+      if(pan_water_mode && p.coverage) {
+        // Exact FS written marker before the compose consumes it, packed to R8_UINT.
+        std::vector<uint8_t> cls(size_t(d.w)*d.h);
+        const auto* values=static_cast<const uint32_t*>(ptr);
+        for(size_t i=0;i<cls.size();++i)cls[i]=(values[8*i+7]&0xffffu)!=0u ? 1 : 0;
+        write_file(pan_dir + "\\" + file,cls.data(),cls.size());
+        d.format=VK_FORMAT_R8_UINT;
+      } else write_file(pan_dir + "\\" + file, ptr, size_t(d.size));
       dd->vk.UnmapMemory(dd->device, d.memory);
       saved = file_mtime(pan_dir + "\\" + file) != 0;
     }
@@ -731,7 +779,7 @@ void pan_on_present(VkQueue queue) {
   }
   manifest += std::string("],\"valid_transport\":") + (pan_invalid ? "false" : "true") + "}\n";
   write_file(pan_dir + "\\burst.json", manifest.data(), manifest.size());
-  log("[pan] burst %d complete: 16 frames, %u samples, transport %s -> %s", pan_serial,
+  log("[pan] burst %d complete: %u frames, %u samples, transport %s -> %s", pan_serial,pan_target-1,
       ordinal, pan_invalid ? "INVALID" : "ok", pan_dir.c_str());
   pan_samples.clear();
   pan_finished = true;

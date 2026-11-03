@@ -1,5 +1,26 @@
 # Dialogue shadows and distant casters - 2026-10-30
 
+## Moving band isolated to legacy cascades (2026-11-03)
+
+New decisive user A/B: disabling Roof sun shadows (`rt_cascade_casters=0`) stops
+the band across a still character in port/camp dialogue, with RT sun still on.
+This supersedes the earlier lack of a causal A/B for this temporal symptom.
+Code admits skinned opaque cascade draws when the camera copy has a different
+placement-buffer offset: full draw-key dedupe misses; mesh-only dedupe applies to
+discarding draws only. The admitted copy is F-1/F-2, so it can shadow the current pose.
+Native dumped cascade VS 1cf36b97d3067b6c fails the affine-instance test (skinned);
+646a930e41f002bb passes (static), and wind VS 50fbfceb06192473 fails.
+These fixtures verify the filter's classification, not which draw hit the face.
+
+Candidate `rt_cascade_static_only=0`, off in presets: exclude dynamic/unclassified
+legacy copies; preserve camera geometry and raw Current Sun. No shader change.
+Design/limits: [TRACK_D_SUN.md](TRACK_D_SUN.md#dialogue-legacy-cascade-filter-2026-11-03-ready_for_live).
+Status READY_FOR_LIVE, not a visible-quality pass. Planned port/camp A/B, counters,
+roof protection and cost checks: [progress/fix-cascade-dialogue.md](progress/fix-cascade-dialogue.md).
+No game launch; the attribution branch and its prepared jobs were not edited.
+
+## Earlier investigation
+
 The user separates two new symptoms from the resolved UI blue-block issue:
 - STATIC face shadows, hairstyle-dependent; not face flicker.
 - Distant shadow changes, suspected trees near cull/LOD distance. Camp and other

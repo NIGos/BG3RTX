@@ -1,3 +1,13 @@
+## Shared water cascade merge (branch worktree-agent-a78f48005e3b350bd, READY_FOR_LIVE, 2026-11-03)
+- Resolved five conflicts against main 6e69f90632e0, including 5ed859c; Git metadata untouched, no commit.
+- Shared water compose/reflect/glint requests carry cascade 1000 plus native 1008=0 / 1010=hair; async pipeline keys carry both states and edge 1014.
+- Regenerated with shader_variant_test --write: 145 variants, delta vs main 145 = 0 (previous branch 167 -> 145).
+- Hair/origin no longer trigger the no-variant skip; rt_native_tileset and rt_omm still skip. Origin 1009 stays GI-only.
+- Build passed. CTests: 118/119 first run; unchanged pipeline_async.h/pipeline_specs.h had checkout-only CRLF, restored committed LF; failed shader_identity_test rerun passed (119/119 across runs).
+- pp-diff main: 209/209 identical input keys, zero compiles. Sample gates: watercasc 19/19, 66 comparisons; waterhair 19/19, 66; native 64/64, 334; cascade 44/44, 88. Zero failures; controls 17,932 / 16,681 / 54,005 / 1 differing lines.
+- hair_qual offline dry run passed with existing temporary py shim; diff --check passed, no conflict markers. Logs: build/merge-hair/merge-water-*.log.
+- No game launch, ABI/default/preset changes. Live quality and GPU cost remain unmeasured; status READY_FOR_LIVE.
+
 ## Native hair prerequisites (branch worktree-agent-a78f48005e3b350bd, READY_FOR_LIVE, 2026-11-03)
 - Resolved main integration in gi.cpp, water.cpp, shader_variant_test.cpp; regenerated variants.txt, never hand-merged it.
 - Preserved main migration, RF GI layouts, pool variants, water glint/MV and async background pipeline builds.

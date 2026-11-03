@@ -56,7 +56,8 @@ static bool persist(std::wstring* err=nullptr) {
 static void footer() {
   std::wstring t=std::to_wstring(dirty_count())+L" unsaved changes. ";
   bool running=game_running();
-  t+=(g.pending||(running&&needs_restart(g.baseline,effective_settings())))?L"Restart required. ":L"Saved for next launch. ";
+  int pending=(g.pending&&(running||!g_screenshot.empty()))?launcher::ui_state::restart_count(g.baseline,saved_settings()):0;
+  t+=pending?widen(launcher::ui_state::restart_banner(pending))+L". ":L"Saved for next launch. ";
   if(running)t+=L"Game is running. ";
   if(!g.message.empty())t+=L"\r\n"+(g.message.size()>220?g.message.substr(0,220)+L"... (Details / report)":g.message);
   ShowWindow(control(g.wnd,ERROR_DETAILS),g.message.empty()?SW_HIDE:SW_SHOW);
@@ -163,7 +164,8 @@ static void rebuild() {
       std::wstring badge=L"GPU: "+widen(k.cost.status)+(std::string(k.cost.gpu)=="Unknown"?L"":L" "+widen(k.cost.gpu))+L" | VRAM: "+(std::string(k.cost.vram)=="Unknown"?std::wstring(L"Unknown"):widen(k.cost.status)+L" "+widen(k.cost.vram));
       label(g.body,badge,32,y,w-32,48);y+=56;
       auto need=st::unmet_need(k,g.st.values[i],g.st.values);if(need.empty())need=st::unmet_key_need(k,g.st.values[i],effective_settings());
-      label(g.body,!need.empty()?widen(need):k.apply==st::Apply::Live?L"Apply: live (no runtime acknowledgement)":L"Apply: "+widen(k.apply_note),32,y,w-32,48);y+=56;
+      label(g.body,widen(st::apply_label(k.apply)),32,y,w-32,28,true);y+=36;
+      if(!need.empty()){label(g.body,widen(need),32,y,w-32,48);y+=56;}
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
   }
@@ -232,7 +234,7 @@ static void command(int id,int code,HWND source) {
     if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility or enable Experimental.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
     g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
-  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
+  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(k.apply))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
   if(id==GAME&&code==EN_CHANGE){int n=GetWindowTextLengthW(source);std::wstring t(n+1,L'\0');GetWindowTextW(source,t.data(),n+1);t.resize(n);g.dir=t;footer();return;}
   if(id==PRESET&&code==CBN_SELCHANGE){select_preset(int(SendMessageW(source,CB_GETCURSEL,0,0)));return;}
   if(code!=BN_CLICKED)return;
@@ -323,6 +325,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   if(!g_review.empty()){
     g.stage=g_review==L"first-run"?0:4;g.dev=false;g.st.values=st::presentation_values(saved_settings(),false);g.saved=g.st.values;
   }
+  if(g_review==L"restart"){g.tab=1;g.baseline["rt_alpha"]=st::lookup(saved_settings(),"rt_alpha")=="0"?"1":"0";g.pending=true;}
   if(g_review==L"graphics")g.tab=1;
   if(g_review==L"advanced")g.tab=3;
   if(g_review==L"support")g.tab=4;

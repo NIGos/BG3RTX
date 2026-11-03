@@ -24,11 +24,11 @@ class Bridge {
   void set_compatibility(GraphicsInspection inspection, int selected = -1);
   void set_can_play(bool value) { can_play_ = value; }
   void set_status(std::string text) { status_ = std::move(text); }
-  void set_restart_needed(bool value) { restart_needed = value; }
+  void set_restart_count(int value) { restart_count_ = std::max(0,value); }
   void set_game_path(std::string value) { game_path_ = std::move(value); }
   void set_mod_status(std::string value) { mod_status_ = std::move(value); }
   int dirty() const;
-  bool dev = false, experimental = false, restart_needed = false;
+  bool dev = false, experimental = false;
  private:
   bg3::settings::Map effective() const;
   bool save_preview(bool enable_required);
@@ -39,6 +39,7 @@ class Bridge {
   bg3::settings::KVList preview_keys_;
   std::vector<std::string> changes_, blocked_;
   std::string preview_kind_, status_, game_path_, mod_status_ = "Not checked";
+  int restart_count_ = 0;
   bool can_play_ = false, report_visible_ = false;
   GraphicsInspection inspection_;
   Compatibility compatibility_;

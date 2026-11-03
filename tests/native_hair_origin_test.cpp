@@ -25,7 +25,9 @@ int main(){
  CHECK(alternate_entry("gi/rt_origin.hlsl"));CHECK(alternate_entry("gi/rt_reflections_sharc.hlsl"));
  CHECK(!alternate_entry("gi/pan_primary.hlsl")); // primary/history semantics unchanged
  const auto* knob=bg3::settings::find_knob("exp_hair_physical_origin");
- CHECK(knob&&knob->experimental&&knob->apply==bg3::settings::Apply::Partial);
+ CHECK(knob&&knob->experimental&&knob->apply==bg3::settings::Apply::Restart);
+ CHECK(bg3::settings::knob_apply(*knob,0)==bg3::settings::Apply::Live);
+ CHECK(bg3::settings::knob_apply(*knob,1)==bg3::settings::Apply::Restart);
  for(int preset:knob->preset)CHECK(preset==0);
  // Actual shared ray-triangle geometry: virtual receiver re-hits its own card,
  // physical launch does not, for both viewing signs and different scene scales.
