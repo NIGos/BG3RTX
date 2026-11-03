@@ -1,0 +1,36 @@
+{
+  "status": "READY_FOR_LIVE after dependent offline checks; not queued",
+  "scene": "S8 Water Queens House",
+  "key": "rt_water_compose_shift",
+  "sequence": [
+    0,
+    1,
+    0,
+    1
+  ],
+  "hypothesis": "Previous lighting TLAS is camera relative; compose origins need cam_now - cam_build.",
+  "turning": {
+    "off_evidence": {
+      "hidden_percent": [
+        15,
+        28
+      ],
+      "tier1_percent": [
+        0.4,
+        1.5
+      ]
+    },
+    "on_prediction": {
+      "hidden_percent": [
+        7,
+        10
+      ],
+      "tier1_percent_covered_water": 25
+    },
+    "acceptance": "Each ON turning window must recover toward static calibration; report ratios from every compose stats line, and debug 25 covered-water tier 1. The two populations have different denominators."
+  },
+  "static_energy": "Pre-post scene float mean plus in-frame compose delta (energy_fs water-compose) unchanged within OFF-repeat noise; derive band from static OFF a/b, never PNGs.",
+  "gpu": "Report existing compose GPU ms per state, capture-free cost windows; wf8 baseline 0.10-0.15 ms. No new pass.",
+  "motion": "1 pixel per 4 newly observed rendered frames, no catch-up; invalidate if frame markers absent, water leaves view, or presented frames still jump.",
+  "quality": "Pending live evidence; no quality pass."
+}

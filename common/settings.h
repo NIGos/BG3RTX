@@ -274,6 +274,13 @@ inline constexpr Knob kKnobs[] = {
     {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, false, "Lighting", {"Measured", "+0.32 ms S6 / +0.20 ms S7", "Unknown", "RTX 5090; ls_box=2; S6 forge and S7 inn; reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; investigation pending. Reference only."}},
 
+  {"exp_water_compose_shift", "Water camera correction",
+   "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_water_compose_shift", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_water_compose_shift", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
   {"exp_native_coverage", "Native coverage",
    "Improves the shape of hair, scalp and cutout surfaces in ray-traced lighting. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Restart, "restart required", false,
@@ -554,6 +561,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
     {"rt_water_rf_edge", "0"},
+    {"rt_water_compose_shift", "0"},
     {"rt_water_rr_mv", "0"},
     {"rt_water_fg_mv", "0"},
     {"rt_water_glint_aa", "0"},

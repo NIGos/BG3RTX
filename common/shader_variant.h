@@ -41,6 +41,7 @@ enum SpecId : unsigned {
   kSpecIdOmmScene = 1012,            // S4  RT_OMM_SCENE
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
+  kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like

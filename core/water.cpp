@@ -203,8 +203,11 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const char* file = req.c_str();
   const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
   const uint32_t edge_value = edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u;
+  const bool shift_spec = cascade_spec && (req.find("rt/water_compose.hlsl") == 0 || req.find("rt/water_glint.hlsl") == 0);
+  const uint32_t shift_value = shift_spec && host->cfg_int("rt_water_compose_shift", 0) != 0 ? 1u : 0u;
   std::string pipe_key = edge_spec ? req + (edge_value ? "#edge=1" : "#edge=0") : req;
   if (cascade_spec) pipe_key += cascade_value ? "#cascade=1" : "#cascade=0";
+  if (shift_spec) pipe_key += shift_value ? "#shift=1" : "#shift=0";
   Bg3ShaderBlob blob{};
   if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE && p.req == pipe_key;
   if (p.p && blob.generation == p.gen && p.req == pipe_key) return true;
@@ -217,11 +220,12 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry,
                nullptr};
-  const uint32_t spec_values[] = {cascade_value, edge_value};
-  VkSpecializationMapEntry spec_entries[2]{};
+  const uint32_t spec_values[] = {cascade_value, edge_value, shift_value};
+  VkSpecializationMapEntry spec_entries[3]{};
   uint32_t spec_count = 0;
   if (cascade_spec) spec_entries[spec_count++] = {bg3::shader_variant::kSpecIdCascade, 0, sizeof(uint32_t)};
   if (edge_spec) spec_entries[spec_count++] = {bg3::shader_variant::kSpecIdWaterRfEdge, sizeof(uint32_t), sizeof(uint32_t)};
+  if (shift_spec) spec_entries[spec_count++] = {bg3::shader_variant::kSpecIdWaterComposeShift, 2 * sizeof(uint32_t), sizeof(uint32_t)};
   const VkSpecializationInfo spec_info{spec_count, spec_entries, sizeof(spec_values), spec_values};
   if (spec_count) pci.stage.pSpecializationInfo = &spec_info;
   pci.layout = layout;
@@ -932,6 +936,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   vk.CmdFillBuffer(cmd, g_cdev, cslot_off(slot), kCStatBytes, 0);    // the shader's counters
   vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes, 0);   // the readback, if no pass copies
   ComposeParams prm{};
+  prm.b[1] = g_st.frame ? 1.0f : 0.0f;   // outgoing camera exists (first copy must not read uninitialized data)
   prm.a[0] = in.w;
   prm.a[1] = cb.capacity;
   prm.a[2] = uint32_t((std::max)(host->cfg_int("rt_debug", 0), 0));
@@ -1069,9 +1074,10 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // M5.5: likewise kFlagRefr only with its water draw's colour copy.
   const bool ls_list = g_cls && lights_ok && lights;
   const bool rr_copy = g_crr && copy_ok && copy && copy->view;
-  if (g_cls) {
+  if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
-    const uint32_t flags = (ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
+    const uint32_t flags = ((ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr)) |
+                           (compose_shift_needed(use, pick) ? kFlagSceneShift : 0u);
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
     if (g_st.flags & kFlagLs) ++(ls_list ? g_cwin.ls_passes : g_cwin.ls_no_lights);
     if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
@@ -1080,12 +1086,13 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
   if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
   else ++g_cwin.untimed;
-  VkDescriptorBufferInfo bufs[6] = {{g_cdev, kCCamOff, 400},
+  VkDescriptorBufferInfo bufs[7] = {{g_cdev, kCCamOff, 400},
                                     {g_cdev, kCCamOff + kCVpOff, 16},
                                     {g_rts, 0, kRtStatsBytes},
                                     {g_cdev, cslot_off(slot) + kCStatBytes, sizeof(ComposeParams)},
                                     {g_cdev, cslot_off(slot), kCStatBytes},
-                                    {VkBuffer(g_st.buf.buffer), 0, g_st.buf.bytes}};
+                                    {VkBuffer(g_st.buf.buffer), 0, g_st.buf.bytes},
+                                    {g_cdev, kCCamOff, kCCamBytes}};
   // rt_water_glint_aa: the glint image when the compose pipeline is the WATER_GLINT_AA one, else g_rad as the
   // stand-in the shader never declares.
   const bool glint = g_glintp.p && g_compose.req.find("WATER_GLINT_AA=1") != std::string::npos &&
@@ -1117,20 +1124,21 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // or, without it, a valid stand-in the shader never reads (kFlagRefr cleared for this pass).
   const VkDescriptorImageInfo ci = rr_copy ? VkDescriptorImageInfo{VK_NULL_HANDLE, copy->view, copy->layout}
                                            : VkDescriptorImageInfo{VK_NULL_HANDLE, g_dep.view, G};
-  const struct { uint32_t b; VkDescriptorType t; const VkDescriptorBufferInfo* bi; const VkDescriptorImageInfo* ii; } src[19] = {
+  const struct { uint32_t b; VkDescriptorType t; const VkDescriptorBufferInfo* bi; const VkDescriptorImageInfo* ii; } src[20] = {
       {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[0], nullptr}, {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[1], nullptr},
       {5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &imgs[0]},  {18, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, nullptr},
       {20, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[2], nullptr}, {60, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufs[3], nullptr},
       {61, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[4], nullptr}, {62, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[1]},
       {66, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[5], nullptr}, {67, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[2]},
       {69, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, &imgs[3]},
+      {64, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bufs[6], nullptr},
       {22, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[0], nullptr},   {23, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[1], nullptr},
       {24, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[2], nullptr},   {25, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[3], nullptr},
       {26, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &lubo, nullptr},    {27, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &lb[5], nullptr},
       {28, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &li},
       {68, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, &ci}};
-  const uint32_t nw = g_crr ? 19u : g_cls ? 18u : 11u;
-  VkWriteDescriptorSet wr[19];
+  const uint32_t nw = g_crr ? 20u : g_cls ? 19u : 12u;
+  VkWriteDescriptorSet wr[20];
   for (uint32_t i = 0; i < nw; ++i) {
     wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     wr[i].dstBinding = src[i].b;
