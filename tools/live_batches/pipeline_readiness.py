@@ -161,6 +161,8 @@ NO_PIPELINE = set("fg_destroy_wait_exact fg_present_metering hit_ao_rays rt_scen
     "rt_capture_peak_reserve rt_capture_demand_size rt_capture_split_mb rt_mesh_pool_trim rt_as_chunk_fit "
     # Startup-only capture layout (common/capture_stride.h): set at launch, never toggled in a run; no core pipeline.
     "rt_capture_wide_split "
+    # Whole-level roof selection (common/sun_roof_selection.h, core/sun_trust.cpp): a CPU roof query, the same pipelines.
+    "rt_sun_roof_world "
     # Scene handout: the hit-material passes take the committed pair (core/gi.cpp handout_hit_settle) and the layer
     # skips the commit-time query (layer/rtscene.cpp). The same pipelines (constant 1051 follows rt_scene_handout).
     "rt_scene_handout_hit_wait".split())

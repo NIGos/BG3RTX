@@ -698,6 +698,12 @@ inline constexpr Knob kKnobs[] = {
     {"k2", "2 exact lights", kCapRayQuery, {{"ls_k", "2"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}, {}, false, false, false, Apply::Hitch}},
    {}, {0, 0, 0, 1}, false, {}, true, "Developer", {"Measured", "0.717 -> 0.555 ms (-23%) at S7 inn", "Unknown", "RTX 5090; k1 scene energy -0.38/-0.34/+0.12%, within OFF spread 0.89%. Ultra approved 2026-11-04; lower presets unqualified."}},
 
+  {"exp_world_roofs", "Stable roof selection",
+   "Selects all roof volumes in the level, independent of the camera. Experimental fix for sun shadows that move under roofs; unqualified.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_sun_roof_world", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_sun_roof_world", "1"}}, {{"rt_geometry", 1}, {"sun_shadows", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 };
 // clang-format on
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
@@ -851,6 +857,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_sun_radius", "0.00459"},
     {"rt_sun_replace", "1"},
     {"rt_sun_roofs", "1"},
+    {"rt_sun_roof_world", "0"},
     {"rt_sun_roof_mode", "0"},
     {"rt_sun_roof_pad", "3.0"},
     {"rt_sun_roof_up", "50.0"},

@@ -7,6 +7,7 @@ Regenerate a job from its `make_job.py` / `make_jobs.py` before use: the committ
 
 | Batch | Job | State (2026-11-14) | Use |
 |---|---|---|---|
+| `roof_shadow` | rs1-dialogue3-roof-world | Staged 2026-11-15, not run (READY_FOR_LIVE). | `rt_sun_roof_world` 0 / 1 / 0 at the port dialogue: the moving sun shadow under roofs (TRACK_D_SUN 12.5). |
 | `hair_stable` | hx1-s8-hair-stable | Current. Ran 190905, 194658, 202905. | The RTX Hair On bundle as the launcher writes it; rerun after any strand change. |
 | `perf_ab` | 5 jobs | Staged, not run. | Performance A/B of the release profile with `sane_gates.py`. |
 | `handout_qual` | 9 jobs | Done (scene handout qualified, SCENE_HANDOUT_DESIGN 8.5 to 8.8). | Template for an Off / On / Off qualification with `sane_gates.py`; `tests/sane_gates_test.py` imports its `analyze.py`. |

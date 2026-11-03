@@ -434,6 +434,10 @@ static void test_gui_levels() {
   }
   CHECK(user_exp == 1);   // Release has no experimental controls.
   CHECK(dev.size() == size_t(kKnobCount - 23));   // 22 release controls: RTX Hair joined (user, 0.9.5 release, 2026-11-08), then its distance detail and motion stability (2026-11-10)
+  const Knob* world_roofs = find_knob("exp_world_roofs");   // whole-level roof selection candidate: developer, off, live
+  CHECK(world_roofs && world_roofs->experimental && world_roofs->dev_only && world_roofs->apply == Apply::Live);
+  CHECK_EQ(code_default("rt_sun_roof_world"), "0");
+  if (world_roofs) CHECK(knob_value(*world_roofs, parse_ini("rt_sun_roof_world=1\n")) == 1);
   {  // SER (user decision 2026-11-08): on in every preset; choosing it in release raises the ray tracing pipeline trace.
     const int rt = knob_index("exp_gi_rt_pipeline"), ser = knob_index("exp_gi_rt_pipeline_reorder");
     for (int p = 0; p < kPresetCount; ++p) CHECK(preset_values(p)[rt] == 1 && preset_values(p)[ser] == 1);

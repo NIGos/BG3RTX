@@ -2,6 +2,7 @@
 // database: python -m tools.assets build --out data/assetdb, then bin/assetdb_test.exe.
 // Skips (exit 0) when the database is missing. Host functions the loader uses are
 // stubbed here; the join check (GPU copies) is not exercised.
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -11,6 +12,7 @@
 
 #include "../layer/assetdb.h"
 #include "../layer/sebridge.h"
+#include "../common/sun_roof_selection.h"
 
 namespace bg3 {
 void log(const char* fmt, ...) {
@@ -184,6 +186,24 @@ int main(int argc, char** argv) {
     CHECK(inside);
     printf("roof volumes within 120 m of the foundry floor: %u (kinds 0x%x), the floor point inside one: %d\n", nv,
            kinds, int(inside));
+  }
+
+  // Whole-level roof selection through the real DB API, including the port's CTY level.
+  // The finite sentinel must retain every roof and produce identical records after a
+  // dialogue camera cut and a changed screen-derived radius.
+  {
+    SunRoofSelection q;
+    const int32_t level = a->current_level(nullptr, nullptr);
+    CHECK(q.update(level, true, 3, 50, cam, 600, 1));
+    std::vector<Bg3DbVolume> before(512), after(512);
+    const uint32_t count = a->roof_volumes(q.center, q.radius, before.data(), 512);
+    CHECK(count > 0 && count <= 512);
+    const float cut_cam[3] = {1000, 1.5f, 1000};
+    CHECK(!q.update(level, true, 3, 50, cut_cam, 300, 30));
+    const uint32_t next = a->roof_volumes(q.center, q.radius, after.data(), 512);
+    CHECK(next == count);
+    CHECK(std::memcmp(before.data(), after.data(), (std::min)(count, 512u) * sizeof(Bg3DbVolume)) == 0);
+    printf("world roof selection: %u volumes, camera-cut records identical\n", count);
   }
 
   // Materials: the deferred FS of Base_VT (AUDIT_ENGINE_DATA 2.1)

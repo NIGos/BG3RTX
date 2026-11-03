@@ -1,6 +1,7 @@
 // RT sun replace: the upload side of the trust test (core/sun_trust.h).
 #include "sun_trust.h"
 #include "completion_lease.h"
+#include "../common/sun_roof_selection.h"
 
 #include <cmath>
 #include <cstring>
@@ -39,7 +40,8 @@ CoreCompletionLease g_lease[kRing];
 bool g_busy_logged = false;
 uint64_t g_calls = 0;
 bool g_have_cam = false;
-float g_cam[3] = {}, g_last_query[3] = {1e30f, 1e30f, 1e30f};
+float g_cam[3] = {};
+SunRoofSelection g_selection;
 float g_top = -1e30f;   // absolute y of the highest visible point (latest readback)
 float g_dmax = -1.0f;   // farthest pixel needing the roof test (m, latest readback; < 0 none yet)
 float g_radius = 0.0f;  // roof query radius of the latest refresh
@@ -96,7 +98,8 @@ bool ensure() {
 // matters has a point within g_dmax + rt_tmax of the camera and passes api_roof_volumes'
 // test (centre distance minus bounding radius <= radius). Before the first readback the
 // pixels are taken to be within rt_tmax (the scene-top readback's own range): 2 rt_tmax.
-// rt_sun_roof_radius > 0 overrides it (manual experiments only).
+// This legacy bound omits padding and the shader's infinite roof ray (see refresh).
+// rt_sun_roof_radius > 0 overrides it; rt_sun_roof_world ignores it entirely.
 float roof_radius() {
   const float manual = host->cfg_float("rt_sun_roof_radius", 0.0f);
   if (manual > 0.0f) return manual;
@@ -104,22 +107,23 @@ float roof_radius() {
   return (g_dmax >= 0.0f ? g_dmax : tmax) + tmax;
 }
 
-// Re-reads the roof volumes around the camera, nearest first (api_roof_volumes sorts by
-// distance). Beyond kSunMaxVolumes the farthest are dropped: logged once per level with
-// the count, and counted in the "sun stats" line.
+// Re-read around the camera (legacy) or the whole level from a fixed world origin.
+// The API tests UNPADDED bounds, whereas the shader tests padded bounds on an infinite
+// ray: the legacy screen-derived radius does not bound that test. Whole-level selection
+// removes that mismatch and its delayed readback feedback. Every known level fits the cap.
 void refresh(const Bg3AssetDbApi* a, float pad_xz, float pad_y) {
-  const float radius = roof_radius();
-  g_radius = radius;
+  const float radius = g_selection.radius;
+  g_radius = g_selection.world ? -1.0f : radius;   // stats: -1 means whole level
   g_vol.resize(kSunMaxVolumes);
-  g_total = a->roof_volumes(g_cam, radius, g_vol.data(), kSunMaxVolumes);
+  g_total = a->roof_volumes(g_selection.center, radius, g_vol.data(), kSunMaxVolumes);
   g_vol.resize(g_total < kSunMaxVolumes ? g_total : kSunMaxVolumes);
   if (g_total > kSunMaxVolumes) {
     const int32_t level = a->current_level(nullptr, nullptr);
     if (level != g_over_logged) {
       g_over_logged = level;
-      host->log("sun: WARNING %u roof volumes within %.0f m of the camera, only the nearest %u uploaded "
+      host->log("sun: WARNING %u roof volumes in query %.0f m (-1 whole level), only the nearest %u uploaded "
                 "(kSunMaxVolumes): %u dropped, pixels under them can be trusted (leak)",
-                g_total, radius, kSunMaxVolumes, g_total - kSunMaxVolumes);
+                g_total, g_radius, kSunMaxVolumes, g_total - kSunMaxVolumes);
     }
   }
   for (Bg3DbVolume& v : g_vol) {   // padding: eaves overhang the trigger, the roof sits above it
@@ -131,7 +135,6 @@ void refresh(const Bg3AssetDbApi* a, float pad_xz, float pad_y) {
     v.half[0] += pad_xz, v.half[2] += pad_xz, v.half[1] += 0.5f * pad_y;
     for (int k = 0; k < 3; ++k) v.center[k] += up[k] * 0.5f * pad_y;
   }
-  memcpy(g_last_query, g_cam, sizeof g_cam);
 }
 
 }  // namespace
@@ -172,10 +175,15 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
   int32_t level = a && a->available() ? a->current_level(&lname, nullptr) : -1;
   const bool roofs = want_roofs && level >= 0 && g_have_cam && have_cam2;
   if (roofs) {
-    const float dx = g_cam[0] - g_last_query[0], dy = g_cam[1] - g_last_query[1], dz = g_cam[2] - g_last_query[2];
-    if (level != g_level || g_calls % 30 == 0 || dx * dx + dy * dy + dz * dz > 25.0f)
-      refresh(a, host->cfg_float("rt_sun_roof_pad", 3.0f), host->cfg_float("rt_sun_roof_up", 50.0f));
-    if (level != g_level)
+    const float pad = host->cfg_float("rt_sun_roof_pad", 3.0f), up = host->cfg_float("rt_sun_roof_up", 50.0f);
+    const bool world = host->cfg_int("rt_sun_roof_world", 0) != 0;
+    if (g_selection.update(level, world, pad, up, g_cam, roof_radius(), g_calls)) {
+      refresh(a, pad, up);
+      if (world)
+        host->log("sun: world roof selection: level %s, %u volumes (%zu uploaded), pad %.1f up %.1f",
+                  lname, g_total, g_vol.size(), pad, up);
+    }
+    if (level != g_level && !world)
       host->log("sun: rt_sun_replace %d: level %s, %u roof volumes within %.0f m of the camera (%zu uploaded)", replace,
                 lname, g_total, g_radius, g_vol.size());
     g_level = level;
@@ -186,6 +194,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
     }
   } else {
     g_vol.clear();
+    g_selection.valid = false;   // restore immediately after roofs/camera/level return
   }
   ++g_calls;
   // Without the roofs (no database, level unknown, or no camera yet), nothing may be
@@ -320,6 +329,7 @@ void sunt_release() {
   g_map = nullptr;
   g_failed = g_have_cam = false;
   g_vol.clear();
+  g_selection = SunRoofSelection{};
   g_total = 0;
   g_level = -2;
   g_top = -1e30f;

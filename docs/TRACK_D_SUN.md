@@ -25,7 +25,8 @@ Two passes in the pre-lighting hook (`core/gi.cpp`, a few lines around the sun d
      `SUN_MAX_VOLUMES`). The radius is
      derived per frame (`core/sun_trust.cpp roof_radius`): the farthest pixel whose trust
      still depends on the roof test (read back from `rt_sun_resolve.hlsl`, header byte 48)
-     + `rt_tmax` (the ray's reach), so every volume a counted ray can meet is in the query;
+     + `rt_tmax` (the ray's reach). This legacy bound omits padding and the roof test's
+     infinite ray; it does not guarantee complete coverage (see 12.5 below).
      `rt_sun_roof_radius` > 0 overrides it. Volumes beyond the cap are dropped farthest first,
      logged once per level (`sun: WARNING N roof volumes ...`) and counted in `sun stats`
      (`over kSunMaxVolumes on N frames`). `scripts/roof_stats.py` (asset DB): at most 398
@@ -149,6 +150,36 @@ and what the trust did with them (`sun stats`, 600-frame windows):
   up = p100 roof height above the trigger top; (b) rise: per level, the p100 height of
   TLAS instances above the ground under them near the frustum edge facing the sun, or
   `rt_sun_top=1` with the scene top once the off-screen ramp is fixed.
+
+### 12.5 Stable whole-level roof selection (2026-11-03, rebased 2026-11-15, default off, READY_FOR_LIVE)
+
+`rt_sun_roof_world=1` (Developer: Stable roof selection, `exp_world_roofs`) queries the whole level from
+a fixed origin, once per level or padding change. It ignores `rt_sun_roof_radius` and the
+delayed camera/farthest-pixel readback. Every known level fits 512 volumes (cap gate).
+The legacy radius filters unpadded volumes but the shader uses padded volumes and an
+infinite ray; its finite reach proof is therefore incomplete. Periodic refreshes can
+change roof membership even for a stationary receiver. The new policy removes that
+source of variation without changing the world-space OBB test or roof modes.
+The policy is `common/sun_roof_selection.h` (CTest `sun_roof_selection_test`; `assetdb_test`
+checks the CTY records stay identical across a camera cut).
+
+Fixed with the key off too: clearing the upload now invalidates its cache, so the roofs
+return in the same frame when they are enabled again or the camera comes back (before, the
+list could stay empty until the next periodic refresh); live pad/up changes refresh at once.
+Ordinary key-off queries keep their 30-frame / 5 m refresh policy. No ABI, shader or variant change.
+
+This is READY_FOR_LIVE, not a confirmed fix for the dialogue band. Roof mode 0 retains
+the game's per-frame mask, so stable membership cannot eliminate a moving native mask.
+The GUI Sun shadows choice "Include hidden roofs" writes `rt_cascade_casters`, not `rt_sun_roofs`:
+the job sets both explicitly.
+
+Live A/B (staged, `tools/live_batches_staged/roof_shadow`, job rs1-dialogue3-roof-world, Test Dialogue3,
+key 0 / 1 / 0 in one run, about 4.3 minutes after the load). It must show: with the key on, every
+`sun stats` line has `roof query -1 m` and the level's whole roof count (398 at CTY), and the band over
+the still left character stops in the 4 PNGs of the ON energy window while both OFF windows reproduce
+it; energy of ON inside the OFF pair (floor 0.5%); rt passes GPU ms within noise + max(0.1 ms, 1%)
+(the roof loop over all volumes is not measured yet). A band that stays with a fixed roof set rejects
+the key as the fix. A cut-away interior in Ultra must keep its roof protection before promotion.
 
 ## Current native-caster sun scene (default off)
 
