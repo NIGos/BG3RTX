@@ -65,7 +65,7 @@ static void footer() {
   ShowWindow(control(g.wnd,ERROR_DETAILS),g.message.empty()?SW_HIDE:SW_SHOW);
   SetWindowTextW(control(g.wnd,STATUS),t.c_str());
   auto preset=st::preset_values_for(g.st.preset,g.st.caps);int custom=0;
-  for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev)&&g.st.values[i]>=0)custom+=g.st.values[i]!=preset[i];
+  for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev))custom+=g.st.values[i]!=preset[i];
   std::wstring note=!g.st.have_gpu?L"Compatibility: Unknown\nRecheck in Overview":custom?L"Custom: "+std::to_wstring(custom)+L" settings\nSuitability: estimate":L"Matches preset\nSuitability: estimate";
   SetWindowTextW(control(g.wnd,NOTE),note.c_str());
   EnableWindow(control(g.wnd,PLAY),!g_no_game&&g_screenshot.empty()&&g.stage>=4&&valid_game_dir(g.dir)&&!running);
@@ -166,7 +166,7 @@ static void rebuild() {
       std::wstring badge=L"GPU: "+widen(k.cost.status)+(std::string(k.cost.gpu)=="Unknown"?L"":L" "+widen(k.cost.gpu))+L" | VRAM: "+(std::string(k.cost.vram)=="Unknown"?std::wstring(L"Unknown"):widen(k.cost.status)+L" "+widen(k.cost.vram));
       label(g.body,badge,32,y,w-32,48);y+=56;
       auto need=st::unmet_need(k,g.st.values[i],g.st.values);if(need.empty())need=st::unmet_key_need(k,g.st.values[i],effective_settings());
-      label(g.body,widen(st::apply_label(k.apply)),32,y,w-32,28,true);y+=36;
+      label(g.body,widen(st::apply_label(st::knob_apply(k,g.st.values[i]))),32,y,w-32,28,true);y+=36;
       if(!need.empty()){label(g.body,widen(need),32,y,w-32,48);y+=56;}
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
@@ -216,8 +216,8 @@ static bool save(bool) {
 }
 static void select_preset(int p) {
   auto v=st::preset_values_for(p,g.st.caps);
-  // Presets must not overwrite hidden legacy or custom selections.
-  for(int i=0;i<st::kKnobCount;++i)if(g.st.values[i]<0||!st::knob_visible(st::kKnobs[i],g.dev))v[i]=g.st.values[i];
+  // Preset review replaces visible custom selections; hidden controls stay intact.
+  for(int i=0;i<st::kKnobCount;++i)if(!st::knob_visible(st::kKnobs[i],g.dev))v[i]=g.st.values[i];
   std::wstring t=L"Preview preset: "+widen(st::kPresetLabel[p])+L"\n";
   for(int i=0;i<st::kKnobCount;++i)if(v[i]!=g.st.values[i])t+=L"\n"+widen(st::kKnobs[i].label)+L": "+(st::kKnobs[i].kind==st::Kind::Choice?choice_label(st::kKnobs[i],v[i]):std::to_wstring(v[i]));
   if(MessageBoxW(g.wnd,t.c_str(),L"Replace settings with preset?",MB_OKCANCEL|MB_ICONQUESTION)==IDOK){g.st.preset=p;g.st.values=v;rebuild();}
@@ -238,7 +238,7 @@ static void command(int id,int code,HWND source) {
     if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility or enable Experimental.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
     g.ab_selection.touch(k,c);g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
-  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(k.apply))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
+  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(st::knob_apply(k,g.st.values[id-DETAILS])))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
   if(id==GAME&&code==EN_CHANGE){int n=GetWindowTextLengthW(source);std::wstring t(n+1,L'\0');GetWindowTextW(source,t.data(),n+1);t.resize(n);g.dir=t;footer();return;}
   if(id==PRESET&&code==CBN_SELCHANGE){select_preset(int(SendMessageW(source,CB_GETCURSEL,0,0)));return;}
   if(code!=BN_CLICKED)return;
