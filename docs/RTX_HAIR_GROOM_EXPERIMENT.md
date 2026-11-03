@@ -112,3 +112,5 @@ Integration design: docs/RTX_HAIR_INTEGRATION.md.
 ## Licence
 No RTXCR/NVIDIA SDK code or data used; LSS layout from the Khronos extension spec. Later RTXCR code or
 hair BSDF: NVIDIA RTX SDK licence (see feasibility doc). Nothing downloaded: numpy 2.4.3 (BSD-3), Pillow 12.3.0 (MIT-CMU), scipy 1.17.1 (BSD-3) were already installed; the GR2 decode is the existing LSLib v1.20.4 export.
+Batch tool (tools/hair_groom/batch.py): LSLib v1.20.4 ExportTool package (github.com/Norbyte/lslib, its LICENSE) reused from the
+local m2-foundry copy, with its granny2.dll (RAD Game Tools, ships with that package; never redistributed by BG3RTX).

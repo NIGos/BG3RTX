@@ -59,3 +59,46 @@ def load(path, mesh_name):
                 weights=_accessor(gltf, binary, attr["WEIGHTS_0"]).astype(np.float32),
                 tris=_accessor(gltf, binary, prim["indices"]).reshape(-1, 3).astype(np.int64),
                 joint_names=names, joint_positions=origins.astype(np.float32))
+
+
+def _str(raw, at):
+    n = int(np.frombuffer(raw, "<u4", 1, at)[0])
+    return raw[at + 4:at + 4 + n].decode("utf-8"), at + 4 + n
+
+
+def load_gr2_dump(path, mesh_name):
+    """One mesh of a tools/hair_groom/gr2_dump.ps1 file (LSLib's GR2 reader, native vertex/index order)."""
+    raw = Path(path).read_bytes()
+    if raw[:4] != b"GR2D" or int(np.frombuffer(raw, "<u4", 1, 4)[0]) != 1:
+        raise ValueError(f"{path}: not a GR2 dump v1")
+    meshes = int(np.frombuffer(raw, "<u4", 1, 8)[0])
+    at, found = 12, None
+    for _ in range(meshes):
+        name, at = _str(raw, at)
+        nv, ni, nb = (int(x) for x in np.frombuffer(raw, "<u4", 3, at))
+        at += 12
+        bind = []
+        for _ in range(nb):
+            b, at = _str(raw, at)
+            bind.append(b)
+        vtx = np.frombuffer(raw, np.dtype([("p", "<f4", 3), ("uv", "<f4", 2), ("j", "u1", 4), ("w", "u1", 4)]), nv, at)
+        at += nv * 28
+        idx = np.frombuffer(raw, "<u4", ni, at)
+        at += ni * 4
+        if name == mesh_name:
+            found = (vtx, idx, bind)
+    if found is None:
+        raise KeyError(f"{path}: no mesh {mesh_name}")
+    bones = {}
+    nbones = int(np.frombuffer(raw, "<u4", 1, at)[0])
+    at += 4
+    for _ in range(nbones):
+        name, at = _str(raw, at)
+        bones[name] = np.frombuffer(raw, "<f4", 16, at).reshape(4, 4).astype(np.float64)
+        at += 64
+    vtx, idx, bind = found
+    # LSLib's InverseWorldTransform is row-vector form (translation in the last row): world origin = inverse's last row.
+    origins = np.array([np.linalg.inv(bones[b])[3, :3] if b in bones else np.zeros(3) for b in bind], np.float32).reshape(-1, 3)
+    return Mesh(positions=np.ascontiguousarray(vtx["p"], np.float32), uv=np.ascontiguousarray(vtx["uv"], np.float32),
+                joints=vtx["j"].astype(np.int64), weights=vtx["w"].astype(np.float32) / 255.0,
+                tris=idx.reshape(-1, 3).astype(np.int64), joint_names=bind, joint_positions=origins)

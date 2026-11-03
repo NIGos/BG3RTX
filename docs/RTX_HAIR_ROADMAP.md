@@ -12,11 +12,11 @@ LOD 1/4: 0.63/0.61/0.92 ms, 15 + 3 MB; static arrays 34 MB per hairstyle (mesh p
 | # | Step | Impact | Effort | Can start |
 |---|---|---|---|---|
 | 1 | Qualify the secondary-ray prototype | medium (shadows, AO, GI, reflections of hair) | days | NEEDS-LIVE (job ready) |
-| 2 | Converter quality + artist-free validation | medium (fewer frizz tips, gaps) | 2-3 days | OFFLINE-NOW |
-| 3 | Fibre BSDF at secondary hits | high in GI/reflections, backlight | 1 week | OFFLINE-NOW, then live |
-| 4 | Coverage: every CHAR_Hair visual, beards | high (consistency across the cast) | 1 week | OFFLINE-NOW (needs LSLib on the PC) |
+| 2 | Automated batch conversion of every style (first version done) | high (whole cast) | days | OFFLINE-NOW |
+| 3 | Converter quality + artist-free validation | medium (fewer frizz tips, gaps) | 2-3 days | OFFLINE-NOW |
+| 4 | Fibre BSDF at secondary hits | high in GI/reflections, backlight | 1 week | OFFLINE-NOW, then live |
 | 5 | Animation robustness | medium (no lag/pop under motion) | days | mostly NEEDS-LIVE |
-| 6 | Primary replacement of the visible hair | very high (the hair you see) | 3-5 weeks | after 1, 3, 5 |
+| 6 | Primary replacement of the visible hair | very high (the hair you see) | 3-5 weeks | after 1, 4, 5 |
 
 ## 1. Secondary rays (prototype, commit 104092ca)
 On screen: hair shadows on face/neck/shoulders become fibre-fine instead of ribbon blocks; AO under the hair,
@@ -31,7 +31,26 @@ cost off/groom/off/no-hair). Offline already passed: build, 130 CTests, key-off 
 Next optimisation if the gate passes: hide replaced cards by instance mask instead of the software skip
 (needs a mask bit free in cascade/current-sun passes) for the full card-cost saving. Deps: none.
 
-## 2. Converter quality and validation (OFFLINE-NOW)
+## 2. Automated batch conversion and coverage (OFFLINE-NOW; first version done)
+One command on the user's PC: `python -m tools.hair_groom.batch --report-dir <dir>` (`--match`, `--limit`,
+`--jobs`, `--accept-review`). It enumerates the LOD0 CHAR_Hair objects of the mesh_materials catalogue (872 rows:
+hair and beards), resolves each mask, reads GR2 and mask from the paks (read-only), decodes the GR2 with LSLib's
+reader (`gr2_dump.ps1`, PowerShell 7, granny2.dll next to LSLib.dll; native vertex/index order, so the index-only
+join ID holds; LSLib's glTF exporter fails on some meshes, e.g. Lae'zel, Jaheira), detects the atlas grid,
+converts (strands of every tile a card touches, dedupe), validates (silhouette IoU, coverage and radiance vs the
+cards in front/side/back renders at 2 mm, root channel, UV winding, reversed cards) and writes pass /
+needs-review / reject, a front PNG per style, `summary.md`, `state.json`; assets (3 LODs, named by index ID)
+only for pass (review with the flag), add-only. Incremental by pak entry (package, offset, size) + mesh +
+converter version; resumable; progress every 30 s; BelowNormal priority.
+First run (9 companion styles, 81 s, 3 jobs): 7 pass (Shadowheart, Astarion, Karlach, Lae'zel, Gale, Minthara,
+Jaheira: IoU 0.92-0.97), 2 needs review (Gale's beard: IoU 0.76, small mesh at 2 mm pixels; Halsin: 44% of the
+cards with the root away from the head). Atlas grids seen: 8x2, 8x4, 9x2, 8x16. All 872: ~27 s per style per
+job: ~2.2 h with 3 jobs, ~1.1 h with 6. Next: LOD1 meshes, pubes/fur recipes, beards at finer render pixels, a
+review page. Crowd budget: LOD by screen size (done) plus a VRAM cap dropping far characters to LOD 1/4 then
+cards (10 close characters at LOD 0 ~710 MB + 34 MB per style). Gates: offline as above (CTest: catalogue
+parsing, grid detection); live: matched/unmatched counts in a crowd scene (camp, Lower City). Deps: none.
+
+## 3. Converter quality and validation (OFFLINE-NOW)
 On screen: fewer fake tips (strands are 14 mm median pieces: crossings in the painted mask), no doubled
 strands, cleaner partings. Method: (a) stitch across card seams (end of a strand on card A to the start on
 the adjacent card B when positions and directions agree within the strand radius); (b) longer 2-D tracking
@@ -44,7 +63,7 @@ Inputs: masks and meshes (paks, read-only). Risks: over-stitching across layered
 and < 2 mm). Cost: none at runtime (same segment count +-5%). Gates: offline metrics above in a CTest on a
 fixture style + the PNG review. Deps: none.
 
-## 3. Fibre BSDF (OFFLINE-NOW, then live)
+## 4. Fibre BSDF (OFFLINE-NOW, then live)
 On screen: hair hit by GI/reflection rays gets a coloured specular R lobe and TT/TRT (rim light in backlight,
 warm transmission) instead of today's unknown/approximate hair material at secondary hits; with step 6 the
 visible hair too. Method: near-field Chiang 2016 / far-field Marschner-d'Eon written from the papers
@@ -61,21 +80,6 @@ per hair hit batch (shading only; traversal unchanged). Gates: offline furnace +
 CPU/PT reference render vs the shader on a fixture; live: character energy within spread of the analytic
 expectation, backlit shot shows rim (PNG pair). Deps: step 1 (the groom hit carries the fibre tangent).
 
-## 4. Coverage of all characters (OFFLINE-NOW)
-On screen: every hairstyle (869 CHAR_Hair visuals / 872 LOD0 rows in mesh_materials v2: player, companions,
-NPCs, beards) behaves the same; no mixed card/strand shadows in crowds. Method: batch `tools.hair_groom.asset`
-over the catalogue (one LSLib glTF export per GR2, mask resolved per material, ~6 s each, ~1.5 h, parallel,
-progress every 30 s, cache by GR2 hash); assets generated on the user's PC from their paks, never shipped.
-Beards (CHAR_Hair with beard flag) same path; pubes and fur (CHAR_Fur_IDmsk, CHAR_Pubes) keep the card path
-until a mask-to-strand recipe exists for them (different mask layout). Crowd budget: LOD by screen size
-(done), plus a VRAM cap (rt_vram_guard share) that drops far characters to LOD 1/4 then cards; 10 close
-characters at LOD 0 = ~710 MB BLAS+points + 34 MB per distinct style. Join robustness: index-only ID +
-index count, collision log, an offline table of all IDs (fail on duplicates between different meshes).
-Inputs: LSLib on the PC (tools/assets locate), Models.pak/Textures.pak read-only. Risks: index buffers not
-host-mapped for some draws (then cards), LOD1 meshes (convert LOD1 too: 2,003 triangles, cheap).
-Gates: offline: every visual converts, ID table unique, per-style IoU >= 0.9; live: matched/unmatched counts
-in a crowd scene (camp, Lower City), VRAM within the guard. Deps: step 2 (better strands before batch).
-
 ## 5. Animation (mostly NEEDS-LIVE)
 On screen: strands follow head turns, spring physics and wind exactly as the cards (points are embedded in the
 captured deformed card triangles), no lag or pops at LOD switches. Method: already per-frame refit; add a
@@ -87,7 +91,7 @@ rebuild cost 1.3 ms spikes. Cost: rebuild 1.1-1.3 ms when triggered, +11 MB with
 offline synthetic sway test in the bench (trace cost vs rebuild); live: dialogue with head turns, `[hair groom]`
 build/refit counts, no visible lag in PNG pairs at motion, scene build GPU ms. Deps: step 1.
 
-## 6. Primary replacement of the visible hair (after 1, 3, 5)
+## 6. Primary replacement of the visible hair (after 1, 4, 5)
 On screen: the hair you see is strands: no alpha-tested card edges, no dither/TAA shimmer (the edge flicker
 the user reported), correct parallax, proper backlight. Method options: (a) RT primary: one ray per hair
 pixel against the groom TLAS inside the game's hair mask (pixels the card raster covers, dilated by the strand
@@ -106,9 +110,10 @@ interplay, look change. Cost: hair pixels x 1 ray: full-screen close-up at DLSS 
 ~0.6 ms trace + 0.2-0.4 ms shading, 2-4 rays per pixel for coverage AA ~1.5-2.5 ms; typical (hair 10-25% of
 the screen) 0.2-0.6 ms. Gates: offline: PT reference vs shader on a fixture (coverage, colour); live: same-run
 A/B cards/strands, edge-flicker metric (temporal variance on hair pixels) lower, character energy within the
-BSDF expectation, RR/FG artefact review (PNG + short float burst), cost < budget the user sets. Deps: 1, 3, 5.
+BSDF expectation, RR/FG artefact review (PNG + short float burst), cost < budget the user sets. Deps: 1, 4, 5.
 
 ## Top 3 next steps
 1. Live run of `hair_groom` (step 1): proves the join, the energy and the real cost.
-2. Converter stitch/taper + validation CTest (step 2), then the batch over all styles (step 4).
-3. Fibre BSDF from papers with furnace tests (step 3): needed for both secondary hits and step 6.
+2. Batch over all 872 styles on the user's PC (step 2), review the needs-review list; then converter
+   stitch/taper (step 3) and an incremental rerun.
+3. Fibre BSDF from papers with furnace tests (step 4): needed for both secondary hits and step 6.

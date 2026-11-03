@@ -44,6 +44,23 @@ def cards(tris, vertex_count):
     return count, label[tris[:, 0]]
 
 
+def detect_tile_grid(mesh, max_tiles=16):
+    """Atlas tile grid (columns, rows) of a card mesh: the median UV extent of its cards. BG3 hair atlases
+    tile one card per cell (Shadowheart: 8 x 2). Returns (grid, share of cards that fit one cell)."""
+    count, card_of = cards(mesh.tris, len(mesh.positions))
+    lo = np.full((count, 2), np.inf)
+    hi = np.full((count, 2), -np.inf)
+    uv = mesh.uv[mesh.tris].reshape(-1, 2)
+    card = np.repeat(card_of, 3)
+    np.minimum.at(lo, card, uv)
+    np.maximum.at(hi, card, uv)
+    span = np.median(hi - lo, axis=0)
+    grid = tuple(int(np.clip(np.rint(1.0 / max(s, 1e-6)), 1, max_tiles)) for s in span)
+    g = np.array(grid, float)
+    fits = np.all(np.floor(lo * g + EPS) == np.floor(hi * g - EPS), axis=1)
+    return grid, float(fits.mean())
+
+
 def barycentric(uv_tri, points):
     """Barycentrics of points (N, 2) in one UV triangle (3, 2); rows of NaN if degenerate."""
     a, b, c = uv_tri
@@ -140,15 +157,17 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
         tris = mesh.tris[tri_ids]
         uv = mesh.uv
         lo, hi = uv[tris].reshape(-1, 2).min(0), uv[tris].reshape(-1, 2).max(0)
-        tile = tuple(np.floor((lo + hi) / 2 * tile_grid).astype(int))
-        if np.any(np.floor(lo * tile_grid + EPS) != np.floor(hi * tile_grid - EPS)):
+        # Every tile the card's UV box touches (most styles: exactly one); samples outside the card are dropped.
+        t0 = np.clip(np.floor(lo * tile_grid + EPS).astype(int), 0, np.array(tile_grid) - 1)
+        t1 = np.clip(np.floor(hi * tile_grid - EPS).astype(int), 0, np.array(tile_grid) - 1)
+        if np.any(t0 != t1):
             report["cards_spanning_tiles"] += 1
         e0 = uv[tris[:, 1]] - uv[tris[:, 0]]
         e1 = uv[tris[:, 2]] - uv[tris[:, 0]]
         sign = np.sign(e0[:, 0] * e1[:, 1] - e0[:, 1] * e1[:, 0])
         if (sign > 0).any() and (sign < 0).any():
             report["mixed_winding_cards"] += 1
-        rows = per_tile.get(tile, [])
+        rows = [r for tx in range(t0[0], t1[0] + 1) for ty in range(t0[1], t1[1] + 1) for r in per_tile.get((tx, ty), [])]
         if not rows:
             continue
         u, v, wd, slope, rp, dp = (np.concatenate([r[k] for r in rows]) for k in range(6))

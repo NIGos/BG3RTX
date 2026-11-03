@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, bench_data, convert, geom, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, convert, geom, mesh, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -212,6 +212,28 @@ def test_geom():
     check("pairs within distance = brute force", got == want and len(want) > 10, (len(got), len(want)))
 
 
+def test_batch_catalogue():
+    check("tile grid of one full-atlas card", convert.detect_tile_grid(card_mesh()) == ((1, 1), 1.0))
+    quarter = card_mesh()
+    quarter.uv = (quarter.uv * [0.25, 0.5] + [0.5, 0.5]).astype(np.float32)
+    check("tile grid 4 x 2", convert.detect_tile_grid(quarter) == ((4, 2), 1.0), convert.detect_tile_grid(quarter))
+    hair = {"source": "Public/Shared/Assets/Materials/Characters/CHAR_Hair.lsf",
+            "native": {"children": [{"_": "Texture2DParameters", "ParameterName": "ID_Depth_Root_Alpha_MSKA", "ID": "t1"}]}}
+    doc = {"materials": {"m1": hair, "m2": {"source": "x/CHAR_Skin.lsf", "native": {}}},
+           "textures": {"t1": {"native": {"SourceFile": "Generated/A_MSKA.DDS"}}},
+           "rows": [{"lod": 0, "material_id": "m1", "object_id": "HAIR_A.HAIR_A_Mesh.1", "source": "G/HAIR_A.GR2", "visual_id": "v1"},
+                    {"lod": 1, "material_id": "m1", "object_id": "HAIR_A.HAIR_A_Mesh_LOD1.3", "source": "G/HAIR_A.GR2", "visual_id": "v1"},
+                    {"lod": 0, "material_id": "m1", "object_id": "HAIR_A.HAIR_A_Mesh.1", "source": "G/HAIR_A.GR2", "visual_id": "v2"},
+                    {"lod": 0, "material_id": "m2", "object_id": "HEAD.HEAD_Mesh.0", "source": "G/HEAD.GR2", "visual_id": "v3"}]}
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "cat.json"
+        path.write_text(json.dumps(doc))
+        got = batch.styles(path)
+        check("batch: one LOD0 CHAR_Hair style per GR2 and mesh, mask resolved",
+              got == [{"name": "HAIR_A:HAIR_A_Mesh", "gr2": "G/HAIR_A.GR2", "mesh": "HAIR_A_Mesh", "mask": "Generated/A_MSKA.DDS", "visual": "v1"}], got)
+        check("batch: name filter", batch.styles(path, ["nothing"]) == [])
+
+
 def test_locate_overlap():
     uv = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], np.float32)
     tris = np.array([[0, 1, 2], [0, 1, 2]])  # the same UV triangle twice: an overlap
@@ -295,7 +317,7 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
