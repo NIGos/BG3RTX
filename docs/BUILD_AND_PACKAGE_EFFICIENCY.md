@@ -285,3 +285,17 @@ Generation on the user's machine (never inside the game folder; read-only paks):
 - Asset DB: is shipping `bg3rtx_assetdb.bin` (light positions, colours, names, UUIDs derived from the
   game's paks) acceptable for the beta, or must it be generated on the player's machine from day one?
   Conservative default here: generate it (frozen Python tool), like the VT masks.
+
+### SCC1 re-gate against the merged design (2026-11-03)
+
+The always-on design has 165 variants; one module per file and remaining layout define set.
+`rt_spec_cascade` is gone. The revised batch in tools/live_batches/spec_cascade rejects only actual
+DXC `compiled in` events (cache reads are allowed), including water, after warmup and on every
+converted-key toggle. Same-state energy and GPU ms predictions stay zero within OFF-OFF spread.
+The 01:39 run fails this gate: cascade-off caused water_compose:water_compose to compile at
+01:41:31.120 (1640 ms). core/water.cpp make_pipe -> shader_variant::water_request still varies
+RT_CASCADE_MASKS / RT_CASCADE_SUN_HIT. Both requests are listed; cascade specialization missed
+this water path. GI GPU repeats also exceed their own spread. The ignored retired key provides
+no old/new equivalence measurement. Additional converted-key windows are absent from that run;
+startup-latched hit/native capabilities need effective switching or startup fixtures, not INI-only
+claims. See the batch README and regate_013945.json. No live or shader compile was run for this audit.
