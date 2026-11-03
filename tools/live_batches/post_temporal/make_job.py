@@ -47,6 +47,7 @@ def make():
                                   match=r'gpu temporal: [\d.]+ ms/frame; active 1',min=1,windows=['timing-'+label]))
         step('restore',5,dict(base,pan_post=0,pan_edge=0,pan_prepare=0,qa_exposure_hold=0))
         startup=dict(x.split('=',1) for x in template['set'].split(','))
+        if scene=='s8': startup.pop('rr_sss',None)  # layer default 1, not in bg3rtx.ini: combine.py cannot reset it in the S8 jobs
         # Real Ultra preset: no custom lighting overrides; native hair stays off as in ef1.
         for k in ['gi_ao','rt_shadows','gi_strength']: startup.pop(k,None)
         startup.update(base,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg_snap_delay_ms=0)
