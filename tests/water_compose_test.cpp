@@ -1198,6 +1198,38 @@ int main(int argc, char** argv) {
       if (!pool) CHECK(on == off);
       else {
         CHECK(on != off && on.size() > off.size());
+        // Exercise the emitted predicate, including the native pow floor.
+        // All three independently sampled foam masks must be absent; a
+        // nonzero texture/flow signal must never be accepted by a tolerance.
+        for (unsigned sample = 0; sample < 6; ++sample) {
+          std::map<uint32_t, float> value;
+          const uint32_t raw[] = {742,809,873}, weight[] = {751,814,878};
+          for (unsigned m = 0; m < 3; ++m) {
+            value[raw[m]] = sample == m + 1 ? 1e-20f : 0.0f;
+            value[weight[m]] = std::pow(std::fmax(std::fabs(value[raw[m]]), 1e-4f), 1.8621f) * 0.8952f;
+            CHECK(value[weight[m]] > 0.0f); // old exact-zero predicate rejects even no foam
+          }
+          // Disabled multiplier must still qualify, even with nonzero raw masks.
+          if (sample == 4) for (unsigned m = 0; m < 3; ++m) value[raw[m]]=1.0f, value[weight[m]]=0.0f;
+          std::map<uint32_t, bool> truth;
+          bool guard = false;
+          unsigned comparisons = 0;
+          for (size_t p = 5; p < on.size(); p += on[p] >> 16) {
+            const unsigned op = on[p] & 65535u;
+            if (op == 49u) truth[on[p+2]] = sample != 5; // specialization 1025
+            if (op == 180u && value.count(on[p+3])) {
+              truth[on[p+2]] = value[on[p+3]] == 0.0f;
+              ++comparisons;
+            }
+            if ((op == 166u || op == 167u) && truth.count(on[p+3]) && truth.count(on[p+4])) {
+              guard = op == 166u ? truth[on[p+3]] || truth[on[p+4]] : truth[on[p+3]] && truth[on[p+4]];
+              truth[on[p+2]] = guard;
+              if (comparisons == 6 && op == 167u) break;
+            }
+          }
+          CHECK(comparisons == 6);
+          CHECK(guard == (sample == 0 || sample == 4));
+        }
         // Only the final colour output gains a store; record words do not grow.
         auto stores = [](const std::vector<uint32_t>& mod) {
           unsigned n = 0;
