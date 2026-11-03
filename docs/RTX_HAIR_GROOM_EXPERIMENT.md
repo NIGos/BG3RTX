@@ -1,7 +1,6 @@
 # Card-to-strand groom experiment (Shadowheart hair)
 
-2026-11-03. Offline only: no game, GPU session, runtime, shader, ABI or settings change.
-Converter `tools/hair_groom/` (CTest `hair_groom_test`):
+2026-11-03, offline only (no game, GPU, runtime, shader, ABI or settings change). CTest `hair_groom_test`.
 `python -m tools.hair_groom --gltf <LSLib export of HAIR_HUM_F_Shadowheart_Spring.GR2> --out <new dir>`.
 
 **Verdict: approximate.** The strands reproduce the cards' silhouette, density and root/tip layout,
@@ -23,8 +22,8 @@ Usable for RT secondary rays (shadows, GI, reflections); not for strand simulati
   (spring physics included) without its own skinning.
 
 ## UV consistency
-- No UV overlap inside a card (0 of 943k samples), no mirrored winding, 2 cards straddle a tile edge.
-- 22 of 656 cards (3.4%) have the root farther from the head than the tip (bun and braid loops).
+- No UV overlap inside a card (0 of 943k samples), no mirrored winding, 2 cards straddle a tile edge;
+  22 of 656 cards (3.4%) have the root farther from the head than the tip (bun and braid loops).
 - Layered cards: 19.5% of strand points have another card's point within 0.5 mm; 3,892 strands (4.5%)
   are >80% duplicated by a stacked card on the same tile. Kept: they are on screen too.
 
@@ -33,19 +32,15 @@ Usable for RT secondary rays (shadows, GI, reflections); not for strand simulati
 |---|---:|---:|---:|---:|
 | Primitives | 40,090 tris | 856,802 segments | 451,094 | 248,889 |
 | Points / vertices | 33,513 | 942,998 | 537,287 | 335,082 |
-- 86,196 strands; length p5/p50/p95 2/14/71 mm, 1.9 km total; radius p5/p50/p95 0.054/0.125/0.35 mm
-  (painted clumps, ~3x a real hair). Conversion ~6 s per style.
+- 86,196 strands, length p5/p50/p95 2/14/71 mm; radius 0.054/0.125/0.35 mm (clumps, ~3x a hair); ~6 s/style.
 - Memory at 2 mm: LSS positions+radii 15.1 MB (16 B/point), indices 3.4 MB, embedding 11 MB; cards
   today 2.9 MB captured vertices (88 B) + 0.5 MB indices.
-- Per frame and character: 15.1 MB written (8.6 MB at 4 mm) and 857k (451k) LSS primitives refit,
-  11..21x the card primitive count. DOTS fallback (4 triangles per segment) is not viable.
-  GPU refit/trace ms: NOT measured.
+- Per frame and character: 15.1 MB written (8.6 at 4 mm), 857k (451k) LSS primitives refit = 11..21x
+  the card primitives. DOTS fallback (4 triangles/segment) not viable. GPU refit/trace ms NOT measured.
 
 ## Visual check (CPU renderer `tools/hair_groom/render.py`; left cards, right groom)
-Same orthographic camera, light, opacity shadow map, fibre shading and ellipsoid head proxy for both;
-cards use mask alpha as opacity, strands their exact coverage.
-![front](img/hair_groom/front.jpg) ![side](img/hair_groom/side.jpg)
-![backlit](img/hair_groom/backlit.jpg) ![crown](img/hair_groom/crown_zoom.jpg)
+Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: mask alpha, strands: coverage.
+![front](img/hair_groom/front.jpg) ![side](img/hair_groom/side.jpg) ![backlit](img/hair_groom/backlit.jpg) ![crown](img/hair_groom/crown_zoom.jpg)
 - Silhouette IoU 0.92 / 0.94 / 0.94 (front/side/back); coverage +1..+4 points; radiance +1..+9%,
   backlit -11% (thin tips transmit, brighter rim, darker sheet interiors). Crown close-up coverage
   0.98 -> 0.91: stacked cards repeat the same strands, which then overlap instead of adding up.
@@ -61,6 +56,5 @@ cards use mask alpha as opacity, strands their exact coverage.
    which LSS removes; keep rule < 1 ms.
 
 ## Licence
-No RTXCR or other NVIDIA SDK code or data used. The LSS layout (position + radius per vertex, segment
-indices) is from the Khronos `VK_NV_ray_tracing_linear_swept_spheres` spec. Later RTXCR code or its
-hair BSDF falls under the NVIDIA RTX SDK licence (notices, redistribution; RTX_HAIR_FEASIBILITY.md).
+No RTXCR/NVIDIA SDK code or data used; the LSS layout is from the Khronos extension spec. Later RTXCR
+code or its hair BSDF falls under the NVIDIA RTX SDK licence (notices, redistribution; see feasibility doc).
