@@ -4,6 +4,8 @@
 #include <cmath>
 #include <span>
 #include <string>
+#include <string_view>
+#include <set>
 #include <vector>
 namespace bg3::mesh_paks {
 constexpr size_t kRowBytes = 840;
@@ -13,6 +15,8 @@ struct Row {
   mesh_content::Sample sample;
   std::array<float,64> uv{};
   std::vector<float> corners; // v2: full ordered position3/UV2 stream
+  uint32_t color_layout{}; // v3: 1 = explicit native COLOR_0 RGBA
+  std::vector<float> colors; // full ordered corner COLOR_0, never inferred/defaulted
   std::string material;
 };
 inline bool uuid(const std::string& s) {
@@ -23,6 +27,25 @@ inline bool uuid(const std::string& s) {
   }
   return true;
 }
+// Transactional manifest contract: local basenames only, unique, bounded.
+inline bool shard_names(std::string_view text,std::vector<std::string>& names,size_t max_count=10000){
+ names.clear();if(text.empty() || text.size()>1024*1024)return false;
+ std::vector<std::string> parsed;std::set<std::string> unique;
+ while(!text.empty()){
+  const auto end=text.find('\n');std::string name(text.substr(0,end));
+  if(!name.empty() && name.back()=='\r')name.pop_back();
+  if(name.empty() || !name.starts_with("mesh_paks_cov_paks2_") || !name.ends_with(".bin") ||
+   name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")!=std::string::npos ||
+   !unique.insert(name).second || parsed.size()>=max_count)return false;
+  parsed.push_back(std::move(name));
+  if(end==std::string_view::npos)break;text.remove_prefix(end+1);
+ }
+ names=std::move(parsed);return !names.empty();
+}
+inline bool shard_size(uint64_t size,uint64_t total){
+ constexpr uint64_t cap=2ull*1024*1024*1024;
+ return total<=cap && size<=512ull*1024*1024 && size<=cap-total;
+}
 // Transactional parser: malformed/truncated/oversized tables publish nothing.
 inline bool parse(std::span<const uint8_t> bytes,std::vector<Row>& rows) {
   rows.clear();
@@ -30,8 +53,8 @@ inline bool parse(std::span<const uint8_t> bytes,std::vector<Row>& rows) {
   auto u32=[&](size_t at){uint32_t v{};for(unsigned i=0;i<4;++i)v|=uint32_t(bytes[at+i])<<(i*8);return v;};
   const uint32_t n=u32(12);
   const uint32_t version=u32(8);
-  if((version!=1&&version!=2) || n>1000000 || (version==1&&bytes.size()!=16+uint64_t(n)*kRowBytes))return false;
-  if(n>(bytes.size()-16)/(version==2?kRowBytes+4+60:kRowBytes))return false;
+  if((version!=1&&version!=2&&version!=3) || n>1000000 || (version==1&&bytes.size()!=16+uint64_t(n)*kRowBytes))return false;
+  if(n>(bytes.size()-16)/(version>=2?kRowBytes+4+60:kRowBytes))return false;
   std::vector<Row> parsed;parsed.reserve(n);
   size_t next=16;
   for(uint32_t i=0;i<n;++i) {
@@ -50,12 +73,19 @@ inline bool parse(std::span<const uint8_t> bytes,std::vector<Row>& rows) {
     for(size_t c=0;c<64;++c){const uint32_t v=u32(at+548+c*4);std::memcpy(&r.uv[c],&v,4);if(!std::isfinite(r.uv[c]))return false;}
     r.material.assign(reinterpret_cast<const char*>(bytes.data()+at+804),36);
     if(!uuid(r.material))return false;
-    if(version==2){
+    if(version>=2){
       if(bytes.size()-next<4)return false;const auto count=u32(next);next+=4;
       if(count!=r.index_count||uint64_t(count)*20>bytes.size()-next)return false;
       r.corners.resize(size_t(count)*5);
       for(size_t c=0;c<r.corners.size();++c){const uint32_t v=u32(next+c*4);std::memcpy(&r.corners[c],&v,4);if(!std::isfinite(r.corners[c]))return false;}
       next+=size_t(count)*20;
+    }
+    if(version>=3){
+      if(bytes.size()-next<8)return false;r.color_layout=u32(next);const auto count=u32(next+4);next+=8;
+      if(r.color_layout>1 || (r.color_layout==0?count!=0:count!=r.index_count) || uint64_t(count)*16>bytes.size()-next)return false;
+      r.colors.resize(size_t(count)*4);
+      for(size_t c=0;c<r.colors.size();++c){const auto v=u32(next+c*4);std::memcpy(&r.colors[c],&v,4);if(!std::isfinite(r.colors[c]) || r.colors[c]<0 || r.colors[c]>1)return false;}
+      next+=size_t(count)*16;
     }
     parsed.push_back(std::move(r));
   }
@@ -82,6 +112,35 @@ inline bool full_match(const Row& row,const mesh_content::Input& in,mesh_content
   }
   return true;
 }
+// Compare the exact native COLOR input across every indexed corner. Supported
+// encodings have explicit Vulkan component order, never a guessed BGRA swizzle.
+enum class ColorEncoding { Unknown, Float4, Unorm8Rgba };
+inline bool color_match(const Row& row,const mesh_content::Input& in,mesh_content::Bytes colors,uint32_t stride,ColorEncoding encoding){
+  const uint32_t width=encoding==ColorEncoding::Float4?16u:encoding==ColorEncoding::Unorm8Rgba?4u:0u;
+  if(!width || stride<width || row.color_layout!=1 || row.colors.size()!=size_t(in.count)*4 || in.count!=row.index_count || !colors.data)return false;
+  // sample() validates the index stream bounds and signed vertex offset.
+  mesh_content::Sample checked;if(!mesh_content::sample(in,checked))return false;
+  for(uint32_t c=0;c<in.count;++c){
+    uint32_t ix=c;if(in.index_bytes==1)ix=in.indices.data[c];
+    else if(in.index_bytes==2){uint16_t v;std::memcpy(&v,in.indices.data+size_t(c)*2,2);ix=v;}
+    else if(in.index_bytes==4)std::memcpy(&ix,in.indices.data+size_t(c)*4,4);
+    const int64_t vertex=in.vertex_offset+ix;if(vertex<0 || uint64_t(vertex)>UINT64_MAX/stride)return false;
+    const uint64_t at=uint64_t(vertex)*stride;if(at>colors.size || colors.size-at<width)return false;
+    for(uint32_t k=0;k<4;++k){float got;
+      if(encoding==ColorEncoding::Float4)std::memcpy(&got,colors.data+at+k*4,4);
+      else got=float(colors.data[at+k])/255.f;
+      const float expected=row.colors[size_t(c)*4+k];
+      if(!std::isfinite(got)||!std::isfinite(expected)||got!=expected)return false;
+    }
+  }
+  return true;
+}
+// Paks-only native Tileset rows require an explicit local COLOR layout and
+// exactly the captured static culling policy. Resource/clip checks remain separate.
+inline bool tileset_color_publication(const Row* row,bool key_on,bool joined,bool cull_known,bool two_sided){
+ return key_on && joined && row && row->color_layout==1 && row->colors.size()==size_t(row->index_count)*4 &&
+  cull_known && two_sided==bool(row->flags&1u);
+}
 inline bool hlod_compatible(const Row& row,uint64_t vs,uint64_t fs,bool cull_known,bool two_sided) {
   return vs==0x2d2ac3c38992b7f0ull&&fs==0xb0ecc292e8661561ull&&
     (row.flags&4u)&&!(row.flags&2u)&&cull_known&&two_sided==bool(row.flags&1u);
@@ -98,7 +157,7 @@ inline Result lookup(std::span<const Row> rows,uint32_t count,const mesh_content
     bool same=true;if(uv)for(size_t c=0;c<64;++c)if(std::abs(uv[c]-r.uv[c])>1e-3f){same=false;break;}
     if(!same)continue;
     // Even equal UUIDs with different geometry/UV candidates remain disputed.
-    if(out.row && (out.row->material!=r.material||out.row->flags!=r.flags||!(out.row->sample==r.sample)||out.row->uv!=r.uv))return {Match::Ambiguous,{}};
+    if(out.row && (out.row->material!=r.material||out.row->flags!=r.flags||!(out.row->sample==r.sample)||out.row->uv!=r.uv||out.row->corners!=r.corners||out.row->color_layout!=r.color_layout||out.row->colors!=r.colors))return {Match::Ambiguous,{}};
     out={Match::Unique,&r};
   }
   return out;

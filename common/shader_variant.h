@@ -230,7 +230,8 @@ inline unsigned allowed(const char* file) {
 // here without updating that test's expected skips fails it.
 struct NoVariant { const char* key; const char* defines; };
 inline constexpr NoVariant kWaterNoVariant[] = {
-    {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
+    {"rt_native_tileset", "RT_NATIVE_TILESET=1"},
+    {"rt_hit_material_paks", "RT_NATIVE_TILESET=1"}};
 // Water deliberately traces the same-generation OMM reference TLAS. Its alpha
 // layout is the host's superset layout; unused OMM bindings need no shader variant.
 // rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).

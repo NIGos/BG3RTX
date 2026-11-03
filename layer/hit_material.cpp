@@ -1,6 +1,8 @@
 #include "hit_material.h"
 #include "assetdb.h"
 #include "../common/mesh_paks.h"
+#include "../common/pak_uv_join.h"
+#include <map>
 #include "omm_sampler.h"
 #include "../common/native_hit_capability.h"
 #include "../common/native_hit_join.h"
@@ -72,6 +74,7 @@ struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflect
  // The VS inputs at record (native_hit_instanced.h pair_check; wind: wind_clip_tolerance) and the
  // draw's instance count (the instance blocks of rt/hit_material_instanced_remap.hlsl).
  uint32_t family{},instances{};bool staged{};instanced::WindInputs inputs;
+ bool pak_color{}; // COLOR_0 certified against a joined local GR2; native XFB publishes all four channels
  bool generated{}; // rt_hit_material_generated: the row's recipe is a generated one (common/native_hit_generated.h)
 };
 struct Deferred {
@@ -142,22 +145,34 @@ const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
  return r && r->layout==native_vt::LayoutMask && !pool_mask_on.load(std::memory_order_relaxed)?nullptr:r;
 }
 std::vector<mesh_paks::Row> pak_meshes;
-std::atomic<uint64_t> pak_attempts{0},pak_matches{0};
+std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
 void paks_load(){
  pak_meshes.clear();if(!paks_on)return;
- const auto dir=std::filesystem::path(assetdb_file()).parent_path();std::error_code ec;
- for(std::filesystem::directory_iterator it(dir,ec),end;!ec&&it!=end;it.increment(ec)){
-  const auto path=it->path();const auto name=path.filename().string();
-  if(name!="mesh_paks_cov_paks.bin")continue;
-  const auto size=it->file_size(ec);if(ec||size>512ull*1024*1024){ec.clear();continue;}
+ const auto dir=std::filesystem::path(assetdb_file()).parent_path();
+ std::vector<std::string> names;std::error_code ec;
+ const auto manifest=dir/"mesh_paks_cov_paks2.manifest";
+ if(std::filesystem::exists(manifest,ec)){
+  if(ec || std::filesystem::file_size(manifest,ec)>1024*1024 || ec)return;
+  std::ifstream list(manifest);const std::string text((std::istreambuf_iterator<char>(list)),std::istreambuf_iterator<char>());
+  if(list.bad() || !mesh_paks::shard_names(text,names)){log("[hit material paks] invalid shard manifest; no rows published");return;}
+
+ }else names.push_back("mesh_paks_cov_paks.bin");
+ uint64_t total=0;std::vector<mesh_paks::Row> staged;
+ for(const auto& name:names){
+  const auto path=dir/name;const auto size=std::filesystem::file_size(path,ec);
+  if(ec || !mesh_paks::shard_size(size,total)){log("[hit material paks] missing/oversized shard %s; no rows published",name.c_str());return;}total+=size;
   std::ifstream file(path,std::ios::binary);std::vector<uint8_t> bytes(static_cast<size_t>(size));
-  if(!file.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))continue;
+  if(!file.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))return;
   std::vector<mesh_paks::Row> rows;
-  if(!mesh_paks::parse(bytes,rows)){log("[hit material paks] rejected malformed table %s",path.string().c_str());continue;}
-  for(auto& row:rows)pak_meshes.push_back(std::move(row));
+  if(!mesh_paks::parse(bytes,rows)){log("[hit material paks] rejected malformed table %s; no rows published",path.string().c_str());return;}
+  for(auto& row:rows)staged.push_back(std::move(row));
  }
- log("[hit material paks] loaded %llu candidates; only full geometry/UV verified HLOD draws can supply current resources and checked basis",(unsigned long long)pak_meshes.size());
+ pak_meshes=std::move(staged);
+ log("[hit material paks] loaded %llu candidates from %zu shards; HLOD full geometry/UV and native Tileset COLOR verification required",(unsigned long long)pak_meshes.size(),names.size());
 }
+
+bool pak_uv_get(const CmdState&,const DrawArgs&,const InstPipe&,std::array<float,64>&);
+void pak_uv_live_owners(std::set<uint64_t>&);
 const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
  if(!paks_rows()||!ip.ok||!ip.pos_float3||!ip.uv_ok||ip.pos_binding>=CmdState::kMaxVertexBindings||ip.uv_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
  const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
@@ -174,11 +189,21 @@ const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,cons
  in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
  if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
  in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
- mesh_content::Sample sample;if(!mesh_content::sample(in,sample))return nullptr;
- auto match=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);
- if(match.status!=mesh_paks::Match::Unique||!match.row||!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided))return nullptr;
  const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
- return mesh_paks::full_match(*match.row,in,uv,ip.uv_stride?ip.uv_stride:uint32_t(ub.stride))?match.row:nullptr;
+ mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
+ if(sampled && uv.data){
+  auto match=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);
+  if(match.status!=mesh_paks::Match::Unique||!match.row||!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided))return nullptr;
+  return mesh_paks::full_match(*match.row,in,uv,ip.uv_stride?ip.uv_stride:uint32_t(ub.stride))?match.row:nullptr;
+ }
+ // Device-local inputs use the same 32-corner UV join as native hair. A UV
+ // candidate cannot authorize publication without the full geometry witness.
+ lock.unlock();std::array<float,64> got{};
+ if(pak_uv_get(state,args,ip,got)){
+  const auto candidate=mesh_paks::lookup(pak_meshes,args.count,sampled?&sample:nullptr,got.data());
+  if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
+ }
+ return nullptr;
 }
 // The VS inputs of an instanced draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
 // at record: frame 0:0 word 0, camera 0:2 _m2/_m6; wind: scene 0:1 wind words, material 1:1 _m0.._m3;
@@ -274,7 +299,7 @@ bool mark_owner(VkCommandBuffer cmd,Slot& slot){
  if(std::find(slot.owners.begin(),slot.owners.end(),id)==slot.owners.end())slot.owners.push_back(id);return true;
 }
 uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_cast<VkCommandBuffer>(uintptr_t(command)));}
-bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_hot(CfgHot::rt_native_tileset)!=0);}
+bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_hot(CfgHot::rt_native_tileset)!=0 || paks_rows());}
 DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
@@ -455,8 +480,52 @@ bool current(const View& v){
  return i->second.image==v.image && i->second.creation.id==v.id && image!=tracker().images.end() && image->second.id==v.image_id;
 }
 bool material_current(const Material& m){
+ if(m.pak_color && !paks_rows() && !cfg_hot(CfgHot::rt_native_tileset))return false;
  if(m.row.reserved==2){for(const auto& v:m.tileset_views)if(!current(v))return false;return true;}
  return current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical);
+}
+// Only the exact audited Tileset pair may turn joined GR2 COLOR into a
+// material row. Position/UV and every COLOR corner are independently checked;
+// the existing XFB path publishes the same native RGBA at NtsColorOffset.
+const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& args){
+ if(!paks_rows() || !tileset_deferred(state.vs,state.fs) || args.kind!=1)return nullptr;
+ TilesetInputs inputs{};if(!geo_native_tileset_material_inputs(state.pipe[0],&inputs)||!inputs.valid)return nullptr;
+ const auto& pa=inputs.attributes[0];const auto& ca=inputs.attributes[4];const auto& ua=inputs.attributes[5];
+ if(pa.format!=VK_FORMAT_R32G32B32_SFLOAT || ua.format!=VK_FORMAT_R32G32_SFLOAT)return nullptr;
+ const auto encoding=ca.format==VK_FORMAT_R32G32B32A32_SFLOAT?mesh_paks::ColorEncoding::Float4:
+  ca.format==VK_FORMAT_R8G8B8A8_UNORM?mesh_paks::ColorEncoding::Unorm8Rgba:mesh_paks::ColorEncoding::Unknown;
+ if(encoding==mesh_paks::ColorEncoding::Unknown)return nullptr;
+ uint64_t stream_sizes[6]{};for(uint32_t i:{0u,4u,5u}){
+  const auto binding=inputs.attributes[i].binding;if(binding>=CmdState::kMaxVertexBindings)return nullptr;
+  stream_sizes[i]=geo_buffer_size(state.vb[binding].buffer);
+ }
+ const uint64_t index_size=geo_buffer_size(state.ib);
+ std::shared_lock lock(tracker().mu);
+ auto bytes=[&](VkBuffer b,uint64_t offset)->mesh_content::Bytes{
+  const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end() || bm->second.second>UINT64_MAX-offset)return {};
+  const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);
+  const uint64_t start=bm->second.second+offset;
+  if(mp==tracker().mapped.end() || range==tracker().mapped_ranges.end() || start<range->second.first || start>=range->second.second)return {};
+  // Mapping is bounded below by the underlying buffer in stream().
+  return {mp->second+start,range->second.second-start};
+ };
+ auto stream=[&](uint32_t location,uint32_t& stride)->mesh_content::Bytes{
+  const auto& a=inputs.attributes[location];
+  if(a.binding>=CmdState::kMaxVertexBindings)return {};const auto& vb=state.vb[a.binding];
+  stride=a.dynamic_stride?uint32_t(vb.stride):a.stride;if(!stride || vb.offset>UINT64_MAX-a.offset)return {};
+  const uint64_t at=vb.offset+a.offset,size=stream_sizes[location];if(at>=size)return {};
+  auto b=bytes(vb.buffer,at);b.size=(std::min)(b.size,size-at);return b;
+ };
+ mesh_content::Input in{};in.positions=stream(0,in.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
+ in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
+ if(!in.index_bytes || state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
+ const uint64_t at=state.ib_offset+uint64_t(args.first)*in.index_bytes,size=index_size;if(at>=size)return nullptr;
+ in.indices=bytes(state.ib,at);in.indices.size=(std::min)(in.indices.size,size-at);
+ mesh_content::Sample sample;if(!mesh_content::sample(in,sample))return nullptr;
+ const auto found=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);if(found.status!=mesh_paks::Match::Unique)return nullptr;
+ uint32_t uv_stride{},color_stride{};const auto uv=stream(5,uv_stride),color=stream(4,color_stride);
+ const bool joined=mesh_paks::full_match(*found.row,in,uv,uv_stride) && mesh_paks::color_match(*found.row,in,color,color_stride,encoding);
+ return mesh_paks::tileset_color_publication(found.row,paks_rows(),joined,inputs.cull_known,inputs.two_sided)?found.row:nullptr;
 }
 bool capture_tileset(VkCommandBuffer cmd,CmdState* resolved,Material& material){
  auto* state=cfg_hot(CfgHot::perf_hook_state)?resolved:cmd_state(cmd);if(!state || !tileset_deferred(state->vs,state->fs))return false;
@@ -574,11 +643,12 @@ void collect(bool force=false){
  // Only slots whose frame can still get a query (or whose owners still run) keep their source copy (source_releasable).
  for(auto& s:slots)if(source_releasable(bool(s.data.b),s.frame,now,std::all_of(s.owners.begin(),s.owners.end(),[&](uint64_t id){return retired(id);}))){
   destroy(s.data);s.data_bytes=0;}
- std::set<uint64_t> live;for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
+ std::set<uint64_t> live;pak_uv_live_owners(live);for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
  for(const auto& [id,p]:packets)live.insert(id);for(const auto& [id,q]:queries){live.insert(id);live.insert(q->source);live.insert(q->deferred->recording);}
  for(auto i=owners.begin();i!=owners.end();)if(!live.contains(i->first) && retired(i->first)){submitted_queues.erase(i->first);i=owners.erase(i);}else ++i;
  for(auto i=marked.begin();i!=marked.end();)if(!owners.contains(i->second))i=marked.erase(i);else ++i;
 }
+#include "pak_uv_readback.inl"
 std::shared_ptr<Deferred> packet_for(const Slot& slot){
  std::shared_ptr<Deferred> found;
  for(const auto& [id,p]:packets)if(p->frame==slot.frame && p->camera==slot.camera && p->camera_offset==slot.camera_offset){
@@ -639,7 +709,8 @@ PoolObserved& pool_observed(uint64_t frame){
 }
 void pool_log(uint64_t frame){
  if(paks_on){uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
-  log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; unsupported COLOR remains unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);}
+  log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
+  log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
  for(size_t i=0;i<size_t(pool::Status::Count);++i){draws+=c.draws[i];instances+=c.instances[i];}
  const PoolObserved empty{};
@@ -747,7 +818,7 @@ void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
 void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
- for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
+ for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();pak_uv_destroy();
  for(auto& s:slots){destroy(s.data);s={};}
  for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline,basis_pipeline,remap_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
  for(auto layout:{gather_layout,join_layout,basis_layout,remap_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
@@ -961,7 +1032,13 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // rt_hit_material_capture_unlocked: only this recording's thread writes this packet until it is
  // finalized (other threads read finalized packets only), so the binding reads run unlocked.
  const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
- Material material{};const bool captured=tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);
+ Material material{};
+ if(tileset && paks_rows() && !cfg_hot(CfgHot::rt_native_tileset)){
+  ++pak_attempts;const auto* pak=paks_tileset_color(*state,args);
+  if(pak){material.pak_color=true;material.row.padding[7]=1u;material.row.padding[6]=3u;++pak_matches;++pak_color_matches;} // local RGBA; Tileset reads R/G
+  else{++p.binding_declined;return false;} // paks-only never certifies an unmatched/ambiguous COLOR source
+ }
+ const bool captured=tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);
  if(unlocked)lock.lock();
  if(!captured){++p.binding_declined;if(counts)++counts->bindings;if(gen)++gen->bindings;return false;}
  // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
@@ -998,7 +1075,7 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
 }
 void pool_jobs_record(VkCommandBuffer,CmdState*);
 void deferred_finish(VkCommandBuffer cmd,bool readonly){
- if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuMaterial);pool_jobs_record(cmd,state);std::lock_guard lock(mutex);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
+ if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuMaterial);pool_jobs_record(cmd,state);std::lock_guard lock(mutex);pak_uv_record(cmd,state);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
  if(p.finalized){p.valid=false;return;}p.finalized=true;p.valid=p.valid && readonly && cfg_hot(CfgHot::rt_hit_material)!=0 && compute_ready(false);
  if(!own(cmd)){p.valid=false;return;}
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -1037,6 +1114,14 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
   (unsigned long long)p.frame,p.uncaptured_draws,p.uncaptured_instanced,(unsigned long long)p.uncaptured_vertices);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
+void pak_uv_forget_buffer(VkBuffer b){
+ std::lock_guard lock(mutex);
+ for(auto it=pak_uv_cache.begin();it!=pak_uv_cache.end();){
+  const auto& key=it->first;auto& e=it->second;
+  if(key[0]!=uint64_t(b) && key[6]!=uint64_t(b) && key[8]!=uint64_t(b)){++it;continue;}
+  if(e.xfb.b){e.invalid=true;++it;}else it=pak_uv_cache.erase(it);
+ }
+}
 bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
  *geometry=*position=0;if(!inst.ok || args.kind>1)return false;
  pool::Geometry g;g.indexed=args.kind==1;g.count=args.count;g.first=args.first;g.vertex_offset=g.indexed?args.vertex_offset:0;
@@ -1154,6 +1239,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   if(stored==pool::Table<PoolMaterial>::Store::Fresh)assign_material(pool_table.find(geometry)->payload,payload);
   due=recipe && basisPipeline && pool_job_due(geometry,frame,args,stride);
  }
+ if(!recipe && pak_fallback && keyed && poolPipeline && basisPipeline)return pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
  return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
 }
 PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh& mesh){

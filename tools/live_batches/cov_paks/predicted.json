@@ -3,10 +3,31 @@
   "authorization": "NOT_AUTHORIZED_NOT_QUEUED",
   "key": "rt_hit_material_paks",
   "prediction_order": "Written before any live run; no live run has been requested or performed.",
+  "candidate_revision": "cov-paks2 working tree on babbb778; git metadata read-only, no commit",
+  "offline_scope": {
+    "catalogue_candidates": 45356,
+    "metadata_rejected": 3541,
+    "eligible_rows": 41815,
+    "eligible_gr2_sources": 21712,
+    "fresh_decoded_rows": 0,
+    "fresh_joined_rows": 0,
+    "unprocessed_rows": 41815,
+    "runtime_aggregate_table_limit_bytes": 2147483648,
+    "default_binary_shard_limit_bytes": 503316480,
+    "verification": "Host/core build and eleven focused CTests pass; 12 Python cases pass; 236/236 shader requests byte-identical to babbb778 with zero DXC compiles.",
+    "blocker": "LSLib v1.20.4 LSLib.dll/granny2.dll unavailable; restricted network download failed. Inventory is not a generated join table.",
+    "color_contract": "Explicit native COLOR_0 RGBA only; audited Tileset blend reads R/G, FLUID lava heat uses B/A. ENV_Lava_AlphaTest_Flowmap_Bounce_VT VS reads G/B for displacement/phase and FS needs animated VT flow UVs. Unknown or multiple layouts fail closed.",
+    "device_local_contract": "One-time 32-corner UV readback selects candidates only; it does not replace full geometry/COLOR verification or certify a material row."
+  },
   "missing_observables": [
     "Full real GR2 table generation and decoder/native ObjectID audit",
     "HLOD fallback current resources and checked basis publication, with unchanged previously qualified rows",
-    "Lava/Tileset vertex-colour recipes and equivalent resources remain unsupported; candidate identity alone does not qualify them"
+    "Fresh COLOR_0 table generation and real decoded channel verification remain blocked on the native decoder",
+    "Animated lava heat still needs flow-noise, distance and rock-mask recipe inputs; COLOR alone cannot qualify its shading",
+    "ENV lava Flowmap_Bounce needs an animated depth/per-draw geometry path and a VT flow-UV material recipe; static HLOD fallback is invalid for this WPO shader",
+    "Device-local UV candidate readback does not establish full GR2 geometry/COLOR equality",
+    "Previously qualified rows must remain unchanged with the new key off",
+    "Pak Tileset capture uses the native Tileset layout, which conservatively skips unsupported RT water variants. Ultra water parity is not qualified; this batch cannot promote the key."
   ],
   "scenes": {
     "S8": {

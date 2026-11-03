@@ -1,24 +1,29 @@
-## Pak mesh join and restricted HLOD fallback (branch cov-paks, PARTIAL_OFFLINE, 2026-11-03)
-- New tools.assets.mesh_paks reuses the groom LSLib v1.20.4 native GR2 reader.
-- Local-only JSON/bin retain v1 content ID, 32 UV samples, full ordered position/UV
-  corners, material UUID, texture metadata, colour intent and two-sidedness.
-- Cache keys include source, material, tool and decoder bytes; 25 s heartbeat.
-- ObjectID suffix is ExportOrder, never group ordinal. Unique native name plus
-  one full-range MaterialIndex 0 group only; conflicting assignments fail closed.
-- rt_hit_material_paks=0, Experimental GUI; enable with instanced capture at startup.
-- Existing recipes win. Exact HLOD_GM recipe, all position bits/UVs, static cull
-  state, current captured descriptors/overrides and checked basis gate new rows.
-- Pak two-sidedness uses the existing row flag. No ABI/shader/request delta.
-- Key off publishes no pak rows; ambiguous, stale or unsupported inputs stay unknown.
-- Lava/Tileset vertex-colour recipes and unmapped-input fallback remain incomplete.
-- Native ExportOrder/LOD cannot be independently verified by the current GR2 reader.
-- Generated 30 GR2 -> 74 rows (40 HLOD / 13 lava / 21 Tileset), 0 failures;
-  10 audited HLOD_GM rows. Final local JSON/bin: mesh_paks_cov_paks (76.1 MB bin).
-- Tileset repeat: 10/10 cache hits, 2.48 s versus 13.5 s decoding.
-- Full host build and 7 focused CTests pass; 9 Python cases pass. Full-match
-  mutations beyond the 32 samples, tolerance bounds and malformed v2 reject.
-- Live draft tools/live_batches/cov_paks: S6 forge lava, camp, S8; OFF/ON/OFF,
-  missing-record/attempted and qualified shares, float scene energy, GI GPU ms.
-- Three plans 174 s each; estimate 14.7 min, 570 MB. Fake-runner dryrun passed.
-- No game launch, live qualification, measured coverage/energy/GPU cost or promotion.
-- No commit, merge or git metadata writes; assetdb additions only, never shipped.
+## Pak material coverage (branch cov-paks2, PARTIAL_OFFLINE, 2026-11-03)
+- Continues babbb778; no git metadata writes, commit, game launch or live promotion.
+- B3PAKS1 v3 retains full ordered COLOR_0 RGBA beside position/UV corners.
+- Native descriptor must declare exactly one Float4/Byte4 colour map; absent,
+  mixed, multiple, non-finite and unknown layouts fail closed, never default white.
+- Audited Tileset reads R/G. Paks alone enables its native XFB/9-texture path;
+  full geometry, UV, COLOR, cull, resource and basis checks gate its rows.
+- Existing native-Tileset opt-in stays independent; paks-only rows stop on key off.
+- S6 FLUID lava uses B/A plus flow noise, rock mask and view distance. ENV lava
+  Flowmap_Bounce VS uses G/B for displacement/phase; FS uses animated VT flow UV.
+  Channels are retained offline; these missing dynamic recipes stay unqualified.
+- Device-local HLOD inputs get one-time 32-corner UV readback after submit retirement.
+  Unique UV candidates still need full geometry proof before material publication.
+- Reset recordings retry; destroyed buffers invalidate candidates; jobs are bounded.
+- Batch covers all matching lava/Tileset/HLOD sources, with 25 s progress,
+  per-GR2 cache/checkpoints, resume offsets and immutable streamed <=480 MB shards.
+- Complete manifests load transactionally, <=512 MB/file and <=2 GB aggregate.
+- Inventory: 45,356 candidates, 3,541 metadata rejected, 41,815 eligible rows
+  in 21,712 GR2s. Fresh decoded/joined 0; unprocessed 41,815, not rejected.
+- Blocked: LSLib v1.20.4 native DLLs unavailable; restricted-network download failed.
+  Only shared addition: mesh_paks_cov_paks2_inventory.json. Old 74-row table preserved.
+- Host/core builds pass; 11 focused CTests and 12 Python cases pass. Python v3
+  fixture and existing 74-row v2 table both pass the C++ reader.
+- 236/236 shader requests byte-identical to babbb778; 0 DXC compiles; ABI/request delta 0.
+- cov_paks predictions updated; fake-runner dryrun passed, no watched queue used.
+- S6/camp/S8 draft checks same-run shares, float scene energy and GI GPU ms;
+  no measured gain/cost. Pak Tileset layout skips unsupported RT water variants.
+- Before live: supply decoder, generate bounded real tables, verify COLOR joins;
+  whole-catalogue loading above 2 GB and Ultra water parity remain unresolved.

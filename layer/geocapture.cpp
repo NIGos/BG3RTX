@@ -1813,8 +1813,8 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
     g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : cfg_int("rt_hit_material",0) && hair_split ? 64 : 24) : 16;
     g_stride_without_tileset=g_stride;
-    g_tileset_capture=g_alpha_mode && hair_split && cfg_hot(CfgHot::rt_native_tileset)!=0;
-    if(cfg_hot(CfgHot::rt_native_tileset) && !g_tileset_capture)log("[geo] rt_native_tileset rejected: restart with rt_alpha=1 rt_bvh_split=1");
+    g_tileset_capture=g_alpha_mode && hair_split && (cfg_hot(CfgHot::rt_native_tileset)!=0 || cfg_hot(CfgHot::rt_hit_material_paks)!=0);
+    if((cfg_hot(CfgHot::rt_native_tileset) || cfg_hot(CfgHot::rt_hit_material_paks)) && !g_tileset_capture)log("[geo] native Tileset / pak COLOR rejected: restart with rt_alpha=1 rt_bvh_split=1");
     if(g_tileset_capture)g_stride=(std::max)(g_stride,cfg_int("rt_hit_material",0)?80u:40u);
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
@@ -2720,7 +2720,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  if(c->rt && g_tileset_capture && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
+  if(c->rt && g_tileset_capture && (cfg_hot(CfgHot::rt_native_tileset) || cfg_hot(CfgHot::rt_hit_material_paks)) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
@@ -3103,6 +3103,7 @@ void geo_device_destroyed(DeviceData* dd) {
 
 // From the tracker's vkDestroyBuffer hook (the one hook for it).
 void geo_forget_buffer(VkBuffer b) {
+  native_hit::pak_uv_forget_buffer(b);
   std::lock_guard<std::mutex> lock(g_mu);
   g_buffer_usage.erase(b);
   g_buffer_size.erase(b);

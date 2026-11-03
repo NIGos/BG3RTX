@@ -52,11 +52,12 @@ class MeshPaksTests(unittest.TestCase):
     def test_strict_native_decoder(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'m.bin'; path.write_bytes(self.dump())
-            v, i, groups = p.read_dump(path)['Mesh']
+            v, i, groups, colors = p.read_dump(path)['Mesh']
+            self.assertIsNone(colors)
             np.testing.assert_array_equal(v, self.v)
             np.testing.assert_array_equal(i, self.i)
             np.testing.assert_array_equal(groups, [[0, 0, 1]])
-            for raw in (self.dump()[:-1], self.dump()+b'!', b'GR2P'+struct.pack('<I', 2)):
+            for raw in (self.dump()[:-1], self.dump()+b'!', b'GR2P'+struct.pack('<I', 3)):
                 path.write_bytes(raw)
                 with self.assertRaises(ValueError):
                     p.read_dump(path)
@@ -95,16 +96,67 @@ class MeshPaksTests(unittest.TestCase):
             path = Path(tmp)/'corners'; path.write_bytes(full)
             row = dict(**sig, **p.material_info(self.doc, self.mid), full_geometry_cache=str(path))
             raw = p.binary_table([row])
-            self.assertEqual(len(raw), 16 + 840 + 4 + 60)
-            self.assertEqual(struct.unpack_from('<8sII', raw), (b'B3PAKS1\0', 2, 1))
+            self.assertEqual(len(raw), 16 + 840 + 4 + 60 + 8)
+            self.assertEqual(struct.unpack_from('<8sII', raw), (b'B3PAKS1\0', 3, 1))
             self.assertEqual(raw[16+804:16+840].decode(), self.mid)
-            self.assertEqual(raw[-60:], full)
+            self.assertEqual(raw[-68:-8], full)
             row['template'] = 'Public/Engine/Assets/Materials/Engine_Default_HLOD_GM_VT.lsf'
             tagged = p.binary_table([row])
             self.assertEqual(struct.unpack_from('<I', tagged, 16+16)[0], 7)
             path.write_bytes(full[:-1])
             with self.assertRaises(ValueError):
                 p.binary_table([row])
+
+    def test_native_color_layout_and_order(self):
+        colors = np.array([[0, .2, .4, 1], [1, 0, 0, .5], [.1, .3, .7, 1]], '<f4')
+        name = b'Mesh'
+        raw = (b'GR2P' + struct.pack('<III', 2, 1, len(name)) + name
+               + struct.pack('<IIII', 3, 3, 1, 1) + self.v.tobytes() + colors.tobytes()
+               + self.i.tobytes() + struct.pack('<III', 0, 0, 1))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'dump'; path.write_bytes(raw)
+            _, indices, _, decoded = p.read_dump(path)['Mesh']
+            np.testing.assert_array_equal(decoded[indices], colors)
+            for broken in (raw[:-1], raw[:32] + struct.pack('<I', 2) + raw[36:]):
+                path.write_bytes(broken)
+                with self.assertRaises(ValueError): p.read_dump(path)
+            sig, full = p.signature(self.v, self.i)
+            geom = Path(tmp)/'corners'; geom.write_bytes(full)
+            color = Path(tmp)/'color'; color.write_bytes(colors.tobytes())
+            import hashlib
+            row = dict(**sig, **p.material_info(self.doc, self.mid), full_geometry_cache=str(geom),
+                       color_layout=1, color_sha256=hashlib.sha256(color.read_bytes()).hexdigest(),
+                       full_color_cache=str(color))
+            encoded = p.binary_table([row])
+            self.assertEqual(encoded[-48:], colors.tobytes())
+            self.assertEqual(struct.unpack_from('<II', encoded, len(encoded)-56), (1, 3))
+            color.write_bytes(color.read_bytes()[:-1])
+            with self.assertRaises(ValueError): p.binary_table([row])
+            row['color_layout'] = 2
+            with self.assertRaises(ValueError): p.binary_table([row])
+
+    def test_catalogue_inventory_tracks_rejected_and_unprocessed(self):
+        row = dict(self.doc['rows'][0], source='bad.GR2', ambiguous=True)
+        self.doc['rows'].append(row)
+        plan = p.catalogue_plan(self.doc)
+        self.assertEqual(plan['counts'], dict(candidates=2, eligible=1, rejected_metadata=1,
+                                             decoded=0, joined=0, unprocessed=1, sources=1))
+        self.assertEqual(plan['families']['Lava.lsf'], dict(candidates=2, eligible=1))
+
+    def test_streaming_bounded_immutable_shards(self):
+        sig, full = p.signature(self.v, self.i)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'corners'; path.write_bytes(full)
+            row = dict(**sig, **p.material_info(self.doc, self.mid), full_geometry_cache=str(path))
+            target = Path(tmp)/'mesh_paks_cov_paks2.json'
+            names = p.write_sharded_tables([row, row, row], target, 1840)
+            self.assertEqual(names, ['mesh_paks_cov_paks2_0000.bin', 'mesh_paks_cov_paks2_0001.bin'])
+            for name, count in zip(names, (2, 1)):
+                raw = (Path(tmp)/name).read_bytes()
+                self.assertLessEqual(len(raw), 1840)
+                self.assertEqual(struct.unpack_from('<8sII', raw), (b'B3PAKS1\0', 3, count))
+            with self.assertRaises(ValueError): p.write_sharded_tables([row], target, 1840)
+            with self.assertRaises(ValueError): p.write_sharded_tables([row], Path(tmp)/'too-small.json', 16)
 
     def test_incremental_cache_and_group_failure(self):
         class Pak:

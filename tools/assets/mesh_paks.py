@@ -29,7 +29,7 @@ from .mesh_materials import write_new
 from ..hair_groom.asset import content_id
 
 FORMAT = 'BG3RTX_MESH_PAKS_V1'
-VERSION = 'mesh-paks-1'
+VERSION = 'mesh-paks-2-color'
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -53,13 +53,22 @@ def read_dump(path):
     def u32():
         return struct.unpack('<I', take(4))[0]
 
-    if take(4) != b'GR2P' or u32() != 1:
+    if take(4) != b'GR2P':
+        raise ValueError('unsupported GR2P magic')
+    version = u32()
+    if version not in (1, 2):
         raise ValueError('unsupported GR2P version')
     result = {}
     for _ in range(u32()):
         name = take(u32()).decode('utf-8')
         nv, ni, ng = u32(), u32(), u32()
+        layout = u32() if version == 2 else 0
+        if layout not in (0, 1):
+            raise ValueError('ambiguous native COLOR_0 layout')
         verts = np.frombuffer(take(nv * 20), '<f4').reshape(nv, 5)
+        colors = np.frombuffer(take(nv * 16), '<f4').reshape(nv, 4) if layout else None
+        if colors is not None and (not np.isfinite(colors).all() or np.any((colors < 0) | (colors > 1))):
+            raise ValueError('non-finite/out-of-range native COLOR_0')
         idx = np.frombuffer(take(ni * 4), '<u4')
         groups = np.frombuffer(take(ng * 12), '<u4').reshape(ng, 3)
         if name in result:
@@ -69,7 +78,7 @@ def read_dump(path):
         for _, first, count in groups:
             if not count or int(first) + int(count) > ni // 3:
                 raise ValueError('invalid native triangle group')
-        result[name] = (verts, idx, groups)
+        result[name] = (verts, idx, groups, colors)
     if at != len(raw):
         raise ValueError('trailing GR2P data')
     return result
@@ -163,6 +172,29 @@ def select_rows(doc, match=('lava', 'tileset', 'hlod')):
     return result
 
 
+def catalogue_plan(doc, match=('lava', 'tileset', 'hlod')):
+    """Inventory all requested rows before decoding; blocked work is not rejection."""
+    selected = select_rows(doc, match)
+    wanted = {k for k, m in doc['materials'].items()
+              if any(s.lower() in m['source'].lower() for s in match)}
+    candidates = [r for r in doc['rows'] if r['material_id'] in wanted]
+    families = {}
+    for row in candidates:
+        family = Path(doc['materials'][row['material_id']]['source']).name
+        f = families.setdefault(family, dict(candidates=0, eligible=0))
+        f['candidates'] += 1
+    for row in selected:
+        families[Path(doc['materials'][row['material_id']]['source']).name]['eligible'] += 1
+    return dict(format=FORMAT, generated_locally=True, redistributable=False,
+                qualification='inventory only; no runtime joins or quality qualification',
+                counts=dict(candidates=len(candidates), eligible=len(selected),
+                            rejected_metadata=len(candidates)-len(selected), decoded=0, joined=0,
+                            unprocessed=len(selected), sources=len({r['source'] for r in selected})),
+                families=families,
+                sources=[dict(source=source, rows=count) for source, count in sorted(
+                    __import__('collections').Counter(r['source'] for r in selected).items())])
+
+
 def dump(lslib, source, output, pwsh):
     script = Path(__file__).with_name('mesh_paks_dump.ps1')
     # communicate timeout emits no hidden child work after returning.
@@ -179,8 +211,8 @@ def dump(lslib, source, output, pwsh):
 
 
 def binary_table(rows):
-    # v2 appends full native ordered position/UV corners to each candidate.
-    data = bytearray(struct.pack('<8sII', b'B3PAKS1\0', 2, len(rows)))
+    # v3 retains native COLOR_0 in the same ordered-corner domain.
+    data = bytearray(struct.pack('<8sII', b'B3PAKS1\0', 3, len(rows)))
     for r in rows:
         mid = r['material_id'].encode('ascii')
         if len(mid) != 36:
@@ -193,25 +225,67 @@ def binary_table(rows):
         if len(full) != r['index_count'] * 20 or hashlib.sha256(full).hexdigest() != r['geometry_sha256']:
             raise ValueError('full geometry stream missing or changed')
         data += struct.pack('<I', r['index_count']) + full
+        layout = r.get('color_layout', 0)
+        if layout not in (0, 1):
+            raise ValueError('ambiguous COLOR_0 layout')
+        color = Path(r['full_color_cache']).read_bytes() if layout else b''
+        if layout and (len(color) != r['index_count'] * 16 or hashlib.sha256(color).hexdigest() != r['color_sha256']
+                       or not np.isfinite(np.frombuffer(color, '<f4')).all()
+                       or np.any((np.frombuffer(color, '<f4') < 0) | (np.frombuffer(color, '<f4') > 1))):
+            raise ValueError('full COLOR_0 stream missing or changed')
+        data += struct.pack('<II', layout, r['index_count'] if layout else 0) + color
     return bytes(data)
 
 
-def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset', 'hlod')):
+def write_sharded_tables(rows, output, max_bytes=480 * 1024 * 1024):
+    """Stream immutable tables below the runtime 512 MB per-file parser bound.
+
+    The caller publishes the JSON manifest last. Metadata alone stays in memory;
+    each geometry/color stream is read, validated and released one row at a time.
+    """
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    buckets, current, size = [], [], 16
+    for row in rows:
+        row_size = 840 + 4 + row['index_count'] * 20 + 8
+        if row.get('color_layout', 0): row_size += row['index_count'] * 16
+        if row_size + 16 > max_bytes:
+            raise ValueError('one mesh exceeds shard byte budget; cannot split a mesh identity')
+        if size + row_size > max_bytes and current:
+            buckets.append(current); current, size = [], 16
+        current.append(row); size += row_size
+    if current or not buckets: buckets.append(current)
+    names = [output.with_name(output.stem + f'_{i:04d}.bin') for i in range(len(buckets))]
+    if any(path.exists() for path in names):
+        raise ValueError('all binary shards must be NEW files')
+    for number, (path, bucket) in enumerate(zip(names, buckets), 1):
+        with path.open('xb') as stream:
+            stream.write(struct.pack('<8sII', b'B3PAKS1\0', 3, len(bucket)))
+            for row in bucket:
+                stream.write(binary_table([row])[16:])
+        say(f'[mesh paks] shard {number}/{len(names)}: {len(bucket)} rows, {path.stat().st_size} bytes')
+    return [path.name for path in names]
+
+
+def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset', 'hlod'), start_source=0):
     cache = Path(cache); cache.mkdir(parents=True, exist_ok=True)
     groups = {}
     for row in select_rows(doc, match):
         groups.setdefault(row['source'], []).append(row)
     sources = sorted(groups, key=lambda s: (not any('lava' in doc['materials'][r['material_id']]['source'].lower() for r in groups[s]), s))
-    if limit:
-        sources = sources[:limit]
-    progress = dict(done=0, failures=0, hits=0)
+    if start_source < 0 or limit < 0:
+        raise ValueError('source offset and limit must be nonnegative')
+    total_sources = len(sources)
+    sources = sources[start_source:start_source+limit if limit else None]
+    selected_sources = set(sources)
+    progress = dict(done=0, failures=0, hits=0, candidates=sum(len(groups[s]) for s in sources), decoded=0)
     start = time.monotonic(); stop = threading.Event()
 
     def report():
         elapsed = max(time.monotonic()-start, 1e-9)
         rate = progress['done']/elapsed
         say(f"[mesh paks] {progress['done']}/{len(sources)} GR2, {rate:.2f}/s, "
-            f"ETA {(len(sources)-progress['done'])/max(rate,1e-9):.0f}s, failures {progress['failures']}, cached {progress['hits']}")
+            f"ETA {(len(sources)-progress['done'])/max(rate,1e-9):.0f}s, decoded {progress['decoded']}, failures {progress['failures']}, cached {progress['hits']}")
 
     def heartbeat():
         while not stop.wait(25):
@@ -219,6 +293,7 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
 
     thread = threading.Thread(target=heartbeat, daemon=True); thread.start()
     output, failures = [], []
+    checkpoint_path = cache / ('batch-' + hashlib.sha256(json.dumps(sources).encode()).hexdigest()[:16] + '.checkpoint')
     decoder_identity = hashlib.sha256(Path(__file__).read_bytes()).digest()
     for dependency in ('LSLib.dll', 'granny2.dll'):
         dep = Path(lslib)/dependency
@@ -236,12 +311,13 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                 if record.exists():
                     try:
                         saved = json.loads(record.read_text(encoding='utf-8'))
-                        binary_table(saved['rows'])  # a missing/truncated full stream invalidates the cache
+                        for cached_row in saved['rows']:
+                            binary_table([cached_row])  # validate one geometry stream at a time
                     except (OSError, ValueError, KeyError, struct.error):
                         saved = None
                     if saved is not None:
                         output.extend(saved['rows']); failures.extend(saved['failures'])
-                        progress['failures'] += len(saved['failures']); progress['hits'] += 1
+                        progress['failures'] += len(saved['failures']); progress['hits'] += 1; progress['decoded'] += len(saved['rows'])
                         continue
                 with tempfile.TemporaryDirectory(prefix='bg3-paks-') as tmp:
                     src, decoded = Path(tmp)/'input.gr2', Path(tmp)/'decoded.bin'
@@ -251,7 +327,7 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                     for r in relevant:
                         try:
                             name, export_order = mesh_object(r['object_id'])
-                            verts, idx, native_groups = meshes[name]
+                            verts, idx, native_groups, colors = meshes[name]
                             # VisualBank rows address whole named meshes. Only
                             # a single full-range material group is supported;
                             # never mistake ExportOrder for a group ordinal.
@@ -265,7 +341,16 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                             if not full_path.exists() or full_path.read_bytes() != full:
                                 # Workspace cache only, never shared assetdb.
                                 full_path.write_bytes(full)
-                            built.append(dict(**sig, **material_info(doc, r['material_id']), source=source,
+                            color_info = dict(color_layout=0, vertex_color_semantic=None)
+                            if colors is not None:
+                                color = np.ascontiguousarray(colors[idx], '<f4').tobytes()
+                                color_hash = hashlib.sha256(color).hexdigest()
+                                color_path = cache / (color_hash + '.colors')
+                                if not color_path.exists() or color_path.read_bytes() != color:
+                                    color_path.write_bytes(color)
+                                color_info = dict(color_layout=1, vertex_color_semantic='COLOR_0_RGBA',
+                                                  color_sha256=color_hash, full_color_cache=str(color_path.resolve()))
+                            built.append(dict(**sig, **material_info(doc, r['material_id']), **color_info, source=source,
                                               object_id=r['object_id'], lod=r['lod'],
                                               export_order=export_order,
                                               identity='source + unique native mesh name; single full-range material group',
@@ -276,50 +361,73 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                     staging = record.with_suffix('.tmp')
                     staging.write_text(json.dumps(dict(rows=built, failures=rejected), sort_keys=True), encoding='utf-8')
                     staging.replace(record)
-                    output.extend(built); failures.extend(rejected); progress['failures'] += len(rejected)
+                    output.extend(built); failures.extend(rejected); progress['failures'] += len(rejected); progress['decoded'] += len(built)
             except (OSError, ValueError, RuntimeError, KeyError) as e:
                 failures.append(dict(source=source, error=str(e))); progress['failures'] += 1
             finally:
                 progress['done'] += 1
+                snapshot = dict(format=FORMAT, status='PARTIAL_OFFLINE', counts=dict(progress),
+                                total_sources=len(sources),
+                                last_source=source, runtime_join_ready=False)
+                staging = checkpoint_path.with_suffix('.tmp')
+                staging.write_text(json.dumps(snapshot, sort_keys=True), encoding='utf-8')
+                staging.replace(checkpoint_path)
     finally:
         stop.set(); thread.join(); report()
     return dict(format=FORMAT, runtime_join_ready=False,
                 qualification='candidate only; exact geometry/basis/current texture views required',
-                rows=output, failures=failures, counts=dict(progress, rows=len(output)),
+                rows=output, failures=failures, counts=dict(progress, rows=len(output), total_sources=total_sources,
+                    source_offset=start_source, selected_sources=len(sources), joined=0,
+                    unprocessed=sum(len(v) for k, v in groups.items() if k not in selected_sources)),
                 generated_locally=True, redistributable=False)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('--plan-only', action='store_true', help='NEW inventory JSON for every matching catalogue row; no decoder required')
     ap.add_argument('--catalogue', required=True, type=Path)
     ap.add_argument('--cache', required=True, type=Path)
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--game', default=game_data())
     ap.add_argument('--lslib', default=lslib_tools())
     ap.add_argument('--pwsh', default=shutil.which('pwsh'))
-    ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--limit', type=int, default=0, help='GR2 sources per incremental shard, 0 means all')
+    ap.add_argument('--shard-mb', type=int, default=480, help='stream tables below 512 MB loader cap; manifest published last')
+    ap.add_argument('--start-source', type=int, default=0, help='offset in deterministic lava-first source order')
     ap.add_argument('--match', nargs='+', default=['lava', 'tileset', 'hlod'])
     args = ap.parse_args()
     if os.name == 'nt':
         import ctypes
         ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x4000)
+    if args.limit < 0 or args.start_source < 0 or not 1 <= args.shard_mb <= 480:
+        ap.error('source offset/limit must be nonnegative and shard-mb must be in [1,480]')
+    if args.game:
+        install = Path(args.game).resolve().parent
+        if any(p.resolve().is_relative_to(install) for p in (args.out, args.cache, args.out.with_suffix('.manifest'))):
+            ap.error('outputs/cache must be outside game install')
+    if args.plan_only:
+        doc = json.loads(args.catalogue.read_text(encoding='utf-8'))
+        result = catalogue_plan(doc, args.match)
+        write_new(args.out, result)
+        say('[mesh paks] inventory ' + json.dumps(result['counts'], sort_keys=True))
+        return 0
     if not args.game or not args.lslib or not args.pwsh:
         ap.error('require installed game Data, LSLib v1.20.4 Tools, and PowerShell 7 (--game/--lslib/--pwsh)')
     if not (Path(args.lslib)/'granny2.dll').is_file():
         ap.error('LSLib Tools must include granny2.dll')
-    companion = args.out.with_suffix('.bin')
+    companion = args.out.with_suffix('.manifest')
     if args.out.exists() or companion.exists():
         ap.error('output and binary companion must be NEW files')
     install = Path(args.game).resolve().parent
     if any(p.resolve().is_relative_to(install) for p in (args.out, args.cache, companion)):
         ap.error('outputs/cache must be outside game install')
     doc = json.loads(args.catalogue.read_text(encoding='utf-8'))
-    result = build(doc, PackageSet(args.game), args.lslib, args.cache, args.pwsh, args.limit, args.match)
-    binary = binary_table(result['rows'])
+    result = build(doc, PackageSet(args.game), args.lslib, args.cache, args.pwsh, args.limit, args.match, args.start_source)
+    result['binary_shards'] = write_sharded_tables(result['rows'], args.out, args.shard_mb * 1024 * 1024)
     write_new(args.out, result)
-    with companion.open('xb') as f:
-        f.write(binary)
-    say(f'[mesh paks] wrote {args.out}, {companion}; {len(result["rows"])} candidates, {len(result["failures"])} failures')
+    with companion.open('x', encoding='utf-8', newline='\n') as manifest:
+        manifest.write('\n'.join(result['binary_shards']) + '\n')  # complete-set marker last
+    say(f'[mesh paks] wrote {args.out}, {len(result["binary_shards"])} shards; {len(result["rows"])} candidates, {len(result["failures"])} failures')
     return 0 if result['rows'] else 1
 
 

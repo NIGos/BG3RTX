@@ -6,6 +6,8 @@ namespace bg3::native_hit {
 // Internal main-AlphaDSL extension. Never part of the public host/core ABI.
 inline constexpr uint32_t cache_slots=nh_cache_slots,sampler_slots=nh_sampler_slots,record_bytes=256,max_records=nh_alpha_rows;
 bool enabled();
+// Invalidate retained pak UV candidates before a game buffer handle can be reused.
+void pak_uv_forget_buffer(VkBuffer);
 // Bytes the recycled-buffer pool retains (rt_vram_guard breakdown and yield 2).
 uint64_t recycled_bytes();
 // rt_hit_material_instanced at startup: the G-buffer VS of an instanced wind / 2S pair gets the

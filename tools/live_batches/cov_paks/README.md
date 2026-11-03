@@ -37,7 +37,10 @@ harness; this PC's dryrun used a temporary PATH adapter to installed Python.
 Before an authorized live batch, stage plans under the test checkout's
 captures/live_batches/cov_paks/plans and generate the local join table with
 `python -m tools.assets.mesh_paks --help`. Do not ship generated pak data.
-Lava/Tileset identity candidates do not establish their vertex-colour recipes.
+Identity candidates alone do not establish vertex-colour recipes. cov-paks2 adds
+full native COLOR_0 validation for the audited Tileset pair, behind paks alone.
+The native Tileset layout conservatively skips unsupported RT water variants;
+this draft cannot qualify Ultra water parity or promote the key.
 
 Local generation completed: 30 GR2 -> 74 rows (40 HLOD, 13 lava, 21 Tileset),
 zero decode failures. Ten rows carry the audited HLOD_GM recipe tag. Fixed runtime
@@ -48,5 +51,11 @@ ExportOrder/LOD fields are unavailable in this decoder; source/name conflicts
 are rejected across the whole catalogue. Limited decoding cannot establish
 uniqueness against every unseen GR2. Current per-draw resources and cull checks
 remain mandatory. No positive live share or energy prediction follows from row count.
+The immutable v2 sample above is preserved. The new full inventory has 45,356
+candidates: 3,541 metadata rejected and 41,815 eligible rows in 21,712 GR2s.
+Fresh decoded/joined rows are zero; LSLib v1.20.4 DLLs are currently unavailable.
+See `docs/progress/cov-paks.md` and `tools/assets/mesh_content_id.md` for the v3
+COLOR contract, bounded shard workflow, and remaining animated lava recipes.
+Device-local UV readback computes candidates, not full geometry proof.
 Every diag-on window requires exact matches, records and ready basis above zero;
 a loader-only or zero-participation run is INVALID.
