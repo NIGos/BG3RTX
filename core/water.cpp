@@ -1238,7 +1238,8 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
       same_lights=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
     }
   }
-  const bool want_hit=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game;
+  const bool want_hit=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game &&
+      hit_shade_inputs_alive(g_st.frame,now,ls_list && same_lights);
   const bool shift_on=host->cfg_int("rt_water_compose_shift",0) != 0;
   bool previous_hit=false,shade_pass=false;
   if(hit_shade_previous_frame(g_st.frame,now,want_hit,shift_on) && host->rt_hit_material_use){

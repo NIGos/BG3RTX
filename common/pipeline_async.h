@@ -37,10 +37,10 @@ struct Result {
 enum class State { kStarted, kBuilding, kReady, kFailed };
 
 // Select only within one pass and layout. Layout retirement clears the caller's previous handle.
-// Pending and failed replacements must not punch a hole in already running RT work.
+// Pending and failed replacements reuse previous work only if its resource mode is compatible.
 template <class Handle>
-constexpr Handle select_pipeline(State state, Handle ready, Handle previous) {
-  return state == State::kReady && ready ? ready : previous;
+constexpr Handle select_pipeline(State state, Handle ready, Handle previous, bool previous_compatible = true) {
+  return state == State::kReady && ready ? ready : previous_compatible ? previous : Handle{};
 }
 
 inline constexpr unsigned kFailCooldown = 240;   // polls of a failed key before it is built again

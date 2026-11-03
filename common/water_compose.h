@@ -330,6 +330,12 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
 // Borrowed lights, TLAS and camera must describe one lighting frame. The immediately
 // previous frame is usable only when compose shifts the ray into that frame's space.
 // Failure selects ordinary composition, preserving shadows and refraction.
+// Scene/material retention does not retain the game's lighting buffers, views or
+// descriptor sets. Same-frame inputs are safe; F-1 inputs only when this frame binds
+// the very same lighting list (then the game still owns them after a level unload).
+inline constexpr bool hit_shade_inputs_alive(uint64_t lighting_frame, uint64_t now, bool seen_this_frame) {
+  return lighting_frame && (lighting_frame == now || seen_this_frame);
+}
 inline constexpr bool hit_shade_frame_ok(uint64_t lighting_frame, uint64_t now, bool same_tlas,
                                          bool same_lights, bool shifted) {
   return lighting_frame && same_tlas && same_lights &&
