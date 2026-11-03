@@ -133,6 +133,14 @@ const Loaded* find(uint64_t index_id, uint32_t index_count) {
   auto it = g_assets.find(index_id);
   return it != g_assets.end() && it->second->asset.indices == index_count ? it->second.get() : nullptr;
 }
+std::vector<const Loaded*> with_count(uint32_t index_count) {
+  std::lock_guard lock(g_mu);
+  load_all();
+  std::vector<const Loaded*> out;
+  for (const auto& [id, l] : g_assets)
+    if (l->asset.indices == index_count) out.push_back(l.get());
+  return out;
+}
 bool count_known(uint32_t index_count) {
   std::lock_guard lock(g_mu);
   load_all();

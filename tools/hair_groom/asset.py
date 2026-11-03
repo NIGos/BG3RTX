@@ -7,8 +7,11 @@ layer computes it from the captured hair draw's host index range), so the layer 
 hair draw to it. The header also keeps layer/mesh_content_id.h's v1 position ID (bind pose).
 Files are only added, never overwritten (data/assetdb is shared).
 
-Layout v1 (little endian):
-  header  'HGRM', version 1, position_id uint64, index_id uint64, card_vertices, card_indices, lods, 0
+Layout v2 (little endian; v1 = the same without the UV samples):
+  header  'HGRM', version 2, position_id uint64, index_id uint64, card_vertices, card_indices, lods, 0
+  float32 uv[32 * 2]   UV0 at corner floor(s * (card_indices - 1) / 31), s = 0..31, in index order: the layer
+                       matches a captured draw by these when its index buffer is not host data (the captured
+                       soup keeps each corner's UV, deformation-independent)
   per LOD: keep_fraction float32, points P, segments S, 0
            uint32 triangle[P]  (index of the card triangle in native index order)
            float32 bary[P*2]   (weights of the triangle's 2nd and 3rd vertex; 1st = 1 - b1 - b2)
@@ -67,10 +70,18 @@ def index_id(indices):
     return h or 1
 
 
+def uv_samples(hair):
+    """(32, 2) float32 UV0 of the sampled corners (common/hair_groom_asset.h uv_samples_match)."""
+    corners = hair.tris.ravel()
+    at = [s * (len(corners) - 1) // (SAMPLES - 1) for s in range(SAMPLES)]
+    return np.ascontiguousarray(hair.uv[corners[at]], "<f4")
+
+
 def write(path, cid, hair, lods):
     """lods: [(keep_fraction, Groom)]. cid: the position ID. Exclusive creation."""
     with open(path, "xb") as f:
-        f.write(MAGIC + struct.pack("<IQQ4I", 1, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0))
+        f.write(MAGIC + struct.pack("<IQQ4I", 2, cid, index_id(hair.tris), len(hair.positions), hair.tris.size, len(lods), 0))
+        f.write(uv_samples(hair).tobytes())
         for keep, g in lods:
             if not (np.all(g.radii > 0) and np.all(g.radii < 0.01)):
                 raise ValueError(f"LOD {keep}: radius outside (0, 10 mm): the layer would reject the file")

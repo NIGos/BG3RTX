@@ -17,9 +17,10 @@ import make_job as hq  # noqa: E402  (ULTRA, HAIR_START, the window gate shapes)
 
 BATCH = "hair_groom"
 LIVE = "hair-groom"
-# Shadowheart's hair is the one converted groom (data/assetdb/hair_grooms, python -m tools.hair_groom.asset):
-# camp first (the party at camp), then a dialogue save. A run without a groom instance is INVALID (gated).
-SAVES = [("hg1-camp-fg2", "Campsite - 27h"), ("hg2-dialogue1-fg2", "Test Dialogue1")]
+# Shadowheart's hair is the one converted groom (data/assetdb/hair_grooms, LOD0 + LOD1). The 11:03 rerun saw her
+# LOD1 draw (6009 indices) only in Test Dialogue1; the camp save has no Shadowheart hair draw (camp job dropped).
+# A run without a groom instance is INVALID (gated).
+SAVES = [("hg2-dialogue1-fg2", "Test Dialogue1")]
 GROOM_START = "rt_hair_groom=1"
 
 BASE = {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_hair_physical_origin": "1", "rt_stats": "0",
