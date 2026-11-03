@@ -20,7 +20,7 @@ function Get-CameraPlanSample($step, [double]$elapsed, [int]$width, [int]$height
     $progress = [Math]::Max(0.0,$elapsed-$step.motion_start)
     $segment = [int64][Math]::Floor($progress/($dragSeconds+$resetSeconds))
     $within = $progress-$segment*($dragSeconds+$resetSeconds)
-    $reset = $within -ge $dragSeconds
+    $reset = -not $step.frame_delta_pixels -and $within -ge $dragSeconds
     $offset = if($reset) {0} else {[int][Math]::Floor($within*$step.pixels_per_second)}
     $x = [int][Math]::Floor($width / 2) + $step.direction * ($offset - [int][Math]::Floor($travel / 2))
     return @{ kind=$kind; active=($active -and -not $reset); reset=$reset; x=$x; y=[int][Math]::Floor($height/2);
@@ -69,4 +69,26 @@ function Get-RotationInputAction($state, $sample, [double]$now) {
     return @{kind='press';x=$state.x;y=$state.y}
   }
   throw 'Invalid rotation input state'
+}
+
+# Frame-paced drag for capture plans. One small delta per newly observed rendered
+# frame, never a wall-clock catch-up jump after a stalled runner/game.
+function Get-FrameRotationSample($state, $sample, $step, [long]$frame, [int]$width) {
+  if (-not $step.frame_delta_pixels) { return $sample }
+  if ($step.frame_delta_pixels -lt 1 -or $step.frame_delta_pixels -gt 2) { throw 'Frame drag needs 1 or 2 pixels' }
+  if ($state.label -ne $step.label) {
+    $state.label=$step.label; $state.frame=$frame; $state.offset=0; $state.segment=0
+  }
+  $interval=if ($step.frame_interval) { [int]$step.frame_interval } else { 1 }
+  if ($interval -lt 1) { throw 'Frame interval must be positive' }
+  if ($sample.active -and $frame -ge $state.frame+$interval) {
+    $state.frame=$frame
+    $state.offset += [int]$step.frame_delta_pixels
+    $travel=[Math]::Max(8,[int][Math]::Floor($width/4))
+    if ($state.offset -ge $travel) { $state.offset=0; $state.segment++ }
+  }
+  if (-not $sample.active) { $state.frame=[Math]::Max($state.frame,$frame) }
+  $sample.segment=$state.segment
+  $sample.x=[int][Math]::Floor($width/2)-[int][Math]::Floor($width/8)+$step.direction*$state.offset
+  $sample
 }

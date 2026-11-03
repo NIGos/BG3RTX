@@ -1,6 +1,7 @@
 #include "../common/perf_hook_state.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
+#include "mesh_content_id.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -45,6 +46,7 @@
 #include "omm_native_plain.h"
 #include "omm_submit.h"
 #include "../common/omm_material_cache.h"
+#include "../common/omm_mask_bake.h"
 
 #include <algorithm>
 #include <smmintrin.h>
@@ -85,6 +87,9 @@ constexpr uint32_t kInfoHairProcedural = 1u << 12;
 // rt_primary_fade_class (diagnostics): the draw's camera-occlusion fade cut is enabled
 // (gi/pan_primary.hlsl RT_PRIMARY_FADE). Set only with the key on; no ray reads it otherwise.
 constexpr uint32_t kInfoCameraFade = 1u << 14;
+// A dynamic instance held by rt_dyn_hold (rt_occ_stats' occluder kind "held", common/occ_stats.h
+// kOccInfoHeld). Bits 16..31 are the pool alpha slot only with nh_pool_meta, never set on a held one.
+constexpr uint32_t kInfoHeld = 1u << 31;
 constexpr uint32_t kRecBytes = 208;                // AlphaRec, rt_common.hlsli
 constexpr uint32_t kRingSlots = kSceneSlots;       // per-build regions of the host ring (= scene slots, rtscene.cpp)
 constexpr uint32_t kStatusSlots = 16384;           // validation results (16 B each)
@@ -373,6 +378,7 @@ struct NativeOmmVariant {
   omm::AttachedBlas blas{};
 };
 struct Mesh {
+  uint64_t content_id = 0; // diagnostic candidate, never a material join
   uint32_t tris = 0;
   bool alpha = false;
   MeshState state = kBuilt;
@@ -432,6 +438,9 @@ struct DynSlot {
   uint32_t hold_stride = 0;
   AlphaSnapshot hold_alpha{};
   bool hold_has_alpha = false;
+  // rt_omm_dyn: the micro-map its BLAS was built with (0 none) and its per-triangle index range in the pool.
+  uint64_t omm_ticket = 0;
+  VkDeviceSize omm_index_off = 0, omm_index_size = 0;
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
 // rt_cascade_casters: the BLAS of last frame's cascade-only soup, a new one every build (the
@@ -446,8 +455,11 @@ uint64_t g_hold_why[7] = {};
 
 // ---- this capture's draws ----
 struct FrameDraw {
+  uint64_t content_id = 0;
+  std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
+  uint64_t omm_key = 0;       // rt_omm_dyn: the draw's identity without the per-frame occurrence (shared micro-maps)
   const uint8_t* rows[3] = {};   // instance 0's matrix rows in the game's mapped memory
   uint32_t row_stride[3] = {};
   uint32_t instances = 0, tris_per_instance = 0;
@@ -466,6 +478,46 @@ struct FrameDraw {
   std::vector<Range> ranges;
 };
 std::vector<FrameDraw> g_draws;
+bool g_content_on = false;
+uint64_t g_content_captures = 0;
+mesh_content::Captures g_content_ids;
+
+// Only existing host mappings. Never stage a GPU copy or hash XFB/world-space
+// positions. Hold the tracker lock through reads so unmap cannot race them.
+void content_sample(const BvhDraw& d, FrameDraw& fd) {
+  const auto& ip = *d.inst;
+  if (!ip.pos_float3 || ip.pos_binding >= CmdState::kMaxVertexBindings) return;
+  const auto& vb = d.s->vb[ip.pos_binding];
+  const uint64_t vsize = geo_buffer_size(vb.buffer);
+  const uint64_t isize = d.args.kind == 1 ? geo_buffer_size(d.s->ib) : 0;
+  std::shared_lock lock(tracker().mu);
+  auto bytes = [&](VkBuffer b, uint64_t size, uint64_t offset) -> mesh_content::Bytes {
+    const auto bm = tracker().buffer_mem.find(b);
+    if (bm == tracker().buffer_mem.end() || offset >= size || bm->second.second > UINT64_MAX - offset) return {};
+    const auto mp = tracker().mapped.find(bm->second.first);
+    const auto range = tracker().mapped_ranges.find(bm->second.first);
+    const auto start = bm->second.second + offset;
+    if (mp == tracker().mapped.end() || range == tracker().mapped_ranges.end() ||
+        start < range->second.first || start >= range->second.second) return {};
+    return {mp->second + start, (std::min)(size - offset, range->second.second - start)};
+  };
+  if (vb.offset > UINT64_MAX - ip.pos_offset) return;
+  mesh_content::Input in{};
+  in.positions = bytes(vb.buffer, vsize, vb.offset + ip.pos_offset);
+  in.stride = ip.pos_stride ? ip.pos_stride : uint32_t(vb.stride);
+  in.count = d.args.count;
+  in.vertex_offset = d.args.kind == 1 ? int64_t(d.args.vertex_offset) : int64_t(d.args.first);
+  if (d.args.kind == 1) {
+    in.index_bytes = d.s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 :
+        d.s->ib_type == VK_INDEX_TYPE_UINT16 ? 2 : d.s->ib_type == VK_INDEX_TYPE_UINT8_EXT ? 1 : 0;
+    if (!in.index_bytes || d.s->ib_offset > UINT64_MAX - uint64_t(d.args.first) * in.index_bytes) return;
+    in.indices = bytes(d.s->ib, isize, d.s->ib_offset + uint64_t(d.args.first) * in.index_bytes);
+  } else if (d.args.kind != 0) return;
+  mesh_content::Sample sample;
+  if (!mesh_content::sample(in, sample)) return;
+  fd.content_id = mesh_content::hash(sample);
+  fd.content_sample = std::make_shared<mesh_content::Sample>(sample);
+}
 std::unordered_map<uint64_t, uint32_t> g_dyn_seen;   // dyn key -> occurrences this capture
 uint32_t g_audits_this_frame = 0;
 bool g_capture_all_meshes = false;
@@ -626,6 +678,10 @@ struct Stats {
   // declined, accelerated scene builds recorded / declined.
   uint64_t omm_draws = 0, omm_captured = 0, omm_alpha_static_tris = 0, omm_alpha_dyn_tris = 0, omm_capture_tris = 0;
   uint64_t omm_range_tris = 0, omm_baked = 0, omm_reused = 0, omm_declined = 0, omm_scenes = 0, omm_scene_declined = 0;
+  // rt_omm_dyn: masked per-draw draws/triangles seen, with a micro-map attached, baked (entries, triangles), not
+  // baked for the per-build or memory budget or a failure, accelerated scenes built.
+  uint64_t omm_dyn_draws = 0, omm_dyn_tris = 0, omm_dyn_att_draws = 0, omm_dyn_att_tris = 0, omm_dyn_baked = 0;
+  uint64_t omm_dyn_bake_tris = 0, omm_dyn_deferred = 0, omm_dyn_failed = 0, omm_dyn_scenes = 0;
 };
 Stats g_st;
 std::mutex g_st_mu;   // fixup counters (submit thread)
@@ -898,6 +954,192 @@ bool build_omm_scene(VkCommandBuffer cmd,uint32_t slot,uint32_t instances,VkDevi
   g_omm_commands[slot]=cmd;g_omm_recordings[slot]=state->recording;return true;
 }
 
+// ---- rt_omm_dyn (live, default 0; docs/P4_OMM.md 11.2c): micro-maps on masked per-draw BLAS ----
+// A per-draw BLAS (camp grass: wind VS, refit every frame) whose record reads an offline mask through its mip-0
+// view (rt_vt_alpha_masks + rt_alpha_fine_lod: the same hard-cut test for every ray) gets a four-state micro-map
+// (subdivision 4, common/omm_mask_bake.h), baked once per (draw identity without the per-frame occurrence, mask
+// view, cuts, uv scale, triangle count) from the soup's uvs and reused across frames and draws. Every frame, before
+// the build or refit, shaders/rt/omm_bake_mask.hlsl check writes each triangle's micro-map index: itself while its
+// uv bits equal the bake's snapshot, else FULLY_UNKNOWN_OPAQUE (the any-hit decides): exact per triangle whatever
+// the identity matched (wind moves positions only; uvs are checked, not assumed). In the ordinary TLAS these
+// instances carry DISABLE_OPACITY_MICROMAPS: it is the reference scene of the OMM variants and their omm check. A
+// copy with the flag cleared is the accelerated TLAS (g_omm_tlas, the static variants' slot; bvh_omm_commit writes
+// the 'OMM3' proof). rt_omm_reference=1 traces the reference: the in-launch A/B without a rebuild. With the key on
+// the static pool-variant path is not used (0.06% of camp's alpha triangles). Micro-maps live until teardown.
+struct DynMicromap {
+  uint32_t tris = 0;
+  uint64_t ticket = 0;
+  VkImageView mask = VK_NULL_HANDLE;
+  Buf data, snapshot, descriptors;   // data/descriptors: micro-map build inputs, freed once the bake ran
+  uint64_t rec = 0;                  // build record of the bake's command buffer
+  bool ready = false;                // that command buffer was submitted (latched: records are pruned)
+};
+std::unordered_map<uint64_t, DynMicromap> g_omm_dyn;
+VkDeviceSize g_omm_dyn_bytes = 0;    // our buffers of every entry (the backend's micro-map storage is separate)
+uint64_t g_omm_dyn_cached_tris = 0;
+std::vector<uint64_t> g_omm_dyn_tickets[kSceneSlots];   // micro-maps the slot's accelerated TLAS traverses
+struct OmmDynPipe { VkDescriptorSetLayout dsl{}; VkPipelineLayout layout{}; VkPipeline bake{}, check{}; uint64_t gen_bake{}, gen_check{}; };
+OmmDynPipe g_omm_dyn_pipe;
+Buf g_omm_dyn_stats, g_omm_dyn_readback;   // device-local counters of omm_bake_mask.hlsl, their host copy
+bool g_omm_dyn_stats_zero = false;
+constexpr VkDeviceSize kOmmDynStatsBytes = 32;
+struct OmmDynPush { uint32_t soup_off, stride, tris, groups_x; float cut_lo, cut_hi, scale_u, scale_v; uint32_t index_off, mask_w, mask_h, pad; };
+static_assert(sizeof(OmmDynPush) == 48, "omm_bake_mask.hlsl Push");
+constexpr VkBuildAccelerationStructureFlagsKHR kOmmDynBlasFlags =
+    VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_DISABLE_OPACITY_MICROMAPS_EXT | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_OPACITY_MICROMAP_UPDATE_EXT;
+constexpr uint32_t kOmmDynDisable = VK_GEOMETRY_INSTANCE_DISABLE_OPACITY_MICROMAPS_EXT;
+
+bool ensure_omm_dyn_pipe() {
+  Bg3ShaderBlob bake{}, check{};
+  if (!shader_get("rt/omm_bake_mask.hlsl", "bake", "cs_6_6", &bake) || !shader_get("rt/omm_bake_mask.hlsl", "check", "cs_6_6", &check))
+    return false;
+  OmmDynPipe& p = g_omm_dyn_pipe;
+  if (p.bake && p.check && p.gen_bake == bake.generation && p.gen_check == check.generation) return true;
+  auto& vk = g_dd->vk;
+  if (!p.dsl) {
+    VkDescriptorSetLayoutBinding b[6]{};
+    for (uint32_t i = 0; i < 6; ++i)
+      b[i] = {i, i == 1 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; ci.bindingCount = 6; ci.pBindings = b;
+    if (vk.CreateDescriptorSetLayout(g_dd->device, &ci, nullptr, &p.dsl) != VK_SUCCESS) return false;
+  }
+  if (!p.layout) {
+    const VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(OmmDynPush)};
+    VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    ci.setLayoutCount = 1; ci.pSetLayouts = &p.dsl; ci.pushConstantRangeCount = 1; ci.pPushConstantRanges = &push;
+    if (vk.CreatePipelineLayout(g_dd->device, &ci, nullptr, &p.layout) != VK_SUCCESS) return false;
+  }
+  auto make = [&](const Bg3ShaderBlob& code, const char* entry, VkPipeline& out) {
+    VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; mi.codeSize = code.size_bytes; mi.pCode = code.code;
+    VkShaderModule module{};
+    if (vk.CreateShaderModule(g_dd->device, &mi, nullptr, &module) != VK_SUCCESS) return false;
+    VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO}; ci.layout = p.layout;
+    ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, entry};
+    const auto r = vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &out);
+    vk.DestroyShaderModule(g_dd->device, module, nullptr);
+    return r == VK_SUCCESS;
+  };
+  VkPipeline nb{}, nc{};
+  if (!make(bake, "bake", nb) || !make(check, "check", nc)) {
+    if (nb) vk.DestroyPipeline(g_dd->device, nb, nullptr);
+    return false;
+  }
+  // Recorded commands may still use the old pipelines: destroyed at device teardown (after idle).
+  if (p.bake) g_omm_old_pipelines.push_back(p.bake);
+  if (p.check) g_omm_old_pipelines.push_back(p.check);
+  p.bake = nb; p.check = nc; p.gen_bake = bake.generation; p.gen_check = check.generation;
+  if (!g_omm_dyn_stats.b) {
+    if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "OMM dyn counters") ||
+        !make_buf(g_omm_dyn_readback, kOmmDynStatsBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "OMM dyn counters readback"))
+      return false;
+    std::memset(g_omm_dyn_readback.map, 0, size_t(kOmmDynStatsBytes));
+    g_omm_dyn_stats_zero = true;
+  }
+  return true;
+}
+
+void omm_dyn_dispatch(VkCommandBuffer cmd, VkPipeline pipe, const OmmDynPush& pc, VkBuffer soup, VkDeviceSize soup_bytes,
+                      const DynMicromap& e, uint32_t gx, uint32_t gy) {
+  auto& vk = g_dd->vk;
+  const VkDescriptorBufferInfo buffers[5] = {{soup, 0, soup_bytes},
+                                             {e.data.b ? e.data.b : e.snapshot.b, 0, VK_WHOLE_SIZE},
+                                             {e.snapshot.b, 0, VK_WHOLE_SIZE},
+                                             {g_omm_dyn_stats.b, 0, kOmmDynStatsBytes},
+                                             {g_pool.b, 0, g_pool.size}};
+  const VkDescriptorImageInfo image{VK_NULL_HANDLE, e.mask, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet w[6]{};
+  for (uint32_t i = 0; i < 6; ++i) {
+    w[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    w[i].dstBinding = i; w[i].descriptorCount = 1;
+    w[i].descriptorType = i == 1 ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    if (i == 1) w[i].pImageInfo = &image; else w[i].pBufferInfo = &buffers[i == 0 ? 0 : i - 1];
+  }
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_omm_dyn_pipe.layout, 0, 6, w);
+  vk.CmdPushConstants(cmd, g_omm_dyn_pipe.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, gx, gy, 1);
+}
+
+// The micro-map attachment of a per-draw BLAS: `count` triangles (the build's, or the capacity for sizing), each
+// indexed through the pool range at `index` (written by the check this frame).
+bool omm_dyn_attachment(uint64_t ticket, uint32_t tris, uint32_t count, VkDeviceAddress index,
+                        VkAccelerationStructureTrianglesOpacityMicromapEXT* out, VkMicromapUsageEXT* usage) {
+  if (!omm::attachment(ticket, tris, *out) || out->usageCountsCount != 1) return false;
+  *usage = out->pUsageCounts[0];
+  usage->count = count;
+  out->pUsageCounts = usage;
+  out->indexType = VK_INDEX_TYPE_UINT32;
+  out->indexBuffer.deviceAddress = index;
+  out->indexStride = 4;
+  out->baseTriangle = 0;
+  return true;
+}
+
+VkAccelerationStructureBuildSizesInfoKHR blas_sizes_omm(uint32_t prims, uint32_t stride, VkBuildAccelerationStructureFlagsKHR flags,
+                                                        const VkAccelerationStructureTrianglesOpacityMicromapEXT* omm_attach) {
+  VkAccelerationStructureGeometryKHR g = tri_geometry(0, prims, stride, false);
+  g.geometry.triangles.pNext = omm_attach;
+  VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  bi.flags = flags;
+  bi.geometryCount = 1;
+  bi.pGeometries = &g;
+  VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &prims, &sz);
+  return sz;
+}
+
+void omm_dyn_free(DynMicromap& e) {
+  for (Buf* b : {&e.data, &e.snapshot, &e.descriptors})
+    if (b->b) { g_omm_dyn_bytes -= (std::min)(g_omm_dyn_bytes, b->size); free_buf(*b); }
+}
+
+// The accelerated scene of a slot whose per-draw BLAS carry micro-maps: the instance array copied after the
+// matrices were fixed up at submit, the `enable` instances' flags rewritten without DISABLE_OPACITY_MICROMAPS.
+bool build_omm_dyn_scene(VkCommandBuffer cmd, uint32_t slot, uint32_t instances, VkDeviceSize ring_base, uint64_t record,
+                         const std::vector<std::pair<uint32_t, uint32_t>>& enable) {
+  g_omm_records[slot] = 0;
+  if (enable.empty() || !instances || !g_ring_transfer_source) return false;
+  const auto* state = cmd_state(cmd);
+  if (!state || !state->recording) return false;
+  const VkDeviceSize ib = VkDeviceSize(instances) * 64u;
+  if (!ensure_tlas(slot, instances, &g_omm_tlas[slot]) ||
+      !ensure_omm_buffer(g_omm_instances[slot], ib, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, false, "OMM scene instances"))
+    return false;
+  auto& vk = g_dd->vk;
+  barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
+          kXfer, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+  const VkBufferCopy copy{ring_base, 0, ib};
+  vk.CmdCopyBuffer(cmd, g_ring.b, g_omm_instances[slot].b, 1, &copy);
+  barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT);
+  // VkAccelerationStructureInstanceKHR: the word at byte 52 is instanceShaderBindingTableRecordOffset (24 bits,
+  // 0 here) and the 8 flag bits; the mask (byte 48, set at submit) is untouched.
+  for (const auto& [index, flags] : enable)
+    if (index < instances) vk.CmdFillBuffer(cmd, g_omm_instances[slot].b, VkDeviceSize(index) * 64u + 52u, 4, flags << 24);
+  // The baseline TLAS and this one share scratch: order AS scratch writes too.
+  barrier(cmd, kAS | kCS | kXfer, VK_ACCESS_MEMORY_WRITE_BIT, kAS,
+          VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_READ_BIT);
+  VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+  geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+  geometry.geometry.instances = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR};
+  geometry.geometry.instances.data.deviceAddress = g_omm_instances[slot].addr;
+  VkAccelerationStructureBuildGeometryInfoKHR build{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR; build.flags = kTlasFlags; build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+  build.geometryCount = 1; build.pGeometries = &geometry; build.dstAccelerationStructure = g_omm_tlas[slot].as;
+  VkAccelerationStructureBuildSizesInfoKHR size{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build, &instances, &size);
+  if (!ensure_scratch(size.buildScratchSize)) return false;
+  build.scratchData.deviceAddress = scratch_at(0);
+  const VkAccelerationStructureBuildRangeInfoKHR range{instances, 0, 0, 0};
+  const auto* rp = &range;
+  vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &build, &rp);
+  g_omm_records[slot] = record; g_omm_commands[slot] = cmd; g_omm_recordings[slot] = state->recording;
+  return true;
+}
+
 void unindex(uint64_t key, const std::vector<Range>& ranges) {
   for (const Range& r : ranges) {
     auto it = g_buf_meshes.find(r.b);
@@ -1146,7 +1388,17 @@ void bvh_device_created(DeviceData* dd) {
 void bvh_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  if(g_omm_clone.pipeline || g_omm_validate.pipeline)dd->vk.DeviceWaitIdle(dd->device);
+  g_content_ids.clear(); g_content_on = false; g_content_captures = 0;
+  if(g_omm_clone.pipeline || g_omm_validate.pipeline || g_omm_dyn_pipe.bake)dd->vk.DeviceWaitIdle(dd->device);
+  // rt_omm_dyn: the backend destroys the micro-maps themselves (omm::device_destroyed).
+  for (auto& [k, e] : g_omm_dyn) { omm::release_ticket(e.ticket); omm_dyn_free(e); }
+  g_omm_dyn.clear(); g_omm_dyn_bytes = 0; g_omm_dyn_cached_tris = 0;
+  for (auto& t : g_omm_dyn_tickets) t.clear();
+  for (VkPipeline p : {g_omm_dyn_pipe.bake, g_omm_dyn_pipe.check}) if (p) dd->vk.DestroyPipeline(dd->device, p, nullptr);
+  if (g_omm_dyn_pipe.layout) dd->vk.DestroyPipelineLayout(dd->device, g_omm_dyn_pipe.layout, nullptr);
+  if (g_omm_dyn_pipe.dsl) dd->vk.DestroyDescriptorSetLayout(dd->device, g_omm_dyn_pipe.dsl, nullptr);
+  g_omm_dyn_pipe = {};
+  for (Buf* b : {&g_omm_dyn_stats, &g_omm_dyn_readback}) if (b->b) free_buf(*b);
   for(auto* p:{&g_omm_clone,&g_omm_validate}) {
     if(p->pipeline)dd->vk.DestroyPipeline(dd->device,p->pipeline,nullptr);
     if(p->layout)dd->vk.DestroyPipelineLayout(dd->device,p->layout,nullptr);
@@ -1251,6 +1503,17 @@ bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_spl
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
+  const bool content_on = cfg_int("rt_mesh_content_id", 0) != 0;
+  if (g_content_on) {
+    if (g_content_captures == 2 || g_content_captures % 120 == 0 || !content_on)
+      log("[mesh id] content ids: %llu meshes, %llu collisions, %llu stable across 2 captures",
+          (unsigned long long)g_content_ids.current.size(), (unsigned long long)g_content_ids.collisions,
+          (unsigned long long)g_content_ids.stable);
+    g_content_ids.next();
+  }
+  if (!content_on && g_content_on) { g_content_ids.clear(); g_content_captures = 0; }
+  g_content_on = content_on;
+  if (content_on) ++g_content_captures;
   g_draws.clear();
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
@@ -1276,6 +1539,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   if (indexed) dk = mix(mix(dk, uint64_t(s->ib)), s->ib_offset);
   dk = mix(dk, d.alpha);
   fd.dyn_key = mix(dk, g_dyn_seen[dk]++);   // the n-th draw with that identity this frame
+  fd.omm_key = dk;
   if (!d.inst || !d.inst->ok) {
     ++g_st.not_inst_pattern;
     return BVH_CAPTURE;
@@ -1342,17 +1606,21 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
       fd.omm_material=std::make_shared<omm::NativePlainCapture>(std::move(captured));++g_st.omm_captured;
     }
   }
-  if (g_capture_all_meshes) return BVH_CAPTURE;
+  auto capture = [&](BvhVerdict verdict) {
+    if (g_content_on) content_sample(d, fd);
+    return verdict;
+  };
+  if (g_capture_all_meshes) return capture(BVH_CAPTURE);
   auto it = g_meshes.find(mk);
   if (it == g_meshes.end()) {
     auto rj = g_rejected.find(mk);
     if (rj == g_rejected.end() || frame_index() >= rj->second.until) fd.extract = true;
-    return BVH_CAPTURE;
+    return capture(BVH_CAPTURE);
   }
   Mesh& m = it->second;
-  if (m.tris != fd.tris_per_instance) return BVH_CAPTURE;   // cannot happen for one key; be safe
+  if (m.tris != fd.tris_per_instance) return capture(BVH_CAPTURE);   // cannot happen for one key; be safe
   if (m.state == kNeedCheck && !m.check_pending) fd.check = true;
-  if (m.state != kReady) return BVH_CAPTURE;
+  if (m.state != kReady) return capture(BVH_CAPTURE);
   fd.cached = true;
   *mesh_tris = m.tris;
   // A periodic audit: the cached draw is captured once more and compared.
@@ -1362,7 +1630,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     ++g_audits_this_frame;
     m.last_audit = frame_index();
     fd.audit = true;
-    return BVH_CACHED_AUDIT;
+    return capture(BVH_CACHED_AUDIT);
   }
   return BVH_CACHED;
 }
@@ -1386,6 +1654,7 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
   if (token >= g_draws.size()) return;
   FrameDraw& fd = g_draws[token];
   fd.captured = true;
+  if (g_content_on && fd.content_sample) g_content_ids.add(fd.content_id, *fd.content_sample);
   fd.soup_off = offset;
   fd.prims = prims;
   fd.cap_alpha = alpha;
@@ -1468,7 +1737,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   // result and end-of-use invalidation flag BEFORE resetting its generation.
   if(const auto* proof=g_omm_mapped_stamp[slot];proof && g_omm_expected[slot] &&
       (proof[0]!=g_omm_expected[slot] || proof[32]!=g_omm_expected[slot] ||
-       proof[35]!=0x4f4d4d32u || proof[36]!=0u)) {
+       (proof[35]!=0x4f4d4d32u && proof[35]!=0x4f4d4d33u) || proof[36]!=0u)) {
     for(const auto& old:g_omm_ranges[slot]) {
       auto found=g_meshes.find(old.mesh);
       if(found==g_meshes.end() || found->second.gen!=old.generation || !found->second.omm)continue;
@@ -1481,6 +1750,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   g_omm_expected[slot]=0;g_omm_mapped_stamp[slot]=nullptr;
   g_omm_ranges[slot].clear();
+  g_omm_dyn_tickets[slot].clear();
   g_omm_records[slot]=0;
   const VkBuildAccelerationStructureFlagsKHR dyn_flags =
       VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR |
@@ -1498,7 +1768,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<Ext> ext;
   struct MeshBuild { uint64_t key; };
   std::vector<MeshBuild> mesh_builds;
-  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; HairBoundsPush hair; };
+  struct DynBuild { DynSlot* slot; VkDeviceSize soup_off; uint32_t prims; bool refit; HairBoundsPush hair; uint64_t omm = 0; uint32_t omm_tris = 0; };
   std::vector<DynBuild> dyn_builds;
   struct HairBoundsWork {HairBoundsPush push;bool pool_source;};
   std::vector<HairBoundsWork> hair_bounds_work;
@@ -1531,6 +1801,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       // A new mesh: its storage, its extraction from instance 0, checked against the last instance.
       Mesh m;
+      m.content_id = fd.content_id;
       m.gen = ++g_mesh_gen;
       m.tris = fd.tris_per_instance;
       m.alpha = fd.alpha;
@@ -1629,6 +1900,38 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool dyn_refit_ok = cfg_int("rt_dyn_refit", 1) != 0;
   struct HoldCopy { VkDeviceSize src, dst, bytes; };
   std::vector<HoldCopy> hold_copies;
+  // rt_omm_dyn (live): needs the EXT backend (rt_omm=1 at startup), the alpha test and a transfer-source ring.
+  // Bakes of new micro-maps (dispatched after the soup conversion) and this frame's uv checks.
+  const bool omm_dyn_on = cfg_int("rt_omm_dyn", 0) != 0 && alpha_test && omm::available_for(g_dd) && g_ring_transfer_source && g_pool.b &&
+                          ensure_omm_dyn_pipe();
+  struct OmmBake { uint64_t key; VkDeviceSize soup_off; uint32_t tris, w, h; VkImageView view; float cut_lo, cut_hi, su, sv; };
+  struct OmmCheck { const DynMicromap* e; VkDeviceSize soup_off, index_off; uint32_t tris; };
+  std::vector<OmmBake> omm_bakes;
+  std::vector<OmmCheck> omm_checks;
+  std::unordered_set<uint64_t> omm_baking;
+  uint64_t omm_bake_tris = 0;
+  const uint64_t omm_bake_cap = uint64_t((std::max)(cfg_int("rt_omm_dyn_bake_tris", 131072), 0));
+  const VkDeviceSize omm_dyn_cap = VkDeviceSize((std::max)(cfg_int("rt_omm_dyn_mb", 256), 0)) << 20;
+  if (omm_dyn_on) {
+    // Bakes whose command buffer ran: usable, inputs freed; dropped ones are discarded.
+    for (auto it = g_omm_dyn.begin(); it != g_omm_dyn.end();) {
+      DynMicromap& e = it->second;
+      const int st = e.ready ? kRecSubmitted : rec_state(e.rec);
+      if (!e.ready && st == kRecSubmitted) {
+        e.ready = true;
+        for (Buf* b : {&e.data, &e.descriptors})
+          if (b->b) { g_omm_dyn_bytes -= (std::min)(g_omm_dyn_bytes, b->size); free_buf(*b); }
+      }
+      if (!e.ready && st != kRecPending) {
+        omm::release_ticket(e.ticket);
+        omm_dyn_free(e);
+        g_omm_dyn_cached_tris -= (std::min)(g_omm_dyn_cached_tris, uint64_t(e.tris));
+        it = g_omm_dyn.erase(it);
+        continue;
+      }
+      ++it;
+    }
+  }
   for (auto& [di, key] : dyn) {
     FrameDraw& fd = g_draws[di];
     if (fd.held) {
@@ -1660,10 +1963,67 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
       s.hair_bounds_size=bytes;
     }
+    // rt_omm_dyn: a masked record with a ready micro-map for this draw's identity gets it (a new identity is baked
+    // this frame and used from a later one); the BLAS flags allow the instance flag to switch it off.
+    uint64_t omm_want = 0;
+    const DynMicromap* omm_entry = nullptr;
+    if (omm_dyn_on && !hair && fd.cap_alpha && fd.rec != kNone) {
+      AlphaRec ar{};
+      VkImageView view{};
+      uint32_t mw = 0, mh = 0;
+      if (alpha_fine_mask(fd.rec, &ar, &view, &mw, &mh)) {
+        ++g_st.omm_dyn_draws;
+        g_st.omm_dyn_tris += fd.prims;
+        const float lo = (std::min)(ar.cut, ar.cut_first), hi = (std::max)(ar.cut, ar.cut_first);
+        uint32_t b[4];
+        std::memcpy(&b[0], &lo, 4); std::memcpy(&b[1], &hi, 4); std::memcpy(&b[2], &ar.scale[0], 4); std::memcpy(&b[3], &ar.scale[1], 4);
+        uint64_t mk = mix(mix(mix(mix(mix(mix(fd.omm_key, uint64_t(view)), b[0]), b[1]), b[2]), b[3]), fd.prims);
+        if (!mk) mk = 1;
+        auto it = g_omm_dyn.find(mk);
+        if (it == g_omm_dyn.end()) {
+          const VkDeviceSize bytes = VkDeviceSize(fd.prims) * (64u + 24u + 8u);
+          if (omm_baking.count(mk)) {
+          } else if (omm_bake_tris + fd.prims > omm_bake_cap || g_omm_dyn_bytes + bytes > omm_dyn_cap ||
+                     fd.soup_off > UINT32_MAX || fd.prims > 65535u * 65535u) {
+            ++g_st.omm_dyn_deferred;
+          } else {
+            omm_baking.insert(mk);
+            omm_bake_tris += fd.prims;
+            omm_bakes.push_back({mk, fd.soup_off, fd.prims, mw, mh, view, lo, hi, ar.scale[0], ar.scale[1]});
+          }
+        } else if (it->second.ready && it->second.tris == fd.prims && it->second.mask == view) {
+          // Index range for the check (capacity like the BLAS's, reallocated when the draw grows).
+          const VkDeviceSize need = VkDeviceSize(fd.prims) * 4u;
+          if (s.omm_index_size < need) {
+            if (s.omm_index_size) g_pending_free.push_back({now, -1, s.omm_index_off, s.omm_index_size});
+            s.omm_index_size = 0;
+            const VkDeviceSize bytes = VkDeviceSize(fd.prims + fd.prims / 4u) * 4u;
+            if (pool_alloc(cmd, bytes, &s.omm_index_off)) s.omm_index_size = bytes;
+          }
+          // The check covers at most 65535 x 64 triangles in one dispatch: every index of the build is written.
+          if (s.omm_index_size >= need && s.omm_index_off <= UINT32_MAX && fd.prims <= 65535u * 64u &&
+              omm::register_ticket_use(cmd, it->second.ticket)) {
+            omm_want = it->second.ticket;
+            omm_entry = &it->second;
+          }
+        }
+      }
+    }
+    // Sizes with the attachment: the capacity's and this build's triangle counts.
+    VkAccelerationStructureTrianglesOpacityMicromapEXT omm_cap_attach{}, omm_now_attach{};
+    VkMicromapUsageEXT omm_cap_use{}, omm_now_use{};
+    if (omm_want && (!omm_dyn_attachment(omm_want, omm_entry->tris, fd.prims + fd.prims / 4, 0, &omm_cap_attach, &omm_cap_use) ||
+                     !omm_dyn_attachment(omm_want, omm_entry->tris, fd.prims, 0, &omm_now_attach, &omm_now_use))) {
+      omm_want = 0;
+      omm_entry = nullptr;
+    }
+    const VkBuildAccelerationStructureFlagsKHR slot_flags = omm_want ? dyn_flags | kOmmDynBlasFlags : dyn_flags;
     bool fresh = !s.as.as;
     // A refit (UPDATE) needs the source built: its last build must have been submitted
     // (a dropped command buffer left the BLAS unbuilt; a full build does not read it).
-    bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.hair==hair && s.flags == dyn_flags &&
+    // rt_omm_dyn: only with the same micro-map (the per-triangle indices may change: ALLOW_OPACITY_MICROMAP_UPDATE).
+    bool refit = dyn_refit_ok && !fresh && s.prims == fd.prims && s.alpha == fd.cap_alpha && s.hair==hair && s.flags == slot_flags &&
+                 s.omm_ticket == omm_want &&
                  rec_submitted(s.rec) &&
                  s.since_build < uint32_t(rebuild_frames);
     // A full build never goes into the BLAS that TLASes in flight reference: a
@@ -1675,13 +2035,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     // A new range gives the BLAS a new address, so the TLAS signature changes and
     // the TLAS is rebuilt; the old range is released once no live slot references it.
     // Refits (UPDATE) keep the layout and stay in place. rt_dyn_inplace=1: old behaviour.
-    if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.hair!=hair || s.flags != dyn_flags)) {
+    if (!refit && (fresh || !inplace_ok || fd.prims > s.cap_prims || s.alpha != fd.cap_alpha || s.hair!=hair || s.flags != slot_flags ||
+                   s.omm_ticket != omm_want)) {
       if (s.as.as) as_destroy(s.as);
       uint32_t cap_prims = fd.prims + fd.prims / 4;
-      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
+      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(cap_prims,dyn_flags):
+          omm_want ? blas_sizes_omm(cap_prims, stride, slot_flags, &omm_cap_attach) : blas_sizes(cap_prims, stride, !fd.cap_alpha, dyn_flags);
+      // Micromap attachments change sizes, not the per-draw BLAS lifetime domain.
       if (!as_create(sz.accelerationStructureSize, s.as, "BLAS chunk for a per-draw BLAS (draw left out this frame)", 1)) {
         if (s.hold_size) g_pending_free.push_back({now, -1, s.hold_off, s.hold_size});
         if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+        if (s.omm_index_size) g_pending_free.push_back({now, -1, s.omm_index_off, s.omm_index_size});
         g_dyn.erase(key);
         key = 0;
         continue;
@@ -1689,13 +2053,20 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       s.cap_prims = cap_prims;
       s.alpha = fd.cap_alpha;
       s.hair=hair;
-      s.flags = dyn_flags;
+      s.flags = slot_flags;
+      s.omm_ticket = omm_want;
       ++g_st.dyn_new;
     }
     if (!refit || s.prims != fd.prims) {
-      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(fd.prims,dyn_flags):blas_sizes(fd.prims, stride, !fd.cap_alpha, dyn_flags);
+      VkAccelerationStructureBuildSizesInfoKHR sz = hair?hair_sizes(fd.prims,dyn_flags):
+          omm_want ? blas_sizes_omm(fd.prims, stride, slot_flags, &omm_now_attach) : blas_sizes(fd.prims, stride, !fd.cap_alpha, dyn_flags);
       s.build_scratch = sz.buildScratchSize;
       s.update_scratch = sz.updateScratchSize;
+    }
+    if (omm_want) {
+      omm_checks.push_back({omm_entry, fd.soup_off, s.omm_index_off, fd.prims});
+      ++g_st.omm_dyn_att_draws;
+      g_st.omm_dyn_att_tris += fd.prims;
     }
     s.prims = fd.prims;
     s.last_used = now;
@@ -1713,7 +2084,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       if(!alpha_native_hair_bounds(fd.rec,uint32_t(s.hair_bounds_off)))return false;
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
-    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp});
+    dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
     s.rec = rec;
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
@@ -1822,6 +2193,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     g_st.static_inst += fd.instances;
   }
   const uint32_t n_static_written = n;
+  std::vector<std::pair<uint32_t, uint32_t>> omm_enable;   // rt_omm_dyn: instance, flags in the accelerated TLAS
+  std::vector<uint64_t> omm_tickets;
   for (auto& [di, key] : dyn) {
     if (!key) continue;
     const FrameDraw& fd = g_draws[di];
@@ -1838,9 +2211,17 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     in.instanceShaderBindingTableRecordOffset = 0;
     in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR |
                (alpha && alpha_test ? 0u : uint32_t(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR));
+    if (s.omm_ticket && !s.hair) {
+      // rt_omm_dyn: the ordinary TLAS is the reference scene (micro-maps off); the accelerated copy enables them.
+      if (omm_dyn_on && alpha && alpha_test) {
+        omm_enable.push_back({n, in.flags});
+        if (std::find(omm_tickets.begin(), omm_tickets.end(), s.omm_ticket) == omm_tickets.end()) omm_tickets.push_back(s.omm_ticket);
+      }
+      in.flags |= kOmmDynDisable;
+    }
     in.accelerationStructureReference = s.as.addr;
     const bool opaque_material=!alpha && !fd.held && fd.material_record>=native_hit::nh_alpha_rows && fd.material_record<native_hit::nh_material_rows;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);
@@ -1976,6 +2357,53 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS | kAS, kRW);
   }
   fault_checkpoint(cmd, kCkBvhConverted, uint32_t(rec));
+  // rt_omm_dyn: bakes of new micro-maps from this frame's converted soup, then the per-triangle uv checks that
+  // write the indices this frame's per-draw BLAS builds read.
+  if (omm_dyn_on && (!omm_bakes.empty() || !omm_checks.empty())) {
+    if (g_omm_dyn_stats_zero) {
+      dd->vk.CmdFillBuffer(cmd, g_omm_dyn_stats.b, 0, kOmmDynStatsBytes, 0);
+      g_omm_dyn_stats_zero = false;
+      barrier(cmd, kXfer, VK_ACCESS_TRANSFER_WRITE_BIT, kCS, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+    }
+    constexpr VkBufferUsageFlags kIn = VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
+    for (const OmmBake& b : omm_bakes) {
+      DynMicromap e;
+      e.tris = b.tris; e.mask = b.view; e.rec = rec;
+      const VkDeviceSize db = VkDeviceSize(b.tris) * 64u, sb = VkDeviceSize(b.tris) * 24u, tb = VkDeviceSize(b.tris) * 8u;
+      const bool made = make_buf(e.data, db, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | kIn, false, "OMM dyn micro-map data") &&
+                        make_buf(e.snapshot, sb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "OMM dyn uv snapshot") &&
+                        make_buf(e.descriptors, tb, kIn, true, "OMM dyn micro-map descriptors");
+      for (Buf* p : {&e.data, &e.snapshot, &e.descriptors}) g_omm_dyn_bytes += p->size;
+      if (!made) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      std::vector<omm::Triangle> tris(b.tris);
+      for (uint32_t i = 0; i < b.tris; ++i) tris[i] = {i * 64u, uint16_t(omm_mask::kOmbLevel), uint16_t(VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT)};
+      std::memcpy(e.descriptors.map, tris.data(), size_t(tb));
+      const uint32_t gx = (std::min)(b.tris, 65535u), gy = (b.tris + gx - 1) / gx;
+      const OmmDynPush pc{uint32_t(b.soup_off), stride, b.tris, gx, b.cut_lo, b.cut_hi, b.su, b.sv, 0, b.w, b.h, 0};
+      omm_dyn_dispatch(cmd, g_omm_dyn_pipe.bake, pc, cap.xfb, cap.xfb_size, e, gx, gy);
+      omm::Input input{};
+      input.descriptors = tris;
+      input.data = e.data.addr; input.dataBytes = db;
+      input.triangles = e.descriptors.addr; input.triangleBytes = tb;
+      input.dataUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | kIn | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+      input.triangleUsage = kIn | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+      e.ticket = omm::record(cmd, input);   // its barriers order the bake's writes before the micro-map build
+      // A failed record leaves the dispatch recorded: free_buf defers the destruction past every frame in flight.
+      if (!e.ticket) { omm_dyn_free(e); ++g_st.omm_dyn_failed; continue; }
+      ++g_st.omm_dyn_baked;
+      g_st.omm_dyn_bake_tris += b.tris;
+      g_omm_dyn_cached_tris += b.tris;
+      g_omm_dyn.emplace(b.key, std::move(e));
+    }
+    for (const OmmCheck& c : omm_checks) {
+      const OmmDynPush pc{uint32_t(c.soup_off), stride, c.tris, 0, 0.0f, 0.0f, 0.0f, 0.0f, uint32_t(c.index_off), 0, 0, 0};
+      omm_dyn_dispatch(cmd, g_omm_dyn_pipe.check, pc, cap.xfb, cap.xfb_size, *c.e, (c.tris + 63) / 64, 1);
+    }
+    barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kXfer,
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_TRANSFER_READ_BIT);
+    const VkBufferCopy copy{0, 0, kOmmDynStatsBytes};
+    dd->vk.CmdCopyBuffer(cmd, g_omm_dyn_stats.b, g_omm_dyn_readback.b, 1, &copy);
+  }
   JobBatch batch{now, 0, {}, {}, {}, rec};
   batch.command = reinterpret_cast<uint64_t>(cmd);
   // Status slots: one per job, one per new mesh's compacted size, then the batch's
@@ -2065,6 +2493,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     std::vector<VkAccelerationStructureBuildGeometryInfoKHR> infos;
     std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges;
     geo.reserve(mesh_builds.size() + dyn_builds.size() + 1);
+    std::vector<VkAccelerationStructureTrianglesOpacityMicromapEXT> omm_attach;
+    std::vector<VkMicromapUsageEXT> omm_use;
+    omm_attach.reserve(dyn_builds.size());
+    omm_use.reserve(dyn_builds.size());
     VkDeviceSize scratch = 0, al = rt_scratch_alignment();
     std::vector<VkDeviceSize> scratch_off;
     for (const MeshBuild& mb : mesh_builds) {
@@ -2094,10 +2526,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
               (unsigned long long)(VkDeviceSize(db.prims) * tri_bytes), (unsigned long long)cap.xfb_size);
       }
       geo.push_back(db.slot->hair?hair_geometry(g_pool.addr+db.slot->hair_bounds_off):tri_geometry(soup_addr + db.soup_off, db.prims, stride, !db.slot->alpha));
+      if (db.omm) {
+        // rt_omm_dyn: the micro-map, indexed per triangle by this frame's check (the same flags and sizes as decided).
+        omm_attach.emplace_back();
+        omm_use.emplace_back();
+        if (omm_dyn_attachment(db.omm, db.omm_tris, db.prims, g_pool.addr + db.slot->omm_index_off, &omm_attach.back(), &omm_use.back()))
+          geo.back().geometry.triangles.pNext = &omm_attach.back();
+        else
+          log("[omm dyn] WARNING frame %llu: micro-map attachment lost between decision and build", (unsigned long long)now);
+      }
       ranges.push_back({db.prims, 0, 0, 0});
       VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
       bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-      bi.flags = dyn_flags;
+      bi.flags = db.slot->flags;
       bi.mode = db.refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
       bi.srcAccelerationStructure = db.refit ? db.slot->as.as : VK_NULL_HANDLE;
       bi.dstAccelerationStructure = db.slot->as.as;
@@ -2226,6 +2667,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
   // Preserve the baseline mesh BLAS and TLAS. Material-specific variants are
   // separate, and expose instance ranges for the accelerated scene clone.
+  if (omm_dyn_on) {
+    if (!omm_enable.empty() && build_omm_dyn_scene(cmd, slot, n, rbase, rec, omm_enable)) {
+      g_omm_dyn_tickets[slot] = omm_tickets;
+      ++g_st.omm_dyn_scenes;
+    }
+    omm_draws.clear();   // rt_omm_dyn replaces the static pool-variant path (one accelerated TLAS per slot)
+  }
   for(const auto& draw:omm_draws) {
     const auto& fd=g_draws[draw.draw];auto found=g_meshes.find(fd.mesh_key);
     if(found==g_meshes.end() || !fd.omm_material)continue;
@@ -2366,9 +2814,18 @@ bool bvh_omm_commit(VkCommandBuffer cmd,uint32_t slot,VkBuffer stamp,VkDeviceSiz
   if(!mapped || !generation || !state || g_omm_commands[slot]!=cmd ||
      g_omm_recordings[slot]!=state->recording ||
      !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])) ||
-     g_omm_ranges[slot].empty()) {
+     (g_omm_ranges[slot].empty() && g_omm_dyn_tickets[slot].empty())) {
     barrier(cmd,kXfer,VK_ACCESS_TRANSFER_WRITE_BIT,kCS,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
     return false;
+  }
+  if(g_omm_ranges[slot].empty()) {
+    // rt_omm_dyn: micro-maps of immutable masks, checked per triangle before this scene's BLAS builds: the
+    // proof is the generation alone ('OMM3', omm_scene_guard.hlsli), no content epochs.
+    const uint32_t proof[4]={generation,0u,uint32_t(g_omm_dyn_tickets[slot].size()),0x4f4d4d33u};
+    barrier(cmd,kXfer,VK_ACCESS_TRANSFER_WRITE_BIT,kXfer,VK_ACCESS_TRANSFER_WRITE_BIT);
+    vk.CmdUpdateBuffer(cmd,stamp,base+128u,sizeof proof,proof);
+    barrier(cmd,kXfer,VK_ACCESS_TRANSFER_WRITE_BIT,kCS|VK_PIPELINE_STAGE_HOST_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_HOST_READ_BIT);
+    g_omm_expected[slot]=generation;g_omm_mapped_stamp[slot]=mapped;return true;
   }
   const auto& source=g_omm_ranges[slot][0];
   const VkDescriptorBufferInfo buffers[]={{g_omm_rows[slot].b,0,VkDeviceSize(g_omm_ranges[slot].size())*32},
@@ -2393,9 +2850,10 @@ bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR se
   if(!identity)return false;*identity=0;
   std::lock_guard lock(g_mu);
   if(slot>=kSceneSlots || !selected || selected!=g_omm_tlas[slot].as || !g_omm_expected[slot] ||
-     !cfg_hot(CfgHot::rt_omm) || !omm::available_for(g_dd) || g_omm_ranges[slot].empty() ||
+     !cfg_hot(CfgHot::rt_omm) || !omm::available_for(g_dd) || (g_omm_ranges[slot].empty() && g_omm_dyn_tickets[slot].empty()) ||
      !omm::cached_bake_ready(g_omm_records[slot],g_omm_records[slot],bvh_rec_state(g_omm_records[slot])))return false;
   for(const auto& source:g_omm_ranges[slot])if(!omm::register_ticket_use(cmd,source.baked.ticket))return false;
+  for(const uint64_t ticket:g_omm_dyn_tickets[slot])if(!omm::register_ticket_use(cmd,ticket))return false;
   *identity=g_omm_records[slot];return true;
 }
 
@@ -2951,6 +3409,8 @@ void bvh_on_present() {
         g_pending_free.push_back({now, -1, it->second.hold_off, it->second.hold_size});
       if(it->second.hair_bounds_size)
         g_pending_free.push_back({now,-1,it->second.hair_bounds_off,it->second.hair_bounds_size});
+      if (it->second.omm_index_size)
+        g_pending_free.push_back({now, -1, it->second.omm_index_off, it->second.omm_index_size});
       it = g_dyn.erase(it);
     } else {
       ++it;
@@ -3073,6 +3533,28 @@ void bvh_on_present() {
         double(omm::bake_input_bytes()) / 1048576.0, (unsigned long long)st[0], (unsigned long long)st[1],
         (unsigned long long)st[2], (unsigned long long)(st[0] - (std::min)(st[0], st[1] + st[2])),
         have_states ? "" : " (bake counters not read back yet)");
+    if (cfg_int("rt_omm_dyn", 0) || !g_omm_dyn.empty()) {
+      // rt_omm_dyn coverage and cost inputs (docs/P4_OMM.md 11.2c); micro-triangle states and uv checks are
+      // cumulative device counters (omm_bake_mask.hlsl), read back after each build that baked or checked.
+      uint32_t c[8] = {};
+      if (g_omm_dyn_readback.map) std::memcpy(c, g_omm_dyn_readback.map, sizeof c);
+      static uint32_t last_checked = 0, last_changed = 0;   // the check counters wrap: logged per window
+      const uint32_t checked = c[3] - last_checked, changed = c[4] - last_changed;
+      last_checked = c[3]; last_changed = c[4];
+      const double micro = double(c[0]) + double(c[1]) + double(c[2]);
+      log("[omm dyn] last %llu builds (rt_omm_dyn %d): masked per-draw draws %.1f (%.3fM triangles) per build, with a micro-map "
+          "%.1f (%.3fM triangles, %.1f%%); baked %llu micro-maps (%.3fM triangles), deferred %llu, failed %llu; accelerated "
+          "scenes %llu; cache %zu micro-maps, %.3fM triangles, our buffers %.2f MB, backend micro-map+scratch %.2f MB; baked "
+          "micro-triangles so far: known opaque %.1f%%, known transparent %.1f%%, unknown %.1f%% (%u triangles); uv checks "
+          "this window: %u triangles, %u changed",
+          (unsigned long long)s.builds, cfg_int("rt_omm_dyn", 0), s.omm_dyn_draws / nb, s.omm_dyn_tris / nb * 1e-6,
+          s.omm_dyn_att_draws / nb, s.omm_dyn_att_tris / nb * 1e-6,
+          s.omm_dyn_tris ? 100.0 * double(s.omm_dyn_att_tris) / double(s.omm_dyn_tris) : 0.0, (unsigned long long)s.omm_dyn_baked,
+          s.omm_dyn_bake_tris * 1e-6, (unsigned long long)s.omm_dyn_deferred, (unsigned long long)s.omm_dyn_failed,
+          (unsigned long long)s.omm_dyn_scenes, g_omm_dyn.size(), g_omm_dyn_cached_tris * 1e-6, double(g_omm_dyn_bytes) / 1048576.0,
+          double(omm::live_bytes()) / 1048576.0, micro ? 100.0 * c[0] / micro : 0.0, micro ? 100.0 * c[1] / micro : 0.0,
+          micro ? 100.0 * c[2] / micro : 0.0, c[5], checked, changed);
+    }
   }
   if (s.audits_moving_ok + s.audits_moving_failed)
     log("[bvh] audits while the camera moved: %llu ok, %llu failed, max error %.3f x tolerance "

@@ -15,9 +15,8 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kSpecCascade = 1u << 16 };
-// kSpecCascade sits at bit 16: bits 12-15 are left to the define keys of pending branches (gi-reproj-guards uses 4096
-// and 8192), so their merges do not collide with it.
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kSpecCascade = 1u << 16 };
+// kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
 // RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
@@ -41,11 +40,15 @@ enum SpecId : unsigned {
   kSpecIdOmmScene = 1012,            // S4  RT_OMM_SCENE
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
+  kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
 // instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
 // small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
+// S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
+inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
+
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -102,9 +105,13 @@ inline bool cascade_entry(const char* file) {
       "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl", "gi/rt_local_shadows.hlsl",
       "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl", "gi/rt_local_shadows_check.hlsl",
       "gi/rt_local_shadows_full_check.hlsl", "gi/rt_local_shadows_k.hlsl", "gi/rt_local_shadows_full_k.hlsl",
+      // the box (projector) passes (2026-11-02: without these they traced 0xFF and the F-1/F-2 cascade copy shadowed
+      // local and box lights; rt_occ_stats "cascade" kind under local/box)
+      "gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
+      "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
-      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
+      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl", "gi/rt_occ_stats.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;
@@ -171,14 +178,20 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 
 // Water uses the existing cascade constant 1000 for both states. The sun-hit marker
 // describes the pass, never the toggle; only the sun ray sees cascade casters.
+// Native hair (`scalp`: the layer's scalp capability, as kScalp for gi/): the scene's kind3 scalp and hair
+// records, read through the shared alpha set 1 (RT_SPEC_NATIVE, constants 1008/1010), so the
+// water rays see hair as the gi/ passes do. The physical hair origin (RT_HAIR_PHYSICAL_ORIGIN) is a
+// launch-point image of the gi/ receivers (binding 50): water rays start on the water, so it adds nothing.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
-inline std::string water_request(const char* req, bool cascade) {
+inline std::string water_request(const char* req, bool cascade, bool scalp = false) {
   std::string out = req;
   (void)cascade;
+  (void)scalp;
   if (out.compare(0, sizeof("rt/water_compose.hlsl") - 1, "rt/water_compose.hlsl") != 0 &&
       out.compare(0, sizeof("rt/water_reflect.hlsl") - 1, "rt/water_reflect.hlsl") != 0 &&
       out.compare(0, sizeof("rt/water_glint.hlsl") - 1, "rt/water_glint.hlsl") != 0) return out;
   out += out.find('?') == std::string::npos ? "?WATER_SPEC_CASCADE=1" : ";WATER_SPEC_CASCADE=1";
+  out += ";RT_SPEC_NATIVE=1";
   if (out.find("WATER_SHADOWS=1") != std::string::npos) out += ";RT_CASCADE_SUN_HIT=1";
   return out;
 }
@@ -207,6 +220,7 @@ inline unsigned allowed(const char* file) {
   if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass | kHitPool2s;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
+  if (occ_stats_entry(file)) f |= kOccStats;
   return f;
 }
 
@@ -220,10 +234,8 @@ inline unsigned allowed(const char* file) {
 struct NoVariant { const char* key; const char* defines; };
 inline constexpr NoVariant kWaterNoVariant[] = {
     {"rt_omm", "RT_OMM_SCENE=1"},
-    {"rt_native_tileset", "RT_NATIVE_TILESET=1"},
-    {"rt_native_scalp", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
-    {"rt_native_hair", "RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"},
-    {"rt_hair_physical_origin", "RT_HAIR_PHYSICAL_ORIGIN=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1"}};
+    {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
+// rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
@@ -275,6 +287,7 @@ inline std::string request(const char* file, unsigned flags) {
   // Step S2b: gi_far is constant 1007 of the gi_hit_sun files (core/gi.cpp refresh), never RT_GI_FAR.
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
+  if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }

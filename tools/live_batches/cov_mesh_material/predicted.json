@@ -1,0 +1,25 @@
+{
+  "status": "BLOCKED_OFFLINE",
+  "authorization": "NOT_AUTHORIZED_NOT_QUEUED",
+  "key": "rt_hit_material_paks",
+  "prediction_order": "Written before any live run; no live run has been requested or performed.",
+  "missing_observables": [
+    "A collision-checked mesh content fingerprint shared by GR2 data and runtime BLAS source geometry",
+    "Object-space UV and native N/B/T basis for meshes without a G-buffer capture",
+    "A validated pak-material-to-native-row recipe and texture residency binding",
+    "An offline replay proving every previously qualified row and its evaluated energy unchanged"
+  ],
+  "scenes": {
+    "S8": {"job": "cmm1-paks-s8-fg2", "latest_qualified_percent": 63.5, "audit_base_missing_percent": 25, "qualified_share_delta_points": null, "gi_trace_delta_ms": null, "energy_delta_percent": null},
+    "S6": {"job": "cmm2-paks-s6-fg2", "latest_qualified_percent": 41.7, "audit_base_missing_percent": 49, "qualified_share_delta_points": null, "gi_trace_delta_ms": null, "energy_delta_percent": null},
+    "inn": {"job": "cmm3-paks-inn-fg2", "latest_qualified_percent": 30.1, "qualified_share_delta_points": null, "gi_trace_delta_ms": null, "energy_delta_percent": null},
+    "camp": {"job": "cmm4-paks-camp-fg2", "latest_qualified_percent_range": [13.1, 29.0], "qualified_share_delta_points": null, "gi_trace_delta_ms": null, "energy_delta_percent": null}
+  },
+  "gates": {
+    "qualified_share": "Each ON diagnostic window must improve Q/A beyond the absolute OFF-b minus OFF-a repeat spread; no positive prediction is justified until the offline join succeeds.",
+    "existing_qualified_rows": "Zero changed bytes and zero changed evaluated values on the previously qualified subset; global scene mean is not a substitute.",
+    "scene_energy": "Float pre-post scene-colour mean in dumps.json, ON versus the mean of OFF-a and OFF-b; threshold comes from the OFF repeat spread. No PNG or bloom mean.",
+    "gpu_cost": "GI trace GPU median per cost window, ON minus mean OFF-a/OFF-b; diagnostics are disabled during cost windows.",
+    "window_validity": "At least 120 completed diagnostic frames per window, capacity overflow zero, scene wait timeout zero. Missing deciding lines make the run INVALID."
+  }
+}

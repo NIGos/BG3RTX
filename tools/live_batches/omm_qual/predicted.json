@@ -48,5 +48,37 @@
    "predicted": null,
    "reason": "mip 0 reads more texture bandwidth than mip 2; not derived"
   }
+ },
+ "om4-camp-omm-dyn-fg2": {
+  "violations": {
+   "predicted": 0,
+   "source": "omm check, diag-check window. Exact by construction: with B on the masked test is a hard cut on the bilinear mip-0 read for every ray; a micro-triangle is known only if every texel a bilinear read inside its uv box (+ 1/256 texel, float and 1e-5 barycentric slack) can touch is >= max(cuts) + 1/255 or 0 / < min(cuts) - 1/255 (tests/omm_mask_bake_test: 0 violations in 3.2M dense samples; SDK probe: 0 contradictions); a triangle whose uvs changed since the bake gets FULLY_UNKNOWN_OPAQUE in the same frame",
+   "written": "2026-11-02"
+  },
+  "coverage": {
+   "predicted": "masked per-draw triangles with a micro-map >= 90% in every cost window; baked micro-triangles known about 40-49% (opaque about 20-23%, transparent about 22-26%)",
+   "source": "tools/assets/omm_mask_coverage.py, camp pack, grass shader 738494714d50b4c7, level 4: 48.7% known (22.9 / 25.8) with the same texel rule but without the uv slack and the 1024-texel cap; the bake cap is 131072 triangles per build, so all ~2.1M masked triangles are baked within ~20 builds of the warmup; the other 16 masked VT shaders are not measured offline",
+   "written": "2026-11-02"
+  },
+  "candidates": {
+   "predicted": "accelerated 30-50% fewer than reference",
+   "source": "known micro-triangles leave the any-hit loop (transparent: culled, opaque: committed without evaluation); ~97-98% of camp alpha candidates read a mask (P4_OMM 11.2d), uniform micro-triangle areas, ~45% known",
+   "written": "2026-11-02"
+  },
+  "cost": {
+   "predicted": "rt passes: cost-on 1.5-3 ms below the cost-ref mean; local-light shadows and reflections lower in proportion",
+   "source": "upper bound 5.7-6.3 ms when every alpha candidate is resolved (rt_alpha_test=0 at camp, P4_OMM 11); ~45% of the candidates resolved, the traversal of the remaining geometry unchanged. Not derived beyond the sign and this bound. Fixed cost in both REF and ON (not in rt passes): the per-frame uv check (one thread per masked triangle), the accelerated TLAS copy + build (scene build GPU line) and slightly larger per-draw BLAS",
+   "written": "2026-11-02"
+  },
+  "memory": {
+   "predicted": "backend micro-map storage + scratch <= 256 MB (its cap), our buffers ~24 B per cached triangle after the bakes ran",
+   "source": "64 B of 4-state data per triangle at level 4, one micro-map per (draw identity, mask, cuts, scale, triangle count); [omm dyn] line",
+   "written": "2026-11-02"
+  },
+  "shot-on": {
+   "predicted": null,
+   "source": "the same answers on the same rays (violations 0): energy of shot-on equals the shot-ref mean within |ref-b - ref-a|",
+   "written": "2026-11-02"
+  }
  }
 }

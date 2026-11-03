@@ -138,6 +138,15 @@ static const uint kBxGame = 16u, kBxRec = 18u, kBxBox = 20u, kBxExcess = 22u, kB
 #ifndef LS_K
 #define LS_K 0
 #endif
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+// rt_occ_stats (common/occ_stats.h, core/gi.cpp): the occluder kinds of the point/spot and box rays
+// from character pixels. Only in the every-mode box variant (its group barrier; set 4 is the box
+// statistics set, binding 1 the occluder counters).
+#if !(LS_BOX && LS_FULL) || LS_K
+#error "RT_OCC_STATS needs LS_BOX=1, LS_FULL=1, LS_K=0 (rt_local_shadows_full_box.hlsl)"
+#endif
+#include "../rt/occ_stats.hlsli"
+#endif
 
 [[vk::binding(46, 0)]] [[vk::image_format("rgba32ui")]] RWTexture2D<uint4> lsSlots;
 
@@ -474,11 +483,8 @@ bool ls_box_all_lights() { return (pc.ls_flags & (1u << 27)) != 0u; }
 bool ls_box_traced(uint bi, LsLite s) {
   const Bg3Box b = load_box(bi);
   if ((b.flags & 1u) != 0u && ((pc.ls_shadowed == 0u && !ls_qa_off()) || s.cls == kMatHair)) return false;
-  // ls_box=1: box lights the game draws without a shadow map keep the game's look (artists place
-  // decorative casters inside such boxes: the main-menu skull). ls_box=2 traces them up to the end
-  // of their light-side fade-in, where such fixtures sit (rt/bg3_boxes.hlsli bg3_box_fixture_end):
-  // visibility only, t <= s = 1, so it can only remove light, where a caster is on the segment.
-  if ((b.flags & 1u) == 0u && !ls_box_all_lights()) return false;
+  // Honour the game's shadow flag, including mode 2. Bit 29 enables the old A/B policy.
+  if (!bl_shadow_selected(b.flags, (pc.ls_flags & (1u << 29)) != 0u)) return false;
   float3 uvw;
   if (!bg3_box_reaches(b, s.channel, s.P, uvw)) return false;
   if (!(bg3_box_falloff(b, uvw) > 0.0)) return false;   // c = 0: no delta
@@ -747,6 +753,12 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
 
   uint3 cl = bg3_cluster(fp, d);
   uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  // A ray's darkening: the light it removes, unscaled by the AO-on-direct factor, over the pixel's
+  // lit diffuse + specular before this pass.
+  const float occ_den = max(lum(gDiffuse[fp] + gSpecular[fp]), 1e-8);
+  uint occ_nl = 0, occ_nb = 0;
+#endif
   float3 dd = 0, ds = 0;          // delta diffuse / specular
   float3 md = 0, ms = 0;          // validation: recomputed lighting with the game's shadows
   float3 cd_all = 0, cs_all = 0;  // debug: unshadowed sum of the traced lights
@@ -830,6 +842,12 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         t = 0.0;
         dd -= ct;
       }
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+      if (RT_OCC_ON && occ_character(cls) && !qa) {
+        occ_ray(kOccLocal, vs, max(lum(cd * (s - t)) + lum(cs * (s - t)), 0.0) / occ_den);
+        ++occ_nl;
+      }
+#endif
       dd += cd * (t - s);
       ds += cs * (t - s);
       td += cd * t;
@@ -907,6 +925,12 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       cd_all += cd;
       cs_all += cs;
       const bool occ = vs == kRtOccluded && !qa;
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+      if (RT_OCC_ON && occ_character(cls) && !qa) {
+        occ_ray(kOccBox, vs, max(lum(cd * (sh - t)) + lum(cs * (sh - t)), 0.0) / occ_den);
+        ++occ_nb;
+      }
+#endif
       n_traced += qa ? 0u : 1u;
       nb_tr += qa ? 0u : 1u;
       n_occ += occ ? 1u : 0u;
@@ -1236,6 +1260,16 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       rtStats.Store((70 * 64) * 4, asuint((pc.mat_classes & 8u) != 0u ? gFrame.b.x : -1.0));   // set0/b0 _m4
     }
   }
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  // The pixel's darkening per source: the light the traced shadows remove as the pass applies it
+  // (ls_debug=2's term), the box lights' share from their own delta, over the lit buffers before.
+  if (RT_OCC_ON && occ_character(cls) && !validate) {
+    const float k = saturate(pc.ls_strength);
+    const float all_rem = lum(max(-(dd * fdif + ds * fspec) * k, 0.0)), box_rem = lum(max(-(bdd * fdif + bds * fspec) * k, 0.0));
+    if (occ_nl != 0u) occ_pixel(kOccLocal, max(all_rem - box_rem, 0.0) / occ_den);
+    if (occ_nb != 0u) occ_pixel(kOccBox, box_rem / occ_den);
+  }
+#endif
   return true;
 }
 #endif
@@ -1378,7 +1412,13 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
 #if LS_BOX && LS_FULL
 void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
   if (gi < kBxN) gsBx[gi] = 0u;
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) occ_clear(gi);
+#endif
   GroupMemoryBarrierWithGroupSync();
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON && all(tid.xy == 0u)) occ_add(kOccPassLs, 1u);
+#endif
 #else
 void main(uint3 tid : SV_DispatchThreadID) {
 #endif
@@ -1398,6 +1438,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if LS_BOX && LS_FULL
   GroupMemoryBarrierWithGroupSync();
   if (pc.ls_stats != 0u) bx_flush(gi, gid.xy);
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) occ_flush(gi, gid.xy);
+#endif
 #endif
 }
 #endif

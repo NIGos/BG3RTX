@@ -6,22 +6,15 @@
    "rt_cascade_casters",
    "gi_temporal_mv_sample",
    "gi_prev_radiance_guard",
-   "rt_hit_material_instanced",
-   "rt_hit_material_wind_rgb",
-   "rt_hit_material_ip_grass",
    "gi_far",
-   "rt_native_hair",
-   "rt_native_scalp",
-   "rt_native_tileset",
-   "rt_hair_physical_origin",
    "rf_hit_gi",
    "rt_water_rf_edge"
   ],
-  "pipeline_creation_per_toggle": true,
+  "pipeline_creation_per_toggle": "every live toggle but gi_far-0, which reuses its startup variant slot (core/gi.cpp refresh: far_on is variant bit 128, a reuse logs nothing)",
   "pipeline_ms": null,
   "energy_delta_same_state": 0.0,
   "gpu_ms_delta_same_state": 0.0,
   "band": "absolute OFF-a minus OFF-b spread at identical functional settings; dumps.json pre-post float mean for energy, per-pass GPU medians for cost",
-  "not_live_toggleable": "RT_HIT_POOL_2S is startup capability, not an INI toggle; separate startup fixture needed, not covered by this run"
+  "not_live_toggleable": "Startup capabilities, need separate startup fixtures, not covered by this run: RT_HIT_POOL_2S; rt_hit_material_instanced/_wind_rgb/_ip_grass (constants 1003-1005 follow the layer's startup capability words, core/gi.cpp refresh); rt_native_hair/_scalp/_tileset (sticky capability words, common/native_scalp_capability.h, native_tileset_capability.h; restart keys); rt_hair_physical_origin (needs the scalp capability; off->on needs restart). All four native keys stay 0 here: water has no variant for them (shader_variant::kWaterNoVariant, core/water.cpp water_rf skip), so with them on water never traces."
  }
 }

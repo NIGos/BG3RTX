@@ -296,6 +296,10 @@ spread (prior 10-31: RT 3.44 / 3.41 ms, Hair sun visibility 0.150 -> 0.355 -> 0.
 Still open after it: the other hair families (lashes, beards, fur, ExtraUV), the Astarion hairline band (class 5
 shared by Hair/Pubes/Scalp), and the GUI default (Experimental until these gates pass in all three saves).
 
+2026-11-02 product blockers fixed offline: water reflect/compose have scalp/hair variants (no water skip with
+hair on), and new pipeline variants build on background workers (common/pipeline_async.h) instead of freezing
+the render thread for about 60 s at the first hair frame. Checklist: docs/progress/worktree-agent-a78f48005e3b350bd.md.
+
 ## Dated entries moved from TRACK_D_RT.md (2026-10-30)
 
 Newest first, as they were at the top of TRACK_D_RT.md. Later entries supersede earlier ones.

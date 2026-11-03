@@ -72,6 +72,19 @@ int main(int argc, char** argv) {
     CHECK(request("gi/rt_hit_material.hlsl", pool | excluded) == request("gi/rt_hit_material.hlsl", (pool & ~kHitPool2s) | excluded));
   CHECK(request("gi/rt_shadow.hlsl", pool) == request("gi/rt_shadow.hlsl", 0));
 
+  // Box cascade coverage and diagnostic values share their migrated modules.
+  for (const char* f : {"gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
+                        "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl", "gi/rt_occ_stats.hlsl"}) {
+    CHECK(cascade_entry(f));
+    CHECK(request(f, 0) == request(f, kCascade));
+    CHECK(spec_cascade_value(f, kCascade) == 1);
+  }
+  CHECK(kOccStats != kHitPool2s);
+  CHECK(kSpecIdOccStats == 1011);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0).find("RT_SPEC_OCC_STATS=1") != std::string::npos);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0) == request("gi/rt_local_shadows_full_box.hlsl", kOccStats));
+  CHECK(request("gi/rt_shadow.hlsl", kOccStats) == request("gi/rt_shadow.hlsl", 0));
+
   std::set<std::string> want;
   size_t bases = 0;
   for (const auto& e : std::filesystem::directory_iterator(root / "shaders" / "gi")) {
@@ -94,13 +107,19 @@ int main(int argc, char** argv) {
     want.insert(water_request(r, true));
   }
   // Cascade state changes only specialization, for both water families and every layout.
-  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1");
+  CHECK(water_request("rt/water_reflect.hlsl", false) == "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1");
   CHECK(water_request("rt/water_reflect.hlsl", true) == water_request("rt/water_reflect.hlsl", false));
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
-        "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_CASCADE=1;RT_CASCADE_SUN_HIT=1");
+        "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1");
   CHECK(water_request("rt/water_view.hlsl", true) == "rt/water_view.hlsl");
   CHECK(water_request("rt/water_mv.hlsl", true) == "rt/water_mv.hlsl");
   for (const char* r : kFixedRequests) CHECK(water_request(r, false) == water_request(r, true));
+  CHECK(water_request("rt/water_reflect.hlsl", false, false) == water_request("rt/water_reflect.hlsl", false, true));
+  CHECK(water_request("rt/water_view.hlsl", false, true) == "rt/water_view.hlsl");
+  CHECK(water_request("rt/water_mv.hlsl", false, true) == "rt/water_mv.hlsl");
+  for (const char* r : kFixedRequests)
+    for (bool cascade : {false, true})
+      CHECK(water_request(r, cascade, false) == water_request(r, cascade, true));
   // rt_water_rf_edge: both values use the same module, including every record layout.
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
@@ -122,7 +141,7 @@ int main(int argc, char** argv) {
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
-    want.insert(water_request(b, true));
+    for (int c = 0; c < 4; ++c) want.insert(water_request(b, c & 1, (c & 2) != 0));
   }
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {

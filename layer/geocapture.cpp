@@ -1949,6 +1949,8 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   if (!pa || !pb || pb->inputRate != VK_VERTEX_INPUT_RATE_VERTEX) return ip;
   ip.pos_binding = pa->binding < CmdState::kMaxVertexBindings ? uint8_t(pa->binding) : uint8_t(0xff);
   ip.pos_offset = pa->offset;
+  ip.pos_stride = dyn_stride ? 0 : pb->stride;
+  ip.pos_float3 = pa->format == VK_FORMAT_R32G32B32_SFLOAT;
   // The mesh is what the per-vertex inputs hold: the VS and their layout are part of its key.
   uint64_t h = mod.hash ^ 0x9e3779b97f4a7c15ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 1099511628211ull; };

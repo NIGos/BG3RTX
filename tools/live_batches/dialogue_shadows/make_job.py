@@ -24,7 +24,7 @@ HAIR_START = "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_or
 NOHAIR_START = "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_origin=1,rt_xfb_mb=1024,rt_cascade_mb=427"
 BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,"
             "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,"
-            "dump_png_width=960,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
+            "dump_png_width=768,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
             "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,"
             "rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
             "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,"
@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_cascade_static_only": "1"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0", "rt_cascade_static_only": "1"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -54,6 +54,22 @@ plan = [
     # Shader variants: warmed by the ds0 job (below), which every ds job requires.
     step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles
     step("settle-cam", 10, qa_exposure_hold="0"),                    # ds1 10:54: the dialogue camera still moved 41 s after load
+    # The first held shot right after the load (user screens 7-9, port: the moving face band is in THIS shot; the later
+    # diag-occ windows may sit in another cut). Its trace proves the framing; sun rays on character px with distances.
+    step("diag-view-occ-first", 12, [6], rt_occ_stats="1", qa_exposure_hold="0"),
+    # User 2026-11-03: sun between the buildings that should be static but moves: (f) and (g) first, in this shot.
+    # (f) cascade copies re-fitted to the close-up camera; (g) the roof trust (rt_sun_roofs) and the whole replace rule.
+    # Every phase is a 'static' motion step: the runner sends no input, so a moving band is from our side or the game's.
+    step("diag-occ-frames-casc0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_cascade_casters="0", qa_exposure_hold="0"),
+    step("diag-view-occ-roofs0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_roofs="0", qa_exposure_hold="0"),
+    step("diag-view-occ-replace0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_replace="0", qa_exposure_hold="0"),
+    # (e) a cinematic light rig: the game's mask (red) vs our traced sun (green) in the same first shot; an offset band
+    # of the same shape = another light direction.
+    step("diag-view-sunmask-first", 8, [5], rt_debug="2", qa_exposure_hold="0"),
+    # Frame by frame (4-frame lines) in the same shot, rt_dyn_hold 4 then 0: a moving occluder shows as kind/distance
+    # changing line to line; held/stale geometry as 'held' that vanishes with hold 0.
+    step("diag-occ-frames-hold4", 6, rt_occ_stats="1", rt_occ_stats_frames="4", qa_exposure_hold="0"),
+    step("diag-occ-frames-hold0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_dyn_hold="0", qa_exposure_hold="0"),
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
     step("shot-nolocal-on", SHOT, True, rt_local_shadows="0"),               # the game's own local-light shadows
@@ -65,8 +81,10 @@ plan = [
     step("shot-static-only-off", SHOT, True, rt_cascade_static_only="0"),
     step("shot-static-only-on", SHOT, True, rt_cascade_static_only="1"),
     step("shot-nocascade-on", SHOT, True, rt_cascade_casters="0"),   # last frame's cascade soup out of the sun TLAS
-    step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),             # no held (absent) draws while static
+    step("shot-boxold-on", SHOT, True, ls_box_cascade_old="1"),      # the old box passes: the cascade copy shadows local/box lights
+    step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),            # no held (absent) draws while static
     step("shot-noao-on", SHOT, True, gi_ao="0"),                     # RT AO off
+    step("shot-nogi-on", SHOT, True, gi="0"),                        # no GI at all: no RT AO and no RT bounce (port: bounce share)
     step("shot-off-d", SHOT, True),
     step("shot-hair-on", SHOT, True, **HAIR),                        # native Hair + Scalp coverage (else opaque cards)
     step("shot-hairorigin-on", SHOT, True, **ORIGIN),                # + physical secondary origins
@@ -78,8 +96,16 @@ plan = [
     step("motion-nosun", 12, [6, 6.5], rt_shadows="0", contact_shadows="0"),
     step("view-lsremoved", 12, [6], ls_debug="2"),                # local light removed x4 (where D-LS darkens)
     step("view-lsowners", 12, [6], ls_debug="9"),                 # evaluated lights by owner (magenta character)
-    step("diag-view-sunmask", 12, [6], rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
+    step("diag-view-sunmask", 12, rt_debug="2"),             # game sun mask (red) vs traced (green): direction/caster set
     step("diag-ls-stats", 10, ls_stats="1"),                         # light removed % of the lit luminance
+    # rt_occ_stats (docs/DIALOGUE_SHADOWS.md "Occluder-kind diagnostic"): per source the character px darkened, the
+    # mean darkening, the occluder kinds and distances; one line per 60 frames. Each window flips one key so the kind
+    # it names must vanish (validation of the kind) and the darkening it causes is read off directly.
+    step("diag-occ-base", 10, rt_occ_stats="1"),
+    step("diag-occ-nohold", 10, rt_occ_stats="1", rt_dyn_hold="0"),         # 'held' share -> 0
+    step("diag-occ-nocascade", 10, rt_occ_stats="1", rt_cascade_casters="0"),   # 'cascade' share -> 0
+    step("diag-occ-hair", 10, rt_occ_stats="1", **ORIGIN),                    # hair/scalp kinds replace opaque cards
+    step("diag-occ-boxold", 10, rt_occ_stats="1", ls_box_cascade_old="1"),    # before the box cascade-mask fix: local/box 'cascade' > 0
     step("diag-rt-hairoff-a", 10, rt_stats="1", rt_primary_check="1"),
     step("diag-rt-hairon", 10, rt_stats="1", rt_primary_check="1", **ORIGIN),
     step("diag-rt-hairoff-b", 10, rt_stats="1", rt_primary_check="1"),
@@ -93,6 +119,7 @@ labels = [p["label"] for p in plan]
 shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
 traced = [p["label"] for p in plan if p.get("trace_at")]
 cost = [l for l in labels if l.startswith("cost-")]
+occ = [l for l in labels if l.startswith(("diag-occ-", "diag-view-occ-"))]
 judged = shots + [l for l in labels if l.startswith(("view-", "diag-view-"))] + cost
 seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]
@@ -114,7 +141,15 @@ expect_every = [
     {"name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every judged window with the casters on",
      "select": r"\[cascade\] casters: cascade \d+, \d+ frames;", "match": r", buffer full 0\.0, added ", "min": 1,
      "windows": cascade_on, "when_present": True},
+    {"name": "occ stats: every diag-occ window has a complete line with the sun/AO pass and the D-LS occ variant running",
+     "select": r"occ stats \(\d+ frames\): character px", "match": r"passes: sun/AO [1-9]\d*, D-LS [1-9]\d* frames",
+     "min": 1, "windows": occ},
+    {"name": "occ stats: the sun replica line is present in every diag-occ window (read: mismatch <= 1% of the sun rays, predicted.json)",
+     "select": r"occ stats \(\d+ frames\): character px", "match": r"sun replica mismatch \d+ of \d+ rays",
+     "min": 1, "windows": occ},
 ]
+# Pair registration, rather than scene-build camera logs, decides whether shots are comparable.
+# Run pair_registration.py before interpreting character energy; never warp the images.
 
 
 def job(name, save, first, hair):
@@ -135,6 +170,8 @@ def job(name, save, first, hair):
         r"rt stats \(\d+ frames, alpha test on\): primary-ray check match",
         r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+",
         r"\[rrpost\] exposure hold released after [1-9]\d* writes",
+        r"occ stats: active \(sun traced 1, RT GI 1;",
+        r"occ stats \(\d+ frames\): character px",
     ]
     if hair:
         expect += [r"\[hair origin\] startup auxiliary capability 1",
@@ -142,6 +179,7 @@ def job(name, save, first, hair):
     forbid = [r"\[crash\] exception 0x", "VK_ERROR_DEVICE_LOST", r"\[hot\] core (rejected|faulted)",
               "FAILED, keeping previous", "compile call failed", "RR creation failed", "RR evaluate failed",
               "ls box: requested but native set/layout or pipeline unavailable",
+              "occ stats: requested but the pass is unavailable",
               r"\[geo\] rt_native_hair rejected", r"\[alpha hair\] rt_native_hair requires restart",
               r"\[hair origin\] enable rejected"]
     # Foreground (user 2026-11-02 10:xx: the PC is free). The ds1 stall was a shader compile, not focus.
@@ -158,7 +196,7 @@ def job(name, save, first, hair):
                      r"\[cpu\] capture hooks", r"\[trace\]", r"\[shaders\].*\?", r"\[crash\]", "FAILED", "ls box",
                      "ls stats", "ls: local-light shadow pass GPU", "rt stats", "sun stats", "sun check", "gi: GPU cost",
                      r"\[cascade\] casters", r"\[geo\]", r"\[alpha hair\]", r"\[alpha scalp\]", r"\[hair origin\]",
-                     r"\[bvh\]", r"\[rrpost\] exposure (held|hold|probe)"],
+                     r"\[bvh\]", r"\[rrpost\] exposure (held|hold|probe)", "occ stats"],
         "expect": expect, "forbid": forbid, "expect_runner": runner, "stop_on_dump": True,
         "purpose": ("Dialogue character shadows (docs/DIALOGUE_SHADOWS.md 2026-11-02): attribution inside one run at a held "
                     "dialogue shot, user config (Ultra + bg3rtx_user.ini). PNG shots base / RT sun off / local off / box off / "
@@ -187,7 +225,10 @@ WARM_PLAN = "ds_warm.json"
 STATS = dict(rt_stats="1", rt_primary_check="1", qa_exposure_hold="0")
 _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters="0", ls_box="0")),
               ("views", dict(rt_debug="2", ls_debug="2")), ("owners", dict(ls_debug="9", ls_box="0")),
-              ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0"))]
+              ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0")),
+              ("occ", dict(rt_occ_stats="1")), ("occhair", dict(ORIGIN, rt_occ_stats="1")),
+              ("occnocasc", dict(rt_occ_stats="1", rt_cascade_casters="0")),
+              ("boxold", dict(rt_occ_stats="1", ls_box_cascade_old="1"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
 warm_plan.append(step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"))
 warm_seconds = sum(p["seconds"] for p in warm_plan)
@@ -235,7 +276,7 @@ def main():
         if a.no_hair:   # the hair phases still toggle the keys; with the startup off they are inert (logged rejected)
             j["forbid"] = [f for f in j["forbid"] if "hair" not in f]
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
-    print(f"{len(SAVES)} jobs, plan {PLAN}: {len(plan)} phases, {seconds} s, {len(traced)} PNG traces per job -> {out}")
+    print(f"{len(SAVES)} jobs, plan {PLAN}: {len(plan)} phases, {seconds} s, {sum(len(p.get('trace_at', [])) for p in plan)} PNG traces per job -> {out}")
 
 
 if __name__ == "__main__":

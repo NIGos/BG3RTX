@@ -615,3 +615,18 @@ Energy is the post-water image (RR colour input) over the exposure, against the 
 - S1 QuickSave_3784 is labelled the foundry (TEST_SCENES) but COVERAGE measured the sea there.
   The `mm2` expect line requires supported water draws, so a view without water is INVALID.
 - Previous-frame water reuse needs a deformation/flow motion contract; M5.1 measures static only.
+
+## wf9 compose camera correction (2026-11-03, offline candidate)
+
+wf8 S8 turning lost tier 1 (25% static to 0.4-1.5% of covered water) while compose used the
+previous lighting TLAS in about 95% of passes. `rt_water_compose_shift=0` remains the default;
+SpecId 1015 selects the correction with no request or ABI change. The CPU signals only earlier
+stash/stash-kept selections, not newer scenes. water_copy preserves outgoing CameraCB float4 13
+in cCam bytes 400-415 before overwrite, with validity in w; first copy cannot read undefined data.
+Compose binds the existing b64 camera buffer and shifts reflection, sun, local-light and refraction
+origins by current minus build camera. Ray distances are translation invariant; hit reconstruction,
+projection, light vectors and screen radiance stay in current camera space. No history or energy blend.
+The Experimental GUI exposes Water camera correction, off in all presets. See the wf9 progress
+fragment and tools/live_batches/water_flicker_wf9 for offline checks and the unqueued S8 prediction:
+hidden share about 7-10%, covered-water tier 1 near 25%, static float energy within repeat noise.
+GPU delta remains unmeasured (wf8 compose 0.10-0.15 ms). This is READY_FOR_LIVE, not a quality pass.

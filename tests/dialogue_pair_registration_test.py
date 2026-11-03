@@ -39,7 +39,10 @@ class DialogueRegistrationTest(unittest.TestCase):
         for control in ("motion-base-fix-off", "motion-nosun"):
             for index in (0, 1):
                 self.assertIn((control, index, "motion-base", index), pairs)
-        self.assertEqual(len(pairs), 31)
+        # The bundle adds box-old and GI-off attribution shots; both need OFF neighbours.
+        self.assertIn(("shot-off-c", 0, "shot-boxold-on", 0), pairs)
+        self.assertIn(("shot-off-d", 0, "shot-nogi-on", 0), pairs)
+        self.assertEqual(len(pairs), 35)
 
 
 if __name__ == "__main__":

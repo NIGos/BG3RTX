@@ -672,6 +672,28 @@ No shader or rendering logic changed. Existing live evidence: energy within band
 local-light pass +0.32 ms S6 / +0.20 ms S7. These costs remain reference measurements,
 not visual approval. Investigate artistic lights in S6 (Adamantine Forge) before promotion.
 
+**Art intent correction (2026-11-03, ls-box-art, offline candidate).**
+The extractor resolves placement/template `Shadow` (LGHT bit 2) and `CastShadow` (bit 9),
+light type 2 = box. The Lua bridge also captures both (`assetdb_api.h` runtime bits 5/6),
+but projector selection reads the native b29 record: `_m8 & 1` is its active shadow-map flag.
+There is no proven independent projector CastShadow bit or per-projector bridge join.
+S6's world `WLD_Main_A`: 892 boxes; (Shadow, CastShadow) 00 = 433, 01 = 89,
+10 = 355, 11 = 15. This includes other act 1 regions, not only Grymforge or visible lights.
+`WLD_UnderdarkSubs_C` instance: 98 boxes (88 both clear, 10 Shadow only);
+`PLT_UND_AdamantineForge`: 5 (4 both clear, 1 Shadow only). See the hashed offline
+`tools/live_batches/box_lights_art/asset_flags.json` for scope and source evidence.
+Previously mode 1 honoured `_m8 & 1`; mode 2 ignored it for unshadowed boxes.
+Now both preserve those lights unshadowed by default. Mode 2 retains its near-plane limit.
+Host key `ls_box_honour_shadow=1`; 0 restores old mode 2 for one-run A/B, through push bit 29.
+The experimental rf_hit_gi reflection hit path is unchanged (its legacy box policy remains).
+Non-box identity: 216/216 byte-identical to main; pp-diff 216 unchanged / 15 box requests changed.
+No ABI or variant request changes.
+This is a conservative box-only art policy; the point/spot policy above is unchanged.
+Prepared S6 batch: `tools/live_batches/box_lights_art`, static OFF / old / fixed, every-window
+stats, held-exposure float scene means and diagnostic-free costs. Not queued or authorized.
+Live energy, visible recovery and GPU cost remain unmeasured; `ls_box=0` stays the default.
+The following 2026-11-01 mode-2 evidence describes the legacy override.
+
 **`ls_box=2` (2026-11-01, off by default, READY_FOR_LIVE; GUI "Box light shadows: All box lights").**
 Why S6 traced only 0.009 box lights per px (lr3 08:49:39 `ls box stats`): not culling or the froxel
 list (listed 2.44/px, evaluated 1.141/px), but the rule above: `ls_box=1` traces only `_m8 & 1`

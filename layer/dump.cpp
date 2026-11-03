@@ -369,6 +369,8 @@ static std::string format_name(VkFormat f) {
 // 0.5 + 0.5 * v / max|v|; one channel → min..max stretch; UNORM colour as is.
 // A fourth channel that varies gets its own *_a.png.
 static bool g_dump_raw = false;   // set per capture by dumps_finish
+static bool g_dump_preview_f32 = false;   // dump_preview_f32, set per capture by dumps_finish
+constexpr uint64_t kFsComposeDump = 0x5c3fdabc477f316aull;   // the scene colour before post (rrpost.cpp kFsCompose)
 static std::string process(const Dump& d, const uint8_t* data, const std::string& dir, int max_w) {
   const size_t n = size_t(d.w) * d.h;
   float mn[4] = {INFINITY, INFINITY, INFINITY, INFINITY}, mx[4] = {-INFINITY, -INFINITY, -INFINITY, -INFINITY};
@@ -435,6 +437,19 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
     std::string f32 = std::string(base) + ".f32";
     write_file(dir + "\\" + f32, raw.data(), raw.size() * sizeof(float));
   }
+  // dump_preview_f32=1: the scene colour before post (pass 5c3fdabc) as float32 RGBA (no header) at the
+  // preview's size and with its nearest-texel sampling, so the same texels as every other preview of the
+  // render-resolution targets (the G-buffer class in RT2's _a.png): float energy over a screen mask
+  // (tools/live_batches/dialogue_shadows/char_energy.py) at ~10 MB per trace instead of full-size dumps.
+  if (g_dump_preview_f32 && !d.depth && d.pass_fs == kFsComposeDump) {
+    std::vector<float> pv(size_t(ow) * oh * 4);
+    for (uint32_t y = 0; y < oh; ++y)
+      for (uint32_t x = 0; x < ow; ++x) {
+        const uint32_t sx = uint32_t(uint64_t(x) * d.w / ow), sy = uint32_t(uint64_t(y) * d.h / oh);
+        decode(d.format, d.depth, data + (size_t(sy) * d.w + sx) * d.texel, &pv[(size_t(y) * ow + x) * 4]);
+      }
+    write_file(dir + "\\" + std::string(base) + "_p.f32", pv.data(), pv.size() * sizeof(float));
+  }
   bool alpha_varies = ch == 4 && mx[3] > mn[3];
   if (alpha_varies) {
     std::vector<uint8_t> a3(alpha.size() * 3);
@@ -487,6 +502,7 @@ void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue)
   make_dirs(dir);
   int max_w = cfg_int("dump_png_width", 1280);
   g_dump_raw = cfg_int("dump_raw", 0) != 0;
+  g_dump_preview_f32 = cfg_int("dump_preview_f32", 0) != 0;
   ULONGLONG t0 = GetTickCount64();
   std::vector<std::string> parts(mine.size());
   std::vector<void*> maps(mine.size(), nullptr);

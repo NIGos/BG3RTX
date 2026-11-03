@@ -22,7 +22,8 @@ inline bool alternate_entry(const char* file) {
  "gi/gi_trace_rt_hit_direct_em.hlsl","gi/gi_trace_rt_sharc_hit_direct_em.hlsl","gi/rt_reflections_hit_shade_em.hlsl","gi/rt_reflections_sharc_hit_shade_em.hlsl","gi/rt_local_shadows.hlsl","gi/rt_local_shadows_full.hlsl",
  "gi/rt_local_shadows_box.hlsl","gi/rt_local_shadows_full_box.hlsl","gi/rt_local_shadows_native_full.hlsl",
  "gi/rt_local_shadows_native_full_box.hlsl","gi/rt_local_shadows_ref.hlsl","gi/rt_local_shadows_check.hlsl","gi/rt_local_shadows_full_check.hlsl",
- "gi/rt_local_shadows_k.hlsl","gi/rt_local_shadows_box_k.hlsl","gi/rt_local_shadows_full_k.hlsl","gi/rt_local_shadows_full_box_k.hlsl"};
+ "gi/rt_local_shadows_k.hlsl","gi/rt_local_shadows_box_k.hlsl","gi/rt_local_shadows_full_k.hlsl","gi/rt_local_shadows_full_box_k.hlsl",
+ "gi/rt_occ_stats.hlsl"};
  for(const char* name:names)if(std::strcmp(name,file)==0)return true;return false;
 }
 struct OriginVec3 {float x,y,z;};
