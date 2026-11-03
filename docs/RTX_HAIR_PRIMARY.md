@@ -125,4 +125,5 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   pre-post scene colour of the hair ROI, and the visible hue. Key-off: byte-identical D-LS modules (spec
   constant default 0), checked with shader_identity. Cost: +1 counting query per traced light on strand pixels
   (bench: LSS 0.25 ns per ray) + hd_shade (~200 ALU): estimate +0.1-0.3 ms at a close-up.
-  with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per character, VRAM.
+- **4:** DoF/RR post check with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per
+  character, VRAM.
