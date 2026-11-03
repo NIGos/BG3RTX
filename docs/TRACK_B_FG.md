@@ -1,5 +1,15 @@
 # Track B: DLSS Frame Generation through Streamline
 
+## Character-edge attribution prepared - 2026-11-03 (edge-flicker, offline only)
+
+`tools/live_batches/edge_flicker` prepares one static Test Dialogue3 run: independent
+FG, AO, sun, GI, RR, CBT and post-order toggles bracketed by baseline repeats.
+K8 native and P16 displayed captures occupy separate windows. Diagnostic `pan_edge=0`
+by default; no ABI/shader change. Budget 1.478 GB, scene 180 s, estimated 5 min with load.
+The analyzer reuses QA temporal tests and dialogue shot registration. Half-size
+samples, animation and capture-induced cadence limit attribution; parity is not
+generated-frame identity. No live result, GPU capture cost or quality pass yet.
+
 ## Default promotion - 2026-10-30
 
 `fg_input_copy=1` is now the default for input correctness. The previous sections

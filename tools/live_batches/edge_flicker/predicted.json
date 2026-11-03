@@ -1,0 +1,49 @@
+{
+  "status": "OFFLINE_ONLY",
+  "scene": "Test Dialogue3, first port dialogue shot; no camera or dialogue input",
+  "observable": "Temporal variance at character silhouettes and class-5 hair versus class-3/5 interior, rendered and presented separately",
+  "candidates": {
+    "hair_rr_guides": {
+      "prediction": "rr=0 or rr_cbt=0 changes rendered edge energy more than baseline-repeat spread; interior changes less",
+      "limit": "RR off also changes RT denoising; no guide-content proof from a toggle alone"
+    },
+    "post_dof_depth": {
+      "prediction": "rr_post=0 changes edge energy; flicker correlates with temporal depth changes and remains with FG off",
+      "limit": "rr_post=0 changes reconstruction order, not a DoF disable; cannot prove DoF alone"
+    },
+    "dlss_g": {
+      "prediction": "fg=0 removes presented edge excess or parity asymmetry while rendered edge energy remains within repeat spread",
+      "limit": "FG off changes base FPS; record watch rates and compare cadence, not raw magnitudes across sampling intervals"
+    },
+    "rt_strand_noise": {
+      "prediction": "gi_ao=0, rt_shadows=0, or gi_strength=0 removes the most rendered edge flicker; presented follows",
+      "limit": "sun switch is global; energy-changing switches are attribution only, never quality passes"
+    }
+  },
+  "windows": [
+    "base-a",
+    "fg-off",
+    "ao-off",
+    "sun-off",
+    "gi-off",
+    "rr-off",
+    "cbt-off",
+    "post-late",
+    "base-b"
+  ],
+  "capture": {
+    "presented_per_window": 16,
+    "rendered_per_window": 8,
+    "rendered_stage": "native tonemap hudless, after DoF",
+    "mask": "depth discontinuity union class-5 hair, restricted to character support; interior eroded class-3/5 support"
+  },
+  "decision": "Rank edge variance reductions separately per domain; require registered shot and baseline-repeat separation. Report ambiguous if animation, brightness or cadence confounds ranking. No quality pass.",
+  "native_hair": "Default 0 retained: startup-only capture dependencies and known Dialogue3 pool overflow. Not safe for a live-only toggle in this batch.",
+  "budget": {
+    "max_disk_bytes": 2000000000,
+    "target_scene_seconds": "120-300",
+    "game_launches": 1
+  },
+  "shader_request_delta": 0,
+  "camera_settle": "40 s warmup + 5 s baseline settle; observed dialogue camera movement at 41 s in dialogue_shadows. SSS stays default 1 to preserve the five-minute budget."
+}
