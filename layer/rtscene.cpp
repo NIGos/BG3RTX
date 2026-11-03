@@ -34,6 +34,7 @@
 #include "omm_sampler.h"
 #include "omm_bake.h"
 #include "../common/cascade_casters.h"
+#include "../common/water_build_camera.h"
 #include "../common/hair_cost_epoch.h"
 
 #include <intrin.h>
@@ -289,11 +290,40 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char*
   return true;
 }
 
+Buf g_water_build_cameras;
+
 void free_buf(Buf& b) {
   fault_untrack(b.addr);
   defer_destroy(BG3_DEFER_BUFFER, uint64_t(b.b));
   defer_destroy(BG3_DEFER_MEMORY, uint64_t(b.m));
   b = Buf{};
+}
+
+// Record the exact source camera only after a successful TLAS build, in the build command buffer.
+void publish_water_build_camera(VkCommandBuffer cmd, const SceneSlot& scene, const float* camera, bool valid) {
+  using namespace water;
+  if (!cfg_int("rt_water_reflections", 0)) return;
+  auto* ring = static_cast<BuildCameraRing*>(persist(kBuildCameraKey, sizeof(BuildCameraRing)));
+  if (!ring) return;
+  BuildCameraLock lock(*ring);
+  if (!g_water_build_cameras.b && !make_buf(g_water_build_cameras, kBuildCameraCount * kBuildCameraBytes,
+      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, "water build cameras")) return;
+  const uint64_t frame = scene.built;
+  const uint32_t index = build_camera_index(frame);
+  float value[4]{};
+  if (valid && std::isfinite(camera[52]) && std::isfinite(camera[53]) && std::isfinite(camera[54])) {
+    std::memcpy(value, camera + 52, 12); value[3] = 1;
+  }
+  VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  g_dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 1, &barrier, 0, nullptr, 0, nullptr);
+  g_dd->vk.CmdUpdateBuffer(cmd, g_water_build_cameras.b, index * kBuildCameraBytes, sizeof value, value);
+  ring->buffer = uint64_t(g_water_build_cameras.b);
+  // Unreadable/non-finite cameras cannot certify a translation (or F-1 hit shading).
+  ring->entries[index] = {frame, value[3] != 0 ? uint64_t(scene.tlas) : 0,
+                         value[3] != 0 ? uint64_t(scene.omm_reference) : 0};
 }
 
 VkDeviceAddress buffer_address(VkBuffer b) {
@@ -799,6 +829,12 @@ void rt_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> lock(g_mu);
     release_all();
+    if (auto* ring = static_cast<water::BuildCameraRing*>(persist(water::kBuildCameraKey, sizeof(water::BuildCameraRing)))) {
+      water::BuildCameraLock lock(*ring);
+      ring->buffer = 0;
+      for (auto& e : ring->entries) e = {};
+      free_buf(g_water_build_cameras);
+    }
     for (auto& s : g_scene) {
       defer_destroy(BG3_DEFER_BUFFER, uint64_t(s.pose));
       defer_destroy(BG3_DEFER_MEMORY, uint64_t(s.pose_memory));
@@ -1153,6 +1189,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     scene.camera_offset = cap.ubo_offset;
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
     scene.camera_pose_valid = source_camera_valid;
+    publish_water_build_camera(cmd, scene, source_camera, source_camera_valid);
     scene.sun_base=res.sun_base;scene.producer=cmd;
     scene.native_epoch=cap.native_epoch;
     scene.native_frame_buffer=cap.native_frame_buffer;scene.native_frame_offset=cap.native_frame_offset;
@@ -1184,6 +1221,12 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     g_failed = true;
     log("[rt] acceleration structure allocation failed; scene building stopped");
     release_all();
+    if (auto* ring = static_cast<water::BuildCameraRing*>(persist(water::kBuildCameraKey, sizeof(water::BuildCameraRing)))) {
+      water::BuildCameraLock lock(*ring);
+      ring->buffer = 0;
+      for (auto& e : ring->entries) e = {};
+      free_buf(g_water_build_cameras);
+    }
     return;
   }
   // Track D phase 3: the alpha-tested draws' records and textures; InstInfo of the one instance.
@@ -1295,6 +1338,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   scene.camera_offset = cap.ubo_offset;
   std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
   scene.camera_pose_valid = source_camera_valid;
+  publish_water_build_camera(cmd, scene, source_camera, source_camera_valid);
   g_built_prims = prims;
   g_built_aprims = aprims;
   g_built_sig = signature;

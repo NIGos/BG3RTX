@@ -8,29 +8,35 @@
     0,
     1
   ],
-  "hypothesis": "Previous lighting TLAS is camera relative; compose origins need cam_now - cam_build.",
+  "hypothesis": "Compose must use the exact selected rt_scene TLAS build camera from the host-written 4-entry GPU ring, not the previous lighting copy camera.",
   "turning": {
     "off_evidence": {
-      "hidden_percent": [
-        15,
-        28
+      "screen_hit_percent": [
+        6.4,
+        7.9
       ],
-      "tier1_percent": [
-        0.4,
-        1.5
+      "hidden_percent": [
+        23.8,
+        27.7
+      ],
+      "water_reflect_screen_hit_percent": [
+        18.6,
+        19.8
+      ],
+      "water_reflect_hidden_percent": [
+        12.2,
+        14.4
       ]
     },
     "on_prediction": {
-      "hidden_percent": [
-        7,
-        10
-      ],
-      "tier1_percent_covered_water": 25
+      "screen_hit_percent": 19,
+      "hidden_percent": 13
     },
-    "acceptance": "Each ON turning window must recover toward static calibration; report ratios from every compose stats line, and debug 25 covered-water tier 1. The two populations have different denominators."
+    "acceptance": "Each ON turning window recovers compose screen hits toward water_reflect (~19%) and hidden toward ~13% in the SAME window; static pose is not the turning reference. Report TLAS age, camera missing and build-camera delta from every compose stats line; camera missing must be 0. No tuned threshold: use the observed water_reflect window spread as the reference."
   },
   "static_energy": "Pre-post scene float mean plus in-frame compose delta (energy_fs water-compose) unchanged within OFF-repeat noise; derive band from static OFF a/b, never PNGs.",
   "gpu": "Report existing compose GPU ms per state, capture-free cost windows; wf8 baseline 0.10-0.15 ms. No new pass.",
   "motion": "turn_mode=keys holds E (+1) or Q (-1) throughout motion interval, no mouse deltas. Q/E moved in 120/120 samples in the 10:08 live probe; invalidate if water leaves view or presented frames jump.",
-  "quality": "Pending live evidence; no quality pass."
+  "quality": "Pending live evidence; no quality pass.",
+  "remaining_hidden": "If hits remain hidden, rt_water_hit_shade (F-1 consistent) shades tiers 2/3; do not add hysteresis."
 }

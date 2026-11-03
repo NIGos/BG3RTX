@@ -1,36 +1,15 @@
-## Compose camera correction (branch wf9-compose-shift, READY_FOR_LIVE, 2026-11-03)
-- wf8 S8: about 95% of compose passes used the older camera-relative stash TLAS without rebasing rays.
-- Added rt_water_compose_shift, default 0 in INI and every preset; Experimental GUI Water camera correction.
-- SpecId 1015; no ABI change. shaders/variants.txt request delta 0.
-- water_copy preserves outgoing CameraCB float4 13 in cCam bytes 400-415 before overwrite.
-- Validity rejects the first copy; finite/range checks match water_reflect. CPU has no stash camera.
-- Earlier stash and stash-kept picks set the shift flag; same-frame, newer and refused picks do not.
-- Reflection, sun, local-light and refraction origins shift by cam_now - cam_build.
-- Distances are translation invariant; hits, light vectors and screen tests remain in current space.
-- Compose binds the already-declared camera buffer; glint and compose keep matching pipeline suffixes.
-- CPU unit tests cover all 12 scene-use/pick cases and disjoint flags; frame pacing tests cover stalls.
-- Build and all 118 CTests passed; final GUI dependency/schema update passed all 4 settings/launcher checks.
-- spec_cascade_check --key watershift --all --baseline main: 14/14 requests, 56/56 comparisons pass.
-- Both values match reference branches; frozen key-off matches main for all 28 compose/copy entries.
-- pp-diff main: 231 requests, 209 identical inputs, 22 changed preprocessing; no failed preprocessing.
-- Raw modules contain the new constant; key-off preservation is proved after specialization, not raw byte identity.
-- Unqueued S8 batch: 23 phases / 281 s; static and turning 0/1/0/1 within one launch.
-- Frame-paced turns post 1 pixel per 4 observed rendered frames, never wall-clock catch-up deltas.
-- Four raw bursts, 80 presents numbered p00-p79 across five folders, four static energy traces; bound 1.915 GB.
-- Fake dryrun and scene-wait/capacity lints pass. Initial 6 min allowance failed; corrected to 7 min including load.
-- Prediction: ON turning hidden share about 7-10%, covered-water tier 1 near 25%; static float energy within OFF noise.
-- GPU delta unmeasured; wf8 compose was 0.10-0.15 ms. Every cost window requires compose GPU ms and stability stats.
-- In game: S8 Water Queens House pool, look for stable column reflections during smooth turns; quality gate pending.
-- No game launched, no real job queued, no commit or git metadata write. git diff --check passes.
-
-## wf9 live result (S8 Water Queens House, 2026-11-03 03:48-03:54, INVALID on a gate, data read; NOT FIXED)
-- Turns were still not smooth. Each 1 px frame-drag post (every 4 rendered frames) gives one ~45-90 deg camera jump, then the camera holds (presents: 1-2 jumps per 16, mean abs diff ~20 vs 0.4-2).
-- Raw debug 25, covered-water tier 1 (static 99100: 14.7-15.4%): the jump frame drops to 0.0-1.2% with shift 1 (99101 f5857, 99103 f8968/f8971) and with shift 0 (99102 f7409/f7413). Held frames: shift 0 12-23%, shift 1 18-26%.
-- Compose stats, hidden (screen hit): static 6.4-6.5% (14.9%) for 0 and 1. Turn cost windows: shift 0 16.7/17.5/18.0/17.1%, shift 1 17.4/17.8/17.7/17.6% (hit 14.3-15.4% for both). Predicted ON 7-10%: not met.
-- Stability: every window composed 120/120, 0 uncomposed, 0 flips. water_reflect hidden also goes from 5.9% to 11.8-14.6% in turns: the turn poses differ (rays/frame 233k -> 400-457k).
-- Energy (water-compose float mean): OFF 0.187359 / 0.187538, ON 0.187707 / 0.187474. The scene-only mean before the water varies by 0.0004 between repeats: unchanged within noise.
-- Compose GPU median: static OFF 0.104, ON 0.099 ms. Turn OFF 0.127-0.131, ON 0.115-0.129 ms. No added cost.
-- Verdict: the shift does not remove the on/off. Tier 1 is lost on the camera-jump frame with both values, so the stale-TLAS translation is not the deciding cause under this input. The fix stays off and unqualified.
-- Next test: the camera must move a little on every rendered frame. The input posts 1 px but the game turns the camera in big steps.
-- INVALID cause: the gate counts a stats line only if the line before it came after the settings read. scene-wait/casters lines come every ~4.0 s (120 frames at 30 fps). In energy-static-3, lines at 52.976 (7 ms before the 52.983 read) and 56.975 (straddles), then the 59.16 trace stalled the next one to 03:50:03.270, after the window ended at 03.008.
-- Job fix: in plans/wf9_s8.json, energy-static-0..3 change "seconds": 10, "motion_start": 10, "motion_end": 10 to 14 / 14 / 14 (2 periods 8 s + 2.3 s trace stall = 10.3 s worst case). In the job file, "estimated_phase_seconds": 281 -> 297.
+## Water compose camera correction (branch wf9-compose-shift, READY_FOR_LIVE, 2026-11-03)
+- Defect: S8 water reflections switch on/off while turning. Cause in our compose: it traces a one-frame-old
+  camera-relative TLAS, so screen hits fail the same-surface depth test (water_compose.hlsl:442).
+- Key rt_water_compose_shift (SpecId 1015, off in every preset, Experimental GUI "Water camera correction").
+- First version shifted by the previous copy's camera: no effect. wf9 live with smooth Q/E turns (11:56):
+  compose screen hits 6.4-7.9% vs water_reflect 18.6-19.8% in the same windows, hidden 24-28% vs 12-14%,
+  shift 0 and 1 identical; the one frame with a same-frame TLAS recovered (14.3%). Energy and cost neutral
+  (compose 0.10-0.15 ms).
+- Fix now: host-written 4-entry GPU ring of TLAS build cameras; the compose shifts by the camera of the TLAS
+  it actually traces (also for F-1 hit shading). Missing/stale cameras refuse the shift. No hysteresis.
+- Compose stats now log TLAS age and build-camera delta. Unit tests cover the ring; watershift spec check
+  15/15 (key-off 30/30, reference 60/60); pp-diff main 219 identical + 16 changed; ABI unchanged.
+- Prediction: turning screen hits ~19%, hidden ~13%, static energy unchanged. Needs the wf9 live (layer restart).
+- In game: S8 Water Queens House, turn with Q/E and watch the pool column reflections stay on.
+- Full history: docs/archive/wf9-compose-shift-history.md.

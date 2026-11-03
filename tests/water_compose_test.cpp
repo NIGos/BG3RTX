@@ -6,6 +6,7 @@
 // table key) and writes water_fs_<hash hi>_patched.spv for spirv-val / spirv-cross (CMake passes
 // captures/shaders when it exists).
 #include "../common/water_compose.h"
+#include "../common/water_build_camera.h"
 #include "../common/water_fs_patch.h"
 #include "../common/water_policy.h"
 
@@ -156,6 +157,31 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  {
+    using namespace bg3::water;
+    BuildCameraRing ring{};
+    CHECK(find_build_camera(ring, 1, 1).frame == 0);
+    for (uint64_t f = 1; f <= 9; ++f) {
+      BuildCameraLock lock(ring);
+      ring.entries[build_camera_index(f)] = {f, 100 + f, 200 + f};
+      CHECK(find_build_camera(ring, 100 + f, f).frame == f);
+      CHECK(find_build_camera(ring, 200 + f, f).frame == f);
+      CHECK(find_build_camera(ring, 100 + f, f - 1).frame == 0);
+      if (f > 1) CHECK(find_build_camera(ring, 100 + f - 1, f).frame == f - 1);
+      if (f > 4) CHECK(find_build_camera(ring, 100 + f - 4, f).frame == 0);
+      CHECK(find_build_camera(ring, 100 + f, f + 4).frame == 0);
+    }
+    CHECK(build_camera_index(0x100000003ull) == 3);
+    ring.entries[build_camera_index(8)] = {8, 109, 0};
+    CHECK(find_build_camera(ring, 109, 9).frame == 9);
+    CHECK(find_build_camera(ring, 109, 9, 8).frame == 8);
+    CHECK(find_build_camera(ring, 109, 9, 7).frame == 0);
+    CHECK(find_build_camera(ring, 0, 9).frame == 0);
+    ring.entries[build_camera_index(9)] = {9, 0, 0}; // invalid source camera
+    CHECK(find_build_camera(ring, 109, 9, 9).frame == 0);
+    ring.entries[build_camera_index(9)] = {8, 999, 0}; // corrupt frame/index pair
+    CHECK(find_build_camera(ring, 999, 9).frame == 0);
+  }
   CHECK((kFlagSceneShift & kFlagHitShade) == 0u);
   // Hidden-hit shading can fail independently of the ordinary water chain.
   for (uint64_t frame : {0ull, 97ull, 98ull, 99ull, 100ull, 101ull})

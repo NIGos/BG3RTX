@@ -672,3 +672,17 @@ the native local-shadow term for this experimental dispatch rather than evaluate
 current water records with F-1's froxel list. Matching lists keep local shadows.
 Off behavior, shaders, ABI and variant requests are unchanged. GPU cost and live
 hit-attempt confirmation remain pending; keys stay experimental/off.
+
+### wf9 exact build-camera correction (2026-11-03, offline)
+Smooth Q/E turns disproved the previous-copy camera premise: compose screen hits 6.4-7.9%,
+hidden 24-28%, versus water_reflect 18.6-19.8% / 12-14% in the same windows; shift 0/1 matched.
+The host now writes a 4-entry device-local camera ring on each successful scene build. Entries
+are indexed by the full build frame, tagged with the baseline/OMM TLAS aliases, and selected
+by the final compose stash/newer scene's exact build frame. Missing, future or overwritten
+entries disable the shift. Compose copies the selected entry before dispatch; no previous-copy
+camera, ABI change, new binding or request. SpecId 1015 and the default-off key are unchanged.
+The existing compose line reports TLAS age avg/max and GPU-measured build-camera delta avg/max
+(last pass of each readback slot), plus missing-camera count. Prediction: turning screen hits
+~19%, hidden ~13%, static float energy unchanged. Cost remains unmeasured (prior compose
+0.131-0.146 ms turning). Remaining tier 2/3 hits use the F-1-consistent rt_water_hit_shade;
+no hysteresis. The unqueued wf9 batch remains pending live confirmation and a layer restart.
