@@ -1,6 +1,13 @@
 #ifdef WATER_SPEC_CASCADE
 #define RT_SPEC_CASCADE 1
 #endif
+// The reference override is offline-only; runtime requests never vary with this key.
+#ifdef WATER_COMPOSE_SHIFT_REFERENCE
+#define WATER_COMPOSE_SHIFT_ON (WATER_COMPOSE_SHIFT_REFERENCE != 0)
+#else
+[[vk::constant_id(1015)]] const uint kSpecWaterComposeShift = 0;
+#define WATER_COMPOSE_SHIFT_ON (kSpecWaterComposeShift != 0u)
+#endif
 #ifdef WATER_SPEC_RF_EDGE
 [[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
 #define WATER_RF_EDGE 1
@@ -108,7 +115,7 @@
 
 struct ComposeParams {
   uint4 a;    // x pitch (records per row), y capacity (records), z rt_debug, w flags (bit 0 apply)
-  float4 b;   // x roughness above which the probe stays (rf_mirror_rough)
+  float4 b;   // x roughness above which the probe stays; y outgoing camera valid (copy only)
 };
 [[vk::binding(60, 0)]] ConstantBuffer<ComposeParams> cp;
 [[vk::binding(61, 0)]] RWByteAddressBuffer cStats;
@@ -137,6 +144,20 @@ static const uint kHeaderBytes = 64u, kRecordBytes = 40u;   // common/water_comp
 static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_compose.h
 #endif
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
+
+// Spare camera-buffer slot, after the 400-byte CameraCB and before ViewportCB.
+// Copy reads the outgoing camera before overwriting it. The TLAS stash uses that
+// lighting's camera; the current camera/depth/radiance remain in the first slots.
+static const uint kBuildCamOffset = 400u;
+float3 compose_scene_origin(float3 origin) {
+  if (WATER_COMPOSE_SHIFT_ON && (cp.a.w & 32u) != 0u) {
+    const float4 build = asfloat(cCam.Load4(kBuildCamOffset));
+    if (build.w == 0.0) return origin;
+    const float3 d = cam.x[3].xyz - build.xyz;
+    if (all(isfinite(d)) && all(abs(d) <= 1e6)) return origin + d;
+  }
+  return origin;
+}
 
 // Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
 // wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
@@ -285,6 +306,11 @@ void water_copy(uint3 tid : SV_DispatchThreadID) {
     const float4 c[25] = {cam.v0, cam.v1, cam.v2, cam.m6_r0, cam.m6_r1, cam.m6_r2, cam.m6_r3, cam.ray0, cam.ray1,
                           cam.ray2, cam.x[0], cam.x[1], cam.x[2], cam.x[3], cam.x[4], cam.x[5], cam.x[6], cam.x[7],
                           cam.x[8], cam.x[9], cam.x[10], cam.x[11], cam.x[12], cam.x[13], cam.x[14]};
+    if (WATER_COMPOSE_SHIFT_ON) {
+      // No outgoing camera on the first copy; avoid even reading its uninitialized words.
+      const uint3 previous = cp.b.y != 0.0 ? cCam.Load3(13u * 16u) : uint3(0, 0, 0);
+      cCam.Store4(kBuildCamOffset, uint4(previous, asuint(cp.b.y)));
+    }
     [unroll] for (uint i = 0; i < 25u; ++i) cCam.Store4(i * 16u, asuint(c[i]));
     cCam.Store4(kVpOffset, asuint(float4(vp.scale, vp.bias)));
   }
@@ -421,10 +447,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (!all(isfinite(o)) || !all(isfinite(R))) {
       tier = 6u;
     } else {
-      const float th = rt_closest(o, R, pc.rf_tmax, cone, aborted);
+      const float th = rt_closest(compose_scene_origin(o), R, pc.rf_tmax, cone, aborted);
       if (aborted) tier = 5u;
       else if (th < 0.0) tier = 4u;
       else {
+        // Translation preserves th; reconstruct in this frame for screen depth/radiance.
         const float3 H = o + R * th;
         float2 quv;
         float qd;
@@ -505,7 +532,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
       g_rt_cascade_ray = true;   // rt_cascade_casters: the sun ray (only) sees the cascade's casters
 #endif
-      sv = rt_visibility(so, sdir, pc.rt_tmax, scone);
+      sv = rt_visibility(compose_scene_origin(so), sdir, pc.rt_tmax, scone);
 #if defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
       if (RT_CASCADE_ON) g_rt_cascade_ray = false;
 #elif defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
@@ -610,7 +637,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
       const float tmax = dist - pc.ls_clear;
       if (!(tmax > 0.0) || !all(isfinite(lo))) continue;   // the light at the surface: lit
       ++nTr;
-      const uint lv = rt_visibility(lo, tl / dist, tmax, lcone);
+      const uint lv = rt_visibility(compose_scene_origin(lo), tl / dist, tmax, lcone);
       if (lv == kRtOccluded) {
         ++nOcc;
         lsRem += ck;
@@ -653,10 +680,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (!all(isfinite(P)) || !all(isfinite(Tdir))) {
       rtier = 6u;
     } else {
-      const float th = rt_closest(P, Tdir, pc.rf_tmax, rcone, raborted);
+      const float th = rt_closest(compose_scene_origin(P), Tdir, pc.rf_tmax, rcone, raborted);
       if (raborted) rtier = 5u;
       else if (th < 0.0) rtier = 4u;
       else {
+        // th is invariant under the scene-origin translation.
         const float3 H = P + Tdir * th;
         float2 quv;
         float qd;

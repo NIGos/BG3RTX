@@ -1,0 +1,306 @@
+{
+  "name": "wf9-s8-compose-shift",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 550,
+  "repeat": 1,
+  "live_batch": "water-flicker-wf9",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=1,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=0,rt_water_game_shadow=0,rt_water_rr_mv=0,rt_water_fg_mv=0,rt_water_glint_aa=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,pan_water=1,pan_water_frames=8,pan_delay_ms=2000,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_compose_shift=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/water_flicker_wf9/plans/wf9_s8.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[water\\]",
+    "gi: GPU cost",
+    "\\[rrpost\\] exposure (held|probe)",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material\\] buffer reuse",
+    "\\[sl\\] fg_letterbox",
+    "sun stats",
+    "^\\S+\\s+\\[core\\] sun:",
+    "\\[core\\] guard:",
+    "skipped: no variant for",
+    "\\[bvh\\] mesh pool",
+    "\\[hit material pool basis\\]",
+    "\\[cascade\\] buffer full",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[water\\]",
+    "rf: reflection pass",
+    "gi: GPU cost",
+    "\\[pan\\]",
+    "\\[sl\\] capturing \\d+ presented frames",
+    "\\[sl\\] present capture done",
+    "slDLSSGSetOptions",
+    "\\[sl\\] DLSS-G gets",
+    "\\[pan\\] burst",
+    "\\[pan\\].*water",
+    "\\[pan\\].*REFUSED",
+    "PNG write failed",
+    "capture writer backlog"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[trace\\] frame \\d+ written",
+    "\\[sl\\] present capture done",
+    "\\[water\\] compose stability",
+    "\\[pan\\] burst 99100 complete: 8 frames"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[water\\] water geometry UNAVAILABLE",
+    "\\[water\\] build submission failed",
+    "\\[water\\] reflections unavailable",
+    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+    "\\[water\\] compose UNAVAILABLE",
+    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+    "\\[water\\] compose: variant pipeline creation failed",
+    "\\[water\\] compose: a water pipeline blends",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[cascade\\] could not allocate",
+    "skipped: no variant for",
+    "sun: WARNING \\d+ roof volumes within",
+    "over kSunMaxVolumes on [1-9]",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hit material pool basis\\] over kBasisCapBytes",
+    "\\[bvh\\] mesh pool full at",
+    "\\[pan\\].*(REFUSED|failed|dropped)",
+    "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)",
+    "\\[pan\\].*transport INVALID",
+    "\\[pan\\].*refused",
+    "PNG write failed",
+    "capture writer backlog"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=23\\b",
+    "\\[frame-drag\\] phase=\\d+ label=cost-turn-0 rendered=\\d+ x=\\d+",
+    "\\[frame-drag\\] phase=\\d+ label=cost-turn-1 rendered=\\d+ x=\\d+",
+    "\\[frame-drag\\] phase=\\d+ label=cost-turn-2 rendered=\\d+ x=\\d+",
+    "\\[frame-drag\\] phase=\\d+ label=cost-turn-3 rendered=\\d+ x=\\d+",
+    "\\[motion-trace\\] phase=1 label=energy-static-0 repeat=0",
+    "\\[motion-trace\\] phase=2 label=energy-static-1 repeat=0",
+    "\\[motion-trace\\] phase=3 label=energy-static-2 repeat=0",
+    "\\[motion-trace\\] phase=4 label=energy-static-3 repeat=0"
+  ],
+  "stop_on_dump": false,
+  "purpose": "S8 compose camera-space shift 0/1/0/1; static energy calibration then smooth turns; no live authorization.",
+  "estimated_phase_seconds": 281,
+  "expect_every": [
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "when_present": true,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "continuity",
+      "select": "\\[core\\] \\[water\\] compose stability",
+      "match": "uncomposed 0 \\(on/off flips 0\\)",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "reflection stats",
+      "select": "\\[core\\] \\[water\\] reflections \\(",
+      "match": "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "compose tiers",
+      "select": "\\[core\\] \\[water\\] compose \\(",
+      "match": "screen hit \\(composed\\) [0-9.]+%, hidden [0-9.]+%.*aborted 0, invalid 0",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "compose GPU ms",
+      "select": "\\[core\\] \\[water\\] compose GPU",
+      "match": "compose GPU [0-9.]+ ms median.*compose dispatches [0-9.]+ ms median",
+      "min": 1,
+      "windows": [
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3",
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    },
+    {
+      "name": "raw 99100",
+      "select": "\\[pan\\] burst 99100 complete",
+      "match": "\\[pan\\] burst 99100 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "diag-view-static"
+      ]
+    },
+    {
+      "name": "raw 99101",
+      "select": "\\[pan\\] burst 99101 complete",
+      "match": "\\[pan\\] burst 99101 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "diag-view-turn-1"
+      ]
+    },
+    {
+      "name": "raw 99102",
+      "select": "\\[pan\\] burst 99102 complete",
+      "match": "\\[pan\\] burst 99102 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "diag-view-turn-2"
+      ]
+    },
+    {
+      "name": "raw 99103",
+      "select": "\\[pan\\] burst 99103 complete",
+      "match": "\\[pan\\] burst 99103 complete: 8 frames, \\d+ samples, transport ok",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "diag-view-turn-3"
+      ]
+    },
+    {
+      "name": "presented captures",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "energy-static-0",
+        "snap-turn-0",
+        "snap-turn-1",
+        "snap-turn-2",
+        "snap-turn-3"
+      ]
+    },
+    {
+      "name": "static float means",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "settle_s": 1,
+      "windows": [
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3"
+      ]
+    }
+  ],
+  "energy_fs": "water-compose",
+  "window_mode": "visible_unfocused_fg"
+}
