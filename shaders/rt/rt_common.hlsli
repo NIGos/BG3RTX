@@ -1441,7 +1441,9 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
 #ifdef RT_SPEC_NATIVE
+#ifndef RT_VIS_NO_GROOM   // gi/hair_fibre.hlsl: the scene alone (it counts the strands on the ray itself)
   if (RT_GROOM_ON && !aborted && rt_groom_trace(r, true).t >= 0.0) return kRtOccluded;
+#endif
 #endif
   if (aborted) {
     rt_count_unknown(asuint(o.x) ^ asuint(o.z));

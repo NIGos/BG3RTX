@@ -446,6 +446,7 @@ static const CfgHotKey kCfgHot[] = {
   {"perf_hitmat_lists", 0},
   {"perf_hook_state", 0},
   {"rt_hair_groom", 0},
+  {"rt_hair_groom_primary", 0},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];

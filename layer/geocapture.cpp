@@ -105,6 +105,8 @@ uint64_t cascade_bytes() {
   return (std::max)(uint64_t(cascade_mb()) << 20, g_cc_grown.load());
 }
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
+std::mutex g_gbuf_viewport_mu;
+float g_gbuf_viewport[4] = {};                     // its viewport 0 (rt_hair_groom_primary)
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local uint32_t t_last_hair_outputs = 0;
@@ -425,6 +427,11 @@ VKAPI_ATTR void VKAPI_CALL CmdSetViewport(VkCommandBuffer cmd, uint32_t first, u
     if (CmdState* s = cmd_state(cmd)) {
       s->viewport = vps[0];
       s->has_viewport = true;
+      if (s->in_pass && s->pass.width == g_gbuf_w.load() && s->pass.height == g_gbuf_h.load() && is_gbuffer(s->pass)) {
+        std::lock_guard<std::mutex> lock(g_gbuf_viewport_mu);
+        const float v[4] = {vps[0].x, vps[0].y, vps[0].width, vps[0].height};
+        std::memcpy(g_gbuf_viewport, v, sizeof v);
+      }
     }
 }
 
@@ -1833,6 +1840,11 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
 bool geo_native_tileset_enabled() { return g_tileset_capture; }
 void geo_native_tileset_disable(){g_tileset_capture=false;g_stride=g_stride_without_tileset;}
 
+void geo_render_size(uint32_t* width, uint32_t* height) { *width = g_gbuf_w.load(); *height = g_gbuf_h.load(); }
+void geo_gbuffer_viewport(float out[4]) {
+  std::lock_guard<std::mutex> lock(g_gbuf_viewport_mu);
+  std::memcpy(out, g_gbuf_viewport, sizeof g_gbuf_viewport);
+}
 bool geo_native_hair_enabled() { return g_stride >= 88u && g_alpha_mode; }
 VkDeviceSize geo_ubo_align() { return g_ubo_align ? g_ubo_align : 256; }
 

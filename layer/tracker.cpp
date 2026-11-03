@@ -508,6 +508,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
     uint64_t h = hash64(ci->pCode, ci->codeSize);
     shader_dump(h, ci->pCode, ci->codeSize);
     water_note_module(*out, h, ci->pCode, ci->codeSize);   // M5.3: the audited water FS variants
+    hair_primary_note_module(*out, h);                       // rt_hair_groom_primary: the static hair FS
     if(direct && used_patched) {
       const uint64_t actual=hash64(pci.pCode,pci.codeSize);
       shader_dump(actual,pci.pCode,pci.codeSize);
@@ -579,6 +580,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, V
   diag(DIAG_PIPELINE_US, uint64_t((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart));
   geo_note_pipelines(count, cis, out);
   if (r >= 0) water_note_pipelines(device, cache, count, cis, out);   // M5.3 (rt_water_compose at creation)
+  if (r >= 0) hair_primary_note_pipelines(device, cache, count, cis, out);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   for (uint32_t i = 0; i < count; ++i) {
     if (!out[i]) continue;
@@ -627,6 +629,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyPipeline(VkDevice device, VkPipeline p,
   device_of(device)->vk.DestroyPipeline(device, p, a);
   geo_forget_pipeline(p);
   water_forget_pipeline(p);
+  hair_primary_forget_pipeline(p);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().pipelines.erase(p);
 }

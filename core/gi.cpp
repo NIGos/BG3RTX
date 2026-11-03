@@ -36,6 +36,7 @@
 
 #include "core.h"
 #include "../common/camera_motion.h"
+#include "../common/hair_primary.h"
 #include "../common/native_scalp_capability.h"
 #include "../common/native_tileset_capability.h"
 #include "../common/omm_scene_capability.h"
@@ -345,6 +346,7 @@ bool g_occ_logged = false;
 VkPipelineLayout g_occ_layout = VK_NULL_HANDLE;
 Pipe g_occ;               // gi/rt_occ_stats.hlsl: the sun and AO occluders
 Pipe g_ls_full_box_occ;   // gi/rt_local_shadows_full_box.hlsl (constant 1011 = 1): the point/spot and box occluders
+Pipe g_hair_fibre;        // gi/hair_fibre.hlsl (rt_hair_fibre): strand pixels with the fibre BSDF, after D-LS
 VkDescriptorSetLayout g_bx_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_bx_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_bx_set = VK_NULL_HANDLE;
@@ -1207,6 +1209,12 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdHairGiMean, hair_gi_mean ? 1u : 0u);
   }
   if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
+  if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0) {   // rt_hair_fibre: the layer's hair primary header
+    const auto* hp = static_cast<const hair_primary::Persist*>(host->persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));
+    const uint64_t a = hp ? hp->header : 0;
+    specs.add(hair_primary::kSpecRecordLo, uint32_t(a));
+    specs.add(hair_primary::kSpecRecordHi, uint32_t(a >> 32));
+  }
   slot_key += specs.key();
   Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
@@ -3376,6 +3384,23 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     if (s.pan && refresh(g_pan_ls, "gi/pan_local.hlsl", g_ls_layout)) lsp = g_pan_ls.pipeline;
     local_applied=lsp && ls_dispatch(cmd, lb, lp, sun, lsp, (g_w + 7) / 8, (g_h + 7) / 8, box ? &s : nullptr);
     ls_box_applied = box && local_applied && !s.pan;   // the screen traced its box lights this frame
+    // rt_hair_fibre (docs/RTX_HAIR_PRIMARY.md 3b-2b): the visible strands' sun and local lights with the fibre BSDF,
+    // on top of D-LS's result (same sets and push constants; inside D-LS's timed region).
+    if (local_applied && !s.pan && host->cfg_int("rt_hair_fibre", 0) && host->cfg_int("rt_hair_groom_primary", 0) &&
+        refresh(g_hair_fibre, "gi/hair_fibre.hlsl", g_ls_layout)) {
+      memory_barrier(cmd, kCS, kCS);
+      const bool ran = ls_dispatch(cmd, lb, lp, sun, g_hair_fibre.pipeline, (g_w + 7) / 8, (g_h + 7) / 8);
+      // Logged when it starts (the first frame after a frame without it) and every 300 frames while on.
+      static uint64_t s_hair_fibre_last = 0, s_hair_fibre_run = 0;
+      if (ran) {
+        const uint64_t now = host->frame_index();
+        s_hair_fibre_run = now == s_hair_fibre_last + 1 ? s_hair_fibre_run + 1 : 0;
+        s_hair_fibre_last = now;
+        if (s_hair_fibre_run % 300 == 0)
+          host->log("[hair fibre] strand pixels lit by the fibre BSDF after D-LS (%llu frames in this run)",
+                    (unsigned long long)s_hair_fibre_run);
+      }
+    }
     if (s.pan && local_applied) {
       Bg3Binding im{};
       im.image = g_aux.image; im.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -3737,7 +3762,7 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
-                  &g_rf_resolve, &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
+                  &g_rf_resolve, &g_trace_rt, &g_ls, &g_ls_prep, &g_hair_fibre, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
