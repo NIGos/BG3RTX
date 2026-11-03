@@ -139,8 +139,10 @@ reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 6
   grids (IoU 0.755-0.759), the alpha-weighted width and the texel-size mip. Short beards share it (26 player, 13
   named NPC): a systematic card/strand difference the reference does not explain; to pass: a card reference that
   averages the game's dithered alpha test (C5), or an explicit visual review (batch --accept-review).
-  Now: 745 pass, 346 review, 126 reject (reachable: 718 / 244 / 98). Player 354 / 49 / 29, companion 4 / 1 / 1
-  (Gale's beard), named NPC 153 / 32 / 26, generic NPC 8 / 7 / 10, hat variant 167 / 138 / 32, item 32 / 17 / 0. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+  Before M1: 745 pass, 346 review, 126 reject. Full rerun after M1 (2026-11-04, 1217 styles in 52 min, batch v4:
+  fibre reference, radial orientation, root from geometry): 877 pass, 295 review, 45 reject (reachable: 785 / 234 /
+  44). Player 373 / 40 / 19, companion 5 / 0 / 1 (Gale's beard LOD1, IoU 0.68; its LOD0 passes), named NPC 160 / 41 /
+  10, generic NPC 13 / 10 / 2, hat variant 201 / 128 / 8, item 31 / 14 / 4, CV only 2 / 1 / 0; unused 92 / 61 / 1. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
