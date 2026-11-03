@@ -52,7 +52,9 @@ class FlowTests(unittest.TestCase):
         for name, _ in STAGES:
             start = next(i for i,p in enumerate(plan) if p["label"] == "survive-"+name+"-1")
             windows = plan[start:start+3]
-            self.assertEqual([p["seconds"] for p in windows], [20, 20, 20])
+            # The primary stage's windows hold a whole 300-frame strand line at 30 fps (its strand-draw gate).
+            want = 25 if name == "d-primary" else 20
+            self.assertEqual([p["seconds"] for p in windows], [want, want, want])
             self.assertEqual(len({p["set"] for p in windows}), 1)
             self.assertFalse(any(p.get("reload_selected") for p in windows))
             self.assertGreater(sum(p["seconds"] for p in windows), 25+1)

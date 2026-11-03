@@ -165,7 +165,8 @@
       "min": 1,
       "period_frames": 300,
       "windows": [
-        "validation-strands"
+        "validation-strands",
+        "validation-after-reload"
       ]
     }
   ],
