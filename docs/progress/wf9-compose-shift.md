@@ -34,3 +34,15 @@
 - Next test: the camera must move a little on every rendered frame. The input posts 1 px but the game turns the camera in big steps.
 - INVALID cause: the gate counts a stats line only if the line before it came after the settings read. scene-wait/casters lines come every ~4.0 s (120 frames at 30 fps). In energy-static-3, lines at 52.976 (7 ms before the 52.983 read) and 56.975 (straddles), then the 59.16 trace stalled the next one to 03:50:03.270, after the window ended at 03.008.
 - Job fix: in plans/wf9_s8.json, energy-static-0..3 change "seconds": 10, "motion_start": 10, "motion_end": 10 to 14 / 14 / 14 (2 periods 8 s + 2.3 s trace stall = 10.3 s worst case). In the job file, "estimated_phase_seconds": 281 -> 297.
+
+## wf9 Q/E live result (S8, 2026-11-03 11:56-12:03, valid 23/23 phases; NOT FIXED)
+- Turns were smooth: every present pair differs (mean abs 7.8-12.8 vs 0.1 static, no jumps), raw game proxy 0.024-0.052 per frame, about 4 deg per rendered frame.
+- Pose confound: the turns face the sea (covered water 600k px vs 275k pool), so the reference is water_reflect in the same windows, not the static view.
+- Same turn windows: water_reflect hit 18.6-19.8%, hidden 12.2-14.4%; compose shift 0 hit 6.4-7.6%, hidden 23.8-27.5%; shift 1 hit 6.6-7.9%, hidden 23.9-27.7%. Miss (49.5%) and off screen (17.4-18.6%) match water_reflect: the TLAS trace is right, the screen-hit test fails.
+- Static: compose hit 15.0%, hidden 6.4% for both values (water_reflect 14.8 / 5.9). Flips 0, except 1 at the first shift switch (pipeline rebuild).
+- Raw debug 25, tier 1 of covered water: static 12.1-12.9%. Turning shift 1: 1.3-4.5% (99101, 99103). Shift 0: 2.3-7.1%, but 14.3% on f7720, the only frame whose TLAS is from the same frame ("newer scene taken" 3-6 per 120).
+- Energy (water-compose): OFF 0.187525 / 0.187869, ON 0.187837 / 0.187675. Compose delta -0.000116 to -0.000132 in all four. Unchanged within noise.
+- Compose GPU median: static OFF 0.104, ON 0.099 ms; turning 0.131-0.146 ms for both. No added cost.
+- Verdict: the one-frame-old TLAS decides the flip (same-frame TLAS recovers), but the shift has no effect, so its build camera is wrong. The shader uses the previous copy's camera (water_compose.hlsl:159, stored at 321), not the camera the TLAS was built for. water_reflect gets its camera from the host for its build (core/water.cpp:1424).
+- Fix: shift by the TLAS's build frame. Keep a 4-entry ring of copy cameras on the GPU, indexed by frame. Pick the entry for the stash's rt_scene built_frame (core/water.cpp:1202/1228). No ABI change. Log the TLAS age in stats.
+- Fallback if hits stay hidden: rt_water_hit_shade for tiers 2/3 (water_compose.hlsl:455). No hysteresis (it lags and is not physically correct).
