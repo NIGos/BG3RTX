@@ -310,7 +310,7 @@ struct Capture {
   int layer = -1;
   int ts = -1;                                       // timestamp pair of the captured pass
   uint64_t rec = 0;                                  // build record of its command buffer (submitted?)
-  uint32_t c_seen = 0, c_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
+  uint32_t c_seen = 0, c_dup = 0, c_mesh_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
   uint32_t c_dynamic_added = 0, c_dynamic_excluded = 0;
   bool c_static_only = false;
   std::unordered_set<uint64_t> c_legacy_keys;
@@ -1131,6 +1131,7 @@ std::mutex g_cc_mu;                 // everything below
 std::condition_variable g_cc_cv;
 cascade::KeySets g_cc_keys;         // the camera source pass's draw keys (this frame and the last)
 cascade::KeySets g_cc_mesh_keys;    // its mesh keys (alpha-tested cascade draws drawn by it are skipped)
+cascade::InstanceSets g_cc_instance_keys; // same-frame mesh/material/model/pulled-instance keys
 Capture g_ccap[3];                  // the captured cascade pass of frame F is g_ccap[F % 3] (a build may use F-1 or F-2)
 struct CcMeta {
   uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0;
@@ -1155,7 +1156,7 @@ std::vector<float> g_cc_ms;
 std::atomic<uint64_t> g_cc_alpha_known{0}, g_cc_alpha_uv{0};   // skipped alpha-tested cascade draws
 struct CcStats {
   uint64_t legacy_frames = 0, dynamic_added = 0, dynamic_excluded = 0, set_changes = 0;
-  uint64_t frames = 0, seen = 0, dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
+  uint64_t frames = 0, seen = 0, dup = 0, mesh_dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
   uint64_t bytes = 0, bytes_max = 0, demand_max = 0, keys = 0, unconverted = 0;
   uint64_t builds[6] = {}, build_tris = 0;
 };
@@ -1203,8 +1204,27 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
     d.place = uint64_t(vb.buffer), d.place_offset = vb.offset;
   } else {            // per-draw UBO (set 1 binding 0: the model matrix of the depth-only VS)
     Bg3Binding b;
-    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer)
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer) {
       d.place = uint64_t(b.buffer), d.place_offset = b.offset;
+      const uint32_t pull_at=cascade::model_pull_offset(s->vs);
+      uint32_t model[16]{},pull_index=0;
+      Bg3Binding material{},pulled{},camera{};float origin[3]{};
+      // Snapshot current model/instance contents, never the ring allocation.
+      // Class A keeps exact stream/range identity; unknown layouts stay exact too.
+      if(pull_at && geo_uniform_buffer_range(b.buffer,b.offset,pull_at+4) &&
+         (b.range==VK_WHOLE_SIZE || b.range>=pull_at+4) &&
+         read_mapped(b.buffer,b.offset,model,sizeof model) &&
+         read_mapped(b.buffer,b.offset+pull_at,&pull_index,4) &&
+         query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,2,0,&camera,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && camera.buffer &&
+         (camera.range==VK_WHOLE_SIZE || camera.range>=224) && geo_uniform_buffer_range(camera.buffer,camera.offset,224) &&
+         read_mapped(camera.buffer,camera.offset+208,origin,sizeof origin) && cascade::model_position(d,model,origin) &&
+         query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,1,0,&material,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && material.buffer &&
+         (!pull_index || (query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,13,0,&pulled,cfg_hot(CfgHot::perf_hook_state)?s:nullptr) && pulled.buffer))) {
+        d.material=cascade::mix(cascade::mix(cascade::mix(1469598103934665603ull,uint64_t(material.buffer)),material.offset),material.range);
+        if(!d.material) d.material=1;
+        d.instance=cascade::model_instance_key(model,pull_index,uint64_t(pulled.buffer),pulled.offset);
+      }
+    }
   }
   return d;
 }
@@ -1275,6 +1295,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.rt_ubo = VK_NULL_HANDLE;
   c.rt_ubo_off = 0;
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
+  c.c_mesh_dup=0;
   c.c_dynamic_added = c.c_dynamic_excluded = 0;
   c.c_static_only = cfg_int("rt_cascade_static_only", 0) != 0;
   c.c_legacy_keys.clear();
@@ -1388,14 +1409,17 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   AlphaFs alpha_fs{};
   const bool cutout=pi.discard && cc_alpha!=1 && alpha_lookup(s->fs,&alpha_fs);
   const cascade::DrawId id=cascade_draw_id(cmd,s,args,pi);
-  bool mesh_duplicate=false,draw_duplicate=false;
+  bool mesh_duplicate=false,draw_duplicate=false,offset_duplicate=false;
   {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     mesh_duplicate=g_cc_mesh_keys.contains(c->record_frame,cascade::mesh_key(id));
     draw_duplicate=id.place && g_cc_keys.contains(c->record_frame,cascade::draw_key(id));
+    offset_duplicate=!draw_duplicate && g_cc_instance_keys.contains(c->record_frame,id);
+    draw_duplicate=draw_duplicate || offset_duplicate;
   }
   const auto legacy=cascade::legacy_caster(pi.discard,cc_alpha,cutout,
     cfg_int("rt_cascade_alpha_dedupe",1)!=0,mesh_duplicate,draw_duplicate);
+  if(legacy==cascade::LegacyCaster::duplicate && offset_duplicate) ++c->c_mesh_dup;
   const bool static_candidate=cascade_static_candidate(s,pi);
   const bool dynamic_excluded=legacy==cascade::LegacyCaster::keep &&
     !cascade::keep_static_only(c->c_static_only,static_candidate);
@@ -1545,6 +1569,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   }
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
+  st.mesh_dup += c->c_mesh_dup;
   st.full += c->c_full, st.added += c->c_added, st.tris += tris;
   st.tris_max = (std::max)(st.tris_max, uint64_t(tris));
   st.bytes += c->cursor;
@@ -1637,7 +1662,8 @@ void cascade_on_present() {
       "(max %llu), %.2f MB (max %.2f of %d MB, demand max %.2f MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
       "%llu: with the instance %llu (%.0f triangles), no soup %llu, unsubmitted %llu, no camera %llu, legacy %llu, "
       "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion); "
-      "legacy dynamic/unclassified added %.1f, excluded %.1f per frame; set changes %llu per window",
+      "legacy dynamic/unclassified added %.1f, excluded %.1f per frame; set changes %llu per window; "
+      "duplicates by mesh (offset differs) %.1f per frame",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
       int(capacity >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
@@ -1645,7 +1671,8 @@ void cascade_on_present() {
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
       (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms,
       st.dynamic_added/double(st.legacy_frames ? st.legacy_frames : 1),
-      st.dynamic_excluded/double(st.legacy_frames ? st.legacy_frames : 1),(unsigned long long)st.set_changes);
+      st.dynamic_excluded/double(st.legacy_frames ? st.legacy_frames : 1),(unsigned long long)st.set_changes,
+      st.mesh_dup/n);
   // The inversion's premises, from the matrix the conversion used: orthographic (w column
   // (0, 0, 0, 1)), invertible, and the UBO's origin (byte 208) = the camera's of that frame.
   std::string ext;
@@ -2461,6 +2488,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     g_cc_mesh_keys.insert(c->record_frame, cascade::mesh_key(id));
     if (id.place) g_cc_keys.insert(c->record_frame, cascade::draw_key(id));
+    g_cc_instance_keys.insert(c->record_frame,id);
   }
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;

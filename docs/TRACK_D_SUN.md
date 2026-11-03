@@ -186,3 +186,22 @@ The first sample, frame gaps and policy toggles seed the comparison. Counters ar
 only; existing captured-pass GPU median and `gpu` lines supply live cost, unmeasured.
 CPU regression, native static/skin/wind fixtures and settings gates pass. Dialogue A/B
 and smoke_ultra roof/interior gates are specified in `progress/fix-cascade-dialogue.md`.
+
+## Dialogue duplicate identity correction (2026-11-03, offline verified candidate)
+
+The default admission path now also checks the camera draw set of the same frame
+by mesh, material binding and instance. Audited class-B per-draw shaders compare
+model contents and pulled vertex stream/index instead of UBO allocation offsets.
+Model translations are rebased using each pass origin; matching uncertainty is
+derived from the half-ULP errors of the float translation and origin inputs.
+Different transforms, materials and instance ranges remain distinct. Unknown or
+unreadable inputs retain exact matching; class-A stream ranges stay unchanged.
+This preserves off-camera roofs and does not filter the raw Current Sun proof
+stream. Its compacted legacy soup uses the corrected duplicate policy.
+
+The `[cascade] casters` line reports `duplicates by mesh (offset differs)` per
+frame. `rt_cascade_static_only` remains an optional fallback. No ABI/shader change;
+variant request delta 0, no new GPU pass. CPU regressions cover duplicate removal,
+distinct instances and differing origins. Visual roof coverage and dialogue
+confirmation remain pending; no game was launched. Validation details are in
+[the branch progress](progress/fix-cascade-dialogue.md).

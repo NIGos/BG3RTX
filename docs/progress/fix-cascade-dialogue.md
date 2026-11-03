@@ -1,38 +1,34 @@
-## Moving dialogue sun band (branch fix-cascade-dialogue, READY_FOR_LIVE, 2026-11-03)
-- No commit (git metadata read-only); no game launch, save access or other-branch edits.
-- User A/B isolates the moving band to Roof sun shadows; RT sun remains enabled.
-- Admission defect: `common/cascade_casters.h:46` hashes placement offsets;
-  `layer/geocapture.cpp:1395` requires the full opaque draw key. Equal meshes with
-  different UBO offsets survive (mesh dedupe is for discarding draws only).
-  `layer/rtscene.cpp:936` adds that captured pose at F-1/F-2. Exact face-hit draw unproven.
-- Fix: `rt_cascade_static_only=0`, Advanced / Static roof casters only, all presets off.
-  ON keeps recognised affine class-A instances with known non-storage position VBs.
-  Rejects skin/cloth/wind, per-draw and unknown paths, even after opaque dedupe misses.
-  Filters both standalone and Current Sun's compacted legacy soup; raw Current Sun unchanged.
-- Limits: may omit unrecognised static roofs; affine instance transforms or CPU-uploaded
-  vertices can still move. No evidence yet for cascade-set hysteresis or a matrix fix.
-- `[cascade] casters`: dynamic/unclassified added/excluded per frame, set changes per window.
-  Sets ignore order; placement ring offsets can change identities without moving geometry.
-- Build passed. Seven targeted CTests passed (cascade, settings, shader variants, native VT
-  recipes, replay pack, roof cap, OMM scene binding). Defaults/schema current; diff check clean.
-- Native read-only SPIR-V fixtures: static 646a930e41f002bb accepted, skinned
-  1cf36b97d3067b6c and wind 50fbfceb06192473 rejected. CPU regression reproduces
-  offset-mismatched opaque character admission and checks ON exclusion / OFF preservation.
-- ABI unchanged. Shader edits 0; shaders/variants.txt request delta 0; no identity run needed.
-- Port proposal for worktree-agent-a0c9be1ab336eae1a's ds3-dialogue3-fg2 (Test Dialogue3):
-  retain its nocascade window. Add base-A / static-only-A / base-B / static-only-B / base-C
-  in ONE static shot; `rt_shadows=1,rt_cascade_casters=1,rt_sun_cascade_current=0` throughout,
-  changing only `rt_cascade_static_only=0/1`. Repeat at camp ds1 (Test Dialogue1).
-- After >=2 frames of capture replacement, collect complete 120-frame stats windows;
-  job hold >=90, visible_unfocused_fg, patterns + expect and expect_every for every ON window.
-  Match dynamic/unclassified added 0.0 and excluded >0 on ON; buffer full and other matrix 0.0.
-  Compare face/torso band motion with OFF/OFF repeats and existing nocascade (motion should stop).
-  Use separated PNGs for inspection; temporal/energy tolerances come from OFF-repeat noise.
-  Keep AO/hair/local/exposure settings equal. Use pre-post float scene means, not PNG energy.
-- Prediction: ON removes all dynamic/unclassified legacy additions and their stale-pose band;
-  static roofs remain. If the band persists, inspect static membership changes before hysteresis.
-- smoke_ultra: qualified Ultra keys + filter ON/OFF, S8 roof/canopy and S7 cut-away interior.
-  Require retained static roof triangles, no roof/interior light leaks beyond OFF-repeat noise,
-  water composed every frame, no capacity/scene-wait failures, existing sun trust guards intact.
-- GPU cost unmeasured (no new pass). Compare captured-pass median, `gpu` RT/GI/water and build
-  cost in diagnostic-free windows; no concurrent builds. Pending lives are not a quality pass.
+## Cascade dialogue duplicate fix (branch fix-cascade-dialogue, READY_FOR_LIVE, 2026-11-03)
+- No commit: git metadata read-only. No game launch or save access.
+- Root cause: placement UBO offsets in the full draw key let a camera-visible
+  opaque character enter the legacy F-1/F-2 cascade soup as a second pose.
+- Fix directly on the default path: same-frame camera mesh + material + instance
+  matching independent of per-draw UBO allocation. No new key.
+- Audited class-B layouts supply the model matrix and pulled vertex index.
+  Material binding, mesh/range, instance count/first instance and pulled stream
+  remain part of identity. Class-A instance-stream ranges remain exact.
+- Model translations are compared in absolute world space using each pass's
+  origin. Comparison uncertainty derives from float encoding precision.
+- Unknown layouts, unavailable mapped data and unmatched off-camera roofs retain
+  existing admission. Raw Current Sun geometry and coverage proof stay unchanged;
+  its compacted legacy ranges use the corrected duplicate policy.
+- `[cascade] casters` adds `duplicates by mesh (offset differs)` per frame.
+- `rt_cascade_static_only=0` remains the off-by-default fallback, Advanced /
+  Static roof casters only. It can omit unrecognised static roofs when enabled.
+- Unit regressions cover offset/allocation mismatches, differing pass origins,
+  same mesh at distinct placements, materials, pulled instances/ranges, frame
+  isolation, unknown inputs and cascade-only roofs.
+- Validation: C++ build passed (17 s). Full suite 114/116; fold_progress failed
+  during a documentation encoding edit, then passed after correction (1/1).
+  Remaining failure: shader_identity_test sees pre-existing CRLF common/settings.h;
+  bytes equal HEAD after newline normalization. Unrelated file left untouched.
+  Cascade regression, roof cap, GPU fixture and both replay tests passed.
+- ABI unchanged; shader edits 0; shaders/variants.txt request delta 0.
+- Live confirmation remains pending. Check Test Dialogue3 at the port and
+  Test Dialogue1 at camp: Roof sun shadows ON, fallback OFF, moving face band
+  absent; the new duplicate counter should increase for offset-mismatched draws.
+- Outdoor/roof confirmation: S8 roofs/canopies and S7 cut-away interior retain
+  coverage; smoke_ultra includes qualified keys and water composition checks.
+- Matching remains conservative when cascade recording precedes its camera draw
+  or the material binding is missing/different; such copies can still survive.
+- GPU cost unmeasured (no new pass); use existing captured-pass and gpu lines.
