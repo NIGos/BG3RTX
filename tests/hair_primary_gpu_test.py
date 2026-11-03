@@ -20,7 +20,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import bsdf, primary  # noqa: E402
+from tools.hair_groom import bsdf, dual, primary  # noqa: E402
 
 FAILS = []
 
@@ -160,6 +160,46 @@ def bsdf_check(exe, spv, n=4000, seed=11):
     check("BSDF GPU vs CPU: every sample within 2e-4 relative", rep["rel_err_max"] < 2e-4, rep["rel_err_max"])
 
 
+def dual_check(exe, spv, n=3000, seed=13):
+    """hd_shade (GPU) against dual.shade_table (CPU, same tables) on random frames, offsets, fibre counts 0..6."""
+    rng = np.random.default_rng(seed)
+
+    def unit(k):
+        v = rng.normal(size=(k, 3))
+        return v / np.linalg.norm(v, axis=1, keepdims=True)
+    cases = [(bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]), ((0.6, 0.45, 0.3), 0.55), ((0.85, 0.8, 0.7), 0.4)]
+    rows, want = [], []
+    for color, rough in cases:
+        t, wo, wi = unit(n), unit(n), unit(n)
+        h = rng.uniform(-0.99, 0.99, n)
+        nf = rng.integers(0, 7, n).astype(float)
+        want.append(dual.shade_table(t, wo, wi, h, nf, color, rough))
+        block = np.zeros((n, 16), "<f4")
+        block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, h, wo, rough
+        block[:, 8:11], block[:, 11], block[:, 12:15] = wi, nf, color
+        rows.append(block)
+    want = np.concatenate(want)
+    with tempfile.TemporaryDirectory() as d:
+        inp, out = Path(d) / "s.bin", Path(d) / "o.bin"
+        inp.write_bytes(np.concatenate(rows).tobytes())
+        p = subprocess.run([str(exe), "bsdf", str(inp), str(spv), str(out)], capture_output=True, text=True)
+        print(p.stdout.strip())
+        if p.returncode == 77:
+            return
+        if p.returncode:
+            print(p.stderr)
+            check("dual GPU check ran", False, p.returncode)
+            return
+        got = np.frombuffer(out.read_bytes(), "<f4").reshape(-1, 4)[:, :3].astype(np.float64)
+    err = np.abs(got - want) / np.maximum(np.abs(want), 1e-3 * np.abs(want).max())
+    rep = {"samples": len(want), "rel_err_p99": float(np.percentile(err, 99)), "rel_err_max": float(err.max()),
+           "finite": bool(np.all(np.isfinite(got)))}
+    print(json.dumps(rep))
+    check("dual GPU values finite", rep["finite"])
+    check("dual GPU vs CPU: 99% of samples within 1e-4 relative", rep["rel_err_p99"] < 1e-4, rep["rel_err_p99"])
+    check("dual GPU vs CPU: every sample within 1e-3 relative", rep["rel_err_max"] < 1e-3, rep["rel_err_max"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -168,6 +208,7 @@ def main():
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--distance", type=float, default=0.9)
     ap.add_argument("--bsdf-spv", type=Path, help="also compare shaders/rt/hair_bsdf.hlsli with tools/hair_groom/bsdf.py")
+    ap.add_argument("--dual-spv", type=Path, help="also compare shaders/rt/hair_dual.hlsli with tools/hair_groom/dual.py")
     a = ap.parse_args()
     if a.groom:
         gr = np.load(a.groom)
@@ -184,6 +225,8 @@ def main():
         compare(g, ref, primary.gbuffer(ref, cam), strict=a.groom is None)
     if a.bsdf_spv:
         bsdf_check(a.exe, a.bsdf_spv)
+    if a.dual_spv:
+        dual_check(a.exe, a.dual_spv)
     print(f"{len(FAILS)} failures" if FAILS else "all passed")
     sys.exit(1 if FAILS else 0)
 

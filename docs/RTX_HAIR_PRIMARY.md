@@ -105,7 +105,12 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   dual 0.70/0.73/0.75, corrected 1.02/1.01/1.01; held-out colours corrected 0.97-1.04 (one 1.12 at 18%
   reference spread). A measurement bug found on the way (radiance vs flux: a cos(theta_o) factor) is fixed in
   the estimator. CTest `hair_groom_test` (test_dual).
-  **3b-2 (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
+  **3b-2a (done offline):** `shaders/rt/hair_dual.hlsli` `hd_shade` (fibre averages and k from the generated
+  `hair_dual_table.hlsli`, bilinear in (log colour, roughness)) and its twin `dual.shade_table`: GPU vs CPU
+  relative error max 1.4e-5 (9000 samples, 0-6 fibres in front); table model vs per-colour Monte Carlo averages
+  0.967/0.972/0.981 (CHAR_Hair colour). Found on the way: a `static const float x[8][3][6]` table read shifted
+  fields on the GPU (DXC SPIR-V); the table is flat now.
+  **3b-2b (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
   (hb_eval_pixel - the game's class-5 term, bg3_materials/bg3_sun) x radiance x our visibility, behind its own
   key; Hair_Color from the strand's RT1 (the native material output). Open: single-scatter Chiang is pale
   (RTX_HAIR_INTEGRATION 4), so 3b needs the dual-scattering term (Zinke 2008: forward transmittance and

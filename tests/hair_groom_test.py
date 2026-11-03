@@ -444,6 +444,17 @@ def test_dual():
     check("white fibre: forward + backward fractions ~1 (energy)", np.all(np.abs(av.a_f + av.a_b - 1) < 0.03), av.a_f + av.a_b)
     check("correction table: k > 1 everywhere (the model misses multiple scattering, never adds)",
           np.all(np.asarray(dual.TABLE_K) > 1))
+    gen = (ROOT / "shaders" / "rt" / "hair_dual_table.hlsli").read_text(encoding="utf-8")
+    check("shaders/rt/hair_dual_table.hlsli is current (python -m tools.hair_groom.dual --hlsl)", gen == dual.hlsl_tables())
+    # The shader's table model against the per-colour Monte Carlo averages (interpolation over the grid).
+    rng = np.random.default_rng(9)
+    k = 20000
+    tt, wo, wi = (rng.normal(size=(k, 3)) for _ in range(3))
+    tt, wo, wi = (v / np.linalg.norm(v, axis=1, keepdims=True) for v in (tt, wo, wi))
+    h, nf = rng.uniform(-1, 1, k), rng.integers(0, 4, k)
+    a = dual.shade_table(tt, wo, wi, h, nf, c, r).mean(0)
+    b_ = dual.shade(tt, wo, wi, h, nf, c, r, corrected=True).mean(0)
+    check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
 
 
 for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
