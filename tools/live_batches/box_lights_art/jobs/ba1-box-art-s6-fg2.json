@@ -1,0 +1,141 @@
+{
+ "name": "ba1-box-art-s6-fg2",
+ "save": "Adamantine Forge",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 550,
+ "repeat": 1,
+ "live_batch": "box-lights-art",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,ls_impl=1,ls_samples=0,ls_shadowed=3,ls_k=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_scene_wait=1,rt_cascade_casters=0,ls_box=0,ls_native_direct_validate=0,cpu_timing=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,ls_box_honour_shadow=1,rf_hit_gi=0",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/box_lights_art/plans/art_s6.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "rt applied",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[cpu\\] capture hooks",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "ls box",
+  "ls stats",
+  "ls: local-light shadow pass GPU",
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[geo\\] RT capture"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "ls box: active \\(mode 2;",
+  "ls box: inactive \\(mode 0;",
+  "ls box stats \\(120 frames\\): evaluated (?!0\\.000)[0-9.]+/px",
+  "ls box bound \\(120 frames\\): px [1-9]\\d* ",
+  "ls: local-light shadow pass GPU median .*box 2\\)",
+  "ls: local-light shadow pass GPU median .*box 0\\)",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "ls box: requested but native set/layout or pipeline unavailable"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\].*visible_unfocused",
+  "\\[motion-trace\\] phase=9 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-old-a repeat=0",
+  "\\[motion-trace\\] phase=11 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=12 label=shot-fixed-a repeat=0",
+  "\\[motion-trace\\] phase=13 label=shot-off-c repeat=0",
+  "\\[motion-trace\\] phase=14 label=shot-old-b repeat=0",
+  "\\[motion-trace\\] phase=15 label=shot-off-d repeat=0",
+  "\\[motion-trace\\] phase=16 label=shot-fixed-b repeat=0",
+  "\\[motion-trace\\] phase=17 label=shot-off-e repeat=0",
+  "\\[motion-plan\\] complete phases=19\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Static S6 within-run OFF / legacy mode 2 / fixed mode 2. Preserve artistic unshadowed boxes; energy from scene-colour float means, same-run OFF noise. See predicted.json and README.md.",
+ "estimated_phase_seconds": 227,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-old",
+    "cost-fixed",
+    "cost-off-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-old",
+    "cost-fixed",
+    "cost-off-b"
+   ]
+  },
+  {
+   "name": "old policy actually traces artistic boxes",
+   "select": "ls box trace \\(120 frames\\):",
+   "match": "mode 2; .*unshadowed traced [1-9]\\d*",
+   "windows": [
+    "diag-old"
+   ],
+   "min": 1
+  },
+  {
+   "name": "fixed policy never traces artistic boxes",
+   "select": "ls box trace \\(120 frames\\):",
+   "match": "mode 2; .*unshadowed traced 0,",
+   "windows": [
+    "diag-fixed"
+   ],
+   "min": 1
+  },
+  {
+   "name": "boxes participate in both diagnostic windows",
+   "select": "ls box stats \\(120 frames\\):",
+   "match": "evaluated (?!0\\.000)[0-9.]+/px",
+   "windows": [
+    "diag-old",
+    "diag-fixed"
+   ],
+   "min": 1
+  }
+ ],
+ "window_mode": "visible_unfocused_fg",
+ "post": "py -3 tools/live_batches/box_lights_art/energy_check.py \"{log}\"",
+ "post_gate": true
+}

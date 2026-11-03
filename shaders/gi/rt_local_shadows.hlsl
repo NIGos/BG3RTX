@@ -474,11 +474,8 @@ bool ls_box_all_lights() { return (pc.ls_flags & (1u << 27)) != 0u; }
 bool ls_box_traced(uint bi, LsLite s) {
   const Bg3Box b = load_box(bi);
   if ((b.flags & 1u) != 0u && ((pc.ls_shadowed == 0u && !ls_qa_off()) || s.cls == kMatHair)) return false;
-  // ls_box=1: box lights the game draws without a shadow map keep the game's look (artists place
-  // decorative casters inside such boxes: the main-menu skull). ls_box=2 traces them up to the end
-  // of their light-side fade-in, where such fixtures sit (rt/bg3_boxes.hlsli bg3_box_fixture_end):
-  // visibility only, t <= s = 1, so it can only remove light, where a caster is on the segment.
-  if ((b.flags & 1u) == 0u && !ls_box_all_lights()) return false;
+  // Honour the game's shadow flag, including mode 2. Bit 29 enables the old A/B policy.
+  if (!bl_shadow_selected(b.flags, (pc.ls_flags & (1u << 29)) != 0u)) return false;
   float3 uvw;
   if (!bg3_box_reaches(b, s.channel, s.P, uvw)) return false;
   if (!(bg3_box_falloff(b, uvw) > 0.0)) return false;   // c = 0: no delta

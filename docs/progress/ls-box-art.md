@@ -1,0 +1,24 @@
+## Box light art intent (branch ls-box-art, READY_FOR_LIVE, 2026-11-03)
+- User report: legacy ls_box=2 can remove artistic fill/rim lights in S6 Grymforge.
+- Asset flags: Shadow = LGHT bit 2, CastShadow = bit 9, LightType 2 = box.
+- WLD_Main_A: 892 boxes, flags (Shadow, CastShadow) 00/01/10/11 = 433/89/355/15.
+- WLD_UnderdarkSubs_C instance: 98 boxes, 88 both clear, 10 Shadow only.
+- Adamantine Forge platform: 5 boxes, 4 both clear, 1 Shadow only.
+- Counts are placed source records, not the S6 camera's visible set. Audit JSON includes DB hash.
+- Native projector _m8 bit 0 is the usable shadow-map flag; no independent CastShadow join proved.
+- Old mode 1 honoured it; old mode 2 traced boxes with it clear as well.
+- Fixed mode 2 preserves unshadowed boxes and keeps the shadow-view near-plane limit.
+- Host key ls_box_honour_shadow defaults to 1; 0 restores old mode 2 for in-run A/B.
+- Deferred box pass only; experimental rf_hit_gi keeps its legacy box policy. ABI unchanged; variants delta 0.
+- Shared CPU/HLSL selection test adds 4,096 cases including nonzero atlas slots.
+- Build passed; all 118 CTests passed (101.13 s). Settings generator unchanged after update.
+- Preprocess vs main: 231 requests, 124 identical inputs, 92 same text, 15 changed, 0 failures.
+- Default and full box shaders: 2/2 compile and spirv-val pass (serial shared helper).
+- Non-box SPIR-V: 216/216 byte-identical to main (6e69f90632e0), zero compiles needed.
+- S6 job prepared outside inboxes: 227 s static plan, 9 PNG traces, about 550 MB.
+- Fake-runner dryrun passed; exposure, scene-wait and capacity lint passed.
+- Post energy gate uses pre-post float means and same-run OFF noise; no tuned brightness band.
+- Energy fixtures: recovery passes; darkening, unresolved recovery and NaN fail.
+- GPU cost and artistic-light recovery remain unmeasured. Historical old S6 cost +0.32 ms only.
+- Check S6 lower-right walkway and central pillar in same-run OFF / old / fixed shots.
+- ls_box stays 0 in every preset. Nothing queued, game never launched, no commit made.

@@ -641,6 +641,7 @@ inline constexpr KV kDefaults[] = {
     {"ls_debug", "0"},
     {"ls_stats", "0"},
     {"ls_box", "0"},
+    {"ls_box_honour_shadow", "1"},
     {"ls_native_direct_validate", "0"},
     {"ls_lights", "1"},
     {"ls_owners", "31"},
