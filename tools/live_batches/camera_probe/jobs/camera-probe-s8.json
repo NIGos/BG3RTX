@@ -1,0 +1,94 @@
+{
+  "name": "camera-probe-s8",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 400,
+  "repeat": 1,
+  "live_batch": "camera-probe",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=30,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=0,rt_water_game_shadow=0,rt_water_rr_mv=0,rt_water_fg_mv=0,rt_water_glint_aa=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=6000,fg_log_presents=1,pan_water=0,pan_water_frames=8,pan_delay_ms=0,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_compose_shift=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/camera_probe/plans/camera_s8.json"
+  ],
+  "patterns": [
+    "\\[sl\\] DLSS-G frame",
+    "\\[rt\\] scene build GPU",
+    "\\[sl\\].*capture",
+    "\\[cfg\\]",
+    "\\[crash\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[sl\\] DLSS-G frame",
+    "\\[rt\\] scene build GPU",
+    "\\[sl\\] present capture done"
+  ],
+  "forbid": [
+    "\\[crash\\] exception",
+    "VK_ERROR_DEVICE_LOST",
+    "PNG write failed",
+    "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=7\\b",
+    "\\[rotation-input\\] phase=1\\b",
+    "\\[rotation-input\\] phase=2\\b",
+    "\\[rotation-input\\] phase=3\\b",
+    "\\[rotation-input\\] phase=4\\b",
+    "\\[rotation-input\\] phase=5\\b"
+  ],
+  "estimated_phase_seconds": 110,
+  "window_mode": "visible_unfocused_fg",
+  "stop_on_dump": false,
+  "expect_every": [
+    {
+      "name": "moving samples (necessary, not a smoothness proof)",
+      "select": "\\[rt\\] scene build GPU .*camera moving,",
+      "match": "camera moving, [1-9]\\d* samples",
+      "min": 1,
+      "windows": [
+        "turn-legacy",
+        "turn-hold_drag-1",
+        "turn-hold_drag-2",
+        "turn-centre_hold-1",
+        "turn-centre_hold-2"
+      ]
+    },
+    {
+      "name": "one delayed fallback sequence in each window",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "turn-legacy",
+        "turn-hold_drag-1",
+        "turn-hold_drag-2",
+        "turn-centre_hold-1",
+        "turn-centre_hold-2"
+      ]
+    },
+    {
+      "name": "render frame markers use real camera uniforms",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "camera from uniforms",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "turn-legacy",
+        "turn-hold_drag-1",
+        "turn-hold_drag-2",
+        "turn-centre_hold-1",
+        "turn-centre_hold-2"
+      ]
+    }
+  ]
+}

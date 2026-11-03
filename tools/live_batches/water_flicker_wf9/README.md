@@ -1,7 +1,7 @@
 # wf9: S8 compose camera shift
 
 Prepared offline. Never queued. No game launch or live authorization. `predicted.json` precedes the job.
-One Water Queens House launch, visible_unfocused_fg, 23 phases / 281 s plus load.
+One Water Queens House launch, visible_unfocused_fg, 23 phases / 297 s plus load.
 The static energy calibration toggles rt_water_compose_shift 0/1/0/1 at one unmoved camera;
 then the moving windows repeat 0/1/0/1 in the same run. Compose stays enabled throughout.
 Other water image terms stay off at startup and in every compared window. The outer queue restores INI.
@@ -48,3 +48,7 @@ The wrapper checks counts and byte bounds before the common fake queue check.
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/water_flicker_wf9/dryrun.ps1`.
 Synthetic authorization receipts exist only in temporary .queue-fake-root directories and permit no real run.
 Keep this folder outside every watched captures/queue/pending inbox.
+
+Camera probe preparation: energy-static-0..3 now last 14 s (motion_start/end 14).
+The inert `_comment_turn_mode` fields document the future mode/speed alternative;
+no winner is selected or active. See ../camera_probe/README.md before changing turns.
