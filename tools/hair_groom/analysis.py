@@ -25,17 +25,48 @@ def root_channel_check(mask, tile_grid=(8, 2), threshold=128):
     return out
 
 
+def _orientation_flags(groom, head_centre, margin=0.005):
+    first, last = groom.offsets[:-1], groom.offsets[1:] - 1
+    d_root = np.linalg.norm(groom.points[first] - head_centre, axis=1)
+    d_tip = np.linalg.norm(groom.points[last] - head_centre, axis=1)
+    chord = np.linalg.norm(groom.points[last] - groom.points[first], axis=1)
+    return (d_tip < d_root - margin,
+            np.abs(d_tip - d_root) > np.maximum(margin, chord / np.sqrt(2.0)))
+
+
+def reorient(groom, head_centre):
+    """Copy a groom with radial strands pointing away from the head and arc-length root parameters.
+
+    Tangential strands keep their order. A collapsed strand uses evenly spaced parameters.
+    The converter's groom (including its cached arrays) is left untouched.
+    """
+    from dataclasses import replace
+
+    reversed_, decided = _orientation_flags(groom, head_centre)
+    flip = reversed_ & decided
+    lengths = np.diff(groom.offsets)
+    index = np.arange(len(groom.points))
+    opposite = np.repeat(groom.offsets[:-1] + groom.offsets[1:] - 1, lengths) - index
+    index = np.where(np.repeat(flip, lengths), opposite, index)
+    arrays = {name: getattr(groom, name)[index].copy() for name in
+              ("points", "radii", "joints", "weights", "root_param", "triangle", "bary", "normal_offset")}
+    if groom.strands:
+        step = np.r_[0.0, np.linalg.norm(np.diff(arrays["points"].astype(float), axis=0), axis=1)]
+        step[groom.offsets[:-1]] = 0
+        arc = np.cumsum(step)
+        arc -= np.repeat(arc[groom.offsets[:-1]], lengths)
+        total = np.repeat(arc[groom.offsets[1:] - 1], lengths)
+        fallback = (np.arange(len(index)) - np.repeat(groom.offsets[:-1], lengths)) / np.repeat(lengths - 1, lengths)
+        arrays["root_param"] = np.divide(arc, total, out=fallback, where=total > 0).astype(groom.root_param.dtype)
+    return replace(groom, **arrays), int(flip.sum())
+
+
 def orientation(groom, head_centre, margin=0.005):
     """Strands whose tip is closer to the head centre than the root (by > margin) are reversed. Only strands more
     radial than tangential decide (|d_tip - d_root| > chord cos 45): a strand lying along the scalp has root and tip at
     the same distance from the head whichever way it runs (Halsin 2026-11-03: 369 of 842 cards flagged by scalp strands
     with a radial share of 0.20, the groom's images within 1-3% of the cards)."""
-    first, last = groom.offsets[:-1], groom.offsets[1:] - 1
-    d_root = np.linalg.norm(groom.points[first] - head_centre, axis=1)
-    d_tip = np.linalg.norm(groom.points[last] - head_centre, axis=1)
-    chord = np.linalg.norm(groom.points[last] - groom.points[first], axis=1)
-    reversed_ = d_tip < d_root - margin
-    decided = np.abs(d_tip - d_root) > np.maximum(margin, chord / np.sqrt(2.0))
+    reversed_, decided = _orientation_flags(groom, head_centre, margin)
     per_card = {}
     for c, r, ok in zip(groom.card, reversed_, decided):
         if ok:
