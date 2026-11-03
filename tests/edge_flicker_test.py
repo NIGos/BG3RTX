@@ -9,7 +9,7 @@ from PIL import Image
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.live_batches.edge_flicker.analyze import masks, energy, rank, burst, analyze, presents, registered_run, registered_endpoints
+from tools.live_batches.edge_flicker.analyze import masks, energy, rank, burst, analyze, presents, registered_run, registered_endpoints, dialogue_metrics, shifted_mask, registration_structure, scaled_shift
 from tools.live_batches.edge_flicker.make_job import WINDOWS
 from tools.live_batches.dialogue_shadows.pair_registration import registration
 
@@ -69,6 +69,38 @@ class EdgeFlickerTest(unittest.TestCase):
         self.assertEqual(keep, [0, 1, 2, 3])
         with self.assertRaises(ValueError):
             registered_run(a, [a, a, cut, a])
+
+    def test_window_offset_and_subtitle_exclusion(self):
+        a = np.random.default_rng(31).random((160, 384, 3))
+        # Corresponds to the top of the subtitle region, y=590 at 1920x800.
+        stop = 118
+        frames = []
+        for i in range(6):
+            f = np.roll(a, (3, 7), axis=(0, 1))
+            f[stop:] = np.random.default_rng(i).random(f[stop:].shape)*50
+            frames.append(f)
+        keep, report = registered_run(a, frames)
+        self.assertEqual(keep, list(range(6)))
+        self.assertEqual(report['shift_px'], (3, 7))
+        self.assertEqual(report['subtitle_top'], stop)
+        self.assertEqual(registration_structure(a).shape, (118, 384))
+        self.assertEqual(scaled_shift((3, 7), (160, 384), (320, 768)), (6, 14))
+
+    def test_hair_residual_sparkle_and_rigid_control(self):
+        frames = [np.full((160, 384, 3), .5, 'f4') for _ in range(8)]
+        for i, f in enumerate(frames):
+            f[4:66, 128:176] += .02*(-1)**i
+        m = dialogue_metrics(frames, (0, 0))
+        self.assertAlmostEqual(m['hair_box']['residual_x1000'], 40, places=3)
+        self.assertEqual(m['hair_box']['sparkle_percent'], 100)
+        self.assertAlmostEqual(m['hair_box']['mean_code'], .5, places=5)
+        self.assertLess(m['rigid_control']['residual_x1000'], 1e-5)
+        shifted = [np.roll(f, (2, -4), axis=(0, 1)) for f in frames]
+        self.assertAlmostEqual(dialogue_metrics(shifted, (2, -4))['hair_box']['residual_x1000'], 40, places=3)
+        # Pixels shifted out of bounds are discarded, never wrapped into a ROI.
+        mask = np.zeros((5, 5), bool)
+        mask[0, 0] = True
+        self.assertFalse(shifted_mask(mask, (-1, 0)).any())
 
     def test_cut_endpoint_does_not_contaminate_baseline_masks(self):
         skin = self.m.copy()

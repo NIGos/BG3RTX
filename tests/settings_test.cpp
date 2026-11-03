@@ -415,7 +415,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 3);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(user_exp == 4);   // Includes the default-off RR hair coverage resolve candidate.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_groom", "exp_hair_visibility", "exp_hair_pool_trim", "exp_hair_cheap", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -788,6 +788,18 @@ static void test_ultra_water() {
   for (int i = 0; i < kKnobCount; ++i)
     if (kKnobs[i].experimental) first_exp = (std::min)(first_exp, i);
   CHECK(iw < first_exp);
+  const Knob& hair_resolve = *find_knob("rr_hair_resolve");
+  CHECK(hair_resolve.experimental && !hair_resolve.dev_only);
+  CHECK(hair_resolve.apply == Apply::Live);
+  CHECK_EQ(hair_resolve.choices[1].need[0].knob, "rr");
+  CHECK_EQ(hair_resolve.required_on[0].key, "rr_post");
+  CHECK_EQ(hair_resolve.required_on[0].value, "1");
+  for (int preset = 0; preset < kPresetCount; ++preset) {
+    Map expanded;
+    for (const auto& kv : expand_preset(preset)) expanded[kv.first] = kv.second;
+    CHECK_EQ(get(expanded, "rr_hair_resolve"), "0");
+  }
+
 }
 
 static void test_product_policy() {

@@ -301,6 +301,13 @@ inline constexpr Knob kKnobs[] = {
     {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.13 ms S6", "Unknown", "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."}},
 
+  {"rr_hair_resolve", "Hair coverage resolve",
+   "Experimental spatial hair smoothing before Ray Reconstruction. May soften hair silhouettes; quality and GPU cost await a live comparison.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rr_hair_resolve", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {}},
+
   {"exp_water_compose_shift", "Water camera correction",
    "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Live, "live", false,
@@ -512,6 +519,7 @@ inline constexpr KV kDefaults[] = {
     {"rr", "1"},
     {"rr_preset", "6"},
     {"rr_post", "1"},
+    {"rr_hair_resolve", "0"},
     {"rr_cbt", "1"},
     {"rr_post_quantise", "1"},
     {"rr_post_check", "0"},

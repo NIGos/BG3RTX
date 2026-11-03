@@ -210,6 +210,18 @@
        {"id": "on", "label": "Shadowed", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "1"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "all", "label": "All", "apply": "live", "caps": ["ray_query"], "keys": {"ls_box": "2"}, "needs": {"rt_geometry": 1, "local_shadows": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "rr_hair_resolve", "label": "Hair coverage resolve",
+     "description": "Experimental spatial hair smoothing before Ray Reconstruction. May soften hair silhouettes; quality and GPU cost await a live comparison.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": false,
+     "category": "Lighting", "summary": "Experimental spatial hair smoothing before Ray Reconstruction. May soften hair silhouettes; quality and GPU cost await a live comparison.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rr_post": "1"},
+     "required_from_choice": {"rr_post": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_resolve": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_resolve": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
+     ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
      "description": "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
