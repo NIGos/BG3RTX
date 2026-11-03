@@ -95,7 +95,7 @@ std::string Bridge::handle(const std::string& message){
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Unknown preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
-    for(int i=0;i<st::kKnobCount;++i){if(state_.values[i]<0||!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
+    for(int i=0;i<st::kKnobCount;++i){if(!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
   }else if(type=="experimental")experimental=get<bool>(o,"value");
   else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Edits discarded.";}
   else if(type=="save")save_preview(get<std::string>(o,"policy")=="enable");
@@ -127,7 +127,10 @@ std::string Bridge::state_json() const {
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
     out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q(std::string(k.cost.gpu)=="Unknown"?"":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::knob_apply(k,value)))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
     bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable":!available?"Enable Experimental to select":need;
-      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(k.choices[c].apply))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
+      std::string requirements;
+      for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(st::kKnobs[j].label)+" "+label(j,n.min_choice);}}
+      for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(n.label);}
+      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(k.choices[c].apply))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
   std::string gpu="Unknown adapter",vram="Unknown",driver="Unknown";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Unknown":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
