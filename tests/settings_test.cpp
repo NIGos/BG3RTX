@@ -415,8 +415,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 4);   // Includes the default-off RR hair coverage resolve candidate.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_groom", "exp_hair_visibility", "exp_hair_pool_trim", "exp_hair_cheap", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 8);   // Includes the default-off RR hair coverage resolve candidate.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -528,7 +528,7 @@ static void test_gui_levels() {
   CHECK(find_knob("local_shadows")->choices[3].dev);
   CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
   CHECK(find_knob("exp_water")->apply == Apply::Restart);
-  CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);
+  CHECK(find_knob("exp_native_coverage")->apply == Apply::Live);
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
   // No orphan key: every key the old entries wrote is still written by a knob or is automatic.
@@ -628,7 +628,7 @@ static void test_gui_levels() {
     CHECK(!key_change_needs_restart(key, "1", "0"));
   }
   CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1"));
-  for (const char* key : {"rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current"})
+  for (const char* key : {"rt_native_tileset", "rt_omm", "rt_sun_cascade_current"})
     CHECK(key_change_needs_restart(key, "0", "1"));
   CHECK(!key_change_needs_restart("rt_native_scalp", "0", "1"));
 }
@@ -722,7 +722,7 @@ static void test_rendering_experiments() {
       v[knob_index("local_shadows")]=1;CHECK(!unmet_need(*lk,1,v).empty());
     }
   }
-  CHECK(find_knob("exp_native_coverage")->apply==Apply::Restart);
+  CHECK(find_knob("exp_native_coverage")->apply==Apply::Live);
   Gpu gpu{0x10de,0x2b85,"NVIDIA GeForce RTX 5090",true,true};
   CHECK(!choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
   gpu.opacity_micromap=true;CHECK(choice_supported(*find_knob("exp_omm"),1,gpu_caps(gpu)));
@@ -941,12 +941,29 @@ static void test_apply_modes() {
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
   for (const auto* key : {"rt_hair_visibility", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean"}) {
     const auto& knob = *find_knob(std::string("exp_") + (key + 3));
-    CHECK(knob.dev_only && knob.experimental);
+    CHECK(knob.experimental);
+    CHECK(knob.dev_only == (std::string(key)=="rt_hair_visibility" || std::string(key)=="rt_hair_gi_mean"));
     CHECK_EQ(code_default(key), "0");
     CHECK(!key_change_needs_restart(key, "0", "1"));
     for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==0);
     for(int choice=0;choice<2;++choice)CHECK(knob_apply(knob,choice)==Apply::Live);
   }
+  // Player trial toggles are visible, default-off and live in both directions.
+  for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_compose_shift", "exp_water_hit_shade",
+                         "exp_native_coverage", "exp_hair_groom", "exp_hair_pool_trim", "exp_hair_cheap"}) {
+    const auto& k=*find_knob(id);
+    CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
+    CHECK(k.choices[0].apply==Apply::Live || k.choices[0].apply==Apply::Hitch);
+    CHECK(k.choices[1].apply==Apply::Live || k.choices[1].apply==Apply::Hitch);
+    for(int p=0;p<kPresetCount;++p)CHECK(k.preset[p]==0);
+  }
+  CHECK_EQ(get(on_map(*find_knob("rr_post"),0),"rr_post"),"1");
+  CHECK_EQ(get(on_map(*find_knob("rr_post"),1),"rr_post"),"0");
+  for(const char* key : {"rt_native_hair","rt_native_scalp","rt_hair_groom","rr_post"}) {
+    CHECK(!key_change_needs_restart(key,"0","1"));
+    CHECK(!key_change_needs_restart(key,"1","0"));
+  }
+  CHECK(find_knob("exp_native_coverage")->choices[2].dev);
   const auto& hair_gi_cull = *find_knob("exp_hair_gi_cull");
   CHECK(hair_gi_cull.dev_only && hair_gi_cull.experimental);
   CHECK_EQ(code_default("rt_hair_gi_cull"), "0");

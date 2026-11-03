@@ -1,6 +1,7 @@
 #pragma once
 #include "launcher.h"
 #include <functional>
+#include "../../common/experimental_ab.h"
 
 namespace launcher::web {
 // The host supplies side effects. Tests inject CPU-only callbacks; JS never
@@ -30,6 +31,7 @@ class Bridge {
   int dirty() const;
   bool dev = false, experimental = false;
  private:
+  bg3::experimental_ab::Selection ab_selection_;
   bg3::settings::Map effective() const;
   bool save_preview(bool enable_required);
   State& state_;
