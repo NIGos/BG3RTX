@@ -9,7 +9,9 @@
 // there first (the velocity variant's previous positions, camera-relative to last frame's camera).
 [[vk::binding(0, 0)]] ByteAddressBuffer Soup;
 [[vk::binding(1, 0)]] RWByteAddressBuffer Pool;
-struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad0, pad1, pad2; };
+// soup_tris: the draw's captured triangles; every soup read is bounded by it and by the buffer (fail closed: the point
+// keeps last frame's position).
+struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, soup_tris, pad1, pad2; };
 [[vk::push_constant]] Push pc;
 
 uint orderable(float f) { const uint u = asuint(f); return (u & 0x80000000u) != 0u ? ~u : u | 0x80000000u; }
@@ -27,9 +29,15 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     const uint tri = Pool.Load(pc.tri_off + i * 4u);
     const float2 b = asfloat(Pool.Load2(pc.bary_off + i * 8u));
     float3 v[3];
-    bool ok = true;
+    uint soup_bytes;
+    Soup.GetDimensions(soup_bytes);
+    // The last byte this point reads: vertex 2 of its triangle, UV included (+24).
+    // (No 64-bit arithmetic: the groom pass also runs without shaderInt64; tri < soup_tris < 2^24 keeps it in range.)
+    const uint need = tri < pc.soup_tris ? (3u * tri + 2u) * pc.stride + 24u : 0xFFFFFFFFu;
+    bool ok = tri < pc.soup_tris && pc.soup_tris < (1u << 24) && pc.stride >= 24u && pc.stride <= 256u &&
+              pc.soup_base <= soup_bytes && need <= soup_bytes - pc.soup_base;
     [unroll] for (uint k = 0; k < 3; ++k) {
-      v[k] = asfloat(Soup.Load3(pc.soup_base + (3u * tri + k) * pc.stride));
+      v[k] = ok ? asfloat(Soup.Load3(pc.soup_base + (3u * tri + k) * pc.stride)) : 0.0.xxx;
       ok = ok && all(abs(v[k]) < 1e30);
     }
     if (ok) {

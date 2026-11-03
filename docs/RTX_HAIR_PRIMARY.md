@@ -74,6 +74,21 @@ each swapped G-buffer draw, up to 64 per frame, averaged per 300 frames). VRAM: 
 (41.7 MB at 2560x1067) plus per point 8 B UV + 12 B previous position (LOD 0 ~19 MB, LOD 1/2 ~10 MB per character).
 Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 
+## 5b. Fail-safes (after the 2026-11-03 user trial: device lost twice, the player's hair gone)
+- Device lost (17:01, 17:04, main ac1380e5): the groom point update read the matched draw's card triangles at its
+  `soup_off` also for a *held* draw, whose offset is a mesh-pool snapshot offset: a read at +1.97 GB of a 2 GB soup.
+  Now `hair_primary::soup_update_ok` (captured this frame, not held, the whole triangle range inside the soup, the
+  groom's triangles <= the captured ones, stride >= 24) gates the update in bvhsplit (the slot is kept, no groom
+  instance that frame: cards in every pass), and hair_groom_update.hlsl bounds every read by the draw's triangle
+  count and the buffer size (a point outside keeps last frame's position).
+- Bald player: the prepass clone dropped the card depth for every matched static draw, also when its G-buffer
+  pipeline had no strand variant (another material permutation), whose card then failed its EQUAL depth test.
+  `hair_primary::SwapGate`: the G-buffer swaps a groom published twice; the prepass and velocity passes only a draw
+  whose G-buffer strand variant ran in the last completed frame. GPU feedback (`rt/hair_primary_count.hlsl`):
+  strand pixels per groom of the last frame's pixel record, read back 3 publishes later; 2 counted frames in a row
+  with the variant and no strand pixel fail that draw for the session (logged: "its strands drew no pixel"): its
+  cards stay. Regression tests: hair_groom_asset_test (the crash's offsets, the no-variant draw, the strikes).
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
