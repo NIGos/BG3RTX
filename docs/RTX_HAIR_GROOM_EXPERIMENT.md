@@ -56,5 +56,5 @@ Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: ma
    which LSS removes; keep rule < 1 ms.
 
 ## Licence
-No RTXCR/NVIDIA SDK code or data used; the LSS layout is from the Khronos extension spec. Later RTXCR
-code or its hair BSDF falls under the NVIDIA RTX SDK licence (notices, redistribution; see feasibility doc).
+No RTXCR/NVIDIA SDK code or data used; LSS layout from the Khronos extension spec. Later RTXCR code or
+hair BSDF: NVIDIA RTX SDK licence (see feasibility doc). Nothing downloaded: numpy 2.4.3 (BSD-3), Pillow 12.3.0 (MIT-CMU), scipy 1.17.1 (BSD-3) were already installed; the GR2 decode is the existing LSLib v1.20.4 export.
