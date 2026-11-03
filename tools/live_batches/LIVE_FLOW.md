@@ -22,6 +22,12 @@ exclusive. Every required line must fit; `when_present` does not excuse an
 insufficient window when its pass runs. Known periodic events also have their
 cadence checked. One-off trace/burst events retain event semantics.
 
+Required pool-log lines also need `rt_stats=1` in each gated window; startup
+candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
+The runner sends the full job context through a JSON file. Lint checks the remaining
+job-derived environment values against the Windows 32767 UTF-16-unit limit
+(including the terminator), including tags and generated INI/log paths.
+
 Jobs can declare these planning assumptions in a top-level `live_flow` object:
 
 ```json

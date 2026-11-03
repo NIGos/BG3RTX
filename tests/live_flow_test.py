@@ -28,6 +28,41 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_pool_producer_requires_stats_in_each_observe_window(self):
+        j, p = fixture()
+        j["set"] += ",rt_stats=0"
+        j["expect_every"] = [dict(select=r"\[hit material paks join\]", match="ok", windows=["cost-off", "cost-on"])]
+        self.assertEqual(len(f.producer_problems(j, p)), 2)
+        p[2]["set"] += ",rt_stats=1"
+        self.assertFalse(f.producer_problems(j, p))  # inherited by the next window
+        p[3]["set"] += ",rt_stats=0"
+        self.assertEqual(len(f.producer_problems(j, p)), 1)
+        j["expect_every"][0]["min"] = 0
+        self.assertFalse(f.producer_problems(j, p))  # absence gate
+        j["expect"] = [r"\[hit material paks\] loaded 40983 candidates"]
+        self.assertFalse(f.producer_problems(j, p))  # startup is unconditional
+        j["expect"] = [r"\[hit material pool basis\] frame"]
+        j["expect_every"] = []
+        p[2]["set"] += ",rt_stats=0"
+        self.assertTrue(f.producer_problems(j, p))
+
+    def test_environment_checks_scalars_not_file_backed_job_and_counts_utf16(self):
+        j, _ = fixture()
+        j["expect"] = ["x" * 40000]
+        j["set"] += ",unused=" + "x" * 40000
+        self.assertFalse(f.environment_problems(j))
+        j["args"] += ["-Tag", "x" * 32768]
+        self.assertTrue(any("BG3RTX_RUN_TAG" in e for e in f.environment_problems(j)))
+        j["args"][-1] = "\U0001f600" * 16384
+        self.assertTrue(any("32768 UTF-16" in e for e in f.environment_problems(j)))
+        j["args"] = ["-UserIni", "x" * 32768]
+        self.assertTrue(any("BG3RTX_USER_INI" in e for e in f.environment_problems(j)))
+        j["args"] = []
+        j["save"] = "x" * 32766
+        self.assertFalse(f.environment_problems(j))
+        j["save"] += "x"
+        self.assertTrue(any("BG3RTX_SAVE_ONLY" in e for e in f.environment_problems(j)))
+
     def test_regex_forbid_quotes_normal_line_and_is_case_insensitive(self):
         evidence = [dict(path="valid.log", lines=["[water] nonfinite 0", "[crash] exception diagnostics active"])]
         errors, coverage = f.regex_problems(dict(forbid=["NONFINITE", r"\[crash\] exception"], expect=["future effect"]), evidence)

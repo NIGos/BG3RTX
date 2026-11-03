@@ -16,6 +16,7 @@ SOURCES = [
     "gpu_opt1/jobs/go1-camp.json",
     "gpu_opt2/jobs/go2-camp-high.json",
     "post_temporal/jobs/pt-dialogue3.json",
+    "post_temporal/jobs/pt-s8.json",
     "edge_flicker/jobs/ef1-dialogue3-attribution.json",
 ]
 

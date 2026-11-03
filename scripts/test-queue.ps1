@@ -60,6 +60,7 @@ if($DryRun){
 }
 $script:permissionRunner="$PID|$([guid]::NewGuid().ToString('N'))"
 $script:permissionStates=@()
+$script:childContextFiles=@()
 $script:minimizer=$null
 function Assert-QueueRuntime {
   $playing=Get-QueueUserPlayingBlock $root
@@ -490,7 +491,11 @@ function Run-Job($file) {
     $actualBuild=Get-QueueBuildIdentity $tree
     $script:permissionStates+=Use-QueuePermission $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
     $script:permissionContext=@{job=$job;tree=$tree;build=$actualBuild}
-    $env:BG3RTX_QUEUE_CONTEXT=New-QueueChildContext $job $root $tree $actualBuild $PermissionSession $script:permissionRunner
+    $contextFile=Join-Path $q ('child-context.'+[guid]::NewGuid().ToString('N')+'.json')
+    New-QueueChildContext $job $root $tree $actualBuild $PermissionSession $script:permissionRunner | Set-Content -LiteralPath $contextFile -Encoding UTF8
+    $script:childContextFiles+=@($contextFile)
+    Remove-Item Env:BG3RTX_QUEUE_CONTEXT -ErrorAction SilentlyContinue
+    $env:BG3RTX_QUEUE_CONTEXT_FILE=$contextFile
     if(-not $DryRun -and -not $script:minimizer){
       $script:minimizer=Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$(Join-Path $PSScriptRoot 'game-minimizer.ps1')`"",'-WhilePid',$PID
     }
@@ -658,5 +663,11 @@ try {
     }
     $idle = Get-Date
   }
-} finally { Stop-Session "runner stopped"; foreach($state in $script:permissionStates | Select-Object -Unique){Close-QueuePermission $state $script:permissionRunner} }
+} finally {
+  Stop-Session "runner stopped"
+  foreach($state in $script:permissionStates | Select-Object -Unique){Close-QueuePermission $state $script:permissionRunner}
+  # Session and nested QA children retain their original context until stopped.
+  foreach($contextFile in $script:childContextFiles){Remove-Item -LiteralPath $contextFile -ErrorAction SilentlyContinue}
+  Remove-Item Env:BG3RTX_QUEUE_CONTEXT_FILE -ErrorAction SilentlyContinue
+}
 "queue empty"
