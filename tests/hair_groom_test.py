@@ -108,6 +108,23 @@ def test_convert():
     check("orientation: root nearer the head", o["strands_reversed"] == 0 and o["strands_decided"] == 1, o)
     o = analysis.orientation(groom, np.array([0.0, -0.3, 0.0]))
     check("orientation: reversed card detected", o["strands_reversed"] == 1 and o["cards_mostly_reversed"] == 1, o)
+    # Mirrored UVs: the same card with u reflected (every UV triangle's winding flips) places the same strand,
+    # reflected across the card, exactly embedded: the embedding does not depend on the UV orientation.
+    mir = card_mesh()
+    mir.uv = np.c_[1 - mir.uv[:, 0], mir.uv[:, 1]].astype(np.float32)
+    gm, rm = convert.convert(mir, m, tile_grid=(1, 1), step=16)
+    emb_m = np.einsum("pk,pkd->pd", gm.bary, mir.positions[mir.tris[gm.triangle]])
+    check("mirrored UV card: same strand, exactly embedded", gm.strands == 1 and np.allclose(emb_m, gm.points, atol=1e-6)
+          and np.allclose(gm.points[:, 1], p[:, 1], atol=1e-6) and np.allclose(gm.radii, groom.radii, rtol=1e-4)
+          and rm["unmapped_samples"] == 0, (gm.strands, rm))
+    # Collapsed card vertices (a triangle without world area: no UV -> world Jacobian, width 0 there): the strand
+    # keeps a positive radius from its measured samples (the layer refuses r <= 0).
+    col = card_mesh()
+    col.positions = col.positions.copy()
+    col.positions[4:6] = col.positions[2:4]   # row 2 onto row 1
+    gc, _ = convert.convert(col, m, tile_grid=(1, 1), step=16)
+    check("collapsed triangle: every radius positive", gc.strands == 1 and np.all(gc.radii > 0) and np.all(np.isfinite(gc.radii)),
+          gc.radii.min() if gc.strands else None)
     # A second identical card on top: every point is a layered duplicate.
     two = card_mesh()
     two.positions = np.concatenate([two.positions, two.positions + [0, 0, 1e-4]]).astype(np.float32)
