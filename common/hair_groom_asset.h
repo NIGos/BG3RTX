@@ -33,6 +33,25 @@ uint64_t index_content_id(Index&& index, uint32_t count) {
   return h ? h : 1;
 }
 
+// Why a captured native hair draw got no groom (layer log and counters; tests/hair_groom_asset_test.cpp).
+enum class JoinMiss : uint8_t { None = 0, NotIndexed, CountUnknown, NotHostMapped, NoFile, Count };
+inline JoinMiss join_miss(bool indexed, bool count_known, bool host_mapped, bool file_found) {
+  if (!indexed) return JoinMiss::NotIndexed;
+  if (!count_known) return JoinMiss::CountUnknown;   // no groom file has this index count (other style or LOD)
+  if (!host_mapped) return JoinMiss::NotHostMapped;
+  return file_found ? JoinMiss::None : JoinMiss::NoFile;
+}
+inline const char* join_miss_name(JoinMiss m) {
+  switch (m) {
+    case JoinMiss::None: return "matched";
+    case JoinMiss::NotIndexed: return "not an indexed draw";
+    case JoinMiss::CountUnknown: return "no groom file with this index count (other style or LOD: run tools.hair_groom.batch)";
+    case JoinMiss::NotHostMapped: return "index buffer not host-mapped";
+    case JoinMiss::NoFile: return "index id has no groom file (same count, other mesh)";
+    default: return "?";
+  }
+}
+
 struct Lod {
   float keep = 1;            // share of the strands (radii widened by 1 / keep)
   uint32_t points = 0, segments = 0;

@@ -14,6 +14,11 @@ import numpy as np
 from . import geom, strands2d
 
 EPS = 1e-4
+# Largest strand radius kept (metres): the widest painted clump of the reference LOD0 conversion is 1.14 mm;
+# wider samples come from near-degenerate UV triangles of LOD1 cards.
+MAX_RADIUS = 0.002
+# The layer's parser rejects radii >= 10 mm (common/hair_groom_asset.h): thinned LODs stay below.
+MAX_THIN_RADIUS = 0.009
 
 
 @dataclass
@@ -222,7 +227,11 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
                 b0 += 1
             if b0 - a0 < 2:
                 continue
-            pts.append(p[a0:b0]); rad.append(width[a0:b0] / 2); jnt.append(j[a0:b0]); wgt.append(w[a0:b0])
+            # A painted strand keeps its width: samples on near-degenerate UV triangles (LOD1 cards) blow the
+            # UV -> world Jacobian up; cap each at 3x the strand's median radius.
+            r = width[a0:b0] / 2
+            r = np.minimum(np.minimum(r, 3 * np.median(r)), MAX_RADIUS)
+            pts.append(p[a0:b0]); rad.append(r); jnt.append(j[a0:b0]); wgt.append(w[a0:b0])
             root.append(rp[a0:b0]); offsets.append(offsets[-1] + b0 - a0); card_ids.append(c)
             emb_t.append(tri_ids[hit[a0:b0]]); emb_b.append(bary[a0:b0]); emb_n.append(normal_offset[a0:b0])
     groom = Groom(np.concatenate(pts).astype(np.float32), np.concatenate(rad).astype(np.float32),
@@ -283,5 +292,5 @@ def thin(groom, keep_fraction, seed=0x9E3779B9):
     h = (ids * np.uint64(seed) + np.uint64(0x632BE59BD9B4E019)) & np.uint64(0xFFFFFFFF)
     keep = (h.astype(np.float64) / 2.0 ** 32) < keep_fraction
     out = select(groom, keep)
-    out.radii = (out.radii / keep_fraction).astype(np.float32)
+    out.radii = np.minimum(out.radii / keep_fraction, MAX_THIN_RADIUS).astype(np.float32)
     return out

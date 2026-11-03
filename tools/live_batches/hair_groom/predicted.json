@@ -2,7 +2,8 @@
  "_rule": "Written and committed BEFORE the run (AGENTS.md). rt_hair_groom A/B with native hair on throughout (hair_qual Ultra keys + hair startup latches + rt_hair_groom=1 at startup). Cost = 300-frame 'rt passes' / 'gi' lines of cost-groom minus mean(cost-off-a, cost-off-b), |off-a - off-b| its noise; native hair cost = cost-off minus cost-nohair. Energy = float mean of the pre-post scene colour, character ROI (skin + hair class) by tools/live_batches/dialogue_shadows/char_energy.py, spread = relative std of shot-off-a/b/c.",
  "_all": {
   "join": {
-   "predicted": "'[hair groom] loaded ...hgrm' once, '[hair groom] <id> uploaded: 3 LODs' once, '[hair groom] frame N: 1+ groom instances' in every groom-on window (gated: no instance = INVALID, e.g. Shadowheart absent or her hair index buffer not host-mapped: then the '[hair groom] draw with N indices' lines say why)"
+   "run_2026_11_03_1040": "INVALID: device feature and file load OK, but no hair draw had 120270 indices (no join attempted past the count filter; unmatched 8/frame at camp). Fix: LOD1 groom file (6009 indices) + per-draw unmatched log with index count and reason; warm-nohair phase.",
+   "predicted": "'[hair groom] loaded ...hgrm' (2 files), '[hair groom] <id> uploaded: 3 LODs' once, '[hair groom] frame N: 1+ groom instances' in every groom-on window (gated: no instance = INVALID, e.g. Shadowheart absent or her hair index buffer not host-mapped: then the '[hair groom] draw with N indices' lines say why)"
   },
   "cost-groom vs cost-off (native hair on in both)": {
    "predicted": "rt passes -0.5 to -1.5 ms and gi -0.8 to -2.0 ms: the card candidates of the matched style skip the procedural intersection and texture reads in shadow/AO/GI/reflection rays (bench: strands 2.0-2.3x cheaper per hair ray); the card AABBs are still traversed (software skip), so not the full card cost",
