@@ -13,14 +13,21 @@ Design detail stays in RTX_HAIR_PRIMARY.md, RTX_HAIR_ROADMAP.md and RTX_HAIR_INT
   validate on the representative set only (M1).
 - Gates are derived, never loosened without a reason derived from the data.
 
-## Where it stands
-| Area | Done | Pending merge (bundle12) | Not started |
+## Where it stands (updated 2026-11-04; this plan is the source of truth)
+Closure-plan steps (RTX_HAIR_PRIMARY.md section 8) inside the milestones: C1 = M0, C2 = M2.1, C3 = M3.1-3.3,
+C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
+
+| Milestone | State | Commits / branch | Live |
 |---|---|---|---|
-| Geometry | LSS grooms, 745 styles pass (v2 reference), LOD + crowd budget | fibre reference 068ff6e4 (C5) | LOD1 transfer, curly tracer |
-| On screen | G-buffer/prepass/velocity variants, fail-safes, pool bound | strike rule 51956f86, header order f659b5ee + A/B 4661e4bc | tips, sub-pixel AA |
-| Shading | fibre BSDF (Chiang) + dual scattering for sun and local lights, strand count fix | | GI, specular indirect, many lights |
-| Shadows | strands in RT shadow rays (opaque) | transmittance C2b 048d60d5 (needs a rebase on main) | game shadow map consistency, AO |
-| Live | hv5: stable, but no strand ever drawn on screen | hv5 + hair_crowd rerun with the order A/B | |
+| M0 stability (C1) | ready: strike rule, header order + A/B in hv5, strand-draw gates | 51956f86, f659b5ee, 4661e4bc (bundle12) | L1: hv5 + hair_crowd after bundle12 |
+| M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun running | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod) | none (counts offline) |
+| M2 shadows (C2) | M2.1 transmittance done offline, needs a rebase on main; M2.2 shadow-map consistency, M2.3 AO not started | 048d60d5 (claude/hair-shadow-transmittance) | L2 |
+| M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 sub-pixel, M3.3 RR guides, M3.4 post depth not started | 795f6008 (claude/hair-tips) | L2 |
+| M4 indirect (C4) | not started | | L3 |
+| M5 views (C6) | not started | | L3 |
+| M6 performance | not started (SER applies to ray-tracing pipelines, not to the inline queries the strand passes use: half-resolution traces and the crowd budget are the levers) | | L4 |
+| M7 content | beards and hat hair through M1's rerun; dyes need a live check | | L4 |
+| M8 qualification (C7) | not started | | L5 |
 
 ## Milestones (in order; two to three streams run in parallel, one agent per stream)
 
