@@ -605,7 +605,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_last_tag = 0;
     g_pixels_fresh = true;
     for (CountSlot& s : g_cnt) s.valid = false;
-    log("[hair primary] level load (new G-buffer images): strand swaps paused for %llu frames, groom state reset",
+    log("[hair primary] level load (first or new G-buffer images): strand swaps paused for %llu frames, groom state reset",
         (unsigned long long)hair_primary::kLoadQuietFrames);
   }
   if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {

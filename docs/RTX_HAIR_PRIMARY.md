@@ -170,6 +170,12 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   verdicts, UV joins and UV readbacks in flight at the same boundary (their identities are built from handles).
   Live bisect: hair_validation hv5 (one F8 per stage: native + scalp, + physical origin, + groom, + primary, 60 s
   each); hv4 repeats the reload under GPU-AV.
+- Device lost in the first level load with rt_hair_groom_primary latched at startup (hair_crowd hc1 2026-11-04
+  00:25: first publish at frame 1479 while the level streamed, two strikes at 1482, device lost at 1489; the read at
+  0x2270524000 is in no buffer of ours, cause not confirmed). The menu publishes no groom, so LoadGuard first saw the
+  in-level image and opened no quiet window. Now the first image is a boundary too: no swap for 300 frames after the
+  first publish. bvhsplit publishes a groom's draw key only from the second update of its points range (a new LOD or
+  upload keeps the cards for that frame). Test: hair_groom_asset_test (level reload block, first image).
 - Overlapping grooms (review of f5b339eb): the pixel's closest strand of all grooms is cached once per pixel; a card
   fragment writes it only when it lies on its own card (`hp_on_card`: strand points lie on their card triangles, so
   within (radius bound 10 mm + segment length / 2) / |cos| of the card surface along the ray, plus the pixel's spread).

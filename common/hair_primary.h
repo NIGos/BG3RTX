@@ -177,16 +177,18 @@ inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submi
 // G-buffer proof and feedback is dropped and no draw is swapped for kLoadQuietFrames frames: the scene's draws,
 // buffers and descriptors are all new (hv1 2026-11-03 18:40: device lost 3 s after the selected-save reload, with
 // the strand variants active). After it the usual rule holds again (two publishes, then the G-buffer, then the rest).
+// The first image seen is a boundary too: with rt_hair_groom_primary latched at startup the menu publishes no groom, so
+// the first publish comes in the middle of the first level load (hc1 2026-11-04 00:25: device lost 10 frames after the
+// first publish, the level still streaming; strands enabled live after a load had survived).
 constexpr uint64_t kLoadQuietFrames = 300;
 struct LoadGuard {
   uint64_t image = 0, quiet_until = 0;
-  // The G-buffer depth image of this frame; true at a boundary (a different image after a first one).
+  // The G-buffer depth image of this frame; true at a boundary (the first image, or a different one).
   bool observe(uint64_t depth_image, uint64_t now) {
     if (!depth_image || depth_image == image) return false;
-    const bool boundary = image != 0;
     image = depth_image;
-    if (boundary) quiet_until = now + kLoadQuietFrames;
-    return boundary;
+    quiet_until = now + kLoadQuietFrames;
+    return true;
   }
   bool quiet(uint64_t now) const { return now < quiet_until; }
 };

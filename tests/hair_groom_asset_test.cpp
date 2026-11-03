@@ -244,7 +244,10 @@ int main() {
       g.publish(&k, 1);
       ++frame;
     };
-    publish(0xA);
+    publish(0xA);   // the first image (startup latch: the first publish is inside the first level load)
+    CHECK(load.quiet(frame) && load.quiet(frame + hair_primary::kLoadQuietFrames - 2));
+    frame += hair_primary::kLoadQuietFrames;
+    CHECK(!load.quiet(frame));
     publish(0xA);
     g.gbuffer_drew(k);
     publish(0xA);
