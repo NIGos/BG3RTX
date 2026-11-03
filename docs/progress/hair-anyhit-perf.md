@@ -1,7 +1,7 @@
 ## Native hair GI traversal cost (branch hair-anyhit-perf, READY_FOR_LIVE, 2026-11-03)
 - S8 hq1 03:55: native hair rt passes 5.80-5.94 -> 8.10-8.18 ms (+2.3); GI 6.97-7.11 -> 10.27-10.30 ms (+3.2).
 - 840 hair records/frame, 0 scalp; original +0 to +0.5 ms prediction disproved; < 1.0 ms keep gate not met.
-- Candidate rt_hair_gi_cull=0 default; spec 1016 skips procedural hair in GI closest bounce queries when on.
+- Candidate rt_hair_gi_cull=0 default; spec 1017 skips procedural hair in GI closest bounce queries when on.
 - Same GI ray count; 100% of procedural-hair candidate intersection/coverage work skipped in those queries.
 - Primary, AO, reflections, sun/local shadows and GI-hit shadow rays retain native hair coverage.
 - GI lighting/occlusion near hair can change; preserving skin hair shadows alone does not prove energy equivalence.

@@ -1204,7 +1204,7 @@ static bool gHairGiBounceQuery = false;
 #ifdef RT_HAIR_GI_CULL_REFERENCE
 #define RT_HAIR_GI_CULL_ON (RT_HAIR_GI_CULL_REFERENCE != 0)
 #else
-[[vk::constant_id(1016)]] const uint kSpecHairGiCull = 0u;
+[[vk::constant_id(1017)]] const uint kSpecHairGiCull = 0u;
 #define RT_HAIR_GI_CULL_ON (kSpecHairGiCull != 0u)
 #endif
 #define RT_CLOSEST_QUERY_FLAGS (RT_QUERY_FLAGS | ((RT_HAIR_GI_CULL_ON && gHairGiBounceQuery) ? RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES : 0u))

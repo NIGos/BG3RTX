@@ -163,7 +163,7 @@ def old_requests_hairgi(spec_request):
         if assign[1008] or assign.get(1009, 0):
             continue
         for cull in (0, 1):
-            out.append((assign | {1016: cull}, request +
+            out.append((assign | {1017: cull}, request +
                         (";" if "?" in request else "?") + f"RT_HAIR_GI_CULL_REFERENCE={cull}"))
     return out
 
@@ -332,7 +332,7 @@ def check_baseline(tool, tmp, i, spec_path, old_path, assign, assign_reference):
     if assign_reference:
         reference = opt(tool, old_path, Path(tmp) / f"{i}_baseline-assigned.spv",
                         "--set-spec-const-default-value=" + " ".join(
-                            f"{k}:{v}" for k, v in sorted(assign.items()) if k != 1016))
+                            f"{k}:{v}" for k, v in sorted(assign.items()) if k != 1017))
     return check_one(tool, tmp, i, spec_path, reference, assign)
 
 
@@ -439,7 +439,7 @@ def main():
                         newp, oldp = Path(bt) / f"new_{i}_{e.name}.spv", Path(bt) / f"old_{i}_{e.name}.spv"
                         newp.write_bytes(compiled[r].blob(e.name))
                         oldp.write_bytes(refs[r].blob(e.name))
-                        assignments = ([a for a, _ in pairs[r] if a[1016] == 0]
+                        assignments = ([a for a, _ in pairs[r] if a[1017] == 0]
                                        if args.key == "hairgi" else [pairs[r][0][0]])
                         for j, assign in enumerate(assignments):
                             baseline_jobs.append((f"base_{i}_{e.name}_{j}", r, e.name, newp, oldp, assign))

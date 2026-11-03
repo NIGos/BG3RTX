@@ -17,7 +17,7 @@ static int checks = 0;
 int main() {
   // The queued payload owns its values after the render stack is changed/destroyed.
   pa::PipelineSpecs off;
-  off.add(1008, 0); off.add(1010, 0); off.add(1014, 0); off.add(1016, 0);
+  off.add(1008, 0); off.add(1010, 0); off.add(1014, 0); off.add(1017, 0);
   auto on = off;
   on.data[1] = 1;
   CHECK(off.key() != on.key());
@@ -32,7 +32,7 @@ int main() {
   CHECK(specialization_builds.poll(on.key(), 1, [on] {
     VkSpecializationInfo info{on.count, on.entries, on.count * sizeof(uint32_t), on.data};
     const auto* values = static_cast<const uint32_t*>(info.pData);
-    return pa::Result{values[1] == 1 && values[2] == 0 && info.pMapEntries[1].constantID == 1010 && values[3] == 1 && info.pMapEntries[3].constantID == 1016 ? 42u : 0u, 1, true};
+    return pa::Result{values[1] == 1 && values[2] == 0 && info.pMapEntries[1].constantID == 1010 && values[3] == 1 && info.pMapEntries[3].constantID == 1017 ? 42u : 0u, 1, true};
   }, nullptr) == pa::State::kStarted);
   const auto on_key = on.key();
   on.data[1] = 0; on.data[2] = 1; on.data[3] = 0;

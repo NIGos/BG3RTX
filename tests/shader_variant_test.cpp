@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
   }
   CHECK(kOccStats != kHitPool2s);
   CHECK(kSpecIdOccStats == 1011);
-  CHECK(kSpecIdHairGiCull == 1016);
+  CHECK(kSpecIdHairGiCull == 1017);
   // Every existing installed slot retains a distinct cull-on sibling; toggling
   // back addresses the original pipeline instead of destroying/rebuilding it.
   for (unsigned base = 0; base < kHairGiCullSlot; ++base) {

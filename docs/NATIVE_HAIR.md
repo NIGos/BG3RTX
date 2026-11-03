@@ -504,7 +504,7 @@ procedural traversal throughout the native-capable shaders. Shadow visibility
 already accepts the first hit except the intentional occluder-attribution diagnostic.
 
 Experimental live key `rt_hair_gi_cull=0` (GUI: Omit hair from indirect rays)
-uses SpecId 1016 in GI trace entries only. On adds SKIP_PROCEDURAL_PRIMITIVES
+uses SpecId 1017 in GI trace entries only. On adds SKIP_PROCEDURAL_PRIMITIVES
 to closest-hit queries before hardware traversal. Hair is currently the TLAS's
 only procedural family. Every GI ray keeps its origin, direction and length;
 all hair procedural candidates, intersections and coverage reads on those rays
@@ -517,7 +517,7 @@ on AABB overlap, not the 840 record count; no candidate count is inferred from i
 Primary/debug/origin, sun/local visibility, GI-hit shadow rays, AO and reflections
 retain hair. Capture, AABB builds and bounds validation also remain. No ABI,
 instance mask, preset or manifest request change. The existing async pipeline key
-and owned specialization payload include 1016, so toggles can warm then reuse both
+and owned specialization payload include 1017, so toggles can warm then reuse both
 states in one run. Key-off equivalence must be checked after freezing the new spec.
 
 This removes GI hair occlusion/bounce and can change indirect brightness: it is
