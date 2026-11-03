@@ -4,7 +4,9 @@
 #include <cstdlib>
 using namespace bg3::mesh_paks;
 #define CHECK(x) do{if(!(x)){std::printf("FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
+#include "pak_uv_readback_fixture.h"
 int main(){
+  readback_fixture::replay();
   std::array<uint64_t,32> off{};
   CHECK(!uv_join::offsets(0,24,0,off));CHECK(!uv_join::offsets(4,24,96,off));
   CHECK(!uv_join::offsets(3,23,69,off));CHECK(!uv_join::offsets(3,24,71,off));

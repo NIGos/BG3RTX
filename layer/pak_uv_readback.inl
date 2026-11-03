@@ -1,17 +1,22 @@
 // Included inside hit_material.cpp's private namespace, after Buffer/create and
 // the recording-owner registry. Uses the existing one-time submit ownership.
-using PakUvKey=std::array<uint64_t,16>;
+using PakUvKey=std::array<uint64_t,16+CmdState::kMaxVertexBindings*3>;
 struct PakUvEntry {
  mesh_paks::uv_join::Readback result;Buffer xfb,host;
  uint64_t recording{},command{};uint32_t count{},stride{};bool recorded{},invalid{};
 };
 std::map<PakUvKey,PakUvEntry> pak_uv_cache; // guarded by mutex
 PakUvKey pak_uv_key(const CmdState& s,const DrawArgs& a,const InstPipe& ip){
- const auto& p=s.vb[ip.pos_binding];const auto& u=s.vb[ip.uv_binding];
- return {uint64_t(s.ib),s.ib_offset,uint64_t(s.ib_type),a.count,a.first,uint64_t(int64_t(a.vertex_offset)),
-  uint64_t(p.buffer),p.offset+ip.pos_offset,uint64_t(u.buffer),u.offset+ip.uv_offset,
-  ip.uv_stride?ip.uv_stride:uint32_t(u.stride),ip.vtx_sig,s.vs,s.fs,
+ const auto& p=s.vb[ip.pos_binding];
+ PakUvKey key{uint64_t(s.ib),s.ib_offset,uint64_t(s.ib_type),a.count,a.first,uint64_t(int64_t(a.vertex_offset)),
+  uint64_t(p.buffer),p.offset+ip.pos_offset,0,0,0,ip.vtx_sig,s.vs,s.fs,
   ip.pos_stride?ip.pos_stride:uint32_t(p.stride),uint64_t(s.pipe[0])};
+ // XFB already contains decoded UVs. A raw float2 binding may not exist;
+ // retain every per-vertex input instead of indexing the 0xff sentinel.
+ for(uint32_t b=0;b<CmdState::kMaxVertexBindings;++b)if(ip.vtx_bindings&(1u<<b)){
+  key[16+b*3]=uint64_t(s.vb[b].buffer);key[17+b*3]=s.vb[b].offset;key[18+b*3]=s.vb[b].stride;
+ }
+ return key;
 }
 void pak_uv_live_owners(std::set<uint64_t>& live){for(const auto& [key,e]:pak_uv_cache)if(e.xfb.b)live.insert(e.recording);}
 void pak_uv_poll(){
@@ -38,9 +43,8 @@ bool pak_uv_get(const CmdState& s,const DrawArgs& a,const InstPipe& ip,std::arra
 }
 bool pak_uv_capture(VkCommandBuffer cmd,CmdState* s,const DrawArgs& a,const InstPipe& ip,uint32_t stride,
                     VkBuffer* xfb,VkDeviceSize* offset,VkDeviceSize* bytes){
- if(!paks_rows() || !one_time(s) || !ip.uv_ok || !ip.pos_float3 || ip.pos_binding>=CmdState::kMaxVertexBindings ||
-    ip.uv_binding>=CmdState::kMaxVertexBindings || a.kind!=1 || !a.instances ||
-    s->vb[ip.pos_binding].offset>UINT64_MAX-ip.pos_offset || s->vb[ip.uv_binding].offset>UINT64_MAX-ip.uv_offset)return false;
+ if(!paks_rows() || !one_time(s) || !ip.ok || ip.pos_binding>=CmdState::kMaxVertexBindings ||
+    a.kind!=1 || !a.instances || s->vb[ip.pos_binding].offset>UINT64_MAX-ip.pos_offset)return false;
  const bool candidate=mesh_paks::has_candidates(pak_meshes,a.count);
  const uint64_t size=uint64_t(a.count)*stride;std::array<uint64_t,32> copies{};
  if(!candidate || size>pool::kJobXfbBytes || !mesh_paks::uv_join::offsets(a.count,stride,size,copies))return false;

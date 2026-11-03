@@ -191,36 +191,39 @@ bool pak_uv_get(const CmdState&,const DrawArgs&,const InstPipe&,std::array<float
 void pak_uv_live_owners(std::set<uint64_t>&);
 const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
  PakInputAttempt attempt;
- if(!paks_rows()||!ip.ok||!ip.pos_float3||!ip.uv_ok||ip.pos_binding>=CmdState::kMaxVertexBindings||ip.uv_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
- const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
- const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
- std::shared_lock lock(tracker().mu);
- auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
-  const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
-  const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
-  if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
-  return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
- };
- if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
- mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
- in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
- if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
- in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
- const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
- mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
- if(sampled && uv.data){
-  std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
-  if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
-  attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
-  if(match.status!=mesh_paks::Match::Unique)return nullptr;
-  if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
-  if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
-  if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
-  return match.row;
+ if(!paks_rows()||!ip.ok||ip.pos_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
+ // Raw layout restrictions apply only to CPU sampling, not to decoded XFB.
+ if(ip.pos_float3 && ip.uv_ok && ip.uv_binding<CmdState::kMaxVertexBindings){
+  const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
+  const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
+  std::shared_lock lock(tracker().mu);
+  auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
+   const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
+   const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
+   if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
+   return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
+  };
+  if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
+  mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
+  in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
+  if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
+  in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
+  const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
+  mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
+  if(sampled && uv.data){
+   std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
+   if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
+   attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
+   if(match.status!=mesh_paks::Match::Unique)return nullptr;
+   if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
+   if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+   if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
+   return match.row;
+  }
  }
- // Device-local inputs use the same 32-corner UV join as native hair. A UV
- // candidate cannot authorize publication without the full geometry witness.
- lock.unlock();std::array<float,64> got{};
+ // Unmapped or packed inputs use decoded XFB UVs. A UV candidate cannot
+ // authorize publication without the full geometry witness.
+ std::array<float,64> got{};
  if(pak_uv_get(state,args,ip,got)){
   attempt.candidate=true;const auto candidate=paks_candidate(args.count,got.data());
   if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
@@ -1149,7 +1152,9 @@ void pak_uv_forget_buffer(VkBuffer b){
  std::lock_guard lock(mutex);
  for(auto it=pak_uv_cache.begin();it!=pak_uv_cache.end();){
   const auto& key=it->first;auto& e=it->second;
-  if(key[0]!=uint64_t(b) && key[6]!=uint64_t(b) && key[8]!=uint64_t(b)){++it;continue;}
+  bool uses=key[0]==uint64_t(b) || key[6]==uint64_t(b);
+  for(uint32_t binding=0;binding<CmdState::kMaxVertexBindings;++binding)uses|=key[16+binding*3]==uint64_t(b);
+  if(!uses){++it;continue;}
   if(e.xfb.b){e.invalid=true;++it;}else it=pak_uv_cache.erase(it);
  }
 }
