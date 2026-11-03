@@ -84,17 +84,19 @@ def combine_group(sources, plan_arg):
             if job.get("live_flow", {}).get(key) != first.get("live_flow", {}).get(key):
                 raise ValueError(f"incompatible live_flow.{key} timing assumptions")
     startup = [settings(j.get("set", "")) for _, j, _ in sources]
-    presets = {s.get("preset", "") for s in startup}
-    if len(presets) != 1:
-        raise ValueError("incompatible startup presets")
-    baseline = defaults(next(iter(presets)))
+    baselines = [defaults(s.get("preset", "")) for s in startup]
+    baseline = baselines[0]
     keys = set().union(*(set(s) for s in startup),
                        *(set(settings(p.get("set", ""))) for _, _, plan in sources for p in plan))
-    unknown = keys - set(baseline) - set.intersection(*(set(s) for s in startup))
+    # Preset changes also reset keys untouched by the source plans. Pin every
+    # differing preset value so the next batch cannot inherit the prior preset.
+    preset_keys = set().union(*(set(b) for b in baselines))
+    keys.update(k for k in preset_keys if len({b.get(k) for b in baselines}) > 1)
+    unknown = keys - set.intersection(*(set(b) for b in baselines)) - set.intersection(*(set(s) for s in startup))
     if unknown:
         raise ValueError(f"cannot reset unknown settings without explicit baselines in every job: {sorted(unknown)}")
-    for k in set().union(*(set(j.get("live_flow", {}).get("startup_only", [])) for _, j, _ in sources)) | {"preset"}:
-        if len({s.get(k, baseline.get(k)) for s in startup}) > 1:
+    for k in set().union(*(set(j.get("live_flow", {}).get("startup_only", [])) for _, j, _ in sources)):
+        if len({s.get(k, b.get(k)) for s, b in zip(startup, baselines)}) > 1:
             raise ValueError(f"incompatible startup-only key {k}")
     combined = deepcopy(first)
     combined.update(name="combined-" + slug(first["save"]), live_batch="combined", requires_success_of=[],
@@ -107,7 +109,7 @@ def combine_group(sources, plan_arg):
     args[args.index("-MovePlan") + 1] = str(plan_arg)
     combined["forbid"] = sorted(set.intersection(*(set(j.get("forbid", [])) for _, j, _ in sources)))
     plan, slices = [], []
-    for n, ((path, job, original), initial) in enumerate(zip(sources, startup)):
+    for n, ((path, job, original), initial, baseline) in enumerate(zip(sources, startup, baselines)):
         prefix = f"b{n + 1}-{slug(job['name'])}--"
         reset = {k: initial.get(k, baseline.get(k)) for k in keys}
         if n:

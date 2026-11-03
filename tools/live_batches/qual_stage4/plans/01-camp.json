@@ -1,5 +1,35 @@
 [
   {
+    "label": "warm-generated-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_stats=0,rt_hit_material_generated=0,rt_vt_alpha_masks=0"
+  },
+  {
+    "label": "warm-generated-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_stats=0,rt_hit_material_generated=1,rt_vt_alpha_masks=1"
+  },
+  {
     "label": "warmup-on",
     "kind": "static",
     "speed": "static",

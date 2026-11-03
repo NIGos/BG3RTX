@@ -13,3 +13,5 @@ Static identity check: pair compact with OFF-a/OFF-b, alpha with OFF-b/OFF-c, wa
 `predicted.json` records planning ranges only: zero guaranteed saving. WI's zero-useful-record receipt remains an empty-view hypothesis; populated camp/S8 do not qualify that saving, and a WI/inn follow-up is required if both contain records. No live measurement or promotion is claimed.
 
 Dryrun 2026-11-03: all shared checks and both fake queue passes succeeded. This environment lacks `py`; a temporary PATH-local `py.cmd` forwarding `-3` calls to `python` was used. The first attempt without that launcher was invalid and superseded; no game started.
+
+Offline lint assumptions: 30 rendered FPS, 1 s settings latency and 1 s per trace stall. Reflection and local-light timers use 300 frames from core/gi.cpp rf_timing_collect / ls_timing_collect. All toggled render states run before measurement.

@@ -6,6 +6,12 @@
     "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
   },
   {
+    "label": "warmup-scaled",
+    "kind": "static",
+    "seconds": 5,
+    "set": "qa_exposure_hold=0,rt_trace_scale=0.5"
+  },
+  {
     "label": "settle-off-a",
     "kind": "static",
     "seconds": 5,

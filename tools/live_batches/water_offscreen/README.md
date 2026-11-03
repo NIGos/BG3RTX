@@ -4,8 +4,8 @@ No game launch or queue submission. One S8 Water Queens House launch, Ultra,
 visible_unfocused_fg, fixed rt_water_hit_shade=2 and rt_water_compose_shift=1.
 The four groups independently compare rt_water_hit_cost 0/1/0/1 (sparse),
 0/2/0/2 (cone/zero), 0/4/0/4 (candidate order), and 0/7/0/7 (combined).
-Each group prewarms its ON pipeline, takes four static float-energy windows
-(two captures each), then four static diagnostic-free cost windows (9 s each).
+All values 0/1/2/4/7 warm before the first capture. Each group takes four static float-energy windows
+(two captures each), then four static diagnostic-free cost windows (14 s each; exclusive lint minimum > 13 s).
 This isolates hit cost from camera motion and the pending compose-shift issue.
 Energy uses water-compose float pre-post scene plus same-frame delta and exposure,
 with separate OFF-repeat/encoding bands per group. Every ON must preserve energy,
@@ -21,8 +21,14 @@ Existing m4 energy post gate checks every ON; cost reporting is separate (no bud
 Mode 1 shares cone/zero culling, but sparse/order only affect out-of-grid mode 2;
 mode 1 remains covered by offline specialization checks, not claimed live-qualified.
 
-349 s phases + loading (8 min dryrun estimate), 32 PNG traces, no float bursts,
+461 s phases + loading (9.7 min dryrun estimate), 32 PNG traces, no float bursts,
 1930 MB conservative estimate. Final restore clears experimental keys/exposure;
 runner restores per-run overrides. Run dryrun.ps1 for synthetic queue verification.
 The synthetic receipt grants no live authorization. Commit predicted.json through
 the coordinator before an authorized run (Git metadata is read only here).
+
+Lint assumptions: 30 rendered FPS, 1 s settings latency, 1 s per trace stall.
+Energy shots last 12 s (exclusive minimum > 11 s); cost windows last 14 s
+(two retained GPU reports after the skipped first line). Load-time roof overflow
+and mesh-pool warnings are rejected with zero tolerance in measured windows.
+No generator exists for this batch; checked-in plan and trace indices are updated directly.

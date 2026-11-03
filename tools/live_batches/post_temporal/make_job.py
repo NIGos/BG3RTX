@@ -13,7 +13,7 @@ def make():
         def step(label,seconds,state,**extra):
             plan.append(dict(label=label,kind='static',speed='static',seconds=seconds,repeat_ms=0,
                              scan=16,capture_at=0,serial=0,motion_start=seconds,motion_end=seconds,
-                             pixels_per_second=0,direction=0,registration_policy='per-window-exclude-cuts',
+                             pixels_per_second=0,direction=0,
                              set=','.join(f'{k}={v}' for k,v in state.items()),**extra))
         base=dict(rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,
                   pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0)
@@ -57,6 +57,12 @@ def make():
                  expect_runner=[r'\[window-mode\].*visible_unfocused',r'^Run ended: done',
                                 rf'\[motion-plan\] complete phases={len(plan)}\b']+traces,
                  purpose='READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized.')
+        job['live_flow'] = dict(expected_fps=30,settings_latency_s=1,trace_stall_s=1)
+        startup_state=dict(v.split('=',1) for v in job['set'].split(','))
+        for key in ['rt_water_fg_mv', 'rt_water_glint_aa', 'rt_water_rr_mv']: startup_state.pop(key,None)
+        for key,value in {'dump_png_width': 1280, 'fg_log_presents': 6, 'fg_snap': 0, 'fg_snap_any': 0, 'fg_snap_delay': 0, 'fg_snap_delay_ms': 0, 'fg_state_every': 60, 'rt_xfb_mb': 1024}.items(): startup_state.setdefault(key,str(value))
+        job['set']=','.join(k+'='+v for k,v in startup_state.items())
+        job['live_flow']['startup_only']=['rt_xfb_mb']
         job['forbid'] += [r'\[rrpost\] temporal REFUSED',r'\[rt\] mesh.*pool full',r'nonfinite']
         job['patterns'] += [r'\[trace\]', r'\[dump\]']
         if scene == 's8':

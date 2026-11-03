@@ -161,12 +161,28 @@ class FlowTests(unittest.TestCase):
         self.assertFalse(f.warmup_problems(j, phases))
 
     def test_combine_rejects_incompatible_mode_startup_and_repeat(self):
-        for change in (dict(window_mode="visible_unfocused"), dict(set="preset=high,rr=0"), dict(repeat=2), dict(tree="other")):
+        for change in (dict(window_mode="visible_unfocused"), dict(repeat=2), dict(tree="other")):
             a, p = fixture()
             b, q = fixture("two")
             b.update(change)
             with self.assertRaises(ValueError):
                 c.combine_group([("a", a, p), ("b", b, q)], "plan")
+
+    def test_combine_restores_each_real_preset_and_rejects_startup_only_changes(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        b["set"] = "preset=high,rr=0"
+        j, phases, manifest = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        reset = c.settings(phases[4]["set"])
+        self.assertEqual(reset["preset"], "high")
+        ultra, high = c.defaults("ultra"), c.defaults("high")
+        changed = [k for k in ultra.keys() & high.keys() if ultra[k] != high[k]]
+        self.assertTrue(changed)
+        for key in changed:
+            self.assertEqual(reset[key], high[key])
+        b["live_flow"] = dict(startup_only=["preset"])
+        with self.assertRaises(ValueError):
+            c.combine_group([("a", a, p), ("b", b, q)], "plan")
 
     def test_combine_cli_writes_one_job_per_save_and_dryruns(self):
         with tempfile.TemporaryDirectory() as t:
