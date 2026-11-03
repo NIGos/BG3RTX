@@ -50,7 +50,17 @@ advance a dialogue. There is no click step: the queue cannot open a dialogue (as
 (2026-11-02) that these saves load already in dialogue. The `static camera` gate (no `camera moving` scene-build
 line in any shot) makes a drifting or cutting dialogue camera INVALID instead of comparing different shots.
 
-## Phases (290 s of plan per job)
+## Occluder diagnostic and character energy (added 2026-11-02, needs a build with rt_occ_stats)
+
+Scenes (SaveInfo, read-only): ds1/ds2 Act 1 (WLD_Main_A, the camp: moving shadow), ds3 the port (CTY_Main_A:
+characters very dark under a roof). New phases: `shot-nogi-on` (gi=0: no RT AO and no bounce, after `shot-noao-on`)
+and `diag-occ-base` / `-nohold` / `-nocascade` / `-hair` (rt_occ_stats=1, 10 s each: occluder kinds and distances
+per source, DIALOGUE_SHADOWS.md), 338 s of plan. Predictions: predicted.json "occ" per save. Every trace also
+writes the float preview of the scene colour (dump_preview_f32=1, about 0.2 GB for 21 traces); character-mask energy
+per shot: `py -3 tools/live_batches/dialogue_shadows/char_energy.py --root <captures> shot-off-a=<stamp> ...`.
+ds0 also warms the occ variants (occ, occ + hair, occ + casters off).
+
+## Phases (290 s of plan per job before the occ windows)
 
 `warmup` 20 s; `settle-cam` 10 s; `shot-off-a`; `shot-nosun-on` (rt_shadows=0, contact_shadows=0: the game's sun map only);
 `shot-nolocal-on` (rt_local_shadows=0); `shot-off-b`; `shot-nobox-on` (ls_box=0); `shot-charlights-on` (ls_owners=15);

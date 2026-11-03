@@ -185,6 +185,8 @@ add_test(NAME native_hit_pipeline_test COMMAND native_hit_pipeline_test)
 add_executable(native_hit_tileset_inputs_test tests/native_hit_tileset_inputs_test.cpp)
 target_include_directories(native_hit_tileset_inputs_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME native_hit_tileset_inputs_test COMMAND native_hit_tileset_inputs_test)
+add_executable(occ_stats_test tests/occ_stats_test.cpp)
+add_test(NAME occ_stats_test COMMAND occ_stats_test)
 add_executable(native_hit_order_test tests/native_hit_order_test.cpp)
 add_test(NAME native_hit_order_test COMMAND native_hit_order_test)
 add_executable(native_hit_join_test tests/native_hit_join_test.cpp)
@@ -357,7 +359,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()

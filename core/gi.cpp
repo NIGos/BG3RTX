@@ -24,6 +24,7 @@
 #include "../common/native_hair_origin.h"
 #include "../common/shader_variant.h"
 #include "../common/ls_exact_k.h"
+#include "../common/occ_stats.h"
 #include "../common/native_hit_capability.h"
 #include <unordered_map>
 #include <unordered_set>
@@ -249,6 +250,24 @@ constexpr uint32_t kLsBoxXCount = 32;   // rt_local_shadows.hlsl kBxN
 constexpr VkDeviceSize kLsBoxXBytes = VkDeviceSize(kLsBoxXCount) * 64 * 4;
 VkBuffer g_bx_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_bx_mem = VK_NULL_HANDLE;
+// rt_occ_stats (common/occ_stats.h, docs/DIALOGUE_SHADOWS.md): the occluder counters, device-local,
+// set 4 binding 1 of the box layout and of g_occ_layout (the same set as the box statistics); zeroed
+// before gi/rt_occ_stats.hlsl, copied into a host ring after the D-LS pass (outside both timed
+// regions), read kOccRing - 1 frames later and logged once per 60 frames ("occ stats").
+namespace occ = bg3::occ_stats;
+constexpr uint32_t kOccRing = 8;
+constexpr VkDeviceSize kOccBytes = occ::kOccBytes;
+VkBuffer g_occ_buf = VK_NULL_HANDLE, g_occ_host = VK_NULL_HANDLE;
+VkDeviceMemory g_occ_mem = VK_NULL_HANDLE, g_occ_host_mem = VK_NULL_HANDLE;
+const uint32_t* g_occ_map = nullptr;
+uint64_t g_occ_frame[kOccRing] = {};
+uint32_t g_occ_slot = 0;
+uint64_t g_occ_armed = 0;   // the frame whose counters the D-LS pass adds to (0: none)
+occ::OccWindow g_occ_win;
+bool g_occ_logged = false;
+VkPipelineLayout g_occ_layout = VK_NULL_HANDLE;
+Pipe g_occ;               // gi/rt_occ_stats.hlsl: the sun and AO occluders
+Pipe g_ls_full_box_occ;   // gi/rt_local_shadows_full_box.hlsl (constant 1011 = 1): the point/spot and box occluders
 VkDescriptorSetLayout g_bx_dsl = VK_NULL_HANDLE;
 VkDescriptorPool g_bx_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_bx_set = VK_NULL_HANDLE;
@@ -754,6 +773,27 @@ bool ensure_bx() {
   const VkDeviceFuncs& vk = *host->vk;
   const auto* d = static_cast<const Bg3DeviceInfo*>(host->persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
   if (!d || d->version < 1) return false;
+  if (!g_occ_buf) {   // rt_occ_stats: set 4 binding 1 (40 KB, always present so the set is complete)
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size = kOccBytes;
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (vk.CreateBuffer(host->device, &bci, nullptr, &g_occ_buf) != VK_SUCCESS) return g_occ_buf = VK_NULL_HANDLE, false;
+    VkMemoryRequirements req;
+    vk.GetBufferMemoryRequirements(host->device, g_occ_buf, &req);
+    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < d->memory.memoryTypeCount && mai.memoryTypeIndex == UINT32_MAX; ++i)
+      if ((req.memoryTypeBits & (1u << i)) && (d->memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        mai.memoryTypeIndex = i;
+    if (mai.memoryTypeIndex == UINT32_MAX || vk.AllocateMemory(host->device, &mai, nullptr, &g_occ_mem) != VK_SUCCESS ||
+        vk.BindBufferMemory(host->device, g_occ_buf, g_occ_mem, 0) != VK_SUCCESS) {
+      vk.DestroyBuffer(host->device, g_occ_buf, nullptr);
+      if (g_occ_mem) vk.FreeMemory(host->device, g_occ_mem, nullptr);
+      g_occ_buf = VK_NULL_HANDLE, g_occ_mem = VK_NULL_HANDLE;
+      return false;
+    }
+  }
   if (!g_bx_buf) {
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bci.size = kLsBoxXBytes;
@@ -776,14 +816,16 @@ bool ensure_bx() {
     }
   }
   if (!g_bx_dsl) {
-    VkDescriptorSetLayoutBinding b{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    // b0 the box statistics, b1 the rt_occ_stats counters (rt/occ_stats.hlsli occStats)
+    VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+                                         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
     VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    sci.bindingCount = 1;
-    sci.pBindings = &b;
+    sci.bindingCount = 2;
+    sci.pBindings = b;
     if (vk.CreateDescriptorSetLayout(host->device, &sci, nullptr, &g_bx_dsl) != VK_SUCCESS) return g_bx_dsl = VK_NULL_HANDLE, false;
   }
   if (!g_bx_pool) {
-    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2};
     VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pci.maxSets = 1;
     pci.poolSizeCount = 1;
@@ -795,14 +837,16 @@ bool ensure_bx() {
   ai.descriptorSetCount = 1;
   ai.pSetLayouts = &g_bx_dsl;
   if (vk.AllocateDescriptorSets(host->device, &ai, &g_bx_set) != VK_SUCCESS) return g_bx_set = VK_NULL_HANDLE, false;
-  VkDescriptorBufferInfo bi{g_bx_buf, 0, kLsBoxXBytes};
-  VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-  w.dstSet = g_bx_set;
-  w.dstBinding = 0;
-  w.descriptorCount = 1;
-  w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  w.pBufferInfo = &bi;
-  vk.UpdateDescriptorSets(host->device, 1, &w, 0, nullptr);
+  VkDescriptorBufferInfo bi[2] = {{g_bx_buf, 0, kLsBoxXBytes}, {g_occ_buf, 0, kOccBytes}};
+  VkWriteDescriptorSet w[2] = {{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+  for (uint32_t i = 0; i < 2; ++i) {
+    w[i].dstSet = g_bx_set;
+    w[i].dstBinding = i;
+    w[i].descriptorCount = 1;
+    w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w[i].pBufferInfo = &bi[i];
+  }
+  vk.UpdateDescriptorSets(host->device, 2, w, 0, nullptr);
   return true;
 }
 
@@ -870,6 +914,36 @@ bool ensure_rg() {
 // ls_box: D-LS's push set 0, the host's set 1, the sun set 2, the game's layout of the
 // lighting's set 1 as set 3, and the device-local box statistics as set 4 (ensure_bx). A
 // different game layout rebuilds the box pipelines.
+// rt_occ_stats: the host ring and the sun/AO pass's layout (the RT push set 0, the host's set 1,
+// empty sets 2-3, the box statistics set 4 whose binding 1 is the occluder counters).
+bool ensure_occ() {
+  if (g_occ_layout && g_occ_host) return true;
+  if (!ensure_rt_layout() || !ensure_bx() || !host->alloc_host_buffer) return false;
+  if (!g_occ_host) {
+    void* m = nullptr;
+    if (!host->alloc_host_buffer(kOccBytes * kOccRing, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &g_occ_host, &g_occ_host_mem, &m))
+      return g_occ_host = VK_NULL_HANDLE, false;
+    g_occ_map = static_cast<const uint32_t*>(m);
+    std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+  }
+  if (!g_empty_dsl) {
+    VkDescriptorSetLayoutCreateInfo ei{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    if (host->vk->CreateDescriptorSetLayout(host->device, &ei, nullptr, &g_empty_dsl) != VK_SUCCESS) return false;
+  }
+  VkDescriptorSetLayout host_layout = VK_NULL_HANDLE;
+  VkDescriptorSet unused;
+  if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
+  VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
+  VkDescriptorSetLayout sets[5] = {g_rt_set_layout, host_layout, g_empty_dsl, g_empty_dsl, g_bx_dsl};
+  VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  lci.setLayoutCount = 5;
+  lci.pSetLayouts = sets;
+  lci.pushConstantRangeCount = 1;
+  lci.pPushConstantRanges = &pc;
+  if (host->vk->CreatePipelineLayout(host->device, &lci, nullptr, &g_occ_layout) != VK_SUCCESS) return g_occ_layout = VK_NULL_HANDLE, false;
+  return true;
+}
+
 bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   if (!game || !ensure_ls_layout() || !ensure_bx()) return false;
   if (g_ls_box_layout && g_ls_box_game == game) return true;
@@ -877,7 +951,7 @@ bool ensure_ls_box_layout(VkDescriptorSetLayout game) {
   VkDescriptorSet unused;
   if (!host->rt_alpha || !host->rt_alpha(&host_layout, &unused) || !host_layout) return false;
   if (g_ls_box_layout) {
-    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box, &g_ls_box_k, &g_ls_full_box_k}) {
+    for (Pipe* p : {&g_ls_box, &g_ls_full_box, &g_ls_native_full_box, &g_ls_box_k, &g_ls_full_box_k, &g_ls_full_box_occ}) {
       host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->pipeline);
       *p = Pipe{};
     }
@@ -925,13 +999,18 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
   // (RT_CASCADE_MASKS, shaders/rt/rt_common.hlsli). rt_sun_resolve traces nothing.
-  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0;
+  // ls_box_cascade_old=1 (diagnostic A/B, live): the box passes trace 0xFF again, as before the 2026-11-02 fix, so
+  // the stale cascade copy shadows local/box lights (rt_occ_stats "cascade" kind under local/box shows it).
+  const bool box_old = std::strncmp(file, "gi/rt_local_shadows", 19) == 0 && std::strstr(file, "_box") &&
+                       host->cfg_int("ls_box_cascade_old", 0) != 0;
+  const bool cascade = sv::cascade_entry(file) && host->cfg_int("rt_cascade_casters", 0) != 0 && !box_old;
   // Include box/native/check helpers too: each may reach rt_common through
   // includes even when it is outside the variant list.
   const bool scalp = std::strncmp(file, "gi/", 3) == 0 && bg3::native_scalp::has_capability(static_cast<uint32_t*>(
       host->persist(bg3::native_scalp::capability_key, sizeof(uint32_t))));
   const bool sun_current = &p == &g_rt_shadow_current;
   // Constant 1013 selects the hit GI program; its value joins the pipeline key.
+  const bool occ_stats = &p == &g_ls_full_box_occ;
   const bool rf_gi = sv::rf_hit_gi_entry(file) && host->cfg_int("rf_hit_gi", 0) > 0;
   const bool omm=std::strncmp(file,"gi/",3)==0 && bg3::omm::scene_capability(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   if(omm)bg3::omm::publish_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
@@ -966,6 +1045,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const uint32_t mv_sample = sv::temporal_mv_entry(file) && host->cfg_int("gi_temporal_mv_sample", 0) != 0 ? 1u : 0u;
   const uint32_t prev_guard = sv::prev_radiance_entry(file) && host->cfg_int("gi_prev_radiance_guard", 0) != 0 ? 1u : 0u;
   std::string slot_key = guards ? selected + "#mv=" + char('0' + mv_sample) + ",pg=" + char('0' + prev_guard) : selected;
+  if(sv::occ_stats_entry(file)) slot_key += occ_stats ? "#occ=1" : "#occ=0";
   if(sv::rf_hit_gi_entry(file)) slot_key += rf_gi ? "#rfgi=1" : "#rfgi=0";
   // Step S2a: the instanced hit-material families (RT_SPEC_HIT_FAMILY) take wind RGB / IP grass as constants 1004 / 1005.
   const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
@@ -1001,6 +1081,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     spec_entries[n_spec] = {id, n_spec * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
     spec_data[n_spec++] = v;
   };
+  if (sv::occ_stats_entry(file)) spec_add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
   if (sv::rf_hit_gi_entry(file)) spec_add(sv::kSpecIdRfHitGi, rf_gi ? 1u : 0u);
   if (spec_cascade) spec_add(sv::kSpecIdCascade, spec_value);
   if (sv::temporal_mv_entry(file)) spec_add(sv::kSpecIdTemporalMv, mv_sample);
@@ -2596,6 +2677,61 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
   return tlas;
 }
 
+// rt_occ_stats: the window over the read-back slots (the slot written kOccRing - 1 frames ago is
+// folded before this frame reuses it), one "occ stats" line per 60 frames read.
+void occ_fold_slot(uint64_t now) {
+  const uint32_t slot = uint32_t(now % kOccRing);
+  if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
+    occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
+    // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
+    if (g_occ_win.frames >= uint32_t((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1))) {
+      host->log("%s", occ::occ_format(g_occ_win).c_str());
+      g_occ_win = occ::OccWindow{};
+    }
+  }
+  g_occ_frame[slot] = 0;
+  g_occ_slot = slot;
+}
+
+// The counters of this frame into its host slot (after the passes that add to them).
+void occ_copy(VkCommandBuffer cmd) {
+  memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
+  const VkBufferCopy cp{0, VkDeviceSize(g_occ_slot) * kOccBytes, kOccBytes};
+  host->vk->CmdCopyBuffer(cmd, g_occ_buf, g_occ_host, 1, &cp);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);
+}
+
+// gi/rt_occ_stats.hlsl over this frame's TLAS, after the sun pass and the GI trace (outside the timed
+// RT region). flags: bit 0 rtVis holds this frame's sun trace, bit 1 giRaw this frame's RT GI.
+bool occ_run(VkCommandBuffer cmd, Bound& b, const Push& base, uint32_t flags) {
+  const VkDeviceFuncs& vk = *host->vk;
+  const uint64_t now = host->frame_index();
+  occ_fold_slot(now);
+  auto traversal = prepare_omm_traversal(cmd, b, g_occ.pipeline, true);
+  if (!traversal.valid()) return false;
+  memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT);   // the previous frame's copy out of it first
+  vk.CmdFillBuffer(cmd, g_occ_buf, 0, kOccBytes, 0);
+  memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS, kCS);
+  Push pc = base;
+  pc.bounce_spec = flags;   // unused by every other pass (gi_common.hlsli)
+  vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ.pipeline);
+  VkWriteDescriptorSet wr[kLsBindings + kNumExtras];
+  vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 0, gather_writes(b, kRtBindings, wr), wr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 1, 1, &b.alpha, 0, nullptr);
+  vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_occ_layout, 4, 1, &g_bx_set, 0, nullptr);
+  vk.CmdPushConstants(cmd, g_occ_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+  vk.CmdDispatch(cmd, (g_w + 7) / 8, (g_h + 7) / 8, 1);
+  occ_copy(cmd);   // complete without D-LS; the D-LS pass's copy (run_post) replaces it
+  g_occ_frame[g_occ_slot] = now;
+  g_occ_armed = now;
+  if (!g_occ_logged) {
+    g_occ_logged = true;
+    host->log("occ stats: active (sun traced %u, RT GI %u; D-LS occluders need ls_box > 0; the sun replica needs "
+              "rt_sun_cascade_current=0)", flags & 1u, (flags >> 1) & 1u);
+  }
+  return true;
+}
+
 bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   initialize_hair_origin();
   if(!g_hair_origin_cap && host->cfg_int("rt_hair_physical_origin",0) && !g_hair_origin_warned){g_hair_origin_warned=true;host->log("[hair origin] enable rejected: restart with rt_hair_physical_origin=1 and rt_native_hair=1 to reserve resources");}
@@ -2872,6 +3008,21 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     g_rt_slot = (g_rt_slot + 1) % kRing;
   }
   timestamp(cmd, 1);
+  // rt_occ_stats (diagnostic windows only): after the timed region, on this frame's TLAS.
+  g_occ_armed = 0;
+  if (tlas && host->cfg_int("rt_occ_stats", 0)) {
+    const bool sun_ok = s.rt_sun && !host->cfg_int("rt_sun_cascade_current", 0);
+    memory_barrier(cmd, kCS, kCS);
+    if (!ensure_occ() || !refresh(g_occ, "gi/rt_occ_stats.hlsl", g_occ_layout) ||
+        !occ_run(cmd, b, pc, (sun_ok ? 1u : 0u) | (s.rt_gi_applied ? 2u : 0u))) {
+      if (!g_occ_logged) host->log("occ stats: requested but the pass is unavailable (layout, pipeline or buffers)");
+      g_occ_logged = true;
+    }
+  } else if (g_occ_win.frames || g_occ_logged) {
+    g_occ_win = occ::OccWindow{};   // a later window starts clean
+    std::memset(g_occ_frame, 0, sizeof g_occ_frame);
+    g_occ_logged = false;
+  }
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
   return true;
 }
@@ -2999,7 +3150,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     }
     ls_timestamp(cmd, 1);
     // The default-settings variant, or the one with every mode (more registers, docs/TRACK_D_RT.md 9.9).
-    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats;
+    // rt_occ_stats: the every-mode box pass with the occluder counters (RT_OCC_STATS), this frame armed.
+    const bool occ_on = g_occ_armed == host->frame_index() && g_occ_buf && host->cfg_int("ls_box", 0);
+    const bool full = lp.ls_samples || lp.ls_debug || lp.ls_stats || occ_on;
     VkPipeline lsp = g_ls.pipeline;
     bool box = false, kv = false, k_ran = false;
     lp.ls_pass = host->cfg_int("ls_check", 0) == 2 ? 2u : 0u;   // reference against itself
@@ -3021,7 +3174,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     } else {
       // ls_k > 0 (TRACK_D_LOCAL_LIGHTS.md 9.11): the LS_K twin of the variant below; ls_k=0 never builds it.
       // A twin that fails to build leaves the every-light variant (same expected output, logged).
-      kv = bg3::ls_exact_k::use_variant(host->cfg_int("ls_k", 0), int(lp.ls_samples), int(lp.ls_debug), 0, 1, false);
+      kv = !occ_on && bg3::ls_exact_k::use_variant(host->cfg_int("ls_k", 0), int(lp.ls_samples), int(lp.ls_debug), 0, 1, false);
       if (kv) lp.ls_kmode = bg3::ls_exact_k::kmode(host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1));
       if (host->cfg_int("ls_box", 0)) {
         if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
@@ -3030,7 +3183,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
             lsp = kvariant.pipeline;
             box = k_ran = true;
           }
-          Pipe& variant = full ? g_ls_full_box : g_ls_box;
+          Pipe& variant = full ? (occ_on ? g_ls_full_box_occ : g_ls_full_box) : g_ls_box;
           if (!box && refresh(variant, full ? "gi/rt_local_shadows_full_box.hlsl" : "gi/rt_local_shadows_box.hlsl", g_ls_box_layout)) {
             lsp = variant.pipeline;
             box = true;
@@ -3074,6 +3227,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
       host->pan_capture(cmd, "local", &im);
     }
     ls_timestamp(cmd, 2);
+    if (occ_on && ls_box_applied && lsp == g_ls_full_box_occ.pipeline) occ_copy(cmd);   // outside the timed region
     if (bx_stats && ls_box_applied) {   // after the end timestamp: outside the timed region
       memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_TRANSFER_BIT);
       const VkBufferCopy cp{0, VkDeviceSize(g_stats_slot) * kStatsSlot + VkDeviceSize(kLsBoxXFirst) * 64 * 4, kLsBoxXBytes};
@@ -3376,7 +3530,7 @@ void gi_release() {
   g_current_sun_layout=VK_NULL_HANDLE;g_current_sun_set_layout=VK_NULL_HANDLE;g_current_sun_host_layout=VK_NULL_HANDLE;
   for (Pipe* p : {&g_hit_gi, &g_hit_gi_sharc, &g_hit_gi_sun, &g_hit_gi_sun_sharc, &g_hit_two_bounce, &g_hit_direct, &g_hit_material, &g_pan_primary, &g_pan_ls, &g_trace, &g_temporal, &g_ao_apply, &g_composite, &g_contact, &g_rt_shadow, &g_rt_shadow_current, &g_rt_debug,
                   &g_trace_rt, &g_ls, &g_ls_prep, &g_rf, &g_rt_origin, &g_ls_match, &g_ls_full, &g_ls_ref, &g_ls_check, &g_ls_full_check, &g_ls_box, &g_ls_full_box, &g_ls_native_full, &g_ls_native_full_box,
-                  &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k,
+                  &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
     for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
@@ -3426,6 +3580,15 @@ void gi_release() {
   host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)g_bx_mem);
   g_bx_pool = VK_NULL_HANDLE, g_bx_dsl = VK_NULL_HANDLE, g_bx_buf = VK_NULL_HANDLE, g_bx_mem = VK_NULL_HANDLE;
   g_bx_set = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)g_occ_layout);
+  for (VkBuffer* bf : {&g_occ_buf, &g_occ_host}) host->defer_destroy(BG3_DEFER_BUFFER, (uint64_t)*bf), *bf = VK_NULL_HANDLE;
+  for (VkDeviceMemory* m : {&g_occ_mem, &g_occ_host_mem}) host->defer_destroy(BG3_DEFER_MEMORY, (uint64_t)*m), *m = VK_NULL_HANDLE;
+  g_occ_layout = VK_NULL_HANDLE;
+  g_occ_map = nullptr;
+  g_occ_armed = 0;
+  g_occ_win = occ::OccWindow{};
+  g_occ_logged = false;
+  std::memset(g_occ_frame, 0, sizeof g_occ_frame);
   host->defer_destroy(BG3_DEFER_SAMPLER, (uint64_t)g_linear_clamp);
   g_linear_clamp = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_POOL, (uint64_t)g_sun_pool);   // frees the sets

@@ -72,6 +72,19 @@ int main(int argc, char** argv) {
     CHECK(request("gi/rt_hit_material.hlsl", pool | excluded) == request("gi/rt_hit_material.hlsl", (pool & ~kHitPool2s) | excluded));
   CHECK(request("gi/rt_shadow.hlsl", pool) == request("gi/rt_shadow.hlsl", 0));
 
+  // Box cascade coverage and diagnostic values share their migrated modules.
+  for (const char* f : {"gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
+                        "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl", "gi/rt_occ_stats.hlsl"}) {
+    CHECK(cascade_entry(f));
+    CHECK(request(f, 0) == request(f, kCascade));
+    CHECK(spec_cascade_value(f, kCascade) == 1);
+  }
+  CHECK(kOccStats != kHitPool2s);
+  CHECK(kSpecIdOccStats == 1011);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0).find("RT_SPEC_OCC_STATS=1") != std::string::npos);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0) == request("gi/rt_local_shadows_full_box.hlsl", kOccStats));
+  CHECK(request("gi/rt_shadow.hlsl", kOccStats) == request("gi/rt_shadow.hlsl", 0));
+
   std::set<std::string> want;
   size_t bases = 0;
   for (const auto& e : std::filesystem::directory_iterator(root / "shaders" / "gi")) {

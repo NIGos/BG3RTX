@@ -15,9 +15,8 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kSpecCascade = 1u << 16 };
-// kSpecCascade sits at bit 16: bits 12-15 are left to the define keys of pending branches (gi-reproj-guards uses 4096
-// and 8192), so their merges do not collide with it.
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kSpecCascade = 1u << 16 };
+// kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
 // RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
@@ -47,6 +46,9 @@ enum SpecId : unsigned {
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
 // instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
 // small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
+// S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
+inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
+
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -103,9 +105,13 @@ inline bool cascade_entry(const char* file) {
       "gi/rt_hit_material.hlsl", "gi/rt_hit_direct.hlsl", "gi/rt_origin.hlsl", "gi/rt_local_shadows.hlsl",
       "gi/rt_local_shadows_full.hlsl", "gi/rt_local_shadows_ref.hlsl", "gi/rt_local_shadows_check.hlsl",
       "gi/rt_local_shadows_full_check.hlsl", "gi/rt_local_shadows_k.hlsl", "gi/rt_local_shadows_full_k.hlsl",
+      // the box (projector) passes (2026-11-02: without these they traced 0xFF and the F-1/F-2 cascade copy shadowed
+      // local and box lights; rt_occ_stats "cascade" kind under local/box)
+      "gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
+      "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl",
       "gi/rt_reflections.hlsl", "gi/rt_reflections_sharc.hlsl",
       "gi/rt_reflections_hit_shade.hlsl", "gi/rt_reflections_sharc_hit_shade.hlsl",
-      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl"};
+      "gi/sharc_debug.hlsl", "gi/sharc_inject.hlsl", "gi/sharc_inject_lock.hlsl", "gi/rt_occ_stats.hlsl"};
   for (const char* n : names)
     if (std::strcmp(n, file) == 0) return true;
   return false;
@@ -208,6 +214,7 @@ inline unsigned allowed(const char* file) {
   if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass | kHitPool2s;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
+  if (occ_stats_entry(file)) f |= kOccStats;
   return f;
 }
 
@@ -276,6 +283,7 @@ inline std::string request(const char* file, unsigned flags) {
   // Step S2b: gi_far is constant 1007 of the gi_hit_sun files (core/gi.cpp refresh), never RT_GI_FAR.
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
+  if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
