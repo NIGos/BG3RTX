@@ -57,7 +57,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=1,qa_exposure_hold=0"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=0,rt_stats=1,qa_exposure_hold=0,rt_scene_wait_ms=100"
  },
  {
   "label": "cost-ref-a",
@@ -72,7 +72,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1"
+  "set": "rt_dyn_refit=1,rt_rebuild_frames=60,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_omm_reference=1,rt_stats=0,qa_exposure_hold=1,rt_scene_wait_ms=12"
  },
  {
   "label": "shot-ref-a",

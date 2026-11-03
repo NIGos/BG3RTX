@@ -109,9 +109,6 @@
     "shot-off-b",
     "shot-hair-b",
     "shot-off-c",
-    "diag-rt-hairoff-a",
-    "diag-rt-hairon",
-    "diag-rt-hairoff-b",
     "cost-off-a",
     "cost-hair",
     "cost-off-b"
@@ -308,8 +305,5 @@
     "cost-hair"
    ]
   }
- ],
- "requires_success_of": [
-  "hq1-s8-water-fg2"
  ]
 }

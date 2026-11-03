@@ -1411,6 +1411,7 @@ VkDeviceMemory g_stats_mem = VK_NULL_HANDLE;
 uint32_t* g_stats_map = nullptr;
 uint32_t g_stats_slot = 0;
 uint64_t g_stats_frame[kStatsRing] = {};
+bool g_stats_scene_current[kStatsRing] = {};
 uint64_t g_stats_sum[kStatsCounters] = {};
 float g_ls_raw[4] = {};   // set1/b0 m0.x, m0.y, m0.w, b13[0] as last written
 float g_frame_m4 = 0;     // set0/b0 _m4 (skin shaded white), raw counter 54
@@ -1529,7 +1530,7 @@ bool stats_init() {
 
 // Picks this frame's slot (cleared on the GPU) after folding in the one written
 // kStatsRing - 1 frames ago.
-void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
+void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_current) {
   uint64_t now = host->frame_index();
   uint32_t slot = uint32_t(now % kStatsRing);
   if (g_stats_frame[slot] && g_stats_frame[slot] + kStatsRing - 1 <= now) {
@@ -1581,8 +1582,9 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
       g_guard_frames = 0;
     }
     for (int i = 0; i < int(kStatsCounters); ++i)
-      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157))
+      if ((i < 27 || i > 30) && i != 70 && (i < 144 || i > 150) && (i < 155 || i > 157) && i < int(kOmmCheckFirst))
         for (int b = 0; b < 64; ++b) g_stats_sum[i] += c[i * 64 + b];
+    bg3::omm::fold_check_stats(g_stats_sum + kOmmCheckFirst, c + kOmmCheckFirst * 64, g_stats_scene_current[slot]);
     for (int i = 27; i <= 30; ++i) std::memcpy(&g_ls_raw[i - 27], &c[i * 64], 4);   // raw floats (latest)
     rf_hit_fold(c);
     hit_em_fold(c);
@@ -1598,6 +1600,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full) {
   }
   g_stats_slot = slot;
   g_stats_frame[slot] = now;
+  g_stats_scene_current[slot] = scene_current;
   host->vk->CmdFillBuffer(cmd, g_stats_buf, VkDeviceSize(slot) * kStatsSlot, kStatsSlot, 0);
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   if (!full) {   // only the guards are wanted: the statistics report stays off
@@ -2692,7 +2695,8 @@ void ls_timing_collect() {
 // usually stamped one frame earlier. The TLAS and set 1 come as one pair from
 // the same host snapshot (rt_scene_set, ABI 8): the passes never trace one
 // build's TLAS with another's InstInfo, records, soup or pool.
-VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity) {
+VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,uint64_t* omm_identity, bool* scene_current) {
+  *scene_current=false;
   *omm_identity=0;
   if (!host->rt_scene || (!host->cfg_int("rt_shadows", 1) && !host->cfg_int("gi_rt", 1) &&
                           !host->cfg_int("rt_local_shadows", 1) && !host->cfg_int("rt_reflections", 1)))
@@ -2713,6 +2717,7 @@ VkAccelerationStructureKHR rt_tlas(VkCommandBuffer cmd, VkDescriptorSet* alpha,u
     if(!fast)tlas=reference;
   }
   ++(built == now ? g_rt_frames_traced : g_rt_frames_stale);
+  *scene_current=built == now;
   if (host->cfg_int("rt_order_trace", 0) > 0 && now > 600 && now % 600 < uint64_t(host->cfg_int("rt_order_trace", 0)))
     host->log("[order] rt passes cmd %p frame %llu scene built %llu", (void*)cmd, (unsigned long long)now,
               (unsigned long long)built);
@@ -2835,7 +2840,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Track D: the frame's TLAS for the ray-traced passes.
   VkDescriptorSet alpha = VK_NULL_HANDLE;
   s.omm_identity=0;
-  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity);
+  bool scene_current=false;
+  VkAccelerationStructureKHR tlas = rt_tlas(cmd, &alpha,&s.omm_identity, &scene_current);
   b.omm_identity=s.omm_identity;
   if (tlas && (!ensure_rt_layout() || !refresh(g_rt_shadow, "gi/rt_shadow.hlsl", g_rt_layout) ||
                !refresh(g_rt_debug, "gi/rt_debug.hlsl", g_rt_layout) ||
@@ -2904,7 +2910,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     pc.rt_stats = host->cfg_int("rt_stats", 0) ? 1u : 0u;
     // Every traced frame: the out-of-range guards are always counted.
     stats_begin(cmd, host->cfg_int("rt_alpha_test", 1) != 0,
-                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0));
+                pc.rt_stats || pc.ls_stats || pc.rf_stats || host->cfg_int("ls_check", 0) || host->cfg_int("rt_primary_epoch",0), scene_current);
     bind_rt(b, tlas, alpha);
     if (!g_rt_logged) {
       g_rt_logged = true;
@@ -3231,7 +3237,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
             box = true;
           }
         }
-        if (!box && !g_ls_box_missing_logged) {
+        if (!box && !g_ls_box_missing_logged && g_builds.pending() == 0) {
           host->log("ls box: requested but native set/layout or pipeline unavailable; retaining point/spot pass");
           g_ls_box_missing_logged = true;
         }

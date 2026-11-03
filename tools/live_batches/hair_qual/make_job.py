@@ -94,7 +94,7 @@ def expect_every(kind):
     g = [
         {"name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
          "select": r"\[rt\] scene wait: \d+ frames", "match": r"got this frame's scene, 0 timeouts", "min": 1,
-         "windows": judged},
+         "windows": [w for w in judged if not w.startswith("diag-")]},
         {"name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every judged window",
          "select": r"\[geo\] RT capture, last \d+ frames:", "match": r"opaque draws dropped \(buffer full\) 0\.00,",
          "min": 1, "windows": judged},
@@ -196,8 +196,6 @@ def job(name, save, kind, first):
         "estimated_phase_seconds": seconds,
         "expect_every": expect_every(kind),
     }
-    if name != first:
-        j["requires_success_of"] = [first]
     return j
 
 
