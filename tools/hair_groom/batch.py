@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "hair-groom-batch-1"
+VERSION = "hair-groom-batch-2"   # 2: asset v2 (UV samples), LOD1, radius caps
 # Verdict thresholds (derived from the Shadowheart reference: IoU 0.92-0.94 at 0.5 mm, 0.89-0.92 at 2 mm,
 # unmapped samples 0.001%, root/row correlation 0.89-0.96). Cards spanning tiles are reported, not judged: the
 # converter places the strands of every tile a card touches, and IoU / unmapped samples measure the result.

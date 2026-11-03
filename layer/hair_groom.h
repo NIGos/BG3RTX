@@ -26,4 +26,6 @@ struct Loaded {
 const Loaded* find(uint64_t index_id, uint32_t index_count);
 // Index counts of the loaded grooms: a draw with another count never matches (no hashing).
 bool count_known(uint32_t index_count);
+// The loaded grooms with this index count (the UV join's candidates).
+std::vector<const Loaded*> with_count(uint32_t index_count);
 }  // namespace bg3::hair_groom

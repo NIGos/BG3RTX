@@ -34,12 +34,31 @@ uint64_t index_content_id(Index&& index, uint32_t count) {
 }
 
 // Why a captured native hair draw got no groom (layer log and counters; tests/hair_groom_asset_test.cpp).
-enum class JoinMiss : uint8_t { None = 0, NotIndexed, CountUnknown, NotHostMapped, NoFile, Count };
+// NotHostMapped: the index id cannot be read; the layer then matches by UV samples from its own soup
+// (UvPending until the readback lands, UvMismatch when no file with that index count has those UVs).
+enum class JoinMiss : uint8_t { None = 0, NotIndexed, CountUnknown, NotHostMapped, NoFile, UvPending, UvMismatch, Count };
 inline JoinMiss join_miss(bool indexed, bool count_known, bool host_mapped, bool file_found) {
   if (!indexed) return JoinMiss::NotIndexed;
   if (!count_known) return JoinMiss::CountUnknown;   // no groom file has this index count (other style or LOD)
   if (!host_mapped) return JoinMiss::NotHostMapped;
   return file_found ? JoinMiss::None : JoinMiss::NoFile;
+}
+
+// The sampled corners of the UV join: corner floor(s * (count - 1) / 31) in index order (tools/hair_groom/asset.py).
+inline uint32_t uv_sample_corner(uint32_t s, uint32_t count) { return uint32_t(uint64_t(s) * (count - 1) / (kSamples - 1)); }
+// Captured UVs (the draw's soup, as the vertex shader wrote them) against a file's samples: equal within `tol`
+// (the capture path's float rounding), with v as stored or flipped (1 - v). Non-finite captured UVs never match.
+inline bool uv_samples_match(const float* captured, const float* expected, float tol = 1e-3f) {
+  for (int flip = 0; flip < 2; ++flip) {
+    bool ok = true;
+    for (uint32_t s = 0; s < kSamples && ok; ++s) {
+      const float u = captured[2 * s], v = captured[2 * s + 1];
+      const float ev = flip ? 1.0f - expected[2 * s + 1] : expected[2 * s + 1];
+      ok = u == u && v == v && (u - expected[2 * s]) <= tol && (expected[2 * s] - u) <= tol && (v - ev) <= tol && (ev - v) <= tol;
+    }
+    if (ok) return true;
+  }
+  return false;
 }
 inline const char* join_miss_name(JoinMiss m) {
   switch (m) {
@@ -48,6 +67,8 @@ inline const char* join_miss_name(JoinMiss m) {
     case JoinMiss::CountUnknown: return "no groom file with this index count (other style or LOD: run tools.hair_groom.batch)";
     case JoinMiss::NotHostMapped: return "index buffer not host-mapped";
     case JoinMiss::NoFile: return "index id has no groom file (same count, other mesh)";
+    case JoinMiss::UvPending: return "UV join pending (soup readback)";
+    case JoinMiss::UvMismatch: return "no groom file with this index count has these UVs (other mesh)";
     default: return "?";
   }
 }
@@ -64,11 +85,14 @@ struct Lod {
 struct Asset {
   uint64_t position_id = 0, index_id = 0;
   uint32_t vertices = 0, indices = 0;
+  bool has_uv = false;
+  float uv[kSamples * 2] = {};   // v2: UV0 of the sampled corners
   std::vector<Lod> lods;
 };
 
-// Layout v1 (tools/hair_groom/asset.py): 'HGRM', version 1, position id u64, index id u64, card vertices,
-// card indices, lods, 0; per LOD: keep f32, points, segments, 0, then the arrays above in that order.
+// Layout (tools/hair_groom/asset.py): 'HGRM', version 1 or 2, position id u64, index id u64, card vertices,
+// card indices, lods, 0; v2: 32 x (u, v) f32 corner samples; per LOD: keep f32, points, segments, 0, then the
+// arrays above in that order.
 // `bytes` must outlive the views. Every range and index is checked; false on anything malformed.
 inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
   out = {};
@@ -81,11 +105,19 @@ inline bool parse(const uint8_t* bytes, uint64_t size, Asset& out) {
   std::memcpy(&indices, bytes + 28, 4);
   std::memcpy(&lods, bytes + 32, 4);
   std::memcpy(&pad, bytes + 36, 4);
-  if (version != 1 || !indices || indices % 3 || !lods || lods > 8 || !out.index_id) return false;
+  if ((version != 1 && version != 2) || !indices || indices % 3 || !lods || lods > 8 || !out.index_id) return false;
   out.vertices = vertices;
   out.indices = indices;
   const uint32_t triangles = indices / 3;
   uint64_t at = 40;
+  if (version == 2) {
+    if (size - at < sizeof out.uv) return false;
+    std::memcpy(out.uv, bytes + at, sizeof out.uv);
+    at += sizeof out.uv;
+    for (float x : out.uv)
+      if (!(x == x) || x < -64.0f || x > 64.0f) return false;
+    out.has_uv = true;
+  }
   for (uint32_t l = 0; l < lods; ++l) {
     if (size - at < 16) return false;
     Lod lod;

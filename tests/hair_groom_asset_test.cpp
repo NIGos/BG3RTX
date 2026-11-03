@@ -3,6 +3,7 @@
 #include "../common/hair_groom_asset.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <string>
 #include <vector>
 using namespace bg3::hair_groom;
@@ -46,9 +47,34 @@ int main() {
   CHECK(join_miss(true, true, true, false) == JoinMiss::NoFile);
   CHECK(join_miss(true, true, true, true) == JoinMiss::None);
   for (int m = 0; m < int(JoinMiss::Count); ++m) CHECK(std::string(join_miss_name(JoinMiss(m))) != "?");
+  // UV join: exact, within tolerance, v flipped; a different sample or NaN does not match.
+  float want[64], got[64];
+  for (int i = 0; i < 64; ++i) want[i] = got[i] = 0.01f * float(i % 50);
+  CHECK(uv_samples_match(got, want));
+  got[5] += 5e-4f;
+  CHECK(uv_samples_match(got, want));
+  for (int s = 0; s < 32; ++s) got[2 * s + 1] = 1.0f - want[2 * s + 1];
+  CHECK(uv_samples_match(got, want));
+  got[10] += 0.01f;
+  CHECK(!uv_samples_match(got, want));
+  for (int i = 0; i < 64; ++i) got[i] = want[i];
+  got[0] = std::nanf("");
+  CHECK(!uv_samples_match(got, want));
+  CHECK(uv_sample_corner(0, 6) == 0 && uv_sample_corner(31, 6) == 5 && uv_sample_corner(16, 120270) == 62074);
 
   Asset a;
   auto b = asset();
+  CHECK(parse(b.data(), b.size(), a) && !a.has_uv);
+  {   // v2: the same file with 64 UV floats after the header
+    std::vector<uint8_t> v2(b.begin(), b.begin() + 40);
+    const uint32_t two = 2;
+    std::memcpy(v2.data() + 4, &two, 4);
+    for (int i = 0; i < 64; ++i) put<float>(v2, 0.25f);
+    v2.insert(v2.end(), b.begin() + 40, b.end());
+    CHECK(parse(v2.data(), v2.size(), a) && a.has_uv && a.uv[63] == 0.25f && a.lods.size() == 1);
+    put<float>(v2, 0.0f);
+    CHECK(!parse(v2.data(), v2.size(), a));
+  }
   CHECK(parse(b.data(), b.size(), a));
   CHECK(a.index_id == 9 && a.position_id == 7 && a.indices == 6 && a.lods.size() == 1);
   CHECK(a.lods[0].points == 3 && a.lods[0].segments == 2 && a.lods[0].root[2] == 200);

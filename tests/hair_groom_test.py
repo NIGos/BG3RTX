@@ -187,10 +187,14 @@ def test_asset():
         except FileExistsError:
             check("asset never overwrites", True)
     magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
-    check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 1, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
+    check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 2, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
+    uvs = np.frombuffer(raw, "<f4", 64, 40).reshape(32, 2)
+    corners = card.tris.ravel()
+    check("asset UV samples: UV0 at the sampled corners", np.allclose(uvs[0], card.uv[corners[0]]) and
+          np.allclose(uvs[31], card.uv[corners[-1]]) and np.allclose(uvs[16], card.uv[corners[16 * 23 // 31]]), uvs[:2])
     # Shared fixture with tests/hair_groom_asset_test.cpp (C++ index_content_id).
     check("index id fixture", asset.index_id([0, 1, 2, 0, 2, 3]) == INDEX_ID_FIXTURE, hex(asset.index_id([0, 1, 2, 0, 2, 3])))
-    at, sizes = 40, []
+    at, sizes = 40 + 256, []
     for keep, g in lods:
         k, p, sgm, _ = struct.unpack("<f3I", raw[at:at + 16])
         sizes.append((k, p, sgm))
