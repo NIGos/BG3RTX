@@ -97,4 +97,65 @@ Check ((FrameSample 200).x -eq $x0+2) 'duplicate marker never moves twice'
 $frameStep.frame_interval=4
 Check ((FrameSample 203).x -eq $x0+2) 'interval waits for four frames'
 Check ((FrameSample 204).x -eq $x0+3) 'interval emits one pixel after four frames'
+# Exact messages through the same mapping used by auto-run (no user32 calls).
+foreach ($mode in 'hold_drag','centre_hold') {
+  foreach ($direction in -1,1) {
+    foreach ($speed in 1,2) {
+      $smooth=@{label="$mode-$direction-$speed";kind='rotate';turn_mode=$mode;motion_start=0;motion_end=3;
+                pixels_per_second=1;direction=$direction;frame_delta_pixels=$speed;frame_interval=1}
+      $fs=@{label='';frame=0;offset=0;segment=0}
+      $rs=@{stage='released';at=[double]::NegativeInfinity;segment=-1;x=0;y=0}
+      $messages=@()
+      foreach ($f in 0..29) {
+        if ($rs.stage -ne 'pressed') { $fs.frame=$f }
+        $s=Get-FrameRotationSample $fs (Get-CameraPlanSample $smooth ($f/30.0) 1920 1080) $smooth $f 1920
+        $action=Get-RotationInputAction $rs $s ($f/30.0)
+        $messages+=@(Get-RotationMouseMessages $action)
+        # Repeated marker/poll emits nothing, including after a stalled frame number.
+        $again=Get-FrameRotationSample $fs (Get-CameraPlanSample $smooth ($f/30.0) 1920 1080) $smooth $f 1920
+        Check ($again.x -eq $s.x) "$mode duplicate marker $f"
+      }
+      $messages+=@(Get-RotationMouseMessages (Get-RotationInputAction $rs @{kind='static';active=$false} 3))
+      Check ($messages[0].message -eq 0x200 -and $messages[0].buttons -eq 0 -and $messages[0].x -eq 960) "$mode reset at centre"
+      Check ($messages[1].message -eq 0x207 -and $messages[1].buttons -eq 16 -and $messages[1].x -eq 960) "$mode press at centre"
+      Check ($messages[-1].message -eq 0x208 -and $messages[-1].buttons -eq 0) "$mode final release"
+      Check (@($messages | Where-Object {$_.message -eq 0x207}).Count -eq 1) "$mode holds one press"
+      Check (@($messages | Where-Object {$_.message -eq 0x208}).Count -eq 1) "$mode releases once"
+      $drags=@($messages | Select-Object -Skip 2 | Select-Object -SkipLast 1)
+      $prev=960
+      foreach ($m in $drags) {
+        Check ($m.message -eq 0x200 -and $m.buttons -eq 16 -and $m.y -eq 540) "$mode drag protocol"
+        Check ($m.x-$prev -eq $direction*$speed) "$mode exact delta"
+        $prev=$m.x
+      }
+      if ($mode -eq 'centre_hold') { Check ($drags.Count -eq 1) 'centre offset posted once, then held without repeated moves' }
+      else { Check ($drags.Count -gt 20) 'continuous one-delta-per-frame held drag' }
+      $before=$fs.offset
+      $stall=Get-FrameRotationSample $fs @{active=$true} $smooth 10000 1920
+      $expected=if ($mode -eq 'hold_drag') {$before+$speed} else {$speed}
+      Check ($fs.offset -eq $expected) "$mode never catches up after stall"
+    }
+  }
+}
+$smooth.turn_mode='typo';$rejected=$false
+try { Get-CameraPlanSample $smooth 1 1920 1080 | Out-Null } catch {$rejected=$true}
+Check $rejected 'unknown mode rejected'
+$smooth.turn_mode='hold_drag';$smooth.frame_interval=4;$rejected=$false
+try { Get-FrameRotationSample @{} @{active=$true} $smooth 1 1920 | Out-Null } catch {$rejected=$true}
+Check $rejected 'smooth mode rejects sparse frames'
+$smooth.frame_interval=1;$fs=@{label=$smooth.label;frame=1;offset=959;segment=0};$rejected=$false
+try { Get-FrameRotationSample $fs @{active=$true} $smooth 2 1920 | Out-Null } catch {$rejected=$true}
+Check $rejected 'client edge fails closed without wrap'
+$legacy=@{kind='rotate';motion_start=0;motion_end=10;pixels_per_second=60;direction=1}
+foreach ($t in 0,1,7.99,8,8.12) {
+  $implicit=Get-CameraPlanSample $legacy $t 1920 1080
+  $legacy.turn_mode='legacy'
+  $explicit=Get-CameraPlanSample $legacy $t 1920 1080
+  Check (($implicit | ConvertTo-Json -Compress) -eq ($explicit | ConvertTo-Json -Compress)) 'explicit legacy matches default'
+  $legacy.Remove('turn_mode')
+}
+$missing=@{turn_mode='hold_drag';kind='rotate';pixels_per_second=1;direction=1}
+$rejected=$false
+try { Get-CameraPlanSample $missing 0 1920 1080 | Out-Null } catch {$rejected=$true}
+Check $rejected 'smooth mode without frame pacing rejected before runner skips sampler'
 Write-Host "$count camera-input and permission checks passed"
