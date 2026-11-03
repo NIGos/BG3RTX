@@ -1,4 +1,5 @@
 #include "../common/mesh_paks.h"
+#include "../layer/shader_cache.h"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -99,5 +100,49 @@ int main(int argc,char** argv){
   CHECK(!mesh_paks::shard_size((512ull<<20)+1,0));
   CHECK(!mesh_paks::shard_size(1,2ull<<30));
   CHECK(!mesh_paks::shard_size(1,UINT64_MAX));
+  // Compact v4 preserves full-stream SHA-256 witnesses, not full geometry.
+  bytes=v2bytes;bytes.resize(16+840);word(8,4);
+  const auto ext=bytes.size();bytes.resize(ext+72);word(ext,1);
+  const auto geom=shader_cache::sha256_hex(corners,sizeof corners);
+  const auto col=shader_cache::sha256_hex(row.colors.data(),row.colors.size()*4);
+  auto put_digest=[&](size_t at,const std::string& h){for(size_t c=0;c<32;++c)bytes[at+c]=uint8_t(std::stoul(h.substr(c*2,2),nullptr,16));};
+  put_digest(ext+4,geom);put_digest(ext+36,col);
+  CHECK(mesh_paks::parse(bytes,rows)&&rows[0].compact&&rows[0].corners.empty()&&rows[0].colors.empty());
+  CHECK(mesh_paks::full_match(rows[0],input,uvbytes,8,shader_cache::sha256_hex));
+  CHECK(!mesh_paks::full_match(rows[0],input,uvbytes,8));
+  CHECK(mesh_paks::color_match(rows[0],input,colorbytes,4,mesh_paks::ColorEncoding::Unorm8Rgba,shader_cache::sha256_hex));
+  rows[0].geometry_digest[0]^=1;CHECK(!mesh_paks::full_match(rows[0],input,uvbytes,8,shader_cache::sha256_hex));
+  bytes.pop_back();CHECK(!mesh_paks::parse(bytes,rows));bytes.push_back(0);
+  word(ext+68,129);CHECK(!mesh_paks::parse(bytes,rows));word(ext+68,0);
+  // Synthetic expanded capture: padded float4 position at 0, UV at 16,
+  // both 64-byte material and 88-byte hair captures. Transformed positions
+  // and non-indexed corner numbering cannot reproduce the native content ID.
+  for(uint32_t stride:{64u,88u}){
+    std::vector<uint8_t> capture(3*stride,0xcd);
+    const float uvs[6]={0.125f,0.25f,0.5f,0.75f,0.875f,1.f};
+    for(size_t c=0;c<3;++c){float pos[3]={p[c*3]+10,p[c*3+1]-20,p[c*3+2]+30};
+      std::memcpy(capture.data()+c*stride,pos,12);std::memcpy(capture.data()+c*stride+16,uvs+c*2,8);}
+    mesh_content::Input cap{{capture.data(),capture.size()},{},stride,3,0,0};
+    mesh_content::Sample transformed;CHECK(mesh_content::sample(cap,transformed));CHECK(!(transformed==row.sample));
+    std::array<float,64> sampled_uv{};
+    mesh_content::Bytes capture_uv{capture.data()+16,capture.size()-16};
+    CHECK(mesh_paks::uv_sample(cap,capture_uv,stride,sampled_uv));
+    auto candidate=row;candidate.uv=sampled_uv;rows={candidate};
+    CHECK(mesh_paks::lookup(rows,3,&transformed,sampled_uv.data()).status==mesh_paks::Match::Missing);
+    CHECK(mesh_paks::lookup(rows,3,nullptr,sampled_uv.data()).status==mesh_paks::Match::Unique);
+    CHECK(!mesh_paks::full_match(candidate,cap,capture_uv,stride)); // candidate is not publication
+    auto short_uv=capture_uv;short_uv.size=2*stride+7;CHECK(!mesh_paks::uv_sample(cap,short_uv,stride,sampled_uv));
+    // Raw object-space expanded capture can pass the compact witness even
+    // though its implicit corner indices cannot recreate the native ID.
+    std::array<float,15> expected{};
+    for(size_t c=0;c<3;++c){std::memcpy(capture.data()+c*stride,p.data()+c*3,12);
+      std::memcpy(expected.data()+c*5,p.data()+c*3,12);std::memcpy(expected.data()+c*5+3,uvs+c*2,8);}
+    candidate.compact=true;candidate.geometry_digest=shader_cache::sha256_hex(expected.data(),sizeof expected);
+    CHECK(mesh_paks::full_match(candidate,cap,capture_uv,stride,shader_cache::sha256_hex));
+    // A changed unsampled corner must fail the compact full witness too.
+    many_uv[2]=0;candidate=fullrow;candidate.compact=true;candidate.geometry_digest=shader_cache::sha256_hex(fullrow.corners.data(),fullrow.corners.size()*4);
+    CHECK(mesh_paks::full_match(candidate,many,manyuv,8,shader_cache::sha256_hex));
+    many_p[3]+=0.5f;CHECK(!mesh_paks::full_match(candidate,many,manyuv,8,shader_cache::sha256_hex));many_p[3]-=0.5f;
+  }
   std::puts("mesh_paks: parser, candidate joins, ambiguity and publication fail-closed paths passed");
 }

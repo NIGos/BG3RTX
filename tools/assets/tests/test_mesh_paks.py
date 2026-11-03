@@ -2,6 +2,8 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -176,6 +178,57 @@ class MeshPaksTests(unittest.TestCase):
                 reject = p.build(self.doc, Pak(), 'lslib', tmp)
                 self.assertEqual(reject['rows'], [])
                 self.assertEqual(len(reject['failures']), 1)
+
+    def test_bounded_batches_resume_and_reject_changed_shards(self):
+        class Pak:
+            def __init__(_, game): pass
+            def fingerprint(_): return []
+            def read(_, name): return name.encode()
+        owner = self
+        class Decoder:
+            calls = 0
+            def __init__(_, *args): pass
+            def __call__(_, lslib, source, output, pwsh):
+                Decoder.calls += 1
+                output.write_bytes(owner.dump())
+            def close(_): pass
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ('LSLib.dll', 'granny2.dll'):
+                (root/name).write_bytes(b'fixture')
+            self.doc['rows'].append(dict(self.doc['rows'][0], source='y.GR2'))
+            cat = root/'catalogue.json'; cat.write_text(json.dumps(self.doc))
+            args = SimpleNamespace(out=root/'summary.json', catalogue=cat, game='fixture',
+                lslib=root, cache=root/'cache', pwsh='fixture', match=['lava'],
+                limit=0, start_source=0, batch_sources=1, shard_mb=1)
+            with patch.object(p, 'PackageSet', Pak), patch.object(p, 'Decoder', Decoder):
+                self.assertEqual(p.batch_catalogue(args, self.doc), 0)
+                report = json.loads(args.out.read_text())
+                self.assertEqual(report['counts']['decoded'], 2)
+                self.assertEqual(report['counts']['native_decoded'], 2)
+                self.assertEqual(report['counts']['joined'], 0)
+                self.assertEqual(report['counts']['unprocessed'], 0)
+                shards = {f.name: f.read_bytes() for f in root.glob('*.bin')}
+                args.out.unlink()  # only the temporary summary, simulating interrupted final publication
+                self.assertEqual(p.batch_catalogue(args, self.doc), 0)
+                self.assertEqual(Decoder.calls, 2)
+                self.assertEqual(shards, {f.name: f.read_bytes() for f in root.glob('*.bin')})
+                args.out.unlink()
+                damaged = next(root.glob('*.bin')); raw = bytearray(damaged.read_bytes()); raw[0] ^= 1
+                damaged.write_bytes(raw)
+                with self.assertRaisesRegex(ValueError, 'invalid completed batch shard'):
+                    p.batch_catalogue(args, self.doc)
+
+    def test_source_failure_counts_all_affected_eligible_rows(self):
+        class Pak:
+            def read(_, name): raise OSError('fixture read failure')
+        self.doc['rows'].append(dict(self.doc['rows'][0], lod=1))
+        with tempfile.TemporaryDirectory() as tmp:
+            result = p.build(self.doc, Pak(), 'fixture', tmp)
+        self.assertEqual(result['counts']['source_failed_rows'], 2)
+        self.assertEqual(result['counts']['native_decoded'], 0)
+        self.assertEqual(result['counts']['decoded'], 0)
+        self.assertEqual(result['counts']['failures'], 1)
 
 
 if __name__ == '__main__':

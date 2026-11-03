@@ -1,5 +1,102 @@
 # Mesh content candidate ID v1
 
+## Compact runtime catalogue (cov-paks2, 2026-11-03)
+
+`python -m tools.assets.mesh_paks_compact --summary <full-summary.json> --out
+<assetdb>/mesh_paks_cov_paks2_compact_20261103.bin` reads the immutable v3
+shards and batch metadata, verifies all geometry/COLOR SHA-256 values and row
+conservation, then publishes a NEW complete manifest last. Existing files are
+never overwritten. The runtime prefers that compact manifest, falling back to
+the previous manifest/table only when the compact manifest is absent. Invalid
+compact input publishes nothing. The 512 MiB/file and 2 GiB/set caps remain.
+
+B3PAKS1 v4 keeps the 840-byte v1 prefix (including all 131 canonical words,
+64 sampled UV floats, UUID and flags). It appends little-endian COLOR layout
+u32 (0 absent, 1 canonical COLOR_0 RGBA), ordered position3/UV2 SHA-256 (32
+bytes), ordered RGBA SHA-256 (32 bytes; zeros when absent), texture count u32,
+then each parameter length u32, ASCII parameter bytes and 36-byte texture UUID.
+Parameters are unique, 1..128 bytes, <=128 refs per row. Flags: two-sided bit 0,
+uses-COLOR bit 1, audited HLOD bit 2. No full geometry, colors or cache paths.
+Original Float4 versus Byte4 storage is not recoverable from the v3 canonical
+layout; current Vulkan attributes still determine the checked runtime encoding.
+
+All 40,983 rows, 6,091 COLOR layouts and 85,630 texture references occupy
+41,956,440 bytes (40.01 MiB), versus 33,386,148,008 source binary bytes.
+The C++ reader independently parsed the complete compact file. Source deletion
+inventory is in its additive JSON companion; no compact operation depends on
+those source files afterwards. Texture UUIDs remain provenance, not a bridge
+from game UUIDs to VkImageViews. Existing observed descriptor/UBO, shader pair,
+cull, clip, basis and resource checks remain mandatory.
+
+### What the ID actually hashes, and why the old audit joined nothing
+
+`layer/bvhsplit.cpp::content_sample` reads the native bound vertex input under
+the tracker lock: binding offset + position attribute offset +
+`(vertex_offset + index) * effective_stride`, exactly 12 bytes per sample.
+Indices start at ib_offset + first_index * index_width. Pipeline float3 support
+and current host mapping are required. Instance transforms are NOT applied;
+XFB, world positions and mesh-pool bytes are NOT substituted. The sampler
+does not apply skinning; if the engine already deformed a bound input buffer,
+those current bytes are hashed.
+The pak decoder calls the same v1 algorithm on native GR2 object-space float3
+and original indices. These IDs CAN agree when native upload floats/index order
+agree. There is no evidence that the earlier 0 full-byte replay matches meant
+0 native content-ID joins: the replay packs do not contain the native index
+stream or input bindings needed to reconstruct that ID.
+
+XFB uses post-VS positions and expands indexed draws to corner order. A
+non-indexed capture hashes index_count=0, vertex_span=corner_count and implicit
+corner ordinals; a pak row hashes its actual index count/span/relative indices.
+Position words also change under transforms, skinning, WPO and rounding.
+Stride/padding themselves are excluded, but UV must be read at byte 16 in both
+64- and 88-byte captures, not as tightly packed position3/UV2. The mesh pool
+inverts the instance transform on the GPU, recovering approximate object-space
+positions, not original float bits. Inverting again cannot undo float rounding
+or skinning/WPO, nor recover the original indexed topology.
+
+Read-only replay evidence (`captures/cov-paks2/compact_uv_positions_20261103.json`):
+S6 0/1,015 UV candidates (36 missing counts, 979 UV mismatches); camp 58 unique
+and 4 ambiguous/471; S8 52 unique/602. Full ordered witnesses and sampled position
+bit matches are 0 in all three. Representative matching-UV position errors are
+5.60e-6 at camp and 2.83e-6..6.68e-6 at S8, consistent with the documented pool
+transform/inverse round trip. This explains rejection of these examples; it
+does not prove the source of every missing candidate or live material coverage.
+
+### Join and publication
+
+The candidate key is draw index/corner count + 32 ordered UV0 pairs at
+floor(s*(count-1)/31), using the existing groom tolerance 1e-3. It survives
+position transforms and vertex renumbering when UV0/corner order are preserved;
+it does not survive arbitrary topology reorder or animated UV changes.
+`mesh_paks::uv_sample` handles indexed native bindings and expanded 64/88-byte
+captures. Runtime narrows by count before comparing UVs. Different material,
+geometry, COLOR, flags or texture contracts remain ambiguous, including equal
+UUIDs with disputed geometry. The original content ID remains diagnostic.
+
+Mapped native inputs can publish only after reconstructing every ordered
+position3/UV2 byte and, for Tileset, every normalized RGBA value and checking the
+stored SHA-256 witnesses. This permits changed vertex numbering without
+trusting a UV-only identity. Compact UV equality is intentionally bit-exact at
+the full-witness stage (stricter than legacy v2/3); small UV differences decline.
+Device-local UV readback finds candidates but still cannot publish without
+that witness. Pool rounding is NOT handled by an invented position epsilon.
+Unsupported animated lava recipes remain unqualified. SHA-256 collision
+resistance replaces stored full-byte comparison; the 64-bit content hash never
+authorizes publication.
+
+`[hit material paks join]` logs cumulative UV attempts, unique candidates,
+missing/ambiguous/invalid keys, witness failures, recipe/cull failures, pending
+or unsupported inputs, equal/different native samples and total draw attempts.
+`draws = attempts + inputs_pending`; `attempts = unique + missing + ambiguous +
+invalid`. These are candidate/publication gates, not hit-weighted coverage.
+The existing paks line reports full-witness matches and ready material basis.
+The unqueued `tools/live_batches/cov_paks_compact` camp job is 75 s plus load,
+two ON observations with an OFF interval and explicit restoration. It may
+diagnose zero matches; it cannot qualify a visual gain, GPU cost or Ultra parity.
+No game was launched. Shader request delta and ABI delta are both 0.
+
+## Earlier full-geometry catalogue contract
+
 Runtime implementation: `layer/mesh_content_id.h`, used by `layer/bvhsplit.cpp`
 only with `rt_mesh_content_id=1`. This is a sampled candidate fingerprint, not
 proof of mesh equality and not a material qualification path.

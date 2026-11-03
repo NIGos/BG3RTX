@@ -2,6 +2,7 @@
 #include "assetdb.h"
 #include "../common/mesh_paks.h"
 #include "../common/pak_uv_join.h"
+#include "shader_cache.h"
 #include <map>
 #include "omm_sampler.h"
 #include "../common/native_hit_capability.h"
@@ -146,11 +147,24 @@ const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
 }
 std::vector<mesh_paks::Row> pak_meshes;
 std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
+// Candidate counts and publication rejections are separate: UV is not proof.
+std::atomic<uint64_t> pak_uv_attempts{0},pak_uv_unique{0},pak_missing{0},pak_ambiguous{0},pak_invalid{0},pak_witness{0},pak_recipe{0},pak_inputs{0},pak_id_equal{0},pak_id_different{0};
+struct PakInputAttempt {bool candidate{};~PakInputAttempt(){if(!candidate)++pak_inputs;}};
+mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
+ ++pak_uv_attempts;
+ const auto first=std::lower_bound(pak_meshes.begin(),pak_meshes.end(),count,[](const auto& row,uint32_t n){return row.index_count<n;});
+ const auto last=std::upper_bound(first,pak_meshes.end(),count,[](uint32_t n,const auto& row){return n<row.index_count;});
+ auto r=mesh_paks::lookup(std::span<const mesh_paks::Row>(first,last),count,nullptr,uv);
+ switch(r.status){case mesh_paks::Match::Unique:++pak_uv_unique;break;
+ case mesh_paks::Match::Missing:++pak_missing;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
+ case mesh_paks::Match::Invalid:++pak_invalid;break;}return r;
+}
 void paks_load(){
  pak_meshes.clear();if(!paks_on)return;
  const auto dir=std::filesystem::path(assetdb_file()).parent_path();
  std::vector<std::string> names;std::error_code ec;
- const auto manifest=dir/"mesh_paks_cov_paks2.manifest";
+ const auto compact_manifest=dir/"mesh_paks_cov_paks2_compact_20261103.manifest";
+ const auto manifest=std::filesystem::exists(compact_manifest,ec)?compact_manifest:dir/"mesh_paks_cov_paks2.manifest";
  if(std::filesystem::exists(manifest,ec)){
   if(ec || std::filesystem::file_size(manifest,ec)>1024*1024 || ec)return;
   std::ifstream list(manifest);const std::string text((std::istreambuf_iterator<char>(list)),std::istreambuf_iterator<char>());
@@ -168,12 +182,14 @@ void paks_load(){
   for(auto& row:rows)staged.push_back(std::move(row));
  }
  pak_meshes=std::move(staged);
+ std::stable_sort(pak_meshes.begin(),pak_meshes.end(),[](const auto& a,const auto& b){return a.index_count<b.index_count;});
  log("[hit material paks] loaded %llu candidates from %zu shards; HLOD full geometry/UV and native Tileset COLOR verification required",(unsigned long long)pak_meshes.size(),names.size());
 }
 
 bool pak_uv_get(const CmdState&,const DrawArgs&,const InstPipe&,std::array<float,64>&);
 void pak_uv_live_owners(std::set<uint64_t>&);
 const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
+ PakInputAttempt attempt;
  if(!paks_rows()||!ip.ok||!ip.pos_float3||!ip.uv_ok||ip.pos_binding>=CmdState::kMaxVertexBindings||ip.uv_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
  const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
  const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
@@ -192,16 +208,22 @@ const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,cons
  const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
  mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
  if(sampled && uv.data){
-  auto match=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);
-  if(match.status!=mesh_paks::Match::Unique||!match.row||!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided))return nullptr;
-  return mesh_paks::full_match(*match.row,in,uv,ip.uv_stride?ip.uv_stride:uint32_t(ub.stride))?match.row:nullptr;
+  std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
+  if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
+  attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
+  if(match.status!=mesh_paks::Match::Unique)return nullptr;
+  if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
+  if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+  if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
+  return match.row;
  }
  // Device-local inputs use the same 32-corner UV join as native hair. A UV
  // candidate cannot authorize publication without the full geometry witness.
  lock.unlock();std::array<float,64> got{};
  if(pak_uv_get(state,args,ip,got)){
-  const auto candidate=mesh_paks::lookup(pak_meshes,args.count,sampled?&sample:nullptr,got.data());
+  attempt.candidate=true;const auto candidate=paks_candidate(args.count,got.data());
   if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
+  ++pak_witness; // device-local UV candidate has no full ordered witness
  }
  return nullptr;
 }
@@ -488,6 +510,7 @@ bool material_current(const Material& m){
 // material row. Position/UV and every COLOR corner are independently checked;
 // the existing XFB path publishes the same native RGBA at NtsColorOffset.
 const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& args){
+ PakInputAttempt attempt;
  if(!paks_rows() || !tileset_deferred(state.vs,state.fs) || args.kind!=1)return nullptr;
  TilesetInputs inputs{};if(!geo_native_tileset_material_inputs(state.pipe[0],&inputs)||!inputs.valid)return nullptr;
  const auto& pa=inputs.attributes[0];const auto& ca=inputs.attributes[4];const auto& ua=inputs.attributes[5];
@@ -522,9 +545,13 @@ const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& a
  const uint64_t at=state.ib_offset+uint64_t(args.first)*in.index_bytes,size=index_size;if(at>=size)return nullptr;
  in.indices=bytes(state.ib,at);in.indices.size=(std::min)(in.indices.size,size-at);
  mesh_content::Sample sample;if(!mesh_content::sample(in,sample))return nullptr;
- const auto found=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);if(found.status!=mesh_paks::Match::Unique)return nullptr;
  uint32_t uv_stride{},color_stride{};const auto uv=stream(5,uv_stride),color=stream(4,color_stride);
- const bool joined=mesh_paks::full_match(*found.row,in,uv,uv_stride) && mesh_paks::color_match(*found.row,in,color,color_stride,encoding);
+ std::array<float,64> got{};if(!mesh_paks::uv_sample(in,uv,uv_stride,got)){return nullptr;}
+ attempt.candidate=true;const auto found=paks_candidate(args.count,got.data());if(found.status!=mesh_paks::Match::Unique)return nullptr;
+ if(sample==found.row->sample)++pak_id_equal;else ++pak_id_different;
+ const bool joined=mesh_paks::full_match(*found.row,in,uv,uv_stride,shader_cache::sha256_hex) && mesh_paks::color_match(*found.row,in,color,color_stride,encoding,shader_cache::sha256_hex);
+ if(!joined)++pak_witness;
+ else if(!inputs.cull_known||inputs.two_sided!=bool(found.row->flags&1u))++pak_recipe;
  return mesh_paks::tileset_color_publication(found.row,paks_rows(),joined,inputs.cull_known,inputs.two_sided)?found.row:nullptr;
 }
 bool capture_tileset(VkCommandBuffer cmd,CmdState* resolved,Material& material){
@@ -708,7 +735,9 @@ PoolObserved& pool_observed(uint64_t frame){
  return pool_obs[0];
 }
 void pool_log(uint64_t frame){
- if(paks_on){uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
+ if(paks_on){
+  log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load());
+  uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
   log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
   log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
