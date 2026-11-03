@@ -585,6 +585,62 @@ Scripts: the session scratchpad (`refr.py`, `refr2.py`); not kept in the repo (o
   the bridge and trees shadow the water once (no double darkening), and the lit water keeps its sun glints.
 - Not done: Debris (probe mask _774: an `amb` id would cover it).
 
+## M5.6 water surface shading
+
+2026-11-03, analysis only; [term audit, input limits and numbers](WATER_SURFACE_ANALYSIS.md).
+Yes: improve native surface terms without changing water_reflect, water_hit_shade or reflection tracing.
+Priority below is expected visible impact per incremental ms, conditional on proven inputs; no quality pass.
+All proposed keys default 0 in the central settings/GUI and presets. No keys implemented by this task.
+Common OFF rule: original FS patch words/record layout and ordinary water SPIR-V remain byte-identical;
+use specialization constants for arithmetic, not request multiplication; layout changes need explicit forms.
+Check via cached shader_identity helpers, FS patch pins and spirv-val; this docs branch request delta is 0.
+Common gate: unsupported family/instance, missing input or overlap preserves its native term; finite output.
+Use separated terms/rests before target quantization (M5.4 R=C-D), never subtract a huge packed glint.
+Every candidate first passes CPU algebra/encoding tests and dependent offline FS/reference checks.
+All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, not timing gates.
+
+1. Direct sun-glint footprint: `rt_water_surface_glint=0`, FS patch, expected +0.02-0.10 ms.
+   The game already has r>=.09 and capped ddx/ddy(N) AA; preserve recorded N, E and reflection roughness.
+   Filter only direct specular with slope moments from normal samples/mips; prove the moment inputs first.
+   Keep sun clouds/visibility; rebuild R and any affected local-sum BRDF inputs if extending beyond sun.
+   OFF: emit today's FS exactly; zero unresolved variance reproduces the old direct term within encoding.
+   Predict: fewer isolated flashing glints on S8 lit pool, broader footprint, same integrated lobe energy.
+   Gate: footprint-supersampled native-BRDF reference, integral within its convergence/encoding bound;
+   static linear energy within OFF-repeat noise for filtering, lower residual than OFF/OFF noise on Q/E.
+   Needs live S8 static + held Q/E A/B; solar-disc integration only if a separate reference proves bias.
+2. Interface/column split: `rt_water_surface_fresnel=0`, FS patch + compose, +0.01-0.05 ms.
+   Emit probe/interface and column terms separately; remove a from clean-water reflection, put (1-F)
+   on transmitted/column transport; foam stays a separate layer. Preserve DFG weighting initially.
+   Rebuild A/B and native fallback identically; retain reflection rays, radiance and eligibility unchanged.
+   Never divide existing A/B by a or multiply their E by a second F. Direct Fresnel uses L.H, not N.V.
+   OFF: original stores/compose identity; matching traced/probe radiance is still a zero replacement delta.
+   Predict: shallow S8 rim retains column reflections; at a=.5 interface weight doubles in smooth limit.
+   Gate: white-furnace/planar dielectric reference, energy partition including roughness and a=0/1;
+   model brightness may change. Live S8 pool static/Q/E A/B and Ultra smoke required.
+3. Refracted path ramp: `rt_water_surface_path=0`, pool-only FS + compose, +0.01-0.04 ms.
+   Reuse existing refraction hit distance, no extra ray; replace only column ramp d by physical L_t.
+   Requires runtime ramp CB mapping and separated column/source terms; preserve shoreline/foam masks.
+   OFF: old record and refraction delta exact; equal L_t=d gives same ramp within input precision.
+   Predict: S8 hit-pixel T .225 -> .157 in the retained flat-plane model; not a measured runtime delta.
+   Gate: reproduce native ramp first, monotonic T, analytic distance/angle fixtures; unresolved keeps native.
+   Live S8 tiles/steps static/Q/E A/B: stable depth appearance, no rim halos; not labelled absorption.
+4. Spectral medium: `rt_water_surface_medium=0`, FS + compose, +0.02-0.08 ms after step 3.
+   Blocked on physical sigma_a/sigma_s, metre units and source mapping; authored colours are not sigma.
+   Replace column by exp(-sigma_t L) and accounted scattering source; preserve interface and air fog.
+   OFF: native column exact; gate zero coefficients/zero length identity for the new transport model,
+   T(2L)=T(L)^2, nonnegative source, converged slab reference and no double fog. No guessed deep colour.
+   Predict depth-dependent bed RGB instead of grey fading; live S8 static/Q/E A/B after mapping proof.
+5. Shore/foam separation: `rt_water_surface_foam=0`, FS patch, +0.01-0.05 ms, lower priority.
+   Preserve authored flow; use validated geometric contact for clean-water edge, separate bubble coverage.
+   OFF: original masks exact; zero foam preserves clean-water output. Needs mask/geometry mapping first.
+   Gate contact width from footprint/depth precision, no foreground bleed or lost foam; live S8 rim Q/E,
+   then S3 camp pond/bridge. No new wave simulation, caustics or blanket fog replacement in this lane.
+
+No live batch is authorized or queued. Existing opaque GI packs cannot qualify these surface terms.
+New live evidence must use same-run toggles, post-water float colour and clean GPU ms; patterns/expect
+and expect_every in both ON windows, thresholds from encoding/reference convergence/OFF-repeat noise.
+Report each actual pass cost and test with qualified Ultra keys; do not gate shading-model changes on equal mean.
+
 ## Promotion to Ultra (2026-11-01, batch tools/live_batches/m5_promotion, NOT run)
 
 Gate table from the latest valid S8 runs (each key alone, static view; `py -3 -m tools.m5_promotion_gate <log>`).
