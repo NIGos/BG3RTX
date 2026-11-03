@@ -496,7 +496,7 @@ inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, Co
 inline constexpr bool compose_plain_counter(uint32_t i) {
   return i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
       (i>=kCsLsRec && i<kCsLsSumL) || i==kCsLsChkShWithin || i==kCsNonFinite ||
-      (i>=kCsHitAttempt && i<kCsHitEnd) || (i>=kCsRrRec && i<kCsRrSumGame);
+      (i==55 || (i>=kCsHitAttempt && i<kCsHitEnd)) || (i>=kCsRrRec && i<kCsRrSumGame);
 }
 
 }  // namespace bg3::water

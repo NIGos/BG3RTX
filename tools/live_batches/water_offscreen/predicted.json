@@ -4,14 +4,16 @@
     "shot-on-a": {
       "predicted": 0.0,
       "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
-      "cost_gpu_ms": null,
-      "coverage": "Every ON window requires hidden > 0 AND offscreen > 0 in both extended stats lines. Current native_hit_cluster rejects truly out-of-frustum hits, so offscreen is predicted zero and this requested gate is expected to fail until a world-light provider exists. No threshold relaxation."
+      "cost_gpu_ms": 1.0,
+      "coverage": "Mode 2: offscreen shaded > 0 and hidden shaded > 0 in EVERY ON window, in both reflection and compose. Current-frame union of active froxel lights queried by world position; not every raw b25 slot (unlisted slots are stale). Truncation > 32 retains probe, counted; no preset promotion.",
+      "cost_budget_source": "Acceptance budget: added reflection + compose median <= 1.0 ms (about 1.5x the qualified 0.67 ms water chain); p90 <= OFF p90 + 1.0 ms. Budget only, not measured prediction; use matched diagnostic-free GPU windows."
     },
     "shot-on-b": {
       "predicted": 0.0,
       "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
-      "cost_gpu_ms": null,
-      "coverage": "Every ON window requires hidden > 0 AND offscreen > 0 in both extended stats lines. Current native_hit_cluster rejects truly out-of-frustum hits, so offscreen is predicted zero and this requested gate is expected to fail until a world-light provider exists. No threshold relaxation."
+      "cost_gpu_ms": 1.0,
+      "coverage": "Mode 2: offscreen shaded > 0 and hidden shaded > 0 in EVERY ON window, in both reflection and compose. Current-frame union of active froxel lights queried by world position; not every raw b25 slot (unlisted slots are stale). Truncation > 32 retains probe, counted; no preset promotion.",
+      "cost_budget_source": "Acceptance budget: added reflection + compose median <= 1.0 ms (about 1.5x the qualified 0.67 ms water chain); p90 <= OFF p90 + 1.0 ms. Budget only, not measured prediction; use matched diagnostic-free GPU windows."
     }
   }
 }

@@ -1,15 +1,18 @@
 # Water hidden-hit shading: S8 draft
 
 One Water Queens House launch, Ultra water, visible_unfocused_fg. Not queued.
-Static and smooth turn windows toggle rt_water_hit_shade 0/1/0/1 with
+Static and smooth turn windows toggle rt_water_hit_shade 0/2/0/2 with
 rt_water_compose_shift=1. Turns reuse wf9 direction +1, one pixel per four
 rendered frames, and equal opposite returns. Cost windows have no diagnostics.
 Every ON window requires hidden > 0 AND offscreen > 0 in BOTH extended water
-stats lines, as requested. The offscreen gate is predicted to fail: the shared
-native light grid rejects truly out-of-frustum hits. Keep this failure visible;
-this candidate cannot qualify full offscreen shading until a world-light provider
-exists. No gate or RF bias threshold was relaxed.
-Record compose GPU median/p90 and reflection GPU ms versus OFF; cost is unknown.
+stats lines. Mode 2 queries sphere-culled nearest lights outside the grid.
+Only the current frame's froxel membership union certifies active point/spot
+slots and their types. Raw unlisted slots are stale (docs/ASSET_DB.md).
+A hit may be off-screen even when its lights also illuminate the camera volume.
+Lights absent from all current froxels and world local-probe queries remain gaps.
+At most 32 local lights; truncation retains the probe and is counted in both logs.
+No gate or RF bias threshold was relaxed.
+Record compose GPU median/p90 and reflection GPU ms versus OFF; cost is unknown. Added median and p90 GPU budget: 1.0 ms.
 The same-frame/TLAS borrowed-descriptor guard stays conservative: earlier
 lighting falls back to ordinary compose, so ON compose coverage may fail.
 

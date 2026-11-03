@@ -103,7 +103,8 @@ int main(int argc, char** argv) {
   }
   CHECK(bases > 0);
   for (const char* r : kFixedRequests) {   // outside gi/: each names an existing file
-    const std::string f(r, std::strchr(r, '?'));
+    const char* end=std::strchr(r, '?');
+    const std::string f(r, end ? size_t(end-r) : std::strlen(r));
     CHECK(std::filesystem::exists(root / "shaders" / f));
     want.insert(water_request(r, false));
     want.insert(water_request(r, true));

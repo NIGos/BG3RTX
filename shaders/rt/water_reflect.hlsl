@@ -294,6 +294,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   wstat(15, water && fallback);
   wstat(22, water && tier == 2u && skin);
 #ifdef WATER_HIT_SHADE_LAYOUT
+  if(kWaterHitShade==2u)wstat(31,g_water_truncated);
   wstat(24,shade_attempt); wstat(25,shaded && tier==2u); wstat(26,shaded && tier==3u);
   [unroll] for(uint reason=1u;reason<=4u;++reason) wstat(26u+reason,shade_attempt && shade_reason==reason);
 #endif

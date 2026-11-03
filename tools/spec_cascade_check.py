@@ -161,7 +161,7 @@ def old_requests_waterhit(spec_request):
     compose = split_request(spec_request)[0] == "rt/water_compose.hlsl"
     out = []
     for shift in (0, 1) if compose else (0,):
-        for value in (0, 1):
+        for value in (0, 1, 2):
             assign = {1016: value}
             reference = spec_request + f";WATER_HIT_SHADE_REFERENCE={value}"
             if compose:
@@ -422,7 +422,8 @@ def main():
         base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
         try:
             refs = compile_requests(base, pick, tool=tool, cache=Cache(), jobs=args.jobs, label="spec baseline")
-            with tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
+            with Progress("spec baseline equivalence", sum(len(compiled[r].entries) for r in pick),
+                          every=30, verb="compared") as progress, tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
                 for i, r in enumerate(pick):
                     for e in compiled[r].entries:
                         newp, oldp = Path(bt) / "new.spv", Path(bt) / "old.spv"
@@ -430,6 +431,7 @@ def main():
                         oldp.write_bytes(refs[r].blob(e.name))
                         n = check_one(tool, bt, f"base_{i}_{e.name}", newp, oldp, pairs[r][0][0])
                         baseline_ok &= n == 0
+                        progress.step(failed=bool(n))
                         if n: say(f"BASELINE DIFFERENT: {r} [{e.name}]: {n}")
             say(f"key-off baseline {args.baseline}: {'PASS' if baseline_ok else 'FAIL'} ({len(pick)} requests)")
         finally:

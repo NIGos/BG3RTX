@@ -1,27 +1,35 @@
-## Water hidden-hit reflections (branch rt-reflections-offscreen, READY_FOR_LIVE, 2026-11-03)
-- Resolved bundle-20261103 in place; Git metadata read only, no staging or commit.
-- rt_water_hit_shade remains 0 in all presets; Experimental control has explicit apply metadata.
-- Replaced provisional 1100 with registry SpecId 1016; cascade 1000, hair 1008/1010,
-  edge 1014 and compose shift 1015 share the async pipeline specialization map/cache key.
-- WATER_HIT_SHADE_LAYOUT adds material bindings 21-29, game set 2 and sun set 3.
-  Regenerated variants: bundle 147 -> 156 (+9 layouts, no on/off multiplication).
-- Compose closest-hit origin and shading hit both use compose_scene_origin; screen H stays current.
-  Hit-shading eligibility is flag 64, separate from camera shift flag 32 (CPU regression gate).
-- Borrowed lighting remains exact-frame/TLAS only; earlier lighting keeps ordinary compose.
-  Unknown materials/light/roof keep the native probe; C + A L - B is unchanged.
-- Build succeeded; all 125 CTests passed across full suite + targeted corrective reruns.
-  Defaults check and variant generator pass; ordinary pp-diff vs bundle: 235/235 unchanged
-  (210 input-identical, 25 preprocessed-identical), zero compiles required.
-- watercasc: 19/19 requests, 68/68 comparisons; waterhit: 9/9, 64/64 (both shift values).
-  watershift: 17/17 requests, 68/68 comparisons. Initial waterhit OFF gate failed on a
-  short-circuit histogram predicate; eager capability-only predicates passed, checker unchanged; controls differ.
-- Prepared tools/live_batches/water_offscreen: S8 Water Queens House, Ultra, shift=1,
-  static and matched wf9 turns 0/1/0/1 in one visible_unfocused_fg launch. Prediction first.
-  14 phases, 225 s, 12 static traces, no float bursts; synthetic dryrun passed.
-- Every ON window requires hidden AND offscreen shaded > 0 in both extended stats lines.
-  Offscreen is predicted zero (light-grid rejection), so that requested gate is expected to fail.
-- Automatic post_gate: static float water-compose energy within OFF noise for BOTH ONs;
-  compose/reflection GPU ms median/p90 remain unmeasured. Commit prediction before live.
-- In game after separate authorization: S8 pool hidden reflections should follow matched turns;
-  unsupported hits retain probe. Existing chain 0.53-0.67 ms is not this increment's cost.
-- No game launched, real job queued, quality pass, preset promotion or RF bias relaxation.
+## Water world-query candidate (branch rt-reflections-offscreen, READY_FOR_LIVE (bounded provider), 2026-11-03)
+- Git metadata read only; no commit, game launch or real job queued. ABI unchanged.
+- rt_water_hit_shade=2 extends SpecId 1016; Experimental GUI choice; presets still 0.
+- Off-grid hits use a once-per-frame GPU point/spot membership/type union, then
+  world bounding-sphere/channel culling and stable nearest selection, K=32.
+- K bounds local visibility rays to one subgroup's lane count (1024 / 32 = 32x below
+  the existing froxel cap). More than K retains probe, never a partial energy sum.
+- Truncation: reflection word 31 / compose word 55, wave/group-reduced device-local
+  counters, existing delayed readback, both logs report world truncated.
+- Source correction: raw b25 is not a full active frame list. ASSET_DB.md measured
+  1,182 valid-looking vs 39 listed slots; unlisted slots hold other frames/places.
+  Use every current froxel's active point/spot union at arbitrary world positions.
+  Never-listed lights, world boxes and local probes remain provider gaps.
+- Sun/roof, native light BRDF/visibility/policy, sky cube direction/mip/blend/scale
+  and AO reused. Receiver C + A L - B is unchanged; unknowns retain native probe.
+- Existing same-frame/TLAS and forward/opaque buffer equality guards stay in force.
+- Shared CPU/HLSL sphere and nearest selector: boundaries, invalid/channel inputs,
+  shuffled/tied populations through 4096, empty sets and truncation tested.
+- shader_variant_test --write: 156 -> 157 requests (+1 preparation, no cross product).
+  Fixed its plain-request parser; refreshed GUI schema for the new mode.
+- pp-diff HEAD: 244 common requests; 210 input-identical + 25 pp-identical,
+  only 9 hit-layout requests changed. Two-shader probe compiled/spirv-val passed.
+- Final build succeeded; all 126 CTests passed (new CPU selector included).
+  Initial generator/schema failures corrected; host_atomics_lint passed.
+- waterhit: 9/9 layouts, 96/96 comparisons (modes 0/1/2 x both compose shifts);
+  key-off matches HEAD in all 9; control differs. All 10 requests validate.
+  Added shared-helper progress reporting to the checker's baseline comparisons.
+- water_offscreen draft toggles 0/2/0/2; synthetic dryrun passed all checks.
+  Every ON requires offscreen AND hidden shaded > 0 in both consumer stats.
+- predicted.json: static float mean unchanged within OFF noise/encoding band;
+  added reflection + compose median/p90 GPU budget 1.0 ms. Cost unmeasured.
+- After separate live authorization: S8 Water Queens House, Ultra, static repeats
+  then matched turns in one visible_unfocused_fg launch; inspect pool reflections.
+- No quality pass, RF bias relaxation or preset promotion. Full active-list coverage
+  needs a verified provider, not stale slots or story-unsafe database lights.

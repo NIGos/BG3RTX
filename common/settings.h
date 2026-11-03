@@ -246,6 +246,8 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
    {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
+    {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
    {}, {0,0,0,0}, true, {}, false, "Experimental", {}},
 

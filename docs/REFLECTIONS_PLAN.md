@@ -36,7 +36,7 @@ reflection is the bed's reflection, not a second reflection term on the forward 
 |---|---|---|---|---|
 | Eligible screen hit, tier 1 / (a) | `E * Lscreen` replaces the weighted probe, blended at screen/roughness edges | Same output; optional tier (a) check computes hit shading without replacing the screen source | Current-frame copied opaque radiance replaces the FS probe | Same |
 | Hidden on screen, tier 2 | Native probe | Qualified material and complete supported lighting: `E * Lhit`; otherwise probe | Native FS probe | Same hit shader as RF on a qualified, fully supported row; otherwise probe |
-| Off screen, tier 3 | Native probe | Hit shading only if its material point still passes the light-grid domain; otherwise probe | Native FS probe | Same qualification and lighting domain; otherwise probe |
+| Off screen, tier 3 | Native probe | Hit shading only if its material point still passes the light-grid domain; otherwise probe | Native FS probe | Mode 1: native grid. Mode 2: bounded current-frame world query (C); unsupported hits retain probe |
 | TLAS miss, tier 4 | Native probe | Native probe | Native FS probe | Native FS probe; directional sky is a later stage |
 | Aborted / invalid | Native probe | Native probe | Native FS probe | Native FS probe |
 | Ineligible receiver, rough water, below-surface ray, invalid/unowned forward record | Native game lighting | Native game lighting | Original forward colour | Original forward colour |
@@ -49,8 +49,9 @@ actual off-screen workload.
 A qualified material alone is insufficient. `native_hit_direct.hlsli:140`
 (`native_hit_cluster`) explicitly requires projection inside `[0,1)` and a valid froxel slice.
 `native_hit_shade.hlsli:223` performs that check before costly VT decoding. A genuinely
-out-of-frustum hit therefore keeps the probe even after step A. Step A chiefly resolves hidden
-on-screen objects; it cannot complete the user's full off-screen goal on its own.
+out-of-frustum hit therefore keeps the probe even after step A. Step A (mode 1) chiefly resolves hidden
+on-screen objects. Mode 2 adds the bounded world query in C; its current-frame
+light union can illuminate off-grid hits but is not a full active-world provider.
 The current TLAS also contains captured draws, not an arbitrary persistent world. An object
 never captured or culled from every contributing pass cannot appear in a reflection.
 
@@ -70,7 +71,8 @@ The runtime switch is Vulkan SpecId 1016 in `common/shader_variant.h`, after com
 share one pipeline specialization map and cache key. `WATER_HIT_SHADE_LAYOUT=1` adds
 material bindings 21-29, borrowed game set 2 and sun set 3, so it remains a layout define.
 This capability adds 9 requests to the bundle's 147 (156 total), not an on/off cross product.
-Ordinary requests remain unchanged with the key off. The compose reflection ray starts at
+Ordinary requests remain unchanged with the key off. Mode 2 adds device-local
+world membership binding 31 within this capability and one preparation request (157 total). The compose reflection ray starts at
 `compose_scene_origin(o)`; hit shading receives `compose_scene_origin(H)` in that same TLAS
 camera space. Screen projection still uses the current-space H. The capability histogram
 uses eager pure predicates so specialization matches the fixed-key reference without changing
@@ -123,14 +125,51 @@ Gate outdoor sky direction and scale against the same-frame game environment sou
 cube blend states, and prove enclosed rooms do not acquire sky. Keep local-probe replacement
 separate: a miss may represent intentional interior probe lighting.
 
-### C. Complete the off-screen domain and define replacement
+### C. Bounded world query candidate (mode 2)
 
-Provide light and probe queries at a world point outside the camera froxel grid before relaxing
-`native_hit_cluster`. Reuse runtime active-light state; the asset DB's 19,572 placed lights
-are possible sources, not proof a story-controlled light is active. Local probe boxes/cubes
-also need a world query. Then supply persistent/cascade geometry and material rows for
-never-G-buffer-drawn meshes through a verified mesh identity join. Each provider fails closed.
-This stage is required for true reflections of fully off-camera objects.
+`rt_water_hit_shade=2` extends SpecId 1016; modes 0 and 1 keep their contracts.
+The Experimental GUI exposes this mode; every preset remains off. No ABI change.
+`water_light_prepare.hlsl` builds a 4096-slot current-frame point/spot membership
+and type union once at lighting, before the water traces, in device-local memory.
+It scans only the current grid dimensions, validates list bounds and rejects an
+inconsistent type. Transfer clear -> compute build -> compute readers are ordered.
+The preparation is included in reflection GPU timing. Borrowed frame/TLAS and
+forward/opaque light-buffer equality checks still apply to compose.
+
+**Provider limit:** the premise that every b25 slot is a current active light is
+false for this renderer. ASSET_DB.md measured 1,182 valid-looking slots versus 39
+listed in Grymforge; unlisted slots contain other frames/places. This candidate
+uses all currently listed point/spot lights as a world-space source, independent
+of the hit's projection. Such lights can reach off-screen hits. It does not revive
+unlisted slots, infer spot type from cone values, or substitute story-unsafe DB
+lights. A verified full active-light provider remains necessary for lights absent
+from every current froxel. World projector and local-probe queries remain gaps.
+
+At an out-of-grid qualified hit, `water_world_lights.h` tests channel and authored
+bounding spheres, then selects nearest centres with stable slot-id tie breaks.
+K = 32 bounds local visibility rays to one subgroup's lane count, 32 times below
+the existing 1024-light froxel cap. This is a work budget, not an accuracy cutoff:
+if more than K spheres overlap, keep the original probe and count truncation.
+No partial nearest sum is silently accepted as full energy. Both consumers use
+the existing wave -> group -> device-local statistics and asynchronous readback:
+reflection word 31 / compose word 55, logged as `world truncated`.
+Malformed lists, unknown visibility, material and roof failures also keep probe.
+
+Local terms reuse authored light amplitudes, BRDF, visibility and D-LS policy.
+Sun reuses `native_hit_sun`, including its roof/cascade contract. Sky specular
+samples the global cube pair along the exact reflected world direction at the
+hit, `reflect(R, material.normal)` for outgoing `-R`; sharp/rough mip, blend and
+lighting scale follow the audited native convention. Diffuse uses irradiance at
+N, with native DFG/AO factors. Receiver DFG remains applied only in water compose.
+This is a global environment approximation, not a world local-probe replacement.
+No TLAS miss acquires sky in this step. Missing captured geometry remains a gap.
+
+Offline culling/selection tests cover empty, boundary, invalid/channel cases,
+nearest sorting, ties, truncation and shuffled 4096-slot populations. The live
+draft toggles 0/2/0/2 and predicts offscreen shaded > 0 in every ON window, equal
+static mean within OFF noise/encoding uncertainty, and added median/p90 GPU cost
+<= 1.0 ms in matched diagnostic-free windows. Cost is unmeasured. No launch or
+queue submission is authorized; this is not a quality pass or preset promotion.
 
 For opaque receivers continue subtracting only the audited `Tp` term, weighted by w. At w=1
 the RT estimate replaces the native probe; at 0<w<1 it blends two estimates of the same term;

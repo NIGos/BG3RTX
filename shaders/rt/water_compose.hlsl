@@ -781,6 +781,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #endif
   cstat(14, trace && tier == 2u && skin);
 #ifdef WATER_HIT_SHADE_LAYOUT
+  if(kWaterHitShade==2u)cstat(55,g_water_truncated);
   cstat(57,shade_attempt); cstat(58,shaded && tier==2u); cstat(59,shaded && tier==3u);
   [unroll] for(uint reason=1u;reason<=4u;++reason) cstat(59u+reason,shade_attempt && shade_reason==reason);
 #endif
