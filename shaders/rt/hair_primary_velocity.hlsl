@@ -61,18 +61,19 @@ Out main(float4 pos : SV_Position) {
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
   if (k >= grooms) discard;
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
-  const uint i0 = ld(pool + row.z + seg * 4u);
+  uint i0;
+  if (!hp_segment(pool, ld(rec + 56u), row, seg, i0)) discard;
   const float v = asfloat(e.y);
   {   // the G-buffer variant's ownership test: only the card fragment that wrote this strand (hp_on_card)
     const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
-    const float seg_len = length(ldf3(pool + row.x + (i0 + 1u) * 12u) - ldf3(pool + row.x + i0 * 12u));
+    const float seg_len = length(ldf3(hp_at(pool, row.x, i0 + 1u, 12u)) - ldf3(hp_at(pool, row.x, i0, 12u)));
     if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, seg_len)) discard;
   }
   float3 prev;
   if (row.w != 0u) {
-    prev = lerp(ldf3(pool + row.w + i0 * 12u), ldf3(pool + row.w + (i0 + 1u) * 12u), v);   // previous camera-relative
+    prev = lerp(ldf3(hp_at(pool, row.w, i0, 12u)), ldf3(hp_at(pool, row.w, i0 + 1u, 12u)), v);   // previous camera-relative
   } else {
-    const float3 cur = lerp(ldf3(pool + row.x + i0 * 12u), ldf3(pool + row.x + (i0 + 1u) * 12u), v);
+    const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);
     prev = cur + gCam.position - gPrev.position;
   }
   const float4 c = mul(float4(prev, 1.0), gPrev.vp);

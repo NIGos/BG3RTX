@@ -119,6 +119,15 @@ def on_card(t_card, t_hit, cos_card, foot, seg_len):
     return abs(t_hit - t_card) <= (MAX_RADIUS + 0.5 * seg_len) / max(cos_card, 1e-6) + foot
 
 
+def segment_ok(row, seg, i0, pool_bytes):
+    """hp_segment's bounds (64-bit offsets): every pool byte the strand readers touch for segment seg of table row
+    (points, uv, starts, prev offsets), whose first point is i0, lies inside the mesh pool."""
+    x, y, z, w = row
+    inside = lambda off, n: off + n <= pool_bytes
+    return (inside(z + seg * 4, 4) and inside(x + i0 * 12, 24) and (y == 0 or inside(y + i0 * 8, 16))
+            and (w == 0 or inside(w + i0 * 12, 24)))
+
+
 def _mix(x):
     x &= 0xFFFFFFFF
     x ^= x >> 16; x = (x * 0x7feb352d) & 0xFFFFFFFF

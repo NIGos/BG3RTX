@@ -88,6 +88,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
+  const uint pool_bytes = ld(rec + 56u);
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint64_t at = pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes;
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
@@ -105,12 +106,14 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
       const uint k = q.CommittedInstanceIndex(), seg = q.CommittedPrimitiveIndex();
       if (k < grooms && seg <= hair_primary_max_segment) {
         const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
-        const uint i0 = ld(pool + row.z + seg * 4u);
-        const float3 p0 = ldf3(pool + row.x + i0 * 12u), p1 = ldf3(pool + row.x + (i0 + 1u) * 12u);
+        uint i0;
+        if (hp_segment(pool, pool_bytes, row, seg, i0)) {
+        const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
         const float3 hit = dir * q.CommittedRayT();
         const float v = hp_segment_param(hit, p0, p1);
         const float4 c = mul(float4(hit, 1.0), gCam.vp);
         e = uint4((k << 24) | seg, asuint(v), asuint(c.z / c.w), 0u);
+        }
       }
     }
     e.w = hp_seal(e.xyz, tag);
@@ -121,12 +124,14 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   if (k >= grooms) discard;   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
   const float v = asfloat(e.y);
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
-  const uint i0 = ld(pool + row.z + seg * 4u);
-  const float3 p0 = ldf3(pool + row.x + i0 * 12u), p1 = ldf3(pool + row.x + (i0 + 1u) * 12u);
+  uint i0;
+  if (!hp_segment(pool, pool_bytes, row, seg, i0)) discard;
+  const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
   const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
   if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, length(p1 - p0))) discard;
-  const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(pool + row.y + i0 * 8u, 4));
-  const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(pool + row.y + (i0 + 1u) * 8u, 4));
+  if (row.y == 0u) discard;   // no point UVs (the layer publishes a row without them only for a card-kept draw)
+  const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
+  const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
   const float2 uv = lerp(uv0, uv1, v);
   const float3 t_world = normalize(p1 - p0);
   const float3 to_cam = -normalize(lerp(p0, p1, v));
