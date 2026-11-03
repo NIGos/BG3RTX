@@ -223,6 +223,17 @@ int main() {
     CHECK(h.feedback_frame(keys, drew, zero, zero, 3).empty());
     CHECK(h.feedback_frame(keys, drew, zero, zero, 3).size() == 3);
   }
+  {   // rt_hair_groom_primary_order: the header the G-buffer pass applies (newest publish ordered before it on the GPU)
+    using hair_primary::Staged;
+    const Staged st[3] = {{10, 100, 0xA}, {11, 101, 0xB}, {12, 102, 0xC}};
+    auto none = [](uint64_t) { return false; };
+    auto upto101 = [](uint64_t r) { return r <= 101; };
+    CHECK(hair_primary::pick_publish(st, 3, 0xC, none) == 2);      // this frame's build recorded in the same command buffer
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, upto101) == 1);   // another buffer: the newest already submitted
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, none) == -1);     // nothing ordered before it: no strand swap
+    const Staged empty[2] = {};
+    CHECK(hair_primary::pick_publish(empty, 2, 0, upto101) == -1);
+  }
   {   // level reload (hv1 2026-11-03 18:40, device lost after F8): LoadGuard + SwapGate as hair_primary_publish uses them
     hair_primary::LoadGuard load;
     hair_primary::SwapGate g;

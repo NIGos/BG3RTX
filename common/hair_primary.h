@@ -156,6 +156,23 @@ struct SwapGate {
   }
 };
 
+// rt_hair_groom_primary_order: the header is written in the G-buffer's own command buffer, right before its render
+// pass, instead of in the prepass's (where the groom build is recorded). The game may submit the two in either order;
+// the G-buffer then read an adjacent frame's header (hv5 2026-11-03: every groom struck at once). The header applied
+// is the newest staged publish whose build is ordered before the G-buffer on the GPU: recorded earlier in the same
+// command buffer, or in a command buffer already submitted (one queue). None: no strand swap this frame (fail closed).
+struct Staged { uint32_t tag = 0; uint64_t rec = 0; uint64_t cmd = 0; };
+template <class Submitted>
+inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submitted submitted) {
+  int best = -1;
+  for (int i = 0; i < n; ++i) {
+    const Staged& s = staged[i];
+    if (!s.tag || !(s.cmd == gbuffer_cmd || submitted(s.rec))) continue;
+    if (best < 0 || s.tag > staged[best].tag) best = i;
+  }
+  return best;
+}
+
 // Level loads (and resolution changes) recreate the game's G-buffer images. At such a boundary every published groom,
 // G-buffer proof and feedback is dropped and no draw is swapped for kLoadQuietFrames frames: the scene's draws,
 // buffers and descriptors are all new (hv1 2026-11-03 18:40: device lost 3 s after the selected-save reload, with

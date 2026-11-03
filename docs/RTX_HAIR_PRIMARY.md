@@ -164,6 +164,16 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   The velocity variant applies the same test. Entries are sealed (`hp_seal`: word 3 mixes the tag with the other
   words), so a torn 16-byte store never pairs this frame's tag with an older key.
 
+- Strike rule (hv5 2026-11-03: every groom of a counted frame struck at once, then every draw kept its cards for the
+  session): a counted frame whose strand pixels carry an adjacent frame's tag is no evidence (the G-buffer ran against
+  another publish: the build is recorded with the prepass, the game may submit the G-buffer in another order); draws
+  sharing an index-range key are summed; a strike retires the draw for 600 frames (doubling to 9600), not the session.
+- `rt_hair_groom_primary_order` (off, live): the header is written in the G-buffer pass's own command buffer (cmd.cpp
+  pass_ready, before the game's begin) from the newest staged publish whose build is recorded earlier in that command
+  buffer or already submitted (`hair_primary::pick_publish`); none: no strand swap that frame, and the next prepass
+  keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
+  the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.

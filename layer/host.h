@@ -925,9 +925,15 @@ bool hair_primary_wanted();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
-                          const uint64_t* keys, const uint8_t* lods, uint32_t count, uint32_t width, uint32_t height,
-                          const float* viewport);
+// rec: the scene build's record (bvhsplit), so an ordered publish (rt_hair_groom_primary_order) knows when it is submitted.
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
+                          const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,
+                          uint32_t width, uint32_t height, const float* viewport);
+// rt_hair_groom_primary_order: before a render pass begins (outside it); applies the groom header in the main G-buffer
+// pass's own command buffer.
+void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p);
+// bvhsplit: a build record whose command buffer was submitted.
+bool bvh_rec_submitted(uint64_t id);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.
 void geo_render_size(uint32_t* width, uint32_t* height);
 void geo_gbuffer_viewport(float out[4]);

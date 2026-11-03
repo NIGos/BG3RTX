@@ -773,6 +773,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_gi_mean", "0"},
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
+    {"rt_hair_groom_primary_order", "0"},
     {"rt_hair_fibre", "0"},
     {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},
