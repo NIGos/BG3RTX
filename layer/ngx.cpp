@@ -1223,7 +1223,7 @@ static void trace_images(VkCommandBuffer cmd, const VkImage* all, int count, con
   for (uint32_t i = 0; i < p.color_count; ++i) j += (i ? ",\"" : "\"") + image_ref(p.color_images[i]) + "\"";
   j += "],\"depth\":\"\"}";
   trace_event(s, j);
-  std::string dumps = trace_dump_pass(cmd, s);
+  std::string dumps = trace_dump_pass(cmd, s, strcmp(tag, "rrpost") == 0 && cfg_int("pan_post", 0));
   trace_event(s, "{\"op\":\"end\",\"draws\":1,\"dumps\":[" + dumps + "]}");
   s->pass = saved;
   memcpy(s->color_layouts, saved_layouts, sizeof saved_layouts);
@@ -1459,6 +1459,24 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   if (result != NVSDK_NGX_Result_Success && eval_logs++ < 8)
     log("[ngx] RR evaluate failed: %s (0x%08x)", result_name(result), unsigned(result));
   if (g_qpool) ts_mark(dd, cmd, ts_slot, 2);
+  if (use_post && result == NVSDK_NGX_Result_Success) {
+    Bg3Binding inputs[2]{};
+    const char* keys[] = {NVSDK_NGX_Parameter_Depth, NVSDK_NGX_Parameter_MotionVectors};
+    for (unsigned i = 0; i < 2; ++i) {
+      auto* resource = get_res(p, keys[i]);
+      if (!resource || resource->Type != NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW) continue;
+      const auto& im = resource->Resource.ImageViewInfo;
+      auto& b = inputs[i]; b.image = im.Image; b.view = im.ImageView;
+      b.format = VkFormat(im.Format); b.width = im.Width; b.height = im.Height;
+      b.layout = sl_input_layout(cmd, b.image, i == 0 ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    float jitter[2] = {}, scale[2] = {};
+    const bool valid = get_f(p, NVSDK_NGX_Parameter_Jitter_Offset_X, jitter[0]) &&
+        get_f(p, NVSDK_NGX_Parameter_Jitter_Offset_Y, jitter[1]) &&
+        get_f(p, NVSDK_NGX_Parameter_MV_Scale_X, scale[0]) && get_f(p, NVSDK_NGX_Parameter_MV_Scale_Y, scale[1]);
+    if (!valid) inputs[1] = {};
+    rrpost_temporal(cmd, inputs[0], inputs[1], jitter, scale, reset || old_reset != 0, ow, oh);
+  }
   // The game's post chain after RR, at output resolution, into its DLSS output.
   if (use_post && result == NVSDK_NGX_Result_Success && !rrpost_final(cmd, out->Resource.ImageViewInfo.Image, VkFormat(out->Resource.ImageViewInfo.Format), ow, oh))
     log("[ngx] RR before post: the output-resolution grade could not be recorded");

@@ -1,0 +1,286 @@
+{
+  "name": "pt-dialogue3",
+  "save": "Test Dialogue3",
+  "session": false,
+  "live_batch": "post-temporal",
+  "window_mode": "visible_unfocused_fg",
+  "traces": 0,
+  "hold": 90,
+  "timeout": 480,
+  "repeat": 1,
+  "stop_on_dump": false,
+  "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0,dump_png_width=384",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/post_temporal/plans/pt_dialogue3.json"
+  ],
+  "patterns": [
+    "\\[pan\\]",
+    "\\[sl\\]",
+    "\\[ngx\\]",
+    "\\[hot\\]",
+    "\\[watch\\]",
+    "\\[pace\\]",
+    "\\[cfg\\]",
+    "\\[rrpost\\]",
+    "GPU cost",
+    "FAILED",
+    "\\[crash\\]",
+    "\\[trace\\]",
+    "\\[dump\\]"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+  ],
+  "expect_every": [
+    {
+      "name": "AC/EB K8 off-a",
+      "select": "\\[pan\\] burst 98700 complete",
+      "match": "\\[pan\\] burst 98700 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-off-a"
+      ]
+    },
+    {
+      "name": "presented K8 off-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-off-a"
+      ]
+    },
+    {
+      "name": "float energy off-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-a"
+      ]
+    },
+    {
+      "name": "post GPU cost off-a",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-off-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting off-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-off-a"
+      ]
+    },
+    {
+      "name": "AC/EB K8 on-a",
+      "select": "\\[pan\\] burst 98701 complete",
+      "match": "\\[pan\\] burst 98701 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-on-a"
+      ]
+    },
+    {
+      "name": "presented K8 on-a",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-on-a"
+      ]
+    },
+    {
+      "name": "float energy on-a",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-on-a"
+      ]
+    },
+    {
+      "name": "post GPU cost on-a",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-on-a"
+      ]
+    },
+    {
+      "name": "FG actually presenting on-a",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-on-a"
+      ]
+    },
+    {
+      "name": "temporal GPU cost on-a",
+      "select": "\\[rrpost\\] gpu temporal:",
+      "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+      "min": 1,
+      "windows": [
+        "timing-on-a"
+      ]
+    },
+    {
+      "name": "AC/EB K8 off-b",
+      "select": "\\[pan\\] burst 98702 complete",
+      "match": "\\[pan\\] burst 98702 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-off-b"
+      ]
+    },
+    {
+      "name": "presented K8 off-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-off-b"
+      ]
+    },
+    {
+      "name": "float energy off-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-off-b"
+      ]
+    },
+    {
+      "name": "post GPU cost off-b",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-off-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting off-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-off-b"
+      ]
+    },
+    {
+      "name": "AC/EB K8 on-b",
+      "select": "\\[pan\\] burst 98703 complete",
+      "match": "\\[pan\\] burst 98703 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "rendered-on-b"
+      ]
+    },
+    {
+      "name": "presented K8 on-b",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "presented-on-b"
+      ]
+    },
+    {
+      "name": "float energy on-b",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "energy-on-b"
+      ]
+    },
+    {
+      "name": "post GPU cost on-b",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "timing-on-b"
+      ]
+    },
+    {
+      "name": "FG actually presenting on-b",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "presented-on-b"
+      ]
+    },
+    {
+      "name": "temporal GPU cost on-b",
+      "select": "\\[rrpost\\] gpu temporal:",
+      "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+      "min": 1,
+      "windows": [
+        "timing-on-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x",
+    "RR (creation|evaluate) failed",
+    "FAILED, keeping previous",
+    "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+    "PNG write failed",
+    "capture writer backlog",
+    "\\[sl\\] edge capture REFUSED",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[rrpost\\] temporal REFUSED",
+    "\\[rt\\] mesh.*pool full",
+    "nonfinite"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=23\\b",
+    "\\[motion-trace\\] phase=5 label=energy-off-a repeat=0",
+    "\\[motion-trace\\] phase=10 label=energy-on-a repeat=0",
+    "\\[motion-trace\\] phase=15 label=energy-off-b repeat=0",
+    "\\[motion-trace\\] phase=20 label=energy-on-b repeat=0"
+  ],
+  "estimated_phase_seconds": 165,
+  "purpose": "READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized."
+}

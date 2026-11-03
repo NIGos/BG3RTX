@@ -19,6 +19,8 @@ def decode(path, entry):
     data = path.read_bytes()
     if fmt in (97, 83):  # RGBA16F, RG16F
         return np.frombuffer(data, '<f2').reshape(h, w, 4 if fmt == 97 else 2).astype('f4')
+    if fmt == 109:  # RGBA32F temporal post history
+        return np.frombuffer(data, '<f4').reshape(h, w, 4)
     if fmt == 100:
         return np.frombuffer(data, '<f4').reshape(h, w, 1)
     if fmt in (37, 43, 44, 50):

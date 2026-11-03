@@ -48,6 +48,14 @@ int main() {
   auto edge_mixed=edge;edge_mixed.masks[0]&=~4;edge_mixed.add(101,"material",999);
   if(!check(!edge_mixed.complete()))return 1;
   if(!check(!EdgePanSamples::wanted("gi",1) && !EdgePanSamples::wanted("albedo",2)))return 1;
+  EdgePanSamples post{100,true};
+  for(uint64_t f=101;f<=108;++f)for(auto name:{"depth","final","material","albedo","rr_post_ac","rr_post_eb"})
+    if(EdgePanSamples::wanted(name,f-100,true))post.add(f,name,(name==std::string_view("rr_post_ac") || name==std::string_view("rr_post_eb"))?f+1000:f);
+  if(!check(post.complete()))return 1;
+  auto missing_post=post;missing_post.masks[4]&=~32;
+  if(!check(!missing_post.complete()))return 1;
+  auto duplicate_post=post;duplicate_post.add(102,"rr_post_ac",102);
+  if(!check(!duplicate_post.complete()))return 1;
   std::puts("pan epoch and explicit warmup/K16 completeness checks passed");
   return 0;
 }

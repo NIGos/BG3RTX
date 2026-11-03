@@ -1,0 +1,86 @@
+{
+  "status": "OFFLINE_PREPARED_NOT_QUEUED",
+  "key": "rr_post_temporal",
+  "default": 0,
+  "scenes": [
+    "Test Dialogue3 (ef1 port shot)",
+    "Water Queens House (static S8 decision shot)"
+  ],
+  "sequence": [
+    0,
+    1,
+    0,
+    1
+  ],
+  "windows": [
+    "off-a",
+    "on-a",
+    "off-b",
+    "on-b"
+  ],
+  "hypothesis": "Unfiltered jittered DoF coverage/residual and bloom after RR cause edge shimmer. Reproject and accumulate A/C/B at alpha 1/16, clamp history to current 3x3, jitter-align final.",
+  "supplied_baseline": {
+    "depth_flip_residual_x1000": [
+      11.7,
+      15.3
+    ],
+    "depth_flip_late_rr": 3.7,
+    "hair_over_dof_residual_x1000": [
+      7.6,
+      13.1
+    ],
+    "hair_over_dof_late_rr": 3.1,
+    "bright_top_percent": 1,
+    "bright_contour_residual_x1000": [
+      7.3,
+      6.1
+    ],
+    "bright_contour_late_rr": 1.5,
+    "depth_stable_face_residual_x1000": [
+      0.2,
+      0.35
+    ],
+    "far_background_residual_x1000": [
+      0.92,
+      1.34
+    ],
+    "far_background_late_rr": 0.85
+  },
+  "predictions": {
+    "hair_over_dof": "Both ON windows approach supplied rr_post=0 residual 3.1 x 1000 PQ.",
+    "bright_contour": "Both ON windows approach supplied rr_post=0 residual 1.5 x 1000 PQ.",
+    "far_background_mean": "Linear pre-grade background mean remains within the OFF repeat spread; no energy loss.",
+    "depth_stable_face": "Residual remains within OFF repeat spread of the supplied 0.2-0.35 x 1000 PQ control.",
+    "cost": "Report [rrpost] gpu temporal ms/frame for both ON windows; measured live cost is pending."
+  },
+  "gates": {
+    "transport": "Every rendered K8 has 36 submitted samples: depth/final/AC/EB every frame, material/albedo at both ends. Every presented capture has eight consecutive frames. Missing/duplicate/nonfinite data is INVALID.",
+    "registration": "Reuse edge_flicker registration_structure/registered_run/shifted_mask. Exclude subtitle region for Dialogue3. Reject camera cuts and animation-confounded comparisons; never warp beauty frames.",
+    "masks": "Freeze masks from both OFF repeats: class-5 support against baseline depth discontinuities for hair-over-DoF, brightest 1 percent of baseline character contours, eroded depth-stable class-3 face control, far depth-stable background excluding character silhouettes. No candidate-derived mask or retuned threshold.",
+    "residual": "Use edge_flicker.energy midpoint residual by parity, independently on rendered and presented sequences. Both ON repeats must improve beyond the measured OFF-repeat spread; historical late-RR values are targets, not new reference measurements.",
+    "components": "Decode rr_post_ac as C.rgb/A.a, rr_post_eb as bloom.rgb/exposure.a, Vulkan formats 97 (OFF) or 109 (ON). Report component residuals independently; exposure must stay fresh.",
+    "energy": "Energy traces retain rrpost slots 1 (effective AC), 2 (linear RR Z), 6 (effective EB), 384-wide nearest float32 RGBA *_p.f32 sidecars. Join trace rrpost image references to dumps.json. For ON, sample AC/EB at uv+jitter/renderSize from the energy jitter log; OFF samples at uv. Reconstruct the same chain_value (including rr_post_quantise R11 truncations) from Z, AC and EB. Compare fixed far-background float mean across both OFF/ON repeats; report full-image dumps.json float means as an independent check. PNG/PQ means and isolated bloom means cannot pass the energy gate.",
+    "timing": "Only timing-* phases, separate from bursts/float traces. No build, compile or GPU tool may overlap cost windows. Missing active=1 temporal timing in either ON window is INVALID.",
+    "qualification": "No quality pass until both scenes and both ON windows pass. Keep key off in presets."
+  },
+  "offline_reference": {
+    "constant": "exact invariant for all seven channels",
+    "alternating_50_percent": "steady states 15/31 and 16/31, mean 0.5; variance 1/3844 (961x lower)",
+    "iid_50_percent": "variance 1/124 (31x lower)",
+    "disocclusion": "fresh current value, never black"
+  },
+  "capture": {
+    "rendered_per_window": 8,
+    "presented_per_window": 8,
+    "energy_traces_per_window": 1,
+    "game_launches": 2,
+    "phase_seconds_per_scene": 165,
+    "disk_bound_bytes": 2070977920,
+    "disk_bound_note": "Includes 70 MB logs/summaries; <2 GiB. Float previews and small PNGs reserved inside summary allowance. No full raw trace dumps. Analyze/delete raw per scene; keep reports."
+  },
+  "shader_request_delta": 1,
+  "shader_manifest_delta": 0,
+  "new_entries": 2,
+  "abi_change": false,
+  "live_permission": "None. Jobs remain outside every watched inbox. Never launch the game in this task."
+}

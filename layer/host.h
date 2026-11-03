@@ -325,7 +325,7 @@ std::string image_ref(VkImage image);
 std::string view_ref(VkImageView view);
 // Records copies of the pass's attachments into readback buffers; returns
 // the dump ids as a JSON array fragment for the pass's "end" event.
-std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s);
+std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview = false);
 // Terrain packet dump (terrain_packet_dump.inl, diagnostic only).
 struct TerrainSubmission {std::vector<uint64_t> packets;uint64_t frame{};};
 #if BG3RTX_DIAGNOSTICS
@@ -500,6 +500,8 @@ void rrpost_pass_end(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLay
 void rrpost_dispatch_pre(VkCommandBuffer cmd, uint64_t cs);
 void rrpost_dispatch_post(VkCommandBuffer cmd, uint64_t cs);   // QA exposure hold
 bool rrpost_take(VkCommandBuffer cmd, uint32_t w, uint32_t h, uint32_t ow, uint32_t oh, RrPostInputs* out);
+void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Binding& mv,
+                     const float jitter[2], const float scale[2], bool reset, uint32_t ow, uint32_t oh);
 bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh);
 void rrpost_forget_image(VkImage image);   // the game destroys an image
 int rrpost_trace_images(VkImage* out, int max);

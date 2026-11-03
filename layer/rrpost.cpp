@@ -90,6 +90,9 @@ struct Binds {
   VkImageView stencil = VK_NULL_HANDLE;
   VkImageLayout stencil_l = VK_IMAGE_LAYOUT_UNDEFINED;
   bool ac = false;
+  VkImageView temporal_in[4] = {}; // depth, previous AC, EB, depth/MV
+  VkImageLayout depth_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageView temporal_ac = VK_NULL_HANDLE, temporal_eb = VK_NULL_HANDLE, temporal_meta = VK_NULL_HANDLE;
   VkImageView out11 = VK_NULL_HANDLE, out16 = VK_NULL_HANDLE, out_r16 = VK_NULL_HANDLE;
   VkDescriptorBufferInfo buf[3] = {};
   bool has_buf[3] = {};
@@ -117,6 +120,11 @@ Img g_xs, g_xr, g_ac, g_eb, g_check, g_cbt, g_z, g_sss_before, g_sss;
 // Fillers for every binding a step does not use: a reused ring set must never
 // keep a stale descriptor of a game image or buffer (see run()).
 Img g_dummy2d, g_dummy3d;
+Img g_hist_ac[2], g_hist_eb[2], g_hist_meta[2];
+bool g_hist_valid = false, g_temporal_active = false;
+uint32_t g_hist_index = 0, g_hist_ow = 0, g_hist_oh = 0;
+uint64_t g_hist_frame = 0;
+float g_hist_jitter[2] = {}, g_final_jitter[2] = {};
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_buf_mem = VK_NULL_HANDLE;
 void* g_dummy_buf_map = nullptr;
@@ -134,8 +142,8 @@ struct Pipe {
   VkPipeline pipe = VK_NULL_HANDLE;
   uint64_t gen = 0;
 };
-Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"hair_resolve"}};
-enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_HAIR };
+Pipe g_pipes[] = {{"start"}, {"dof"}, {"resolve"}, {"exposure"}, {"bloom"}, {"final"}, {"check"}, {"probe"}, {"copy"}, {"sss"}, {"hold"}, {"hair_resolve"}, {"temporal"}, {"temporal_final"}};
+enum { P_START, P_DOF, P_RESOLVE, P_EXPOSURE, P_BLOOM, P_FINAL, P_CHECK, P_PROBE, P_COPY, P_SSS, P_HOLD, P_HAIR, P_TEMPORAL, P_TEMPORAL_FINAL };
 std::string g_last_logged_why;
 uint64_t g_completed = 0, g_broken_frames = 0;
 
@@ -147,9 +155,9 @@ float g_ts_period = 1.0f;
 uint32_t g_ts_next = 0;
 bool g_ts_pending[kTs] = {};
 int g_ts_kind[kTs] = {};
-double g_ts_acc[2] = {};
-uint32_t g_ts_frames[2] = {};
-uint64_t g_ts_last_frame[2] = {};
+double g_ts_acc[3] = {};
+uint32_t g_ts_frames[3] = {};
+uint64_t g_ts_last_frame[3] = {};
 ULONGLONG g_ts_tick = 0;
 
 // Exposure probe (s1b13[0] of the lighting vs the exposure buffers).
@@ -248,21 +256,23 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
 
 bool ensure_layout(DeviceData* dd) {
   if (g_dsl) return true;
-  VkDescriptorSetLayoutBinding b[15] = {};
-  const VkDescriptorType types[15] = {
+  VkDescriptorSetLayoutBinding b[20] = {};
+  const VkDescriptorType types[20] = {
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLER,
       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
-  for (uint32_t i = 0; i < 15; ++i) {
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+      VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+      VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+  for (uint32_t i = 0; i < 20; ++i) {
     b[i].binding = i;
     b[i].descriptorType = types[i];
     b[i].descriptorCount = 1;
     b[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
   }
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dci.bindingCount = 15;
+  dci.bindingCount = 20;
   dci.pBindings = b;
   if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return false;
   VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
@@ -272,9 +282,9 @@ bool ensure_layout(DeviceData* dd) {
   pci.pushConstantRangeCount = 1;
   pci.pPushConstantRanges = &pcr;
   if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5 * kRing},
+  VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 9 * kRing},
                                    {VK_DESCRIPTOR_TYPE_SAMPLER, kRing},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 5 * kRing},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 6 * kRing},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * kRing}};
   VkDescriptorPoolCreateInfo ppi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   ppi.maxSets = kRing;
@@ -311,7 +321,8 @@ bool ensure_layout(DeviceData* dd) {
 
 VkPipeline pipeline(DeviceData* dd, Pipe& p) {
   Bg3ShaderBlob blob{};
-  if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
+  if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" :
+                  (strcmp(p.entry, "temporal") == 0 || strcmp(p.entry, "temporal_final") == 0) ? "rr_post_temporal.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
   if (p.pipe && blob.generation == p.gen) return p.pipe;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
@@ -382,8 +393,8 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   VkPipeline pipe = pipeline(dd, g_pipes[which]);
   if (!pipe) return false;
   VkDescriptorSet set = g_sets[g_next_set++ % kRing];
-  VkDescriptorImageInfo ii[13] = {};
-  VkWriteDescriptorSet w[15] = {};
+  VkDescriptorImageInfo ii[18] = {};
+  VkWriteDescriptorSet w[20] = {};
   uint32_t n = 0, k = 0;
   uint32_t written = 0;   // bindings this step writes
   auto img = [&](uint32_t binding, VkDescriptorType t, VkImageView v, VkImageLayout l) {
@@ -409,6 +420,11 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   w[n].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
   w[n].pImageInfo = &ii[k];
   ++n, ++k;
+  if (b.temporal_ac) img(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.temporal_ac, VK_IMAGE_LAYOUT_GENERAL);
+  if (b.temporal_eb) img(14, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.temporal_eb, VK_IMAGE_LAYOUT_GENERAL);
+  for (uint32_t i = 0; i < 4; ++i)
+    img(15 + i, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, b.temporal_in[i], i == 0 ? b.depth_layout : VK_IMAGE_LAYOUT_GENERAL);
+  img(19, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.temporal_meta, VK_IMAGE_LAYOUT_GENERAL);
   if (b.ac) img(6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, g_ac.view, VK_IMAGE_LAYOUT_GENERAL);
   if (b.ac) img(14, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, g_eb.view, VK_IMAGE_LAYOUT_GENERAL);
   img(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, b.out11, VK_IMAGE_LAYOUT_GENERAL);
@@ -450,16 +466,16 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
     VkDescriptorImageInfo fi[2] = {{VK_NULL_HANDLE, g_dummy2d.view, VK_IMAGE_LAYOUT_GENERAL},
                                    {VK_NULL_HANDLE, g_dummy3d.view, VK_IMAGE_LAYOUT_GENERAL}};
     VkDescriptorBufferInfo fb{g_dummy_buf, 0, VK_WHOLE_SIZE};
-    VkWriteDescriptorSet fw[15] = {};
+    VkWriteDescriptorSet fw[20] = {};
     uint32_t fn = 0;
-    for (uint32_t i = 0; i < 15; ++i) {
+    for (uint32_t i = 0; i < 20; ++i) {
       if (i == 5 || (written & (1u << i))) continue;   // 5: the sampler, always written
       VkWriteDescriptorSet& x = fw[fn++];
       x = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
       x.dstSet = set;
       x.dstBinding = i;
       x.descriptorCount = 1;
-      if (i <= 4) x.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, x.pImageInfo = &fi[i == 3 ? 1 : 0];
+      if (i <= 4 || (i >= 15 && i <= 18)) x.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, x.pImageInfo = &fi[i == 3 ? 1 : 0];
       else if (i >= 9 && i <= 12) x.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, x.pBufferInfo = &fb;
       else x.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, x.pImageInfo = &fi[0];
     }
@@ -494,7 +510,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   if (slot != UINT32_MAX) {
     dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, slot * 2 + 1);
     g_ts_pending[slot] = true;
-    g_ts_kind[slot] = which == P_FINAL ? 1 : 0;
+    g_ts_kind[slot] = which == P_TEMPORAL ? 2 : (which == P_FINAL || which == P_TEMPORAL_FINAL) ? 1 : 0;
     int kind = g_ts_kind[slot];
     if (g_ts_last_frame[kind] != frame_index()) {
       g_ts_last_frame[kind] = frame_index();
@@ -1043,6 +1059,58 @@ void rrpost_forget_image(VkImage image) {
   g_view_use.erase(image);
 }
 
+// Runs after bloom and NGX, while the exact RR depth/MV views are still live.
+// History is never redeclared UNDEFINED when read. Only the next ping-pong output is discarded.
+void rrpost_temporal(VkCommandBuffer cmd, const Bg3Binding& depth, const Bg3Binding& mv,
+                     const float jitter[2], const float scale[2], bool reset, uint32_t ow, uint32_t oh) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_temporal_active = false;
+  DeviceData* dd = device_of(cmd);
+  if (!cfg_int("rr_post_temporal", 0)) { g_hist_valid = false; return; }
+  const uint32_t w = g_ch.w, h = g_ch.h;
+  if (!dd || !depth.view || !mv.view || depth.width != w || depth.height != h ||
+      mv.width != w || mv.height != h || !std::isfinite(jitter[0]) || !std::isfinite(jitter[1]) ||
+      !std::isfinite(scale[0]) || !std::isfinite(scale[1])) {
+    g_hist_valid = false;
+    log("[rrpost] temporal REFUSED: missing/invalid RR depth, motion or jitter"); return;
+  }
+  const bool resize = g_hist_ac[0].w != w || g_hist_ac[0].h != h || g_hist_ow != ow || g_hist_oh != oh;
+  if (resize || reset || g_hist_frame + 1 != frame_index()) g_hist_valid = false;
+  bool allocated = true;
+  for (uint32_t i = 0; i < 2; ++i) {
+    allocated = img_ensure(dd, g_hist_ac[i], VK_FORMAT_R32G32B32A32_SFLOAT, w, h, "temporal AC") && allocated;
+    allocated = img_ensure(dd, g_hist_eb[i], VK_FORMAT_R32G32B32A32_SFLOAT, w, h, "temporal EB") && allocated;
+    allocated = img_ensure(dd, g_hist_meta[i], VK_FORMAT_R32G32B32A32_SFLOAT, w, h, "temporal depth/MV") && allocated;
+  }
+  if (!allocated || !pipeline(dd, g_pipes[P_TEMPORAL_FINAL])) {
+    g_hist_valid = false; log("[rrpost] temporal REFUSED: resources/pipeline"); return;
+  }
+  if (!g_hist_valid)
+    to_general(dd, cmd, {&g_hist_ac[0], &g_hist_eb[0], &g_hist_meta[0], &g_hist_ac[1], &g_hist_eb[1], &g_hist_meta[1]});
+  const uint32_t next = 1 - g_hist_index;
+  to_general(dd, cmd, {&g_hist_ac[next], &g_hist_eb[next], &g_hist_meta[next]});
+  Binds b;
+  b.in[0] = g_ac.view; b.in[1] = g_eb.view; b.in[2] = mv.view;
+  b.in_l[0] = b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL; b.in_l[2] = mv.layout;
+  b.temporal_in[0] = depth.view; b.depth_layout = depth.layout;
+  b.temporal_in[1] = g_hist_ac[g_hist_index].view;
+  b.temporal_in[2] = g_hist_eb[g_hist_index].view;
+  b.temporal_in[3] = g_hist_meta[g_hist_index].view;
+  b.temporal_ac = g_hist_ac[next].view; b.temporal_eb = g_hist_eb[next].view;
+  b.temporal_meta = g_hist_meta[next].view;
+  Push pc{}; pc.size[0] = w; pc.size[1] = h;
+  pc.flags = g_hist_valid ? 1u : 0u;
+  pc.uvmap[0] = g_hist_jitter[0] - jitter[0]; pc.uvmap[1] = g_hist_jitter[1] - jitter[1];
+  pc.uvscale[0] = scale[0]; pc.uvscale[1] = scale[1];
+  if (!run(dd, cmd, P_TEMPORAL, b, pc, (w + 7) / 8, (h + 7) / 8)) {
+    g_hist_valid = false; log("[rrpost] temporal REFUSED: dispatch"); return;
+  }
+  g_hist_index = next; g_hist_valid = g_temporal_active = true; g_hist_frame = frame_index();
+  g_hist_ow = ow; g_hist_oh = oh;
+  memcpy(g_hist_jitter, jitter, sizeof g_hist_jitter);
+  memcpy(g_final_jitter, jitter, sizeof g_final_jitter);
+}
+
 // After the RR evaluate: grade(A * RR + C) into the game's DLSS output image.
 bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint32_t ow, uint32_t oh) {
   std::lock_guard<std::mutex> lock(g_mu);
@@ -1055,9 +1123,9 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   Binds b;
   b.in[0] = g_z.view;
   b.in_l[0] = VK_IMAGE_LAYOUT_GENERAL;
-  b.in[1] = g_ac.view;
+  b.in[1] = g_temporal_active ? g_hist_ac[g_hist_index].view : g_ac.view;
   b.in_l[1] = VK_IMAGE_LAYOUT_GENERAL;
-  b.in[2] = g_eb.view;
+  b.in[2] = g_temporal_active ? g_hist_eb[g_hist_index].view : g_eb.view;
   b.in_l[2] = VK_IMAGE_LAYOUT_GENERAL;
   b.lut = g_ch.lut;
   b.lut_l = g_ch.lut_l;
@@ -1065,16 +1133,30 @@ bool rrpost_final(VkCommandBuffer cmd, VkImage out_image, VkFormat out_fmt, uint
   Push pc{};
   pc.size[0] = ow, pc.size[1] = oh;
   pc.src[0] = g_ch.w, pc.src[1] = g_ch.h;
+  if (cfg_int("pan_post", 0) && cmd_state(cmd) && cmd_state(cmd)->tracing)
+    log("[rrpost] energy jitter %g %g, render %ux%u, temporal %d", g_temporal_active ? g_final_jitter[0] : 0.0f,
+        g_temporal_active ? g_final_jitter[1] : 0.0f, g_ch.w, g_ch.h, int(g_temporal_active));
+  if (cfg_int("pan_post", 0) && cfg_int("pan_capture", 0) > 0) {
+    const Img* images[] = {g_temporal_active ? &g_hist_ac[g_hist_index] : &g_ac,
+                           g_temporal_active ? &g_hist_eb[g_hist_index] : &g_eb};
+    const char* names[] = {"rr_post_ac", "rr_post_eb"};
+    for (unsigned i = 0; i < 2; ++i) {
+      Bg3Binding image{}; image.image = images[i]->image; image.view = images[i]->view;
+      image.format = images[i]->fmt; image.width = images[i]->w; image.height = images[i]->h;
+      image.layout = VK_IMAGE_LAYOUT_GENERAL; pan_capture(cmd, names[i], &image);
+    }
+  }
   memcpy(pc.grade, g_ch.grade, sizeof pc.grade);
   pc.flags = cfg_int("rr_post_quantise", 1) ? 2u : 0u;
-  return run(dd, cmd, P_FINAL, b, pc, (ow + 7) / 8, (oh + 7) / 8);
+  pc.uvmap[0] = g_final_jitter[0]; pc.uvmap[1] = g_final_jitter[1];
+  return run(dd, cmd, g_temporal_active ? P_TEMPORAL_FINAL : P_FINAL, b, pc, (ow + 7) / 8, (oh + 7) / 8);
 }
 
 // Images worth dumping in a trace, after the evaluate.
 int rrpost_trace_images(VkImage* out, int max) {
   std::lock_guard<std::mutex> lock(g_mu);
   int n = 0;
-  for (const Img* g : {&g_xr, &g_ac, &g_z, &g_check, &g_cbt, &g_sss, &g_eb})
+  for (const Img* g : {&g_xr, g_temporal_active ? &g_hist_ac[g_hist_index] : &g_ac, &g_z, &g_check, &g_cbt, &g_sss, g_temporal_active ? &g_hist_eb[g_hist_index] : &g_eb})
     if (g->image && n < max) out[n++] = g->image;
   return n;
 }
@@ -1159,6 +1241,8 @@ void rrpost_on_present() {
         "%llu",
         g_ts_frames[0] ? g_ts_acc[0] / g_ts_frames[0] : 0.0, g_ts_frames[1] ? g_ts_acc[1] / g_ts_frames[1] : 0.0,
         (unsigned long long)g_completed, (unsigned long long)g_broken_frames);
+  if (g_ts_frames[2]) log("[rrpost] gpu temporal: %.3f ms/frame; active %d", g_ts_acc[2] / g_ts_frames[2], int(g_temporal_active));
+  g_ts_acc[2] = 0; g_ts_frames[2] = 0;
   g_ts_acc[0] = g_ts_acc[1] = 0;
   g_ts_frames[0] = g_ts_frames[1] = 0;
 }
