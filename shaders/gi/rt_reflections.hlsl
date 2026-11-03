@@ -108,7 +108,9 @@
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
 
 #if RT_TRACE_HALF
-[[vk::binding(31, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rfRaw;
+// Reflections do not use GI's raw output. Reuse its RGBA16F slot so D-RF stays
+// within maxPushDescriptors (32), including hit-shade, SHaRC and emission.
+#define rfRaw giRaw
 #endif
 static const float kNoHit = 65504.0;
 

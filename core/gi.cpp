@@ -234,8 +234,9 @@ constexpr uint32_t kRtBindings = kBindings + 3;
 // clusters, 24 b24 index list, 25 b25 lights (SSBOs), 26 b39 constants (UBO),
 // 27 b40 shadow views (SSBO), 28 b41 shadow atlas (sampled), 29 set0/b2 (UBO).
 constexpr uint32_t kLsBindings = kRtBindings + 9;
-// D-RF adds full-grid hit distance (30) and the half-grid delta/distance target (31).
-constexpr uint32_t kRfBindings = kLsBindings + 2; // 31: scaled reflection delta + hit distance
+// D-RF adds full-grid hit distance (30). Half-grid delta/distance reuses GI's
+// unused RGBA16F binding 8, keeping the push layout at 32 descriptors.
+constexpr uint32_t kRfBindings = kLsBindings + 1;
 
 // Bindings past the contiguous ranges (docs/archive/AUDIT_RT.md fixes), in every layout whose
 // bit is set: 1 base, 2 ray-traced, 4 D-LS.
@@ -3441,10 +3442,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     rb.w[kLsBindings].descriptorCount = 1;
     rb.w[kLsBindings].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     rb.w[kLsBindings].pImageInfo = &rb.rf_hit;
-    rb.rf_raw = {VK_NULL_HANDLE, g_rf_raw.view, VK_IMAGE_LAYOUT_GENERAL};
-    rb.w[31] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    rb.w[31].dstBinding=31; rb.w[31].descriptorCount=1;
-    rb.w[31].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; rb.w[31].pImageInfo=&rb.rf_raw;
+    if (reflection_half()) {
+      rb.rf_raw = {VK_NULL_HANDLE, g_rf_raw.view, VK_IMAGE_LAYOUT_GENERAL};
+      rb.w[8].pImageInfo = &rb.rf_raw;
+    }
     Push rp = pc;
     // Bit 26: the screen's D-LS box pass ran (ls_box=1): rf_hit_shade's boxes then follow its
     // give-back; clear, the screen keeps the game's box x AO and the hit applies the same factor

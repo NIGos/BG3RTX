@@ -455,12 +455,13 @@ Key-off gate: all 173 requests/194 entries match HEAD after specialization; SPIR
 PERF_AUDIT_GPU supplies an experiment, not quality evidence for promoting half resolution.
 Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-sample temporal
 weight, and existing depth-aware `gather_history` before full-grid AO/composite and dense RR guides.
-Reflection half-grid traces write a dedicated RGBA16F delta/hit-distance target (binding 31).
+Reflection half-grid traces write a dedicated RGBA16F delta/hit-distance target through
+the unused GI raw slot (set 0 binding 8), preserving D-RF's 32-descriptor push layout.
 A full-grid depth/normal/material-guided resolve applies deltas to native destination lighting,
 with hit distance from the strongest guide sample (never averaged with the no-hit sentinel).
 Diagnostic reflection debug/validation retains full resolution. Non-RR uses the spatial resolve;
 Low keeps reflections off and preserves its screen-space GI budget.
-The additional binding requires a layout define (`RT_TRACE_HALF`); no on/off define product
+The alternate output uses the existing `RT_TRACE_HALF` variant; no on/off define product
 for unchanged GI. Manifest 145 -> 163 requests (+18); full-grid modules stay byte-identical.
 Far/bounce/emission remain off below Ultra; existing levels are unchanged and tested.
 Offline estimator check: `python tools/gpu_trace_scale_check.py`; real-scene and reflection

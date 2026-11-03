@@ -1,7 +1,8 @@
 // Reconstruct only the reflection delta; preserve each destination's native probe/direct light.
 #include "gi_common.hlsli"
 [[vk::binding(30,0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
-[[vk::binding(31,0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> rfRaw;
+// Same reused RGBA16F binding 8 as the half-grid reflection trace.
+#define rfRaw giRaw
 uint2 sample_pixel(uint2 q) { return min(q*2u+uint2(pc.frame&1u,(pc.frame>>1)&1u),pc.full-1u); }
 [numthreads(8,8,1)]
 void main(uint3 tid:SV_DispatchThreadID) {
