@@ -29,6 +29,40 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_trace_export_quantile_and_previous_phase_serialization(self):
+        entry = dict(runner='00:00:01.000 [motion-trace]\n00:00:02.000 [motion-trace]',
+                     lines=['00:00:01.500 [trace] frame 1 written:',
+                            '00:00:07.000 [trace] frame 2 written:'])
+        with patch.dict(f.TRACE_EXPORT, {}, clear=True):
+            f.configure_trace_exports([entry])
+            self.assertEqual(f.TRACE_EXPORT['seconds'], 5)
+            self.assertEqual(f.TRACE_EXPORT['samples'], 2)
+            j, _ = fixture()
+            j['live_flow'] = dict(trace_stall_s=0, trace_dispatch_s=1)
+            p = [phase('previous', 2), phase('event', 8)]
+            for row in p: row['trace_at'] = [1]
+            j['expect_every'] = [dict(select=r'\[trace\] frame', match='written',
+                                     event=True, min=1, windows=['event'])]
+            errors, budgets = f.window_problems(j, p)
+            # Previous finishes at 7; next at 13 absolute / 11 local.
+            self.assertTrue(errors)
+            self.assertEqual(budgets[0]['minimum_seconds_exclusive'], 11)
+            p[1]['seconds'] = 11.1
+            self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_trace_dispatch_stall_rejects_old_energy_window(self):
+        j, _ = fixture()
+        j['live_flow'] = dict(trace_stall_s=1, trace_dispatch_s=4,
+                              trace_export=dict(seconds=.319))
+        p = [phase('energy', 2.1)]
+        p[0]['trace_at'] = [1]
+        j['expect_every'] = [dict(select=r'\[trace\] frame', match='written',
+                                 event=True, min=1, windows=['energy'])]
+        self.assertTrue(f.window_problems(j, p)[0])
+        f.tighten(j, p)
+        self.assertGreater(p[0]['seconds'], 6)
+        self.assertFalse(f.window_problems(j, p)[0])
+
     def test_readiness_does_not_replace_scene_settle_or_failure_latency(self):
         j, p = fixture()
         p[0].update(seconds=45, wait_log=["pipelines ready"])

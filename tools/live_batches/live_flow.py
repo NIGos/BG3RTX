@@ -25,6 +25,53 @@ from tools.live_batches import fps_windows
 # ceil(max observed seconds) + the one-second settings/observation alignment.
 SCENE_SETTLE_SECONDS = {"Water Queens House": 17, "Test Dialogue3": 19,
                         "Test Dialogue1": 16, "Campsite - 27h": 29}
+TRACE_EXPORT = {}
+
+
+def configure_trace_exports(entries):
+    """Nearest-rank p95 request -> written latency, including consecutive requests.
+
+    Match each request only before the next request; never borrow a later export
+    to hide missing evidence. Clocks use the same midnight handling as gates.
+    """
+    from scripts.queue_gates import stamped_lines
+    samples = []
+    for entry in entries:
+        requests = [t for t, line in stamped_lines(entry.get("runner", "")) if "[motion-trace]" in line]
+        writes = [t for t, line in stamped_lines("\n".join(entry["lines"]))
+                  if re.search(r"\[trace\] frame \d+ written:", line)]
+        for i, start in enumerate(requests):
+            end = requests[i+1] if i+1 < len(requests) else math.inf
+            finish = next((t for t in writes if start <= t < end), None)
+            if finish is not None:
+                samples.append(finish-start)
+    TRACE_EXPORT.clear()
+    if samples:
+        TRACE_EXPORT.update(seconds=sorted(samples)[math.ceil(.95*len(samples))-1],
+                            quantile=.95, samples=len(samples), maximum=max(samples))
+
+
+def trace_schedules(job, plan):
+    """Carry the previous export across phase boundaries, including ungated traces."""
+    meta = job.get("live_flow", {})
+    segments = {i: seg.get("live_flow", {}) for seg in meta.get("segments", [])
+                for i in range(seg["offset"], seg["offset"]+seg["count"])}
+    origin = finish = 0
+    out = {}
+    for i, (phase, state) in enumerate(zip(plan, phase_states(job, plan))):
+        local = segments.get(i, meta)
+        export = max(float(local.get("trace_export", {}).get("seconds", 0)), TRACE_EXPORT.get("seconds", 0))
+        dispatch = float(local.get("trace_dispatch_s", 0))
+        fps = fps_windows.expected(job, state)["fps"]
+        latency = float(local.get("settings_latency_s", 1))
+        service = max(2/fps + float(local.get("trace_stall_s", 1)), export)
+        times = []
+        for at in phase.get("trace_at", []):
+            finish = max(origin+max(float(at), latency), finish) + dispatch + service
+            times.append(finish-origin)
+        out[phase.get("label")] = times
+        origin += float(phase.get("seconds", 0))
+    return out
 
 
 def read(path):
@@ -301,7 +348,7 @@ def judged_labels(job, plan):
     return labels
 
 
-def trace_event_budget(gate, phase, fps, latency, stall):
+def trace_event_budget(gate, phase, fps, latency, stall, completions=None):
     """Trace requests serialize through tracer.cpp's two-present recording and write.
 
     auto-run.ps1 queues one request file at a time; a dense trace_at list cannot
@@ -310,10 +357,11 @@ def trace_event_budget(gate, phase, fps, latency, stall):
     """
     if not gate.get("event") or "[trace] frame" not in gate["select"].replace("\\", ""):
         return None
-    finish, completions = latency, []
-    for at in phase.get("trace_at", []):
-        finish = max(float(at), finish) + 2 / fps + stall
-        completions.append(finish)
+    if completions is None:
+        finish, completions = latency, []
+        for at in phase.get("trace_at", []):
+            finish = max(float(at), finish) + 2 / fps + stall
+            completions.append(finish)
     end = float(phase.get("seconds", 0))
     settled = latency + float(gate.get("settle_s", 0))
     complete = sum(settled <= t < end for t in completions)
@@ -337,6 +385,7 @@ def window_problems(job, plan):
     if not all(math.isfinite(v) and v >= 0 for v in (latency, trace_stall)):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
+    schedules = trace_schedules(job, plan)
     phases = {p.get("label"): (p, s) for p, s in zip(plan, phase_states(job, plan))}
     segment_meta = {p.get("label"): seg.get("live_flow", {})
                     for seg in meta.get("segments", [])
@@ -359,7 +408,7 @@ def window_problems(job, plan):
             if need == 0:
                 continue
             name = g.get("name", g["select"])
-            trace = trace_event_budget(g, p, fps, latency, trace_stall)
+            trace = trace_event_budget(g, p, fps, latency, trace_stall, schedules[label])
             if trace is not None:
                 if "trace_stall_s" not in window_meta:
                     errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
@@ -452,6 +501,7 @@ def duration_budget(job, plan):
     fps = 30 if str(job.get("window_mode", "")).startswith("visible_unfocused") else float(job.get("live_flow", {}).get("expected_fps", 30))
     stall = float(job.get("live_flow", {}).get("trace_stall_s", 1))
     windows = []
+    schedules = trace_schedules(job, plan)
     segment_meta = {p.get("label"): seg.get("live_flow", {})
                     for seg in job.get("live_flow", {}).get("segments", [])
                     for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
@@ -464,10 +514,7 @@ def duration_budget(job, plan):
         unresolved = []
         stall = float(segment_meta.get(label, job.get("live_flow", {})).get("trace_stall_s", 1))
         if phase.get("trace_at"):
-            finish = latency
-            for at in phase["trace_at"]:
-                finish = max(finish, float(at)) + 2 / fps + stall
-            minimum = max(minimum, finish)
+            minimum = max(minimum, schedules[label][-1])
         # dump.cpp: edge9 / water(raw_frames+1) / ordinary17 samples,
         # then three presents before completion; include settings and write budget.
         selected = [g for g in job.get("expect_every", []) if g.get("event") and int(g.get("min",1)) > 0
@@ -611,6 +658,8 @@ def settings(text):
 def retime(job, plan):
     """One regeneration path for generators and the offline CLI."""
     job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
+    if TRACE_EXPORT:
+        job["live_flow"]["trace_export"] = dict(TRACE_EXPORT)
     changes = tighten(job, plan)
     for phase, state in zip(plan, phase_states(job, plan)):
         if phase.get("wait_log"):
@@ -627,6 +676,7 @@ def tighten_files(directory):
     """Refresh checked-in artifacts with the same model used by lint/preflight."""
     index = corpus(default_results(), ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
     fps_windows.configure(index["entries"])
+    configure_trace_exports(index["entries"])
     reports = []
     for path in job_files(directory):
         job, plan, plan_path = load_job(path)
@@ -760,6 +810,7 @@ def main(argv=None):
         ap.error("--newest must be positive")
     index = corpus(a.results, a.cache, a.newest)
     fps_windows.configure(index["entries"])
+    configure_trace_exports(index["entries"])
     print(f"VALID corpus: {len(index['entries'])} logs, {len(index['saves'])} saves; {a.results}", flush=True)
     report = dict(corpus={k: v for k, v in index.items() if k not in ("entries", "key", "matches")}, jobs={})
     failures = 0
