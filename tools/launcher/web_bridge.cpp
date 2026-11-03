@@ -52,6 +52,19 @@ template<class T> T get(const Object& o,const char* key,T fallback={}) {auto i=o
 std::string q(const std::string& s){std::string out="\"";constexpr char hex[]="0123456789abcdef";for(unsigned char c:s){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}return out+'"';}
 const char* b(bool value){return value?"true":"false";}
 std::string strings(const std::vector<std::string>& values){std::string out="[";for(auto& x:values){if(out.size()>1)out+=",";out+=q(x);}return out+"]";}
+std::string capability_requirements(unsigned mask) {
+  const std::pair<unsigned,const char*> names[] = {
+    {st::kCapRayQuery,"hardware ray queries"}, {st::kCapDlss,"NVIDIA RTX DLSS"},
+    {st::kCapFg,"frame generation support"}, {st::kCapMfg,"multi-frame generation support"},
+    {st::kCapOpacityMicromap,"opacity micromap support"},
+    {st::kCapLinearSweptSpheres,"linear swept spheres support"},
+    {st::kCapShaderInt64,"64-bit shader integers (shaderInt64)"},
+    {st::kCapFragmentStores,"fragment shader stores (fragmentStoresAndAtomics)"},
+    {st::kCapHairGrooms,"valid local hair groom files"}};
+  std::string text;
+  for (const auto& item:names) if(mask & item.first){if(!text.empty())text+="; ";text+="needs ";text+=item.second;}
+  return text;
+}
 std::string label(int i,int value){auto& k=st::kKnobs[i];return value<0?"Custom value preserved":k.kind==st::Kind::Choice?std::string(k.choices[value].label):std::to_string(value);}
 }
 Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),saved_(state.values),saved_preset_(state.preset) {
@@ -125,12 +138,12 @@ std::string Bridge::state_json() const {
   std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_count_>0)+",\"restartCount\":"+std::to_string(restart_count_)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_count_))+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
   bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q(std::string(k.cost.gpu)=="Unknown"?"":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::knob_apply(k,value)))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
-    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable":!available?"Enable Experimental to select":need;
-      std::string requirements;
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value)))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable: "+capability_requirements(k.choices[c].caps & ~state_.caps):!available?"Enable Experimental to select":need;
+      std::string requirements=capability_requirements(k.choices[c].caps);
       for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(st::kKnobs[j].label)+" "+label(j,n.min_choice);}}
       for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(n.label);}
-      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(k.choices[c].apply))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
+      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c)))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
   std::string gpu="Unknown adapter",vram="Unknown",driver="Unknown";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Unknown":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}

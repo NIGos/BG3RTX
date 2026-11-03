@@ -25,6 +25,9 @@ constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
 constexpr uint32_t kRowBytes = 16;
 constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 1088, one vkCmdUpdateBuffer
+// Counts buffer of the fail-safe (rt/hair_primary_count.hlsl): strand pixels per groom k, then per groom the strand
+// pixels whose segment fails the readers' pool bound (hp_segment discards them; counted so the bound is never silent).
+constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kCountBytes = kRefusedOffset + kMaxGrooms * 4;
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;

@@ -2,8 +2,10 @@
 
 2026-11-03. Roadmap step 6 (docs/RTX_HAIR_ROADMAP.md), started on the user's decision after the trial build:
 "i capelli mi sembrano sempre card based", so the strand groom in secondary rays alone is not enough.
-Key `rt_hair_groom_primary` (proposed, off, live toggle, needs `rt_hair_groom=1`). Matched styles only; scalp,
+Key `rt_hair_groom_primary` (experimental, off, restart required, needs `rt_hair_groom=1`). Matched styles only; scalp,
 accessories and unmatched styles keep the game's draws. Status: design + offline increment 1a.
+
+Activation is latched at device creation after a reported hot-enable device loss; INI reloads and A/B cannot enable it. The safety gate does not qualify the pending crash fix.
 
 ## 1. Where the strands enter the frame (decision)
 The game draws CHAR_Hair cards in four camera passes (FRAME_MAP, NATIVE_HAIR "Native source"):
