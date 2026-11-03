@@ -720,3 +720,28 @@ player's `fg=2` setup can run different RR versions.
   were present. The rewrites coincided with other agents' sessions and with
   the display being in standby, and no NGX call through these hooks ever
   failed. Run `scripts/ensure-settings.py` (main) before launching.
+
+## Temporal replayed post (`rr_post_temporal`, off, 2026-11-03)
+
+The ef1 12:10 evidence isolates the replayed jittered CoC coverage/residual and
+bloom: hair-over-DoF residual 7.6/13.1 versus late RR 3.1 x 1000 PQ; brightest
+contours 7.3/6.1 versus 1.5. Stable face residual is only 0.2-0.35.
+`rr_post_temporal=1` adds one render-resolution pass after bloom and the RR evaluate,
+before the output grade. It reprojects A/C and bloom with RR's scaled motion plus
+previous-minus-current jitter, clamps each accepted history to the current 3x3
+range, then accumulates at alpha 1/16 (one Halton-x cycle). Exposure stays fresh.
+Four bilinear history taps are tested independently against the current depth
+footprint plus two D24 roundings and an MV one-pixel footprint plus two fp16
+roundings. Failed taps are excluded; zero valid weight selects the fresh value.
+Camera/NGX reset, RR mode switch, skipped frames, key toggle and input/output resize
+invalidate history. Final samples AC/EB at uv + jitter/render size.
+Six device-local RGBA32F images (~250 MiB at 2560 x 1067) avoid fp16 EMA stagnation.
+Original rr_post shader entries remain unchanged; one auto-discovered standalone
+request adds two entries (manifest delta 0). No host-visible atomics or ABI change.
+CPU reference gates constant energy, alternating/iid coverage variance, affine
+linearity, clamps, invalid history and depth/MV rejection. The live jobs under
+`tools/live_batches/post_temporal` compare 0/1/0/1 on Dialogue3 and static S8,
+including real Ultra. Targets: hair and bright-contour residual reach the supplied
+late-RR level, linear far-background energy and stable face remain within OFF
+repeat noise. GPU temporal ms/frame and visual qualification remain pending;
+no promotion. Check fine white hair over DoF and sun-lit rims in Test Dialogue3.
