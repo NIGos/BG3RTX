@@ -1,0 +1,14 @@
+## RR hair decision (branch rr-hair2, READY_FOR_LIVE, 2026-11-03)
+- Resolve remains CANDIDATE, off: user liked normal-view A/B; 4x4 blocks were seen only in 6x crops.
+- ef2: gradient -24%, high-frequency -48%, RR mean -0.6%, no flicker gain; dialogue drift 10-18 px confounded ranking.
+- Analyzer aligns slow integer drift within windows, clips borders, checks rigid residuals and records shifts/exclusions.
+- ef3 prepared outside pending: static S8 close companion, no dialogue/Q/E; framing/ROIs require future verification.
+- Repeated post 1/0/1/0 then resolve 0/1/0/1 at post 1; K8/P16, float traces and clean timing per state.
+- Predicted first; 285 s scene + 120 s load, estimated 1.7 GB; synthetic queue dryrun passes.
+- fg_snap_full=0 default; when enabled, adds native ordinal-zero PNG beside compact P16, no shader or ABI change.
+- Report saves 1:1 hair crops side by side, fixed frame ordinal/source IDs; secondary 6x diff, detail and rigid metrics.
+- Whole-frame RGB histogram/mean/highlight comparisons vs both early-RR repeats; PQ appearance is not float energy.
+- TRACK_A_RR records late-RR tradeoffs: earlier -0.79% mean vs -0.03% repeat, 1.79 vs 1.57 PQ delta, about 0.2 ms.
+- Build and all 132 CTests pass; 16 analyzer fixtures pass; git diff --check passes; variants.txt delta 0.
+- No shaders changed: shader identity not needed. No game launch, queue staging, commit or git metadata write.
+- Live quality, float energy and GPU cost remain unmeasured; review S8 hair at 100% plus DoF/bloom/highlights.

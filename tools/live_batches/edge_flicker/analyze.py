@@ -123,39 +123,16 @@ def registration_structure(frame):
     return np.hypot(dx, dy)
 
 
-def registered_run(anchor, frames):
-    """Longest consecutive stable run inside this window, excluding subtitle UI.
+def registered_run(anchor, frames, config=None):
+    """Register each sub-window frame; translation alone never rejects a window."""
+    from tools.live_batches.edge_flicker.drift import register_window
+    return register_window(anchor, frames, config)
 
-    The retained run can have a constant integer offset from base-a. Move masks
-    by that offset; never warp/resample beauty or join frames across a cut.
-    """
-    local = registration_structure(frames[0])
-    regs = []
-    for frame in frames:
-        try:
-            regs.append(registration(local, registration_structure(frame)))
-        except ValueError as error:
-            regs.append(dict(valid=False, error=str(error)))
-    runs, current = [], []
-    for i, r in enumerate(regs):
-        usable = 'shift_px' in r
-        same = current and r.get('shift_px') == regs[current[-1]].get('shift_px')
-        if current and (not usable or not same):
-            runs.append(current)
-            current = []
-        if usable:
-            current.append(i)
-    if current:
-        runs.append(current)
-    keep = max(runs, key=len, default=[])
-    if len(keep) < 4:
-        raise ValueError('dialogue shot moved: fewer than four consecutive registered frames')
-    offset = registration(registration_structure(anchor), registration_structure(frames[keep[0]]))
-    return keep, dict(frames=regs, included=keep,
-                     excluded=[i for i in range(len(frames)) if i not in keep],
-                     anchor_registration=offset,
-                     shift_px=offset['shift_px'],
-                     subtitle_top=round(frames[0].shape[0]*590/800))
+
+def aligned_frames(frames, report):
+    from tools.live_batches.edge_flicker.drift import translate
+    return [translate(frames[i], tuple(-v for v in report['frames'][i]['shift_px']))
+            for i in report['included']]
 
 
 def shifted_mask(mask, shift):
@@ -196,7 +173,8 @@ def registered_endpoints(values, keep):
 
 def energy(codes, mask):
     y = np.stack([c @ Y for c in codes])
-    if not np.isfinite(y).all() or not mask.any():
+    mask = mask & np.isfinite(y).all(axis=0)
+    if not mask.any():
         raise ValueError('nonfinite colour or empty region')
     variance = y.var(axis=0, ddof=1)
     residual = y[1:-1] - (y[:-2]+y[2:])/2
@@ -224,7 +202,7 @@ def score(codes, references, edge, interior, shift=(0, 0)):
         for ref in references:
             if ref[0].shape != codes[0].shape:
                 raise ValueError('baseline framing dimensions differ')
-            result = (det.temporal(ref, codes, moving=~mask) if tuple(shift) == (0, 0) else
+            result = (det.temporal(ref, codes, moving=~mask) if tuple(shift) == (0, 0) and all(np.isfinite(f).all() for f in ref+codes) else
                       dict(status='INCONCLUSIVE', reason='cross-window translation; use local ROI residual'))
             result.pop('map', None)
             tests.append(result)
@@ -290,6 +268,7 @@ def analyze(game_text, runner_text, resolve, job=None, plan=None):
     lines = gates.stamped_lines(game_text)
     wins = gates.windows(runner_text, plan, lines)
     paths, evidence = {}, {}
+    presented_extents = []
     for label in labels:
         paths[label] = {}
         for kind in ('rendered', 'presented'):
@@ -303,11 +282,23 @@ def analyze(game_text, runner_text, resolve, job=None, plan=None):
             paths[label][kind] = resolve(found[0])
             if kind == 'presented' and not any(re.search(r'\[sl\] edge capture format 64,', l) for l in selected):
                 raise ValueError(label+': presented encoding is not confirmed HDR10 RGB10A2 (format 64)')
+            if kind == 'presented':
+                extents = [tuple(map(int, m.groups())) for l in selected
+                           if (m := re.search(r'edge capture format 64, extent (\d+)x(\d+)', l))]
+                presented_extents.extend(extents)
             evidence[kind+'-'+label] = [l for l in selected if '[watch]' in l or
                                        'DLSS-G frame' in l or '[pace]' in l]
     all_paths = [p for row in paths.values() for p in row.values()]
     if len(set(all_paths)) != 2*len(labels):
         raise ValueError('capture path reused across windows')
+    if job.get('analysis'):
+        from tools.live_batches.edge_flicker.drift import decision_report
+        config = dict(job['analysis'])
+        if config.get('full_resolution_presented'):
+            if len(presented_extents) != len(labels) or len(set(presented_extents)) != 1:
+                raise ValueError('missing or changing full presented extent')
+            config['presented_extent'] = list(presented_extents[0])
+        return decision_report(paths, config, evidence, job.get('artifact_dir'))
     bases = [burst(paths[label]['rendered']) for label in ('base-a', 'base-b')]
     depth_anchor = bases[0]['depth'][0]
     base_regs = []
@@ -315,17 +306,19 @@ def analyze(game_text, runner_text, resolve, job=None, plan=None):
         keep, reg = registered_run(depth_anchor, b['depth'])
         base_regs.append(reg)
         for field in ('codes', 'depth'):
-            b[field] = [b[field][i] for i in keep]
+            b[field] = aligned_frames(b[field], reg)
         # Material/albedo exist only at original endpoints; discard endpoints
         # outside the registered run rather than importing a cut's classes.
         for field in ('material', 'albedo'):
-            b[field] = registered_endpoints(b[field], keep)
-    edge, interior = masks(bases[0]['depth'], bases[0]['material'])
+            from tools.live_batches.edge_flicker.drift import translate
+            b[field] = [translate(b[field][j], tuple(-v for v in reg['frames'][frame]['shift_px']))
+                        for j, frame in enumerate((0, 7)) if frame in keep]
+    edge, interior = masks([np.nan_to_num(d) for d in bases[0]['depth']], [np.nan_to_num(m) for m in bases[0]['material']])
     inverse = tuple(-v for v in base_regs[0]['shift_px'])
     edge, interior = shifted_mask(edge, inverse), shifted_mask(interior, inverse)
     ref_present = [presents(paths[label]['presented']) for label in ('base-a', 'base-b')]
     present_anchor = ref_present[0][0]
-    ref_present = [[frames[i] for i in registered_run(present_anchor, frames)[0]]
+    ref_present = [aligned_frames(frames, registered_run(present_anchor, frames)[1])
                    for frames in ref_present]
     refs = [b['codes'] for b in bases]
     rows = {}
@@ -334,15 +327,16 @@ def analyze(game_text, runner_text, resolve, job=None, plan=None):
         b = burst(paths[label]['rendered'])
         keep, rendered_regs = registered_run(depth_anchor, b['depth'])
         for field in ('codes', 'depth'):
-            b[field] = [b[field][i] for i in keep]
+            b[field] = aligned_frames(b[field], rendered_regs)
         render_shift = scaled_shift(rendered_regs['shift_px'], b['depth'][0].shape, b['codes'][0].shape[:2])
         presented = presents(paths[label]['presented'])
         shown, present_regs = registered_run(present_anchor, presented)
+        presented_aligned = aligned_frames(presented, present_regs)
         rows[label] = dict(registration=dict(rendered=rendered_regs, presented=present_regs),
                            rendered=score(b['codes'], refs, edge, interior, render_shift),
-                           presented=score([presented[i] for i in shown], ref_present, edge, interior, present_regs['shift_px']),
+                           presented=score(presented_aligned, ref_present, edge, interior, present_regs['shift_px']),
                            dialogue_roi=dict(rendered=dialogue_metrics(b['codes'], render_shift),
-                                             presented=dialogue_metrics([presented[i] for i in shown], present_regs['shift_px'])),
+                                             presented=dialogue_metrics(presented_aligned, present_regs['shift_px'])),
                            depth_edge_variance=float(np.stack(b['depth']).var(0, ddof=1)[
                                shifted_mask(edge, rendered_regs['shift_px'])].mean()))
         albedos = [b['albedo'][j] for j, frame in enumerate((0, 7)) if frame in keep]
@@ -389,7 +383,7 @@ def main():
     try:
         report = analyze(a.game_log.read_text(errors='replace'),
                          a.runner_log.read_text(errors='replace'), resolve,
-                         json.loads(a.job.read_text()) if a.job else None,
+                         dict(json.loads(a.job.read_text()), artifact_dir=str(a.out.with_suffix(''))) if a.job else None,
                          json.loads(a.plan.read_text()) if a.plan else None)
     except (ValueError, OSError, KeyError, StopIteration) as error:
         report = dict(status='INVALID', quality_pass=False, error=str(error))

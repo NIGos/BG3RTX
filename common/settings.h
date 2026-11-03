@@ -599,6 +599,7 @@ inline constexpr KV kDefaults[] = {
     {"pan_capture", "0"},
     {"pan_water", "0"},
     {"pan_edge", "0"},
+    {"fg_snap_full", "0"},
     {"pan_water_frames", "8"},
     {"pan_delay_ms", "0"},
     {"pan_prepare", "0"},
