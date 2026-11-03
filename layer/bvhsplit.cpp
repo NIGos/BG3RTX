@@ -1355,6 +1355,18 @@ bool ensure_omm_dyn_pipe() {
   if (!shader_get("rt/omm_bake_mask.hlsl", "bake", "cs_6_6", &bake) || !shader_get("rt/omm_bake_mask.hlsl", "check", "cs_6_6", &check))
     return false;
   OmmDynPipe& p = g_omm_dyn_pipe;
+  // Retry each allocation independently: the stats buffer may survive a failed readback allocation.
+  if (!g_omm_dyn_stats.b) {
+    if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "OMM dyn counters"))
+      return false;
+    g_omm_dyn_stats_zero = true;
+  }
+  if (!g_omm_dyn_readback.b) {
+    if (!make_buf(g_omm_dyn_readback, kOmmDynStatsBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "OMM dyn counters readback"))
+      return false;
+    std::memset(g_omm_dyn_readback.map, 0, size_t(kOmmDynStatsBytes));
+  }
   if (p.bake && p.check && p.gen_bake == bake.generation && p.gen_check == check.generation) return true;
   auto& vk = g_dd->vk;
   if (!p.dsl) {
@@ -1390,14 +1402,6 @@ bool ensure_omm_dyn_pipe() {
   if (p.bake) g_omm_old_pipelines.push_back(p.bake);
   if (p.check) g_omm_old_pipelines.push_back(p.check);
   p.bake = nb; p.check = nc; p.gen_bake = bake.generation; p.gen_check = check.generation;
-  if (!g_omm_dyn_stats.b) {
-    if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                  VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, "OMM dyn counters") ||
-        !make_buf(g_omm_dyn_readback, kOmmDynStatsBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "OMM dyn counters readback"))
-      return false;
-    std::memset(g_omm_dyn_readback.map, 0, size_t(kOmmDynStatsBytes));
-    g_omm_dyn_stats_zero = true;
-  }
   return true;
 }
 
