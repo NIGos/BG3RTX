@@ -427,6 +427,15 @@ def test_primary():
             wrong += ok and not mine
     check("ownership: every strand pixel kept by its own card only", owned == hits2.hit.sum() and wrong == 0,
           (owned, wrong, int(hits2.hit.sum())))
+    # Pool bounds (2026-11-03 19:53: a strand read at pool + 0xFA000000 of a 2 GB pool lost the device).
+    pool = 2146435072
+    row = (468596768, 470000000, 476000000, 0)
+    check("pool bound: a valid segment passes", primary.segment_ok(row, 1000, 5000, pool))
+    check("pool bound: the crash's read (i0 * 12 = 3.9 GB past the points) fails closed",
+          not primary.segment_ok(row, 1000, (0xFA000000 - row[0]) // 12, pool))
+    check("pool bound: 64-bit offsets (i0 * 12 wraps in 32 bits)", not primary.segment_ok(row, 1000, 0x15555556, pool)
+          and (row[0] + 0x15555556 * 12) % 2 ** 32 < pool)
+    check("pool bound: a segment index past the pool fails", not primary.segment_ok(row, 0xFFFFFF, 0, 476000000 + 1000))
     s = primary.seal(5 << 24 | 7, 0x3F000000, 0x3F400000, 1234)
     check("pixel seal: changes with any word, never matches a zeroed entry",
           s != primary.seal(4 << 24 | 7, 0x3F000000, 0x3F400000, 1234) and s != primary.seal(5 << 24 | 7, 0, 0x3F400000, 1234)

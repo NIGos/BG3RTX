@@ -925,7 +925,7 @@ bool hair_primary_wanted();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, const hair_primary::Row* rows,
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
                           const uint64_t* keys, uint32_t count, uint32_t width, uint32_t height, const float* viewport);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.
 void geo_render_size(uint32_t* width, uint32_t* height);

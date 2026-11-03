@@ -43,6 +43,24 @@ static const uint hair_primary_table_offset = 64u;
 static const uint hair_primary_pixel_bytes = 16u;
 static const uint hair_primary_no_strand = 0xFFFFFFFFu;
 static const uint hair_primary_max_segment = 0x00FFFFFFu;
+// The first point i0 of segment `seg` of groom table row `row` (mesh-pool byte offsets of the points, point UVs, segment
+// starts, previous points; common/hair_primary.h), when every pool byte the strand readers touch for that segment lies
+// inside the mesh pool (pool_bytes: header word 14). A pixel entry of another groom, LOD or frame then fails closed
+// (2026-11-03 19:53: a strand read at pool + 3.9 GB, past the 2 GB pool, lost the device). 64-bit offsets: i0 * 12 of a
+// garbage i0 wrapped in 32 bits.
+bool hp_pool_ok(uint64_t off, uint64_t bytes, uint pool_bytes) { return off + bytes <= uint64_t(pool_bytes); }
+bool hp_segment(uint64_t pool, uint pool_bytes, uint4 row, uint seg, out uint i0) {
+  i0 = 0u;
+  const uint64_t s = uint64_t(row.z) + uint64_t(seg) * 4u;
+  if (!hp_pool_ok(s, 4u, pool_bytes)) return false;
+  i0 = vk::RawBufferLoad<uint>(pool + s, 4);
+  return hp_pool_ok(uint64_t(row.x) + uint64_t(i0) * 12u, 24u, pool_bytes) &&
+         (row.y == 0u || hp_pool_ok(uint64_t(row.y) + uint64_t(i0) * 8u, 16u, pool_bytes)) &&
+         (row.w == 0u || hp_pool_ok(uint64_t(row.w) + uint64_t(i0) * 12u, 24u, pool_bytes));
+}
+// Byte address of element i (size bytes) of the pool array at offset off (after hp_segment accepted i0).
+uint64_t hp_at(uint64_t pool, uint off, uint i, uint size) { return pool + uint64_t(off) + uint64_t(i) * size; }
+
 // Largest strand radius a groom file may hold (common/hair_groom_asset.h rejects radii >= 10 mm).
 static const float hair_primary_max_radius = 0.01;
 

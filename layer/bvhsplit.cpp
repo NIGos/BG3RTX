@@ -3501,7 +3501,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           float viewport[4];
           geo_render_size(&w, &h);
           geo_gbuffer_viewport(viewport);
-          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, hp_rows, hp_keys, groom_count, w, h, viewport);
+          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, groom_count, w, h, viewport);
         }
       } else {
         groom_count = 0;
