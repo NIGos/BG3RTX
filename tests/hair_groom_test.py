@@ -294,6 +294,41 @@ def test_render():
     cov = np.zeros(16)
     np.add.at(cov, f.pixel, f.alpha)
     check("strand coverage = 2r / pixel", np.allclose(cov[4:8], 0.2, atol=1e-6), cov.reshape(4, 4))
+    # Tilted cards (the batch's strand reference, fibres=True): a card turned 60 deg about its strand axis shows half its
+    # area while its fibres keep their width: the plain card halves the coverage, the fibre reference keeps the strands'.
+    # Fibres far thinner than a pixel (the batch: 2 mm pixels, 0.1-0.3 mm strands): 0.23 mm strands every 1 mm.
+    h, w = 512, 256
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 252, 4.0)], 1)
+    m[..., 2] = np.linspace(0, 255, h)[:, None].astype(np.uint8)
+    flat = card_mesh(length=0.12, width=0.06)
+    groom, _ = convert.convert(flat, m, tile_grid=(1, 1), step=16)
+    far = (np.array([0.0, 1e4, 0.0]), np.array([1e-3, 1e-3, 1e-3]))
+
+    def sums(deg, axis):
+        a = np.radians(deg)
+        rot = np.eye(3)
+        i, j = [(0, 2), (1, 2)][axis == 0]
+        rot[i, i], rot[i, j], rot[j, i], rot[j, j] = np.cos(a), -np.sin(a), np.sin(a), np.cos(a)
+        card = card_mesh(length=0.12, width=0.06)
+        card.positions = (card.positions @ rot.T).astype(np.float32)
+        pts = (groom.points @ rot.T).astype(np.float32)
+        view = render.View(card.positions.mean(0).astype(float), np.array([0, 0, 1.0]), np.array([0, 1.0, 0]), 0.002, (50, 80))
+        light = np.array([0, 0, -1.0])
+        _, plain = render.render(lambda v: render.card_fragments(card.positions, card.uv, card.tris, m, v), view, light, far)
+        _, fib = render.render(lambda v: render.card_fragments(card.positions, card.uv, card.tris, m, v, fibres=True), view, light, far)
+        _, st = render.render(lambda v: render.strand_fragments(pts, groom.radii, groom.offsets, groom.root_param, v), view, light, far)
+        return st.sum(), plain.sum(), fib.sum()
+    # The card raster and the strand raster differ a little face on (texel point sampling vs the fibre area): the
+    # tilted ratios are judged against that face-on ratio.
+    s0, p0, _ = sums(0.0, 1)
+    flat_ratio = p0 / s0
+    for axis, name in ((1, "about its strand axis"), (0, "about the across axis")):
+        s, p, fb = sums(60.0, axis)
+        check(f"fibre card reference tilted {name}: card/strand ratio within 10% of face on", abs(fb / s / flat_ratio - 1) < 0.1,
+              (fb / s, flat_ratio))
+        if axis == 1:
+            check("plain card reference halves the tilted fibres' coverage", abs(p / s / flat_ratio - 0.5) < 0.1, (p / s, flat_ratio))
 
 
 def test_mesh_loader():

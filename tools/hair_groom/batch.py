@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "hair-groom-batch-2"   # 2: asset v2 (UV samples), LOD1, radius caps
+VERSION = "hair-groom-batch-3"   # 2: asset v2 (UV samples), LOD1, radius caps; 3: fibre-layer card reference
 # Verdict thresholds (derived from the Shadowheart reference: IoU 0.92-0.94 at 0.5 mm, 0.89-0.92 at 2 mm,
 # unmapped samples 0.001%, root/row correlation 0.89-0.96). Cards spanning tiles are reported, not judged: the
 # converter places the strands of every tile a card touches, and IoU / unmapped samples measure the result.
@@ -179,13 +179,19 @@ def process(style, game, lslib, out_dir, report_dir, accept_review):
         ious, cover, light = [], [], []
         report_dir.mkdir(parents=True, exist_ok=True)
         for name, (view, light_dir) in bbox_views(hair.positions, 0.002).items():
-            img_c, cov_c = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v), view, light_dir, head)
+            # Coverage and silhouette against the cards as the fibre layers they paint (render.card_fragments fibres:
+            # a tilted card's fibres keep their width); mean radiance against the plain cards, the reference its
+            # tolerance was derived on (the fibre factor in the light view darkens the cards' self-shadow by up to 34%
+            # on Shadowheart, a shadow-model difference, not a colour one).
+            _, cov_c = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v, fibres=True), view, light_dir, head)
+            img_c, cov_p = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v), view, light_dir, head)
             img_g, cov_g = render.render(lambda v: render.strand_fragments(groom.points, groom.radii, groom.offsets, groom.root_param, v),
                                          view, light_dir, head)
             px = (cov_c > 0.02) | (cov_g > 0.02)
             ious.append(float(((cov_c > 0.5) & (cov_g > 0.5)).sum() / max(((cov_c > 0.5) | (cov_g > 0.5)).sum(), 1)))
             cover.append(float(cov_g[px].mean() - cov_c[px].mean()) if px.any() else 0.0)
-            light.append(float(img_g[px].mean() / max(img_c[px].mean(), 1e-9) - 1) if px.any() else 0.0)
+            pxr = (cov_p > 0.02) | (cov_g > 0.02)
+            light.append(float(img_g[pxr].mean() / max(img_c[pxr].mean(), 1e-9) - 1) if pxr.any() else 0.0)
             if name == "front":
                 safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in style["name"])
                 png = report_dir / f"{safe}_front.png"

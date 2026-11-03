@@ -95,8 +95,15 @@ def box_filter(alpha, factor):
         h // factor, factor, w // factor, factor).mean((1, 3)).astype(np.float32) / 255
 
 
-def card_fragments(positions, uv, tris, mask, view, chunk=4000):
-    """Rasterise card triangles; opacity from the mask filtered to roughly the pixel footprint."""
+def card_fragments(positions, uv, tris, mask, view, chunk=4000, fibres=False):
+    """Rasterise card triangles; opacity from the mask filtered to roughly the pixel footprint.
+
+    fibres: the card stands for the layer of fibres it paints (the strand reference of tools.hair_groom.batch). Face on,
+    a painted fraction alpha of the card is covered; seen at an angle, the card's projected area shrinks by |n.v| while
+    a fibre keeps its diameter and loses only the length along v (sqrt(1 - (t.v)^2), t the root-to-tip direction), so
+    the fibres cover alpha sqrt(1 - (t.v)^2) / |n.v| of the projected card (at most 1). Without it, cards curved around a
+    chin or seen edge-on (beards, 2026-11-03: Gale's strand coverage +0.11 at the beard's rim) under-state what fibres
+    there cover."""
     # Texel size vs pixel: a card tile (256 texels) spans about 3 cm; pick the mip that matches.
     texel = 0.03 / (mask.shape[1] / 8)
     factor = int(2 ** max(0, np.floor(np.log2(view.pixel / texel))))
@@ -138,6 +145,13 @@ def card_fragments(positions, uv, tris, mask, view, chunk=4000):
         tan = (e2 * t1[:, :1] - e1 * t2[:, :1])
         tan *= np.sign(t1[:, 0] * t2[:, 1] - t1[:, 1] * t2[:, 0])[:, None]
         tan /= np.maximum(np.linalg.norm(tan, axis=1, keepdims=True), 1e-12)
+        if fibres:
+            f = view.basis()[2]
+            nrm = np.cross(e1, e2)
+            nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+            cos_n = np.abs(nrm @ f)
+            sin_t = np.sqrt(np.clip(1.0 - (tan @ f) ** 2, 0.0, 1.0))
+            a = np.minimum(1.0, a * sin_t / np.maximum(cos_n, 1e-3))
         ok, pix = _keep(view, px, py)
         ok &= a > 0
         world = np.einsum("nk,nkd->nd", b[ok], P[ok]).astype(np.float32)
