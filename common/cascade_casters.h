@@ -6,7 +6,10 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace cascade {
 
@@ -42,6 +45,9 @@ struct DrawId {
   uint64_t ib = 0, ib_offset = 0;
   uint32_t ib_type = 0;
   uint64_t place = 0, place_offset = 0;   // instance stream or per-draw UBO; 0 unknown
+  uint64_t material = 0, instance = 0;  // canonical per-draw identity, independent of UBO allocation
+  double position[3] = {}, position_error[3] = {};
+  bool position_known = false;
 };
 inline uint64_t draw_key(const DrawId& d) {
   uint64_t h = 1469598103934665603ull;
@@ -65,10 +71,116 @@ inline uint64_t mesh_key(const DrawId& d) {
   return h ? h : 1;
 }
 
+// Audited class-B layouts (TRACK_D_SCENE_BUILD 1): current model mat4 at
+// byte 0, pulled vertex base at 64 in shadow VSs and 96 in camera VSs.
+// Unknown matrix layouts, wind and terrain never use the relaxed identity.
+inline uint32_t model_pull_offset(uint64_t vs) {
+  switch(vs) {
+    case 0x1cf36b97d3067b6cull: case 0xe940736827d5308cull:
+    case 0x41a168e2d8cfcaedull: case 0x61239daf5091675aull:
+    case 0x17970d7c67f7c124ull: case 0x13a9c9f5334dcafdull:
+    case 0x3927925b960e89b7ull: case 0x940da3120a9511d1ull: return 64;
+    case 0x3812bc980438747full: case 0xf111e2921f4e2715ull:
+    case 0xb1e188951a0c8ec2ull: case 0x1ed985dd808dbc45ull:
+    case 0x939d1385fa7f4200ull: return 96;
+    default: return 0;
+  }
+}
+inline uint64_t model_instance_key(const uint32_t model[16], uint32_t pull_index,
+                                   uint64_t pull_buffer, uint64_t pull_offset) {
+  uint64_t h=1469598103934665603ull;
+  for(unsigned i=0;i<16;++i) if(i<12 || i>14) h=mix(h,model[i]);
+  h=mix(h,pull_index);
+  if(pull_index) h=mix(mix(h,pull_buffer),pull_offset);
+  return h ? h : 1;
+}
+inline uint64_t mesh_instance_key(const DrawId& d) {
+  if(!d.material || !d.instance || !d.position_known) return 0;
+  uint64_t h=mix(mix(mesh_key(d),d.material),d.instance);
+  h=mix(mix(h,d.instances),d.first_instance);
+  return h ? h : 1;
+}
+
+// Model translation and the pass origin were each rounded to float by the
+// engine. Recover absolute placement in double; the uncertainty is exactly the
+// sum of their half-ULPs, rather than a scene-dependent distance threshold.
+inline double float_roundoff(float value) {
+  const double up=double(std::nextafter(value,INFINITY))-double(value);
+  const double down=double(value)-double(std::nextafter(value,-INFINITY));
+  return std::fmax(up,down)*0.5;
+}
+inline bool model_position(DrawId& d,const uint32_t model[16],const float origin[3]) {
+  d.position_known=false;
+  for(unsigned i=0;i<16;++i) {
+    float value;std::memcpy(&value,model+i,sizeof value);
+    if(!std::isfinite(value)) return false;
+  }
+  for(unsigned k=0;k<3;++k) {
+    float relative;std::memcpy(&relative,model+12+k,sizeof relative);
+    if(!std::isfinite(origin[k])) return false;
+    d.position[k]=double(relative)+double(origin[k]);
+    d.position_error[k]=float_roundoff(relative)+float_roundoff(origin[k]);
+    if(!std::isfinite(d.position_error[k])) return false;
+  }
+  return d.position_known=true;
+}
+
+// Keep candidates in same-frame buckets. Nontranslation model words, mesh,
+// material and pulled instance are exact; only absolute placement has the
+// derived float-input uncertainty above. Never borrow a previous-frame model.
+class InstanceSets {
+ public:
+  void insert(uint64_t frame,const DrawId& d) {
+    const uint64_t key=mesh_instance_key(d);if(!key) return;
+    const unsigned i=unsigned(frame&1);
+    if(frame_[i]!=frame) {frame_[i]=frame;sets_[i].clear();}
+    sets_[i][key].push_back(d);
+  }
+  bool contains(uint64_t frame,const DrawId& d) const {
+    const uint64_t key=mesh_instance_key(d);if(!key) return false;
+    const unsigned i=unsigned(frame&1);if(frame_[i]!=frame) return false;
+    const auto found=sets_[i].find(key);if(found==sets_[i].end()) return false;
+    for(const DrawId& other:found->second) {
+      bool same=true;
+      for(unsigned k=0;k<3;++k)
+        same=same && std::fabs(d.position[k]-other.position[k])<=d.position_error[k]+other.position_error[k];
+      if(same) return true;
+    }
+    return false;
+  }
+ private:
+  std::unordered_map<uint64_t,std::vector<DrawId>> sets_[2];
+  uint64_t frame_[2]={UINT64_MAX,UINT64_MAX};
+};
+
 // Preserve the existing legacy opaque-cascade policy when a richer current
 // material stream is captured alongside it. Raw cutouts never become legacy
 // opaque casters merely because the current path knows their triangle range.
 enum class LegacyCaster { keep, alpha_skip, duplicate };
+// Conservative class-A subset: affine instance inputs, no VS deformation and no
+// potentially compute-written position stream. Unknown includes per-draw static
+// meshes: do not guess that an unrecognised character/cloth path is static.
+inline bool static_candidate(bool affine_instance, bool position_known, bool storage_position) {
+  return affine_instance && position_known && !storage_position;
+}
+inline bool keep_static_only(bool enabled, bool candidate) { return !enabled || candidate; }
+
+// Compare membership, not draw order or the cascade matrix. Seed again after a
+// gap, a cascade switch or a policy toggle; those are not consecutive samples.
+class SetChanges {
+ public:
+  bool observe(uint64_t frame, bool filtered, const std::unordered_set<uint64_t>& keys) {
+    const bool changed = frame_ != UINT64_MAX && frame == frame_ + 1 && filtered == filtered_ && keys != keys_;
+    if (frame_ == UINT64_MAX || frame >= frame_) {
+      frame_ = frame; filtered_ = filtered; keys_ = keys;
+    }
+    return changed;
+  }
+ private:
+  uint64_t frame_ = UINT64_MAX;
+  bool filtered_ = false;
+  std::unordered_set<uint64_t> keys_;
+};
 inline LegacyCaster legacy_caster(bool discards,int alpha_mode,bool known_cutout,
                                   bool alpha_dedupe,bool mesh_duplicate,bool draw_duplicate) {
   if(discards && alpha_mode!=1 && (known_cutout || alpha_mode!=2)) return LegacyCaster::alpha_skip;

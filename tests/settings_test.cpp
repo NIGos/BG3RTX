@@ -416,7 +416,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 3);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(dev == (std::vector<std::string>{"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -467,7 +467,7 @@ static void test_gui_levels() {
   CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
   CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
-  for (const char* id : {"exp_hair_physical_origin", "exp_omm", "exp_alpha_spill"}) {
+  for (const char* id : {"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill"}) {
     CHECK(!knob_visible(*find_knob(id), false)); CHECK(knob_visible(*find_knob(id), true));
   }
 
@@ -911,6 +911,15 @@ static void test_apply_modes() {
   CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
   for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);
   for (int c = 0; c < 3; ++c) CHECK(knob_apply(*find_knob("sun_shadows"), c) == Apply::Live);
+  const auto& static_casters = *find_knob("exp_cascade_static_only");
+  CHECK(static_casters.dev_only && static_casters.experimental);
+  CHECK_EQ(code_default("rt_cascade_static_only"), "0");
+  for (int c = 0; c < 2; ++c) {
+    CHECK(knob_apply(static_casters, c) == Apply::Live);
+    CHECK_EQ(get(on_map(static_casters, c), "rt_cascade_static_only"), std::to_string(c));
+  }
+  CHECK_EQ(static_casters.choices[1].need[0].knob, "sun_shadows");
+  CHECK(static_casters.choices[1].need[0].min_choice == 2);
   CHECK(knob_apply(*find_knob("exp_water"),0)==Apply::Live);
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }

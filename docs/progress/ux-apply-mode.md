@@ -32,7 +32,9 @@
 - Hair origins, OMM, cutout spill and Local light shadows Full + shadowed lights are dev-only.
 - Both launchers consume the consolidated shared cards/modes; WebView sample cards updated too.
 - Defaults regenerated (no value delta), schema regenerated; USER_SETTINGS and local-light TRACK updated.
-- Correction validation: 101 C++ targets built, excluding the shader fixture and native_hair_origin_test.
-- The latter has a preexisting Apply::Partial compile error; settings and launcher checks pass.
-- Schema regenerated and defaults check passes. Selected 108/108 CTests passed (180.33 s).
+- Main merge reconciliation keeps cascade deduplication and the static-only fallback: developer-only,
+  both choices Live, requiring Sun shadows / Ray-traced + hidden roofs. Defaults/schema regenerated.
+- Fixed the stale native_hair_origin_test Apply::Partial assertion to Restart, with Live Off / Restart On.
+- Validation: 102 C++ targets built, shader fixture excluded; selected 110/110 CTests passed (152.96 s).
+- Settings: 2636 checks, 0 failed; generated defaults --check and git diff --check pass.
 - Shader requests delta 0; ABI unchanged. No game, shader tools, commits or git metadata mutations.
