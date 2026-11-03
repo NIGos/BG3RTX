@@ -503,8 +503,8 @@ def main():
                            (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2])
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
         control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
-                         "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
-                         "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else "main")
+                         "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else
+                         "water_compose" if args.key in ("waterhair", "waterhit") and "water_compose.hlsl" in control_request else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
