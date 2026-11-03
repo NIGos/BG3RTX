@@ -1,13 +1,33 @@
 {
-  "schema": 1,
-  "status": "OFFLINE_ONLY",
-  "hypothesis": "Visible strands retain every baseline character's hair through motion, LOD and toggles without invalid memory reads.",
-  "observed_regression": "2026-11-03 17:01 and 17:04: device loss and player bald; XFB invalid read at offset 2063785984 reported in parent checkout logs.",
-  "stability": {"device_faults": 0, "exceptions": 0, "hair_guards": 0, "pool_full": 0},
-  "visual": "Per-character coverage/IoU loss <= OFF/OFF Student prediction interval plus one-pixel silhouette boundary; zero visible strands always fails. Duplicates and invalid depth count = 0.",
-  "temporal": "Backward-MV warp error, trailing residual and registered edge_flicker second-difference residual <= same-run matched OFF repeat interval plus code precision, separately rendered/presented.",
-  "lighting": "Character pre-post linear energy delta within two-sided OFF-repeat interval; matched PT shadow/backlight error within PT repeat noise.",
-  "performance": "Report observed cohorts 1/5/10, amortized hair GPU ms per character, VRAM <= driver budget and p99 <= declared 1000/targetHz; no budget inferred from previews.",
-  "limitations": ["GPU crash owner must clear runtime before any authorized live batch", "No local external Vulkan SDK validation layer found", "F8 selected-save reload and sampled lifecycle evidence are unverified live; missing transition fails closed", "Separate visible cards/strands masks and FG motion/depth provenance required; generic G-buffer hair class alone is insufficient"],
-  "shader_request_delta": 0
+ "schema": 1,
+ "status": "OFFLINE_ONLY",
+ "hypothesis": "Visible strands retain every baseline character's hair through motion, LOD and toggles without invalid memory reads.",
+ "observed_regression": "2026-11-03 17:01 and 17:04: device loss and player bald; XFB invalid read at offset 2063785984 reported in parent checkout logs.",
+ "stability": {
+  "device_faults": 0,
+  "exceptions": 0,
+  "hair_guards": 0,
+  "pool_full": 0
+ },
+ "visual": "Per-character coverage/IoU loss <= OFF/OFF Student prediction interval plus one-pixel silhouette boundary; zero visible strands always fails. Duplicates and invalid depth count = 0.",
+ "temporal": "Backward-MV warp error, trailing residual and registered edge_flicker second-difference residual <= same-run matched OFF repeat interval plus code precision, separately rendered/presented.",
+ "lighting": "Character pre-post linear energy delta within two-sided OFF-repeat interval; matched PT shadow/backlight error within PT repeat noise.",
+ "performance": "Report observed cohorts 1/5/10, amortized hair GPU ms per character, VRAM <= driver budget and p99 <= declared 1000/targetHz; no budget inferred from previews.",
+ "limitations": [
+  "GPU crash owner must clear runtime before any authorized live batch",
+  "No local external Vulkan SDK validation layer found",
+  "F8 selected-save reload and sampled lifecycle evidence are unverified live; missing transition fails closed",
+  "Separate visible cards/strands masks and FG motion/depth provenance required; generic G-buffer hair class alone is insufficient"
+ ],
+ "shader_request_delta": 0,
+ "strike_rule_20261103": {
+  "hypothesis": "hv5 2026-11-03: every groom of a counted frame struck at once (0 strand pixels with the counted tag) because the G-buffer ran against another publish (the build is recorded at the end of the prepass; the game may submit the G-buffer in another order), so the record's tag was an adjacent frame's.",
+  "predicted": {
+   "strand_draws": "every 300-frame '[hair primary] frame' line in a strand window after the 300-frame swap pause: G-buffer and velocity strand draws > 0 (hv5 strand stages, hair_crowd cost-strands/cost-crowd)",
+   "strikes": "'drew no pixel' lines: 0 on Dialogue1 with the characters on screen; any strike retires the draw for 600 frames only ('its cards come back for 600 frames') and names its per-groom counted+adjacent pixels",
+   "misaligned": "if the hypothesis holds: '[hair primary] counted frame F: its N strand pixels carry an adjacent frame's tag' lines appear (count > 0) where hv5 struck; if they never appear and strikes still occur with 0+0 pixels, the hypothesis is refuted (then: no ray found a strand)",
+   "refusals": "'pool-bound refusals 0' in every counted-frame line"
+  },
+  "invalid_if": "a strand window without a '[hair primary] frame' line, or the strand key not latched (no '[hair primary] header at' line)"
+ }
 }

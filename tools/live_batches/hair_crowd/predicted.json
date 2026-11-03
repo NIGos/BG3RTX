@@ -3,19 +3,30 @@
  "_all": {
   "coverage": {
    "predicted": "with every style converted (batch over 1217 LOD0/LOD1 CHAR_Hair objects), most hair draws of the scene match: Dialogue1 >= 5 groom instances (hg-20261103e: 5 with 17 files), camp several companions; the remaining 'unmatched hair draw' lines name styles the batch rejected or did not see",
-   "invalid_if": "0 groom instances in cost-rt"
-  },
-  "cost-rt vs cost-cards": {
-   "predicted": "rt passes and gi lower by about the hg-20261103e amounts per matched character (rt -1.1..1.5 ms, gi -1.6..1.8 ms in Dialogue1), scene build GPU + 0.06 ms per character (median style, refit; tools.hair_groom.cost)"
-  },
-  "cost-strands vs cost-rt": {
-   "predicted": "strand G-buffer draws 0.2-0.6 ms per close character, rt passes and gi unchanged within noise"
+   "invalid_if": "0 groom instances in cost-strands"
   },
   "cost-crowd vs cost-strands": {
    "predicted": "Dialogue1 (few large characters): the budget does not bind, equal within noise. Camp: the plan line shows coarser LODs for the far characters; scene build GPU and the groom VRAM lower, trace cost about equal (it scales with hair pixels, not segments)",
    "kept_if": "no visible LOD pops on the shot pair at the camp"
+  },
+  "cost-strands vs cost-cards": {
+   "predicted": "with rt_hair_groom live (strands in RT and on screen) vs native cards: rt passes and gi lower by the hg-20261103e amounts per matched character (rt -1.1..1.5 ms, gi -1.6..1.8 ms in Dialogue1) plus strand G-buffer draws 0.2-0.6 ms per close character; scene build GPU +0.06 ms per character"
   }
  },
- "hc1-dialogue1-fg2": {"same_as": "_all"},
- "hc2-campsite-fg2": {"same_as": "_all"}
+ "hc1-dialogue1-fg2": {
+  "same_as": "_all"
+ },
+ "hc2-campsite-fg2": {
+  "same_as": "_all"
+ },
+ "strike_rule_20261103": {
+  "hypothesis": "hv5 2026-11-03: every groom of a counted frame struck at once (0 strand pixels with the counted tag) because the G-buffer ran against another publish (the build is recorded at the end of the prepass; the game may submit the G-buffer in another order), so the record's tag was an adjacent frame's.",
+  "predicted": {
+   "strand_draws": "every 300-frame '[hair primary] frame' line in a strand window after the 300-frame swap pause: G-buffer and velocity strand draws > 0 (hv5 strand stages, hair_crowd cost-strands/cost-crowd)",
+   "strikes": "'drew no pixel' lines: 0 on Dialogue1 with the characters on screen; any strike retires the draw for 600 frames only ('its cards come back for 600 frames') and names its per-groom counted+adjacent pixels",
+   "misaligned": "if the hypothesis holds: '[hair primary] counted frame F: its N strand pixels carry an adjacent frame's tag' lines appear (count > 0) where hv5 struck; if they never appear and strikes still occur with 0+0 pixels, the hypothesis is refuted (then: no ray found a strand)",
+   "refusals": "'pool-bound refusals 0' in every counted-frame line"
+  },
+  "invalid_if": "a strand window without a '[hair primary] frame' line, or the strand key not latched (no '[hair primary] header at' line)"
+ }
 }

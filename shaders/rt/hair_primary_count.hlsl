@@ -1,7 +1,8 @@
 // rt_hair_groom_primary fail-safe (layer/hair_primary.cpp): strand pixels per groom instance in the pixel record of the
 // last frame (entries with that frame's tag). A matched draw whose strands drew no pixel gets its cards back.
 // Also the entries whose segment fails the strand readers' pool bound (hp_segment), per groom, at byte 256: the
-// readers discard those pixels, the layer logs the count (the header still holds the counted frame's rows).
+// readers discard those pixels, the layer logs the count (the header still holds the counted frame's rows). At byte
+// 512 the strand entries sealed with an adjacent frame's tag: a misaligned counted frame is no evidence for a strike.
 #include "hair_primary.hlsli"
 [[vk::binding(0, 0)]] ByteAddressBuffer Pixels;     // hair primary pixel record (16 B entries)
 [[vk::binding(1, 0)]] RWByteAddressBuffer Counts;   // 64 uints: strand pixels per groom instance k; 64: refusals
@@ -10,10 +11,11 @@ struct Push { uint tag, n, header_lo, header_hi; };   // header: the record's ad
 
 groupshared uint gsCount[64];
 groupshared uint gsRefused[64];
+groupshared uint gsOther[64];
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
-  if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u;
+  if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u, gsOther[gi] = 0u;
   GroupMemoryBarrierWithGroupSync();
   const uint64_t rec = (uint64_t(pc.header_hi) << 32) | uint64_t(pc.header_lo);
   if (id.x < pc.n) {
@@ -29,8 +31,13 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
           InterlockedAdd(gsRefused[k], 1u);
       }
     }
+    // An adjacent frame's tag (byte 512): the G-buffer of the counted frame ran against another publish.
+    else if ((e.w == hp_seal(e.xyz, pc.tag - 1u) || e.w == hp_seal(e.xyz, pc.tag + 1u)) && e.x != 0xFFFFFFFFu &&
+             (e.x >> 24) < 64u)
+      InterlockedAdd(gsOther[e.x >> 24], 1u);
   }
   GroupMemoryBarrierWithGroupSync();
   if (gi < 64u && gsCount[gi] != 0u) Counts.InterlockedAdd(gi * 4u, gsCount[gi]);
   if (gi < 64u && gsRefused[gi] != 0u) Counts.InterlockedAdd(256u + gi * 4u, gsRefused[gi]);
+  if (gi < 64u && gsOther[gi] != 0u) Counts.InterlockedAdd(512u + gi * 4u, gsOther[gi]);
 }

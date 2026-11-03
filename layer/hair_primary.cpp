@@ -73,6 +73,7 @@ struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] =
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {}; };
 CountSeen g_seen;
 uint64_t g_refused_total = 0;
+uint64_t g_misaligned_logged = 0;   // counted frames whose strand pixels all carried an adjacent frame's tag
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
 // after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
 constexpr uint32_t kTimed = 64, kTimeSlots = 4;
@@ -183,30 +184,42 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
   CountSlot& s = g_cnt[g_cnt_next];
   if (s.valid) {
     if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
-    uint32_t total = 0;
+    uint32_t total = 0, other_total = 0, other[hair_primary::kMaxGrooms];
     g_seen.frame = s.frame;
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
       g_seen.keys[k] = s.keys[k];
       g_seen.lods[k] = s.lods[k];
       g_seen.pixels[k] = s.map[k];
       g_seen.refused[k] = s.map[hair_primary::kRefusedOffset / 4 + k];
+      other[k] = s.map[hair_primary::kOtherOffset / 4 + k];
       g_refused_total += g_seen.refused[k];
       total += s.map[k];
+      other_total += other[k];
     }
-    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
-      if (s.keys[k] && g_gate.feedback(s.keys[k], s.drew[k], s.map[k])) {
-        // The reason, with what every groom of the counted frame got: a groom with 0 next to one holding the same
-        // strands under another draw key, every groom 0 (no ray found a strand), or refusals (the pool bound).
-        char per[512];
-        int at = 0;
-        for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 470; ++j)
-          if (s.keys[j]) at += std::snprintf(per + at, sizeof per - at, " %u:%u/LOD%u%s", j, s.map[j], unsigned(s.lods[j]),
-                                             j == k ? "*" : "");
-        log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards stay for this session "
-            "(groom %u, LOD %u, counted frame %llu: %u strand pixels in all, %u refused; per groom:%s)",
-            (unsigned long long)s.keys[k], hair_primary::kStrikes, k, unsigned(s.lods[k]), (unsigned long long)s.frame,
-            total, g_seen.refused[k], at ? per : " none");
-      }
+    // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
+    // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
+    if (!total && other_total && g_misaligned_logged++ % 300 == 0)
+      log("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
+          "against another publish): no strike (%llu such frames)", (unsigned long long)s.frame, other_total,
+          (unsigned long long)g_misaligned_logged);
+    for (uint64_t key : g_gate.feedback_frame(s.keys, s.drew, s.map, other, hair_primary::kMaxGrooms)) {
+      // The reason, with what every groom of the counted frame got: 0 everywhere (no ray found a strand), refusals
+      // (the pool bound), or 0 next to grooms with pixels (off screen or behind another groom: retried later).
+      char per[512];
+      int at = 0;
+      uint32_t refused = 0, lod = 0;
+      for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 470; ++j)
+        if (s.keys[j]) {
+          at += std::snprintf(per + at, sizeof per - at, " %u:%u+%u/LOD%u%s", j, s.map[j], other[j], unsigned(s.lods[j]),
+                              s.keys[j] == key ? "*" : "");
+          if (s.keys[j] == key) refused += g_seen.refused[j], lod = s.lods[j];
+        }
+      const auto& r = g_gate.failed[key];
+      log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards come back for %llu frames "
+          "(LOD %u, counted frame %llu: %u strand pixels in all, %u refused; per groom (counted+adjacent tag):%s)",
+          (unsigned long long)key, hair_primary::kStrikes, (unsigned long long)r.wait, lod, (unsigned long long)s.frame,
+          total, refused, at ? per : " none");
+    }
     s.valid = false;
   }
   if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
@@ -601,7 +614,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
-  g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms));
+  g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   g_last_tag = h.tag;
   g_last_n = width * height;
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) g_last_keys[k] = k < count ? keys[k] : 0;
