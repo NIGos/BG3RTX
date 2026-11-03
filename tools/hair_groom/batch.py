@@ -288,8 +288,9 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
             # a tilted card's fibres keep their width); mean radiance against the plain cards, the reference its
             # tolerance was derived on (the fibre factor in the light view darkens the cards' self-shadow by up to 34%
             # on Shadowheart, a shadow-model difference, not a colour one).
-            _, cov_c = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v, fibres=True), view, light_dir, head)
-            img_c, cov_p = render.render(lambda v: render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v), view, light_dir, head)
+            fibre_cards, plain_cards = render.card_fragment_builders(hair.positions, hair.uv, hair.tris, mask)   # one raster
+            _, cov_c = render.render(fibre_cards, view, light_dir, head)
+            img_c, cov_p = render.render(plain_cards, view, light_dir, head)
             img_g, cov_g = render.render(lambda v: render.strand_fragments(groom.points, groom.radii, groom.offsets, groom.root_param, v),
                                          view, light_dir, head)
             px = (cov_c > 0.02) | (cov_g > 0.02)

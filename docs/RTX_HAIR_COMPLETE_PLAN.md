@@ -39,16 +39,21 @@ renders 7.6 / 1.7 / 10.3 s, GR2 dump 2.7 / 1.5 / 5.0 s; 22 s CPU per style on av
    - vectorise `convert.locate` (one Python loop per triangle) and replace `geom.pairs_within` in dedupe with a
      uniform grid hash;
    - target: under 8 s per style, a full rerun under 45 min.
+   Done (2026-11-03): converter 2.4-3.4x faster and renders 1.8x faster, both bit-identical on three real styles;
+   GR2 and groom caches with --revalidate; the 36-style sample 201 -> 118 s cold with identical numbers.
 2. Representative set (`--names`), used between changes:
    - every style drawn in the live test saves: index counts from the "[hair groom]" lines of the Dialogue1, Campsite
      and S8 logs, mapped to styles by triangle count;
    - every companion style;
    - three styles per remaining failure class.
-   About 120 styles, about 10 minutes.
+   About 120 styles, about 10 minutes. Done: tools/hair_groom/sample_names.txt, 80 styles (logs, every companion,
+   three per failure class, LOD siblings).
 3. Converter items that need the rerun:
-   - LOD1 grooms transferred from the passed LOD0 groom: each LOD0 strand point embedded on the nearest LOD1 card
-     triangle, validated with the same gates against the LOD1 cards (today 150 LOD1 fail while their LOD0 passes,
-     e.g. Gale's beard LOD1 at IoU 0.68);
+   - LOD1 grooms transferred from the passed LOD0 groom: tried and rejected (2026-11-03, branch
+     codex/hair-groom-lod1, docs/evidence there): the LOD1 cards are thinner than the LOD0 hair by design, so the
+     transferred LOD0 density over-covers them (Gale's beard LOD1: coverage +0.25, IoU 0.68 -> 0.47; Shadowheart
+     LOD1 pass -> review) while the own LOD1 conversion already passes ordinary hair (Shadowheart LOD1 IoU 0.94).
+     LOD1 keeps its own conversion;
    - a 2-D curve tracer for curly atlases whose curls do not run along the rows (HAIR_Afro_B: 32 styles fail the
      root channel);
    - the fibre reference (done, 068ff6e4).
