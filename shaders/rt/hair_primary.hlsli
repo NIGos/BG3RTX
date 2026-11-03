@@ -37,3 +37,16 @@ float hp_strand_depth(float d_card, float t_card, float t_strand, float a) {
 float hp_strand_depth_ortho(float d_card, float t_card, float t_strand, float dd_dt) {
   return d_card + (t_strand - t_card) * dd_dt;
 }
+
+// The frame record (common/hair_primary.h): table offset, pixel entry size, the no-strand key, the segment bits.
+static const uint hair_primary_table_offset = 64u;
+static const uint hair_primary_pixel_bytes = 16u;
+static const uint hair_primary_no_strand = 0xFFFFFFFFu;
+static const uint hair_primary_max_segment = 0x00FFFFFFu;
+
+// Parameter in [0, 1] of the point of segment p0 -> p1 closest to `hit` (the strand's UV and motion are
+// interpolated with it).
+float hp_segment_param(float3 hit, float3 p0, float3 p1) {
+  const float3 d = p1 - p0;
+  return saturate(dot(hit - p0, d) / max(dot(d, d), 1e-30));
+}

@@ -17,8 +17,8 @@ Options considered:
   DLSS, fog or transparents, and no background behind the hidden cards. Rejected.
 - (b) hide the cards and add a full-screen pass of our own at the G-buffer end: needs our own render pass on
   the game's D24S8 and five targets, plus stencil and material values we do not know. Possible fallback.
-- (c) chosen: **replace the fragment shader of the matched hair draws** in the prepass, G-buffer and
-  velocity passes with a strand variant (pipeline clone, as `layer/water.cpp` does for the water FS).
+- (c) chosen: **replace the fragment shader of the matched hair draws** in the G-buffer and velocity passes
+  with a strand variant, and clone the prepass draw without depth writes (pipeline clone, as `layer/water.cpp` does for the water FS).
   The card triangles become the rasterised *candidate region* (strands lie on the card sheets: every groom
   point is embedded in a card triangle, radius <= 0.35 mm). Per fragment: one camera ray through the pixel
   centre into the groom TLAS, closest strand hit or `discard`. Depth, stencil, blend, render pass, vertex
@@ -27,26 +27,25 @@ Options considered:
   (the vertex stage is the game's), so the point update keeps working.
 
 ## 2. Per-pass variants (all behind the key; a pipeline without a variant draws cards)
-- **Prepass (Depth FS).** Ray = camera (camera-relative origin 0, the TLAS's frame) through the fragment's
-  camera-relative position (VS output, capture offset 60). Closest opaque groom hit `t_s` against the card
-  point's distance `t_c`. Depth: on one camera ray view depth is proportional to distance, so for the
-  native perspective depth `D = A + B/w` the strand depth is `D_s = A + (D_c - A) * t_c / t_s`
-  (`A = near/(near-far)`, from the recorded near/far, NATIVE_HAIR "Native fragment depth"; orthographic:
-  `D_s = D_c + (t_s - t_c) * dD/dt`). Writes SV_Depth. Also writes the hit to a per-pixel record
-  (below). No hit: discard. The game's coverage/dither test is not run: strand coverage replaces it.
-- **G-buffer (Deferred FS).** Same ray, depth test against the prepass value (the game's compare op).
-  Writes RT0 = stereographic view-space normal, RT1 base colour, RT2 = (roughness, specular, backlit,
-  class 5 | light-channel bits), RT3 = 12:12 octahedral tangent + scatter, RT4 = the draw's object ID.
-  The material values come from the game's bound material descriptors (same pipeline layout); until their
-  offsets are confirmed (open item 1) from a per-groom record filled from the CHAR_Hair defaults.
+- **Prepass (Depth FS 5a03e5b6).** This frame's groom TLAS is built from the prepass capture, i.e. after the
+  prepass. So the prepass only loses the card depth: a clone with depth writes off (the XFB capture of the
+  draw is unchanged). The strands write their depth in the G-buffer pass.
+- **G-buffer (Deferred FS 42a95e17, `shaders/rt/hair_primary_gbuffer.hlsl`).** Ray = camera (origin 0 of the
+  camera-relative TLAS frame) through the card fragment's point (unprojected with set 0 b2 `m2`). Closest groom
+  hit or discard; depth = the hit projected with the same `m2` (the clone tests GREATER_OR_EQUAL with writes).
+  Writes RT0 = stereographic view-space fibre normal, RT1/RT2/RT3.w = the native material code evaluated at the
+  strand's own UV (card UV at its embedding point; gradients from the card UV), RT3.xyz = view-space strand
+  tangent (the native FS writes its tangent in the same space; root-to-tip sign: open item), RT2.w = class 5 |
+  the draw's light channel. The draw's own material descriptors are bound (same pipeline layout).
 - **Velocity (Velocity FS).** Reads the per-pixel record (instance, segment, parameter along the segment),
   evaluates the point at the previous frame's positions (one previous-points buffer per groom instance,
   roadmap step 5), projects it with the previous view-projection and writes current minus previous pixel
   position with jitter removed, exactly the game's convention (TRACK_B_FG "Motion vectors").
 - **Shadow cascades:** cards, unchanged (RT shadows already see strands with `rt_hair_groom`).
 
-Per-pixel record (render resolution, 16 B: groom row, segment, v and t as half, frame tag), written by the
-prepass variant, read by the G-buffer and velocity variants. Every fragment of the same pixel computes the
+Per-pixel record (render resolution, 16 B: groom k << 24 | segment, v, native depth, frame tag;
+common/hair_primary.h), written by the first G-buffer fragment of a pixel, read by the later ones and the
+velocity variant. Every fragment of the same pixel computes the
 same ray and the same closest hit, so concurrent writes store identical values; a later fragment whose frame
 tag matches can skip the trace (cuts the card overdraw cost to about one trace per pixel).
 
@@ -71,12 +70,13 @@ an upper bound. Close-up head at 1.6M hair pixels: ~0.4 ms prepass trace; the G-
 variants read the record (no trace). Plus refit 0.1 ms per character and 11 MB previous points at LOD 0.
 Report per character: prepass variant GPU ms (timestamps around the hair draws), VRAM of previous points.
 
-## 6. Open items (each a small offline check before the layer code)
-1. Material bytes of the Deferred CHAR_Hair FS (Hair_Color, roughness, scatter, backlit offsets) from the
-   recovered SHD8 sources; and the space of the RT3 hair tangent (the lighting does not rotate it).
-2. Depth compare op and stencil of the three hair pipelines (the `[rt-capture] ... depth write/test` log).
-3. shaderInt64 for the record address constant (water's precedent: `sharc_device=1`).
-4. The fragment's camera-relative position is a VS output in all three passes (capture stream 60).
+## 6. Open items
+1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
+   built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
+2. Depth compare op / dynamic depth state and stencil of the hair pipelines: the clone overrides compare and
+   write; a dynamic compare op would need a CmdSetDepthCompareOp around the draw (log it at clone time).
+3. shaderInt64 and fragment stores (water's precedent: `sharc_device=1`); refuse the variant otherwise.
+4. Instanced hair (FS 0ca5ee93, other bindings) keeps its cards in increment 1.
 
 ## 7. Increments and gates
 - **1a (offline, this commit):** `shaders/rt/hair_primary.hlsli` (depth along the ray, G-buffer encodings

@@ -38,3 +38,8 @@
   (exact vs projection, rel. error < 1e-9), RT0/RT3/RT2.w encodings through the game's decoders
   (normal < 0.2 deg in RG16F, tangent < 0.1 deg), CPU primary tracer (Shadowheart 512 px, 3.6 s).
   DXC + spirv-val pass; no request uses it yet (variants delta 0). Next: 1b FS variants + GPU bench vs CPU.
+- 1b: G-buffer variant `shaders/rt/hair_primary_gbuffer.hlsl` (ps_6_6 via its `// dxc:` line; port of the native
+  hair G-buffer FS 42a95e17 at the strand's UV, strand depth/normal/tangent, per-pixel hit record) compiles and
+  validates. GPU check `hair_primary_gpu_check` + CTest `hair_primary_gpu_test` (RTX 5090): synthetic groom
+  IoU 1.000, same segment 100%, depth rel. 7e-7, normal 0.0004 deg, tangent < 0.07 deg. Shadowheart 512 px
+  (tapered radii vs mean-radius capsules): IoU 0.995, same segment 91% (report only).

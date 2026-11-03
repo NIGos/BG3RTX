@@ -90,6 +90,12 @@ def strand_depth(d_card, t_card, t_strand, a):
     return a + (d_card - a) * (t_card / t_strand)
 
 
+def segment_param(hit, p0, p1):
+    """Parameter in [0, 1] of the point of segment p0 -> p1 closest to `hit` (hp_segment_param)."""
+    d = np.asarray(p1, np.float64) - p0
+    return np.clip(((np.asarray(hit) - p0) * d).sum(-1) / np.maximum((d * d).sum(-1), 1e-30), 0.0, 1.0)
+
+
 def strand_depth_ortho(d_card, t_card, t_strand, dd_dt):
     """Orthographic: D is affine in the distance along the (parallel) ray."""
     return d_card + (t_strand - t_card) * dd_dt

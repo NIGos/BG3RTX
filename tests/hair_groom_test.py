@@ -392,6 +392,9 @@ def test_primary():
     check("tracer: front distance 1 m - r on the axis row", abs(centre - (1.0 - r)) < 2e-4, centre)
     check("tracer: tangent +x, parameter at the centre column ~0.5",
           np.allclose(hits.tangent[rows[0], 32], [1, 0, 0]) and abs(hits.v[rows[0], 32] - 0.5) < 0.02)
+    p0, p1 = pts[0], pts[1]
+    hit = hits.t[rows[0], 32] * cam.rays().reshape(65, 65, 3)[rows[0], 32]
+    check("segment parameter of the hit equals the tracer's", abs(primary.segment_param(hit, p0, p1) - hits.v[rows[0], 32]) < 1e-9)
     gb = primary.gbuffer(hits, cam)
     nb = primary.stereo_decode(gb["rt0"][rows[0], 32])
     check("tracer: G-buffer normal faces the camera (view z < 0)", nb[2] < -0.9, nb)
