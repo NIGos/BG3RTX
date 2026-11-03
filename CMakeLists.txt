@@ -350,7 +350,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate hit_material_generated vram_motion_gate package_licences diagnostics_package release_install)
+  foreach(py_test host_atomics_lint queue_gates fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant spec_cascade_check shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate hit_material_generated vram_motion_gate package_licences diagnostics_package release_install)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()

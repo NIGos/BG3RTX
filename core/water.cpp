@@ -202,31 +202,37 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const bool traces = std::strncmp(base, "rt/water_view", 13) != 0 && std::strncmp(base, "rt/water_mv", 11) != 0;
   const std::string req = bg3::shader_variant::water_request(base, traces && cascade_on());
   const char* file = req.c_str();
+  const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
+  const uint32_t edge_value = edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u;
+  const std::string pipe_key = edge_spec ? req + (edge_value ? "#edge=1" : "#edge=0") : req;
   Bg3ShaderBlob blob{};
-  if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE && p.req == req;
-  if (p.p && blob.generation == p.gen && p.req == req) return true;
+  if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE && p.req == pipe_key;
+  if (p.p && blob.generation == p.gen && p.req == pipe_key) return true;
   const VkDeviceFuncs& vk = *host->vk;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
   VkShaderModule mod = VK_NULL_HANDLE;
-  if (vk.CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) return p.p != VK_NULL_HANDLE && p.req == req;
+  if (vk.CreateShaderModule(host->device, &mci, nullptr, &mod) != VK_SUCCESS) return p.p != VK_NULL_HANDLE && p.req == pipe_key;
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry,
                nullptr};
+  const VkSpecializationMapEntry edge_entry{bg3::shader_variant::kSpecIdWaterRfEdge, 0, sizeof(edge_value)};
+  const VkSpecializationInfo edge_info{1, &edge_entry, sizeof(edge_value), &edge_value};
+  if(edge_spec) pci.stage.pSpecializationInfo = &edge_info;
   pci.layout = layout;
   VkPipeline np = VK_NULL_HANDLE;
   const VkResult r = vk.CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
   vk.DestroyShaderModule(host->device, mod, nullptr);
   if (r != VK_SUCCESS) {
     host->log("[water] %s %s: pipeline creation failed (%d)", file, entry, r);
-    return p.p != VK_NULL_HANDLE && p.req == req;
+    return p.p != VK_NULL_HANDLE && p.req == pipe_key;
   }
   host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
-  if (p.req != req) host->log("[water] %s %s: built", file, entry);
+  if (p.req != pipe_key) host->log("[water] %s %s: built", file, entry);
   p.p = np;
   p.gen = blob.generation;
-  p.req = req;
+  p.req = pipe_key;
   return true;
 }
 

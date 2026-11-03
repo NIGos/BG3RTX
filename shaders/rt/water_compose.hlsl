@@ -1,3 +1,10 @@
+#ifdef WATER_SPEC_RF_EDGE
+[[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
+#define WATER_RF_EDGE 1
+#define WATER_EDGE_ON (kSpecWaterRfEdge != 0u)
+#else
+#define WATER_EDGE_ON true
+#endif
 // M5.3 water composition (rt_water_compose=1, docs/PLAN_M5_WATER.md M5.3, core/water.cpp).
 // Replaces the forward water FS's probe reflection term with the ray-traced reflection where
 // the ray resolves, exactly, with the FS's own factors (common/water_compose.h: the patched FS
@@ -392,9 +399,14 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   float3 L = 0.0.xxx;
 #ifdef WATER_RF_EDGE
   float rf_w = 1.0;   // the screen-edge fade of the traced term (D-RF's rf_edge)
-#define WATER_RF_TERM rf_w * (A * L - B)
+#define WATER_RF_TERM (WATER_EDGE_ON ? rf_w * (A * L - B) : A * L - B)
 #else
 #define WATER_RF_TERM A * L - B
+#endif
+#ifdef WATER_SPEC_RF_EDGE
+// The old unfaded macro expands C + A * L - B, with left-associative
+// addition/subtraction. Select the whole sum to preserve its rounding.
+#define WATER_RF_ADD(C) (WATER_EDGE_ON ? (C) + rf_w * (A * L - B) : (C) + A * L - B)
 #endif
   if (trace) {
     const float3 R = reflect(-V, N);
@@ -429,8 +441,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
               L = rq.rgb;
               tier = 1u;
 #ifdef WATER_RF_EDGE
+              if(WATER_EDGE_ON) {
               const float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
               rf_w = saturate(min(e.x, e.y));
+              }
 #endif
             }
           }
@@ -674,7 +688,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool chg = composed || sunchg;
 #endif
 #else
+#ifdef WATER_SPEC_RF_EDGE
+  const float3 Cu = WATER_RF_ADD(Ct);
+#else
   const float3 Cu = Ct + WATER_RF_TERM;
+#endif
   const bool chg = composed;
 #endif
   // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
@@ -694,7 +712,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
   cstat(14, trace && tier == 2u && skin);
 #ifdef WATER_SHADOWS
+#ifdef WATER_SPEC_RF_EDGE
+  cstat(15, composed && any(WATER_RF_ADD(Ct) < 0.0));
+#else
   cstat(15, composed && any(Ct + WATER_RF_TERM < 0.0));
+#endif
 #else
   cstat(15, composed && any(Cu < 0.0));
 #endif
