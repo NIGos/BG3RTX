@@ -14,10 +14,40 @@ Set-Location -LiteralPath $root
 $script:mergeStarted = $false
 
 function Fail($why) {
-  if ($script:mergeStarted) { git merge --abort 2>$null }
   Write-LongrunSummary 'merge-green steps'
   Write-Host "NOT MERGED: $why"
   exit 1
+}
+
+# Stored in this checkout's Git directory, including linked worktrees.
+$ownerPath = (git rev-parse --git-path bg3rtx-merge-green-owner.json).Trim()
+function Undo-OwnedMerge($owner) {
+  $current = (git rev-parse HEAD).Trim()
+  $merging = (git rev-parse -q --verify MERGE_HEAD 2>$null)
+  if ($LASTEXITCODE -eq 0) {
+    if ($current -ne $owner.head -or "$merging".Trim() -ne $owner.target) {
+      throw 'Merge ownership does not match HEAD/MERGE_HEAD; refusing to abort'
+    }
+    $ErrorActionPreference = 'Continue'
+    try {
+      git merge --abort 2>&1 | Out-Host
+      if ($LASTEXITCODE -ne 0) {
+        Write-Host 'merge --abort failed; trying reset --merge HEAD (tracked files only)'
+        git reset --merge HEAD 2>&1 | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'Owned merge recovery failed; ownership marker retained' }
+      }
+    } finally { $ErrorActionPreference = 'Stop' }
+    git rev-parse -q --verify MERGE_HEAD 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0 -or (git rev-parse HEAD).Trim() -ne $owner.head) {
+      throw 'Owned merge abort verification failed; ownership marker retained'
+    }
+    Write-Host 'Aborted unfinished merge owned by merge-green'
+  }
+  $tracked = git status --porcelain --untracked-files=no
+  if ($LASTEXITCODE -ne 0 -or $tracked) {
+    throw 'Tracked state is dirty or unreadable after merge recovery; refusing to continue; ownership marker retained'
+  }
+  Remove-Item -LiteralPath $ownerPath
 }
 
 # Run a native gate step and capture stdout+stderr as text. Windows PowerShell 5
@@ -41,6 +71,14 @@ function Invoke-Gate([string]$name, [scriptblock]$step) {
 }
 
 if ((git branch --show-current) -ne 'main') { Fail 'target checkout is not on main' }
+if (Test-Path -LiteralPath $ownerPath) {
+  $previous = Get-Content -LiteralPath $ownerPath -Raw | ConvertFrom-Json
+  $ownerProcess = Get-Process -Id $previous.pid -ErrorAction SilentlyContinue
+  if ($ownerProcess -and $ownerProcess.StartTime.ToUniversalTime().ToString('o') -eq $previous.started) {
+    Fail "merge-green owner PID $($previous.pid) is still running"
+  }
+  try { Undo-OwnedMerge $previous } catch { Fail $_.Exception.Message }
+}
 git rev-parse -q --verify MERGE_HEAD 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) { Fail 'an existing merge must be resolved first' }
 if (Test-Path (Join-Path $root 'captures\queue\USER_PLAYING')) { Fail 'user is playing' }
@@ -57,6 +95,11 @@ if ($running) { Fail "queued job $($running.name) is using the main tree" }
 if (git status --porcelain --untracked-files=no) { Fail 'main has uncommitted changes' }
 
 $head = (git rev-parse HEAD).Trim()
+$target = git rev-parse --verify "$Ref^{commit}" 2>$null
+if ($LASTEXITCODE -ne 0) { Fail "invalid merge ref: $Ref" }
+$owner = @{ head=$head; target="$target".Trim(); pid=$PID; started=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o') }
+# Write before invoking Git: a hard kill even during merge leaves a recovery receipt.
+$owner | ConvertTo-Json | Set-Content -LiteralPath $ownerPath
 try {
   # Windows PowerShell 5 treats Git's ordinary stderr progress as error records.
   # Capture it without throwing before we can record ownership of MERGE_HEAD.
@@ -98,6 +141,9 @@ try {
   Write-LongrunSummary 'merge-green steps'
   Write-Host "MERGED $Ref onto $head -> $((git rev-parse --short HEAD).Trim())"
 } catch { Fail $_.Exception.Message }
+finally {
+  if (Test-Path -LiteralPath $ownerPath) { Undo-OwnedMerge $owner }
+}
 
 # Refresh the test checkout only after a successful integration.
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\test-tree.ps1')

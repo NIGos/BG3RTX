@@ -395,6 +395,32 @@ def test_primary():
     p0, p1 = pts[0], pts[1]
     hit = hits.t[rows[0], 32] * cam.rays().reshape(65, 65, 3)[rows[0], 32]
     check("segment parameter of the hit equals the tracer's", abs(primary.segment_param(hit, p0, p1) - hits.v[rows[0], 32]) < 1e-9)
+    # Ownership (two overlapping grooms): groom A's strands on its card plane z = 1, groom B's on z = 0.97 in front.
+    # Every pixel's closest strand is owned by exactly the card it lies on: A's fragment (t_card on z = 1) rejects
+    # B's strands, B's fragment rejects A's, and each accepts its own (10 deg field, 65 px: foot from the plane).
+    seg = 0.01
+    xs = np.arange(-0.05, 0.05 + 1e-9, seg)
+    a_pts = np.stack([xs, np.full_like(xs, 0.002), np.ones_like(xs)], 1)
+    b_pts = np.stack([xs, np.full_like(xs, -0.002), np.full_like(xs, 0.97)], 1)
+    both = np.concatenate([a_pts, b_pts])
+    hits2 = primary.trace(both, np.full(len(both), r), np.array([0, len(xs), 2 * len(xs)]), cam)
+    rays = cam.rays().reshape(65, 65, 3)
+    owned, wrong = 0, 0
+    for yy, xx in zip(*np.nonzero(hits2.hit)):
+        d = rays[yy, xx]
+        from_a = hits2.segment[yy, xx] < len(xs) - 1
+        for plane, mine in ((1.0, from_a), (0.97, not from_a)):
+            t_card = plane / d[2]
+            foot = t_card * pixel * abs(d[0]) / d[2]   # distance spread of the plane over one pixel (small)
+            ok = primary.on_card(t_card, hits2.t[yy, xx], d[2], foot, seg)
+            owned += ok and mine
+            wrong += ok and not mine
+    check("ownership: every strand pixel kept by its own card only", owned == hits2.hit.sum() and wrong == 0,
+          (owned, wrong, int(hits2.hit.sum())))
+    s = primary.seal(5 << 24 | 7, 0x3F000000, 0x3F400000, 1234)
+    check("pixel seal: changes with any word, never matches a zeroed entry",
+          s != primary.seal(4 << 24 | 7, 0x3F000000, 0x3F400000, 1234) and s != primary.seal(5 << 24 | 7, 0, 0x3F400000, 1234)
+          and all(primary.seal(0, 0, 0, t) != 0 for t in (1, 2, 0x7FFFFFFF)))
     gb = primary.gbuffer(hits, cam)
     nb = primary.stereo_decode(gb["rt0"][rows[0], 32])
     check("tracer: G-buffer normal faces the camera (view z < 0)", nb[2] < -0.9, nb)

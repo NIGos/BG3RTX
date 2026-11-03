@@ -101,3 +101,9 @@ Only the serial queue may launch a game, with fresh authorization. An offline
 dryrun, missing observables, or a draw-count log never grants a quality pass.
 Every ON window and baseline character must be represented in the analyzer input.
 Keep raw capture provenance; report FAIL/INVALID per check in JSON and Markdown.
+
+Camera plan fields are shared by the runner and lint in `scripts/camera-plan-fields.json`.
+`registration_policy` is analysis-only metadata for edge_flicker, rr_hair_guide and
+rr_post_decision; it does not schedule runner actions. Unknown fields fail before launch.
+Combined jobs retain external `requires_success_of` prerequisites; inputs depending
+on another input must run separately.

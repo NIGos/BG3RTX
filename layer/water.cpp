@@ -495,7 +495,7 @@ bool compose_buffer() {
   const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.stride);
   if (!make_buf(g_cmp.buf, bytes,
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                    (cfg_int("pan_water",0) ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT : 0u),
+                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 false)) {
     log("[water] compose UNAVAILABLE: the %llu MB record buffer could not be allocated", (unsigned long long)(bytes >> 20));
     return false;

@@ -1,0 +1,36 @@
+{
+  "runner": [
+    "label",
+    "kind",
+    "speed",
+    "seconds",
+    "repeat_ms",
+    "scan",
+    "capture_at",
+    "serial",
+    "motion_start",
+    "motion_end",
+    "pixels_per_second",
+    "direction",
+    "set",
+    "trace_at",
+    "turn_mode",
+    "frame_delta_pixels",
+    "frame_interval",
+    "key_period_ms",
+    "key_down_ms",
+    "hover_x",
+    "hover_y",
+    "shift",
+    "shift_hold",
+    "wheel",
+    "wheel_ms",
+    "wait_log",
+    "wait_log_timeout",
+    "recenter",
+    "reload_selected"
+  ],
+  "analysis_only": [
+    "registration_policy"
+  ]
+}

@@ -538,6 +538,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateShaderModule(VkDevice device, const 
 static VKAPI_ATTR void VKAPI_CALL DestroyShaderModule(VkDevice device, VkShaderModule m, const VkAllocationCallbacks* a) {
   device_of(device)->vk.DestroyShaderModule(device, m, a);
   geo_forget_module(m);
+  hair_primary_forget_module(m);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().modules.erase(m);
   tracker().module_validation.erase(m);

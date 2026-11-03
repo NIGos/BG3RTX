@@ -71,6 +71,10 @@ def path_arg(path):
 def combine_group(sources, plan_arg):
     """Pure composition. sources is [(source_path, job, plan), ...]."""
     first = sources[0][1]
+    names = {j["name"] for _, j, _ in sources}
+    prerequisites = list(dict.fromkeys(dep for _, j, _ in sources for dep in j.get("requires_success_of", [])))
+    if names.intersection(prerequisites):
+        raise ValueError("cannot combine batches that depend on each other")
     def options(j):
         args = list(j.get("args", []))
         i = args.index("-MovePlan")
@@ -99,7 +103,7 @@ def combine_group(sources, plan_arg):
         if len({s.get(k, b.get(k)) for s, b in zip(startup, baselines)}) > 1:
             raise ValueError(f"incompatible startup-only key {k}")
     combined = deepcopy(first)
-    combined.update(name="combined-" + slug(first["save"]), live_batch="combined", requires_success_of=[],
+    combined.update(name="combined-" + slug(first["save"]), live_batch="combined", requires_success_of=prerequisites,
                     patterns=[], expect=[], expect_every=[], expect_runner=[], post_gate=True)
     combined.pop("post", None)
     combined.pop("live_flow", None)
@@ -176,15 +180,15 @@ def extract(manifest, log, runner, out, run_post=False, status=""):
         start, end = wins[offset]["start"], wins[offset + count - 1]["end"]
         sliced = "\n".join(l for t, l in lines if t < wins[0]["start"] or start <= t < end) + "\n"
         kept = []
-        clock = gates._Clock()
+        clock = gates._Clock(lines[0][0] if lines else None)
         for line in runtext.splitlines():
             timestamp = clock(gates._sec(line))
-            m = re.search(r"\[pan-plan\] window (\d+)\b|\[motion-trace\] phase=(\d+)\b", line)
+            m = re.search(r"\[pan-plan\] window (\d+)\b|\[[\w-]+\] phase=(\d+)\b", line)
             if m:
                 i = int(m[1] or m[2])
                 if not offset <= i < offset + count:
                     continue
-                line = re.sub(r"(\[pan-plan\] window |\[motion-trace\] phase=)\d+", lambda x: x[1] + str(i - offset), line)
+                line = re.sub(r"(\[pan-plan\] window |\[[\w-]+\] phase=)\d+", lambda x: x[1] + str(i - offset), line)
                 line = line.replace("label=" + batch["prefix"], "label=")
             elif "[motion-plan] complete" in line or "Run ended:" in line:
                 continue
@@ -249,6 +253,10 @@ def main(argv=None):
     for path in a.jobs:
         job, plan, _ = flow.load_job(path)
         groups.setdefault(job["save"], []).append((path, job, plan))
+    names = {j["name"] for sources in groups.values() for _, j, _ in sources}
+    if any(names.intersection(j.get("requires_success_of", []))
+           for sources in groups.values() for _, j, _ in sources):
+        raise ValueError("cannot combine batches that depend on each other")
     index = flow.corpus(a.results, ROOT / "captures/.cache/live_flow_corpus.json")
     bad = False
     memo = {}
