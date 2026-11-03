@@ -826,6 +826,7 @@ Buf g_groom_uv_rb;                         // host-visible, kGroomUvJobs x 32 x 
 std::unordered_set<uint32_t> g_groom_uv_logged;
 // Draw identity (index range) -> groom index id (0: none) and the join verdict.
 std::unordered_map<uint64_t, std::pair<uint64_t, hair_groom::JoinMiss>> g_groom_join;
+hair_primary::LoadGuard g_groom_load;   // level-load boundary for the join caches (the G-buffer depth image)
 struct GroomAsset {
   // One LOD's arrays in the mesh pool [base, base + size): uploaded when a slot first selects it, evicted
   // (oldest first) when the groom budget needs room.
@@ -2352,6 +2353,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool groom_ready = g_groom_on && ensure_groom_pipeline() &&
       (g_groom_uv_rb.b || make_buf(g_groom_uv_rb, VkDeviceSize(kGroomUvJobs) * 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
                                    "hair groom UV join readback"));
+  // A level load (a new G-buffer depth image, hair_primary::LoadGuard): the join caches are keyed by draw identities
+  // made of Vulkan handles, which the new level reuses for other meshes; a stale verdict would give a new mesh with
+  // the same index count another style's groom, and a UV readback issued before the load would land on a reused
+  // identity. Drop the cached verdicts and the readbacks in flight (their copies still land; nothing reads them).
+  if (g_groom_load.observe(geo_gbuffer_depth_image(), now)) {
+    uint32_t pending = 0;
+    for (GroomUvJob& job : g_groom_uv_jobs) {
+      pending += job.used ? 1u : 0u;
+      job = GroomUvJob{};
+    }
+    log("[hair groom] level load: %zu join verdicts, %zu UV joins and %u UV readbacks in flight dropped",
+        g_groom_join.size(), g_groom_uv.size(), pending);
+    g_groom_join.clear();
+    g_groom_uv.clear();
+    g_groom_logged_unmatched.clear();
+  }
   struct GroomUvCopy { uint32_t job; VkDeviceSize soup_off; };
   std::vector<GroomUvCopy> groom_uv_copies;
   if (groom_ready) {
