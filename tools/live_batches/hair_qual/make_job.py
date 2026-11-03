@@ -5,6 +5,10 @@
 import argparse
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tools.live_batches.live_flow import repair_known_forbids
 
 HERE = Path(__file__).resolve().parent
 BATCH = "hair_qual"
@@ -291,6 +295,7 @@ def main():
     (out / "plans").mkdir(parents=True, exist_ok=True)
     for name, save, kind in SAVES:
         j, phases = cost2_job(name, save, kind)
+        repair_known_forbids(j, phases)
         (out / "plans" / ("hq_cost3_trim_plan.json" if name.startswith("hq4-") else "hq_cost2_plan.json")).write_text(json.dumps(phases, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
     print(f"{len(SAVES)} cost2 jobs; {len(phases)} phases/{sum(p['seconds'] for p in phases)} s per scene -> {out}")

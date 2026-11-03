@@ -89,7 +89,6 @@
     "over kSunMaxVolumes on [1-9]",
     "set 1 [1-9]\\d* out-of-range reads skipped",
     "\\[hit material pool basis\\] over kBasisCapBytes",
-    "\\[bvh\\] mesh pool full at",
     "\\[pan\\].*(REFUSED|failed|dropped)",
     "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)",
     "\\[pan\\].*transport INVALID",
@@ -308,6 +307,32 @@
       "windows": [
         "energy-static-1",
         "energy-static-3"
+      ]
+    },
+    {
+      "name": "no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "energy-static-0",
+        "energy-static-1",
+        "energy-static-2",
+        "energy-static-3",
+        "diag-view-static",
+        "cost-turn-0",
+        "snap-turn-0",
+        "diag-view-turn-0",
+        "cost-turn-1",
+        "snap-turn-1",
+        "diag-view-turn-1",
+        "cost-turn-2",
+        "snap-turn-2",
+        "diag-view-turn-2",
+        "cost-turn-3",
+        "snap-turn-3",
+        "diag-view-turn-3"
       ]
     }
   ],
