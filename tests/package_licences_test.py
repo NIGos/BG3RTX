@@ -19,6 +19,8 @@ class PackageLicencesTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / "scripts").mkdir()
         shutil.copyfile(ROOT / "scripts/package.ps1", self.root / "scripts/package.ps1")
+        shutil.copyfile(ROOT / "scripts/package-third-party.json",
+                        self.root / "scripts/package-third-party.json")
         self.release = self.root / "docs/release"
         shutil.copytree(ROOT / "docs/release/licences", self.release / "licences")
         shutil.copyfile(ROOT / "docs/release/THIRD_PARTY.md", self.release / "THIRD_PARTY.md")
@@ -26,11 +28,10 @@ class PackageLicencesTest(unittest.TestCase):
         section = inventory.split("## Required notice files\n", 1)[1].split("\n## ", 1)[0]
         self.required = re.findall(r"^- `([^`]+)`$", section, re.M)
         self.assertGreaterEqual(len(self.required), 8)
-        # Fixture-only stand-ins exercise wiring; these are not release licence texts.
+        # Wiring checks must use the real collected release texts.
         for name in self.required:
             path = self.release / "licences" / name
-            if not path.exists():
-                path.write_text("Fixture notice only\n", encoding="utf-8")
+            self.assertTrue(path.is_file(), f"Missing real release notice: {name}")
 
     def list_notices(self):
         self.assertIsNotNone(POWERSHELL, "PowerShell is needed for package -ListOnly checks")
@@ -109,13 +110,55 @@ class PackageLicencesTest(unittest.TestCase):
         for name in names:
             self.assertIn(name, result.stderr)
 
-    def test_release_texts_are_lf_and_hashes_match(self):
+    def test_every_shipped_third_party_binary_requires_its_notices(self):
+        manifest = json.loads((self.root / "scripts/package-third-party.json").read_text())
+        expected = {"bin/dxcompiler.dll"} | {"bin/sl/" + name for name in (
+            "sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll",
+            "nvngx_dlssg.dll", "NvLowLatencyVk.dll", "nvngx_dlss.dll", "nvngx_dlssd.dll")}
+        self.assertEqual({entry["destination"] for entry in manifest["binaries"]}, expected)
+        script = (ROOT / "scripts/package.ps1").read_text()
+        self.assertIn("foreach ($entry in $thirdParty.binaries)", script)
+        self.assertIn("Copy-To $source $entry.destination", script)
+        # No parallel hardcoded DLL list can bypass the notice manifest.
+        copies = re.findall(r'Copy-To[^\n]+', script)
+        self.assertEqual([line for line in copies if '"bin' in line and '.dll"' in line],
+                         ['Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\\VkLayer_bg3rtx.dll"'])
+        components = manifest["binaries"] + manifest["compiled_components"]
+        for entry in components:
+            self.assertTrue(entry["licences"], entry)
+            for notice in entry["licences"]:
+                self.assertIn(notice, self.required)
+        # Each binary/header dependency fails with one missing real notice at a time.
+        for notice in sorted({n for e in components for n in e["licences"]}):
+            with self.subTest(notice=notice):
+                path = self.release / "licences" / notice
+                data = path.read_bytes()
+                path.unlink()
+                try:
+                    result = self.list_notices()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(notice, result.stderr)
+                finally:
+                    path.write_bytes(data)
+
+    def test_manifest_cannot_add_an_unlicensed_binary(self):
+        path = self.root / "scripts/package-third-party.json"
+        manifest = json.loads(path.read_text())
+        for licences, message in (([], "has no licences"),
+                                  (["unreviewed.txt"], "unlisted third-party licence")):
+            manifest["binaries"].append(dict(destination="bin/unreviewed.dll", licences=licences))
+            path.write_text(json.dumps(manifest))
+            result = self.list_notices()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(message, result.stderr)
+            manifest["binaries"].pop()
+
+    def test_release_text_hashes_match_verbatim_copies(self):
         inventory = (ROOT / "docs/release/THIRD_PARTY.md").read_text(encoding="utf-8")
         hashes = dict(re.findall(r"\| `([^`]+)` \| `([0-9a-f]{64})` \|", inventory))
         for path in (ROOT / "docs/release/licences").rglob("*"):
             if path.is_file():
                 data = path.read_bytes()
-                self.assertNotIn(b"\r", data, str(path))
                 self.assertEqual(hashlib.sha256(data).hexdigest(), hashes[path.name], path.name)
         self.assertNotIn(b"\r", (ROOT / "docs/release/THIRD_PARTY.md").read_bytes())
 
