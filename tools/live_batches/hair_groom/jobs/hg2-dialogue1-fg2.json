@@ -53,7 +53,7 @@
   "\\[hair groom\\] device with linear swept spheres",
   "\\[hair groom\\] loaded .*\\.hgrm: index id [0-9a-f]{16}",
   "\\[hair groom\\] [0-9a-f]{16} uploaded: \\d+ LODs",
-  "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
+  "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most [1-9]\\d* groom instances",
   "gi: background builds done: [1-9]\\d* builds in \\d+ ms",
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
   "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
@@ -237,8 +237,8 @@
   },
   {
    "name": "groom participation: at least one groom instance in every groom-on window",
-   "select": "\\[hair groom\\] frame \\d+: \\d+ groom instances",
-   "match": "\\[hair groom\\] frame \\d+: [1-9]\\d* groom instances",
+   "select": "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most",
+   "match": "last 300 frames: at most [1-9]\\d* groom instances",
    "min": 1,
    "windows": [
     "shot-groom-a",

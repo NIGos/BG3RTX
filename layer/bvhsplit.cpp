@@ -841,6 +841,7 @@ struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_of
 static_assert(sizeof(GroomPush) == 32);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
+  uint32_t max_instances = 0;   // the most groom instances of one scene in the window
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
 } g_groom_st;
@@ -3357,11 +3358,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_tlas = groom_tlas_address;
   out->groom_count = groom_count;
   out->groom_first = n;
+  g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
   if (g_groom_on && now % 300 == 0) {
-    log("[hair groom] frame %llu: %u groom instances; last 300 frames: matched %llu (LOD %u/%u/%u), full builds %llu, "
+    log("[hair groom] frame %llu: %u groom instances; last 300 frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
         "UV pending %llu, UV mismatch %llu)",
-        (unsigned long long)now, groom_count, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
+        (unsigned long long)now, groom_count, g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
         (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],

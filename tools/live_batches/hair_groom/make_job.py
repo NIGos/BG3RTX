@@ -86,9 +86,10 @@ def expect_every():
          "match": r"; invalid/missing native state 0; unsupported native interfaces total \d+; retired bounds-invalid primitives 0;",
          "min": 1, "windows": hair_on},
         # Participation: without a matched groom instance the A/B measures nothing (INVALID, not a pass).
+        # The window maximum, not the instant of the line: 11:38 run, Shadowheart left the view between lines.
         {"name": "groom participation: at least one groom instance in every groom-on window",
-         "select": r"\[hair groom\] frame \d+: \d+ groom instances",
-         "match": r"\[hair groom\] frame \d+: [1-9]\d* groom instances", "min": 1, "windows": groom_on},
+         "select": r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most",
+         "match": r"last 300 frames: at most [1-9]\d* groom instances", "min": 1, "windows": groom_on},
     ]
     for prefix in ["rt passes", "gi"]:
         metric = (rf"{prefix}: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)" +
@@ -112,7 +113,7 @@ def job(name, save):
         r"\[hair groom\] device with linear swept spheres",
         r"\[hair groom\] loaded .*\.hgrm: index id [0-9a-f]{16}",
         r"\[hair groom\] [0-9a-f]{16} uploaded: \d+ LODs",
-        r"\[hair groom\] frame \d+: [1-9]\d* groom instances",
+        r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most [1-9]\d* groom instances",
         r"gi: background builds done: [1-9]\d* builds in \d+ ms",
         r"rt passes: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
         r"gi: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
