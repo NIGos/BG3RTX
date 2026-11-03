@@ -19,6 +19,12 @@ Write-Output "Inherited PS5 Get-FileHash available=$hashAvailable"
 function Get-FileHash {throw 'Get-FileHash must not be required by queue authorization'}
 $block=Get-QueueChildPermissionBlock $Root
 if($block){throw $block}
+if($env:BG3RTX_QUEUE_CONTEXT){throw 'Full job context still passed through environment'}
+if(-not $env:BG3RTX_QUEUE_CONTEXT_FILE){throw 'Context file path missing'}
+$context=Get-Content -LiteralPath $env:BG3RTX_QUEUE_CONTEXT_FILE -Raw
+if($context.Length -le 32767){throw 'Combined-job regression did not exceed environment value limit'}
+$fixture=($context | ConvertFrom-Json).job.fixture_job
+if($fixture.name -ne 'combined-Water-Queens-House'){throw 'Combined job payload did not survive child transport'}
 $phase=Join-Path $Root 'phase-input.txt'
 Set-Content $phase 'phase fixture'
 $phaseJob=[pscustomobject]@{phases='phase-input.txt'}
@@ -27,13 +33,18 @@ Write-Output "CrossPS child validated: PS=$($PSVersionTable.PSVersion.Major) mod
 Write-Output 'Run ended: done'
 '@ | Set-Content (Join-Path $fake 'scripts/test-queue-fake.ps1')
 $job=[pscustomobject]@{name='startprocess';live_batch='synthetic';timeout=30;traces=0;args=@('-Foreground','-RealPresent');patterns=@('synthetic');expect_runner=@('CrossPS child validated: PS=5 module-independent hash','Run ended: done')}
+# Preserve the actual oversized job as inert data: only this stand-in runs.
+$fixture=Get-Content (Join-Path $repo 'tools/live_batches/combined_20261103/jobs/combined-Water-Queens-House.json') -Raw | ConvertFrom-Json
+$job | Add-Member fixture_job $fixture
 $build=Get-QueueBuildIdentity $fake
 $grant=@{version=1;status='approved';user_steering='SYNTHETIC CPU ONLY';steering_source='queue child Start-Process regression';expires_utc=[datetimeoffset]::UtcNow.AddMinutes(3).ToString('o');runner_session='crossps';jobs=@(@{hash=(Get-QueueJobHash $job $fake);tree=$fake;build=$build;runs=1})}
 $grant | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $fake 'captures/queue/authorizations/synthetic.json')
 $job | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $fake 'captures/queue/pending/startprocess.json')
-& pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fake 'scripts/test-queue.ps1') -DryRun -Root $fake -PermissionSession crossps
+$queueShell=if(Get-Command pwsh -ErrorAction SilentlyContinue){'pwsh'}else{'powershell'}
+& $queueShell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fake 'scripts/test-queue.ps1') -DryRun -Root $fake -PermissionSession crossps
 if($LASTEXITCODE -ne 0){throw 'actual synthetic queue failed'}
 $rows=@(Get-Content (Join-Path $fake 'captures/queue/results.jsonl') | ConvertFrom-Json)
 if($rows.Count -ne 1 -or -not $rows[0].valid -or $rows[0].outcome -notmatch '^Run ended: done'){throw 'Start-Process child validation was not successful'}
 if(Test-Path (Join-Path $fake 'captures/queue/USER_AWAY')){throw 'unexpected away marker'}
-Write-Host "Actual pwsh queue -> Start-Process PS5 child accepted consumed scope without Get-FileHash; scratch $fake"
+if(@(Get-ChildItem -LiteralPath (Join-Path $fake 'captures/queue') -Filter 'child-context.*.json').Count){throw 'Context files leaked after queue shutdown'}
+Write-Host "Actual $queueShell queue -> Start-Process PS5 child accepted oversized combined scope without Get-FileHash; scratch $fake"

@@ -172,6 +172,8 @@ def period(gate, state, fps):
     if "period_frames" in gate:
         return float(gate["period_frames"]) / fps
     sel = gate["select"].replace("\\", "")
+    if producer_requirements(gate["select"]):
+        return 120 / fps  # layer/hit_material.cpp: pool_counter_frame / pool_log
     if "mem] device-local VRAM" in sel:
         return 600 / fps  # layer/layer.cpp, immediately after [pace]
     if "rrpost] gpu" in sel or "ngx] gpu RR" in sel or "watch]" in sel:
@@ -193,6 +195,78 @@ def period(gate, state, fps):
     if "gi: background builds (" in sel:
         return max(1, float(state.get("rt_timing_frames", 120))) / fps
     return None
+
+
+# Literal producer signatures in required regexes -> settings needed to emit them.
+# pool_log is called only with rt_stats enabled (layer/hit_material.cpp).
+# The paks startup "loaded" line is deliberately absent: it is unconditional.
+PRODUCER_SETTINGS = {
+    "[hit material paks join]": {"rt_stats": "1"},
+    "[hit material paks] frame": {"rt_stats": "1"},
+    "[hit material paks COLOR]": {"rt_stats": "1"},
+    "[hit material pool]": {"rt_stats": "1"},
+    "[hit material pool basis]": {"rt_stats": "1"},
+}
+
+
+def producer_requirements(pattern):
+    plain = pattern.replace("\\", "")
+    return {k: v for signature, requirements in PRODUCER_SETTINGS.items()
+            if signature in plain for k, v in requirements.items()}
+
+
+def producer_problems(job, plan):
+    states = phase_states(job, plan)
+    phases = {p.get("label"): s for p, s in zip(plan, states)}
+    errors = []
+    for gate in job.get("expect_every", []):
+        if int(gate.get("min", 1)) == 0:
+            continue
+        for key, value in producer_requirements(gate["select"]).items():
+            labels = gate.get("windows", [])
+            if not labels and not any(s.get(key) == value for s in states):
+                errors.append(f"producer: /{gate['select']}/ requires a window with {key}={value}")
+            for label in labels:
+                if label in phases and phases[label].get(key) != value:
+                    errors.append(f"producer: {label}: /{gate['select']}/ requires {key}={value}")
+    for pattern in job.get("expect", []):
+        for key, value in producer_requirements(pattern).items():
+            if not any(s.get(key) == value for s in states):
+                errors.append(f"producer: expect /{pattern}/ requires a window with {key}={value}")
+    return errors
+
+
+def environment_problems(job):
+    """Only paths/scalars cross the environment; the full job uses a context file.
+
+    Mirror auto-run's job-derived values, counting UTF-16 code units on Windows.
+    The terminator takes one of the 32767 units available for a value.
+    """
+    args = job.get("args", [])
+    options = {str(k).lower(): str(v) for k, v in zip(args, args[1:])
+               if str(k).startswith("-")}
+    tree = Path(job.get("tree") or ROOT)
+    if not tree.is_absolute():
+        tree = ROOT / tree
+    tag = options.get("-tag", "")
+    suffix = "." + tag if tag else ""
+    values = {
+        "BG3RTX_QUEUE_ROOT": str(ROOT),
+        "BG3RTX_QUEUE_CONTEXT_FILE": str(ROOT / "captures/queue" / ("child-context." + "0" * 32 + ".json")),
+        "BG3RTX_QUEUE_QUIT_FILE": str(ROOT / "captures/queue" / ("single." + "0" * 32 + ".quit")),
+        "BG3RTX_RUN_TAG": tag,
+        "BG3RTX_INI": str(tree / "captures" / f"auto{suffix}.ini"),
+        "BG3RTX_SAVE_LOG": str(tree / "captures" / f"saves{suffix}.txt"),
+        "BG3RTX_SAVE_ONLY": options.get("-save", str(job.get("save", ""))),
+    }
+    if "-userini" in options:
+        path = Path(options["-userini"])
+        values["BG3RTX_USER_INI"] = str(path if path.is_absolute() else tree / path)
+    if "-validation" in {str(a).lower() for a in args}:
+        values["VK_LAYER_SETTINGS_PATH"] = str(tree / "captures" / f"vk_layer_settings{suffix}.txt")
+    return [f"environment: {name} value has {size} UTF-16 units; maximum 32766"
+            for name, value in values.items()
+            if (size := len(value.encode("utf-16-le")) // 2) > 32766]
 
 
 def judged_labels(job, plan):
@@ -317,7 +391,7 @@ def repair_known_forbids(job, plan):
 def lint(job, plan, evidence, memo=None):
     regex, coverage = regex_problems(job, evidence, memo)
     windows, budgets = window_problems(job, plan)
-    return dict(problems=regex + windows + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
+    return dict(problems=regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
 
 
 def markdown_report(report):
