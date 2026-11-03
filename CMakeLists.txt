@@ -526,3 +526,6 @@ set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")
 
 add_executable(native_hit_recording_test tests/native_hit_recording_test.cpp)
 add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)
+
+add_executable(water_world_lights_test tests/water_world_lights_test.cpp)
+add_test(NAME water_world_lights_test COMMAND water_world_lights_test)

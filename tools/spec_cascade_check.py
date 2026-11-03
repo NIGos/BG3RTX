@@ -156,7 +156,23 @@ def old_requests_waterhair(spec_request):
     return [(a, r) for a, r in old_requests_native(spec_request) if a[1008] == 0]
 
 
+def old_requests_waterhit(spec_request):
+    # Cross compose shift and hit shading: the combined path must preserve TLAS-space H.
+    compose = split_request(spec_request)[0] == "rt/water_compose.hlsl"
+    out = []
+    for shift in (0, 1) if compose else (0,):
+        for value in (0, 1, 2):
+            assign = {1016: value}
+            reference = spec_request + f";WATER_HIT_SHADE_REFERENCE={value}"
+            if compose:
+                assign[1015] = shift
+                reference += f";WATER_COMPOSE_SHIFT_REFERENCE={shift}"
+            out.append((assign, reference))
+    return out
+
+
 KEYS = {"waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+        "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
         "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
         "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
         "occ": ("RT_SPEC_OCC_STATS=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OCC_STATS=1", "RT_OCC_STATS=1"), lambda f: 1011)),
@@ -407,7 +423,8 @@ def main():
         base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
         try:
             refs = compile_requests(base, pick, tool=tool, cache=Cache(), jobs=args.jobs, label="spec baseline")
-            with tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
+            with Progress("spec baseline equivalence", sum(len(compiled[r].entries) for r in pick),
+                          every=30, verb="compared") as progress, tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
                 for i, r in enumerate(pick):
                     for e in compiled[r].entries:
                         newp, oldp = Path(bt) / "new.spv", Path(bt) / "old.spv"
@@ -415,6 +432,7 @@ def main():
                         oldp.write_bytes(refs[r].blob(e.name))
                         n = check_one(tool, bt, f"base_{i}_{e.name}", newp, oldp, pairs[r][0][0])
                         baseline_ok &= n == 0
+                        progress.step(failed=bool(n))
                         if n: say(f"BASELINE DIFFERENT: {r} [{e.name}]: {n}")
             say(f"key-off baseline {args.baseline}: {'PASS' if baseline_ok else 'FAIL'} ({len(pick)} requests)")
         finally:
@@ -445,7 +463,7 @@ def main():
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
         # Water's copy entry is invariant; compare the active ray entry.
-        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
+        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift", "waterhit") else
                          "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
                          "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),

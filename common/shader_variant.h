@@ -7,11 +7,11 @@
 // request the core can make (tests/shader_variant_test.cpp keeps it equal to these rules;
 // tools/compile_shaders.py compiles all of them).
 #include <cstring>
+#include <cstdint>
 #include <string>
 #include "native_hair_origin.h"
 
 namespace bg3::shader_variant {
-
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
@@ -41,6 +41,8 @@ enum SpecId : unsigned {
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
+  // 1017 is reserved for rt_hair_gi_cull in the next hair-anyhit-perf merge.
+  kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
@@ -122,7 +124,7 @@ inline bool cascade_entry(const char* file) {
 // with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
-inline constexpr const char* kFixedRequests[] = {
+inline constexpr const char* kFixedRequests[] = {"rt/water_light_prepare.hlsl",
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
                                                  "rt/water_reflect.hlsl?WATER_RR_HIT=1",
                                                  // rt_water_rf_edge (core/water.cpp water_rf_edge_request): each compose
@@ -133,7 +135,16 @@ inline constexpr const char* kFixedRequests[] = {
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
+                                                 "rt/water_reflect.hlsl?WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1"};
 
 // rt_water_rf_edge: both values share WATER_SPEC_RF_EDGE; core/water.cpp supplies constant 1014.
 inline std::string water_rf_edge_request(const char* req, bool on) {
@@ -151,6 +162,11 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 // water rays see hair as the gi/ passes do. The physical hair origin (RT_HAIR_PHYSICAL_ORIGIN) is a
 // launch-point image of the gi/ receivers (binding 50): water rays start on the water, so it adds nothing.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
+inline std::string water_hit_request(const char* req,bool capable) {
+  std::string out=req;
+  if(capable)out += out.find('?')==std::string::npos ? "?WATER_HIT_SHADE_LAYOUT=1" : ";WATER_HIT_SHADE_LAYOUT=1";
+  return out;
+}
 inline std::string water_request(const char* req, bool cascade, bool scalp = false) {
   std::string out = req;
   (void)cascade;

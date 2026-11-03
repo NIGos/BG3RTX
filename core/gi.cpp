@@ -3418,6 +3418,23 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
+    if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
+        bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t))))) {
+      const VkDescriptorSet hs = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
+      if (hs && ((g_sunt_ok && g_sunt.view) || g_ls_nodata.view)) {
+        const Bg3Binding src[] = {s.l_flags,s.l_scale,s.l_clusters,s.l_index,s.l_lights,s.l_consts,s.l_shadows,s.l_atlas,s.l_cam2};
+        std::copy(std::begin(src), std::end(src), win.hit.lights);
+        win.hit_identity=s.omm_identity;
+        win.hit.game = s.game_set1; win.hit.game_layout = s.game_set1_layout;
+        win.hit.sun = hs; win.hit.sun_layout = g_sun_dsl;
+        win.hit.ndyn = s.game_set1_ndyn;
+        std::copy(s.game_set1_dyn, s.game_set1_dyn + s.game_set1_ndyn, win.hit.dyn);
+        bool slots = false;
+        for (uint32_t i=0;i<kSunRing;++i) if (g_sun_sets[i]==hs) slots=g_sun_slots[i];
+        wpc.ls_flags = (wpc.ls_flags & ~1u) | (slots && g_lsl_ok && host->cfg_int("ls_lights",1) ? 1u : 0u);
+        wpc.ls_flags |= g_sunt_ok && g_sunt.view ? (1u<<25) : 0u;
+      }
+    }
     if (reflection_applied && host->cfg_int("rt_water_rr_hitdist", 0)) win.rf_hit = g_rf_hit.view;
     water_rf(cmd, win);
   }

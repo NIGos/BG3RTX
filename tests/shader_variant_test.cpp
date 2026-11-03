@@ -17,6 +17,8 @@ int main(int argc, char** argv) {
   const std::filesystem::path root = argv[1];
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
+  CHECK(kSpecWaterHitShade == 1016);
+  CHECK(water_hit_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
   // Fixed spellings: migrated keys share one request; the remaining defines keep their order.
   CHECK(request("gi/rt_shadow.hlsl", 0) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");  // spec only
   CHECK(request("probe.hlsl", kTileset | kOmm) == "probe.hlsl");
@@ -101,7 +103,8 @@ int main(int argc, char** argv) {
   }
   CHECK(bases > 0);
   for (const char* r : kFixedRequests) {   // outside gi/: each names an existing file
-    const std::string f(r, std::strchr(r, '?'));
+    const char* end=std::strchr(r, '?');
+    const std::string f(r, end ? size_t(end-r) : std::strlen(r));
     CHECK(std::filesystem::exists(root / "shaders" / f));
     want.insert(water_request(r, false));
     want.insert(water_request(r, true));
@@ -122,7 +125,7 @@ int main(int argc, char** argv) {
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   for (const char* r : kFixedRequests) {
-    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0)
+    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_HIT_SHADE_LAYOUT"))
       continue;
     const std::string e = water_rf_edge_request(r, true);
     bool listed = false;

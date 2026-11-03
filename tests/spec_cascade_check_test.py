@@ -15,6 +15,17 @@ class WaterHairRequestsTest(unittest.TestCase):
             ({1008: 0, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1")])
 
 
+class WaterHitMappingTest(unittest.TestCase):
+    def test_all_modes_keep_descriptor_contract(self):
+        from tools.spec_cascade_check import KEYS
+        request = "rt/water_compose.hlsl?WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1"
+        marker, references = KEYS["waterhit"]
+        self.assertEqual(marker, "WATER_HIT_SHADE_LAYOUT=1")
+        self.assertEqual(references(request), [
+            ({1016: v, 1015: shift}, request + f";WATER_HIT_SHADE_REFERENCE={v};WATER_COMPOSE_SHIFT_REFERENCE={shift}")
+            for shift in (0, 1) for v in (0, 1, 2)])
+
+
 class PhiOrderTest(unittest.TestCase):
     def setUp(self):
         self.types = {"%1": "bool", "%2": "uint"}

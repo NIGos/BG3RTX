@@ -799,3 +799,18 @@ establish a new pak join or predict its qualified-share gain. No GPU cost or ene
   Both requested commit subjects must include `(unverified: build pending)` and the final trailer
   `Co-Authored-By: Codex <noreply@openai.com>`. No commit, push, game launch or capture write occurred.
 ```
+
+## Off-screen reflection plan (branch rt-reflections-offscreen, 2026-11-03)
+
+See [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md) for the current composition/tier map and staged
+water, directional-environment, world-provider and bias work. Candidate key
+`rt_water_hit_shade=0` reuses the RF material shader for supported water tier 2/3 hits;
+unsupported hits keep the FS probe and compose still replaces `B` with `A L` exactly once.
+This is not yet complete off-screen coverage: `native_hit_cluster` rejects points outside the
+camera froxel grid, and never-captured geometry has no material row. The sky stage needs an
+open-sky/roof trust guard; a scene-TLAS miss alone is not sky.
+
+The user's RF bias threshold is unchanged (S8 0.925, S6 1.089, camp 1.097 failed). The handoff's
+remaining instanced-row AO gap needs a pack containing those rows; non-instanced replay agreement
+cannot close it. Keep `rf_hit_shade`, `rf_hit_gi` and the water candidate Experimental/off until
+their energy gates pass. Ultra is the first possible preset after combined smoke qualification.

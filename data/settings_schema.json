@@ -146,6 +146,19 @@
        {"id": "shadows", "label": "Reflections + shadows", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
        {"id": "refraction", "label": "Reflections + shadows + refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "exp_water_hit_shade", "label": "Water: hidden-surface reflections",
+     "description": "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
+     "apply": "live", "apply_note": "live; captured materials require first-enable restart", "advanced": true, "experimental": true, "developer": false,
+     "category": "Experimental", "summary": "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "hitch", "caps": [], "keys": {"rt_water_hit_shade": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On (experimental)", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_shade": "1"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": ["rt_water_hit_shade"], "developer": false, "maturity": "experimental"},
+       {"id": "world", "label": "World lights (experimental)", "apply": "hitch", "caps": ["ray_query"], "keys": {"rt_water_hit_shade": "2"}, "needs": {"exp_water": 1, "exp_hidden_surface": 1}, "migrate_from": ["rt_water_hit_shade"], "developer": false, "maturity": "experimental"}
+     ]},
     {"id": "exp_hidden_surface", "label": "Off-screen bounce light",
      "description": "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
      "apply": "restart", "apply_note": "Restart to first enable capture or turn it off; Near/Far/reflection changes may hitch while pipelines compile.", "advanced": true, "experimental": false, "developer": false,

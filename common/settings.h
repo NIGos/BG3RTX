@@ -241,6 +241,16 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  {"exp_water_hit_shade", "Water: hidden-surface reflections",
+   "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
+   Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
+   {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
+    {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
+     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
+   {}, {0,0,0,0}, true, {}, false, "Experimental", {}},
+
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
    "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
@@ -565,6 +575,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
+    {"rt_water_hit_shade", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
     {"rt_water_compose", "0"},

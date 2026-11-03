@@ -50,6 +50,9 @@ ATOMIC_TARGETS = {
          H, "g_stats_buf bound at set 0 binding 20 for every gi.cpp pipeline (rt_stats=1)"),
         ("core/water.cpp", "!make_device_buffer(kRtStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, g_rts, g_rts_mem) ||",
          D, "water pipelines bind g_rts at binding 20")],
+    "shaders/rt/water_light_prepare.hlsl:worldLights": [
+        ("core/water.cpp", "make_device_buffer(kWorldBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_world_lights, g_world_memory)",
+         D, "current-frame membership union in device-local memory")],
     "shaders/gi/rt_local_shadows.hlsl:lsBoxStats": [
         ("core/gi.cpp", "bci.size = kLsBoxXBytes;", D,
          "g_bx_buf (ensure_bx: DEVICE_LOCAL memory type; set 4 b0 of the box layout, group-reduced, copied to rtStats 385..416)")],

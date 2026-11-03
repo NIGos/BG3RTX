@@ -156,6 +156,17 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  CHECK((kFlagSceneShift & kFlagHitShade) == 0u);
+  // Hidden-hit shading can fail independently of the ordinary water chain.
+  for(auto use:{LightingUse::kNone,LightingUse::kEarlier,LightingUse::kThisFrame})
+    for(bool same:{false,true})CHECK(hit_shade_frame_ok(use,same)==(use==LightingUse::kThisFrame && same));
+  // Two readback windows retain every reason counter, while 64-bit sums remain separate.
+  uint64_t count[kCsSlotWordsLs]{};
+  for(unsigned window=0;window<2;++window)
+    for(uint32_t i=0;i<kCsRrWords;++i)if(compose_plain_counter(i))count[i]+=i+window;
+  for(uint32_t i=kCsHitAttempt;i<kCsHitEnd;++i)CHECK(count[i]==2*i+1);
+  for(uint32_t i:{16u,18u,20u,kCsSunSumD,kCsLsSumL,kCsRrSumGame})CHECK(count[i]==0);
+
   // 1. Buffer arithmetic: header + capacity records + the sink.
   CHECK(buffer_bytes(10) == kHeaderBytes + 11 * kRecordBytes);
   const uint32_t cap = capacity_of_mb(160);
