@@ -1,0 +1,14 @@
+## Native hair mean quarantine (branch hair-cost4, QUARANTINED, 2026-11-03)
+- No game launch, commit, merge, default or ABI change; git metadata read-only.
+- S8 12:18:04 still lost device after mean ON; fault reports invalid read 0x9d760000, root cause unresolved.
+- Consumer: one bounded ownership-checked load/decision; 0 rejects, 1 accepts, NaN/Inf use native fallback; no retry loop.
+- Audit: current-slot descriptors precede dispatch; pre/post compute barriers exist; a procedural miss need not report a hit.
+- Inactive/groom candidates bypass the software cap; no proven hang mechanism or traversal change claimed.
+- cfg_int now ignores/logs nonzero mean once/process: no tail growth, dispatch, header bit, delayed stamp or SpecId 1019 activation.
+- Layer rebuild/restart required to apply quarantine; mean cannot qualify cost/energy while ignored.
+- Shared nh_consume + CPU consumer/precompute reference: 1291 checks, empty/malformed draws, 0/1/NaN/Inf and capped advancement.
+- All unrelated measurements precede mean/combined warmups and measurements; only their repeats/restoration follow.
+- Build + 132/132 CTests passed; temporary vswhere PATH correction only.
+- PP vs main d09d1f0b: 235 requests, 61 input-identical, 47 PP-same, 127 changed, 0 failures; manifest delta 0.
+- Spec haircost --sample 16 vs main: 72 requests; 152/152 frozen OFF and 608/608 literal-setting comparisons pass.
+- hair_qual dryrun passes (4 INVALID negatives + 4 valid structural); temporary py shim only; GPU ms unmeasured.

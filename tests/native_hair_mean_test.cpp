@@ -49,7 +49,38 @@ static Result precompute(uint32_t base,uint32_t allocation,uint32_t tris,uint32_
  }
  r.probability=nh_probability(hits,512u);store(tail);return r;
 }
+// Reference of one closest-query consumer: rejected candidates advance exactly
+// once; invalid estimates evaluate native coverage once, never resample to accept.
+struct ConsumerResult { unsigned visited=0, reads=0, fallback=0, hits=0; bool aborted=false; };
+static ConsumerResult consume(unsigned candidates, unsigned cap, unsigned tris, float probability) {
+ ConsumerResult r;
+ for(unsigned i=0;i<candidates;++i){
+  if(++r.visited>cap){r.aborted=true;break;}
+  unsigned decision=2;
+  if(nh_mean_range(0,tris*24u+8u,tris,tris,4096u)){
+   ++r.reads;decision=nh_consume(probability,(i*32768u)&0xffffffu);
+  }
+  if(decision==2u){++r.fallback;decision=1u;} // opaque native fixture
+  r.hits+=decision==1u;
+ }
+ return r;
+}
 int main(){
+ for(float p: {0.0f,1.0f,-1.0f,2.0f,std::numeric_limits<float>::quiet_NaN(),
+               std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}){
+  const bool valid=p>=0.0f && p<=1.0f;
+  check(nh_consume(p,0u)==(valid?(p>0.0f?1u:0u):2u));
+  check(nh_consume(p,0x1000000u)==2u);
+  auto r=consume(10000000u,64u,1u,p);
+  check(r.aborted && r.visited==65 && r.reads==64);
+  check(r.fallback==(valid?0u:64u));
+  check(r.hits==(valid?(p==1.0f?64u:0u):64u));
+  auto empty=consume(0,64,0,p);
+  check(empty.visited==0 && empty.reads==0 && empty.hits==0 && !empty.aborted);
+  auto invalid=consume(8,64,0,p);
+  check(invalid.reads==0 && invalid.fallback==8 && invalid.hits==8);
+ }
+
  constexpr uint32_t U=UINT32_MAX;
  // Valid probability endpoints and hard threshold, shared exact 512-decision estimator.
  for(float c: {0.0f,0.3332f,1.0f,100.0f}){

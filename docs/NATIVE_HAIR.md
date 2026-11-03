@@ -611,3 +611,37 @@ Offline gates: 130/130 CTests, CPU reference 1242 checks, mean shader and the
 lighting program difference. hair_qual fake-queue dryrun passes, including
 four INVALID negative runs and four valid structural runs. These gates do not
 establish live energy or stability. No defaults were promoted and no game ran.
+
+## Mean coverage quarantine (2026-11-03, hair-cost4)
+
+The 12:18:04 S8 loss persisted after the 64-primitive repair. The one-shot
+fault log reports an invalid GPU read at 0x9d760000 and released BLAS references
+in scene slots; neither identifies the faulting instruction's resource.
+Root cause remains unresolved. Do not claim a bounded scan fixed the device loss.
+
+Audit: hair_alpha validates the allocation/count via nh_mean_range before its
+single probability load; finite [0,1] values make one Bernoulli decision.
+Zero rejects that candidate, one accepts it, invalid values use native coverage.
+There is no probability-dependent retry loop. Four ordinary query loops have a
+candidate cap, but inactive/groom early skips precede it; traversal is finite
+hardware enumeration, not a proven fixed work budget. No traversal change is
+shipped here. A procedural miss simply resumes Proceed; no ray flag requires a
+candidate to report a hit. Unknown intersections abort rather than fabricate hits.
+
+Precompute binds the current slot's updated set 1 (records/info/pool at 0/7/8),
+dispatches ceil(info_bytes/16/64), and initializes both owned tail words before
+sampling. ALL_COMMANDS read/write -> compute read/write precedes it; compute
+write -> compute read follows. Tail allocation, held-draw publication, shared
+pool writes, texture descriptors and AS lifetime still need GPU-level isolation;
+these source checks do not establish runtime validity or identify the invalid read.
+
+Safety fallback: cfg_int forces rt_hair_gi_mean to zero for every layer/core
+reader, logging a nonzero request once per process. This blocks allocation-tail
+changes, precompute dispatch, header capability bit, delayed timing stamp and
+SpecId 1019 selection together. Rebuild/restart the layer to apply the quarantine.
+Default stays off; no ABI or variant-request change. The shared nh_consume helper
+and CPU reference cover endpoints, NaN/Inf, native fallback, empty draws and
+bounded candidate advancement. Mean/combined warmups and measurements are last,
+after cards/full/pool/cheap/visibility; only their reference repeats/restoration
+follow. These requested states are ignored, so cannot qualify mean performance
+or energy. GPU cost remains unmeasured; no game was launched.

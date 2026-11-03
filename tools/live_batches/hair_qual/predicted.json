@@ -93,5 +93,12 @@
    ]
   },
   "decisions": "Propose trim default-on separately, with unchanged lighting shaders and retained hold payload identity; it also packs ordinary holds. Drop cheap from shipping proposal: measured gain within noise. No default change in this repair."
+ },
+ "hair_cost4": {
+  "status": "QUARANTINED; mean is ignored in every layer/core integer setting consumer; no live authorization",
+  "observed": "S8 hq1 2026-11-03 12:18:04 device loss persisted after cost3. Fault log invalid read 0x9d760000; root cause unresolved.",
+  "predicted": "After rebuilding/restarting the layer, a nonzero mean request logs [hair mean] rt_hair_gi_mean ignored once per process. Effective key remains 0: no mean-tail allocation, precompute, capability header bit or SpecId 1019 activation. Mean-only requests predict no rendering delta beyond repeat noise, not a measured energy or cost result.",
+  "order": "All cards/full/pool/cheap/visibility measurements finish before mean/combined warmups and measurements. Only their full-hair reference repeats and restoration follow.",
+  "qualification": "Mean and the four-key combination cannot qualify while mean is ignored. Existing candidate gates still apply to other keys; no stability or GPU-cost claim from offline checks."
  }
 }

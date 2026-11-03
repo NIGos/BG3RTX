@@ -7,9 +7,9 @@ Four independent jobs: Water Queens House (S8), Test Dialogue1, Test Dialogue2, 
 One launch per scene, Ultra qualified settings plus native hair/scalp/physical-origin startup latches.
 The old GI-cull shortcut stays OFF: its +9..20% character brightening failed equivalence.
 
-Each scene warms all candidates, then takes same-run cards and full-hair references.
+Each scene warms safe candidates, then takes same-run cards and full-hair references.
 Full native hair brackets every pool, cheap, mean and combined candidate independently:
-full / pool / full / cheap / full / mean / full / visibility / full / combined / full.
+full / pool / full / cheap / full / visibility / full / mean / full / combined / full.
 Each state has a float-preview trace and a separate diagnostic-free GPU-cost window.
 Every phase explicitly restores all candidate keys. No captures are written into a watched inbox.
 
@@ -56,3 +56,10 @@ HQ4 is no longer a trim OFF/ON comparison. HQ1-HQ3 retain that comparison.
 Live 10:18-10:32: all four runs lost the device after mean ON; no mean gate passed.
 Pool trim is proposed for default promotion separately; cheap gains were within
 noise, so drop cheap from the shipping proposal (diagnostic stays off).
+
+Hair-cost4: mean is quarantined in cfg_int (nonzero requests log once and return
+zero to every host/core consumer). It cannot qualify energy or cost while ignored.
+All mean/combined warmups and measurements now follow every unrelated measurement;
+only their full-hair reference repeats and restoration follow them. No early
+mean warmup can hide pool/cheap/visibility/cards results after a future repair.
+Root cause of the invalid GPU read remains unresolved; see docs/NATIVE_HAIR.md.
