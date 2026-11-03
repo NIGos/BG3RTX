@@ -140,7 +140,10 @@ def two(olds, id_of):
 
 
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
-KEYS = {"native": ("RT_SPEC_NATIVE=1", old_requests_native),
+KEYS = {"omm": ("RT_SPEC_OMM=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OMM=1", "RT_OMM_SCENE=1"), lambda f: 1012)),
+        "rfgi": ("RF_SPEC_HIT_GI=1", two(lambda r: old_requests_swap(r, "RF_SPEC_HIT_GI=1", "RF_HIT_GI=1"), lambda f: 1013)),
+        "wateredge": ("WATER_SPEC_RF_EDGE=1", two(lambda r: old_requests_swap(r, "WATER_SPEC_RF_EDGE=1", "WATER_RF_EDGE=1"), lambda f: 1014)),
+        "native": ("RT_SPEC_NATIVE=1", old_requests_native),
         "cascade": (SPEC, two(old_requests, lambda f: SPEC_ID)),
         "guards": (GUARDS, two(old_requests_guards, guard_id)),
         "hitfam": (INST, lambda r: old_requests_inst(r)[1:]),   # S2a regression on the S2c union, instanced = 1
@@ -398,11 +401,13 @@ def main():
                     local[(r, e.name)] = dst
         P = lambda r, e="main": local[(r, e)]  # noqa: E731
         control_request = (next((r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"), pick[0])
-                           if args.key == "native" else pick[0])
+                           if args.key in ("native", "omm") else pick[0])
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
-        ctrl = differ(canonical(tool, opt(tool, P(c0), Path(tmp) / "c0.spv", "-O")),
-                      canonical(tool, opt(tool, P(c1), Path(tmp) / "c1.spv", "-O")))
+        # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
+        control_entry = "water_compose" if args.key == "wateredge" else "main"
+        ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
+                      canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
         jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in range(len(pairs[r]))]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \

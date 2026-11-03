@@ -33,3 +33,8 @@
 - S2b: guard far radius/base radius, weights/classification with 1007; gifar 0/20 -> 20/20. Far-on loads need non-far initialization in else.
 - S2b hitinst 31/31 and cascade 52/52 at sample 16. S2c: instanced 1003, wind/IP grass 1004/1005. S3a cb79a4a: always-bound b19 samplers.
 - Canonicalization retains every instruction, type, operand and edge; only parallel phi declaration order by type and intact incoming pairs normalize. Five CPU tests cover it.
+
+## Main conflict resolution (branch variant-migration, offline passed, 2026-11-03)
+- Preserved migration and main VRAM/capture, CPU perf and launcher changes; no async native-hair merge found. No Git metadata writes or game launch.
+- Built; CTests 117/117 (130.46 s). Regenerated 165 variants of 53 bases (+15). New RT_HIT_POOL_2S stays a define: restricted instancing configuration needs dedicated SpecId 1006 coverage; its shader guards now honor constant 1003. pp-diff main c17d27d: 114 = 37 identical inputs + 77 pp-same, 0 compiles.
+- Sample 8 same-program requests: cascade 44/44, guards 26/26, hitfam 23/23, gifar 12/12, hitinst 23/23, native 61/61, rfgi 12/12, wateredge 9/9; controls 1 / 436 / 17,633 / 98,934 / 52,940 / 54,005 / 129,638 / 7,302 lines. Checker comparison functions unchanged. Logs merge-*.log. No GPU cost or live quality claim.

@@ -10,7 +10,7 @@
 #   common\*.h                only the headers the shaders include (found by following #include)
 #   data\assetdb\bg3rtx_assetdb.bin   offline game data (lights, materials, roofs)
 #   bg3rtx.ini                repository bg3rtx.ini + data\release.ini (developer keys off)
-#   README.md, THIRD_PARTY.md, LICENSES\, docs\USER_SETTINGS.md, VERSION.txt, files.txt
+#   README.md, THIRD_PARTY.md, licences\, docs\USER_SETTINGS.md, VERSION.txt, files.txt
 #   install.ps1, uninstall.ps1, Install.cmd, Uninstall.cmd   (scripts\release\)
 # Not shipped: SHaRC headers (licence, docs/release/THIRD_PARTY.md; -WithSharc adds them; sharc=0 in
 # every preset), Aftermath, the OMM SDK, development Streamline DLLs, tools, tests, PDBs.
@@ -19,11 +19,62 @@
 #   .\scripts\package.ps1 -NoBuild         package what bin\ and build-nodiag\bin hold
 #   .\scripts\package.ps1 -Diagnostics     ship the developer layer of bin\ instead
 #   .\scripts\package.ps1 -Version 0.1.0-beta1 -NoZip
-param([switch]$NoBuild, [switch]$Diagnostics, [switch]$WithSharc, [switch]$NoZip,
+#   .\scripts\package.ps1 -ListOnly        validate/list notice files only; no build or output writes
+#   .\scripts\package.ps1 -DryRun          validate/list notices and launcher UI assets; no build or output writes
+param([switch]$ListOnly, [switch]$DryRun, [switch]$NoBuild, [switch]$Diagnostics, [switch]$WithSharc, [switch]$NoZip,
       [string]$Version = "", [string]$OutDir = "")
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "low-priority.ps1")
 $root = Split-Path $PSScriptRoot
+
+# Validate before builds or package writes. THIRD_PARTY.md owns the required file list.
+$noticeDoc = Join-Path $root "docs\release\THIRD_PARTY.md"
+$noticeDir = Join-Path $root "docs\release\licences"
+if (-not (Test-Path -LiteralPath $noticeDoc -PathType Leaf)) { throw "missing required notice inventory: $noticeDoc" }
+$inventory = Get-Content -LiteralPath $noticeDoc -Raw
+$requiredSection = [regex]::Match($inventory, '(?ms)^## Required notice files\r?\n(.*?)(?=^## |\z)')
+$required = [regex]::Matches($requiredSection.Groups[1].Value, '(?m)^- `([^`]+)`\r?$')
+if (-not $requiredSection.Success -or $required.Count -eq 0) { throw "no required notice files listed in $noticeDoc" }
+$missing = @()
+foreach ($entry in $required) {
+  $file = $entry.Groups[1].Value
+  if ($file -notmatch '^[A-Za-z0-9_.-]+$') { throw "invalid required notice filename: $file" }
+  if (-not (Test-Path -LiteralPath (Join-Path $noticeDir $file) -PathType Leaf)) { $missing += $file }
+}
+if ($missing.Count) { throw "missing required notices listed in THIRD_PARTY.md: $($missing -join ', ') (expected in $noticeDir)" }
+$noticeFiles = @([pscustomobject]@{ Source = $noticeDoc; Destination = "THIRD_PARTY.md" })
+$noticeFiles += @(Get-ChildItem -LiteralPath $noticeDir -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+  [pscustomobject]@{ Source = $_.FullName; Destination = "licences\" + $_.FullName.Substring($noticeDir.Length + 1) }
+})
+if ($ListOnly) {
+  # This mode lists only the notice payload, independent of binaries, SDKs and build products.
+  $noticeFiles | ConvertTo-Json
+  return
+}
+
+# The same explicit static payload is used in portable and Inno packages. Runtime
+# discovery falls back to native controls; never fetch or bundle a browser runtime.
+$launcherFiles = @()
+foreach ($f in @("index.html", "app.css", "app.js")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "tools\launcher\ui\$f"); Destination = "bin\ui\$f" }
+}
+foreach ($f in @("LatoWeb-Regular.ttf", "LatoWeb-Semibold.ttf", "OFL.txt", "README.md", "manifest.json")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\fonts\$f"); Destination = "bin\ui\fonts\$f" }
+}
+foreach ($f in @("bg3rtx.svg", "bg3rtx-small.svg", "bg3rtx-small-contrast.svg", "bg3rtx.ico")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\$f"); Destination = "bin\ui\branding\$f" }
+}
+foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "frame.svg", "glyph-help.svg", "glyph-light.svg", "glyph-memory.svg", "glyph-performance.svg", "glyph-water.svg", "hero-lantern.png", "parchment-panel.svg")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
+}
+foreach ($entry in $launcherFiles) {
+  if (-not (Test-Path -LiteralPath $entry.Source -PathType Leaf)) { throw "missing launcher asset: $($entry.Source)" }
+  if ((Get-Item -LiteralPath $entry.Source).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "linked launcher asset: $($entry.Source)" }
+}
+if ($DryRun) {
+  @($noticeFiles) + @($launcherFiles) | ConvertTo-Json
+  return
+}
+. (Join-Path $PSScriptRoot "low-priority.ps1")
 if (-not $OutDir) { $OutDir = Join-Path $root "dist" }
 
 # A worktree has no external\ or data\assetdb of its own: the main checkout's (as CMake does).
@@ -82,6 +133,10 @@ function Copy-To([string]$src, [string]$rel) {
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
 foreach ($f in @("VkLayer_bg3rtx.json", "bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
+foreach ($f in @("README.md", "corner.svg", "dark-stone.svg", "divider.svg", "frame.svg", "glyph-help.svg", "glyph-light.svg", "glyph-memory.svg", "glyph-performance.svg", "glyph-water.svg", "hero-lantern.png", "parchment-panel.svg")) {
+  $launcherFiles += [pscustomobject]@{ Source = (Join-Path $root "assets\branding\ornaments\$f"); Destination = "bin\ui\branding\ornaments\$f" }
+}
+foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 foreach ($f in @("sl.interposer.dll", "sl.common.dll", "sl.dlss_g.dll", "sl.reflex.dll", "sl.pcl.dll",
                  "nvngx_dlssg.dll", "NvLowLatencyVk.dll", "nvngx_dlss.dll", "nvngx_dlssd.dll")) {
   Copy-To (Join-Path $bin "sl\$f") "bin\sl\$f"
@@ -122,20 +177,12 @@ Copy-To $db "data\assetdb\bg3rtx_assetdb.bin"
 $ini = @(Get-Content (Join-Path $root "bg3rtx.ini")) + @(Get-Content (Join-Path $root "data\release.ini"))
 $ini | Set-Content -Encoding UTF8 (Join-Path $out "bg3rtx.ini")
 
-# Licences of what is shipped (docs/release/THIRD_PARTY.md).
-$ext = Find-Shared "external"
-if (-not $ext) { throw "external\ (NVIDIA SDKs) not found" }
-$licences = [ordered]@{
-  "LICENSES\NVIDIA-RTX-SDKs-DLSS.txt"         = "DLSS\LICENSE.txt"
-  "LICENSES\Streamline-MIT.txt"               = "streamline-sdk-v2.14.16\license.txt"
-  "LICENSES\Streamline-3rd-party-licenses.md" = "streamline-sdk-v2.14.16\3rd-party-licenses.md"
-}
-if ($WithSharc) { $licences["LICENSES\SHaRC-NVIDIA-RTX-SDKs.md"] = "sharc-1.8.3\License.md" }
-foreach ($k in $licences.Keys) { Copy-To (Join-Path $ext $licences[$k]) $k }
-# DXC (NCSA) and Vulkan-Headers: their texts are not on disk here; external\licences\ is checked first.
-foreach ($f in @("DirectXShaderCompiler-LICENSE.txt", "Vulkan-Headers-LICENSE.txt")) {
-  $p = Join-Path $ext "licences\$f"
-  if (Test-Path $p) { Copy-To $p "LICENSES\$f" } else { Write-Warning "LICENSES\$f missing: see docs/release/RELEASE_BETA.md section 3 (put it in external\licences\)" }
+# Every checked-in notice, including any additional files/subdirectories.
+foreach ($notice in $noticeFiles) { Copy-To $notice.Source $notice.Destination }
+if ($WithSharc) {
+  $ext = Find-Shared "external"
+  if (-not $ext) { throw "external\ (NVIDIA SDKs) not found" }
+  Copy-To (Join-Path $ext "sharc-1.8.3\License.md") "LICENSES\SHaRC-NVIDIA-RTX-SDKs.md"
 }
 if ($WithSharc) {
   $sharc = Join-Path $ext "sharc-1.8.3\include"
@@ -144,9 +191,8 @@ if ($WithSharc) {
 
 # Player documents and the install scripts.
 Copy-To (Join-Path $root "docs\release\README.md") "README.md"
-Copy-To (Join-Path $root "docs\release\THIRD_PARTY.md") "THIRD_PARTY.md"
 Copy-To (Join-Path $root "docs\USER_SETTINGS.md") "docs\USER_SETTINGS.md"
-foreach ($f in @("install.ps1", "uninstall.ps1", "Install.cmd", "Uninstall.cmd")) {
+foreach ($f in @("install.ps1", "uninstall.ps1", "Install.cmd", "Uninstall.cmd", "diagnostics.ps1", "Diagnostics.cmd")) {
   Copy-To (Join-Path $PSScriptRoot "release\$f") $f
 }
 $sha = (git -C $root rev-parse HEAD).Trim()

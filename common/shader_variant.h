@@ -15,7 +15,7 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kSpecCascade = 1u << 16 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kSpecCascade = 1u << 16 };
 // kSpecCascade sits at bit 16: bits 12-15 are left to the define keys of pending branches (gi-reproj-guards uses 4096
 // and 8192), so their merges do not collide with it.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
@@ -42,6 +42,10 @@ enum SpecId : unsigned {
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
 };
+// rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
+// compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
+// instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
+// small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
 // 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
@@ -199,7 +203,7 @@ inline unsigned allowed(const char* file) {
   if (cascade_entry(file)) f |= kCascade | kSpecCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
   if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass | kHitPool2s;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   return f;
@@ -231,6 +235,8 @@ inline std::string request(const char* file, unsigned flags) {
   if (cascade_entry(file) && !(flags & kSunCurrent)) flags |= kSpecCascade;
   if (flags & kSunCurrent) flags &= ~unsigned(kSpecCascade);
   if (flags & kSpecCascade) flags &= ~unsigned(kCascade);   // the constant, not the request, carries it
+  if (!(flags & kHitInstanced) || !(flags & kHitWindRgb) || (flags & (kHitIpGrass | kOmm | kTileset | kScalp | kHairOrigin)))
+    flags &= ~unsigned(kHitPool2s);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -256,6 +262,7 @@ inline std::string request(const char* file, unsigned flags) {
   // Steps S2a + S2c: rt_hit_material_instanced (1003), wind RGB (1004) and IP grass (1005) are constants of one module
   // per hit-material file (core/gi.cpp refresh): RT_SPEC_HIT_INST=1 always, never RT_HIT_INSTANCED or its sub-defines.
   if (hit_material_entry(file)) add("RT_SPEC_HIT_INST=1");
+  if (flags & kHitPool2s) add("RT_HIT_POOL_2S=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF

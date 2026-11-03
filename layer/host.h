@@ -73,7 +73,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  Count
+  perf_hitmat_lists, perf_hook_state, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -233,6 +233,8 @@ struct CmdState {
   uint32_t dispatches_since_pass = 0, indirect_since_pass = 0;
   uint64_t last_cs = 0;
   bool tracing = false;                // began while a trace was recording
+  // native_hit::RecordingList<Pending>, latched at prepass_begin.
+  std::shared_ptr<void> hit_material_candidates;
   uint64_t recording = 0;              // unique per vkBeginCommandBuffer (rrpost chains)
   VkCommandBufferUsageFlags begin_flags = 0; // exact native recording contract
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_SECONDARY; // unknown stays unsupported
@@ -349,7 +351,7 @@ inline void terrain_capture_finish(uint64_t, const std::string&, VkQueue) {}
 void count_pass();
 // Diagnostic counters, logged with the periodic [auto] line.
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
-                   DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_COUNT };
+                   DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_SUBMIT_US, DIAG_DESCRIPTOR_US, DIAG_ALPHA_DESC_US, DIAG_ALPHA_DESC_CALLS, DIAG_AUX_COALESCED, DIAG_COUNT };
 void diag(DiagCounter c, uint64_t n = 1);
 void watchdog_start();                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
@@ -442,6 +444,9 @@ bool em_core_calib_update(Bg3EmCalib* cal, bool first, double ratio, uint32_t fl
 bool em_core_calib_apply(uint32_t* rec, const Bg3EmCalib* cal);
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out);
+// Internal hook path; state belongs to the current Vulkan recording only.
+bool query_binding_resolved(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                            Bg3Binding* out, const CmdState* resolved);
 bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usage, Bg3Image* out);
 bool alloc_host_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* buffer, VkDeviceMemory* memory,
                        void** mapped);
@@ -1010,6 +1015,28 @@ const VkInstanceCreateInfo* fault_instance_create_info(PFN_vkGetInstanceProcAddr
                                                        VkInstanceCreateInfo* scratch);
 void fault_instance_created(VkInstance inst, PFN_vkGetInstanceProcAddr next);
 void fault_instance_destroyed(VkInstance inst);
+// ---- rt_vram_guard (layer.cpp, policy in common/vram_guard.h) ----
+// Consumer and yield ids are vram_guard::Consumer / vram_guard::Yield (ints here, to keep host.h light).
+// vram_allow: true when the key is off or no budget is known; false refuses the grow (logged once per
+// window with `what`); over_cap: the caller's cap check failed, refused and counted the same way.
+// Required RT capture checks the real driver budget (full replacement + shared grants),
+// bypassing LOW/cache caps; all refusals still log. vram_cap: budget-scaled cache cap,
+// layout hard cap for required RT capture, `fallback` when off.
+// vram_take_ask: bytes this yielder should free now (0 when not low), cleared by the call.
+bool vram_allow(int consumer, uint64_t bytes, const char* what, bool over_cap = false);
+uint64_t vram_cap(int consumer, uint64_t fallback);
+uint64_t vram_take_ask(int yield);
+bool vram_guard_on();
+// Breakdown sources for the [mem] ours line (each module's own lock; never called with the guard lock held).
+struct BvhVram {
+  uint64_t as_reserved = 0, as_live = 0, as_empty = 0, lru = 0, pool = 0;
+  uint64_t pool_used = 0, pool_pending = 0, pool_repacks = 0, blas_relocated = 0;
+  uint32_t chunks = 0;
+};
+void bvh_vram(BvhVram* out);
+void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade);
+uint64_t em_vram_bytes();
+uint64_t water_vram_bytes();
 // Device-address ranges of our buffers, named in a fault report (live or freed).
 void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size);
 void fault_untrack(VkDeviceAddress addr);

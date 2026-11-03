@@ -124,7 +124,14 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  uint4 header=gHitRecords.Load4(0);
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
+#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+ // rt_hit_material_generated two-sided pool rows (common/native_hit_generated.h, e.g. Base_2S_VT 2d815e2a = 923131c7):
+ // h2.w = 5, the FS scales the N column by (gl_FrontFacing ? 1 : -1); every consumer without this define rejects them.
+ const bool two_sided=RT_HIT_INST_ON && h2.w==5u;
+ if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || (h2.w!=3u && !two_sided))return hit_material_unknown(3);
+#else
  if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || h2.w!=3u)return hit_material_unknown(3);
+#endif
  if(h0.y>(0xffffffffu-nh_pool_basis_header)/(3u*nh_pool_basis_vertex) || h0.w>pbytes || nh_pool_basis_header+h0.y*3u*nh_pool_basis_vertex>pbytes-h0.w)return result;
  uint4 bh=gMeshPool.Load4(h0.w);
  if(bh.x!=nh_pool_basis_magic || bh.y!=gHitRecords.Load(row+216u) || bh.z!=h0.y || bh.w!=1u)return hit_material_unknown(4);
@@ -144,6 +151,10 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
   [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
   basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
  }
+#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+ // The facing is the geometry's, as the per-draw two-sided rows: world triangle, interpolated world N, the ray.
+ if(two_sided)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
+#endif
  const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
  NvFields fields;
  if(detail.x==2u){

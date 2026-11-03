@@ -13,6 +13,24 @@ static unsigned checks;
 #define CHECK(x) do{++checks;if(!(x)){std::printf("FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
 
 int main() {
+  // An opaque draw sharing a generated pair has no alpha source. An unassigned,
+  // unrelated or duplicate depth key cannot reserve its deferred stream either.
+  DrawJoin source;source.begin(1, 2);
+  DrawKey alpha{}, opaque{};alpha.words[0] = 1;opaque.words[0] = 2;
+  CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, nullptr, opaque));
+  CHECK(!instanced::capture_source_ok(instanced::IpGrass, false, nullptr, opaque));
+  for (auto f : {instanced::Wind, instanced::AlphaTest2s, instanced::WindRgb})
+    CHECK(instanced::capture_source_ok(f, false, nullptr, opaque)); // keys off: audited behavior
+  CHECK(source.note(1, 2, alpha, UINT32_MAX));
+  CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
+  CHECK(source.assign(1, 2, alpha, 7));
+  CHECK(instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
+  CHECK(instanced::capture_source_ok(instanced::IpGrass, false, &source, alpha));
+  CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, opaque));
+  CHECK(!source.note(1, 2, alpha, 8));
+  CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
+  source.begin(1, 3); // another recording cannot reuse the previous alpha key
+  CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
   // 1. Key off and on agree on every audited pair and VS (the generated FSs are never audited ones).
   for (const auto& r : vt::recipes) {
     CHECK(generated::row(r.vs, r.fs) == nullptr);
@@ -42,7 +60,7 @@ int main() {
     CHECK(r.layout == vt::LayoutBase || r.layout == vt::LayoutVt4);
     CHECK(pool::engine_bytes(r) <= 64u && vt::material_bytes(r) <= 32u);   // the layer's engine[16] / ubo[8] reads
     if (r.capture == vt::CapturePool) {
-      CHECK(g.family == 0 && g.depth_vs == 0 && !r.two_sided && r.layout == vt::LayoutBase);
+      CHECK(g.family == 0 && g.depth_vs == 0 && r.layout == vt::LayoutBase);   // two-sided: RT_HIT_POOL_2S consumers (h2.w 5)
       CHECK(pool::pool_recipe(r.vs, r.fs, false) == nullptr && pool::pool_recipe(r.vs, r.fs, true) == &r);
       CHECK(instanced::recipe(r.vs, r.fs, true, true, true) == nullptr);
     } else {
@@ -90,6 +108,13 @@ int main() {
   const auto* rgb = generated::row(0x9cc7094f4a674c1aull, 0x4464f4425bbb62aeull);    // wind RGB 2S: = 923131c7, two-sided
   CHECK(rgb && rgb->family == instanced::WindRgb && rgb->recipe.two_sided && rgb->recipe.reflectance_offset == 20u &&
         rgb->depth_vs == 0xea8f4071c5a3c181ull);
+  const auto* two = generated::row(0x2d2ac3c38992b7f0ull, 0x2d815e2ab9046501ull);    // Base_2S_VT: = 923131c7, pool two-sided
+  CHECK(two && two->recipe.capture == vt::CapturePool && two->recipe.two_sided && pool::pool_recipe(two->recipe.vs, two->recipe.fs, true) == &two->recipe);
+  // HLOD_TwoSided's reflectance sample has a different page decode. Existing
+  // NormalMix reuses the shading normal sample; a two-sided flag cannot fix it.
+  CHECK(generated::row(0x2d2ac3c38992b7f0ull, 0x3b346b4241d44152ull) == nullptr);
+  CHECK(pool::pool_recipe(0x2d2ac3c38992b7f0ull, 0x3b346b4241d44152ull, true) == nullptr);
+  for (const auto& r : vt::recipes) if (r.capture == vt::CapturePool) CHECK(!r.two_sided);   // audited pool rows keep h2.w 3
   std::printf("native_hit_generated_test: %u checks, %u generated rows\n", checks, generated::kRowCount);
   return 0;
 }

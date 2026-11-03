@@ -63,6 +63,14 @@ int main(int argc, char** argv) {
   CHECK(request("gi/gi_ao_apply.hlsl", kSpecCascade) == "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1");   // not a cascade pass
   CHECK(spec_cascade_value("gi/gi_trace_rt.hlsl", kCascade) == 1 && spec_cascade_value("gi/gi_trace_rt.hlsl", 0) == 0);
   CHECK(spec_cascade_value("gi/gi_ao_apply.hlsl", kCascade) == 0);
+  // Main's generated two-sided pool path retains its define and configuration restrictions.
+  const auto pool = kHitInstanced | kHitWindRgb | kHitPool2s;
+  CHECK(request("gi/rt_hit_material.hlsl", pool) ==
+        "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_HIT_POOL_2S=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitPool2s) == request("gi/rt_hit_material.hlsl", kHitInstanced));
+  for (unsigned excluded : {kHitIpGrass, kOmm, kTileset, kScalp})
+    CHECK(request("gi/rt_hit_material.hlsl", pool | excluded) == request("gi/rt_hit_material.hlsl", (pool & ~kHitPool2s) | excluded));
+  CHECK(request("gi/rt_shadow.hlsl", pool) == request("gi/rt_shadow.hlsl", 0));
 
   std::set<std::string> want;
   size_t bases = 0;

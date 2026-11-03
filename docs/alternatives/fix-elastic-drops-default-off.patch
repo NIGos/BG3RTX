@@ -1,0 +1,44 @@
+--- a/bg3rtx.ini
++++ b/bg3rtx.ini
+@@ -149,7 +149,7 @@
+ rt_vram_compact=1
+ # Demand-sized RT and cascade captures. Requires rt_vram_guard=1 for growth.
+ # Shrink waits for sustained lower demand and GPU retirement. Qualified by vg3.
+-rt_capture_elastic=1
++rt_capture_elastic=0
+ # Ray-traced sun shadows folded into the game's sun shadow mask (in place of
+ # the screen-space contact shadows, which stay the fallback). Needs rt=1.
+ rt_shadows=1
+--- a/common/settings.h
++++ b/common/settings.h
+@@ -495,7 +495,7 @@
+     {"rt_vram_guard", "1"},
+     {"rt_vram_guard_budget_mb", "0"},
+     {"rt_vram_compact", "1"},
+-    {"rt_capture_elastic", "1"},
++    {"rt_capture_elastic", "0"},
+     {"rt_shadows", "1"},
+     {"contact_shadows", "1"},
+     {"rt_strength", "1.0"},
+--- a/tests/settings_test.cpp
++++ b/tests/settings_test.cpp
+@@ -508,12 +508,17 @@
+   for (const char* id : {"exp_vram_guard", "exp_vram_compact", "exp_capture_elastic"})
+     CHECK(find_knob(id) == nullptr);
+   CHECK_EQ(code_default("rt_vram_guard_budget_mb"), "0");
+-  // Automatic fixes: default 1, written by no knob, in no preset or release override (A/B keys only).
++  // Automatic keys: default 1 except the elastic regression fallback; no preset override.
+   for (const char* k : kAutomaticKeys) {
+     CHECK(!is_knob_key(k));
+-    CHECK_EQ(code_default(k), "1");
++    CHECK_EQ(code_default(k), std::string(k) == "rt_capture_elastic" ? "0" : "1");
+     for (int p = 0; p < kPresetCount; ++p) { Map m; for (auto& kv : expand_preset(p)) m[kv.first] = kv.second; CHECK(m.count(k) == 0); }   // no preset writes it
+     CHECK(!key_change_needs_restart(k, "1", "0"));
++  }
++  for (int p = 0; p < kPresetCount; ++p) {
++    Map preset; const Map base = parse_ini("rt_capture_elastic=0\n");
++    for (const auto& kv : expand_preset(p)) preset[kv.first] = kv.second;
++    CHECK_EQ(get(merge_layers({&base, &preset}), "rt_capture_elastic"), "0");
+   }
+   // A hand-set automatic key (A/B off) survives a save.
+   CHECK_EQ(get(parse_ini(render_user_ini("fg_letterbox=0\n", kHigh, preset_values(kHigh))), "fg_letterbox"), "0");

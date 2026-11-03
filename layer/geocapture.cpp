@@ -1,4 +1,6 @@
+#include "../common/perf_hook_state.h"
 #include "../common/rt_capture_budget.h"
+#include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
 #include "../common/sun_raster_domain.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
@@ -168,6 +170,25 @@ struct PipeInfo {
   uint32_t em_raster[9] = {}; // blend/src/dst/op/mask/cull/depth-test/write/compare
 };
 std::unordered_map<VkPipeline, PipeInfo> g_pipes;
+std::atomic<uint64_t> g_pipe_generation{1};
+// Registry values are immutable after publication. Invalidate on create/destroy,
+// including handle reuse. No command-state pointers are retained across hooks.
+static bool draw_pipe(VkPipeline pipe, PipeInfo& out, uint64_t* generation = nullptr) {
+  auto load = [&] {
+    std::lock_guard lock(g_mu);
+    auto it = g_pipes.find(pipe);
+    return it == g_pipes.end() ? std::pair{false, PipeInfo{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM}} : std::pair{true, it->second};
+  };
+  if (!cfg_hot(CfgHot::perf_hook_state)) {
+    auto value = load();
+    if(value.first) out = value.second;
+    return value.first;
+  }
+  thread_local perf::GenerationCache<VkPipeline, std::pair<bool, PipeInfo>> cache;
+  const auto& value = cache.get(pipe, g_pipe_generation.load(std::memory_order_acquire), load);
+  if(generation) *generation = cache.generation;
+  if(value.first) out = value.second; return value.first;
+}
 std::unordered_map<VkBuffer, VkBufferUsageFlags> g_buffer_usage;
 std::unordered_map<VkBuffer, VkDeviceSize> g_buffer_size;
 std::atomic<uint32_t> g_patch_count{0}, g_patch_skipped{0}, g_inst_modules{0}, g_inst_pipes{0};
@@ -309,11 +330,18 @@ struct Capture {
   std::vector<VkBufferCopy> c_legacy_copies;
   VkDeviceSize c_legacy_bytes=0;
   uint64_t c_legacy_sig=1469598103934665603ull;
+  capture_budget::ElasticWindow elastic;
+  capture_budget::RtElasticWindow rt_elastic;
+  uint64_t elastic_target=0;
+  Buf elastic_old;
+  uint64_t elastic_detached=0;
+  capture_budget::ShrinkLogWindow elastic_log;
 };
 
 // The split of the RT capture's XFB buffer between opaque and alpha-tested
 // triangles, sized from the previous frame's demand (rt_alpha_auto=1).
 std::atomic<uint64_t> g_alpha_region{0}, g_alpha_demand_prev{0}, g_opaque_demand_prev{0};
+std::atomic<uint64_t> g_fixed_alpha_region{0}; // Fixed-capacity partition hysteresis, independent of elastic size.
 // Logged loudly: per-window totals, and the first occurrence at once.
 struct RtDropLog {
   uint64_t frames = 0, alpha_overflow = 0, alpha_overflow_mb = 0, opaque_overflow = 0, drop_indirect = 0, drop_topo = 0,
@@ -411,6 +439,50 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreat
 }
 
 // ---- recording helpers ----
+uint64_t elastic_cap(bool cascade){
+  static_assert(capture_budget::ElasticWindow::samples==3*kSceneSlots);
+  const uint64_t start=uint64_t(cascade?cascade_mb():(std::max)(xfb_mb(),16))<<20;
+  return (std::min)(capture_budget::kMeshPoolHardCap,(std::max)(start,
+      vram_cap(cascade?vram_guard::kCascade:vram_guard::kRtCapture,capture_budget::kMeshPoolHardCap)));
+}
+// Detach before recording the next producer. Existing descriptors retain the old
+// handle; keep it through the fence covering the last possible cascade consumer.
+void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
+  if(!cascade && wanted)wanted=(std::max)(wanted,uint64_t((std::max)(xfb_mb(),16))<<20);
+  const uint64_t now=frame_index();
+  if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))
+    free_buf(c.elastic_old); // Only now enter the ordinary deferred destruction path.
+  if(!c.xfb.b || wanted==c.xfb.size || !wanted)return;
+  auto deferred=[&](const char* why){
+    if(c.elastic_log.due(now,capture_budget::ElasticWindow::samples*(cascade?3:1)))
+      log("%s capture resize deferred: %s (target %llu MB, capacity %llu MB)",
+          cascade?"[cascade]":"[geo] RT",why,
+          (unsigned long long)(wanted>>20),(unsigned long long)(c.xfb.size>>20));
+  };
+  const int state=c.rec?bvh_rec_state(c.rec):-1;
+  if(!capture_budget::elastic_can_detach(c.state==1,state,c.elastic_old.b!=VK_NULL_HANDLE)){
+    deferred(c.state==1?"producer recording":c.elastic_old.b?"previous allocation awaiting GPU fence":
+             "producer recording pending or unknown");return;
+  }
+  // Never lower a sampled target below its live need after a budget change.
+  // Shrinks already obey the sampled cap; a new cap only restricts growth.
+  if(wanted>c.xfb.size)wanted=(std::min)(wanted,elastic_cap(cascade));
+  if(wanted==c.xfb.size)return;
+  if(wanted>c.xfb.size && !vram_allow(cascade?vram_guard::kCascade:vram_guard::kRtCapture,wanted,
+                     cascade?"elastic cascade capture":"elastic RT capture")){
+    deferred("growth budget refused");return;
+  }
+  Buf replacement;
+  if(!make_buf(replacement,wanted,VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT | rt_xfb_usage() |
+               (c.c_legacy_transfer?VK_BUFFER_USAGE_TRANSFER_DST_BIT:0),false)){
+    deferred("replacement allocation failed");return;
+  }
+  log(cascade?"[cascade] capture capacity %llu -> %llu MB (elastic, detached slot)":
+              "[geo] RT capture capacity %llu -> %llu MB (elastic, detached slot)",
+      (unsigned long long)(c.xfb.size>>20),(unsigned long long)(wanted>>20));
+  c.elastic_old=c.xfb;c.elastic_detached=now;c.xfb=replacement;c.elastic_target=0;
+}
+
 void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, VkPipelineStageFlags dst,
              VkAccessFlags da) {
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -449,6 +521,11 @@ bool copy_image(VkCommandBuffer cmd, VkImage image, VkImageLayout layout, VkForm
 }
 
 bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
+  if(!readback && cfg_int("rt_capture_elastic",0))elastic_resize(c,c.elastic_target,false);
+  else {
+    if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))free_buf(c.elastic_old);
+    c.elastic.reset();c.rt_elastic.reset();c.elastic_target=0;
+  }
   if (!c.xfb.b) {
     // The per-frame RT capture holds one frame's soup (3.2M triangles = 152 MB
     // in the test scene) and is read in place by the AS build.
@@ -523,11 +600,21 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
     // rt_alpha_mb left at its default follows the vertex size, as rt_xfb_mb does (rt_capture_budget.h).
     VkDeviceSize floor_b = VkDeviceSize((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb", 64),
         capture_budget::kAlphaDefaultMb, g_stride), 1)) * mb;
+    const VkDeviceSize fixed_size=uint64_t((std::max)(xfb_mb(),16))<<20;
+    const VkDeviceSize fixed_floor=capture_budget::alpha_floor(floor_b,fixed_size,
+        cfg_int("rt_alpha_mb",64)==capture_budget::kAlphaDefaultMb,g_stride);
+    const VkDeviceSize fixed_region=capture_budget::alpha_region(fixed_size,fixed_floor,
+        g_fixed_alpha_region.load(),g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),
+        cfg_int("rt_alpha_auto",1)!=0,cfg_int("rt_alpha_max_pct",60));
+    g_fixed_alpha_region=fixed_region;
     // A wide stride's first frame after loading: 40% of the buffer (rt_capture_budget.h alpha_floor).
     floor_b = capture_budget::alpha_floor(floor_b, size, cfg_int("rt_alpha_mb", 64) == capture_budget::kAlphaDefaultMb, g_stride);
-    const VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
+    VkDeviceSize amb=capture_budget::alpha_region(size,floor_b,g_alpha_region.load(),
       g_alpha_demand_prev.load(),g_opaque_demand_prev.load(),cfg_int("rt_alpha_auto",1)!=0,
       cfg_int("rt_alpha_max_pct",60));
+    if(cfg_int("rt_capture_elastic",0))
+      amb=capture_budget::elastic_alpha_region(size,amb,fixed_size,fixed_region);
+    else g_fixed_alpha_region=amb;
     if (amb < size) {
       g_alpha_region = amb;
       c.alpha_base = c.alpha_cursor = c.opaque_end = (size - amb) & ~VkDeviceSize(255);
@@ -1019,7 +1106,7 @@ bool ubo_pipeline() {
 }
 
 void release(Capture& c) {
-  for (Buf* b : {&c.xfb, &c.counters, &c.depth, &c.normals, &c.ubo})
+  for (Buf* b : {&c.xfb, &c.elastic_old, &c.counters, &c.depth, &c.normals, &c.ubo})
     if (b->b) free_buf(*b);
   if (c.qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(c.qp));
   c.qp = VK_NULL_HANDLE;
@@ -1098,7 +1185,7 @@ cascade::DrawId cascade_draw_id(VkCommandBuffer cmd, const CmdState* s, const Dr
     d.place = uint64_t(vb.buffer), d.place_offset = vb.offset;
   } else {            // per-draw UBO (set 1 binding 0: the model matrix of the depth-only VS)
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b) && b.buffer)
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 0, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer)
       d.place = uint64_t(b.buffer), d.place_offset = b.offset;
   }
   return d;
@@ -1127,7 +1214,13 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   if (c.state == 1 && c.record_frame == f) return;   // one such pass per frame: never expected
   // (state 1 from an older frame: that recording never ended its pass; start over)
   const VkDeviceSize bytes = cascade_bytes();
-  if (c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
+  const bool elastic=cfg_int("rt_capture_elastic",0)!=0 && !all_current;
+  if(elastic)elastic_resize(c,c.elastic_target,true);
+  else {
+    if(c.elastic_old.b && capture_budget::elastic_detached_retired(c.elastic_detached,life_gpu_done()))free_buf(c.elastic_old);
+    c.elastic.reset();c.elastic_target=0;
+  }
+  if (!elastic && c.xfb.b && c.xfb.size != bytes) {free_buf(c.xfb);c.c_legacy_transfer=false;} // deferred destruction
   if (!c.xfb.b) {
     static int s_logged_mb = 0;
     if (s_logged_mb != int(bytes >> 20))
@@ -1207,7 +1300,7 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
 
 void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawArgs& args, const PipeInfo& pi) {
   Bg3Binding b;
-  const bool have = query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) && b.buffer &&
+  const bool have = query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) && b.buffer &&
                     (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
   if (c->probe) {   // only the matrix: the first draw's UBO, then no more hooks in this pass
     CcMat m;
@@ -1419,10 +1512,26 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.bytes += c->cursor;
   st.bytes_max = (std::max)(st.bytes_max, uint64_t(c->cursor));
   st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
-  if (c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
+  if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current) && c->xfb.b){
+    const uint64_t cap=elastic_cap(true);
+    const uint64_t wanted=capture_budget::elastic_capacity(c->cursor+c->c_over,g_storage_range,cap);
+    const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
+    if(target!=c->elastic_target && target!=c->xfb.size)
+      log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
+          double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
+          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::ElasticWindow::samples);
+    c->elastic_target=target;
+  }
+  if ((!cfg_int("rt_capture_elastic",0) || cfg_hot(CfgHot::rt_sun_cascade_current)) && c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
     const uint64_t demand = uint64_t(c->cursor) + c->c_over;
-    const uint64_t grown = capture_budget::cascade_grow(c->xfb.size, demand, g_storage_range);
-    if (grown > c->xfb.size && grown > g_cc_grown.load()) {
+    // rt_vram_guard: capped by the device budget's share (vram_guard::cap; never below the current size), and
+    // refused while VRAM is low. The step is the 3 frame buffers at the new size (each replaced one is freed
+    // deferred): refused, the left-out casters stay out (this line's counts) and the refusal is logged.
+    const uint64_t grown = (std::max)((std::min)(capture_budget::cascade_grow(c->xfb.size, demand, g_storage_range),
+                                                 uint64_t(vram_cap(vram_guard::kCascade, UINT64_MAX))),
+                                      uint64_t(c->xfb.size));
+    if (grown > c->xfb.size && grown > g_cc_grown.load() &&
+        vram_allow(vram_guard::kCascade, 3 * grown, "cascade capture grow (casters left out)")) {
       g_cc_grown = grown;
       log("[cascade] buffer full: %u draws (%.1f MB) left out, demand %.1f MB of %.0f MB; the capture grows to %llu MB",
           c->c_full, double(c->c_over) / 1048576.0, double(demand) / 1048576.0, double(c->xfb.size) / 1048576.0,
@@ -1459,6 +1568,7 @@ void cascade_on_present() {
   CcMat mats[kCcLayers];
   float ms = -1;
   int layer = -1;
+  uint64_t capacity=cascade_bytes();
   {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
@@ -1473,6 +1583,10 @@ void cascade_on_present() {
     }
     const uint64_t f = frame_index();
     layer = g_ccap[(f - 1) % 3].layer >= 0 ? g_ccap[(f - 1) % 3].layer : g_ccap[f % 3].layer;
+    if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current)){
+      capacity=0;
+      for(const auto& c:g_ccap)capacity=(std::max)(capacity,uint64_t(c.xfb.size));
+    }
   }
   const double n = double(st.frames), mb = 1.0 / (1 << 20);
   uint64_t builds = 0;
@@ -1487,7 +1601,7 @@ void cascade_on_present() {
       "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
-      int(cascade_bytes() >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
+      int(capacity >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
       (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
       (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);
@@ -1525,6 +1639,18 @@ void cascade_on_present() {
 }
 
 }  // namespace
+
+// rt_vram_guard breakdown (present thread; sizes only, the buffers change at scene/start or grow points):
+// the device RT capture (the alpha region is part of it), and every cascade frame buffer allocated.
+void geo_vram(uint64_t* rt_capture, uint64_t* alpha_region, uint64_t* cascade) {
+  *rt_capture = g_scratch.xfb.size + g_scratch.elastic_old.size;
+  *alpha_region = g_alpha_region.load();
+  uint64_t cc = 0;
+  for (const Capture& c : g_ccap) cc += c.xfb.size + c.elastic_old.size;
+  for (const auto& layer : g_sun_ccap)
+    for (const Capture& c : layer) cc += c.xfb.size + c.elastic_old.size;
+  *cascade = cc;
+}
 
 bool geo_copy_camera(VkCommandBuffer cmd, VkBuffer source, VkDeviceSize offset, VkBuffer destination,
                      VkDeviceSize destination_offset) {
@@ -1926,6 +2052,7 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
                      t == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
     }
     g_pipes[out[i]] = pi;
+    g_pipe_generation.fetch_add(1, std::memory_order_release);
   }
 }
 
@@ -1933,6 +2060,7 @@ void geo_forget_pipeline(VkPipeline p) {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   g_pipes.erase(p);
+  g_pipe_generation.fetch_add(1, std::memory_order_release);
 }
 
 // Before the game's vkCmdBeginRenderPass (outside the pass).
@@ -2009,6 +2137,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
     } else if (g_scratch.state != 1 && rt_src && rt_capture_wanted()) {
       if (start_capture(g_scratch, false, s->pass.width, s->pass.height)) {
         g_scratch.cmd = cmd;
+        if(cfg_int("rt_capture_elastic",0))g_scratch.rec=bvh_rec_register(cmd);
         g_scratch.rt = rt_src && rt_capture_wanted();
         g_scratch.split = g_scratch.rt && bvh_split_wanted();
         g_scratch.cascade = false;
@@ -2074,6 +2203,26 @@ void rt_capture_stats(const Capture& c) {
   // Logs below retain the total physical opaque/fallback stream and all drops.
   g_opaque_demand_prev=capture_budget::opaque_partition_demand(c.cursor+c.opaque_overflow_bytes,
     c.alpha_overflow_bytes+c.alpha_spill_bytes,capture_budget::corrected_partition_feedback(g_stride) || c.alpha_spills!=0);
+  if(cfg_int("rt_capture_elastic",0)){
+    const uint64_t floor=uint64_t((std::max)(capture_budget::effective_mb(cfg_int("rt_alpha_mb",64),
+                                capture_budget::kAlphaDefaultMb,g_stride),1))*capture_budget::mib;
+    const uint64_t demand=g_alpha_mode?capture_budget::elastic_rt_demand(g_opaque_demand_prev.load(),c.alpha_demand,
+        floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
+        c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
+        uint64_t(c.cursor+c.opaque_overflow_bytes);
+    const uint64_t wanted=capture_budget::elastic_rt_capacity(demand,g_storage_range,
+        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+    // rt_capture_stats runs only for the main (non-minor) scene capture.
+    // Restore reserve before the next frame reaches capacity. Unlike cascade
+    // overflow recovery, primary capture must not wait for a dropped draw.
+    const uint64_t target=g_scratch.rt_elastic.observe(c.xfb.size,wanted,demand,true);
+    if(target!=g_scratch.elastic_target && target!=c.xfb.size)
+      log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
+          double(g_opaque_demand_prev.load())/1048576.0,double(c.alpha_demand)/1048576.0,
+          (unsigned long long)(target>>20),(unsigned long long)(c.xfb.size>>20),
+          g_scratch.rt_elastic.count,capture_budget::RtElasticWindow::samples);
+    g_scratch.elastic_target=target;
+  }
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
   ++l.frames;
@@ -2138,10 +2287,10 @@ void rt_capture_stats(const Capture& c) {
 }
 
 // The pass's camera UBO (set 0 binding 2), from its first draw that has one.
-static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e) {
+static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e, CmdState* s) {
   if (e->ubo) return;
   Bg3Binding b;
-  if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+  if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
       (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
       b.offset % g_ubo_align == 0) {
     e->ubo = b.buffer;
@@ -2152,18 +2301,14 @@ static void em_pass_ubo(VkCommandBuffer cmd, EmPass* e) {
 // M5.1: a draw of a forward/effects pass with rt_water_geometry on. True: captured as water.
 static bool water_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args, EmPass* e) {
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   WaterRange r{};
   const int w = water_draw(cmd, s, args, in, pi.depth_write, &r, &e->water_swap);
   if (w) ++e->water_draws;
   if (w != 2) return false;
-  em_pass_ubo(cmd, e);
+  em_pass_ubo(cmd, e, s);
   p_bind_xfb(cmd, 0, 1, &r.soup, &r.off, &r.bytes);
   p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
   e->xfb_active = true;
@@ -2182,11 +2327,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
   if (!e->em) return;
   if (!e->capture) return em_note_draw(s);   // timed only (rt_emissive=0)
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   if (pi.em_state && cfg_hot(CfgHot::rt_em_overlap_check)) {
     static thread_local std::unordered_set<uint64_t> seen;
     if (seen.insert(s->pipe_id[0]).second && seen.size() <= 16)
@@ -2195,7 +2336,7 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
           pi.em_raster[0], pi.em_raster[1], pi.em_raster[2], pi.em_raster[3], pi.em_raster[4],
           pi.em_raster[5], pi.em_raster[6], pi.em_raster[7], pi.em_raster[8], unsigned(pi.em_dynamic));
   }
-  em_pass_ubo(cmd, e);
+  em_pass_ubo(cmd, e, s);
   EmDrawIn in{pi.xfb, pi.triangles, pi.topo, pi.restart, pi.inst.ok ? &pi.inst : nullptr, g_stride,
               pi.uv_match, pi.uv, pi.uv_fs, pi.uv_vs_comps};
   VkBuffer soup = VK_NULL_HANDLE;
@@ -2211,28 +2352,45 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(geo_is(s,GeoKind::Material)){
     bool exact=false,pool_pipeline=false,basis_pipeline=false;InstPipe pool_inst{};
-    {std::lock_guard lock(g_mu);auto i=g_pipes.find(s->pipe[0]);if(i!=g_pipes.end()){
-      s->geo_material_no_writes&=i->second.no_storage_writes;
-      const auto& p=i->second;
+    PipeInfo p{}; uint64_t generation = 0;
+    if(draw_pipe(s->pipe[0], p, &generation)) {
+      s->geo_material_no_writes &= p.no_storage_writes;
+      struct Eligibility { bool exact=false, pool=false, basis=false; InstPipe inst{}; };
+      auto classify = [&] {
+        Eligibility value;
       const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
       native_hit::MaterialPipelineFacts facts;
       facts.tileset=tileset;facts.tileset_capture=g_tileset_capture;facts.stride=g_stride;
       facts.tileset_outputs=p.tileset_outputs;facts.tileset_inputs_valid=p.tileset_material_inputs.valid;facts.vt_outputs=p.vt_outputs;
       facts.xfb=p.xfb;facts.material_state=p.material_state;facts.depth_test=p.depth_test;facts.blend_mask=p.blend_mask;
       facts.color_mask=p.color_mask;facts.triangle_list=p.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;facts.uv_ok=p.uv_match==UV_OK;
-      exact=native_hit::exact_material_pipeline(facts);
+      value.exact=native_hit::exact_material_pipeline(facts);
       // Class A G-buffer draws feed the pool material records (their meshes are BVH-cached).
-      if(native_hit::enabled() && p.inst.ok){pool_inst=p.inst;pool_pipeline=native_hit::pool::pool_material_pipeline(facts);
-        basis_pipeline=pool_pipeline && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
+      if(p.inst.ok){value.inst=p.inst;value.pool=native_hit::pool::pool_material_pipeline(facts);
+        value.basis=value.pool && p.xfb && p.vt_outputs==1u && g_stride>=64u;}
+        return value;
+      };
+      Eligibility value;
+      if(cfg_hot(CfgHot::perf_hook_state)) {
+        thread_local perf::GenerationCache<std::array<uint64_t,5>, Eligibility> cache;
+        value = cache.get({uint64_t(s->pipe[0]), s->vs, s->fs, g_stride, uint64_t(g_tileset_capture)},
+                          generation, classify);
+      } else value = classify();
+      exact=value.exact;
+      if(native_hit::enabled()) { pool_inst=value.inst; pool_pipeline=value.pool; basis_pipeline=value.basis; }
+      const bool tileset=native_hit::tileset_deferred(s->vs,s->fs);
       // One sparse, exact state record per audited native pipeline. A later
       // unsupported term is visible without another blind attribution run.
       static std::unordered_set<uint64_t> reported;
-      if(native_hit::enabled() && cfg_hot(CfgHot::rt_stats) && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
+      std::unique_lock report_lock(g_mu, std::defer_lock);
+      const bool report = native_hit::enabled() && cfg_hot(CfgHot::rt_stats);
+      if(report) report_lock.lock();
+      if(report && ((s->vs==0x3812bc980438747full && s->fs==0x8995da1e4060f53bull) || (g_tileset_capture && tileset)) &&
          reported.size()<16 && reported.insert(uint64_t(s->pipe[0])).second)
         log("[hit material pipeline] pipe %u accepted %u xfb %u basis %u static %u reasons 0x%x depth test %d blend 0x%x color 0x%x topo %u uv %u; raster/multisample/blend pNext %u/%u/%u",
           s->pipe_id[0],unsigned(exact),unsigned(p.xfb),tileset?p.tileset_outputs:p.vt_outputs,unsigned(p.material_state),p.material_reasons,p.depth_test,p.blend_mask,p.color_mask,unsigned(p.topo),unsigned(p.uv_match),p.raster_next,p.multisample_next,p.blend_next);
 
-    }else s->geo_material_no_writes=false;}
+    } else s->geo_material_no_writes=false;
     VkBuffer buffer{};VkDeviceSize offset=0,bytes=0;
     if(pool_inst.ok && native_hit::pool_observe(cmd,s,args,pool_inst,pool_pipeline,basis_pipeline,g_stride,&buffer,&offset,&bytes)){
       p_bind_xfb(cmd,0,1,&buffer,&offset,&bytes);p_begin_xfb(cmd,0,0,nullptr,nullptr);s->geo_material_active=true;return;
@@ -2248,11 +2406,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if(c->rt)native_hit::prepass_observe(cmd,s,args);
   DrawRec d{kind, s->pipe_id[0], s->vs, s->fs, count, instances, -1, 0, VK_NULL_HANDLE, 0, 0, 0};
   PipeInfo pi{false, false, VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
-  {
-    std::lock_guard<std::mutex> lock(g_mu);
-    auto it = g_pipes.find(s->pipe[0]);
-    if (it != g_pipes.end()) pi = it->second;
-  }
+  draw_pipe(s->pipe[0], pi);
   if (c->rt && c->discard_filter && pi.always_discard) {
     ++c->discard_skipped;
     return;
@@ -2269,7 +2423,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !c->rt_ubo) {
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
         (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) &&
         b.offset % g_ubo_align == 0) {
       c->rt_ubo = b.buffer;
@@ -2278,7 +2432,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->readback && c->draws.size() < 65536) {
     Bg3Binding b;
-    if (query_binding(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b) &&
+    if (query_binding_resolved(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 2, 0, &b, cfg_hot(CfgHot::perf_hook_state) ? s : nullptr) &&
         (b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || b.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)) {
       d.ubo = b.buffer;
       d.ubo_off = b.offset;
