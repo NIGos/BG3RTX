@@ -22,13 +22,13 @@ def envelope(repeats, quantum, tests=1):
 
     Student t accounts for estimating noise from few independent OFF repeats.
     Noise repeats must be independent stationary samples. Quantization is a
-    hard floor. scipy is required: missing statistics is never a quality pass.
+    hard floor. The quantile is the shared t_quantile (scripts/qa/em_gate.py, no scipy).
     """
     a = np.asarray(repeats, float)
     if a.ndim != 1 or len(a) < 3 or not np.isfinite(a).all() or quantum < 0:
         raise ValueError("need >= 3 finite independent repeat metrics and nonnegative precision")
-    from scipy.stats import t
-    k = float(t.ppf(1 - .05 / (2 * tests), len(a) - 1))
+    from scripts.qa.em_gate import t_quantile
+    k = float(t_quantile(1 - .05 / (2 * tests), len(a) - 1))
     return float(a.mean()), float(k * a.std(ddof=1) * np.sqrt(1 + 1 / len(a)) + quantum)
 
 
