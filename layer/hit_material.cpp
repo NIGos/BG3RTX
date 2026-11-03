@@ -1208,11 +1208,17 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
  // Revalidate full raw bytes before the refresh throttle. A same-handle host
  // write must not retain a previously witnessed pak material assignment.
- if(pak_fallback){
+ // Candidate discovery covers the class-A draws actually present in the scene,
+ // not only the HLOD publication fallback. Ordinary recipes remain authoritative.
+ const bool pak_probe=paks_rows() && keyed;
+ // Per-draw instanced recipes own their deferred XFB stream. Only pooled
+ // recipes may spend an otherwise idle draw on the candidate readback.
+ const bool pak_readback=pak_probe && recipe && recipe->capture==native_vt::CapturePool;
+ if(pak_probe){
   ++pak_attempts;
   const auto* pak=paks_match(*state,args,inst);
-  if(!pak)recipe=nullptr;
-  else{++pak_matches;payload.pak=true;payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
+  if(pak_fallback && !pak)recipe=nullptr;
+  else if(pak_fallback){++pak_matches;payload.pak=true;payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
    for(char c:pak->material)o.identity=pool::mix(o.identity,uint8_t(c));}
  }
  bool due=false,throttled=false;
@@ -1224,7 +1230,10 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   if(!pool_table.capture_due(geometry,frame)){auto& seen=pool_observed(frame);++seen.draws;++seen.recipe;++seen.throttled;
    due=basisPipeline && pool_job_due(geometry,frame,args,stride);throttled=true;}
  }
- if(throttled)return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
+ if(throttled){
+  if(due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes))return true;
+  return pak_readback && poolPipeline && basisPipeline && pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
+ }
  if(keyed && recipe){
   if(!poolPipeline)o.status=pool::Status::Pipeline;
   else{
@@ -1270,8 +1279,8 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   if(stored==pool::Table<PoolMaterial>::Store::Fresh)assign_material(pool_table.find(geometry)->payload,payload);
   due=recipe && basisPipeline && pool_job_due(geometry,frame,args,stride);
  }
- if(!recipe && pak_fallback && keyed && poolPipeline && basisPipeline)return pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
- return due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes);
+ if(due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes))return true;
+ return pak_readback && poolPipeline && basisPipeline && pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
 }
 PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh& mesh){
  PoolUse use{uint32_t(pool::Status::NoDeferred),UINT32_MAX,false};

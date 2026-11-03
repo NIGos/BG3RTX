@@ -716,6 +716,18 @@ establish a new pak join or predict its qualified-share gain. No GPU cost or ene
 
 ### Pak join increment (cov-paks, 2026-11-03; not qualified)
 
+Camp participation fix (pakjoin-zero, offline only): candidate discovery must run
+on ordinary class-A pool draws independently of the HLOD publication recipe.
+The old HLOD-only dispatch and readback prefilter left all join counters at zero
+in camp despite 306-308 pool observations per frame. Count/UV discovery now uses
+the existing bounded, retired XFB readback when native inputs are unavailable;
+ordinary captured recipes retain precedence. Only the original HLOD/Tileset
+contracts may publish, with full witnesses, current resources, cull and basis.
+This fixes participation, not proven material coverage. The retained camp replay
+has 58 unique UV candidates out of 471 entries and zero full geometry witnesses.
+Enable the existing key at startup (layer restart); mesh content IDs do not gate
+the join. No catalogue regeneration, ABI change or shader request is required.
+
 `tools.assets.mesh_paks` generates local-only JSON and binary join candidates
 from catalogue GR2s, initially lava / Tileset / HLOD. It preserves native ordering,
 uses the shared content ID and 32 UV samples, and retains all ordered position/UV
