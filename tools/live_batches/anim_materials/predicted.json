@@ -12,7 +12,7 @@
   },
   "blockers": [
     "Publish and independently verify lava draw recipe including native flow view/sampler/material UBO/time and complete current geometry/basis.",
-    "Audit and publish sprite per-instance random hash / phase / rate / atlas recipe.",
+    "Publish the sprite per-instance engine seed/hash/frame/atlas inputs and displaced billboard geometry. CPU hash, rate and frame arithmetic is audited; no native geometry publication exists.",
     "Add in-frame animated native-vs-RT sampler reference and float scene-energy analysis gates before qualification.",
     "Identify a visible Base_VT_Scrolling instance in camp; current scene census only proves other scrolling capabilities.",
     "Run candidate with real Ultra qualified keys after dependent offline checks."
@@ -20,5 +20,11 @@
   "frames_per_gate": 120,
   "disk_estimate_mb": 740,
   "game_launches": 0,
-  "defaults_promoted": false
+  "defaults_promoted": false,
+  "offline_followup": {
+    "specialization_id": 1102,
+    "shader_request_delta": 0,
+    "native_time": "0:0 byte 0 for the named scrolling, ENV lava and sprite templates; no wall clock substitute",
+    "publication": "Scrolling only. Lava and sprite remain off because original per-draw resources/current geometry are absent from available packs."
+  }
 }

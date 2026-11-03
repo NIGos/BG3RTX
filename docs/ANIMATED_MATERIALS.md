@@ -55,7 +55,8 @@ Scrolling FS `4b52d62ee893d3b6`, lava FS `8e6584bfaa46d6f3`, lava VS
 game time. This is not a push constant, frame number or wall clock. The descriptor
 is the same one resolved by `common/emissive_policy.h::family_fixup`.
 
-`common/animated_material.h` contains shared CPU/HLSL arithmetic:
+`common/animated_material.h` contains shared CPU/HLSL arithmetic and a CPU-only
+audit of the unpublished native sprite instance/frame path:
 
 - Base_VT_Scrolling: UV * tiling + speed * time. Material 1:1: tiling at 0,
   speed at 8, reflectance at 16. Native VT views are 1:3..6.
@@ -69,7 +70,7 @@ is the same one resolved by `common/emissive_policy.h::family_fixup`.
   does not replace its random hash with a global frame counter. Extracted VS/FS
   evidence is under `captures/anim-materials/sprite*`.
 
-180 independent CPU cases cover scroll, lava flow/bounce and sprite atlas math,
+720 independent CPU cases cover scroll, lava flow/bounce and sprite atlas math,
 including negative time/UV/rates and alpha endpoints. These certify arithmetic
 primitives, not complete native sampling or qualified RT recipes.
 
@@ -84,19 +85,36 @@ meshes without a current draw retain fallback. A GPU execution-time time/control
 comparison remains required for qualification.
 
 Layout 6 stores tiling.xy, speed.xy and time at row bytes 228..244. Specialization
-constant 1021 selects evaluation. ABI and shader request deltas are zero. VT
+constant 1102 selects evaluation (1021..1024 and 1100..1101 reserved). ABI and shader request deltas are zero. VT
 ray-cone gradients scale separately by X/Y tiling. Existing rows retain their
-previous decode. Baseline hit-module byte identity FAILED: 0/4 identical after
-adding specialization constant 1021. Three unaffected temporal requests remain
-byte-identical. This candidate does not satisfy the key-off identity requirement;
-default-path isolation or equivalent approved validation remains outstanding.
+previous decode. The animation branch now has an outer specialization guard: with 1102 = 0 it
+neither reads animation words nor rejects a layout 6 row. Layout 6 publication is
+also off on the host. `tools/spec_cascade_check.py --key animated --all --baseline
+ab7d1df7eea4 --jobs 4` compares every hit request with literal OFF/ON controls and
+key-off with the pre-WIP revision. It covers instancing off, instancing on, Wind
+RGB on and Wind RGB + IP grass on; references preserve those existing constants.
+The ON/OFF control must differ, so unused animation code cannot give a false pass.
+Key-off passes all 45 requests / 180 baseline cases (zero differences), and the
+OFF/ON control differs by 76,091 normalized lines. All 360 literal-reference
+comparisons pass, across the same four instancing/family configurations. Raw unspecialized byte identity is not expected; the gate compares optimized,
+frozen programs with normalized IDs. No request variants or ABI changes are added.
 
 Lava is not published, even as colour/emission only. ENV lava needs current WPO
 geometry/basis, native flow texture/sampler and its separate emissive mapping.
 FLUID_Lava_Plane_Flowmap uses COLOR Z/W, multiple flow/normal layers, distance
 blending and blackbody heat. ENV_Lava forward is a third interface. Native COLOR
 recovery and constant D-EM lava heat cannot supply those missing inputs. Sprite
-publication also needs its per-instance hash and geometry path. Helpers must not
+publication also needs its geometry and per-instance inputs. The CPU audit now
+reproduces VS _209/_210/_218/_341: effective instance ID (including BaseInstance),
+modulo 2047.1416015625, nested golden-ratio fract hash plus engine 1:0 _m0.x seed,
+round-to-even 0.01 quantization, then phase = random * 128 and advance =
+((0.899999976 + random * 0.200000048) * time) * material 1:1 _m6 (byte 28).
+The CPU helper preserves the native multiply order and fused final multiply-add.
+Atlas dimensions are 1:1 _m0.xy, time is 0:0 _m0 (byte 0). VS _360 uses fused
+multiply-add and _370 truncating remainder. 192 additional cases compare these
+steps against an independent scalar translation of the extracted template.
+The same VS _187 adds wind/billboarding and atlas-texture vertex displacement;
+a phase-correct atlas on the static pool mesh would still shade the wrong surface. Helpers must not
 bypass these gates.
 
 S6 pack `replay-20261102-035919-1` and camp/S8 GI packs capture RT pass inputs,
@@ -110,3 +128,20 @@ separate cost windows, predictions and restore. The draft is blocked on missing
 implementation and in-frame sampling/float-energy reference. Its fake-runner pass
 is structural only. GPU ms and visible gain are unmeasured. Do not request live
 authorization for this partial candidate as a lava fix.
+
+## Publication boundary after the follow-up
+
+| Class | Time evidence | Publication decision |
+|---|---|---|
+| Base_VT_Scrolling | FS 4b52d62e, 0:0 byte 0 | Current-frame native draw rows only; off by default. |
+| ENV lava bounce VT | VS 88d26a99 + FS 8e6584bf, 0:0 byte 0 | Off: no audited depth/G-buffer geometry pair or current COLOR/noise/basis witness in packs. Flow/scroll/bounce math is tested; full native surface/emission is not published. |
+| Billboard flipbook | Extracted sprite VS/FS, 0:0 byte 0 | Off: native hash/frame audited; no captured instance seed, native atlas binding, or displaced billboard geometry publication. |
+| FLUID lava / ENV_Lava | Census verifies time loads in deferred/forward/emissive FS | Off: separate heat/flow/normal/emission interfaces are not the ENV bounce recipe. Existing constant D-EM heat remains an explicitly approximate independent path. |
+| Missing or unclassified templates | Four missing files; 73 unclassified time users | Off: no generic clock or class formula is assumed. |
+
+No missing native clock was found for the named candidate templates. The blocker
+is the per-draw resources and current geometry, not an invented wall-clock time.
+The present replay packs cannot supply them, so no lava/sprite publication or
+quality pass is claimed. The unqueued S6/camp drafts and predictions remain blocked.
+Both drafts now require the exposure-hold log as well as setting its key; the full
+CTest suite caught the missing expectation even though the old local lint passed.

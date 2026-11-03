@@ -28,7 +28,12 @@
 #include "../../common/native_vt_fields.h"
 #include "../../common/native_hit_records.h"
 #include "../../common/animated_material.h"
-[[vk::constant_id(1021)]] const uint kSpecAnimatedMaterial=0u;
+// Literal references are compiled only by the offline equivalence gate.
+#ifdef RT_ANIMATED_MATERIAL_REFERENCE
+static const uint kSpecAnimatedMaterial=RT_ANIMATED_MATERIAL_REFERENCE;
+#else
+[[vk::constant_id(1102)]] const uint kSpecAnimatedMaterial=0u;
+#endif
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_hit_tileset_fields.h"
 #endif
@@ -158,8 +163,7 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  if(two_sided)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
 #endif
  const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);float2 uvscale=float2(1,1);
- if(detail.x==6u){
-  if(kSpecAnimatedMaterial==0u)return hit_material_unknown(3);
+ if(kSpecAnimatedMaterial!=0u && detail.x==6u){
   const float4 anim=asfloat(gHitRecords.Load4(row+228u));
   const float time=asfloat(gHitRecords.Load(row+244u));
   if(!all(isfinite(anim)) || !isfinite(time))return hit_material_unknown(5);

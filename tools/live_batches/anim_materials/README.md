@@ -11,3 +11,7 @@ pre-post scene mean, not PNGs. The key is off in every preset.
 Offline structural check: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/anim_materials/dryrun.ps1`.
 The shared fake runner must reject absent real evidence (A), then accept stripped
 structural jobs (B). This grants no authorization and measures no rendering quality.
+Both jobs require `[rrpost] exposure held` evidence, as well as setting the key.
+The follow-up audits the sprite instance hash and frame math, but still publishes
+scrolling rows only. Native game time is known for the named lava/sprite templates;
+the missing resources and current displaced geometry keep both classes off.

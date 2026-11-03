@@ -33,12 +33,35 @@ inline float am_lava_bounce(float time,float speed,float phase,float amplitude){
  x=2.f*(x-am_floor(x))-1.f;x=x<0?-x:x;
  return x*x*(3.f-2.f*x)*amplitude;
 }
+#ifdef __cplusplus
+// CPU audit of the unpublished sprite geometry path.
+// Sprite VS _209/_210/_218/_341: logical instance includes BaseInstance;
+// seed is engine 1:0 _m0.x, not time. Quantization is round-to-even.
+inline float am_sprite_random(float logical_instance,float seed){
+ float x=logical_instance-2047.1416015625f*am_trunc(logical_instance/2047.1416015625f);
+ float a=x*1.6180340051651001f;a-=am_floor(a);
+ a*=x;a-=am_floor(a);a+=seed;a-=am_floor(a);
+ float v=a*100.f,b=am_floor(v),d=v-b;
+ float q=b+((d>.5f || (d==.5f && b-2.f*am_floor(b*.5f)!=0.f))?1.f:0.f);
+ q*=.009999999776482582f;return q<0?0:q>1?1:q;
+}
+inline float am_sprite_native_frame(float time,float random,float material_rate,float columns,float rows){
+ float phase=std::fma(random,128.f,0.f),frames=columns*rows;
+ // VS _360 multiplies jitter * time, then material rate. Preserve that order.
+ float advance=((.8999999761581421f+random*.20000004768371582f)*time)*material_rate;
+ return std::fma(advance,128.f,phase-frames*am_trunc(phase/frames))+.00001f;
+}
+#endif
 // VFX_Model_...BillboardCamera_Flipbook_GradientMap_01 STI VS _360.._370.
 // Native per-instance hash supplies phase and rate; do not replace it with a
 // global frame counter. The atlas uses truncating remainder (not floor/frac).
 inline float am_sprite_frame(float time,float rate,float phase,float columns,float rows){
  float frames=columns*rows;
+#ifdef __cplusplus
+ return std::fma(rate*time,128.f,phase-frames*am_trunc(phase/frames))+.00001f;
+#else
  return rate*time*128.f+(phase-frames*am_trunc(phase/frames))+.00001f;
+#endif
 }
 inline AmUv am_sprite_uv(AmUv uv,float frame,float columns,float rows){
  float x=am_trunc(frame-columns*am_trunc(frame/columns));

@@ -201,7 +201,14 @@ def old_requests_haircost(spec_request):
     return out
 
 
-KEYS = {"haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
+def old_requests_animated(request):
+    """Animation union vs literal off/on, crossed with instancing family settings."""
+    return [({1003: i, 1004: w, 1005: g, 1102: v},
+             request + (";" if "?" in request else "?") + f"RT_ANIMATED_MATERIAL_REFERENCE={v}")
+            for i, w, g in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)) for v in (0, 1)]
+
+
+KEYS = {"animated": ("RT_SPEC_HIT_INST=1", old_requests_animated), "haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
         "groom": ("RT_SPEC_NATIVE=1", old_requests_groom),
         "waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
         "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
@@ -346,7 +353,7 @@ def differ(a, b):
     return len(set(ga) ^ set(gb)) + abs(len(ga) - len(gb)) + sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
 
 
-def check_one(tool, tmp, i, spec_path, old_path, assign):
+def check_one(tool, tmp, i, spec_path, old_path, assign, assign_reference=False):
     """The other constants of both modules (e.g. 1000 in a guards request) stay at their default 0 on both sides."""
     d = Path(tmp) / f"{i}_{'_'.join(f'{k}-{v}' for k, v in sorted(assign.items()))}"
     d.mkdir()
@@ -356,6 +363,13 @@ def check_one(tool, tmp, i, spec_path, old_path, assign):
     # S2b: the far main() declares SV_GroupID / SV_GroupIndex even with the constant 0; dropping unused interface
     # variables on both sides compares the programs, not the declarations.
     s = opt(tool, s, d / "sO.spv", "-O", "--remove-unused-interface-variables")
+    if assign_reference:
+        # Literal animation controls retain the existing instancing constants.
+        # Set those identically on both sides before freezing; the literal
+        # reference has no 1102, so that assignment has no effect there.
+        old_path = opt(tool, old_path, d / "assigned-reference.spv",
+                       "--set-spec-const-default-value=" + " ".join(
+                           f"{k}:{v}" for k, v in sorted(assign.items()) if k != 1102))
     o = opt(tool, old_path, d / "of.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
     o = opt(tool, o, d / "oO.spv", "-O", "--remove-unused-interface-variables")
     return differ(canonical(tool, s), canonical(tool, o))
@@ -367,7 +381,7 @@ def check_baseline(tool, tmp, i, spec_path, old_path, assign, assign_reference):
     if assign_reference:
         reference = opt(tool, old_path, Path(tmp) / f"{i}_baseline-assigned.spv",
                         "--set-spec-const-default-value=" + " ".join(
-                            f"{k}:{v}" for k, v in sorted(assign.items()) if k not in (1017, 1018, 1019, 1020)))
+                            f"{k}:{v}" for k, v in sorted(assign.items()) if k not in (1017, 1018, 1019, 1020, 1102)))
     return check_one(tool, tmp, i, spec_path, reference, assign)
 
 
@@ -478,12 +492,14 @@ def main():
                                        if args.key == "hairgi" else
                                        [a for a, _ in pairs[r] if a[1018] == 0 and a[1019] == 0]
                                        if args.key == "haircost" else
-                                       [a for a, _ in pairs[r]] if args.key == "groom" else [pairs[r][0][0]])
+                                       [a for a, _ in pairs[r]] if args.key == "groom" else
+                                       [a for a, _ in pairs[r] if a[1102] == 0]
+                                       if args.key == "animated" else [pairs[r][0][0]])
                         for j, assign in enumerate(assignments):
                             baseline_jobs.append((f"base_{i}_{e.name}_{j}", r, e.name, newp, oldp, assign))
                 with Progress("spec baseline equivalence", len(baseline_jobs), every=30, verb="compared") as prog, \
                         concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
-                    futs = {pool.submit(check_baseline, tool, bt, i, newp, oldp, assign, args.key in ("hairgi", "haircost", "groom")):
+                    futs = {pool.submit(check_baseline, tool, bt, i, newp, oldp, assign, args.key in ("hairgi", "haircost", "groom", "animated")):
                             (r, entry, assign) for i, r, entry, newp, oldp, assign in baseline_jobs}
                     for f in concurrent.futures.as_completed(futs):
                         r, entry, assign = futs[f]
@@ -536,7 +552,7 @@ def main():
         jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in range(len(pairs[r]))]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \
                 concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
-            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v][1], e), pairs[r][v][0]):
+            futs = {pool.submit(check_one, tool, tmp, f"{i}_{e}", P(r, e), P(pairs[r][v][1], e), pairs[r][v][0], args.key == "animated"):
                     (r, e, v) for i, r, e, v in jobs}
             for f in concurrent.futures.as_completed(futs):
                 r, e, v = futs[f]

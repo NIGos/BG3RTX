@@ -6,7 +6,20 @@ from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.spec_cascade_check import (phi_order, block_order, lower_priority, old_requests_waterhair,
-                                     old_requests_hairgi, old_requests_haircost, check_baseline)
+                                     old_requests_hairgi, old_requests_haircost, old_requests_animated, check_baseline)
+
+
+class AnimatedRequestsTest(unittest.TestCase):
+    def test_literal_controls_and_baseline_assignment(self):
+        request = "gi/rt_hit_direct.hlsl?RT_SPEC_HIT_INST=1"
+        pairs = old_requests_animated(request)
+        self.assertEqual(len(pairs), 8)
+        self.assertEqual([(a[1003], a[1004], a[1005], a[1102]) for a, _ in pairs],
+                         [(i, w, g, v) for i, w, g in
+                          ((0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)) for v in (0, 1)])
+        self.assertEqual({r for _, r in pairs}, {
+            request + ";RT_ANIMATED_MATERIAL_REFERENCE=0",
+            request + ";RT_ANIMATED_MATERIAL_REFERENCE=1"})
 
 
 class BaselineWorkerTest(unittest.TestCase):
@@ -26,6 +39,8 @@ class BaselineWorkerTest(unittest.TestCase):
             check_baseline(None, "scratch", "plain", "new", "old", assign, False)
             optimize.assert_not_called()
             self.assertEqual(compare.call_args.args[-2], "old")
+            check_baseline(None, "scratch", "animation", "new", "old", {1003: 1, 1102: 0}, True)
+            self.assertEqual(optimize.call_args.args[3], "--set-spec-const-default-value=1003:1")
 
 
 class HairCostRequestsTest(unittest.TestCase):

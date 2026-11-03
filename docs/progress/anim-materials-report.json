@@ -8,7 +8,7 @@
   "shared_assetdb_written": false,
   "key": "rt_hit_material_animated",
   "default": 0,
-  "specialization_id": 1021,
+  "specialization_id": 1102,
   "abi_delta": 0,
   "shader_request_delta": 0,
   "census": {
@@ -284,7 +284,20 @@
       "4b52d62ee893d3b6 FS",
       "8e6584bfaa46d6f3 FS",
       "88d26a9941a51911 VS"
-    ]
+    ],
+    "sprite_evidence": {
+      "file": "captures/anim-materials/sprite0.spv",
+      "time_set": 0,
+      "time_binding": 0,
+      "time_offset": 0,
+      "seed_set": 1,
+      "seed_binding": 0,
+      "seed_offset": 0,
+      "controls_set": 1,
+      "controls_binding": 1,
+      "atlas_offset": 0,
+      "material_rate_offset": 28
+    }
   },
   "already_handled": {
     "wind": "Audited native XFB Wind RG, AlphaTest 2S and Wind RGB; not every cloth/wind template.",
@@ -296,13 +309,13 @@
       "Base_VT_Scrolling"
     ],
     "arithmetic_only": [
-      "ENV_Lava_AlphaTest_Flowmap_Bounce_VT flow and WPO wave",
-      "BillboardCamera_Flipbook_GradientMap native frame/atlas arithmetic"
+      "ENV_Lava_AlphaTest_Flowmap_Bounce_VT flow/scroll and bounce wave",
+      "BillboardCamera_Flipbook_GradientMap atlas primitive; CPU-only native instance hash, quantization and fused frame audit"
     ],
     "unsupported": [
-      "FLUID lava full heat/flow/normal/displacement/depth evaluation",
-      "ENV lava RT colour/emission publication",
-      "Sprite instance hash/geometry publication"
+      "Lava full current geometry/basis/COLOR/noise, native flow sampling and emission publication",
+      "Sprite engine seed/atlas resources and displaced billboard geometry publication",
+      "FLUID lava full heat/flow/normal/displacement/depth evaluation"
     ],
     "gpu_cost_ms": null,
     "visual_gain": null
@@ -312,109 +325,116 @@
     "status": "BLOCKED_IMPLEMENTATION",
     "phase_seconds_per_scene": 130,
     "estimated_mb": 740,
-    "dryrun": "passed; fake runner only; no watched inbox"
+    "dryrun": "PASS: 2/2 missing-evidence runs INVALID; 2/2 stripped structural runs valid. Fake runner only; no watched inbox.",
+    "scratch": "C:/Users/quali/AppData/Local/Temp/bg3rtx-anim_materials-dryrun/20261103-185232"
   },
   "files_changed": [
-    "CMakeLists.txt",
-    "bg3rtx.ini",
     "common/animated_material.h",
-    "common/native_vt_surface.h",
-    "common/settings.h",
     "common/shader_variant.h",
-    "core/gi.cpp",
-    "data/settings_schema.json",
     "docs/ANIMATED_MATERIALS.md",
-    "docs/PLAN_M4_REFLECTIONS_GI.md",
-    "docs/progress/anim-materials.md",
     "docs/progress/anim-materials-report.json",
-    "layer/hit_material.cpp",
+    "docs/progress/anim-materials.md",
     "shaders/rt/native_hit_material.hlsli",
     "tests/animated_material_test.cpp",
-    "tests/animated_materials_test.py",
-    "tests/settings_test.cpp",
-    "tools/assets/animated_materials.py",
+    "tests/spec_cascade_check_test.py",
     "tools/live_batches/anim_materials/README.md",
-    "tools/live_batches/anim_materials/dryrun.ps1",
     "tools/live_batches/anim_materials/jobs/01-s6.json",
     "tools/live_batches/anim_materials/jobs/02-camp.json",
-    "tools/live_batches/anim_materials/plans/camp.json",
-    "tools/live_batches/anim_materials/plans/s6.json",
-    "tools/live_batches/anim_materials/predicted.json"
+    "tools/live_batches/anim_materials/predicted.json",
+    "tools/spec_cascade_check.py"
   ],
   "artifacts": [
     "captures/anim-materials/census-final.json",
     "captures/anim-materials/compact-census.json",
     "captures/anim-materials/replay-evidence.json",
     "captures/anim-materials/sprite0.glsl",
-    "captures/anim-materials/sprite1.glsl"
+    "captures/anim-materials/sprite1.glsl",
+    "captures/anim-materials/followup/anim-spec-final.log",
+    "captures/anim-materials/followup/anim-build-test.log"
   ],
   "commands": [
     {
-      "cmd": "python -m tools.assets.animated_materials --catalogue <shared mesh_materials v2> --compact <shared compact v4> --out captures/anim-materials/census-final.json --cache captures/anim-materials/cache",
+      "cmd": "python tools/spec_cascade_check.py --key animated --all --baseline ab7d1df7eea4 --jobs 4",
       "exit_code": 0,
-      "summary": "All 1063 catalogue entries scanned; 4 referenced template files absent; counts are overlapping capabilities, not active-instance guarantees."
+      "summary": "45/45 hit requests: 180/180 key-off baseline comparisons and 360/360 literal OFF/ON comparisons pass; positive control differs by 76091 normalized lines. One shader gate at a time; machine-wide DXC slots respected."
     },
     {
-      "cmd": "cmake --build build --target VkLayer_bg3rtx bg3rtx_core animated_material_test settings_test (MSVC environment, BelowNormal)",
+      "cmd": "scripts/build.ps1 -Test (imported MSVC environment; BelowNormal)",
       "exit_code": 0,
-      "summary": "Host, core and candidate test targets build."
+      "summary": "Full build passes; 138/138 CTests pass. Build 14 s; CTests 354.08 s. Includes 720 formula cases, 192 native sprite cases and round-even boundaries."
     },
     {
-      "cmd": "ctest --test-dir build -R '^(animated_material|animated_materials|settings|native_hit_pool|native_hit_generated|native_vt_recipes)' --output-on-failure",
+      "cmd": "tools/live_batches/anim_materials/dryrun.ps1 (BelowNormal; fake runner)",
       "exit_code": 0,
-      "summary": "6/6 focused CTests pass; arithmetic covers 180 input combinations."
+      "summary": "2 missing-evidence runs rejected; 2 structural runs valid. Scene-wait/capacity/plan checks pass; predicted budget 740 MB. Never launched the game."
     },
     {
-      "cmd": "python tests/animated_materials_test.py",
+      "cmd": "python scripts/queue_gates.py --lint-exposure-hold tools/live_batches",
       "exit_code": 0,
-      "summary": "4 parser/classification/bounds tests pass after compact parser coverage added."
-    },
-    {
-      "cmd": "python scripts/gen_settings_defaults.py --check",
-      "exit_code": 0,
-      "summary": "Defaults match INI/release settings; schema regenerated using rebuilt settings_test."
-    },
-    {
-      "cmd": "python tools/shader_identity.py --filter '^gi/(gi_trace_rt_hit_direct|rt_hit_direct|rt_hit_shade).*hlsl' --validate --jobs 1",
-      "exit_code": 0,
-      "summary": "12/12 representative hit requests compiled and validated serially."
-    },
-    {
-      "cmd": "python tools/shader_identity.py --baseline HEAD --filter '^gi/gi_temporal.hlsl' --jobs 1",
-      "exit_code": 0,
-      "summary": "3/3 unaffected temporal requests byte-identical to ab7d1df7eea4."
-    },
-    {
-      "cmd": "python tools/shader_identity.py --baseline HEAD --filter '^gi/gi_trace_rt_hit_direct.hlsl' --jobs 1",
-      "exit_code": 1,
-      "summary": "FAIL: 0/4 hit requests byte-identical to baseline. New specialization constant changes their SPIR-V. Candidate not qualified."
-    },
-    {
-      "cmd": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/anim_materials/dryrun.ps1",
-      "exit_code": 0,
-      "summary": "2/2 fake evidence runs INVALID as required; 2/2 stripped structural runs valid; scene-wait and capacity lints pass. Process-local py shim needed on this machine."
-    },
-    {
-      "cmd": "python scripts/queue_gates.py --lint-exposure-hold tools/live_batches/anim_materials",
-      "exit_code": 0,
-      "summary": "Static shot windows hold exposure and restore."
+      "summary": "All batches pass. Added exposure-held expectations and patterns to both animation drafts; the first full CTest run caught this missing evidence."
     },
     {
       "cmd": "git --no-optional-locks diff --check",
       "exit_code": 0,
-      "summary": "No whitespace errors; pre-existing resolve-pp-diff.json preserved."
+      "summary": "No whitespace errors. Git metadata remains read-only; no new commit."
     }
   ],
   "open_issues": [
-    "Task is partially implemented. Only Base_VT_Scrolling has a production RT row publication path; lava flow/emission/displacement and sprite publication remain unfinished.",
-    "Required key-off hit shader byte identity failed (0/4); no default-path equivalence or quality pass.",
-    "Existing S6/camp/S8 replay packs lack original lava time/material UBO/flow view/sampler/shader-pair/COLOR provenance; no captured-time lava comparison possible.",
-    "Census tags are heuristic overlapping capabilities plus verified time loads, not exhaustive output-dependency or active-switch certification; 73 time users unclassified and 4 templates unavailable.",
-    "Current-time scrolling rows require a visible current-frame draw; hidden culled rows decline. GPU execution-time parameter/time validation is pending.",
-    "Live draft is BLOCKED_IMPLEMENTATION. Identify a visible scrolling camp instance, implement missing lava/native reference gates, then rerun dependent offline checks. No authorization requested.",
-    "GPU cost, visible quality delta and real Ultra parity remain unmeasured."
+    "Lava RT publication is not implemented: available replay packs lack original current-time COLOR/noise, flow view/sampler, material bindings and displaced geometry/basis witnesses. ENV bounce arithmetic does not substitute for FLUID lava heat/flow/emission.",
+    "Sprite RT publication is not implemented: native time, instance hash and frame math are audited, but current engine seed/atlas bindings and wind/billboard/vertex-texture displacement geometry are absent from available packs.",
+    "Scrolling requires a current visible draw; hidden culled rows decline. GPU execution-time native-vs-RT sampling, a visible camp candidate and float scene-energy reference remain unverified.",
+    "S6/camp drafts remain BLOCKED_IMPLEMENTATION. No live quality, GPU cost or real Ultra evidence; all experimental animation stays off in presets.",
+    "Catalogue capability tags are not active-switch certification; 73 time-reading templates remain unclassified and four template files are missing. Those classes stay off."
   ],
   "preexisting_preserved": [
     "resolve-pp-diff.json"
-  ]
+  ],
+  "wip_commit": "8480a153",
+  "shader_equivalence": {
+    "baseline": "ab7d1df7eea4",
+    "key_off_requests": 45,
+    "key_off_comparisons": 180,
+    "key_off_failures": 0,
+    "key_off_status": "PASS",
+    "control_different_lines": 76091,
+    "literal_comparisons_expected": 360,
+    "literal_status": "PASS",
+    "log": "captures/anim-materials/followup/anim-spec-final.log",
+    "literal_comparisons": 360,
+    "literal_failures": 0,
+    "exit_code": 0,
+    "instancing_family_configurations": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        0
+      ],
+      [
+        1,
+        1,
+        1
+      ]
+    ],
+    "method": "Freeze and optimize SPIR-V with identical existing specialization assignments, then compare normalized programs; unspecialized byte identity is not claimed."
+  },
+  "result": "Key-off specialization equivalence proven. Scrolling remains the only published animated RT class; lava and sprite publication remain unsupported with the available captured resources/current geometry.",
+  "formula_tests": {
+    "scroll_flow_bounce_atlas_cases": 720,
+    "native_sprite_hash_frame_atlas_cases": 192,
+    "round_even_boundary_assertions": 2,
+    "status": "PASS",
+    "evidence": "build/Testing/Temporary/LastTest.log"
+  },
+  "artifact_directory": "captures/anim-materials/followup",
+  "files_changed_scope": "Follow-up changes relative to committed WIP 8480a153; ignored verification logs are in artifact_directory."
 }

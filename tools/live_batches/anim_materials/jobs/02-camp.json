@@ -12,7 +12,8 @@
     "\\[rt\\] scene wait",
     "\\[geo\\] RT capture",
     "\\[cascade\\] casters",
-    "\\[trace\\]"
+    "\\[trace\\]",
+    "\\[rrpost\\] exposure held"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -35,7 +36,8 @@
   ],
   "expect": [
     "\\[auto\\] scene ready",
-    "\\[hit material animated\\].*scrolling rows [1-9]\\d*"
+    "\\[hit material animated\\].*scrolling rows [1-9]\\d*",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
   ],
   "expect_every": [
     {
