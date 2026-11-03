@@ -37,6 +37,43 @@ def strand_mask(h, w, centres, width):
     return a
 
 
+def test_reorient():
+    points = np.array([[.3, 0, 0], [.2, 0, 0], [.05, 0, 0],
+                       [.21, -.05, 0], [.205, 0, 0], [.2, .05, 0],
+                       [.05, 0, 0], [.15, 0, 0], [.3, 0, 0],
+                       [.1, 0, 0], [.1, 0, 0], [.1, 0, 0]], np.float32)
+    n = len(points)
+    offset = np.arange(n, dtype=np.float32) * .0001
+    triangles = np.repeat(points[:, None, :], 3, axis=1)
+    triangles[:, :, 2] -= offset[:, None]
+    triangles[:, 1, 0] += .01
+    triangles[:, 2, 1] += .01
+    g = convert.Groom(points, np.arange(n, dtype=np.float32) * .00001,
+                      np.arange(n * 4).reshape(n, 4), np.arange(n * 4, dtype=np.float32).reshape(n, 4) / 100,
+                      np.arange(0, n + 1, 3), np.arange(4), np.full(n, .7, np.float32),
+                      np.arange(n), np.tile([1., 0., 0.], (n, 1)), offset)
+    original = {f.name: getattr(g, f.name).copy() for f in dataclasses.fields(g)}
+    out, count = analysis.reorient(g, np.zeros(3))
+    check("tangential strand with a nearer tip remains undecided", analysis.orientation(g, np.zeros(3))["strands_reversed"] == 2)
+    permutation = np.r_[2, 1, 0, np.arange(3, n)]
+    check("reorient flips only the inward radial strand", count == 1 and
+          np.array_equal(out.points, points[permutation]))
+    check("reorient reverses all per-point arrays consistently", all(
+        np.array_equal(getattr(out, name), original[name][permutation]) for name in
+        ("points", "radii", "joints", "weights", "triangle", "bary", "normal_offset")))
+    embedded = np.einsum("pk,pkd->pd", out.bary, triangles[out.triangle])
+    embedded[:, 2] += out.normal_offset
+    check("reoriented embedding still reproduces points including normal offsets", np.allclose(embedded, out.points, atol=1e-7))
+    check("reorient root parameter follows arc length, including unchanged strands", np.allclose(
+        out.root_param, [0, .6, 1, 0, .5, 1, 0, .4, 1, 0, .5, 1]))
+    check("reorient preserves converter arrays and strand metadata", all(
+        np.array_equal(getattr(g, name), value) for name, value in original.items()) and
+        np.array_equal(out.offsets, g.offsets) and np.array_equal(out.card, g.card))
+    again, count = analysis.reorient(out, np.zeros(3))
+    check("reorient is idempotent", count == 0 and all(np.array_equal(getattr(again, f.name), getattr(out, f.name))
+          for f in dataclasses.fields(out)))
+
+
 def test_trace():
     a = strand_mask(200, 64, [lambda y: 16 + 3 * np.sin(y / 20), lambda y: 46.0], 3)
     traced, typical = strands2d.trace(a)
@@ -752,6 +789,31 @@ def test_batch_cache():
              patch.object(render, "render", return_value=(np.zeros((2, 2, 3)), np.zeros((2, 2)))):
             rec = batch.process(style, None, None, d / "out", d, False)
             check("cached process reaches validation without conversion", rec.get("iou") == [0.0], rec)
+            with patch.object(render, "render", return_value=(np.ones((2, 2, 3)), np.ones((2, 2)))), \
+                 patch.object(asset, "write") as write_asset, \
+                 patch.object(analysis, "reorient", wraps=analysis.reorient) as reorient:
+                geometry_head = (np.array([0., -.3, 0.]), np.array([.066, .089, .083]))
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], geometry_head)
+                cache_bytes = path.read_bytes()
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("bad mask roots with a head proxy pass via geometry", rec.get("verdict") == "pass" and
+                      rec.get("root_source") == "geometry" and rec.get("root_reversed_strands") == groom.strands, rec)
+                written = write_asset.call_args.args[3][0][1]
+                check("asset receives root-first geometry without rewriting converter cache", reorient.call_count == 1 and
+                      written.points[0, 1] < written.points[-1, 1] and path.read_bytes() == cache_bytes)
+                tangent_head = (np.array([.1, -.1, 0.]), geometry_head[1])
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], tangent_head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("undecided geometry roots retain a review reason", rec.get("verdict") == "needs-review" and
+                      any(s.startswith("root from geometry (") for s in rec.get("reasons", [])), rec)
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("bad mask roots without a head proxy still reject", rec.get("verdict") == "reject" and
+                      any(s.startswith("root channel does not") for s in rec.get("reasons", [])), rec)
+                reorient.reset_mock()
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, corr, geometry_head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("good mask root path never reorients", reorient.call_count == 0 and "root_source" not in rec, rec)
             path.write_bytes(b"corrupt npz")
             check("corrupt groom cache is a miss", batch.load_groom_cache(path) is None)
             check("revalidate cache miss does not convert or replace state", batch.process(style, None, None, d / "out", d, False, True) is None)
@@ -856,7 +918,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

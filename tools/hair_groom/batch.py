@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "hair-groom-batch-3"   # 2: asset v2 (UV samples), LOD1, radius caps; 3: fibre-layer card reference
+VERSION = "hair-groom-batch-4"   # 4: geometry roots when the mask root channel does not follow rows
 # Bump for converter/mesh/mask interpretation changes; validation-only edits bump VERSION alone.
 CONVERTER_VERSION = "hair-groom-converter-1"
 # Verdict thresholds (derived from the Shadowheart reference: IoU 0.92-0.94 at 0.5 mm, 0.89-0.92 at 2 mm,
@@ -274,6 +274,12 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
                 pass   # An unavailable cache must not discard a successful conversion.
         else:
             groom, hair, rep, dropped, grid, fit, root_corr, head = cached
+        bad_root = bool(root_corr) and np.median(root_corr) < ROOT_REJECT
+        geometry_root = bad_root and head[1][0] > 0.01
+        if geometry_root:
+            decided = analysis.orientation(groom, head[0])["strands_decided"]
+            groom, reversed_ = analysis.reorient(groom, head[0])
+            rec.update(root_source="geometry", root_reversed_strands=reversed_, root_decided_strands=decided)
         orient = analysis.orientation(groom, head[0]) if head[1][0] > 0.01 else {}
         unmapped = rep["unmapped_samples"] / max(rep["samples"], 1)
         rec.update(tile_grid=list(grid), cards=rep["cards"], triangles=rep["triangles"], cards_in_one_tile=round(fit, 4),
@@ -309,8 +315,10 @@ def process(style, game, lslib, out_dir, report_dir, accept_review, revalidate=F
         reasons, review = [], []
         if groom.strands == 0:
             reasons.append("no strands")
-        if root_corr and np.median(root_corr) < ROOT_REJECT:
+        if bad_root and not geometry_root:
             reasons.append(f"root channel does not run along the rows (median corr {np.median(root_corr):.2f})")
+        if geometry_root and decided < groom.strands / 2:
+            review.append(f"root from geometry (mask root channel does not run along the rows, median corr {np.median(root_corr):.2f})")
         if min(ious) < IOU_REJECT:
             reasons.append(f"silhouette IoU {min(ious):.2f}")
         if max(abs(x) for x in cover) > COVER_REVIEW:
