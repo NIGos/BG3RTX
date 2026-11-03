@@ -139,6 +139,8 @@ $caps = Join-Path $root "captures"
 New-Item -ItemType Directory -Force $caps | Out-Null
 . (Join-Path $PSScriptRoot "gamelock.ps1")
 . (Join-Path $PSScriptRoot 'camera-plan.ps1')
+$panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
+foreach ($step in $panPlan) { Assert-CameraPlanFields $step }
 . (Join-Path $PSScriptRoot 'queue-window-mode.ps1')
 
 if (-not $NoBuild) { & (Join-Path $PSScriptRoot "build.ps1") }
@@ -611,7 +613,6 @@ function Send-UiKey([int]$vk, [int]$scan) {
   Start-Sleep -Milliseconds 80
   [void][BG3RTX.Win]::PostMessage($h, 0x0101, [IntPtr]$vk, [IntPtr]($l -bor 0xC0000000))
 }
-$panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
 $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false

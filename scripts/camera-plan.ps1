@@ -154,10 +154,8 @@ function Test-CameraPlanReady($step, [string]$text) {
 # Central list of phase fields consumed by auto-run and the camera samplers.
 # Fail offline on typos instead of silently accepting an ignored instruction.
 function Assert-CameraPlanFields($step) {
-  $allowed=@('label','kind','speed','seconds','repeat_ms','scan','capture_at','serial',
-    'motion_start','motion_end','pixels_per_second','direction','set','trace_at',
-    'turn_mode','frame_delta_pixels','frame_interval','key_period_ms','key_down_ms',
-    'hover_x','hover_y','shift','shift_hold','wheel','wheel_ms','wait_log','wait_log_timeout','recenter','reload_selected')
+  $registry=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'camera-plan-fields.json') -Raw | ConvertFrom-Json
+  $allowed=@($registry.runner)+@($registry.analysis_only)
   $names=if ($step -is [System.Collections.IDictionary]) { @($step.Keys) } else { @($step.PSObject.Properties.Name) }
   foreach ($name in $names) {
     if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
