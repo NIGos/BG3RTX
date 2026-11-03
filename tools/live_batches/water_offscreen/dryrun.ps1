@@ -7,5 +7,5 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
   Set-Content -LiteralPath (Join-Path $shim 'py.ps1') '& python @($args | Where-Object { $_ -ne ''-3'' })'
   $env:PATH = "$shim;$env:PATH"
 }
-& (Join-Path $PSScriptRoot '../lean_dryrun.ps1') -Batch water_offscreen -Out $Out -MaxMinutes 6 -MaxMB 2000 -Independent -Unfocused
+& (Join-Path $PSScriptRoot '../lean_dryrun.ps1') -Batch water_offscreen -Out $Out -MaxMinutes 7 -MaxMB 2000 -Independent -Unfocused
 exit $LASTEXITCODE

@@ -95,7 +95,18 @@ VkPipelineLayout g_layout = VK_NULL_HANDLE, g_view_layout = VK_NULL_HANDLE;
 uint32_t g_push_bytes = 0;
 VkDescriptorSetLayout g_hit_game_layout=VK_NULL_HANDLE, g_hit_sun_layout=VK_NULL_HANDLE;
 VkDescriptorSetLayout g_chit_game_layout=VK_NULL_HANDLE, g_chit_sun_layout=VK_NULL_HANDLE;
-struct Pipe { VkPipeline p = VK_NULL_HANDLE; uint64_t gen = 0; std::string req; };   // req: the request p runs
+struct Pipe {
+  struct Variant { VkPipeline p; uint64_t gen; std::string req; };
+  VkPipeline p = VK_NULL_HANDLE;
+  uint64_t gen = 0;
+  std::string req;
+  std::vector<Variant> cached;
+};
+void release_pipe(Pipe& p) {
+  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
+  for (const auto& v : p.cached) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v.p);
+  p = Pipe{};
+}
 // rt_cascade_casters (live, as core/gi.cpp refresh): the water requests trace the cascade's masks.
 bool cascade_on() { return host->cfg_int("rt_cascade_casters", 0) != 0; }
 // Native scalp/hair records in the scene (the layer's capability word, as core/gi.cpp refresh): the
@@ -268,6 +279,13 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
   const std::string pipe_key = req + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]);
+  // Specialization toggles retain their pipelines until the owning layout is retired.
+  if (p.req != pipe_key) {
+    for (auto& v : p.cached) if (v.req == pipe_key) {
+      std::swap(p.p, v.p); std::swap(p.gen, v.gen); std::swap(p.req, v.req);
+      break;
+    }
+  }
   // A built request asks the layer for its generation (in memory, no compile: hot reload rebuilt it);
   // a new request or generation is built in the background (core_pipeline_async), the pass skipping a
   // new request meanwhile and keeping the current pipeline of the same request.
@@ -283,7 +301,8 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
     if (st == 0 && !known) g_building = true;   // a failure is logged by the build (and the layer's compile)
     return known;
   }
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
+  if (known) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
+  else if (p.p) p.cached.push_back({p.p, p.gen, p.req});
   if (p.req != pipe_key) host->log("[water] %s %s: built (spec hair=%u edge=%u)", file, entry, values[1], values[2]);
   p.p = np;
   p.gen = gen;
@@ -310,10 +329,10 @@ bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   VkDevice dev = host->device;
   if (g_layout && (g_alpha_layout != alpha_layout || g_push_bytes != push_bytes ||
       g_hit_game_layout!=g_hit.game_layout || g_hit_sun_layout!=g_hit.sun_layout)) {
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_primary.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_reflect.p);
+    release_pipe(g_primary);
+    release_pipe(g_reflect);
     core_defer_layout_destroy(g_layout);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_world_prepare.p);
+    release_pipe(g_world_prepare);
     g_primary = g_reflect = g_world_prepare = Pipe{};
     g_layout = VK_NULL_HANDLE;
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,(uint64_t)g_push);g_push=VK_NULL_HANDLE;
@@ -345,6 +364,24 @@ bool ensure_layouts(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   if(hit_active() && host->cfg_int("rt_water_hit_shade",0)==2 && !make_pipe(g_world_prepare,"rt/water_light_prepare.hlsl","main",g_layout))return false;
   return make_pipe(g_primary, "rt/water_reflect.hlsl", "water_primary", g_layout) &   // &: both builds start
          make_pipe(g_reflect, rr_hit ? "rt/water_reflect.hlsl?WATER_RR_HIT=1" : "rt/water_reflect.hlsl", "water_reflect", g_layout);
+}
+
+struct ReflectionPipelines {
+  VkDescriptorSetLayout push=VK_NULL_HANDLE,alpha=VK_NULL_HANDLE,game=VK_NULL_HANDLE,sun=VK_NULL_HANDLE;
+  VkPipelineLayout layout=VK_NULL_HANDLE;
+  uint32_t bytes=0;
+  Pipe primary,reflect,prepare;
+};
+ReflectionPipelines g_rother;
+bool g_reflection_hit_mode=false;
+void select_reflection_mode(bool hit) {
+  if(hit==g_reflection_hit_mode)return;
+  using std::swap;
+  swap(g_push,g_rother.push);swap(g_alpha_layout,g_rother.alpha);swap(g_layout,g_rother.layout);
+  swap(g_hit_game_layout,g_rother.game);swap(g_hit_sun_layout,g_rother.sun);
+  swap(g_push_bytes,g_rother.bytes);
+  swap(g_primary,g_rother.primary);swap(g_reflect,g_rother.reflect);swap(g_world_prepare,g_rother.prepare);
+  g_reflection_hit_mode=hit;
 }
 
 bool ensure_view() {
@@ -624,13 +661,13 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   const VkDeviceFuncs& vk = *host->vk;
   VkDevice dev = host->device;
   if (g_compose.p && (g_csun != sun || g_cls != ls || g_crr != refr || g_cgsh != gsh)) {   // the record layout of the buffer decides the variant
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
+    release_pipe(g_compose);
     g_compose = Pipe{};
   }
   const uint32_t nb = refr ? kNumCBindRefr : ls ? kNumCBindLs : kNumCBind;
   if (g_cpush && nb != g_cpush_nb) {   // the push layout differs by the light list and the copy
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_copy.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
+    release_pipe(g_copy);
+    release_pipe(g_compose);
     core_defer_layout_destroy(g_clayout);
     host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_cpush);
     g_copy = g_compose = Pipe{};
@@ -665,8 +702,8 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
   }
   if (g_clayout && (g_calpha != alpha_layout || g_cpush_bytes != push_bytes ||
       g_chit_game_layout!=g_hit.game_layout || g_chit_sun_layout!=g_hit.sun_layout)) {
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_copy.p);
-    host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)g_compose.p);
+    release_pipe(g_copy);
+    release_pipe(g_compose);
     core_defer_layout_destroy(g_clayout);
     g_copy = g_compose = Pipe{};
     g_clayout = VK_NULL_HANDLE;
@@ -711,8 +748,8 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
          make_pipe(g_compose, creq.c_str(), "water_compose", g_clayout);
 }
 
-// The ordinary path remains cached while the experimental path is selected. Most
-// forward passes use previous lighting; those must keep composing with the baseline.
+// The ordinary path remains cached while the experimental path is selected.
+// Passes without a consistent lighting frame keep composing with the baseline.
 struct ComposePipelines {
   VkDescriptorSetLayout push=VK_NULL_HANDLE,alpha=VK_NULL_HANDLE,game=VK_NULL_HANDLE,sun_layout=VK_NULL_HANDLE;
   VkPipelineLayout layout=VK_NULL_HANDLE;
@@ -963,7 +1000,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   }
   const bool want_hit=hit_active();
   if(want_hit) {
-    // Prewarm the ordinary path: it is the fallback for passes on earlier lighting.
+    // Prewarm ordinary composition for passes without a consistent lighting frame.
     const WaterHitInputs saved=g_hit;g_hit=WaterHitInputs{};
     select_compose_mode(false);
     const bool base_ready=ensure_compose(alpha_layout,in.push_bytes,sun,ls,refr,gsh);
@@ -1126,9 +1163,20 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     return false;
   }
   VkDescriptorSet material_alpha=alpha;
-  // Borrowed lighting descriptors may only be read in their frame and against their TLAS.
-  // Otherwise run the cached ordinary composition, including shadows and refraction.
-  const bool shade_pass=g_st.hit.game && hit_shade_frame_ok(use,tlas==g_st.tlas) &&
+  // WATER_LS shares bindings with hit shading. Certify the entire list before selecting
+  // the hit pipeline; without WATER_LS, hit_sources binds the lighting stash's own list.
+  const bool ls_list = g_cls && lights_ok && lights;
+  bool same_lights = !g_cls;
+  if (ls_list) {
+    same_lights = true;
+    for (uint32_t i=0; i<7 && same_lights; ++i) {
+      const auto& a=lights[i]; const auto& b=g_st.hit.lights[i+1];
+      same_lights=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
+    }
+  }
+  const bool shifted = host->cfg_int("rt_water_compose_shift",0) != 0 && compose_shift_needed(use,pick);
+  const bool shade_pass=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game &&
+      hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted) &&
       host->rt_hit_material_use && host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
   select_compose_mode(shade_pass);
   // Both forms were prewarmed at lighting, using the same record layout.
@@ -1145,23 +1193,12 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // M5.4b: this pass's flags word first (kFlagLs only with its water draw's light list): the earlier
   // dispatches' reads of the params, then the update, then this dispatch's read.
   // M5.5: likewise kFlagRefr only with its water draw's colour copy.
-  const bool ls_list = g_cls && lights_ok && lights;
   const bool rr_copy = g_crr && copy_ok && copy && copy->view;
   if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
     uint32_t flags = (ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
     flags |= compose_shift_needed(use, pick) ? kFlagSceneShift : 0u;
     if(!shade_pass)flags&=~kFlagHitShade;
-    if(shade_pass && g_cls) {
-      // These push bindings also feed the forward water's local shadows. A different
-      // list must never be used to shade hidden hits against the lighting camera.
-      bool same=ls_list;
-      for(uint32_t i=0;i<7 && same;++i) {
-        const auto& a=lights[i];const auto& b=g_st.hit.lights[i+1];
-        same=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
-      }
-      if(!same) flags&=~kFlagHitShade;
-    }
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
     if (g_st.flags & kFlagLs) ++(ls_list ? g_cwin.ls_passes : g_cwin.ls_no_lights);
     if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
@@ -1245,12 +1282,12 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
 }
 
 void release_compose() {
-  for(Pipe* p:{&g_cother.copy,&g_cother.compose})host->defer_destroy(BG3_DEFER_PIPELINE,(uint64_t)p->p);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,(uint64_t)g_cother.layout);
+  for(Pipe* p:{&g_cother.copy,&g_cother.compose})release_pipe(*p);
+  core_defer_layout_destroy(g_cother.layout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,(uint64_t)g_cother.push);
   g_cother=ComposePipelines{};g_compose_hit_mode=false;
   release_compose_images();
-  for (Pipe* p : {&g_copy, &g_compose}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
+  for (Pipe* p : {&g_copy, &g_compose}) release_pipe(*p);
   core_defer_layout_destroy(g_clayout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_cpush);
   g_clayout = VK_NULL_HANDLE;
@@ -1328,6 +1365,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
   VkDescriptorSet material_alpha=in.alpha;
   if(hit_active() && (!host->rt_hit_material_use ||
       !host->rt_hit_material_use(cmd,in.scene_tlas,in.alpha,in.hit_identity,&material_alpha) || !material_alpha)) g_hit=WaterHitInputs{};
+  select_reflection_mode(hit_active());
   VkDescriptorSetLayout alpha_layout = VK_NULL_HANDLE;
   VkDescriptorSet alpha_any = VK_NULL_HANDLE;
   g_building = false;
@@ -1536,7 +1574,11 @@ void water_release() {
   std::lock_guard<std::mutex> lock(g_mu);
   release_compose();
   release_images();
-  for (Pipe* p : {&g_primary, &g_reflect, &g_view, &g_world_prepare}) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p->p), *p = Pipe{};
+  for (Pipe* p : {&g_rother.primary, &g_rother.reflect, &g_rother.prepare}) release_pipe(*p);
+  core_defer_layout_destroy(g_rother.layout);
+  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_rother.push);
+  g_rother=ReflectionPipelines{};g_reflection_hit_mode=false;
+  for (Pipe* p : {&g_primary, &g_reflect, &g_view, &g_world_prepare}) release_pipe(*p);
   core_defer_layout_destroy(g_layout);
   core_defer_layout_destroy(g_view_layout);
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)g_push);

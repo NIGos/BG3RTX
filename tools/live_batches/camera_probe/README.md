@@ -1,9 +1,10 @@
 # S8 camera input probe (prepared offline)
 
 No live authorization. One Water Queens House launch, `visible_unfocused_fg`,
-110 s of phases plus loading (allow up to 4 min including the conservative 120 s load estimate).
-Three mode groups: legacy 1 px / 4 renders, hold_drag at 1 and 2 px/render,
-centre_hold at offsets 1 and 2 px. These are five 18 s measurement subwindows.
+80 s of phases plus loading (allow up to 4 min including the conservative 120 s load estimate).
+Legacy 1 px / 4 renders and hold_drag at 1 and 2 px/render: three 18 s measurement windows.
+Each capture window follows a separate 2 s static `set: fg_snap=0` rearm phase.
+Repeated keys within one set collapse to their last value; they cannot rearm capture.
 Prediction was written before the job. No winner has been measured.
 
 ## Exact input protocol
@@ -34,8 +35,8 @@ skipped markers never cause catch-up posts. It logs frames, not camera yaw.
   centre reset or physical cursor movement occurs during an unfocused turn.
 - hold_drag: reset/press at (floor(W/2),floor(H/2)), then x += direction *
   frame_delta_pixels once per observed render while pressed. No wrap/recentre.
-- centre_hold: same reset/press, then one move to centre + direction * 1 or 2 px;
-  no further move until release. Tests the game's possible held-offset integration.
+- centre_hold was removed: BG3 integrates deltas, so its one move turns once and
+  then stops. PostMessage never moves the real cursor.
 
 Use a client width >= 2560 and the job's 30 fps render cap: 18*30*2 = 1080 px
 fits within the half-width. Edge exhaustion aborts rather than wrapping. Speeds
@@ -48,8 +49,8 @@ reports aggregate mean/max/signed yaw only and needs expensive primary diagnosti
 do not enable those here. No new render instrumentation or shader variants.
 The job requires moving scene-build samples and a completed delayed 16-present
 FG sequence in **every** turn subwindow; no raw burst, trace or image dumps.
-Each sequence starts 6 s after input starts. All 80 presents together are bounded
-at 503 MB (display <=3840x2160; half-size RGB plus 1% allowance), plus 50 MB logs.
+Each sequence starts 6 s after input starts. All 48 presents together are bounded
+at 302 MB (display <=3840x2160; half-size RGB plus 1% allowance), plus 50 MB logs.
 
 Read the existing scene-build GPU `camera moving` and `static` sample counts for
 each interior window. Report moving/(moving+static) and GPU ms; counts alone

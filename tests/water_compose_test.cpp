@@ -158,8 +158,11 @@ static uint64_t fnv(const void* p, size_t n) {
 int main(int argc, char** argv) {
   CHECK((kFlagSceneShift & kFlagHitShade) == 0u);
   // Hidden-hit shading can fail independently of the ordinary water chain.
-  for(auto use:{LightingUse::kNone,LightingUse::kEarlier,LightingUse::kThisFrame})
-    for(bool same:{false,true})CHECK(hit_shade_frame_ok(use,same)==(use==LightingUse::kThisFrame && same));
+  for (uint64_t frame : {0ull, 97ull, 98ull, 99ull, 100ull, 101ull})
+    for (bool tlas : {false,true}) for (bool lights : {false,true}) for (bool shift : {false,true})
+      CHECK(hit_shade_frame_ok(frame,100,tlas,lights,shift) ==
+            (tlas && lights && (frame==100 || (frame==99 && shift))));
+  CHECK(!hit_shade_frame_ok(0,0,true,true,true));
   // Two readback windows retain every reason counter, while 64-bit sums remain separate.
   uint64_t count[kCsSlotWordsLs]{};
   for(unsigned window=0;window<2;++window)

@@ -327,10 +327,13 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
   if (stash_frame == now) return LightingUse::kThisFrame;
   return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
 }
-// The hit path borrows lighting descriptor sets only within the exact frame/TLAS.
-// Failure selects ordinary composition; it must not skip water shadows or refraction.
-inline constexpr bool hit_shade_frame_ok(LightingUse use,bool same_tlas) {
-  return use==LightingUse::kThisFrame && same_tlas;
+// Borrowed lights, TLAS and camera must describe one lighting frame. The immediately
+// previous frame is usable only when compose shifts the ray into that frame's space.
+// Failure selects ordinary composition, preserving shadows and refraction.
+inline constexpr bool hit_shade_frame_ok(uint64_t lighting_frame, uint64_t now, bool same_tlas,
+                                         bool same_lights, bool shifted) {
+  return lighting_frame && same_tlas && same_lights &&
+      (lighting_frame == now || (shifted && now > lighting_frame && now - lighting_frame == 1));
 }
 inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
 

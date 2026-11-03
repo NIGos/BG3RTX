@@ -4,7 +4,7 @@
 #    plan, expect_runner names the phase count and every trace, no float bursts, diagnostics
 #    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug, rt_occ_stats) on
 #    exactly in "diag-*" phases, cost windows diag-off and without traces (debug-view traces only in
-#    "diag-view-*"), phases 5-25 s. Batch totals against -MaxMinutes / -MaxMB.
+#    "diag-view-*"), phases 5-25 s (2 s static fg_snap rearm allowed). Batch totals against -MaxMinutes / -MaxMB.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
 #    dependent jobs stay in pending (stop-on-failure). With -Independent (no requires_success_of):
 #    every job runs and every one is INVALID.
@@ -69,7 +69,8 @@ foreach ($job in $jobs) {
     if ($step.serial -and $step.capture_at) { $burstCount++ }
     elseif ($step.serial -or $step.capture_at) { $bursts = $false }
     if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
-    if ($step.seconds -lt 5 -or $step.seconds -gt 25) { $sizes = $false }
+    $rearm = $step.label -like 'rearm-*' -and $step.kind -eq 'static' -and $step.seconds -eq 2 -and $step.set -eq 'fg_snap=0'
+    if (-not $rearm -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
     if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
     if ($label.StartsWith('cost-') -and $diag) { $roles = $false }
@@ -88,7 +89,7 @@ foreach ($job in $jobs) {
   if ($burstCount -gt $MaxBursts) { $bursts = $false }
   $totalBursts += $burstCount
   Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts
-  Check "${n}: phases 5-25 s" $sizes
+  Check "${n}: phases 5-25 s (static capture rearm 2 s)" $sizes
   Check "${n}: timeout $($job.timeout) >= plan + 240 s load" ($job.timeout -ge $sec + 240)
   $er = @($job.expect_runner)
   Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
