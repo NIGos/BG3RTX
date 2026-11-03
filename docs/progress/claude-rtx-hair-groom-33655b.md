@@ -28,3 +28,11 @@
 - Offline: build and all CTests pass (+ hair_groom_asset_test); key-off identity in the commit notes.
 - Live job (not queued): tools/live_batches/hair_groom (camp + Test Dialogue1, groom off/on shots, cost
   off/groom/off/no-hair), predicted.json committed. Gate: groom instances > 0 in groom-on windows.
+
+## rt_hair_groom live 2026-11-03 10:40: INVALID (no join), fixed offline
+- Device feature and both files loaded, but no hair draw had Shadowheart's LOD0 index count (unmatched 8/frame
+  at camp): the camp draws LOD1. Added her LOD1 groom (a97c222a4f2c0dda, 6009 indices), LOD1 in the batch tool
+  (atlas grid from the LOD0 of the same GR2), radius caps (LOD1 cards: up to 6.7 mm from degenerate UVs; now
+  3x strand median, 2 mm; thinned LODs < 9 mm, the parser's bound 10 mm), and a one-time log per unmatched
+  hair draw with its index count and reason (counters in the 300-frame line). Live plan: warm-nohair phase
+  before the cost windows (no-hair pipelines built inside cost-nohair). Build, 131 CTests, dryrun pass.
