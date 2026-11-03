@@ -1814,8 +1814,9 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     // Track D phase 3: the UV goes along with the position, and the scene
     // comes from the depth prepass (rt_alpha needs rt=1; both are read here, once).
     g_alpha_mode = cfg_int("rt", 1) && cfg_int("rt_alpha", 1);
-    // Reserve a stable native-hair layout for live GUI enable; coverage remains key-gated.
-    const bool hair_requested=true;
+    // The 88-byte native-hair layout costs every capture (+37.5% bytes, about +2 ms GI on Ultra S8,
+    // smoke 2026-11-03), so it is reserved only when native hair is on at startup.
+    const bool hair_requested=cfg_int("rt_native_hair",0)!=0;
     const bool hair_split=cfg_int("rt_bvh_split",1)!=0;
     if(hair_requested && !hair_split)
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
