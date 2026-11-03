@@ -1,0 +1,77 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "seconds": 30,
+    "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
+  },
+  {
+    "label": "settle-off-a",
+    "kind": "static",
+    "seconds": 5,
+    "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
+  },
+  {
+    "label": "cost-off-a",
+    "kind": "static",
+    "seconds": 25,
+    "set": "qa_exposure_hold=1"
+  },
+  {
+    "label": "shot-off-a",
+    "kind": "static",
+    "seconds": 5,
+    "trace_at": [
+      1,
+      2,
+      3
+    ],
+    "set": "qa_exposure_hold=1"
+  },
+  {
+    "label": "settle-on",
+    "kind": "static",
+    "seconds": 5,
+    "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
+  },
+  {
+    "label": "cost-on",
+    "kind": "static",
+    "seconds": 25,
+    "set": "qa_exposure_hold=1"
+  },
+  {
+    "label": "shot-on",
+    "kind": "static",
+    "seconds": 5,
+    "trace_at": [
+      1,
+      2,
+      3
+    ],
+    "set": "qa_exposure_hold=1"
+  },
+  {
+    "label": "settle-off-b",
+    "kind": "static",
+    "seconds": 5,
+    "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
+  },
+  {
+    "label": "cost-off-b",
+    "kind": "static",
+    "seconds": 25,
+    "set": "qa_exposure_hold=1"
+  },
+  {
+    "label": "shot-off-b",
+    "kind": "static",
+    "seconds": 5,
+    "trace_at": [
+      1,
+      2,
+      3
+    ],
+    "set": "qa_exposure_hold=1"
+  }
+]

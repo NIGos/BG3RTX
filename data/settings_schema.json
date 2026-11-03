@@ -59,6 +59,18 @@
        {"id": "rt", "label": "Ray-traced", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "rt_high", "label": "Ray-traced High", "apply": "live", "caps": ["ray_query"], "keys": {"gi": "1", "gi_rt": "1", "gi_rr_rays": "2"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "rt_trace_scale", "label": "Lighting trace resolution",
+     "description": "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+     "apply": "hitch", "apply_note": "resets lighting history", "advanced": true, "experimental": false, "developer": false,
+     "category": "Performance", "summary": "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 1, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "half", "label": "Half", "apply": "hitch", "caps": [], "keys": {"rt_trace_scale": "0.5"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "full", "label": "Full", "apply": "hitch", "caps": [], "keys": {"rt_trace_scale": "1.0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
     {"id": "local_shadows", "label": "Local light shadows",
      "description": "Adds shadows from torches, lamps and spells. Fast requires Ray Reconstruction; Full keeps native shadows where needed.",
      "apply": "live", "apply_note": "", "advanced": false, "experimental": false, "developer": false,

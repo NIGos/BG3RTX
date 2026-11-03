@@ -52,6 +52,11 @@ static void test_parse() {
 }
 
 static void test_preset_expansion() {
+  for(int p=0;p<kPresetCount;++p) {
+    Map m; for(auto& kv:expand_preset(p)) m[kv.first]=kv.second;
+    CHECK_EQ(get(m,"rt_trace_scale"),p<=kMedium?"0.5":"1.0");
+    if(p<kUltra) for(const char* key:{"gi_far","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_hit_emission","rt_emissive"}) CHECK_EQ(get(m,key),"0");
+  }
   Map high;
   for (auto& kv : expand_preset(kHigh)) high[kv.first] = kv.second;
   CHECK_EQ(get(high, "rr"), "1");

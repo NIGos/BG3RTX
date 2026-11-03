@@ -430,3 +430,24 @@ along the view ray by at most
 - `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
   (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
   ao_direct=1); the GI bounce and the reflections stay.
+
+## Lower-preset spatial budget (gpu-opt2, 2026-11-03)
+`rt_trace_scale` is 0.5 in Low/Medium, 1.0 in High/Ultra. High is unchanged because
+PERF_AUDIT_GPU supplies an experiment, not quality evidence for promoting half resolution.
+Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-sample temporal
+weight, and existing depth-aware `gather_history` before full-grid AO/composite and dense RR guides.
+Reflection half-grid traces write a dedicated RGBA16F delta/hit-distance target (binding 31).
+A full-grid depth/normal/material-guided resolve applies deltas to native destination lighting,
+with hit distance from the strongest guide sample (never averaged with the no-hit sentinel).
+Diagnostic reflection debug/validation retains full resolution. Non-RR uses the spatial resolve;
+Low keeps reflections off and preserves its screen-space GI budget.
+The additional binding requires a layout define (`RT_TRACE_HALF`); no on/off define product
+for unchanged GI. Manifest 145 -> 163 requests (+18); full-grid modules stay byte-identical.
+Far/bounce/emission remain off below Ultra; existing levels are unchanged and tested.
+Offline estimator check: `python tools/gpu_trace_scale_check.py`; real-scene and reflection
+replay coverage remain missing. Synthetic estimator agreement alone is not a quality pass.
+Prepared batch: `tools/live_batches/gpu_opt2` (camp High, S8 Medium, one launch each).
+Each has 1.0/0.5/1.0 cost windows and static energy repeats; no live run is authorized here.
+Expected saving 0.4-1.3 ms is the audit's hypothesis; actual pass cost is UNMEASURED.
+Synthetic corrected 32-frame GI trace check: mean -3.94% within +/-10.16% (4 paired SE),
+matched trace pixels exact; the wide band does not qualify composed or reflection energy.
