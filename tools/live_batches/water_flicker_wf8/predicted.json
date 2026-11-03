@@ -1,0 +1,27 @@
+﻿{
+  "status": "PREPARED_OFFLINE_NOT_AUTHORIZED",
+  "written": "2026-11-03",
+  "job": "wf8-s8-reflection-flicker",
+  "rule": "Predictions written before job construction. No live run or commit is authorized in this task. Compare only windows in this one launch; never subtract separate turns as if pixel aligned.",
+  "candidate_1_compose_tier_switch": {
+    "supports": "Compose diagnostic turn has above-calibration contribution on/off events coincident with tier-1 to unresolved exits and unresolved to tier-1 entries. Compose-on beauty shows excess over both compose-off repeat windows beyond their repeat spread.",
+    "weakens": "Compose delta events stay within static calibration or beauty switching persists with compose disabled; a null whole-water metric alone cannot exclude reflection-specific events.",
+    "limits": "Existing rt_debug 25 gives signed relative luminance delta and combines unresolved tiers 2-6. It cannot separate hidden, off-screen and sky miss; water_reflect tiers are not substituted for compose tiers."
+  },
+  "candidate_2_game_ssr": {
+    "supports": "Native water-output on/off events persist with compose disabled, especially near screen edges or occlusion; this supports a game-side source, not SSR specifically.",
+    "limits": "Native water output also contains animated normals, probes, refraction and sun glints. It does not expose the game's SSR term. SSR attribution stays unresolved without an isolated native reflection term or independent SSR toggle."
+  },
+  "candidate_3_rr_history": {
+    "supports": "With compose enabled, rr=0 reduces reflection-region presented on/off events beyond both rr=1 repeat windows while pre-post compose delta switching remains comparable. rr_water_mv=1 is optional attribution, not a qualified stabilizer.",
+    "weakens": "No excess over repeat spread in rr=1, or same switches in pre-post compose delta and rr=0.",
+    "limits": "RR-off changes the upscaler and other RT reconstruction paths; it supports RR involvement but does not identify rejection internally."
+  },
+  "stabilizer": {
+    "implemented": false,
+    "reason": "Tier decision is shader-side. Temporal hysteresis requires reprojected per-pixel tier and reflection radiance history, age/disocclusion validation and a specialization-constant key. Holding stale radiance without validation would smear reflections; no such shader change or DXC run is made.",
+    "existing_keys": "rt_water_rf_edge worsened prior whole-water metric; rt_water_rr_mv and rt_water_rr_hitdist were previously null. None is represented as a proven reflection stabilizer."
+  },
+  "energy": "No quality improvement claimed. Static mean differences must be compared with compose-off repeat noise before trusting a lower flicker score. Diagnostic colours are never energy evidence.",
+  "cost": "No new rendering effect. Capture overhead invalidates frame-time comparison; report existing water compose GPU-ms lines only from capture-free windows."
+}

@@ -494,7 +494,8 @@ bool compose_buffer() {
   g_cmp.cap = water::capacity_of_mb(water::record_mb(cfg_int("rt_water_compose_mb", 160), g_cmp.stride), g_cmp.stride);
   const VkDeviceSize bytes = water::buffer_bytes(g_cmp.cap, g_cmp.stride);
   if (!make_buf(g_cmp.buf, bytes,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                    (cfg_int("pan_water",0) ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT : 0u),
                 false)) {
     log("[water] compose UNAVAILABLE: the %llu MB record buffer could not be allocated", (unsigned long long)(bytes >> 20));
     return false;
@@ -713,7 +714,7 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
   // M5.3: the composition variant in place of the game's pipeline for this draw (geocapture
   // geo_post_draw rebinds the game's). Same layout: the game's bound sets stay valid.
   if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) ||
-      cfg_hot(CfgHot::rt_water_refraction)) {   // M5.3 / M5.4
+      cfg_hot(CfgHot::rt_water_refraction) || cfg_int("pan_water",0)) {   // Diagnostic coverage keeps record stores with compose off.
     VkPipeline v = VK_NULL_HANDLE;
     if (g_any_variant.load(std::memory_order_relaxed)) {
       std::lock_guard<std::mutex> cl(g_cmp_mu);
