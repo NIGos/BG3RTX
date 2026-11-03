@@ -13,8 +13,9 @@
   existing admission. Raw Current Sun geometry and coverage proof stay unchanged;
   its compacted legacy ranges use the corrected duplicate policy.
 - `[cascade] casters` adds `duplicates by mesh (offset differs)` per frame.
-- `rt_cascade_static_only=0` remains the off-by-default fallback, Advanced /
-  Static roof casters only. It can omit unrecognised static roofs when enabled.
+- `rt_cascade_static_only=0` remains the off-by-default fallback, Developer /
+  Static roof casters only (Live). Requires Sun shadows / Ray-traced + hidden
+  roofs. It can omit unrecognised static roofs when enabled.
 - Unit regressions cover offset/allocation mismatches, differing pass origins,
   same mesh at distinct placements, materials, pulled instances/ranges, frame
   isolation, unknown inputs and cascade-only roofs.
@@ -25,7 +26,7 @@
   Cascade regression, roof cap, GPU fixture and both replay tests passed.
 - ABI unchanged; shader edits 0; shaders/variants.txt request delta 0.
 - Live confirmation remains pending. Check Test Dialogue3 at the port and
-  Test Dialogue1 at camp: Roof sun shadows ON, fallback OFF, moving face band
+  Test Dialogue1 at camp: Sun shadows / Ray-traced + hidden roofs, fallback OFF, moving face band
   absent; the new duplicate counter should increase for offset-mismatched draws.
 - Outdoor/roof confirmation: S8 roofs/canopies and S7 cut-away interior retain
   coverage; smoke_ultra includes qualified keys and water composition checks.

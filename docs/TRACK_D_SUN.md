@@ -168,7 +168,8 @@ leave a second pose of the same character in the legacy F-1/F-2 soup
 identification of the particular ray hit in the user's dialogue.
 
 `rt_cascade_static_only=0` is the new off-by-default CPU filter, exposed as
-Advanced / Static roof casters only. ON admits only the existing class-A affine
+Developer / Static roof casters only, with Live apply modes for both choices.
+It requires Sun shadows / Ray-traced + hidden roofs. ON admits only the existing class-A affine
 instance position path with a known vertex buffer without STORAGE_BUFFER usage.
 Skinning SSBO, wind/cloth displacement, per-draw transforms and unknown paths are
 excluded. Known static roofs use the same existing conversion and origin rebase.
