@@ -527,3 +527,46 @@ no promised reduction of the +2.3 ms separate RT-pass overhead. The overall
 < 1 ms keep gate remains in force. Inspect S8 and Test Dialogue1 hair/skin shadows
 and float scene-colour energy, with hair enabled throughout the cull A/B windows.
 Status: offline candidate; live permission and quality/cost qualification pending.
+
+
+## Distance/screen selection candidate (2026-11-03, hair-cost2)
+
+`rt_hair_visibility=0` is a live host key, off in every preset. It filters a
+verified subset of static camera Hair draws before `bvh_classify`: supported
+source VS `bf72b58803efe34d`, one direct draw instance, exact float vertex
+attributes, no pulled vertices. Unsupported, instanced, Pubes and cascade draws
+retain full native hair. This is per-hair-draw eligibility, not a claim that the
+entire character is small or that all Hair families are covered.
+
+Recovered source `captures/alpha_cache/bf72b58803efe34d.glsl:133-145` in the main
+checkout selects input location 2 or, when set 1 binding 0 uint at byte 64 is
+nonzero, xyz from 20-byte set 0 binding 13 records. It transforms the input by
+the row-major model matrix at set 1 binding 0 byte 0. The candidate supports
+only the unpulled input, scans every referenced index/vertex (including all
+four required attributes), and checks complete buffer/mapping ranges under the
+tracker lock. STORAGE, TRANSFER_DST and XFB-capable source buffers are rejected;
+mapped memory alone is not a certificate against GPU writes.
+
+Source lines 176-191 apply texture-driven wind before emitting W. The selector
+expands the transformed bounds by an analytic envelope of each recovered term:
+normalized N, sine in [-1,1], clamped root weight in [0,1], and noise in [0,1].
+Noise requires a recognized UNORM view and current weighted sampler with no
+compare, custom border or unknown semantics. Nonfinite, degenerate or unsafe
+arithmetic retains native hair. Projection is restricted to verified zero
+clip-translation perspective cameras; orthographic/unknown cameras retain it.
+
+Near protection uses the larger of `gi_rt_radius` and enabled `gi_far_m`.
+Only farther bounds whose projected width AND height are at most one render
+pixel use the game's ordinary triangle-card capture; FP32 transform/projection
+roundoff is included. This derives the threshold from pixel quantization,
+not a scene-tuned distance. Key changes invalidate old held-draw epochs.
+Each rejected draw creates zero native records and procedural primitives and
+avoids all native coverage samples for its rays; ordinary card traversal and
+capture remain. Work saved cannot be inferred before eligible draws are known.
+
+The existing alpha log adds visibility evaluated/eligible/selected/cards/unknown
+counts. All sources may be unknown in a real scene; no positive cost saving or
+energy equivalence is promised. Unit fixtures cover near, distant large,
+subpixel, invalid camera/unknown bounds and wind expansion. Live qualification
+must compare character energy against full hair within repeat noise and total
+native cost against the unchanged < 1 ms keep rule.

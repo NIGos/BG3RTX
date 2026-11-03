@@ -416,7 +416,7 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 4);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_pool_trim", "exp_hair_cheap", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -924,6 +924,14 @@ static void test_apply_modes() {
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
+  for (const auto* key : {"rt_hair_visibility", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean"}) {
+    const auto& knob = *find_knob(std::string("exp_") + (key + 3));
+    CHECK(knob.dev_only && knob.experimental);
+    CHECK_EQ(code_default(key), "0");
+    CHECK(!key_change_needs_restart(key, "0", "1"));
+    for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==0);
+    for(int choice=0;choice<2;++choice)CHECK(knob_apply(knob,choice)==Apply::Live);
+  }
   const auto& hair_gi_cull = *find_knob("exp_hair_gi_cull");
   CHECK(hair_gi_cull.dev_only && hair_gi_cull.experimental);
   CHECK_EQ(code_default("rt_hair_gi_cull"), "0");

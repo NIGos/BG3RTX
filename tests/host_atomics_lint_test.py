@@ -146,7 +146,7 @@ HOST_STORAGE = {
     ("core/ls_lights.cpp", "&g_buf"): ("plain", ["shaders/gi/rt_local_shadows_match.hlsl:lsKnown"]),
     ("core/water.cpp", "&g_host"): ("plain", ["shaders/rt/water_reflect.hlsl:wp"]),
     ("layer/alphatest.cpp", "&s.stamp"): ("atomic", ["shaders/rt/rt_common.hlsli:gSceneStamp", "shaders/rt/sun_caster_validate.hlsl:Stamp"]),
-    ("layer/bvhsplit.cpp", '"instance/InstInfo ring"'): ("plain", ["shaders/rt/rt_common.hlsli:gInstInfo", "shaders/rt/mesh_extract.hlsl:Mats"]),
+    ("layer/bvhsplit.cpp", '"instance/InstInfo ring"'): ("plain", ["shaders/rt/rt_common.hlsli:gInstInfo", "shaders/rt/mesh_extract.hlsl:Mats", "shaders/rt/hold_pack.hlsl:Jobs"]),
     ("layer/bvhsplit.cpp", '"OMM scene replacements"'): ("plain", ["shaders/rt/omm_scene_clone.hlsl:replacements"]),
     ("layer/bvhsplit.cpp", '"OMM scene source stamps"'): ("plain", ["shaders/rt/omm_scene_validate.hlsl:rows"]),
     ("layer/bvhsplit.cpp", '"split status"'): ("atomic", ["shaders/rt/mesh_extract.hlsl:Status"]),

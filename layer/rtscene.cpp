@@ -33,6 +33,7 @@
 #include "omm_sampler.h"
 #include "omm_bake.h"
 #include "../common/cascade_casters.h"
+#include "../common/hair_cost_epoch.h"
 
 #include <intrin.h>
 
@@ -238,13 +239,19 @@ void commit_scene_slot(int slot, VkAccelerationStructureKHR tlas, VkDescriptorSe
 // GPU timing: 4 timestamps per build (start, converted, BLAS, TLAS) in a ring.
 constexpr uint32_t kRing = 16;
 VkQueryPool g_qp = VK_NULL_HANDLE;
-struct Slot { uint64_t frame = 0; int mode = 0; bool moving = false; uint32_t prims = 0; };   // mode: 0 rebuild, 1 refit, 2 split
+struct Slot { uint64_t frame = 0; int mode = 0; bool moving = false; uint32_t prims = 0; uint64_t hair_epoch = 0; };   // mode: 0 rebuild, 1 refit, 2 split
 Slot g_slots[kRing];
 uint32_t g_next_slot = 0;
 struct Acc { std::vector<float> conv, blas, tlas, total; };
 Acc g_acc[3][2];                   // [rebuild, refit, split][static, camera moving]
 uint32_t g_n_rebuild = 0, g_n_refit = 0, g_n_split = 0, g_n_frames = 0;
 uint64_t g_prims_sum = 0, g_aprims_sum = 0, g_alpha_draws_sum = 0, g_static_tris_sum = 0, g_instances_sum = 0;
+HairCostEpoch g_hair_timing_epoch;
+bool g_hair_timing_reset = false;
+void hair_timing_observe() {
+  if (g_hair_timing_epoch.update(hair_cost_mask([](const char* key,int fallback) { return cfg_int(key,fallback); })))
+    g_hair_timing_reset = true;
+}
 
 const VkBaseInStructure* find_in(const void* chain, VkStructureType t) {
   for (auto p = static_cast<const VkBaseInStructure*>(chain); p; p = p->pNext)
@@ -481,6 +488,10 @@ void release_all() {
 
 void timestamp(VkCommandBuffer cmd, int slot, uint32_t i) {
   if (slot < 0) return;
+  if (i == 0) {
+    hair_timing_observe();
+    g_slots[slot].hair_epoch = g_hair_timing_epoch.generation;
+  }
   g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, uint32_t(slot) * 4 + i);
 }
 
@@ -1111,6 +1122,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.reference_tlas=res.tlas;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
+    if(geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0))timestamp(cmd,slot,3);
     restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();
@@ -1504,6 +1516,13 @@ void rt_on_present() {
   }
   bvh_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
+  hair_timing_observe();
+  if (g_hair_timing_reset) {
+    for (auto& modes : g_acc) for (auto& acc : modes) acc = Acc{};
+    g_n_frames = g_n_rebuild = g_n_refit = g_n_split = 0;
+    g_prims_sum = g_aprims_sum = g_alpha_draws_sum = g_static_tris_sum = g_instances_sum = 0;
+    g_hair_timing_reset = false;
+  }
   // Compile (and recompile after edits) on the present thread, not while
   // the game records.
   if (!g_failed && cfg_hot(CfgHot::rt_build)) ensure_pipeline();
@@ -1523,8 +1542,9 @@ void rt_on_present() {
     if (!done && sl.frame + 60 > now) continue;
     const int mode = sl.mode;
     const bool moving = sl.moving;
+    const bool same_hair_epoch = g_hair_timing_epoch.accepts(sl.hair_epoch);
     sl = Slot{};
-    if (!done || r[6] < r[0]) continue;
+    if (!done || !same_hair_epoch || r[6] < r[0]) continue;
     auto ms = [&](uint64_t a, uint64_t b) { return float(double(b - a) * g_ts_period * 1e-6); };
     Acc& a = g_acc[mode][moving ? 1 : 0];
     a.conv.push_back(ms(r[0], r[2]));
