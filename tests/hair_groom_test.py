@@ -9,9 +9,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, bench_data, convert, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, bench_data, convert, mesh, render, strands2d  # noqa: E402
 
 FAILS = []
+INDEX_ID_FIXTURE = 0xce53baad8d797436
 
 
 def check(name, ok, info=""):
@@ -161,6 +162,45 @@ def test_thin():
     check("thin 1.0 is identity", convert.thin(g, 1.0) is g)
 
 
+def test_asset():
+    # The canonical v1 fixture of tests/mesh_content_id_test.cpp (layer/mesh_content_id.h).
+    quad = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], np.float32)
+    cid, words = asset.content_id(quad, [0, 1, 2, 0, 2, 3])
+    check("content id matches the layer fixture", cid == 0x5f673b88e4625698, hex(cid))
+    check("content id word count", len(words) == 3 + 32 * 4)
+    h, w = 256, 64
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 60, 4.0)], 2)
+    m[..., 2] = np.linspace(0, 255, h)[:, None].astype(np.uint8)
+    card = card_mesh()
+    lods = asset.build(card, m)
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "x.hgrm"
+        asset.write(path, 0x1234, card, lods)
+        raw = path.read_bytes()
+        try:
+            asset.write(path, 0x1234, card, lods)
+            check("asset never overwrites", False)
+        except FileExistsError:
+            check("asset never overwrites", True)
+    magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
+    check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 1, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
+    # Shared fixture with tests/hair_groom_asset_test.cpp (C++ index_content_id).
+    check("index id fixture", asset.index_id([0, 1, 2, 0, 2, 3]) == INDEX_ID_FIXTURE, hex(asset.index_id([0, 1, 2, 0, 2, 3])))
+    at, sizes = 40, []
+    for keep, g in lods:
+        k, p, sgm, _ = struct.unpack("<f3I", raw[at:at + 16])
+        sizes.append((k, p, sgm))
+        tri = np.frombuffer(raw, "<u4", p, at + 16)
+        bary = np.frombuffer(raw, "<f4", 2 * p, at + 16 + 4 * p).reshape(p, 2)
+        full = np.c_[1 - bary.sum(1), bary]
+        pts = np.einsum("pk,pkd->pd", full, card.positions[card.tris[tri]])
+        check(f"asset LOD {keep} reproduces points", np.allclose(pts, g.points, atol=1e-6))
+        at += 16 + p * (4 + 8 + 4 + 1) + sgm * 4
+    check("asset size", at == len(raw), (at, len(raw)))
+    check("asset LODs thin", sizes[0][1] > sizes[1][1] > sizes[2][1], sizes)
+
+
 def test_locate_overlap():
     uv = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], np.float32)
     tris = np.array([[0, 1, 2], [0, 1, 2]])  # the same UV triangle twice: an overlap
@@ -244,7 +284,7 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
