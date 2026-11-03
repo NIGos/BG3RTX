@@ -1,0 +1,116 @@
+# RTX hair: plan to a complete implementation (2026-11-03)
+
+User request: a complete RTX hair that uses every strand capability BG3 allows. This plan supersedes the closure plan
+(docs/RTX_HAIR_PRIMARY.md section 8, branch claude/hair-reload-fix a21262e0) and adds the items that plan left out.
+Design detail stays in RTX_HAIR_PRIMARY.md, RTX_HAIR_ROADMAP.md and RTX_HAIR_INTEGRATION.md.
+
+## Rules for this plan
+- Every runtime change sits behind its key, off by default, with key-off identity (or a REFERENCE=0 proof), and is
+  tested in smoke_ultra with the other qualified keys on before it can ship.
+- Offline first. Each milestone ends with one live confirming run whose predicted numbers are committed first
+  (predicted.json). Lives need the user's go per batch.
+- No full style rerun until every converter or reference change is in (user, 2026-11-03). Between those changes,
+  validate on the representative set only (M1).
+- Gates are derived, never loosened without a reason derived from the data.
+
+## Where it stands
+| Area | Done | Pending merge (bundle12) | Not started |
+|---|---|---|---|
+| Geometry | LSS grooms, 745 styles pass (v2 reference), LOD + crowd budget | fibre reference 068ff6e4 (C5) | LOD1 transfer, curly tracer |
+| On screen | G-buffer/prepass/velocity variants, fail-safes, pool bound | strike rule 51956f86, header order f659b5ee + A/B 4661e4bc | tips, sub-pixel AA |
+| Shading | fibre BSDF (Chiang) + dual scattering for sun and local lights, strand count fix | | GI, specular indirect, many lights |
+| Shadows | strands in RT shadow rays (opaque) | transmittance C2b 048d60d5 (needs a rebase on main) | game shadow map consistency, AO |
+| Live | hv5: stable, but no strand ever drawn on screen | hv5 + hair_crowd rerun with the order A/B | |
+
+## Milestones (in order; two to three streams run in parallel, one agent per stream)
+
+### M0. Stability on screen (C1). Stream A. Live.
+Merge bundle12, rebase C2 on main. One run: hv5 (reload bisect + header-order A/B) and hair_crowd.
+Gate: no device loss; strand draws > 0 in every strand window; the adjacent-tag hypothesis decided by the A/B.
+If it is confirmed: rt_hair_groom_primary_order becomes the default path of the key (then qualified in M8).
+
+### M1. Conversion pipeline, faster and complete. Stream B. Offline, then one full rerun.
+Measured per style (Shadowheart / Gale's beard / Halsin): convert 8.4 / 4.8 / 12.6 s, dedupe 5.9 / 4.0 / 12.5 s,
+renders 7.6 / 1.7 / 10.3 s, GR2 dump 2.7 / 1.5 / 5.0 s; 22 s CPU per style on average, 1217 styles in about 2 h.
+1. Speed:
+   - cache each style's converted groom (npz, keyed by its inputs and the converter version), so a reference or
+     gate change re-validates without converting again (saves the convert and dedupe share, about 60%);
+   - cache the GR2 dumps (keyed by the pak entry);
+   - vectorise `convert.locate` (one Python loop per triangle) and replace `geom.pairs_within` in dedupe with a
+     uniform grid hash;
+   - target: under 8 s per style, a full rerun under 45 min.
+2. Representative set (`--names`), used between changes:
+   - every style drawn in the live test saves: index counts from the "[hair groom]" lines of the Dialogue1, Campsite
+     and S8 logs, mapped to styles by triangle count;
+   - every companion style;
+   - three styles per remaining failure class.
+   About 120 styles, about 10 minutes.
+3. Converter items that need the rerun:
+   - LOD1 grooms transferred from the passed LOD0 groom: each LOD0 strand point embedded on the nearest LOD1 card
+     triangle, validated with the same gates against the LOD1 cards (today 150 LOD1 fail while their LOD0 passes,
+     e.g. Gale's beard LOD1 at IoU 0.68);
+   - a 2-D curve tracer for curly atlases whose curls do not run along the rows (HAIR_Afro_B: 32 styles fail the
+     root channel);
+   - the fibre reference (done, 068ff6e4).
+Gate: the representative set first, then one full rerun with the counts per category in RTX_HAIR_PRIMARY 5a.
+
+### M2. Shadows. Stream A. Offline, then live.
+1. Transmittance through strands (C2b, done offline): rebase, then live.
+2. Consistency with the game's sun shadow maps: they still render the cards. Where the RT shadow does not replace
+   the game's, hair casts the cards' shadow. Either the strands' visibility replaces the hair term of the game's
+   shadow on receivers, or the cards are kept out of the game's cascade when the groom is live. Read the existing
+   shadow design (TRACK_D_RT 6.7, cascade casters) first.
+3. Ambient occlusion from strands on skin, with the same transmittance (today strands occlude AO opaquely or not
+   at all, depending on the pass).
+Gate: skin and neck under hair not black and not unshadowed; key-on vs key-off energy within noise on a static
+camera; PT reference on the bench fixture.
+
+### M3. Image quality. Stream A. Offline, then live.
+1. Tips: the game's dithered alpha test at the strand's own mask alpha (root channel near the tip), so tips fade as
+   on the cards (C3).
+2. Sub-pixel coverage: strands thinner than a pixel rely on the jittered camera ray plus TAA/RR. Measure the flicker
+   with the edge-flicker detector; if it is above the cards, use two rays per strand pixel or a coverage estimate
+   from the capsule distance.
+3. DLSS RR guides: hair material class, specular albedo and roughness of the fibre, hit distance; qualify the "RR
+   hair resolve" candidate with strands.
+4. Depth of field, fog and water: the post passes read the strand depth written by the G-buffer variant; check halos.
+Gate: edge-flicker metric on hair pixels at most the cards' in one run; no energy change; no DoF halo in PNG pairs.
+
+### M4. Indirect light on strands. Stream A. Offline, then live.
+1. Diffuse indirect (GI) through the dual-scattering multiple-scattering term instead of a Lambert response (C4).
+2. Specular indirect: the R lobe of the fibre BSDF from the RT reflections (or the environment) on strand pixels.
+3. Many local lights: the fibre BSDF in D-LS's light sampling (ReSTIR-style reuse) instead of only the lights with a
+   traced shadow.
+4. Radiance cache: SHaRC entries on strands with the fibre albedo, for stable indirect light inside the volume.
+Gate: white-fibre furnace within 3%; key-on vs key-off energy on a static camera; one live A/B per item.
+
+### M5. Every view. Stream A. Offline, then live (C6).
+Portraits, dialogue close-ups and other small passes; instanced hair (FS 0ca5ee93); strands in reflections and
+water hits shaded with the fibre BSDF. Gate: per-pass strand participation lines; no card-only pass left in smoke_ultra.
+
+### M6. Performance. Stream C. Offline, then live.
+Shader Execution Reordering on the strand ray queries (divergent), half-resolution GI/AO traces for strands far away,
+the crowd budget tuned from the live cost lines. Gate: the cost table per character (GPU ms per pass, VRAM) within
+the user's budget on Ultra; no quality change (same-run A/B).
+
+### M7. Content. Stream B. Offline (needs M1).
+Beards, brows, fur and hat hair through M1 (the short-beard class passes with the fibre reference on the sample).
+Character-creation dyes: check that the strand colour follows a dye change (material at the strand's UV) on a created
+character. Gate: per-category pass counts; a dye A/B in one live run.
+
+### M8. Qualification (C7). Stream C. Live.
+Ultra preset entries for the qualified keys, GUI pages (Advanced/Experimental), docs with what to look at and which
+save, smoke_ultra clean, cost within budget.
+
+### Out of scope
+Strand dynamics of their own (collision, per-strand wind): the strands follow the game's simulated cards. Hair of mods
+not converted on the user's PC. The game's ambient model outside RT passes.
+
+## Live batches (one run each, prepared offline, predicted.json first)
+| Batch | After | Content |
+|---|---|---|
+| L1 | bundle12 | hv5 (stages + header order A/B), hair_crowd |
+| L2 | M2 + M3 | shadows and image quality A/B in one Dialogue1 + Campsite run |
+| L3 | M4 + M5 | indirect light and views A/B |
+| L4 | M6 + M7 | cost per character, dyes |
+| L5 | M8 | smoke_ultra with every qualified key, the user's check |
