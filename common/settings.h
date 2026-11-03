@@ -490,6 +490,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_mesh_budget_mb", "2048"},
     {"rt_mesh_audits", "2"},
     {"rt_mesh_audit_frames", "600"},
+    {"rt_mesh_content_id", "0"},
     {"rt_vram_guard", "1"},
     {"rt_vram_guard_budget_mb", "0"},
     {"rt_vram_compact", "1"},
