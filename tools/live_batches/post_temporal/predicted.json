@@ -26,10 +26,6 @@
     0,
     1,
     1,
-    0,
-    0,
-    1,
-    1,
     0
   ],
   "windows": [
@@ -52,11 +48,7 @@
     "off-08",
     "on-08",
     "on-09",
-    "off-09",
-    "off-10",
-    "on-10",
-    "on-11",
-    "off-11"
+    "off-09"
   ],
   "hypothesis": "Unfiltered jittered DoF coverage/residual and bloom after RR cause edge shimmer. Reproject and accumulate A/C/B at alpha 1/16, clamp history to current 3x3, jitter-align final.",
   "supplied_baseline": {
@@ -96,8 +88,8 @@
   "gates": {
     "transport": "Every rendered K8 has 36 submitted samples: depth/final/AC/EB every frame, material/albedo at both ends. Every presented capture has eight consecutive frames. Missing/duplicate/nonfinite data is INVALID.",
     "registration": "Reuse edge_flicker registration_structure/registered_run/shifted_mask. Exclude subtitle region for Dialogue3. Reject camera cuts and animation-confounded comparisons; never warp beauty frames.",
-    "masks": "Freeze masks from all 12 OFF windows: class-5 support against baseline depth discontinuities for hair-over-DoF, brightest 1 percent of baseline character contours, eroded depth-stable class-3 face control, far depth-stable background excluding character silhouettes. No candidate-derived mask or retuned threshold.",
-    "residual": "Dialogue3: 12 adjacent non-overlapping pairs. Even pair indices OFF->ON, odd ON->OFF; balanced time order reduces smooth drift bias. For each pair compute ON minus OFF of the same midpoint residual, independently for total/even/odd, rendered/presented, hair_over_dof/bright_contour. Exact one-sided sign test: improvement iff difference < 0; ties count against improvement. PASS iff binomial upper tail <= 0.05/12 (Bonferroni family: 2 domains x 2 regions x 3 residuals). Minimum 8 pairs derived from 2^-n <= 0.05/12. Fewer means insufficient alternations, never PASS. No min(OFF)-spread quality rule. Pixels, parity and K8 frames are not independent replicates. Registration failure invalidates the observable; no dropping failed windows. This tests consistent paired improvement; historical magnitudes are targets only. Arbitrary animation/serial dependence can still confound a live; no claim of universal phase cancellation.",
+    "masks": "Freeze masks from all 10 OFF windows: class-5 support against baseline depth discontinuities for hair-over-DoF, brightest 1 percent of baseline character contours, eroded depth-stable class-3 face control, far depth-stable background excluding character silhouettes. No candidate-derived mask or retuned threshold.",
+    "residual": "Dialogue3: 10 adjacent non-overlapping pairs. Even pair indices OFF->ON, odd ON->OFF; balanced time order reduces smooth drift bias. For each pair compute ON minus OFF of the same midpoint residual, independently for total/even/odd, rendered/presented, hair_over_dof/bright_contour. Exact one-sided sign test: improvement iff difference < 0; ties count against improvement. PASS iff binomial upper tail <= 0.05/12 (Bonferroni family: 2 domains x 2 regions x 3 residuals). Minimum 8 pairs derived from 2^-n <= 0.05/12. Fewer means insufficient alternations, never PASS. No min(OFF)-spread quality rule. Pixels, parity and K8 frames are not independent replicates. Registration failure invalidates the observable; no dropping failed windows. This tests consistent paired improvement; historical magnitudes are targets only. Arbitrary animation/serial dependence can still confound a live; no claim of universal phase cancellation.",
     "components": "Decode rr_post_ac as C.rgb/A.a, rr_post_eb as bloom.rgb/exposure.a, Vulkan formats 97 (OFF) or 109 (ON). Report component residuals independently; exposure must stay fresh.",
     "energy": "Energy traces retain rrpost slots 1 (effective AC), 2 (linear RR Z), 6 (effective EB), 384-wide nearest float32 RGBA *_p.f32 sidecars. Join trace rrpost image references to dumps.json. For ON, sample AC/EB at uv+jitter/renderSize from the energy jitter log; OFF samples at uv. Reconstruct the same chain_value (including rr_post_quantise R11 truncations) from Z, AC and EB. Compare fixed far-background float mean across all OFF/ON windows; report full-image dumps.json float means as an independent check. PNG/PQ means and isolated bloom means cannot pass the energy gate.",
     "timing": "Separate timing-off-cost/timing-on-cost after captures, pan_post=0; active=1 temporal lines required in ON cost window; no diagnostics/builds/compiles overlap. S8 timing unchanged.",
@@ -115,11 +107,11 @@
     "energy_traces_per_window": 1,
     "game_launches": 2,
     "dialogue3": {
-      "rendered_bursts": 24,
-      "presented_bursts": 24,
-      "energy_traces": 24,
+      "rendered_bursts": 20,
+      "presented_bursts": 20,
+      "energy_traces": 20,
       "disk_bound_bytes": 6212933760,
-      "disk_bound_note": "One-off flicker pack >2 GiB justified by 12 independent pairs; includes 210 MB float sidecars/logs/summaries. Analyze before another scene; retain summaries. No automatic deletion in this task."
+      "disk_bound_note": "One-off flicker pack >2 GiB justified by 10 independent pairs; includes 210 MB float sidecars/logs/summaries. Analyze before another scene; retain summaries. No automatic deletion in this task."
     },
     "s8_phase_seconds": 130.3
   },
@@ -130,37 +122,39 @@
   "live_permission": "None. Jobs remain outside every watched inbox. Never launch the game in this task.",
   "sequence_scope": "Dialogue3 only. S8 retains its existing four-window job and still requires independent qualification.",
   "dialogue3_design": {
-    "pairs": 12,
-    "off_on_order": "OFF ON / ON OFF repeated six times",
+    "pairs": 10,
+    "off_on_order": "OFF ON / ON OFF repeated five times",
     "family_alpha": 0.05,
     "bonferroni_observables": 12,
     "minimum_pairs": 8,
-    "minimum_derivation": "ceil(log2(12/0.05)) = 8; 12 pairs allow one non-improving pair (p=13/4096).",
+    "minimum_derivation": "ceil(log2(12/0.05)) = 8; 10 pairs require all ten improvements (p=1/1024).",
     "duration_derivation": {
-      "fps": 30,
+      "fps": 25.684931506736675,
       "settings_latency_s": 1,
       "write_stall_s": 1,
-      "exclusive_rounding_s": 0.1,
-      "settle_off_s": 2.1,
-      "settle_on_s": 4.7,
-      "settle_frames_off": 32,
-      "settle_frames_on": 108,
-      "settle_note": "ON ceil(log(1/1024)/log(15/16)) = 108 frames; OFF 32 Halton frames. Shared live_flow rounds exclusive endpoints up to next 0.1 s.",
-      "rendered_s": 2.6,
-      "rendered_note": "1 + capture_at 0.1 + (9 capture + 3 completion presents)/30 + 1 write = 2.5 exclusive.",
-      "presented_s": 3.1,
-      "presented_note": "Capture transport is 2.3 s exclusive; FG status gate needs settings 1 + settle 1 + one 30-frame producer interval = 3 s exclusive.",
-      "energy_s": 2.1,
-      "energy_note": "max(trace_at=1, latency=1) + two presents/30 + write=1, rounded exclusive.",
-      "off_window_s": 9.9,
-      "on_window_s": 12.5,
-      "quality_seconds": 268.8,
-      "timing_s": 11.1,
-      "plan_s": 338.9,
+      "trace_export": {
+        "seconds": 0.3169999999954598,
+        "quantile": 0.95,
+        "samples": 439,
+        "maximum": 0.43699999999807915
+      },
+      "trace_dispatch_s": 4,
+      "trace_dispatch_source": "pt-dialogue3.1.004032 phase 25: 00:43:37.562 -> 00:43:41.365 without a motion-trace request; ceil(3.803) = 4 s synchronous scheduling bound. Written markers precede dumps_finish; request-to-written is not full export stall.",
+      "failed_run_request_to_written_s": [
+        0.097,
+        0.094,
+        0.09,
+        0.092,
+        0.081
+      ],
+      "energy_s": 6.1,
+      "energy_note": "max(trace_at=1, settings=1, previous export remaining) + dispatch 4 + max(2/fps + stall 1, VALID request-to-written p95); exclusive 0.1 s rounding. All traces and every-window gates retained.",
+      "plan_s": 384.9,
       "readiness_timeouts_s": 360,
       "load_allowance_s": 120,
-      "worst_case_s": 818.9,
-      "cap_s": 900
+      "worst_case_s": 864.9,
+      "cap_s": 900,
+      "pair_count_derivation": "Quality pair = 31.4 s, fixed phases = 70.9 s; floor((900-480-70.9)/31.4) = 11; largest balanced even count = 10. Minimum remains 8. Twelve pairs would take 927.7 s."
     }
   }
 }
