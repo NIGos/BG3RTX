@@ -12,6 +12,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from tools.low_priority import lower_priority
+lower_priority()
 from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
 
 FAILS = []
@@ -400,6 +402,79 @@ def test_render():
             check("plain card reference halves the tilted fibres' coverage", abs(p / s / flat_ratio - 0.5) < 0.1, (p / s, flat_ratio))
 
 
+def test_render_equivalence():
+    rng = np.random.default_rng(583)
+    pix = rng.integers(0, 31, 4000)
+    depth = rng.normal(size=len(pix))
+    # Several distinct float64 depths in the same float32 bucket, adjacent buckets,
+    # signed zeros, underflow and overflow: buckets must never change exact ordering.
+    depth[:600] = 1 + rng.integers(-20, 20, 600) * 1e-10
+    depth[600:610] = [0.0, -0.0, 1e-310, -1e-310, 1e100, -1e100, 2, 2, -2, -2]
+    order = np.lexsort((depth, pix))
+    check("fragment radix order exactly matches stable lexsort including collisions",
+          np.array_equal(render._fragment_order(pix, depth), order))
+    for special_pix, special_depth in ((np.array([2 ** 33, 2 ** 33, 0]), np.array([1., -1., 0.])),
+                                       (np.array([0, 0, 0]), np.array([np.nan, np.inf, -np.inf]))):
+        check("fragment order fallback matches lexsort",
+              np.array_equal(render._fragment_order(special_pix, special_depth), np.lexsort((special_depth, special_pix))))
+    alpha, colour = rng.uniform(0, 1, len(pix)), rng.uniform(0, 2, (len(pix), 3))
+    pp, aa, cc = pix[order], np.minimum(alpha[order], 0.999), colour[order]
+    tau = -np.log1p(-aa)
+    cum = np.cumsum(tau)
+    first = np.maximum.accumulate(np.where(np.r_[True, pp[1:] != pp[:-1]], np.arange(len(pp)), 0))
+    before = np.exp(-(cum - tau - (cum[first] - tau[first])))
+    expected, total = np.zeros((32, 3)), np.zeros(32)
+    np.add.at(expected, pp, (before * aa)[:, None] * cc)
+    np.add.at(total, pp, tau)
+    image, trans = render.composite(pix, depth, alpha, colour, 32)
+    check("composite matches original add.at arithmetic exactly", np.array_equal(image, expected)
+          and np.array_equal(trans, np.exp(-total)))
+    empty = render.Fragments.concat([])
+    image, trans = render.composite(empty.pixel, empty.depth, empty.alpha, empty.tangent, 4)
+    check("empty composite leaves background untouched", not image.any() and np.all(trans == 1))
+
+    card = card_mesh(length=0.06, width=0.04, rows=3)
+    card.positions[:, 2] = card.positions[:, 0] * 0.8
+    mask = rng.integers(0, 256, (64, 64, 4), dtype=np.uint8)
+    mask[::3, :, 3] = 0
+    # A small viewport exercises clipping as well as raster chunk boundaries.
+    view = render.View(np.array([0.0, -0.03, 0]), np.array([0., 0, 1]), np.array([0., 1, 0]), 0.002, (13, 19))
+    both = render.card_fragments_both(card.positions, card.uv, card.tris, mask, view, chunk=1)
+    for i, fibres in enumerate((True, False)):
+        single = render.card_fragments(card.positions, card.uv, card.tris, mask, view, fibres=fibres)
+        check(f"paired cards equal independent raster, fibres={fibres}", all(
+            np.array_equal(getattr(single, field), getattr(both[i], field)) for field in render.Fragments.FIELDS))
+    builders = render.card_fragment_builders(card.positions, card.uv, card.tris, mask)
+    equivalent = dataclasses.replace(view)
+    with patch.object(render, "card_fragments_both", wraps=render.card_fragments_both) as raster:
+        builders[0](view)
+        builders[1](equivalent)
+        check("paired builders rasterise an equivalent view only once", raster.call_count == 1)
+    # Compare all light/head shadow queries against the original add.at map.
+    light = both[1]
+    slabs = 7
+    lo, hi = np.percentile(light.depth, [0, 100])
+    span = max(hi - lo, 1e-6)
+    bins = np.clip(((light.depth - lo) / span * slabs).astype(np.int64), 0, slabs - 1)
+    tau = np.zeros((view.size[0] * view.size[1], slabs + 1))
+    np.add.at(tau, (light.pixel, bins + 1), -np.log1p(-np.minimum(light.alpha, 0.999)))
+    check("shadow bins match original add.at exactly", np.array_equal(render._shadow_map(light, view, slabs)[2], np.cumsum(tau, 1)))
+    query = view.project(light.world.astype(float))
+    shared = render._shadow_map(light, view, 64)
+    check("shared shadow lookup equals standalone lookup", np.array_equal(
+        render.shadow_transmittance(light, query, view), render.shadow_transmittance(light, query, view, shadow_map=shared)))
+
+    # More than one chunk; a strand boundary falls inside a chunk, not just at its edge.
+    points = rng.uniform(-0.004, 0.004, (33010, 3)).astype(np.float32)
+    offsets = np.array([0, 13, 33010])
+    radii, root = np.full(len(points), 0.0001, np.float32), rng.random(len(points)).astype(np.float32)
+    seg = np.flatnonzero(~np.isin(np.arange(len(points)), offsets[:-1]))
+    reference = render._strand_chunk(points, radii, root, view, 0.5, seg)
+    chunked = render.strand_fragments(points, radii, offsets, root, view)
+    check("strand chunking preserves every fragment and sample order", all(
+        np.array_equal(getattr(reference, field), getattr(chunked, field)) for field in render.Fragments.FIELDS))
+
+
 def test_mesh_loader():
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
@@ -781,7 +856,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
