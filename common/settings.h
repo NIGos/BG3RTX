@@ -353,6 +353,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
+  {"exp_hair_groom_primary", "Strand hair on screen",
+   "The visible hair of converted styles becomes strands (needs strand hair in RT lighting). Moving hair keeps camera motion vectors for now. Cost and look unqualified.",
+   Kind::Choice, Apply::Live, "live; supported LSS hardware, local groom files and shaderInt64 required", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom_primary", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -688,6 +695,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_cheap", "0"},
     {"rt_hair_gi_mean", "0"},
     {"rt_hair_groom", "0"},
+    {"rt_hair_groom_primary", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},

@@ -94,14 +94,16 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint64_t rec = record();
   const uint tag = ld(rec);
   const uint width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
-  if (tag == 0u || grooms == 0u || width == 0u) discard;
+  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint64_t at = pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes;
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
   if (e.w != tag) {
     // Camera-relative point of the card fragment: the ray direction (camera at the origin of the groom TLAS frame).
-    const float2 ndc = pos.xy / float2(width, height) * 2.0 - 1.0;
+    // Vulkan viewport transform inverted (a flipped viewport has a negative height).
+    const float4 view = asfloat(vk::RawBufferLoad<uint4>(rec + 40u, 8));
+    const float2 ndc = (pos.xy - view.xy) / view.zw * 2.0 - 1.0;
     const float4 h = mul(float4(ndc, pos.z, 1.0), inverse4(gCam.vp));
     const float3 dir = normalize(h.xyz / h.w);
     RayDesc r;

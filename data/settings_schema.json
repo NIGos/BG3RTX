@@ -295,6 +295,18 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
+    {"id": "exp_hair_groom_primary", "label": "Strand hair on screen",
+     "description": "The visible hair of converted styles becomes strands (needs strand hair in RT lighting). Moving hair keeps camera motion vectors for now. Cost and look unqualified.",
+     "apply": "live", "apply_note": "live; supported LSS hardware, local groom files and shaderInt64 required", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "The visible hair of converted styles becomes strands (needs strand hair in RT lighting). Moving hair keeps camera motion vectors for now. Cost and look unqualified.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
     {"id": "exp_hair_visibility", "label": "Subpixel distant hair cards",
      "description": "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,

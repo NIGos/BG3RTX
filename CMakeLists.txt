@@ -52,6 +52,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/bvhsplit.cpp
   layer/emissive.cpp
   layer/water.cpp
+  layer/hair_primary.cpp
   layer/devfault.cpp
   layer/aftermath.cpp
   layer/streamline.cpp

@@ -4,6 +4,7 @@
 #include "mesh_content_id.h"
 #include "hair_groom.h"
 #include "../common/hair_groom_budget.h"
+#include "../common/hair_primary.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -426,11 +427,13 @@ struct HairBoundsPush {
 static_assert(sizeof(HairBoundsPush)==112);
 // rt_hair_groom: the strand groom of a per-draw slot's matched hair draw (groom_decide).
 constexpr uint32_t kGroomMax = 64;     // groom instances per scene (one per matched hair draw)
+static_assert(kGroomMax == hair_primary::kMaxGrooms, "the primary header table has one row per groom instance");
 constexpr uint32_t kGroomLods = 4;
 struct GroomSlot {
   uint64_t id = 0;
   int lod = -1, lod_votes = 0;
   VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
+  VkDeviceSize uv_off = 0;     // rt_hair_groom_primary: per-point card UV after the bounds (0: not allocated)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
@@ -480,6 +483,7 @@ struct FrameDraw {
   uint32_t groom_indices = 0;   // the draw's index count (also when unmatched: the log names it)
   hair_groom::JoinMiss groom_miss = hair_groom::JoinMiss::None;
   uint64_t groom_identity = 0;  // the draw's identity without the per-frame occurrence (the join caches)
+  uint64_t hp_key = 0;          // rt_hair_groom_primary: the index-range key its G-buffer draw is swapped by
   std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
@@ -844,7 +848,7 @@ std::vector<uint32_t> g_groom_free_queries;
 TlasSlot g_groom_tlas[kSceneSlots];
 Buf g_groom_inst[kSceneSlots];
 Buf g_groom_scratch;
-struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, pad; };
+struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off; };
 static_assert(sizeof(GroomPush) == 32);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
@@ -1929,6 +1933,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     // Every draw gets its join verdict (cheap: the count filter before any index read); only hair draws use it.
     fd.groom_indices = d.args.count;
     fd.groom_identity = dk;
+    fd.hp_key = hair_primary_draw_key(s, d.args);
     if (!indexed) fd.groom_miss = hair_groom::JoinMiss::NotIndexed;
     else if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
     else fd.groom_id = groom_join(d, dk, &fd.groom_miss);
@@ -2300,7 +2305,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<DynHoldPackJob> hold_pack_jobs;
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
-                     uint64_t key; uint32_t card = UINT32_MAX; };
+                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; };
+  const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
   std::unordered_map<uint64_t, size_t> groom_of_key;
   const bool groom_ready = g_groom_on && ensure_groom_pipeline() &&
@@ -2563,19 +2569,25 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
-      if (ok && lod != g.lod) {   // a new LOD: new points range and a full build into a new BLAS
+      w.hp_key = fd.hp_key;
+      // A new LOD, or primary strands turned on for a slot without per-point UVs: new points range and a full build.
+      if (ok && (lod != g.lod || (hp_on && g.pos_size && !g.uv_off))) {
         if (g.pos_size) {
           g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
           g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
         }
         as_destroy(g.as);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
-        g.pos_size = 0; g.built = false; g.compact = 0; g.lod = lod;
+        g.pos_size = 0; g.uv_off = 0; g.built = false; g.compact = 0; g.lod = lod;
       }
       if (ok && !g.pos_size) {
         const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
-        ok = groom_make_room(pos + 32, now) && pool_alloc(cmd, pos + 32, &g.pos_off);
-        if (ok) { g.pos_size = pos + 32; g.bounds_off = g.pos_off + pos; g_groom_pool_used += g.pos_size; }
+        const VkDeviceSize uv = hp_on ? (VkDeviceSize(l.points) * 8 + 15) / 16 * 16 : 0;
+        ok = groom_make_room(pos + 32 + uv, now) && pool_alloc(cmd, pos + 32 + uv, &g.pos_off);
+        if (ok) {
+          g.pos_size = pos + 32 + uv; g.bounds_off = g.pos_off + pos; g.uv_off = uv ? g.pos_off + pos + 32 : 0;
+          g_groom_pool_used += g.pos_size;
+        }
       }
       if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
       if (ok && !g.as.as) {
@@ -2919,7 +2931,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pl, 0, 2, wr);
       for (const GroomWork& w : groom_work) {
         const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
-                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), 0};
+                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off)};
         dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
         dd->vk.CmdDispatch(cmd, (w.l->points + 127) / 128, 1, 1);
       }
@@ -3100,6 +3112,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 
   bvh_cpu_mark(4);
   VkDeviceAddress groom_tlas_address = 0;   // rt_hair_groom: this slot's groom TLAS (0: none)
+  hair_primary::Row hp_rows[hair_primary::kMaxGrooms] = {};   // rt_hair_groom_primary: groom k's pool offsets
+  uint64_t hp_keys[hair_primary::kMaxGrooms] = {};            // and its draw's index-range key
   uint32_t groom_count = 0;
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
@@ -3326,6 +3340,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
         const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
+        if (groom_count < hair_primary::kMaxGrooms) {
+          hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg), 0u};
+          hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
+        }
         ++groom_count;
       }
       VkAccelerationStructureGeometryKHR gg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -3353,6 +3371,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
         ai.accelerationStructure = g_groom_tlas[slot].as;
         groom_tlas_address = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
+        if (hp_on) {
+          uint32_t w = 0, h = 0;
+          float viewport[4];
+          geo_render_size(&w, &h);
+          geo_gbuffer_viewport(viewport);
+          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, hp_rows, hp_keys, groom_count, w, h, viewport);
+        }
       } else {
         groom_count = 0;
       }
