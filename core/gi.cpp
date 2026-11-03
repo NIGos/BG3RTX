@@ -96,10 +96,11 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar; 1 was rt_scene_rebase).
-  VkPipeline variants[256] = {};
-  uint64_t variant_generations[256] = {};
-  std::string variant_files[256];
+  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
+  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline.
+  VkPipeline variants[bg3::shader_variant::kPipelineSlots] = {};
+  uint64_t variant_generations[bg3::shader_variant::kPipelineSlots] = {};
+  std::string variant_files[bg3::shader_variant::kPipelineSlots];
 };
 
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
@@ -1079,7 +1080,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool ip_grass=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::ip_grass_capability_key,sizeof(uint32_t))));
   // rt_hit_material_generated with two-sided pool rows at startup: the pool consumer's N flip (RT_HIT_POOL_2S), as IP grass.
   const bool pool_2s=instanced && bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::pool_2s_capability_key,sizeof(uint32_t))));
-  const unsigned variant = (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const bool hair_gi_cull = sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_cull", 0) != 0;
+  const unsigned variant = sv::hair_gi_cull_slot(file, hair_gi_cull) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1127,6 +1129,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
     if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
   }
+  if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();
   const bool known = p.variants[variant] && p.variant_files[variant] == slot_key;
   // Diagnostic callers may ignore the return value: never expose a different specialization while building.
@@ -2499,7 +2502,7 @@ bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) 
 // pack must compile what ran (RT_CASCADE_MASKS: GI rays trace 0x01, never the cascade instance).
 std::string pipe_defines(const Pipe& p){
  if(!p.pipeline)return {};
- for(int i=0;i<256;++i)if(p.variants[i]==p.pipeline){
+ for(unsigned i=0;i<bg3::shader_variant::kPipelineSlots;++i)if(p.variants[i]==p.pipeline){
   const std::string& f=p.variant_files[i];const size_t q=f.find('?');
   return q==std::string::npos?std::string():f.substr(q+1);
  }

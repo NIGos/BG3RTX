@@ -2,9 +2,49 @@
 import sys
 import concurrent.futures
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.spec_cascade_check import phi_order, block_order, lower_priority, old_requests_waterhair
+from tools.spec_cascade_check import (phi_order, block_order, lower_priority, old_requests_waterhair,
+                                     old_requests_hairgi, check_baseline)
+
+
+class BaselineWorkerTest(unittest.TestCase):
+    def test_workers_have_private_reference_paths_and_preserve_assignments(self):
+        assign = {1010: 1, 1017: 0}
+        with patch("tools.spec_cascade_check.opt", side_effect=lambda tool, src, dst, *args: dst) as optimize, \
+                patch("tools.spec_cascade_check.check_one", return_value=0) as compare:
+            for identity in ("request_a_hair1", "request_b_hair1"):
+                self.assertEqual(check_baseline(None, "scratch", identity, "new", "old", assign, True), 0)
+            outputs = [c.args[2] for c in optimize.call_args_list]
+            self.assertNotEqual(outputs[0], outputs[1])
+            for call in optimize.call_args_list:
+                self.assertEqual(call.args[3], "--set-spec-const-default-value=1010:1")
+            for call in compare.call_args_list:
+                self.assertEqual(call.args[-1], assign)
+            optimize.reset_mock()
+            check_baseline(None, "scratch", "plain", "new", "old", assign, False)
+            optimize.assert_not_called()
+            self.assertEqual(compare.call_args.args[-2], "old")
+
+
+class HairGiRequestsTest(unittest.TestCase):
+    def test_hair_on_control_and_both_cull_values(self):
+        request = "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1"
+        pairs = old_requests_hairgi(request)
+        self.assertEqual([(a[1010], a[1017]) for a, _ in pairs], [(0, 0), (0, 1), (1, 0), (1, 1)])
+        for assign, reference in pairs:
+            self.assertEqual(assign[1008], 0)
+            self.assertEqual(assign[1009], 0)
+            self.assertIn(f"RT_HAIR_GI_CULL_REFERENCE={assign[1017]}", reference)
+            self.assertEqual("RT_NATIVE_HAIR=1" in reference, bool(assign[1010]))
+            self.assertNotIn("RT_SPEC_NATIVE", reference)
+            self.assertNotIn("RT_SPEC_HAIR_ORIGIN", reference)
+            self.assertIn("RT_SPEC_CASCADE=1", reference)
+
+    def test_reference_query_separator_without_other_defines(self):
+        pairs = old_requests_hairgi("gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1")
+        self.assertEqual(pairs[0][1], "gi/gi_trace_rt.hlsl?RT_HAIR_GI_CULL_REFERENCE=0")
 
 
 class WaterHairRequestsTest(unittest.TestCase):

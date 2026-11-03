@@ -83,6 +83,22 @@ int main(int argc, char** argv) {
   }
   CHECK(kOccStats != kHitPool2s);
   CHECK(kSpecIdOccStats == 1011);
+  CHECK(kSpecIdHairGiCull == 1017);
+  // Every existing installed slot retains a distinct cull-on sibling; toggling
+  // back addresses the original pipeline instead of destroying/rebuilding it.
+  for (unsigned base = 0; base < kHairGiCullSlot; ++base) {
+    const auto off = base | hair_gi_cull_slot("gi/gi_trace_rt.hlsl", false);
+    const auto on = base | hair_gi_cull_slot("gi/gi_trace_rt.hlsl", true);
+    CHECK(off == base && on != off && on < kPipelineSlots);
+  }
+  CHECK(hair_gi_cull_slot("gi/rt_shadow.hlsl", true) == 0u);
+  CHECK(hair_gi_cull_entry("gi/gi_trace_rt.hlsl"));
+  CHECK(hair_gi_cull_entry("gi/gi_trace_rt_sharc_hit_sun_em.hlsl"));
+  CHECK(!hair_gi_cull_entry("gi/gi_trace.hlsl"));
+  CHECK(!hair_gi_cull_entry("gi/rt_origin.hlsl"));
+  CHECK(!hair_gi_cull_entry("gi/rt_shadow.hlsl"));
+  CHECK(!hair_gi_cull_entry("gi/rt_local_shadows.hlsl"));
+  CHECK(!hair_gi_cull_entry("gi/rt_reflections.hlsl"));
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0).find("RT_SPEC_OCC_STATS=1") != std::string::npos);
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0) == request("gi/rt_local_shadows_full_box.hlsl", kOccStats));
   CHECK(request("gi/rt_shadow.hlsl", kOccStats) == request("gi/rt_shadow.hlsl", 0));

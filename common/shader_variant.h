@@ -41,14 +41,20 @@ enum SpecId : unsigned {
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
-  // 1017 is reserved for rt_hair_gi_cull in the next hair-anyhit-perf merge.
   kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
+  kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
 // instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
 // small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
+inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
+// Separate installed slots preserve both warmed cull states during same-run A/B.
+inline constexpr unsigned kHairGiCullSlot = 256u, kPipelineSlots = 512u;
+inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
+  return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
+}
 inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 
 // rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
