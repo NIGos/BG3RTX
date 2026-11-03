@@ -65,19 +65,19 @@ def spv(f, e="main"):
 
 # These production GI variants need their dedicated host interface, not
 # the contracted local-shadow layout. Check the actual compiled modules.
-material_gi = [(spv(f), "RT_NATIVE_TILESET=1" in defines(f))
+material_gi = [(spv(f), ("RT_NATIVE_TILESET=1" in defines(f) or "RT_SPEC_NATIVE=1" in defines(f)))
                for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
                    ("gi_trace_rt_hit_direct.hlsl", "gi_trace_rt_sharc_hit_direct.hlsl"))]
 # rt_hit_emission: the hit-GI variants plus the emissive set 2 (--em), with and without the sun.
-em_gi = [(spv(f), "RT_NATIVE_TILESET=1" in defines(f), "_hit_sun_em" in f.partition("?")[0])
+em_gi = [(spv(f), ("RT_NATIVE_TILESET=1" in defines(f) or "RT_SPEC_NATIVE=1" in defines(f)), "_hit_sun_em" in f.partition("?")[0])
          for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
              ("gi_trace_rt_hit_direct_em.hlsl", "gi_trace_rt_sharc_hit_direct_em.hlsl",
               "gi_trace_rt_hit_sun_em.hlsl", "gi_trace_rt_sharc_hit_sun_em.hlsl"))]
 # gi_hit_sun: the same contract plus the sun set 3 and the roof volumes b47 (--sun).
-sun_gi = [(spv(f), "RT_NATIVE_TILESET=1" in defines(f))
+sun_gi = [(spv(f), ("RT_NATIVE_TILESET=1" in defines(f) or "RT_SPEC_NATIVE=1" in defines(f)))
           for f, rc, _ in res if not rc and f.partition("?")[0].endswith(
               ("gi_trace_rt_hit_sun.hlsl", "gi_trace_rt_sharc_hit_sun.hlsl"))]
-references = [(spv(f), "RT_NATIVE_TILESET=1" in defines(f))
+references = [(spv(f), ("RT_NATIVE_TILESET=1" in defines(f) or "RT_SPEC_NATIVE=1" in defines(f)))
               for f, rc, _ in res if not rc and f.partition("?")[0].rsplit("/", 1)[-1] in
                   ("rt_hit_direct.hlsl", "rt_hit_two_bounce.hlsl")]
 checker = root / "bin" / "native_hit_gi_bindings_test.exe"
@@ -113,11 +113,11 @@ if rf_hit and rf_checker.exists():
     for f, module in rf_hit:
         d = defines(f)
         flags = (["--sharc"] if "sharc" in f.partition("?")[0] else []) + \
-                (["--tileset"] if "RT_NATIVE_TILESET=1" in d else []) + \
-                (["--hair"] if "RT_HAIR_PHYSICAL_ORIGIN=1" in d else []) + \
+                (["--tileset"] if ("RT_NATIVE_TILESET=1" in d or "RT_SPEC_NATIVE=1" in d) else []) + \
+                (["--hair"] if ("RT_HAIR_PHYSICAL_ORIGIN=1" in d or "RT_SPEC_HAIR_ORIGIN=1" in d) else []) + \
                 (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + \
                 (["--em"] if f.partition("?")[0].endswith("_em.hlsl") else []) + \
-                (["--gi"] if "RF_HIT_GI=1" in d else [])
+                (["--gi"] if ("RF_HIT_GI=1" in d or "RF_SPEC_HIT_GI=1" in d) else [])
         result = subprocess.run([str(rf_checker), *flags, module], capture_output=True, text=True)
         if result.returncode:
             res.append(("rf hit shade descriptor interface " + f, result.returncode, result.stdout + result.stderr))

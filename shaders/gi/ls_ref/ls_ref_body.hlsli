@@ -701,15 +701,26 @@ uint lsref_trace_light(lsref_Bg3Surface sf, float3 lpos, uint2 fp, uint key, lsr
   }
   // (`side` < 0 gives the ray a direction below the surface: the origin follows it.)
   float3 o = lsref_rt_ray_origin_o(sf.org, sf.P, sf.N, cone.f0, dir);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  o=rt_secondary_ray_origin_o(fp,sf.org,sf.P,sf.N,cone.f0,dir); // helper gates physical reads and preserves the virtual fallback
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   o=rt_secondary_ray_origin_o(fp,sf.org,sf.P,sf.N,cone.f0,dir); // hand edit: shared physical receiver geometry only
 #endif
+#endif
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if(physical_receiver){
+    HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,pc.ls_soft!=0?R:0.0,pc.ls_soft!=0?pc.ls_clear:max(R,pc.ls_clear));
+    if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   if(physical_receiver){
     HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,pc.ls_soft!=0?R:0.0,pc.ls_soft!=0?pc.ls_clear:max(R,pc.ls_clear));
     if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
   }
+#endif
 #endif
   if (tmax <= 0.0) return kRtLit;
   return lsref_rt_occluded(o, dir, tmax, cone);
