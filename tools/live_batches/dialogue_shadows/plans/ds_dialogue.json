@@ -12,7 +12,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "settle-cam",
@@ -27,7 +27,55 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
+ },
+ {
+  "label": "diag-view-occ-first",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 12,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 12,
+  "motion_end": 12,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
+  "trace_at": [
+   6
+  ]
+ },
+ {
+  "label": "diag-occ-frames-hold4",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,gi=1,ls_box_cascade_old=0"
+ },
+ {
+  "label": "diag-occ-frames-hold0",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 6,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 6,
+  "motion_end": 6,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=1,rt_occ_stats_frames=4,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "shot-off-a",
@@ -42,7 +90,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -60,7 +108,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -78,7 +126,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=0,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=0,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -96,7 +144,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -114,7 +162,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=0,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=0,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -132,7 +180,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=15,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=15,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -150,7 +198,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=2,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=2,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -168,7 +216,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -186,7 +234,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -204,7 +252,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=1",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=1",
   "trace_at": [
    5
   ]
@@ -222,7 +270,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -240,7 +288,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -258,7 +306,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=0,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=0,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -276,7 +324,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -294,7 +342,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -312,7 +360,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -330,7 +378,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    5
   ]
@@ -348,7 +396,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    6,
    6.5
@@ -367,7 +415,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=0,contact_shadows=0,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    6,
    6.5
@@ -386,7 +434,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=2,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=2,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    6
   ]
@@ -404,7 +452,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=9,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=9,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    6
   ]
@@ -422,7 +470,7 @@
   "motion_end": 12,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=2,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0",
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=2,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0",
   "trace_at": [
    6
   ]
@@ -440,7 +488,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-occ-base",
@@ -455,7 +503,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-occ-nohold",
@@ -470,7 +518,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=0,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-occ-nocascade",
@@ -485,7 +533,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=0,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-occ-hair",
@@ -500,7 +548,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-occ-boxold",
@@ -515,7 +563,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,gi=1,ls_box_cascade_old=1"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=1"
  },
  {
   "label": "diag-rt-hairoff-a",
@@ -530,7 +578,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-rt-hairon",
@@ -545,7 +593,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "diag-rt-hairoff-b",
@@ -560,7 +608,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=1,rt_primary_check=1,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "settle",
@@ -575,7 +623,7 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "cost-off-a",
@@ -590,7 +638,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "cost-hair",
@@ -605,7 +653,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "cost-off-b",
@@ -620,7 +668,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  },
  {
   "label": "restore",
@@ -635,6 +683,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,gi=1,ls_box_cascade_old=0"
+  "set": "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_box=2,ls_owners=31,ls_noshadow=1,rt_cascade_casters=1,rt_dyn_hold=4,gi_ao=1.0,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,ls_debug=0,rt_debug=0,ls_stats=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0,rt_occ_stats_frames=60,gi=1,ls_box_cascade_old=0"
  }
 ]

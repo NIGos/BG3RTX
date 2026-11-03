@@ -81,7 +81,24 @@
    },
    "port-dark": "double darkening predicted: AO darkened >= 90% of character px with mean darkening >= 30% (ambient visibility <= 0.7) on top of the game's own occluded ambient; the AO distance bins >= 1 m hold a larger share than in ds1 (the roof and walls within gi_rt_radius); sun: darkened >= 80% of the character px with 'static' (roof) >= 2 m dominating",
    "energy (char_energy.py, float mask mean vs the OFF neighbours)": "shot-noao-on > +25% (beyond the OFF spread; ds1 camp +35% by PNG); shot-nogi-on minus shot-noao-on within the OFF spread = the RT bounce adds almost nothing under the roof (little bounce); shot-nogi-on clearly below shot-noao-on = the bounce lights them and only the AO over-darkens",
-   "diag-occ-boxold": "before the box cascade-mask fix (ls_box_cascade_old=1): a 'cascade' kind appears under local and/or box (> 0 rays); in diag-occ-base (fixed) it is 0 under local/box. The local+box darkening of character px rises by that cascade dark share; the sun and AO lines unchanged within the base spread"
+   "diag-occ-boxold": "before the box cascade-mask fix (ls_box_cascade_old=1): a 'cascade' kind appears under local and/or box (> 0 rays); in diag-occ-base (fixed) it is 0 under local/box. The local+box darkening of character px rises by that cascade dark share; the sun and AO lines unchanged within the base spread",
+   "port-moving-band (user screens 7-9, docs/dialogue_user_screens)": {
+    "observable": "diag-view-occ-first (the first held shot after the load, the screens' framing; its trace proves it) and motion-base: the sun line of 'occ stats' on character px",
+    "b_held_stale": "held/stale or mismatched dynamic geometry (an rt_dyn_hold pose of an earlier frame, or per-draw BLAS of another animation frame or of the previous camera cut): in diag-occ-frames-hold4 'held' >= 50% of the sun darkening on some lines and changing line to line; in diag-occ-frames-hold0 'held' 0 and the line-to-line swing of the sun darkening gone (beyond the hold4 lines' spread); shot-nohold-on mask energy up",
+    "c_foliage_crane": "moving foliage / cloth / rope / crane in the sun path: 'cutout-moving' (wind cutouts) or 'moving' with the distance bins >= 2 m (crane >= 5 m) leading the sun darkening, its share swinging line to line in both frames windows (hold 0 does not stop it); on-screen hair/skin share of those rays low",
+    "self": "'moving' with near share >= 70% (< 0.5 m): the character's own hair/head (H1), not another object",
+    "if_a": "physically plausible (bright sun, the other character between the sun and his face), but the game's own lighting does not show it in dialogue framing; fix options in docs/DIALOGUE_SHADOWS.md 'Port moving band'",
+    "user_2026-11-03": "the other character does NOT move: (a) cannot explain the MOVING part",
+    "ranking": [
+     "b_held_stale",
+     "c_foliage_crane",
+     "d_self_animated",
+     "a_other_character"
+    ],
+    "d_self_animated": "his own animated hair/cape/bow strap: 'moving' (or 'hair'/'scalp' with native hair) with near share >= 70% (< 0.5 m), swinging line to line in both frames windows; on-screen hair/skin share high",
+    "a_other_character": "sun darkening led by 'moving' (opaque soup) >= 50% with its distance bins 0.5-5 m holding >= 50% of the sun darkening and the near (<= 0.5 m) share < 30%; on-screen skin/hair share of the occluded sun rays >= 30% (the occluder is a visible character); unchanged in diag-occ-nohold and nocascade; motion-base differs between its traces while motion-nosun does not (static occluder: no line-to-line swing; unlikely for the moving band)",
+    "limit": "v1 records the whole character mask per 4-frame line, not fixed face/chest pixels; a per-pixel probe needs a shader change, deferred until the spec-constant migration is on main (no compiles meanwhile)"
+   }
   }
  },
  "_all": {

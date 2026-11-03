@@ -271,6 +271,21 @@ at its pixel), per kind `rays % [near %] dark %`, and the occluder distance hist
 - Scenes (save_index.py, read-only): Dialogue1/2 WLD_Main_A (camp, moving shadow), Dialogue3 CTY_Main_A (port, very
   dark under a roof). Predictions per save: tools/live_batches/dialogue_shadows/predicted.json ("occ").
 
+### Port moving band (user screens docs/dialogue_user_screens/7-9.webp, Test Dialogue3, 2026-11-03)
+
+A dark band moves over the left character's face/torso between frames in bright sun; the other character does not
+move. Ranked (predicted.json ds3 "port-moving-band"): held/stale or mismatched dynamic geometry (rt_dyn_hold pose, a
+per-draw BLAS of another animation frame or of the previous camera cut), moving foliage/cloth/rope/crane in the sun
+path, his own animated hair/cape/strap, then the static other character. Windows in the first held shot:
+`diag-view-occ-first`, then `diag-occ-frames-hold4` / `-hold0` with `rt_occ_stats_frames=4` (a line per 4 frames:
+kind and distance changing line to line = a moving occluder; 'held' vanishing with hold 0 = stale geometry).
+Not yet: fixed face/chest probe pixels (shader change, after the spec-constant migration).
+If a static character-on-character sun shadow turns out to be the cause (physically right, absent from the game's
+cascade in dialogue framing), options: keep RT (correct) but soften by the true penumbra (sun_radius already does);
+take character-on-character sun occlusion from the game's own cascade (min with the game's mask for character
+receivers hit by 'moving' occluders); or exclude character casters from character receivers in dialogue only. None
+chosen; the A/B decides.
+
 User 2026-11-02: the saves load already in dialogue; the shadow is on all characters; other dialogues
 show wrong hair shadows (run without the native hair keys).
 

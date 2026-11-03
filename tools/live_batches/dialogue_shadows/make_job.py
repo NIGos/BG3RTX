@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "gi": "1", "ls_box_cascade_old": "0"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "gi": "1", "ls_box_cascade_old": "0"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -54,6 +54,13 @@ plan = [
     # Shader variants: warmed by the ds0 job (below), which every ds job requires.
     step("warmup", 20, qa_exposure_hold="0"),                        # dialogue settles
     step("settle-cam", 10, qa_exposure_hold="0"),                    # ds1 10:54: the dialogue camera still moved 41 s after load
+    # The first held shot right after the load (user screens 7-9, port: the moving face band is in THIS shot; the later
+    # diag-occ windows may sit in another cut). Its trace proves the framing; sun rays on character px with distances.
+    step("diag-view-occ-first", 12, [6], rt_occ_stats="1", qa_exposure_hold="0"),
+    # Frame by frame (4-frame lines) in the same shot, rt_dyn_hold 4 then 0: a moving occluder shows as kind/distance
+    # changing line to line; held/stale geometry as 'held' that vanishes with hold 0.
+    step("diag-occ-frames-hold4", 6, rt_occ_stats="1", rt_occ_stats_frames="4", qa_exposure_hold="0"),
+    step("diag-occ-frames-hold0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_dyn_hold="0", qa_exposure_hold="0"),
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
     step("shot-nolocal-on", SHOT, True, rt_local_shadows="0"),               # the game's own local-light shadows
@@ -100,7 +107,7 @@ labels = [p["label"] for p in plan]
 shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
 traced = [p["label"] for p in plan if p.get("trace_at")]
 cost = [l for l in labels if l.startswith("cost-")]
-occ = [l for l in labels if l.startswith("diag-occ-")]
+occ = [l for l in labels if l.startswith(("diag-occ-", "diag-view-occ-"))]
 judged = shots + [l for l in labels if l.startswith(("view-", "diag-view-"))] + cost
 seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]

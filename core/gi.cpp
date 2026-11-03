@@ -2683,7 +2683,8 @@ void occ_fold_slot(uint64_t now) {
   const uint32_t slot = uint32_t(now % kOccRing);
   if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
     occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
-    if (g_occ_win.frames >= 60) {
+    // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
+    if (g_occ_win.frames >= uint32_t((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1))) {
       host->log("%s", occ::occ_format(g_occ_win).c_str());
       g_occ_win = occ::OccWindow{};
     }
