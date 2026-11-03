@@ -2,9 +2,12 @@
 // orthographic clip -> world inversion (CPU mirror of xfb_to_world.hlsl XFB_ORTHO), the
 // rebase translation and the fragment-discard scan.
 #include "../common/cascade_casters.h"
+#include "../layer/spirv_xfb.h"
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <vector>
 
 using namespace cascade;
@@ -20,7 +23,37 @@ static void project(const float m[4][4], const float w[3], float clip[4]) {
   clip[1] = -clip[1];
 }
 
-int main() {
+int main(int argc, char** argv) {
+  // Optional native fixture check: static cascade VS, skinned cascade VS, wind
+  // VS. No game files are required by CTest; supplied dumps are read-only.
+  if(argc!=1 && argc!=4) return fail(85,"expected static, skin and wind SPIR-V paths");
+  for(int i=1;i<argc;++i) {
+    std::ifstream f(argv[i],std::ios::binary);
+    const std::string bytes((std::istreambuf_iterator<char>(f)),{});
+    if(bytes.size()<20 || bytes.size()%4) return fail(86,"native fixture unreadable");
+    std::vector<uint32_t> words(bytes.size()/4);
+    std::memcpy(words.data(),bytes.data(),bytes.size());
+    const bool affine=bg3::analyze_vs_instancing(words.data(),words.size(),-1).ok;
+    if(static_candidate(affine,true,false)!=(i==1)) return fail(87,"native static/skin/wind classification");
+    std::printf("native fixture %s: affine %d\n",argv[i],int(affine));
+  }
+  // Static roof class A versus skin/cloth/wind, compute-skinned vertices and
+  // unknown bindings. Key OFF preserves all legacy outcomes.
+  for(bool affine : {false,true}) for(bool known : {false,true}) for(bool storage : {false,true}) {
+    const bool candidate=static_candidate(affine,known,storage);
+    if(candidate!=(affine && known && !storage)) return fail(70,"static classification");
+    if(!keep_static_only(false,candidate)) return fail(71,"key off preserves legacy");
+    if(keep_static_only(true,candidate)!=candidate) return fail(72,"key on rejects unknown/deformed");
+  }
+  SetChanges changes;
+  if(changes.observe(10,false,{1,2})) return fail(73,"first set seeds");
+  if(changes.observe(11,false,{2,1})) return fail(74,"order does not change membership");
+  if(!changes.observe(12,false,{1,3})) return fail(75,"equal count replacement detected");
+  if(!changes.observe(13,false,{})) return fail(76,"empty set transition");
+  if(changes.observe(14,true,{1})) return fail(77,"policy toggle reseeds");
+  if(changes.observe(20,true,{2})) return fail(78,"capture gap reseeds");
+  if(changes.observe(19,true,{3})) return fail(79,"late recording ignored");
+  if(changes.observe(21,true,{2})) return fail(80,"late recording did not replace newer set");
   // The old opaque stream must retain EXACTLY its legacy policy even when
   // the current material stream also records cards the old path skipped.
   for(int mode=0;mode<=2;++mode) {
@@ -53,6 +86,17 @@ int main() {
   if (draw_key(a) != draw_key(b)) return fail(10, "equal draws, equal keys");
   b.place_offset = 512;   // the same mesh placed elsewhere (another instance stream range)
   if (draw_key(a) == draw_key(b)) return fail(11, "placement must count");
+  // Reproduce the dialogue failure: the same opaque mesh and range have
+  // distinct camera/shadow placement offsets. Alpha mesh dedupe cannot save
+  // this skinned copy; static-only must remove it despite the draw-key miss.
+  KeySets dialogue_camera;
+  dialogue_camera.insert(100,draw_key(a));
+  const auto old_character=legacy_caster(false,2,false,true,mesh_key(a)==mesh_key(b),
+    dialogue_camera.contains(100,draw_key(b)));
+  if(old_character!=LegacyCaster::keep) return fail(81,"regression must reproduce undeduped character");
+  if(keep_static_only(true,static_candidate(false,true,false))) return fail(82,"lagged skin copy excluded");
+  if(!keep_static_only(false,static_candidate(false,true,false))) return fail(83,"off retains old skin behavior");
+  if(!keep_static_only(true,static_candidate(true,true,false))) return fail(84,"offscreen class A roof retained");
   b = a, b.instances = 5;
   if (draw_key(a) == draw_key(b)) return fail(12, "instance count must count");
   b = a, b.ib_offset = 0;

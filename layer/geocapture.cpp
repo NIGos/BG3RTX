@@ -311,6 +311,9 @@ struct Capture {
   int ts = -1;                                       // timestamp pair of the captured pass
   uint64_t rec = 0;                                  // build record of its command buffer (submitted?)
   uint32_t c_seen = 0, c_dup = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
+  uint32_t c_dynamic_added = 0, c_dynamic_excluded = 0;
+  bool c_static_only = false;
+  std::unordered_set<uint64_t> c_legacy_keys;
   uint64_t c_over = 0;                       // cascade: bytes of the draws left out for a full buffer
   uint64_t c_sig = 1469598103934665603ull;   // cascade: the added draws in order (rt_cascade_refit)
   uint64_t c_tris = 0;
@@ -1151,11 +1154,26 @@ uint64_t g_cc_ts_frame[kCcTs] = {};
 std::vector<float> g_cc_ms;
 std::atomic<uint64_t> g_cc_alpha_known{0}, g_cc_alpha_uv{0};   // skipped alpha-tested cascade draws
 struct CcStats {
+  uint64_t legacy_frames = 0, dynamic_added = 0, dynamic_excluded = 0, set_changes = 0;
   uint64_t frames = 0, seen = 0, dup = 0, alpha = 0, drop = 0, ubo = 0, full = 0, added = 0, tris = 0, tris_max = 0;
   uint64_t bytes = 0, bytes_max = 0, demand_max = 0, keys = 0, unconverted = 0;
   uint64_t builds[6] = {}, build_tris = 0;
 };
 CcStats g_cc_st;
+cascade::SetChanges g_cc_set_changes[kCcLayers]; // protected by g_cc_mu
+
+bool cascade_static_candidate(const CmdState* s, const PipeInfo& pi) {
+  VkBufferUsageFlags usage = 0;
+  bool known = false;
+  if (pi.inst.ok && pi.inst.pos_binding < CmdState::kMaxVertexBindings) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    const auto it = g_buffer_usage.find(s->vb[pi.inst.pos_binding].buffer);
+    known = it != g_buffer_usage.end();
+    if (known) usage = it->second;
+  }
+  return cascade::static_candidate(pi.inst.ok, known && (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+                                    (usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) != 0);
+}
 
 // The cascade index (array layer) of a sun cascade pass, -1 for any other pass.
 int cascade_layer(const Bg3PassInfo& p) {
@@ -1257,6 +1275,9 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.rt_ubo = VK_NULL_HANDLE;
   c.rt_ubo_off = 0;
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
+  c.c_dynamic_added = c.c_dynamic_excluded = 0;
+  c.c_static_only = cfg_int("rt_cascade_static_only", 0) != 0;
+  c.c_legacy_keys.clear();
   c.c_over = 0;
   c.c_sig = 1469598103934665603ull;
   c.c_tris = 0;
@@ -1375,7 +1396,13 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
   }
   const auto legacy=cascade::legacy_caster(pi.discard,cc_alpha,cutout,
     cfg_int("rt_cascade_alpha_dedupe",1)!=0,mesh_duplicate,draw_duplicate);
-  const bool legacy_keep=legacy==cascade::LegacyCaster::keep;
+  const bool static_candidate=cascade_static_candidate(s,pi);
+  const bool dynamic_excluded=legacy==cascade::LegacyCaster::keep &&
+    !cascade::keep_static_only(c->c_static_only,static_candidate);
+  const bool legacy_keep=legacy==cascade::LegacyCaster::keep && !dynamic_excluded;
+  // Filter only the lagged legacy soup. Current Sun needs every native draw for
+  // its coverage proof, including when the legacy soup is compacted alongside it.
+  if(dynamic_excluded) {++c->c_dynamic_excluded;if(!current_sun) return;}
   if(legacy==cascade::LegacyCaster::alpha_skip) {
     if(cutout) {++g_cc_alpha_known;if(alpha_fs.uv==pi.uv && pi.uv>=0) ++g_cc_alpha_uv;}
     if(!current_sun) {++c->c_alpha;return;}
@@ -1389,6 +1416,10 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     ++c->c_full;
     c->c_over += reserved;
     return;
+  }
+  if(legacy_keep && (!current_sun || c->c_legacy_target)) {
+    if(!static_candidate) ++c->c_dynamic_added;
+    c->c_legacy_keys.insert(cascade::mix(cascade::draw_key(id),s->vs));
   }
   if(current_sun && legacy_keep && c->c_legacy_target) {
     c->c_legacy_copies.push_back({c->cursor,c->c_legacy_bytes,reserved});
@@ -1505,6 +1536,13 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     g_sun_meta[c->layer][f % 3]=meta;
   g_cc_cv.notify_all();
   CcStats& st = g_cc_st;
+  // Count only the configured legacy layer, not complementary Current Sun layers.
+  if(c->layer==cfg_hot(CfgHot::rt_cascade_index)) {
+    ++st.legacy_frames;
+    st.dynamic_added += c->c_dynamic_added; st.dynamic_excluded += c->c_dynamic_excluded;
+    if(c->layer>=0 && c->layer<kCcLayers)
+      st.set_changes += g_cc_set_changes[c->layer].observe(f,c->c_static_only,c->c_legacy_keys);
+  }
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
   st.full += c->c_full, st.added += c->c_added, st.tris += tris;
@@ -1598,13 +1636,16 @@ void cascade_on_present() {
       "alpha-tested skipped %.1f, not sizeable %.1f, other matrix %.1f, buffer full %.1f, added %.1f; triangles %.0f "
       "(max %llu), %.2f MB (max %.2f of %d MB, demand max %.2f MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
       "%llu: with the instance %llu (%.0f triangles), no soup %llu, unsubmitted %llu, no camera %llu, legacy %llu, "
-      "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion)",
+      "BLAS failed %llu; captured pass GPU median %.3f ms (its draws + XFB + conversion); "
+      "legacy dynamic/unclassified added %.1f, excluded %.1f per frame; set changes %llu per window",
       layer, (unsigned long long)st.frames, st.seen / n, st.dup / n, st.alpha / n, st.drop / n, st.ubo / n, st.full / n,
       st.added / n, st.tris / n, (unsigned long long)st.tris_max, st.bytes / n * mb, st.bytes_max * mb,
       int(capacity >> 20), st.demand_max * mb, st.keys / n, (unsigned long long)st.unconverted, (unsigned long long)builds,
       (unsigned long long)st.builds[0], st.builds[0] ? double(st.build_tris) / double(st.builds[0]) : 0.0,
       (unsigned long long)st.builds[1], (unsigned long long)st.builds[2], (unsigned long long)st.builds[3],
-      (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms);
+      (unsigned long long)st.builds[4], (unsigned long long)st.builds[5], ms,
+      st.dynamic_added/double(st.legacy_frames ? st.legacy_frames : 1),
+      st.dynamic_excluded/double(st.legacy_frames ? st.legacy_frames : 1),(unsigned long long)st.set_changes);
   // The inversion's premises, from the matrix the conversion used: orthographic (w column
   // (0, 0, 0, 1)), invertible, and the UBO's origin (byte 208) = the camera's of that frame.
   std::string ext;

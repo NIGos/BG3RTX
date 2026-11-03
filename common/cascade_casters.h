@@ -69,6 +69,30 @@ inline uint64_t mesh_key(const DrawId& d) {
 // material stream is captured alongside it. Raw cutouts never become legacy
 // opaque casters merely because the current path knows their triangle range.
 enum class LegacyCaster { keep, alpha_skip, duplicate };
+// Conservative class-A subset: affine instance inputs, no VS deformation and no
+// potentially compute-written position stream. Unknown includes per-draw static
+// meshes: do not guess that an unrecognised character/cloth path is static.
+inline bool static_candidate(bool affine_instance, bool position_known, bool storage_position) {
+  return affine_instance && position_known && !storage_position;
+}
+inline bool keep_static_only(bool enabled, bool candidate) { return !enabled || candidate; }
+
+// Compare membership, not draw order or the cascade matrix. Seed again after a
+// gap, a cascade switch or a policy toggle; those are not consecutive samples.
+class SetChanges {
+ public:
+  bool observe(uint64_t frame, bool filtered, const std::unordered_set<uint64_t>& keys) {
+    const bool changed = frame_ != UINT64_MAX && frame == frame_ + 1 && filtered == filtered_ && keys != keys_;
+    if (frame_ == UINT64_MAX || frame >= frame_) {
+      frame_ = frame; filtered_ = filtered; keys_ = keys;
+    }
+    return changed;
+  }
+ private:
+  uint64_t frame_ = UINT64_MAX;
+  bool filtered_ = false;
+  std::unordered_set<uint64_t> keys_;
+};
 inline LegacyCaster legacy_caster(bool discards,int alpha_mode,bool known_cutout,
                                   bool alpha_dedupe,bool mesh_duplicate,bool draw_duplicate) {
   if(discards && alpha_mode!=1 && (known_cutout || alpha_mode!=2)) return LegacyCaster::alpha_skip;

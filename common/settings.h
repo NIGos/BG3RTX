@@ -284,6 +284,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}}, {"rt_native_tileset"}}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
+  {"exp_cascade_static_only", "Static roof casters only",
+   "Excludes animated and unclassified shadow-map copies from roof sun shadows. "
+   "May omit some roofs; dialogue motion and roof coverage are unqualified.",
+   Kind::Choice, Apply::Live, "live; allow two frames for capture replacement", true,
+   {{"off", "Off", 0, {{"rt_cascade_static_only", "0"}}, {}},
+    {"on", "On", kCapRayQuery, {{"rt_cascade_static_only", "1"}}, {{"roof_shadows", 1}}}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
   {"exp_hair_physical_origin", "Physical hair ray origins (advanced)",
    "Adjusts where light rays start on hair to improve secondary lighting. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Partial, "Enable at startup; then live A/B", true,
@@ -497,6 +505,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_sun_ramp", "0.75"},
     {"rt_sun_near", "0"},
     {"rt_cascade_casters", "0"},
+    {"rt_cascade_static_only", "0"},
     {"rt_cascade_index", "2"},
     {"rt_cascade_mb", "160"},
     {"rt_cascade_origin", "1"},
