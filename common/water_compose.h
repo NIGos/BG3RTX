@@ -185,6 +185,11 @@ inline bool same_encoded(float c, float t, int mantissa_bits) {
 // (the hit's lit radiance, in the lighting's pre-exposed units, in which the lighting's own probe
 // term is Sp k). L = k Sp gives C' = C; the energy change is a T X E (L - k Sp): a darker traced
 // hit than the probe's radiance in that direction, never a unit factor.
+// M5.6: E is the interface DFG reflectance; opacity partitions only the column.
+struct SurfacePartition { float interface_weight, column_weight, transmission_weight; };
+inline SurfacePartition surface_partition(float e, float a) {
+  return {e, (1.0f - e) * a, (1.0f - e) * (1.0f - a)};
+}
 struct FsTerms {
   float refr, direct, kd, sp, e, k, x, ge, t, s, a;
   float sun = 0.0f;   // M5.4: the sun term of Lw (direct holds the local lights), visibility 1 in the FS
@@ -307,6 +312,7 @@ inline constexpr uint32_t kCsRrHidden = 101, kCsRrOff = 102, kCsRrMiss = 103, kC
 inline constexpr uint32_t kCsRrClamped = 106, kCsRrNoCopy = 107;
 inline constexpr uint32_t kCsRrSumGame = 108, kCsRrSumNew = 110, kCsRrSumAll = 112, kCsRrSumShift = 114;
 inline constexpr uint32_t kCsRrSumRwHidden = 116, kCsRrSumRwTraced = 118;
+inline constexpr uint32_t kCsSurfaceClean = 120, kCsSurfaceInvalid = 121;
 inline constexpr uint32_t kCsRrWords = 120;
 static_assert(kCsRrWords <= 128, "the refraction words fit the 128-word slot");
 
@@ -544,7 +550,7 @@ inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, Co
 }
 
 inline constexpr bool compose_plain_counter(uint32_t i) {
-  return i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
+  return i==kCsSurfaceClean || i==kCsSurfaceInvalid || i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
       (i>=kCsLsRec && i<kCsLsSumL) || i==kCsLsChkShWithin || i==kCsNonFinite ||
       (i==55 || (i>=kCsHitAttempt && i<kCsHitEnd)) || (i>=kCsRrRec && i<kCsRrSumGame);
 }

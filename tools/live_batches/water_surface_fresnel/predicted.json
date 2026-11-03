@@ -1,0 +1,21 @@
+{
+  "status": "PREPARED, no live authorization; offline checks required before READY_FOR_LIVE",
+  "scene": "S8 Water Queens House, shallow pool rim",
+  "key": "rt_water_surface_fresnel",
+  "sequence": [
+    0,
+    1,
+    0,
+    1
+  ],
+  "reference": "Interface E from native probe DFG; transmitted column (1-E)*((1-a)*bed+a*column); direct Fresnel evaluated at L.H. Foam remains its own layer. Reflected plus transmitted white-furnace partition equals 1 over a, roughness and angle. Matching native probe radiance has A*L-B=0.",
+  "prediction": "Shallow clean pool retains reflections as a approaches 0; smooth-limit interface weight doubles at a=.5. Brightness MAY change. No equal-mean gate for this shading-model change.",
+  "acceptance": "Both ON static and Q/E windows must retain finite nonnegative terms and reference partition within CPU/half-encoding precision; inspect post-water float colour dumps and in-frame replacement accounting at the shallow rim. Derive any image residual bound from OFF-repeat noise and reference precision, never tune it. Invalid/missing reference records or no clean-water participation => INVALID, not a pass.",
+  "float_observable": "Post-water scene colour referenced by energy_fs=water-compose; retain dumps.json full-resolution float means, exposure b0[0], and existing RR post-preview _p.f32 colour shots for every partition-static phase (layer/dump.cpp writes post_preview float data independently of dump_raw). PNGs only for framing, never energy. Static camera begins at save pool rim; verify framing before judging.",
+  "gpu": "Report existing compose GPU median/p90 and compose dispatch ms for all capture-free cost-turn windows, ON minus OFF. Incremental estimate +0.01-0.05 ms is not a timing gate. No builds or shader compiles during costs.",
+  "motion": "Hold E for cost-turn-0/1 and Q for cost-turn-2/3. Keep pool rim in view. One launch, visible_unfocused_fg; occlusion invalidates presented/frame-time judgement, use GPU ms and float/log evidence.",
+  "smoke_ultra": "All windows use real Ultra with qualified water, OMM, box and off-screen bounce settings retained. No isolated preset substitutions.",
+  "budget": "8 static traces with post-water float previews and dump_raw=0; estimated 490 MB at lean helper 60 MB per trace; 139 s phases plus one load, under 5 minutes at 120 s load.",
+  "restore": "Last phase resets candidate 0 and releases exposure hold; serial queue restores original INI after job. Startup candidate=1 provisions FS before live toggles, no restart within batch.",
+  "reference_limit": "The unchanged compact record does not expose all native column inputs for an image-space automated furnace reconstruction. CPU reference and encoding are offline gates; live draw/record participation and finite coefficient checks plus post-water float images confirm behavior only. A complete image-space reference comparison remains required for qualification; neither equal mean nor successful log gates grants a quality pass."
+}
