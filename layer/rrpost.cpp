@@ -320,10 +320,17 @@ bool ensure_layout(DeviceData* dd) {
   return true;
 }
 
+// The shader file that defines an entry. The build and the per-frame generation check must agree:
+// asking rr_post.hlsl for a temporal entry fails to compile ("missing entry point definition").
+const char* entry_source(const char* entry) {
+  if (strcmp(entry, "hair_resolve") == 0) return "rr_hair.hlsl";
+  if (strcmp(entry, "temporal") == 0 || strcmp(entry, "temporal_final") == 0) return "rr_post_temporal.hlsl";
+  return "rr_post.hlsl";
+}
+
 VkPipeline compile_pipeline(DeviceData* dd, Pipe& p) {
   Bg3ShaderBlob blob{};
-  if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" :
-                  (strcmp(p.entry, "temporal") == 0 || strcmp(p.entry, "temporal_final") == 0) ? "rr_post_temporal.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob)) return p.pipe;
+  if (!shader_get(entry_source(p.entry), p.entry, "cs_6_0", &blob)) return p.pipe;
   if (p.pipe && blob.generation == p.gen) return p.pipe;
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
@@ -359,7 +366,7 @@ bg3::pipe_async::Result compile_background(DeviceData* dd, const char* entry) {
 VkPipeline pipeline(DeviceData* dd, Pipe& p) {
   if (p.pipe) {
     Bg3ShaderBlob blob{};
-    if (!shader_get(strcmp(p.entry, "hair_resolve") == 0 ? "rr_hair.hlsl" : "rr_post.hlsl", p.entry, "cs_6_0", &blob) ||
+    if (!shader_get(entry_source(p.entry), p.entry, "cs_6_0", &blob) ||
         blob.generation == p.gen) return p.pipe;
   }
   bg3::pipe_async::Result result;
