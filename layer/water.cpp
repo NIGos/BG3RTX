@@ -47,6 +47,7 @@
 
 #include "assetdb.h"
 #include "../common/water_compose.h"
+#include "../common/shader_variant.h"
 #include "../common/water_fs_patch.h"
 #include "../common/water_policy.h"
 #include "../common/water_scene.h"
@@ -459,6 +460,8 @@ struct Compose {
   uint64_t addr = 0;
   bool tried = false, ok = false;
   std::unordered_map<VkShaderModule, std::shared_ptr<const std::vector<uint32_t>>> mods;   // patched words
+  std::unordered_map<VkShaderModule, std::shared_ptr<const std::vector<uint32_t>>> surface_mods;
+  std::unordered_map<VkPipeline, VkPipeline> surface_variant;
   std::unordered_map<VkPipeline, VkPipeline> variant;                                       // game's -> ours
   uint64_t mods_patched = 0, mods_refused = 0, pipes = 0, refused_blend = 0, refused_library = 0, failed = 0;
   water::PatchStatus last_refusal = water::PatchStatus::kApplied;
@@ -466,6 +469,7 @@ struct Compose {
 std::mutex g_cmp_mu;
 Compose g_cmp;
 std::atomic<uint64_t> g_swaps{0}, g_no_variant{0};
+std::atomic<uint64_t> g_surface_swaps{0}, g_surface_missing{0};
 std::atomic<bool> g_any_variant{false};
 
 // g_cmp_mu held. The record buffer, once (its address and capacity are baked into every patched
@@ -529,6 +533,7 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   if (!ids && !g_any_variant.load(std::memory_order_relaxed)) return;   // the common case: no lock
   std::lock_guard<std::mutex> lock(g_cmp_mu);
   g_cmp.mods.erase(m);   // a reused handle
+  g_cmp.surface_mods.erase(m);
   if (!ids || !g_dd ||
       (cfg_int("rt_water_compose", 0) == 0 && cfg_int("rt_water_shadows", 0) == 0 && cfg_int("rt_water_ls_shadows", 0) == 0 &&
        cfg_int("rt_water_refraction", 0) == 0) ||
@@ -552,6 +557,19 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
   log("[water] compose: FS %016llx patched (%zu -> %zu words%s%s)", (unsigned long long)hash, bytes / 4, words->size(),
       refr ? ", with the sun, local-light and refraction terms" : ls ? ", with the sun and local-light terms" : sun ? ", with the sun term" : "",
       !sun || !ids->vg ? "" : g_cmp.gsh ? "; the game's sun shadow Vg recorded" : "; the game's sun shadow kept (no sun term)");
+  if (cfg_int("rt_water_surface_fresnel", 0) && ids->fs == 0xc4e92ccdb08dd777ull) {
+    auto surface = std::make_shared<std::vector<uint32_t>>();
+    const auto status = water::patch_fs(code, bytes / 4, *ids, g_cmp.addr, g_cmp.cap, *surface,
+                                         sun, ls, refr, g_cmp.gsh, true);
+    if (status == water::PatchStatus::kApplied) {
+      g_cmp.surface_mods[m] = std::move(surface);
+      log("[water] surface Fresnel: FS %016llx provisioned, record stride unchanged %u B",
+          (unsigned long long)hash, g_cmp.stride);
+    } else {
+      log("[water] surface Fresnel: FS %016llx NOT provisioned (%s); native surface retained",
+          (unsigned long long)hash, water::patch_status_name(status));
+    }
+  }
   g_cmp.mods[m] = std::move(words);
   g_any_variant.store(true, std::memory_order_relaxed);   // from here on modules and pipelines are looked at
 }
@@ -592,43 +610,81 @@ void water_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, co
       if (g_cmp.refused_blend++ < 4) log("[water] compose: a water pipeline blends or masks its output: no variant");
       continue;
     }
-    const auto words = g_cmp.mods[ci.pStages[fs].module];
-    VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    mci.codeSize = words->size() * 4;
-    mci.pCode = words->data();
-    VkShaderModule mod = VK_NULL_HANDLE;
-    if (vk.CreateShaderModule(device, &mci, nullptr, &mod) != VK_SUCCESS) {
-      ++g_cmp.failed;
-      continue;
+    // The ordinary form is always kept for exact OFF and unsupported-family fallback.
+    // Each optional surface form shares its record layout and all original FS specializations.
+    for (int surface = 0; surface < 2; ++surface) {
+      const VkShaderModule original = ci.pStages[fs].module;
+      const auto surface_it = g_cmp.surface_mods.find(original);
+      if (surface && surface_it == g_cmp.surface_mods.end()) continue;
+      const auto words = surface ? surface_it->second : g_cmp.mods[original];
+      VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+      mci.codeSize = words->size() * 4;
+      mci.pCode = words->data();
+      VkShaderModule mod = VK_NULL_HANDLE;
+      if (vk.CreateShaderModule(device, &mci, nullptr, &mod) != VK_SUCCESS) {
+        ++g_cmp.failed;
+        continue;
+      }
+      std::vector<VkPipelineShaderStageCreateInfo> stages(ci.pStages, ci.pStages + ci.stageCount);
+      stages[size_t(fs)].module = mod;
+      std::vector<VkSpecializationMapEntry> spec_entries;
+      std::vector<uint8_t> spec_data;
+      VkSpecializationInfo spec{};
+      if (surface) {
+        const auto* old = stages[size_t(fs)].pSpecializationInfo;
+        if (old) {
+          if (old->mapEntryCount) spec_entries.assign(old->pMapEntries, old->pMapEntries + old->mapEntryCount);
+          if (old->dataSize) {
+            const auto* bytes = static_cast<const uint8_t*>(old->pData);
+            spec_data.assign(bytes, bytes + old->dataSize);
+          }
+        }
+        bool collision = false;
+        for (const auto& e : spec_entries)
+          collision |= e.constantID == shader_variant::kSpecIdWaterSurfaceFresnel;
+        if (collision) {
+          vk.DestroyShaderModule(device, mod, nullptr);
+          log("[water] surface Fresnel: specialization id collision; native surface retained");
+          continue;
+        }
+        const uint32_t value = 1;
+        const uint32_t offset = uint32_t(spec_data.size());
+        const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+        spec_data.insert(spec_data.end(), bytes, bytes + sizeof(value));
+        spec_entries.push_back({shader_variant::kSpecIdWaterSurfaceFresnel, offset, sizeof(value)});
+        spec = {uint32_t(spec_entries.size()), spec_entries.data(), spec_data.size(), spec_data.data()};
+        stages[size_t(fs)].pSpecializationInfo = &spec;
+      }
+      VkGraphicsPipelineCreateInfo vci = ci;
+      vci.pStages = stages.data();
+      vci.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
+      vci.basePipelineHandle = VK_NULL_HANDLE;
+      vci.basePipelineIndex = -1;
+      VkPipeline v = VK_NULL_HANDLE;
+      const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
+      vk.DestroyShaderModule(device, mod, nullptr);
+      if (r != VK_SUCCESS || !v) {
+        if (g_cmp.failed++ < 4) log("[water] compose: variant pipeline creation failed (%d)", r);
+        continue;
+      }
+      auto& variants = surface ? g_cmp.surface_variant : g_cmp.variant;
+      auto it = variants.find(out[i]);
+      if (it != variants.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
+      variants[out[i]] = v;
+      if (!surface) ++g_cmp.pipes;
     }
-    std::vector<VkPipelineShaderStageCreateInfo> stages(ci.pStages, ci.pStages + ci.stageCount);
-    stages[size_t(fs)].module = mod;
-    VkGraphicsPipelineCreateInfo vci = ci;
-    vci.pStages = stages.data();
-    vci.flags &= ~VkPipelineCreateFlags(VK_PIPELINE_CREATE_DERIVATIVE_BIT);
-    vci.basePipelineHandle = VK_NULL_HANDLE;
-    vci.basePipelineIndex = -1;
-    VkPipeline v = VK_NULL_HANDLE;
-    const VkResult r = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &v);
-    vk.DestroyShaderModule(device, mod, nullptr);
-    if (r != VK_SUCCESS || !v) {
-      if (g_cmp.failed++ < 4) log("[water] compose: variant pipeline creation failed (%d)", r);
-      continue;
-    }
-    auto it = g_cmp.variant.find(out[i]);
-    if (it != g_cmp.variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
-    g_cmp.variant[out[i]] = v;
-    ++g_cmp.pipes;
   }
 }
 
 void water_forget_pipeline(VkPipeline p) {
   if (!g_any_variant.load(std::memory_order_relaxed)) return;
   std::lock_guard<std::mutex> lock(g_cmp_mu);
-  auto it = g_cmp.variant.find(p);
-  if (it == g_cmp.variant.end()) return;
-  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
-  g_cmp.variant.erase(it);
+  for (auto* variants : {&g_cmp.variant, &g_cmp.surface_variant}) {
+    auto it = variants->find(p);
+    if (it == variants->end()) continue;
+    defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
+    variants->erase(it);
+  }
 }
 
 void water_unswap(VkCommandBuffer cmd, const CmdState* s) {
@@ -660,6 +716,7 @@ void water_device_destroyed(DeviceData* dd) {
   {
     std::lock_guard<std::mutex> cl(g_cmp_mu);
     for (auto& [p, v] : g_cmp.variant) vk.DestroyPipeline(dd->device, v, nullptr);
+    for (auto& [p, v] : g_cmp.surface_variant) vk.DestroyPipeline(dd->device, v, nullptr);
     free_buf(g_cmp.buf);
     g_cmp = Compose{};
     g_any_variant.store(false);
@@ -720,6 +777,15 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
       std::lock_guard<std::mutex> cl(g_cmp_mu);
       auto it = g_cmp.variant.find(s->pipe[0]);
       if (it != g_cmp.variant.end()) v = it->second;
+      if (cfg_int("rt_water_surface_fresnel", 0) && s->fs == 0xc4e92ccdb08dd777ull) {
+        const auto surface = g_cmp.surface_variant.find(s->pipe[0]);
+        if (surface != g_cmp.surface_variant.end()) {
+          v = surface->second;
+          g_surface_swaps.fetch_add(1, std::memory_order_relaxed);
+        } else {
+          g_surface_missing.fetch_add(1, std::memory_order_relaxed);
+        }
+      }
     }
     if (v) {
       g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, v);
@@ -991,6 +1057,11 @@ void water_on_present() {
     if (!fam.empty() || !other.empty())
       log("[water] families: captured %s; counted %s", fam.empty() ? "none" : fam.c_str(), other.empty() ? "none" : other.c_str());
   }
+  const uint64_t surface_draws = g_surface_swaps.exchange(0), surface_missing = g_surface_missing.exchange(0);
+  if (cfg_int("rt_water_surface_fresnel", 0) || surface_draws || surface_missing)
+    log("[water] surface Fresnel (%llu frames): enabled %d, draws %llu, missing %llu",
+        (unsigned long long)w.frames, cfg_int("rt_water_surface_fresnel", 0) != 0,
+        (unsigned long long)surface_draws, (unsigned long long)surface_missing);
   const uint64_t swaps = g_swaps.exchange(0), novar = g_no_variant.exchange(0);
   if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) ||
       cfg_hot(CfgHot::rt_water_refraction) || swaps) {

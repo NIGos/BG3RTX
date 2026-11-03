@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "water_compose.h"
+#include "shader_variant.h"
 
 namespace bg3::water {
 
@@ -202,7 +203,9 @@ inline void emit_string(std::vector<uint32_t>& v, uint32_t op, const char* s) {
 // Vg then stores lum(D) = 0 (the sun step skips it: its game shadow stays, never shadowed twice).
 inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids, uint64_t addr, uint32_t capacity,
                             std::vector<uint32_t>& out, bool sun = false, bool ls = false, bool refr = false,
-                            bool gsh = false) {
+                            bool gsh = false, bool surface = false) {
+  // Only this audited pool family has the clean-water mask and column inputs below.
+  surface = surface && ids.fs == 0xc4e92ccdb08dd777ull;
   using namespace fsp;
   out.clear();
   if (refr) ls = true;
@@ -219,7 +222,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   uint32_t bound = code[3];
   uint32_t entry = 0, entries = 0, glsl = 0, frag_coord = 0;
   size_t last_cap = 0, last_ext = 0, mem_model = 0, last_mode = 0, first_func = 0, ret = 0;
-  uint32_t t_bool = 0, t_uint = 0, t_u64 = 0, t_float = 0, t_v2 = 0, t_v3 = 0, t_v4 = 0;
+  uint32_t t_bool = 0, t_uint = 0, t_u64 = 0, t_float = 0, t_v2 = 0, t_v3 = 0, t_v4 = 0, t_bool3 = 0;
   std::map<uint32_t, uint32_t> result_type;   // result id -> type id, inside main
   std::map<uint32_t, uint32_t> var_ptr;       // Input variables -> pointer type
   std::map<uint32_t, std::pair<uint32_t, uint32_t>> ptr_of;   // pointer type -> (storage class, pointee)
@@ -263,6 +266,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
         if (a[2] == 32) t_float = a[1];
         break;
       case OpTypeVector:
+        if (a[2] == t_bool && a[3] == 3) t_bool3 = a[1];
         if (t_float && a[2] == t_float) {
           if (a[3] == 2) t_v2 = a[1];
           if (a[3] == 3) t_v3 = a[1];
@@ -380,7 +384,18 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     emit(types, OpConstant, {t_uint, c_wg0, wg});
     emit(types, OpConstant, {t_uint, c_wg1, wg + 1});
   }
+  uint32_t surface_spec=0, surface_zero=0, surface_one3=0, surface_half=0, surface_bool3=0;
+  if (surface) {
+    surface_spec=id(); surface_zero=id(); surface_one3=id(); surface_half=id();
+    surface_bool3=t_bool3;
+    if (!surface_bool3) surface_bool3=id(),emit(types,OpTypeVector,{surface_bool3,t_bool,3});
+    emit(types, 49 /*OpSpecConstantFalse*/, {t_bool,surface_spec});
+    emit(types, OpConstantNull, {t_float,surface_zero});
+    emit(types, OpConstantComposite, {t_v3,surface_one3,c_one,c_one,c_one});
+    emit(types, OpConstant, {t_float,surface_half,0x3f000000u});
+  }
   std::vector<uint32_t> decos;
+  if(surface) emit(decos,OpDecorate,{surface_spec,1 /*SpecId*/,shader_variant::kSpecIdWaterSurfaceFresnel});
   emit(decos, OpDecorate, {t_arr, DecArrayStride, 4});
   emit(decos, OpDecorate, {t_blk, DecBlock});
   emit(decos, OpMemberDecorate, {t_blk, 0, DecOffset, 0});
@@ -403,6 +418,44 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     body.insert(body.end(), w.begin(), w.end());
     return r;
   };
+  // Exact audited diffuse products and their matching Schlick F(L.H). The loop's
+  // diffuse accumulation is postponed until F exists, within the same basic block.
+  struct DirectSplit { uint32_t product, accum, fresnel; };
+  const DirectSplit splits[]={{1947,1948,1958},{2232,2233,2243},{2614,2615,2625},
+                              {2679,2680,2690},{3258,0,3287}};
+  std::map<size_t,std::vector<uint32_t>> surface_insert;
+  std::map<uint32_t,uint32_t> surface_remap;
+  uint32_t clean=0, clean3=0;
+  if(surface) {
+    for(uint32_t v: {751u,2803u,3323u})
+      if(!is(v,v==751u?t_float:t_v3)) return PatchStatus::kIdMismatch;
+    for(const auto& q:splits)
+      if(!is(q.product,t_v3)||!is(q.fresnel,t_v3)||(q.accum&&!is(q.accum,t_v3))) return PatchStatus::kIdMismatch;
+    for(const Ins& x:ins) {
+      const uint32_t* w=code+x.at;
+      if(x.n<3) continue;
+      if(w[2]==751) {
+        clean=op2(OpLogicalAnd,t_bool,{surface_spec,op2(180 /*OpFOrdEqual*/,t_bool,{751,surface_zero})});
+        clean3=op2(OpCompositeConstruct,surface_bool3,{clean,clean,clean});
+        surface_insert[x.at+x.n]=body; body.clear();
+      }
+      for(const auto& q:splits) if(w[2]==q.fresnel) {
+        if(!clean) return PatchStatus::kIdMismatch;
+        const uint32_t col=op2(OpVectorTimesScalar,t_v3,{op2(OpFSub,t_v3,{surface_one3,q.fresnel}),ids.a});
+        const uint32_t factor=op2(OpSelect,t_v3,{clean3,col,surface_one3});
+        const uint32_t weighted=op2(OpFMul,t_v3,{q.product,factor});
+        if(q.accum) {
+          for(const Ins& y:ins) if(y.n>=3 && code[y.at+2]==q.accum && code[y.at]==op_word(OpExtInst,8)) {
+            std::vector<uint32_t> a(code+y.at,code+y.at+y.n);
+            for(size_t j=5;j<a.size();++j) if(a[j]==q.product)a[j]=weighted;
+            body.insert(body.end(),a.begin(),a.end());
+          }
+        } else surface_remap[q.product]=weighted;
+        surface_insert[x.at+x.n]=body; body.clear();
+      }
+    }
+    if(!clean || surface_insert.size()!=6) return PatchStatus::kIdMismatch;
+  }
   const uint32_t fc = op2(OpLoad, t_v4, {frag_coord});
   const uint32_t ux = op2(OpConvertFToU, t_uint, {op2(OpCompositeExtract, t_float, {fc, 0})});
   const uint32_t uy = op2(OpConvertFToU, t_uint, {op2(OpCompositeExtract, t_float, {fc, 1})});
@@ -415,7 +468,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   // G = X * (a * T), E = F0.x * DFG.x + DFG.y, A = G * E, B = G * k * Ks (common/water_compose.h:
   // the traced radiance is in the lighting's units, already the probe's times k).
   const uint32_t T = op2(OpCompositeExtract, t_float, {ids.fog, 3});
-  const uint32_t aT = op2(OpFMul, t_float, {ids.a, T});
+  const uint32_t aT = op2(OpFMul, t_float, {surface ? op2(OpSelect,t_float,{clean,c_one,ids.a}):ids.a, T});
   const uint32_t G = op2(OpVectorTimesScalar, t_v3, {ids.X, aT});
   const uint32_t Gk = op2(OpVectorTimesScalar, t_v3, {ids.X, op2(OpFMul, t_float, {aT, ids.k})});
   const uint32_t E = ext(t_float, GlslFma, {op2(OpCompositeExtract, t_float, {ids.f0, 0}),
@@ -423,7 +476,29 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
                                             op2(OpCompositeExtract, t_float, {ids.dfg, 1})});
   const uint32_t A = op2(OpVectorTimesScalar, t_v3, {G, E});
   const uint32_t B = op2(OpFMul, t_v3, {Gk, ids.Ks});
-  const uint32_t C = ext(t_v3, GlslNMax, {ids.C, c_zero3});
+  uint32_t effectiveC=ids.C, surfaceRest=0;
+  if(surface) {
+    // DFG E stays the probe's sole interface weight. Air additive terms retain
+    // their native coverage and ordering; only the water column is partitioned.
+    const uint32_t trans=op2(OpFSub,t_float,{c_one,E});
+    const uint32_t column=op2(OpFMul,t_float,{ids.a,trans});
+    const uint32_t rw=op2(OpFMul,t_float,{op2(OpFSub,t_float,{c_one,ids.a}),trans});
+    const uint32_t refr3=op2(79 /*OpVectorShuffle*/,t_v3,{ids.refr,ids.refr,0,1,2});
+    const uint32_t fog3=op2(79,t_v3,{ids.fog,ids.fog,0,1,2});
+    const uint32_t air=op2(OpVectorTimesScalar,t_v3,{op2(OpFAdd,t_v3,{op2(OpVectorTimesScalar,t_v3,{3323,T}),fog3}),ids.a});
+    const uint32_t env=op2(OpVectorTimesScalar,t_v3,{op2(OpFAdd,t_v3,{op2(OpVectorTimesScalar,t_v3,{2803,column}),ids.Ks}),ids.k});
+    const uint32_t local=op2(OpVectorTimesScalar,t_v3,{op2(OpFAdd,t_v3,{ids.ls_d,ids.ls_s}),ids.sun_m});
+    const uint32_t gx=op2(OpVectorTimesScalar,t_v3,{ids.X,T});
+    surfaceRest=op2(OpFAdd,t_v3,{op2(OpFAdd,t_v3,{op2(OpFMul,t_v3,{op2(OpFAdd,t_v3,{local,env}),gx}),air}),op2(OpVectorTimesScalar,t_v3,{refr3,rw})});
+    const uint32_t sunlit=op2(OpVectorTimesScalar,t_v3,{op2(OpFAdd,t_v3,{ids.sun_d,ids.sun_s}),ids.sun_m});
+    const uint32_t colour=op2(OpFAdd,t_v3,{surfaceRest,op2(OpFMul,t_v3,{sunlit,gx})});
+    effectiveC=op2(OpSelect,t_v3,{clean3,colour,ids.C});
+    // Keep the original alpha. The record and attachment use exactly this same C.
+    const uint32_t final=op2(OpCompositeConstruct,t_v4,{op2(OpCompositeExtract,t_float,{effectiveC,0}),op2(OpCompositeExtract,t_float,{effectiveC,1}),op2(OpCompositeExtract,t_float,{effectiveC,2}),3675});
+    const uint32_t zero4=id();emit(types,OpConstantNull,{t_v4,zero4});
+    emit(body,OpStore,{11,ext(t_v4,GlslNMax,{final,zero4})});
+  }
+  const uint32_t C = ext(t_v3, GlslNMax, {effectiveC, c_zero3});
   const uint32_t P = op2(OpLoad, t_v3, {ids.pos});
   const uint32_t t = ext(t_float, GlslLength, {P});
   auto c = [&](uint32_t v3, uint32_t i) { return op2(OpCompositeExtract, t_float, {v3, i}); };
@@ -436,7 +511,7 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   v[4] = half2(c(ids.N, 2), c(C, 0));
   v[5] = half2(c(C, 1), c(C, 2));
   v[6] = op2(OpBitcast, t_uint, {t});
-  v[7] = ext(t_uint, GlslPackUnorm2x16, {op2(OpCompositeConstruct, t_v2, {c_one, ids.rough})});
+  v[7] = ext(t_uint, GlslPackUnorm2x16, {op2(OpCompositeConstruct, t_v2, {surface ? op2(OpSelect,t_float,{clean,surface_half,c_one}):c_one, ids.rough})});
   for (uint32_t k = 0; k < kRecordWords; ++k) {
     const uint32_t at = op2(OpIAdd, t_uint, {w0, c_u[k]});
     const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], at});
@@ -450,7 +525,8 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
     // and bright specks in the shadowed pool, 1213 clamped records per frame). R is exact to half.
     const uint32_t S = op2(OpVectorTimesScalar, t_v3, {op2(OpFAdd, t_v3, {ids.sun_d, ids.sun_s}), ids.sun_m});
     const uint32_t D = op2(OpFMul, t_v3, {G, S});
-    const uint32_t R = op2(OpFSub, t_v3, {ids.C, D});
+    const uint32_t R0 = op2(OpFSub, t_v3, {ids.C, D});
+    const uint32_t R = surface ? op2(OpSelect,t_v3,{clean3,surfaceRest,R0}) : R0;
     const uint32_t lumD = op2(OpDot, t_float, {D, c_lum});
     const uint32_t s8 = half2(c(R, 0), c(R, 1)), s9 = half2(c(R, 2), c_f0 ? c_f0 : lumD);
     const uint32_t p8 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w8})});
@@ -469,8 +545,9 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
       lw[11] = half2(c(F, 2), c(ids.ls_f0, 0));
       lw[12] = half2(c(L12, 0), c(L12, 1));
       lw[13] = half2(c(L12, 2), ch);
-      lw[14] = half2(c(ids.ls_dif, 0), c(ids.ls_dif, 1));
-      lw[15] = half2(c(ids.ls_dif, 2), box);
+      const uint32_t dif = surface ? op2(OpVectorTimesScalar,t_v3,{ids.ls_dif,op2(OpSelect,t_float,{clean,ids.a,c_one})}) : ids.ls_dif;
+      lw[14] = half2(c(dif, 0), c(dif, 1));
+      lw[15] = half2(c(dif, 2), box);
       lw[16] = op2(OpBitcast, t_uint, {z});
       for (uint32_t i = 0; i < 3; ++i) {
         lw[17 + i] = op2(OpBitcast, t_uint, {c(P, i)});
@@ -482,7 +559,8 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
         emit(body, OpStore, {p, lw[k], MemAligned, 4});
       }
       if (refr) {   // M5.5 words 24, 25: w24 half2(Refr.r, Refr.g), w25 half2(Refr.b, 1 - a)
-        const uint32_t rw = op2(OpFSub, t_float, {c_one, ids.a});
+        const uint32_t rw0 = op2(OpFSub, t_float, {c_one, ids.a});
+        const uint32_t rw = surface ? op2(OpFMul,t_float,{rw0,op2(OpSelect,t_float,{clean,op2(OpFSub,t_float,{c_one,E}),c_one})}) : rw0;
         const uint32_t s24 = half2(c(ids.refr, 0), c(ids.refr, 1)), s25 = half2(c(ids.refr, 2), rw);
         const uint32_t p24 = op2(OpAccessChain, t_puint, {base, c_u[0], op2(OpIAdd, t_uint, {w0, c_w24})});
         emit(body, OpStore, {p24, s24, MemAligned, 4});
@@ -544,6 +622,28 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
       break;
     }
     q += n;
+  }
+  if(surface) {
+    // Insert early arithmetic without perturbing any ordinary patch word.
+    std::vector<uint32_t> rewritten(out.begin(),out.begin()+5);
+    for(size_t q=5;q<out.size();) {
+      const uint32_t n=out[q]>>16, op=out[q]&0xffffu;
+      bool skip=false;
+      if(n>=3 && op==OpExtInst) for(const auto& d:splits)skip|=d.accum && out[q+2]==d.accum;
+      if(!skip) {
+        const size_t start=rewritten.size();rewritten.insert(rewritten.end(),out.begin()+q,out.begin()+q+n);
+        // The sun's diffuse product is used after its F; only replace value operands.
+        if(op==OpFMul) for(size_t j=start+3;j<rewritten.size();++j) {
+          auto m=surface_remap.find(rewritten[j]);if(m!=surface_remap.end())rewritten[j]=m->second;
+        }
+      }
+      if(n>=3) for(const Ins& original:ins) if(original.n==n && original.op==op && n>=3 && code[original.at+1]==out[q+1] && code[original.at+2]==out[q+2]) {
+        auto add=surface_insert.find(original.at+original.n);
+        if(add!=surface_insert.end()) rewritten.insert(rewritten.end(),add->second.begin(),add->second.end());
+      }
+      q+=n;
+    }
+    out.swap(rewritten);
   }
   return PatchStatus::kApplied;
 }

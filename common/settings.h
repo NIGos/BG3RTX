@@ -248,6 +248,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  {"water_surface_fresnel", "Water interface Fresnel",
+   "Separates clean-water reflection from column opacity. Pending qualification; compare shallow pool reflections at S8 Water Queens House.",
+   Kind::Choice, Apply::Restart, "on: restart; off: live", true,
+   {{"off", "Off", 0, {{"rt_water_surface_fresnel", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On (unqualified)", kCapRayQuery, {{"rt_water_surface_fresnel", "1"}}, {{"exp_water", 1}},
+     {"rt_water_surface_fresnel"}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, false, {}, false, "Surfaces", {}},
+
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
   {"exp_omm", "Opacity micromaps",
@@ -711,6 +719,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_hit_cost", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
+    {"rt_water_surface_fresnel", "0"},
     {"rt_water_compose", "0"},
     {"rt_water_shadows", "0"},
     {"rt_water_ls_shadows", "0"},
@@ -954,6 +963,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_ls_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.5: likewise (the refraction words of the record are patched in at creation).
   if (key == "rt_water_refraction") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // M5.6: the interface/column FS patch is provisioned at pipeline creation.
+  if (key == "rt_water_surface_fresnel") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.4c: likewise (the game-shadow words of the record are patched in at creation).
   if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).

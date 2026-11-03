@@ -148,6 +148,15 @@ static float to_half(float v) {
   const float step = std::ldexp(1.0f, e - 10);
   return std::nearbyint(v / step) * step;
 }
+// Independent unpolarized planar dielectric reference (air -> water). This is a
+// partition reference, not a claim that the game's rough DFG LUT is exact Fresnel.
+static double dielectric_reference(double cosine, double eta) {
+  const double sin2t = (1.0 - cosine * cosine) / (eta * eta);
+  const double ct = std::sqrt(std::fmax(0.0, 1.0 - sin2t));
+  const double rs = (cosine - eta * ct) / (cosine + eta * ct);
+  const double rp = (eta * cosine - ct) / (eta * cosine + ct);
+  return 0.5 * (rs * rs + rp * rp);
+}
 static uint32_t lcg(uint32_t& s) { return s = s * 1664525u + 1013904223u; }
 static float u01(uint32_t& s) { return float(lcg(s) >> 8) * (1.0f / 16777216.0f); }
 
@@ -421,6 +430,67 @@ int main(int argc, char** argv) {
     CHECK(ratio_bin(0.00452f, 0.01383f) == kCsRatioLow);
     CHECK(ratio_bin(1.0f, 1.0f) == kCsRatioMid && ratio_bin(0.5f, 1.0f) == kCsRatioMid && ratio_bin(2.0f, 1.0f) == kCsRatioMid);
     CHECK(ratio_bin(2.01f, 1.0f) == kCsRatioHigh && ratio_bin(1.0f, 0.0f) == 0u);
+  }
+
+  // M5.6 step 2. A white column and white bed form one unit of transmitted
+  // energy; opacity only chooses between them. Test the production coefficients
+  // against an independent planar dielectric and a normalized ensemble of rough
+  // dielectric facets. The ensemble supplies bounded integrated E, not a new DFG
+  // approximation for the renderer. Direct F(L.H) and environment E are distinct.
+  {
+    const double eta = (1.0 + std::sqrt(0.0196)) / (1.0 - std::sqrt(0.0196));
+    unsigned partitions = 0;
+    for (unsigned ri = 0; ri <= 10; ++ri) {
+      const double rough = double(ri) / 10.0;
+      for (double nv : {0.0, 0.0001, 0.01, 0.1, 0.25, 0.5, 0.8, 1.0}) {
+        double integrated = 0.0;
+        // A fixed normalized Beckmann slope ensemble; r=0 is the exact plane.
+        for (unsigned j = 0; j < 64; ++j) {
+          const double slope = rough * rough * std::sqrt(-std::log((j + 0.5) / 64.0));
+          const double phi = j * 2.399963229728653;
+          const double vh = std::fabs((nv + std::sqrt(1.0 - nv * nv) * slope * std::cos(phi)) /
+                                      std::sqrt(1.0 + slope * slope));
+          integrated += dielectric_reference(vh, eta) / 64.0;
+        }
+        if (ri == 0) CHECK(std::fabs(integrated - dielectric_reference(nv, eta)) < 1e-12);
+        for (float E : {0.0f, float(integrated), 1.0f})
+          for (unsigned ai = 0; ai <= 20; ++ai) {
+            const float a = float(ai) / 20.0f;
+            const auto w = surface_partition(E, a);
+            CHECK(w.interface_weight >= 0.0f && w.column_weight >= 0.0f && w.transmission_weight >= 0.0f);
+            CHECK(w.interface_weight == E); // including a=0: a clear column retains its interface
+            CHECK(std::fabs(double(w.interface_weight) + w.column_weight + w.transmission_weight - 1.0) <= 2e-7);
+            if (a == 0.0f) CHECK(w.column_weight == 0.0f);
+            if (a == 1.0f) CHECK(w.transmission_weight == 0.0f);
+            // Half packing's independent roundings bound the white-furnace error.
+            const float wh = to_half(w.interface_weight) + to_half(w.column_weight) + to_half(w.transmission_weight);
+            CHECK(std::fabs(wh - 1.0f) <= std::ldexp(1.0f, -10));
+            const float X = 0.93f, T = 0.71f, k = 0.0098f, probe = 2.2f;
+            const float A = X * T * w.interface_weight;
+            const float B = X * T * k * (probe * w.interface_weight);
+            const float column = 0.2f * w.column_weight + 0.4f * w.transmission_weight;
+            const float C = column + B;
+            const float L = 0.37f * k * probe;
+            const float want = column + X * T * E * L;
+            CHECK(std::fabs(compose(C, A, L, B) - want) <= 2e-7f);
+            CHECK(std::fabs(compose(C, A, k * probe, B) - C) <= 2e-7f);
+            // Actual A/B half storage must retain a=0 and the same single E.
+            const float Ah = to_half(A), Bh = to_half(B);
+            const float encoded_error = std::fabs(Ah * L - Bh - (A * L - B));
+            const float half_bound = std::ldexp(1.0f, -11) * (std::fabs(A * L) + std::fabs(B)) + std::ldexp(1.0f, -23);
+            CHECK(encoded_error <= half_bound);
+            ++partitions;
+          }
+      }
+    }
+    // Angular roles must remain separate: a normal-view sun at grazing L.H
+    // reflects strongly even when the view-integrated environment E is small.
+    const float direct_F = float(dielectric_reference(0.05, eta));
+    const auto environment = surface_partition(0.0196f, 0.5f);
+    const auto direct = surface_partition(direct_F, 0.5f);
+    CHECK(direct.interface_weight > 10.0f * environment.interface_weight);
+    CHECK(std::fabs(environment.interface_weight * 0.5f - 0.0098f) < 1e-8f); // old aE, only a diagnostic
+    std::printf("M5.6: %u dielectric/roughness/opacity partitions and half encodings\n", partitions);
   }
 
   // 4e. M5.4 sun visibility: D = a T X Dsun is the FS's dC/dDsun times its unshadowed sun term and
@@ -1084,6 +1154,44 @@ int main(int argc, char** argv) {
     }
     std::printf("patch %016llx with the game-shadow words (%s): sun %zu, local %zu, refraction %zu words\n",
                 (unsigned long long)fi.fs, fi.vg ? "Vg" : "no game shadow", out_gsun.size(), out_gls.size(), out_grr.size());
+    // M5.6 OFF keeps every existing form word for word, including refraction
+    // and game-shadow forms. ON preserves unproven families and provisions only
+    // the audited pool family; its runtime foam guard retains the native layer.
+    struct SurfaceForm { const char* name; bool sun, ls, refr, gsh; uint32_t capacity; const std::vector<uint32_t>* old; };
+    const SurfaceForm surface_forms[] = {
+      {"surface", false, false, false, false, cap, &out},
+      {"surface_sun", true, false, false, false, cap_sun, &out_sun},
+      {"surface_ls", false, true, false, false, cap_ls, &out_ls},
+      {"surface_refr", false, false, true, false, cap_rr, &out_rr},
+      {"surface_sun_gsh", true, false, false, true, cg_sun, &out_gsun},
+      {"surface_ls_gsh", false, true, false, true, cg_ls, &out_gls},
+      {"surface_refr_gsh", false, false, true, true, cg_rr, &out_grr}};
+    for (const auto& form : surface_forms) {
+      std::vector<uint32_t> off, on;
+      CHECK(patch_fs(words.data(), words.size(), fi, addr, form.capacity, off,
+                     form.sun, form.ls, form.refr, form.gsh, false) == PatchStatus::kApplied);
+      CHECK(off == *form.old);
+      CHECK(patch_fs(words.data(), words.size(), fi, addr, form.capacity, on,
+                     form.sun, form.ls, form.refr, form.gsh, true) == PatchStatus::kApplied);
+      const bool pool = fi.fs == 0xc4e92ccdb08dd777ull;
+      if (!pool) CHECK(on == off);
+      else {
+        CHECK(on != off && on.size() > off.size());
+        // Only the final colour output gains a store; record words do not grow.
+        auto stores = [](const std::vector<uint32_t>& mod) {
+          unsigned n = 0;
+          for (size_t p = 5; p < mod.size(); p += mod[p] >> 16)
+            if ((mod[p] & 0xffffu) == 62u) ++n; // OpStore
+          return n;
+        };
+        CHECK(stores(on) == stores(off) + 1);
+        if (argc >= 3) {
+          std::snprintf(name, sizeof name, "/water_fs_%08x_patched_%s.spv", unsigned(fi.fs >> 32), form.name);
+          std::ofstream sf(std::string(argv[2]) + name, std::ios::binary);
+          sf.write(reinterpret_cast<const char*>(on.data()), std::streamsize(on.size() * 4));
+        }
+      }
+    }
     // Every original instruction is still there, in order (the patch only inserts).
     size_t q = 5;
     for (size_t p = 5; p < words.size();) {
