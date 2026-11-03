@@ -1,0 +1,20 @@
+## Native hair precompute repair (branch hair-cost3, READY_FOR_LIVE, 2026-11-03)
+- No game launch, commit, merge, default or ABI change; git metadata read-only.
+- Live 10:18-10:32: all 4 runs lost the device ~2 s after mean ON; Streamline timeout ~1 s earlier.
+- DbgHelp dump: 0xc0000005 in bg3.exe +0x40e85cc; does not identify the GPU-loss cause.
+- Strand discovery capped at 64 candidates/draw (one workgroup/64 UV-site budget), independent of draw size.
+- No valid frame in prefix: probability -1, full native fallback; per-draw capped-thread count 0/1 in pool tail.
+- Mean allocation tail 4 -> 8 B; AlphaRec 200/204 carry allocation bytes/primitive count, subtype 196 retained.
+- Every tail write/read validates draw ownership, not just pool size; guarded record/info/source reads.
+- CPU precompute reference: 1242 checks (huge/empty draws, offsets/overflow, neighbour bounds, scan edges, quadrature).
+- Final build + 130/130 CTests passed (107.62 s); temporary tool PATH fixes only, no environment-code edits.
+- Manifest 145 requests, delta 0; mean shader compile + Vulkan spirv-val passed.
+- PP against main 0b16b3ee: 234 requests, 60 input-identical +47 PP-same, 127 changed, 0 failures.
+- Spec haircost --sample 16: 72 requests, 152/152 frozen OFF vs main and 608/608 literal comparisons passed.
+- Mean + same 72 requests compiled/spirv-val passed; hair_qual dryrun passed (45.4 min / 1384 MB estimate).
+- HQ4 trim ON from load through all references/restore; dedicated plan, no trim A/B there. Mean windows retained.
+- Reported trim pool MB: S8 261->176 (-32.6%), D1 364->210 (-42.3%), D2 137->90 (-34.3%), D3 1669->1483 (-11.1%).
+- Propose trim default-on separately; no measurable GPU cost reported. Also packs ordinary holds: not retirement only.
+- Existing dyn_hold tests prove retained position/UV bits, native strides, non-hair lifetime and deferred retirement.
+- Drop cheap from shipping proposal: gain within noise, coverage/AO approximation unqualified; diagnostic stays off.
+- Repaired mean GPU cost/energy/device-loss confirmation requires a newly authorized live run; no quality pass.
