@@ -29,3 +29,12 @@
 - Character energy on vs off +0.17% / +2.83% (off spread 1.38%); overcast shot, no visible change beyond animation.
 - Gates fixed: participation only in cost-groom (8 s shots < 300 frames); freeze judged inside the plan
   (the 1088 ms startup burst was the vt_alpha mask load). The old log passes the new gates.
+
+## Primary strand hair, increment 1a (offline, 2026-11-03; user: "si facciamolo")
+- Design docs/RTX_HAIR_PRIMARY.md: strands replace the matched cards inside the game's own hair draws
+  (prepass, G-buffer, velocity) by FS variants (pipeline clone like water); one camera ray per card fragment
+  into the groom TLAS, discard on miss; depth, stencil, lighting, MV, DLSS and post stay the game's.
+- `shaders/rt/hair_primary.hlsli` + twin `tools/hair_groom/primary.py`: strand depth on the card ray
+  (exact vs projection, rel. error < 1e-9), RT0/RT3/RT2.w encodings through the game's decoders
+  (normal < 0.2 deg in RG16F, tangent < 0.1 deg), CPU primary tracer (Shadowheart 512 px, 3.6 s).
+  DXC + spirv-val pass; no request uses it yet (variants delta 0). Next: 1b FS variants + GPU bench vs CPU.

@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, geom, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, geom, mesh, primary, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -344,7 +344,61 @@ def test_bsdf():
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
 
-for t in (test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_primary():
+    rng = np.random.default_rng(5)
+    v = rng.normal(size=(20000, 3))
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    # RT0 is RG16F: round through float16 like the target. Normals facing the camera (view z < 0.5) only:
+    # near the pole n.z = 1 the stereographic value diverges, the game's own precision limit.
+    nv = v[v[:, 2] < 0.5]
+    back = primary.stereo_decode(primary.stereo_encode(nv).astype(np.float16).astype(np.float64))
+    err = np.degrees(np.arccos(np.clip((back * nv).sum(1), -1, 1)))
+    check("RT0 stereographic normal round trip through the game's decode < 0.2 deg", err.max() < 0.2, err.max())
+    back = primary.oct12_decode(primary.oct12_encode(v))
+    err = np.degrees(np.arccos(np.clip((back * v).sum(1), -1, 1)))
+    # 12 bits over [-1, 1] per octahedral axis: a step of 2/4094; the angle error stays below ~0.06 deg.
+    check("RT3 12:12 octahedral tangent round trip through bg3_oct12 < 0.1 deg", err.max() < 0.1, err.max())
+    bytes_ok = np.allclose(primary.oct12_encode(v) * 255, np.rint(primary.oct12_encode(v) * 255))
+    check("RT3 encoding is whole bytes", bytes_ok)
+    check("RT2.w class 5 with light mask 3", primary.rt2_w_decode(primary.rt2_w(5, 3)) == (5, False, 3))
+    # Depth along the camera ray: explicit native projection vs the ratio formula.
+    near, far = 0.1, 1000.0
+    a = primary.depth_a(near, far)
+    b = -a * far
+    check("native reversed depth: near 1, far 0", abs(a + b / near - 1) < 1e-9 and abs(a + b / far) < 1e-12)
+    dirs = rng.normal(size=(1000, 3))
+    dirs[:, 2] = np.abs(dirs[:, 2]) + 0.5
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    tc, ts = rng.uniform(0.3, 50, 1000), rng.uniform(0.3, 50, 1000)
+    dc, ds = a + b / (tc * dirs[:, 2]), a + b / (ts * dirs[:, 2])
+    rel = np.abs(primary.strand_depth(dc, tc, ts, a) - ds) / ds
+    check("strand depth from the card fragment's depth equals the projected hit", rel.max() < 1e-9, rel.max())
+    check("orthographic strand depth is affine", abs(primary.strand_depth_ortho(0.5, 2.0, 3.0, -0.01) - 0.49) < 1e-12)
+    t = rng.normal(size=(500, 3))
+    t /= np.linalg.norm(t, axis=1, keepdims=True)
+    to_cam = rng.normal(size=(500, 3))
+    n = primary.fibre_normal(t, to_cam)
+    check("fibre normal perpendicular to the tangent, facing the camera",
+          np.abs((n * t).sum(1)).max() < 1e-9 and np.all((n * to_cam).sum(1) >= -1e-12))
+    # Tracer: one horizontal strand of radius 2 mm, 1 m in front of a 65 px camera (row 32 on the axis), 10 deg field.
+    r = 0.002
+    pts = np.array([[-0.05, 0.0, 1.0], [0.05, 0.0, 1.0]])
+    cam = primary.Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(10.0), (65, 65))
+    hits = primary.trace(pts, np.array([r, r]), np.array([0, 2]), cam)
+    pixel = 2 * np.tan(np.radians(5.0)) / 65            # metres per pixel at 1 m
+    rows = np.flatnonzero(hits.hit[:, 32])
+    check("tracer: strand covers 2 r / pixel rows", abs(len(rows) - 2 * r / pixel) <= 1, (len(rows), 2 * r / pixel))
+    centre = hits.t[rows, 32].min()
+    check("tracer: front distance 1 m - r on the axis row", abs(centre - (1.0 - r)) < 2e-4, centre)
+    check("tracer: tangent +x, parameter at the centre column ~0.5",
+          np.allclose(hits.tangent[rows[0], 32], [1, 0, 0]) and abs(hits.v[rows[0], 32] - 0.5) < 0.02)
+    gb = primary.gbuffer(hits, cam)
+    nb = primary.stereo_decode(gb["rt0"][rows[0], 32])
+    check("tracer: G-buffer normal faces the camera (view z < 0)", nb[2] < -0.9, nb)
+    check("tracer: G-buffer tangent decodes to +x", np.allclose(primary.oct12_decode(gb["rt3"][rows[0], 32]), [1, 0, 0], atol=1e-3))
+
+
+for t in (test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
