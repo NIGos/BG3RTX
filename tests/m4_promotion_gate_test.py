@@ -12,6 +12,8 @@ import contextlib
 import io
 import json
 import math
+import os
+import subprocess
 import random
 import sys
 import tempfile
@@ -28,6 +30,22 @@ def check(what, ok):
     global fails
     print(("PASS " if ok else "FAIL ") + what)
     fails += 0 if ok else 1
+
+
+def shadowed_tools_case():
+    # A foreign tools package can import successfully, bypassing ImportError fallback.
+    # Exercise both post entry points in a fresh interpreter, outside the repository.
+    repo = Path(__file__).resolve().parents[1]
+    with tempfile.TemporaryDirectory(prefix="post-tools-shadow-") as scratch:
+        foreign = Path(scratch) / "tools"
+        foreign.mkdir()
+        (foreign / "__init__.py").write_text("raise RuntimeError('foreign tools imported')")
+        env = dict(os.environ, PYTHONPATH=scratch)
+        for gate in ("m4_promotion_gate.py", "m5_promotion_gate.py"):
+            result = subprocess.run([sys.executable, str(repo / "tools" / gate), "--help"],
+                                    cwd=scratch, env=env, capture_output=True, text=True)
+            check(f"{gate} prefers repo over foreign tools package", result.returncode == 0)
+            if result.returncode: print(result.stderr)
 
 
 def hms(t):
@@ -233,6 +251,7 @@ def main():
     m = g.DIAG["rf hit gi"].search(gi_line)
     check("rf hit gi line parsed (ratio 1.012, without 0.917, screen source 66.7%)",
           m is not None and m.group(5) == "1.012" and m.group(6) == "0.917" and m.group(10) == "66.7")
+    shadowed_tools_case()
     exposure_case()
     print("all checks passed" if not fails else f"{fails} check(s) failed")
     return 1 if fails else 0

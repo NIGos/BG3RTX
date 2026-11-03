@@ -120,7 +120,7 @@
   ],
   "stop_on_dump": false,
   "purpose": "S8 Ultra hit shading 0/1/0/1 static and matched wf9 turns, compose shift fixed on; draft only.",
-  "estimated_phase_seconds": 225,
+  "estimated_phase_seconds": 249,
   "expect_every": [
     {
       "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -276,6 +276,6 @@
   ],
   "energy_fs": "water-compose",
   "window_mode": "visible_unfocused_fg",
-  "post": "python tools/m4_promotion_gate.py \"{log}\" --pool run",
+  "post": "py -3 tools/m4_promotion_gate.py \"{log}\" --pool run",
   "post_gate": true
 }
