@@ -9,7 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BATCH = "hair_qual"
 LIVE = "hair-qual"
-# S8 first: its water hair variants (rt/water_*.hlsl ?RT_NATIVE_SCALP) were never compiled at run time, so its
+# S8 first: its water hair variants (rt/water_*.hlsl ?RT_SPEC_NATIVE=1) were never compiled at run time, so its
 # startup burst is the cold case; the dialogue jobs read the runtime cache for them.
 SAVES = [("hq1-s8-water-fg2", "Water Queens House", "s8"), ("hq2-dialogue1-fg2", "Test Dialogue1", "dlg"),
          ("hq3-dialogue2-fg2", "Test Dialogue2", "dlg"), ("hq4-dialogue3-fg2", "Test Dialogue3", "dlg")]
@@ -50,7 +50,7 @@ SHOT = 8
 # layer's scalp capability word is sticky from then on (layer/alphatest.cpp alpha_begin_capture): every gi/ and
 # water request is a hair variant from the first lighting frame. So the user's first enable IS the startup: its
 # burst (ds1 10:03:51-10:04:52, 60 s frozen before the fix) runs while warmup holds hair on. Live, only
-# rt_hair_physical_origin selects other variants (the alternate entries, core/gi.cpp refresh): its first toggle off
+# rt_hair_physical_origin selects other pipeline specializations (the alternate entries, core/gi.cpp refresh): its first toggle off
 # in toggle-off-a is the runtime first-toggle case. The coverage A/B after it toggles all three keys.
 plan = [
     step("warmup", 25, qa_exposure_hold="0", **ON),            # the startup burst: hair on as the user starts it
@@ -166,7 +166,7 @@ def job(name, save, kind, first):
     if kind == "s8":
         expect += [r"\[water\] water geometry capture on \(rt_water_geometry=1",
                    r"\[water\] reflections \(\d+ frames, [1-9]\d* traced\)",
-                   r"\[water\] rt/water_reflect\.hlsl\?\S*RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1\S* water_reflect: built"]
+                   r"\[water\] rt/water_reflect\.hlsl\?\S*RT_SPEC_NATIVE=1\S* water_reflect: built \(spec hair=1 edge=\d+\)"]
     forbid = [r"\[crash\] exception 0x", "VK_ERROR_DEVICE_LOST", r"\[hot\] core (rejected|faulted)",
               "FAILED, keeping previous", "compile call failed", "RR creation failed", "RR evaluate failed",
               "skipped: no variant for", r"\[water\] reflections unavailable", "pipeline creation failed",

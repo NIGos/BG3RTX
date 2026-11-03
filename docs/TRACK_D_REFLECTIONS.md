@@ -507,6 +507,63 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Offline: key off, the S8 replay is bit-identical (giRaw fnv1a a54c4dfd1cc9acb9, all 512 x 64 counters equal with
     HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
     rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
+- **Generated rows (2026-11-02; offline, READY_FOR_LIVE, not qualified; docs/GAME_DATA_AUDIT.md action 2).** Key
+  `rt_hit_material_generated=0` (startup VS frame patch, then live; ini only). `py -3 -m tools.material_families.recipe_rows`
+  writes `common/native_hit_generated.h` (`--check` in CTest `hit_material_generated_test`, about 8 s) from three sources
+  that must agree: the asset DB (StaticInstancedDeferred VS/FS, StaticInstancedDepth VS, engine UBO offsets of the UV
+  transform / tile-set index / light channel, the 1:1 Reflectance offset, the VT layer bindings), the FS classifier
+  against the audited recipes (identical, fields only, reflectance member moved, RT2.y = 0.5, or the RT2.w flag bit 3
+  dropped; the DB offsets must equal the classifier's field map) and the capture path (pool: VS 2d2ac3c3; instanced: an
+  audited bit-exact family whose depth VS it shares with an equal G-buffer gl_Position slice, or whose bindings it has
+  with its own depth and G-buffer slices equal). 8 rows of 830 pairs (rejects listed with `--rejected`):
+  IP_AlphaTest(_2S)_VT 0de1b186/641822a7 (= 35a18400, refl @8, LayoutBase per the DB, 2S family, N location 2),
+  wind bushes PBR translucency 27ef2b49/2e34c667 (= 83831811 fields only, LayoutVt4, IP grass family certificate),
+  wind RGB 2S 9cc7094f/4464f442 (= 923131c7) and its GM 9cc7094f/4f3ec0c7 (= 14678345, refl @20), BASE_AlphaTest_FX
+  1e9145e4/9d925bfd (= 14678345), GM_Pulse_AlphaTest 1e9145e4/e4ade329 (= 3da860be, constant: `stage` writes 0.5),
+  Base_GM/BGM 2d2ac3c3/651863a6 and HLOD_GM 2d2ac3c3/b0ecc292 pool (= 3df678c0). Generated instanced rows borrow their
+  family's key, pairing certificate and remap and are checked bit for bit at the hit; they are not gated by the wind
+  RGB / IP grass keys. Key off: every audited lookup unchanged (`native_hit_generated_test`), no shader changed
+  (2961/2961 requests byte-identical). Packs cannot show the share after (rows are captured live); camp pack 013545-2
+  (instanced off) blocks 20.2% of lookups on the bushes' depth FS f9ab595d and 5.4% on IP_AlphaTest's 2f1b0ffd. Live:
+  `tools/live_batches/m4_generated` (camp + inn), predicted camp +12 points (3-25), inn +1.5 (0.3-4), energy null.
+  Rejected and worth a recipe next: 3b346b42 HLOD two-sided (pool two-sided flip), 6561beef/ce81ffaa (DB channel @60
+  disagrees with the classifier's map), the ColorVar / SSS / translucency variants.
+  Live (m4_generated 2026-11-02, hgn1 camp / hgn2 inn): qualified +2.3 / +0.12 points (predicted 12 / 1.5: below),
+  generated 2S rows bit-exact, energy -0.12% / -0.10% (null), GI trace +0.58 / +0.03 ms, no overflow; the wind bushes
+  rows captured 9 and mapped 0 (pairing to diagnose), 83 IP_Base_VT G-buffer draws captured and never mapped. Off.
+  Two-sided pool rows (2026-11-02): RT_HIT_POOL_2S (variant bit kHitPool2s, only instanced + wind RGB without IP grass /
+  OMM / tileset / scalp / hair origin, +45 requests) flips the pool row's N for h2.w = 5; other consumers reject such
+  rows. The generator also accepts an RT2-only difference equal to an audited recipe's RT2 (members erased, temporaries
+  renamed, RT2.w folded): 11 rows (+ Base_2S_VT, Base_AlphaTest_2s_Translucency, ATM_Wind_Vertex_R_AlphaTest). HLOD
+  two-sided 3b346b42 stays rejected (another page decode in its normal-mix sample).
+
+  HLOD audit (2026-11-02, code only, unverified: build pending):
+  `db_templates` / `db_fields` identify `Engine_Default_HLOD_TwoSided_VT` as pool VS
+  `2d2ac3c38992b7f0`, FS `3b346b4241d44152`, engine transform/index/channel offsets
+  0/32/36, table/normal/albedo/physical at 1:3/4/5/6 (LayoutBase), material CB 16 B.
+  There is no parameter with the `reflectance` role. The one-sided HLOD FS
+  `8165785442a20e57` has the same bindings, offsets and missing role; those facts
+  alone cannot prove equal reflectance sampling. ASSET_DB section (b) records named
+  bindings and offsets, drops unrecognized roles and samplers, and stores shader
+  hashes, not shader instructions or VT page-decode expressions.
+
+  Existing row fields cannot express the documented differing page decode of the
+  two-sided FS's reflectance-mix input. `ReflectanceNormalMix` evaluates
+  `clamp(0.5 + (nl.x - 0.5) * ubo)` with the SAME `nl` used for the shading normal:
+  `rt_hit_material_pool` calls `hit_material_layer(..., col=1)` once for both.
+  That sampler fixes `e=page[col]`, scale `exp2(e & 15)`, page x/y bits 14/4,
+  layer bits 24..30 and the tile-set matrix column `col`. `Recipe` can select a
+  binding layout, UBO offsets, reflectance arithmetic and N flip, but has no
+  independent reflectance sample, table column or page-decode selector. Changing
+  the normal binding/layout would also change the shading normal; changing the
+  reflectance offset changes only the mix weight. Neither preserves the material.
+  A row `{3b346b42, 2d2ac3c3, 0, 32, 36, ReflectanceNormalMix, ..., CapturePool,
+  LayoutBase, true}` would therefore silently use the wrong sample and is rejected.
+  A new sampler/row contract is required before adding it. The exact alternative
+  page expression and material-CB weight offset were not re-established here:
+  shader dumps are outside this task's allowed capture reads. No generated header
+  change; no fabricated offset or page selector. The native generated-row test
+  pins rejection. This is a schema limitation audit, not a new qualified recipe.
 - **Cost and bias breakdown (2026-11-01; offline, READY_FOR_LIVE).** Live (m4r1 030749/031149, m4p 11xxxx,
   diagnostics off): rf pass +1.5-1.6 ms at S6 (0.42 -> 1.94-2.0), +2.0 at S8 (0.57 -> 2.55), budget 0.2-0.4.
   - Where it goes (counts per frame from the stats windows, which include the tier (a) checks): S6 has
@@ -593,3 +650,90 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
 - **Live gate (pending).** Same run OFF/ON/OFF at S8 and S1, `rf_stats=1` hold >= 300 frames:
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
+
+### Recipe-row branch progress details (verbatim)
+
+```markdown
+## Generated hit-material rows from the asset DB (branch hm-recipe-rows, READY_FOR_LIVE, 2026-11-02)
+- New `tools/material_families/recipe_rows.py` -> `common/native_hit_generated.h`: rows only where the asset DB (offsets,
+  VT bindings, depth VS), the FS classifier (identical / fields only / reflectance moved / constant 0.5 / flag dropped)
+  and the VS capture path (pool 2d2ac3c3, or a bit-exact instanced family by depth VS + gl_Position slice) agree.
+  8 of 830 pairs: IP_AlphaTest(_2S), wind bushes PBR translucency, wind RGB 2S plain/GM, BASE_AlphaTest_FX,
+  GM_Pulse_AlphaTest (constant), Base_GM/BGM and HLOD_GM (pool, = 3df678c0). TRACK_D_REFLECTIONS 14 "Generated rows".
+- Key `rt_hit_material_generated=0` (startup VS frame patch, then live). Key off: audited lookups unchanged
+  (native_hit_generated_test), 2961/2961 shader requests byte-identical (no shader change), 100/100 CTests.
+- Offline share: packs cannot replay new rows (captured live). Camp pack 013545-2 (instanced off) blocks 20.2% of
+  lookups on the bushes' depth FS and 5.4% on IP_AlphaTest's; the inn pack predates pool alpha (1.0% replayed).
+- Live job ready, not queued: `tools/live_batches/m4_generated` (camp + inn, 164 s each, ~10 min, 0.4 GB), predicted
+  camp +12 points (3-25), inn +1.5 (0.3-4), energy null, camp GI trace +1.0 ms (0.2-2.5). Dryrun static checks pass
+  (its fake-queue runs fail as on main).
+- Also on this branch (from the audit branch): `tools/assets/locate.py`, no hard-coded LSLib or game path in the VT
+  mask extractor (BG3RTX_LSLIB / external/lslib*, BG3_DATA / Steam libraries); vt-masks-catalogue still hard-codes it
+  until it merges with this.
+
+## m4_generated live result: correct, small gain, stays off (branch hm-recipe-rows, measured, 2026-11-02)
+- hgn1 camp 145058 (INVALID only for the share gate's window length) / hgn2 inn 145500 (VALID), GPU ms only (two
+  identity runs compiled during the batch). Qualified share OFF -> ON: camp 26.9% -> 29.2% (+2.3 points; predicted +12,
+  range 3-25: below), inn 24.97% -> 25.09% (+0.12; predicted 1.5, range 0.3-4: below). Clip: every generated 2S row
+  bit-exact (866k-1.49M checked, 0 rejected). Energy: camp -0.12%, inn -0.10% (bands 1.85% / 1.23%): null as predicted.
+  GI trace: camp +0.58 ms (predicted 1.0, 0.2-2.5), inn +0.03 ms. Capacity: overflow 0 everywhere.
+- Why below: camp's bulk was the wind bushes (20.2% of pack lookups): 9 draws captured, 0 mapped (pairing not logged:
+  the IP grass family lines printed only with rt_hit_material_ip_grass; now also with the generated key). The 2S family
+  gained 42 mapped rows (IP_AlphaTest) but 83 more G-buffer draws were captured and never mapped (the opaque IP_Base_VT
+  risk, confirmed): deferred stream 57 -> 93 MB, no overflow. Inn: pool rows 651863a6 9/7 and b0ecc292 6/3 records/ready.
+- Verdict: not into Ultra (+2.3 points for +0.58 ms at camp, no measurable image change); keep off until the bushes pair.
+- Job fix: at camp's ~8.5 fps with rt_stats, 120 frames = 14 s, so a 20-25 s diag window never held two stats lines.
+  The plans now have 5 s gap-* phases (rt_stats=0 resets the core's 120-frame window) before diag-on and diag-off-b,
+  and the share and clip gates are events (settle 1 s). Dryrun static checks pass; 13 phases, 9.8 min.
+
+## Two-sided pool rows (RT_HIT_POOL_2S) and RT2 matching (branch hm-recipe-rows, READY_FOR_LIVE, 2026-11-02)
+- Pool consumer (shaders/rt/native_hit_material.hlsli rt_hit_material_pool): with RT_HIT_POOL_2S + RT_HIT_INSTANCED, rows
+  with h2.w = 5 flip the N column by nv_two_sided_sign (world triangle, interpolated N, ray), as the per-draw 2S rows.
+  Every other consumer rejects h2.w 5 (fail closed, reason row). Variant bit kHitPool2s (common/shader_variant.h): only
+  with instanced + wind RGB and without IP grass / OMM / tileset / scalp / hair origin: +45 requests (variants.txt 2922).
+  The layer publishes `native-hit-pool-2s-v1` when the generated key starts on and a two-sided pool row exists.
+- Generator: two-sided pool rows allowed; an RT2-only difference is accepted when the FS's RT2 equals an audited recipe's
+  (UBO members erased, temporaries renamed, the RT2.w class/flag word folded) and takes its reflectance mode. 11 rows:
+  + Base_2S_VT 2d815e2a and Base_AlphaTest_2s_Translucency 80d6fb8f (pool, two-sided), + ATM_Wind_Vertex_R_AlphaTest
+  0289a872/55592de4 (wind RGB family). HLOD_TwoSided 3b346b42 (the inn's 19 draws) stays rejected: its RT2 normal-mix
+  sample uses another page decode than 81657854's, so it needs a hand audit, not the flip.
+- Job m4_generated updated for one rerun (window fix, IP grass pairing lines, `pairs \d+`); predicted.json rerun 2:
+  camp +2.5 (1.5-4), inn +0.3 (0-1), bushes pairing diagnostic only.
+- Remaining plan (for a fresh agent): (1) rerun m4_generated (needs the user's go); read the IP grass pairing line for
+  the bushes (unread / wind inputs / placement / no prepass) and fix that certificate or the depth-family match;
+  (2) skip capturing G-buffer draws of a generated pair that never pair (IP_Base_VT, 83 per camp frame): e.g. capture
+  only when a depth draw of the same key was noted this frame; (3) audit 3b346b42 by hand (RT2 decode) as a new
+  recipe; (4) promote only if the share gain is worth its GI ms (run 1: +2.3 points for +0.58 ms at camp).
+
+## Item 3: skip unpairable IP draws (branch hm-recipe-rows, unverified: build pending, 2026-11-02)
+- `deferred_begin` now requires an already noted, unique alpha source key for generated instanced and IP grass
+  draws before bindings, staging and XFB allocation. It searches prepared slots and pending prepasses in the
+  current frame; pending recordings must still be current. Opaque sources cannot qualify. The final pairing
+  certificate and GPU checks remain unchanged. Deferred-first recording conservatively skips these rows.
+- Target: the 83 unmapped camp IP_Base_VT draws (deferred stream 57 -> 93 MB in hgn1); expected to remove their
+  stream cost, not a measured result. Generated / IP grass off: other audited capture decisions are unchanged.
+- Extended `native_hit_generated_test`: missing, unassigned, unrelated, duplicate and reset source keys,
+  a valid alpha key, IP grass gating and the unchanged audited wind / 2S policy. Not compiled or run.
+- Later, after the compiler is free, from this checkout in PowerShell:
+  `.\scripts\build.ps1 -Test`
+  `ctest --test-dir build -R '^native_hit_generated_test$' --output-on-failure --no-tests=error`
+- No build, CMake, CTest, DXC, shader tool or live run executed. A future authorized camp A/B must confirm
+  fewer captured unmapped draws / deferred bytes without losing mapped alpha rows; GPU cost is unmeasured.
+
+## Item 4: HLOD two-sided audit (branch hm-recipe-rows, unverified: build pending, 2026-11-02)
+- Read-only DB audit: `Engine_Default_HLOD_TwoSided_VT` = 2d2ac3c38992b7f0 / 3b346b4241d44152;
+  engine offsets 0/32/36, LayoutBase bindings 1:3/4/5/6, material CB 16 B, no Reflectance role.
+- Cannot express its documented separate reflectance page decode with existing fields. NormalMix consumes
+  shading normal `nl.x`; no independent mix-sample page selector exists. TRACK_D_REFLECTIONS section 14
+  records the exact schema limitation and evidence limits. Exact alternative page bits / weight offset
+  require a future shader-source audit; shader dumps were not read under this task's capture restriction.
+- Corrected the misleading generator comment; native test pins rejection of this pair. Header unchanged.
+  No feature added, no GPU cost measured. The 19 inn draws remain unsupported.
+- Later verification (after compiler availability and permission to read shader dumps):
+  `python -m tools.material_families.recipe_rows --check`
+  `python tests/hit_material_generated_test.py`
+  `.\scripts\build.ps1 -Test`
+- Commit creation blocked: Windows ACL denies writes to this worktree's Git metadata, including index.lock.
+  Both requested commit subjects must include `(unverified: build pending)` and the final trailer
+  `Co-Authored-By: Codex <noreply@openai.com>`. No commit, push, game launch or capture write occurred.
+```

@@ -36,6 +36,9 @@ void hs_sun_stat(uint k,bool c){if(g_hd_stats)stat_add(NATIVE_HIT_SUN_STAT_BASE+
 static const uint kHitSunRoof=5u;   // HdDirect.status: the sun is unsupported under a roof volume
 void hs_sun_xstat(uint k,bool c){if(g_hd_stats)stat_add(NATIVE_HIT_SUN_XBASE+k,c,g_hd_bin);}
 bool native_hit_sun_roof_ok(float3 position,float3 L){
+#ifdef RT_SPEC_CASCADE
+ if(RT_CASCADE_ON)return true;   // rt_spec_cascade: RT_CASCADE_MASKS's rule below, chosen at pipeline creation
+#endif
 #ifdef RT_CASCADE_MASKS
  return true;   // the cascade's casters hold the cut-away roofs; the sun ray sees them
 #else
@@ -76,6 +79,8 @@ HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoi
 #endif
 #if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
  g_rt_cascade_ray=true;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+ if(RT_CASCADE_ON)g_rt_cascade_ray=true;
 #endif
 #ifdef NATIVE_HIT_SUN_DISC
  uint visibility=rt_visibility(rt_offset_ray(position,normal),native_hit_sun_dir(L),pc.rt_tmax,cone);
@@ -84,6 +89,8 @@ HdDirect native_hit_sun(NativeHitMaterial material,float3 position,float3 outgoi
 #endif
 #if defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)
  g_rt_cascade_ray=false;
+#elif defined(RT_CASCADE_SUN_HIT) && defined(RT_SPEC_CASCADE)
+ if(RT_CASCADE_ON)g_rt_cascade_ray=false;
 #endif
 #ifdef NATIVE_HIT_SUN_ROOF
  hs_sun_xstat(1u,visibility==kRtUnknown);

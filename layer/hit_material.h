@@ -6,9 +6,13 @@ namespace bg3::native_hit {
 // Internal main-AlphaDSL extension. Never part of the public host/core ABI.
 inline constexpr uint32_t cache_slots=nh_cache_slots,sampler_slots=nh_sampler_slots,record_bytes=256,max_records=nh_alpha_rows;
 bool enabled();
+// Bytes the recycled-buffer pool retains (rt_vram_guard breakdown and yield 2).
+uint64_t recycled_bytes();
 // rt_hit_material_instanced at startup: the G-buffer VS of an instanced wind / 2S pair gets the
 // N/B/T XFB frame patch (common/native_hit_instanced.h).
 bool instanced_patch_vs(uint64_t vs);
+// Its N location (UV one below); rt_hit_material_generated at startup: also the generated VSs (native_hit_generated.h).
+uint32_t instanced_frame_location(uint64_t vs);
 void device_created(DeviceData*);
 void device_destroyed(DeviceData*);
 void prepass_begin(VkCommandBuffer);
@@ -39,4 +43,11 @@ struct PoolMesh {uint64_t gen{};VkDeviceSize pool_off{};uint32_t tris{},stride{}
 struct PoolUse {uint32_t status{};uint32_t slot{UINT32_MAX};bool wants_basis{};};
 PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh&);
 void pool_evicted(uint64_t geometry);
+// BVH owns the outer lock. Freeze prevents new basis jobs while an immutable
+// pool copy is pending; it succeeds only after all prior jobs are retired.
+bool pool_compact_freeze();
+void pool_compact_thaw();
+void pool_compact_scene(uint32_t slot);
+void pool_compact_rebase(uint64_t geometry, uint64_t gen, VkDeviceSize position,
+                         VkDeviceSize basis, uint64_t epoch);
 }

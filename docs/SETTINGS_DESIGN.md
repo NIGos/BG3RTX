@@ -13,6 +13,49 @@ measured).
 
 ---
 
+## A2 native launcher candidate (2026-11-02)
+
+`tools/launcher/ui_product.h` is included by `main.cpp`; no new framework or ABI. A1 owns categories,
+copy, costs and choice policy. The launcher uses `choice_visible`, `choice_available`,
+`presentation_values` and `preview_dependencies`, with combo item data carrying real model indices.
+A hidden legacy choice has a neutral preserved-custom row and stays untouched on unrelated saves.
+
+A separately scrolling child contains Overview, Graphics (Lighting / Surfaces), Performance,
+Advanced and Support. Preset and actions remain pinned. Experimental is a closed disclosure;
+unqualified choices in qualified cards are available only while it is open. Developer is a separate
+tab gated by the merged explicit dev flag. Experimental controls are never duplicated.
+Native common controls retain system button/focus rendering, including the light control surfaces.
+B1 assets are read from stable asset paths at runtime; C2 alone owns embedded resource wiring.
+
+`ui_state.h` holds pure dirty/restart/session/serialization helpers. The UI stores onboarding page,
+selected setup path, process identity (PID + creation time), baseline and pending restart in an atomic
+mod-side `bg3rtx_ui.ini`. Save never advances the process baseline. Opening after a new game process
+begins establishes a new baseline; no runtime acknowledgement is claimed. Unknown external edits
+before observation cannot be reconstructed. State-write failure blocks Save; settings-write failure
+keeps edits and can leave a conservative restart reminder. No game files or saves are read or changed.
+The existing game-path writer has no failure result; durable first-run selection is also retained in
+UI state, but setup integration should add an acknowledged path-save interface in its owned module.
+
+Save previews either dependency policy and all startup adjustments. Preset/Reset preview replacements;
+Close offers Save / Discard / Cancel. Multiline errors keep full text in Details / report.
+A first-run checklist resumes without replacing imported settings or automatically starting the game.
+
+B2 contract hook: `launcher::diagnostics::show_report(HWND owner)` in `diagnostics.h`.
+Only B2 implements the collector. Until available, the UI presents a clear unavailable message.
+C2 must add B2 sources to the launcher target when integrating the header. No diagnostics source,
+installer, shared settings table, build registry or renderer file is changed by A2.
+
+Offline review: `--no-game --screenshot <file.bmp>` uses WM_PRINT offscreen and exits without state
+writes. `--screenshot-view graphics|advanced|experimental|support|missing|probe|error|contrast|first-run` selects a
+fixture; fixture player views force Developer hidden. `--screenshot-width 720` checks narrow reflow;
+`--screenshot-scale 1|1.25|1.5|2` simulates logical scaling. Launch/preset CLI modes cannot be combined
+with no-game/screenshot. PNG evidence is under `captures/gui-product-review/ux-a2-launcher/`.
+These are layout captures, not certification of actual Windows DPI switching or accessibility.
+`python tools/launcher/ui_review.py` regenerates 15 PNGs, tests 3 mixed-mode guards and verifies
+configuration hashes are unchanged. `ui_state_test.cpp` is a CPU-only fixture (15 checks);
+C2 may register it in CMake.
+Manual keyboard-only, Narrator, actual high-contrast theme and multi-monitor DPI QA remain required.
+
 ## 0. Summary
 
 - **Recommended approach.** Settings are drawn by **our own Dear ImGui overlay inside the

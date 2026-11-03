@@ -10,6 +10,52 @@
    "written": "2026-11-02"
   }
  },
+ "wf7a-s8-fg2": {
+  "_cross_launch": {
+   "predicted": null,
+   "source": "no ON/OFF shot pair inside a launch: the comparison is across launches wf7a (rt=1) and wf7b (rt=0), not an energy gate",
+   "flicker": "fg_present_flicker on snap-a / snap-b of both launches with wf7a's diag-view-mask-rot mask: water_over_rest about 1.5 in both (wf6: 1.47-1.51 with rt=1), the two launches within the snap-a / snap-b spread of each launch: the game's own water, closed. rt=1 clearly above rt=0: ours (the RT image as a whole, since every water key was already excluded)",
+   "written": "2026-11-02"
+  }
+ },
+ "wf6-s8-fg2": {
+  "shot-fgmv": {
+   "predicted": null,
+   "source": "rt_water_fg_mv changes only DLSS-G's motion vectors (generated frames); the pre-post energy is unchanged (wf5 160335: +1.32%, band 2.05%)",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "the water_mv copy (wf4/wf5: no measurable change in the reflection lines)",
+   "flicker": "presented frames (fg_present_flicker, 32 consecutive presents per turn): DLSS-G implicated if snap-off-a / snap-off-b show water_parity_ratio above rest_parity_ratio by more than their OFF-OFF difference and water_over_rest above snap-fgoff's; snap-fgmv then moves both towards snap-fgoff. Within the OFF spread everywhere: not FG (the game's water, wf3/wf4/wf5)",
+   "written": "2026-11-02"
+  }
+ },
+ "wf5-s8-fg2": {
+  "shot-glint": {
+   "predicted": null,
+   "source": "rt_water_glint_aa replaces each lit sun record's sun term by the tent-weighted mean of its valid neighbours' (weights renormalised): the mean over the water is kept, only spread; the energy measure (water-compose or the plain after-water dump) moves by edge effects at the water's border and shadow edges only, below the band",
+   "cost_gpu_ms": 0.05,
+   "cost_source": "one more full-screen 8x8 dispatch per water pass reading two record words and the target (water_glint) plus nine RGBA16F loads per composed pixel: about 0.03-0.05 ms, inside [water] compose GPU (0.41 ms)",
+   "flicker": "rendered bursts (pan_artifacts, water mask): peak rate (luma_peak, new) of rot-glint below both OFFs by more than |off-a - off-b|; presented (fg_present_flicker): snap-glint water mean |second difference| below both OFFs. Not sized offline",
+   "written": "2026-11-02"
+  },
+  "shot-fgmv": {
+   "predicted": null,
+   "source": "rt_water_fg_mv changes only the motion vectors DLSS-G reads (generated frames, after the scene colour is dumped): the pre-post energy is unchanged",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "the water_mv copy (wf4: inside [water] reflections GPU, no measurable change)",
+   "flicker": "attribution of the display-rate switch: if DLSS-G misplaces the water with the bed's vectors, snap-off-a / snap-off-b show a water parity asymmetry (water_parity_ratio well above rest_parity_ratio) and a water/rest ratio above snap-fgoff's; snap-fgmv then brings both towards snap-fgoff. snap-noshadow and rot-noshadow (rt_water_shadows=0): if the 1-spp sun-disc ray toggles glints per frame at shadow edges, its water residual and peak rate fall below both OFFs. Compose lines per window (uncomposed 0 and flips 0 in wf4; lighting of this frame 0-12 of 120 frames in static and turn windows alike) are reported, not gated",
+   "written": "2026-11-02"
+  }
+ },
+ "wf4-s8-fg2": {
+  "shot-rrwater": {
+   "predicted": null,
+   "source": "rt_water_rr_mv changes only the motion vectors RR reads (our copy; FG and the core's passes keep the game's), not any radiance before post: the water-compose energy (5c3fdabc + the in-frame compose delta) is unchanged",
+   "cost_gpu_ms": 0.02,
+   "cost_source": "one full-screen RG16F copy of the game's vectors (2.7 Mpx, ~11 MB read + 11 MB write: ~0.01-0.02 ms at the 5090's bandwidth) plus two projections per water pixel; inside the [water] reflections GPU line (0.12 ms in wf2/wf3)",
+   "flicker": "rot-rrwater: water-masked transient rate below both rot-off bursts by more than |off-a - off-b| if RR's reprojection of the water with the bed's motion is the flicker. rot-rroff (the game's DLSS SR instead of RR; the core's non-RR GI / D-LS / D-RF modes too): attribution only; clearly below both OFFs means the flicker is RR's handling of the water, within them means the game's water (its animated normals, probe) or the image whatever the upscaler. Not sized offline: the bed-vs-surface parallax per pixel during the turn is not measured",
+   "written": "2026-11-02"
+  }
+ },
  "wf3-s8-fg2": {
   "shot-nocompose": {
    "predicted": 0.126,

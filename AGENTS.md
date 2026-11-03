@@ -67,6 +67,21 @@ These rules come from mistakes already made in this repo. They apply on every br
   One shared helper, not one copy per feature.
   Offline shader compiles and SPIR-V byte identity: `tools/shader_identity.py` (cached, progress; the
   `tests/*_shader_test.py` gates and merge-green's `tools/compile_shaders.py` use it). Don't call DXC directly.
+- Shader compile time is the bottleneck (lessons of 2026-11-02: four ~2 h identity runs and a 3 h merge-green at once):
+  - Variants multiply: a new on/off key goes in as a Vulkan specialization constant (see
+    docs/BUILD_AND_PACKAGE_EFFICIENCY.md, `rt_spec_cascade`), not a define, unless it changes a layout or
+    binding. Report the `shaders/variants.txt` request delta of every branch; +1000 needs a reason.
+  - The cache keys on preprocessed text (`BG3RTX_SHADER_PP`): an edit that leaves a request's preprocessed text
+    unchanged costs no compile. Only requests that really change are compiled and identity-checked.
+  - DXC slots are machine-wide: parallel compile runs do not add throughput, they only delay each other.
+    Run heavy compiles (identity, merge-green with new variants) one at a time, highest priority first.
+  - Don't spend compile time that a merged or planned improvement makes unnecessary (user rule, 2026-11-02):
+    finish the improvement first (e.g. the spec-constant migration), then compile and check once.
+  - merge-green updates the test tree, so no live can run during it: queue a long merge-green after the lives
+    that are ready, not before them. merge-green merges in the main checkout: if one is stopped, check
+    `.git/MERGE_HEAD` and run `git merge --abort` before anything else.
+- Chain scripts: `set -f` before word-splitting job lists (an unquoted `*` expanded to file names once), stop
+  on `MERGE FAILED`, and stop children too (`taskkill /T`): stopping only the wrapper left a stale chain running.
 - GPU statistics counters live in device-local memory, reduced per workgroup, copied to the host after
   the timed region: host-visible atomics cost 15 ms (water reflections) and 7 ms (water compose) in 2026-11.
   CTest `host_atomics_lint_test` fails on a new shader atomic into a host-visible buffer (classify it there).

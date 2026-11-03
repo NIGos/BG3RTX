@@ -9,7 +9,7 @@
  },
  "hq1-s8-water-fg2": {
   "same_as": "_all",
-  "water": "[water] reflections traced > 0 in every judged window, hair on and off (gated); '[water] rt/water_reflect.hlsl?...RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1... water_reflect: built' once (expect); no 'skipped: no variant for' (forbid)",
+  "water": "[water] reflections traced > 0 in every judged window, hair on and off (gated); '[water] rt/water_reflect.hlsl?...RT_SPEC_NATIVE=1... water_reflect: built (spec hair=1 edge=...)' once (expect); no 'skipped: no variant for' (forbid)",
   "hair records": "report only (party at the port; not gated): records > 0 expected for the visible party",
   "energy": "whole frame shot-hair-a/b >= OFF - spread; character ROI brighter by 0-10% (small characters in the isometric view)"
  },

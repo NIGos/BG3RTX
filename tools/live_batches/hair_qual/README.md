@@ -21,7 +21,7 @@ hair startup latches (rt_native_hair/scalp/origin=1, rt_origin=1, 88-byte vertic
 The startup latches need the keys on at launch, and the layer's scalp capability word is sticky from then
 (layer/alphatest.cpp alpha_begin_capture): every gi/ and water request is a hair variant from the first lighting
 frame. So the user's "first enable" is a restart with hair on, and its burst (ds1 10:03:51-10:04:52: 60 s frozen
-before the fix) runs in `warmup` (hair on). Live, only rt_hair_physical_origin selects other variants (the alternate
+before the fix) runs in `warmup` (hair on). Live, rt_hair_physical_origin selects another specialization of the same module (the alternate
 entries); its first toggle off in `toggle-off-a` is the runtime first-toggle case.
 
 ## Phases (250 s of plan per job)
@@ -48,7 +48,7 @@ not judged); `diag-rt-hairoff-a` / `diag-rt-hairon` / `diag-rt-hairoff-b` 10 s; 
   `[alpha scalp]` invalid/missing 0.
 - Dialogue jobs, every hair-on window: `[alpha hair]` coverage records > 0, `[alpha scalp]` hard or dither records > 0.
 - hq1: `[water] reflections (N frames, M traced)` M > 0 in every judged window (hair on and off), the water_reflect
-  hair variant `built` line, and forbidden anywhere: `skipped: no variant for`, `[water] reflections unavailable`.
+  `RT_SPEC_NATIVE=1` module `built (spec hair=1 edge=...)` line, and forbidden anywhere: `skipped: no variant for`, `[water] reflections unavailable`.
 - After the run (not queue gates): character float energy with
   `py -3 tools/live_batches/dialogue_shadows/char_energy.py --root <captures> shot-off-a=<stamp> shot-hair-a=<stamp> ...`:
   ON >= OFF - spread (predicted +20 to +30% in dialogue); whole-frame mean from dumps.json the same; cost

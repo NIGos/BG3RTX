@@ -1,3 +1,10 @@
+#ifdef WATER_SPEC_RF_EDGE
+[[vk::constant_id(1014)]] const uint kSpecWaterRfEdge = 0;
+#define WATER_RF_EDGE 1
+#define WATER_EDGE_ON (kSpecWaterRfEdge != 0u)
+#else
+#define WATER_EDGE_ON true
+#endif
 // M5.3 water composition (rt_water_compose=1, docs/PLAN_M5_WATER.md M5.3, core/water.cpp).
 // Replaces the forward water FS's probe reflection term with the ray-traced reflection where
 // the ray resolves, exactly, with the FS's own factors (common/water_compose.h: the patched FS
@@ -294,6 +301,53 @@ bool same_encoded(float c, float t, int mbits) {
   return abs(t - c) <= ldexp(1.0, e - 1.0 - float(mbits));
 }
 
+#if defined(WATER_GLINT_AA) && defined(WATER_SHADOWS)
+// rt_water_glint_aa (core/water.cpp): the water's sun term D = C - R (the record's colour without its sun
+// term, M5.4) is a glint of a few pixels of ~1000 (S8, the water pass's dump) that the turn under-samples.
+// water_glint (rt/water_glint.hlsl, a dispatch before water_compose, nothing consumed) stores each owned sun record's D; the
+// compose then replaces the pixel's D by the tent-weighted (1 2 1)^2 mean of the valid D around it: the
+// sun lobe integrated over a pixel footprint of +-1 pixel, the same mean (weights renormalised over the
+// valid neighbours), only spread. Occluded pixels keep R (no sun term), restored (M5.4c) ones the FS's.
+[[vk::binding(69, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> gGlint;   // rgb D, a 1 valid
+
+// The pixel's own sun term (shaders/rt/water_glint.hlsl, the entry: its own file, so no ordinary compose
+// request gains a module).
+float4 glint_of(uint2 fp) {
+  const uint idx = fp.y * cp.a.x + fp.x;
+  float4 o = 0.0.xxxx;
+  if (fp.x < cp.a.x && idx < cp.a.y) {
+    const uint at = kHeaderBytes + idx * kRecordBytes;
+    const uint4 r1 = cRec.Load4(at + 16u);
+    if ((r1.w & 0xffffu) != 0u) {
+      const float2 nc = f16tof32(uint2(r1.x, r1.x >> 16)), c12 = f16tof32(uint2(r1.y, r1.y >> 16));
+      const float3 Crec = float3(nc.y, c12);
+      const float3 Ct = target[fp];
+      const uint2 r2 = cRec.Load2(at + 32u);
+      const float2 r01 = f16tof32(uint2(r2.x, r2.x >> 16)), r2d = f16tof32(uint2(r2.y, r2.y >> 16));
+      const float3 Rs = float3(r01, r2d.x);
+      const bool own = same_encoded(Crec.r, Ct.r, 6) && same_encoded(Crec.g, Ct.g, 6) && same_encoded(Crec.b, Ct.b, 5);
+      const float3 D = max(Ct - Rs, 0.0);
+      if (own && all(isfinite(Rs)) && isfinite(r2d.y) && r2d.y > 0.0 && all(isfinite(D))) o = float4(D, 1.0);
+    }
+  }
+  return o;
+}
+
+// The tent-weighted mean of the valid D around fp (own D when it is the only one).
+float3 glint_mean(uint2 fp) {
+  float4 s = 0.0.xxxx;
+  [unroll] for (int dy = -1; dy <= 1; ++dy)
+    [unroll] for (int dx = -1; dx <= 1; ++dx) {
+      const int2 q = int2(fp) + int2(dx, dy);
+      if (any(q < 0) || any(q >= int2(pc.full))) continue;
+      const float w = (dx == 0 ? 2.0 : 1.0) * (dy == 0 ? 2.0 : 1.0);
+      const float4 g = gGlint[q];
+      s += g.a > 0.0 ? float4(g.rgb * w, w) : 0.0.xxxx;
+    }
+  return s.a > 0.0 ? s.rgb / s.a : 0.0.xxx;
+}
+#endif
+
 [numthreads(8, 8, 1)]
 void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   g_rt_pass = kRtPassRefl;
@@ -345,9 +399,14 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   float3 L = 0.0.xxx;
 #ifdef WATER_RF_EDGE
   float rf_w = 1.0;   // the screen-edge fade of the traced term (D-RF's rf_edge)
-#define WATER_RF_TERM rf_w * (A * L - B)
+#define WATER_RF_TERM (WATER_EDGE_ON ? rf_w * (A * L - B) : A * L - B)
 #else
 #define WATER_RF_TERM A * L - B
+#endif
+#ifdef WATER_SPEC_RF_EDGE
+// The old unfaded macro expands C + A * L - B, with left-associative
+// addition/subtraction. Select the whole sum to preserve its rounding.
+#define WATER_RF_ADD(C) (WATER_EDGE_ON ? (C) + rf_w * (A * L - B) : (C) + A * L - B)
 #endif
   if (trace) {
     const float3 R = reflect(-V, N);
@@ -382,8 +441,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
               L = rq.rgb;
               tier = 1u;
 #ifdef WATER_RF_EDGE
+              if(WATER_EDGE_ON) {
               const float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
               rf_w = saturate(min(e.x, e.y));
+              }
 #endif
             }
           }
@@ -447,7 +508,24 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     }
   }
   const bool occluded = straced && sv == kRtOccluded;
+#if defined(WATER_GLINT_AA)
+  // rt_water_glint_aa: a lit (or unknown) owned sun record's D replaced by the footprint mean (glint_mean).
 #ifdef WATER_GSH
+  const bool restored = gsh_on && gshrec && straced && sv == kRtLit && any(Dg != 0.0);
+#else
+  const bool restored = false;
+#endif
+  const float4 gOwn = has ? gGlint[fp] : 0.0.xxxx;
+  const bool glint = valid && gOwn.a > 0.0 && !occluded && !restored;
+  const float3 Cg = glint ? Ct - gOwn.rgb + glint_mean(fp) : Ct;
+#ifdef WATER_GSH
+  const bool sunchg = occluded || restored || glint;
+  const float3 Cs = occluded ? Rs : restored ? Ct + Dg : Cg;
+#else
+  const bool sunchg = occluded || glint;
+  const float3 Cs = occluded ? Rs : Cg;
+#endif
+#elif defined(WATER_GSH)
   // M5.4c: lit where the game shadowed: the FS at sun visibility 1, C + Dg (V (C + Dg) + (1 - V) R at V = 1).
   const bool restored = gsh_on && gshrec && straced && sv == kRtLit && any(Dg != 0.0);
   const bool sunchg = occluded || restored;
@@ -610,7 +688,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const bool chg = composed || sunchg;
 #endif
 #else
+#ifdef WATER_SPEC_RF_EDGE
+  const float3 Cu = WATER_RF_ADD(Ct);
+#else
   const float3 Cu = Ct + WATER_RF_TERM;
+#endif
   const bool chg = composed;
 #endif
   // Fail-closed (common/water_compose.h compose_writes, kCsNonFinite): a non-finite term keeps the game's C.
@@ -630,7 +712,11 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
   cstat(14, trace && tier == 2u && skin);
 #ifdef WATER_SHADOWS
+#ifdef WATER_SPEC_RF_EDGE
+  cstat(15, composed && any(WATER_RF_ADD(Ct) < 0.0));
+#else
   cstat(15, composed && any(Ct + WATER_RF_TERM < 0.0));
+#endif
 #else
   cstat(15, composed && any(Cu < 0.0));
 #endif

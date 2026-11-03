@@ -63,7 +63,7 @@
   "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
   "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
   "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
-  "\\[water\\] rt/water_reflect\\.hlsl\\?\\S*RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1\\S* water_reflect: built"
+  "\\[water\\] rt/water_reflect\\.hlsl\\?\\S*RT_SPEC_NATIVE=1\\S* water_reflect: built \\(spec hair=1 edge=\\d+\\)"
  ],
  "forbid": [
   "\\[crash\\] exception 0x",

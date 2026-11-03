@@ -2,6 +2,7 @@
 // make_pipe. Start, busy, the result handed over once, failure cooldown, a parked layout destroyed only
 // after its builds finish (and their unclaimed results discarded), join discarding the rest.
 #include "../common/pipeline_async.h"
+#include "../common/pipeline_specs.h"
 
 #include <atomic>
 #include <chrono>
@@ -14,6 +15,27 @@ static int checks = 0;
 #define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL line %d: %s\n", __LINE__, #x); std::exit(1); } } while (0)
 
 int main() {
+  // The queued payload owns its values after the render stack is changed/destroyed.
+  pa::PipelineSpecs off;
+  off.add(1008, 0); off.add(1010, 0); off.add(1014, 0);
+  auto on = off;
+  on.data[1] = 1;
+  CHECK(off.key() != on.key());
+  auto edge = on;
+  edge.data[2] = 1;
+  CHECK(edge.key() != on.key());
+  pa::Builds specialization_builds(1, [](const pa::Result&) {});
+  CHECK(specialization_builds.poll(on.key(), 1, [on] {
+    VkSpecializationInfo info{on.count, on.entries, on.count * sizeof(uint32_t), on.data};
+    const auto* values = static_cast<const uint32_t*>(info.pData);
+    return pa::Result{values[1] == 1 && values[2] == 0 && info.pMapEntries[1].constantID == 1010 ? 42u : 0u, 1, true};
+  }, nullptr) == pa::State::kStarted);
+  const auto on_key = on.key();
+  on.data[1] = 0; on.data[2] = 1;
+  specialization_builds.wait_idle();
+  pa::Result specialized{};
+  CHECK(specialization_builds.poll(on_key, 1, {}, &specialized) == pa::State::kReady);
+  CHECK(specialized.pipeline == 42);
   std::set<uint64_t> discarded;
   std::atomic<int> inits{0};
   {

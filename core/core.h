@@ -50,6 +50,12 @@ struct WaterRfIn {
   // rt_water_rr_hitdist: RR's specular hit distance image (core/gi.cpp g_rf_hit, R16F) when D-RF wrote it
   // this frame and the key is on, else null (the variant is then not selected).
   VkImageView rf_hit = VK_NULL_HANDLE;
+  // rt_water_rr_mv: the game's motion vectors of this frame (core/gi.cpp g_mv_image, written this frame) and the
+  // layout its pass leaves them in; null when unknown or the key is off.
+  VkImage mv_image = VK_NULL_HANDLE;
+  VkImageView mv_view = VK_NULL_HANDLE;
+  VkFormat mv_format = VK_FORMAT_UNDEFINED;
+  VkImageLayout mv_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 };
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
@@ -59,6 +65,7 @@ void water_release();
 // gi.cpp: background pipeline builds (common/pipeline_async.h), joined in gi_release. The compute
 // pipeline of `req`:`entry` for `layout`: 1 ready (*out, *generation: the caller owns the pipeline),
 // 0 building (logged once when it starts), -1 failed (retried after a cooldown).
-int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout layout, VkPipeline* out, uint64_t* generation);
+int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout layout, VkPipeline* out, uint64_t* generation,
+                        const VkSpecializationInfo* specialization = nullptr);
 // A pipeline layout a background build may still read: destroyed (defer_destroy) once none does.
 void core_defer_layout_destroy(VkPipelineLayout layout);

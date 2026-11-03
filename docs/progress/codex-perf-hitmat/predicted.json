@@ -1,0 +1,16 @@
+{
+  "job": "cpu-camp-hitmat",
+  "status": "READY_FOR_LIVE_NOT_QUEUED",
+  "scene": "Campsite - 27h",
+  "key": "perf_hitmat_lists",
+  "states": [0, 1, 0, 1],
+  "minimum_steady_frames_per_state": 600,
+  "discard_first_cpu_window_after_toggle": true,
+  "historical_baseline_ms_per_frame": {"mutex_wait": [0.624, 0.686], "query_total": [0.916, 0.956]},
+  "predicted_delta_ms_per_frame": {"mutex_wait": [-0.5, -0.2], "query_total": [-0.4, -0.2], "gpu_passes": 0},
+  "predicted_relative_delta": {"pre_post_float_mean": 0, "mapped_rows": 0, "qualified_coverage": 0},
+  "required": {"scene_wait_timeouts": 0, "capacity_drops": 0, "previous_frame_tlas": 0, "missing_rt_passes": 0},
+  "tolerance": "Derived from repeated key-off windows at identical poses; no fixed energy or timing threshold.",
+  "interpretation": "Planning estimates from CPU audit E3, overlapping and not additive. No measured saving; query-record subtotal has no historical baseline."
+}
+

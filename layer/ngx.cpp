@@ -394,6 +394,38 @@ void ngx_set_spec_hit_distance(VkImage image, VkImageView view, VkFormat format,
   g_shd_frame = frame_index();
 }
 
+// ABI 26 (rt_water_rr_mv): the core's motion vectors (the game's with the water surface's on the
+// water pixels), handed to RR instead of the game's while fresh. FG keeps the game's vectors.
+static std::mutex g_rmv_mu;
+static NVSDK_NGX_Resource_VK g_rmv_res{};
+static uint64_t g_rmv_frame = 0;
+static bool g_rmv_logged = false;
+
+void ngx_set_rr_motion_vectors(VkImage image, VkImageView view, VkFormat format, uint32_t w, uint32_t h) {
+  std::lock_guard<std::mutex> lock(g_rmv_mu);
+  g_rmv_res = {};
+  g_rmv_frame = 0;
+  if (!image || !view) return;
+  g_rmv_res.Resource.ImageViewInfo.ImageView = view;
+  g_rmv_res.Resource.ImageViewInfo.Image = image;
+  g_rmv_res.Resource.ImageViewInfo.SubresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  g_rmv_res.Resource.ImageViewInfo.Format = format;
+  g_rmv_res.Resource.ImageViewInfo.Width = w;
+  g_rmv_res.Resource.ImageViewInfo.Height = h;
+  g_rmv_res.Type = NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW;
+  g_rmv_res.ReadWrite = false;
+  g_rmv_frame = frame_index();
+}
+
+// rt_water_fg_mv (layer/streamline.cpp): the same core vectors for DLSS-G, while fresh.
+bool ngx_core_motion_vectors(VkImage* image, VkImageView* view, VkFormat* format, uint32_t* w, uint32_t* h) {
+  std::lock_guard<std::mutex> lock(g_rmv_mu);
+  if (!g_rmv_frame || g_rmv_frame + 1 < frame_index()) return false;
+  const auto& im = g_rmv_res.Resource.ImageViewInfo;
+  *image = im.Image, *view = im.ImageView, *format = VkFormat(im.Format), *w = im.Width, *h = im.Height;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // G-buffer discovery (called at every render pass end, on recording threads)
 // ---------------------------------------------------------------------------
@@ -1340,6 +1372,27 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
         post.color.w, post.color.h, int(post.color.format), ow, oh, cbt_ok ? "yes" : "no", sss_ok ? "yes" : "no");
   }
 
+  // rt_water_rr_mv (ABI 26): the core's motion vectors while fresh, at the game's MV size and format; the
+  // game's resource is put back after the evaluate (the block is reused, and FG reads its own copy).
+  static NVSDK_NGX_Resource_VK s_rmv;
+  NVSDK_NGX_Resource_VK* game_mv = get_res(p, NVSDK_NGX_Parameter_MotionVectors);
+  bool rmv_ok = false;
+  {
+    std::lock_guard<std::mutex> lock(g_rmv_mu);
+    rmv_ok = game_mv && cfg_int("rt_water_rr_mv", 0) && g_rmv_frame && g_rmv_frame + 2 >= frame_index() &&
+             g_rmv_res.Resource.ImageViewInfo.Width == game_mv->Resource.ImageViewInfo.Width &&
+             g_rmv_res.Resource.ImageViewInfo.Height == game_mv->Resource.ImageViewInfo.Height &&
+             g_rmv_res.Resource.ImageViewInfo.Format == game_mv->Resource.ImageViewInfo.Format;
+    if (rmv_ok) s_rmv = g_rmv_res;
+  }
+  if (rmv_ok) {
+    p->Set(NVSDK_NGX_Parameter_MotionVectors, static_cast<void*>(&s_rmv));
+    if (!g_rmv_logged) {
+      g_rmv_logged = true;
+      log("[ngx] RR gets the core's motion vectors (rt_water_rr_mv), %ux%u format %d",
+          s_rmv.Resource.ImageViewInfo.Width, s_rmv.Resource.ImageViewInfo.Height, int(s_rmv.Resource.ImageViewInfo.Format));
+    }
+  }
   int old_reset = 0;
   if (cfg_int("pan_inputs", 0) && cfg_int("pan_capture", 0) > 0) {
     const char* keys[] = {NVSDK_NGX_Parameter_Color, NVSDK_NGX_Parameter_Depth,
@@ -1374,6 +1427,7 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
     Nest n;
     result = orig_eval()(cmd, f.rr, p, cb);
   }
+  if (rmv_ok) p->Set(NVSDK_NGX_Parameter_MotionVectors, static_cast<void*>(game_mv));
   dump_mv("rr_mvec_after");
   if (reset) p->Set(NVSDK_NGX_Parameter_Reset, had_reset ? old_reset : 0);
   if (use_post) {

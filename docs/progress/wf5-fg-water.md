@@ -1,0 +1,40 @@
+## Water flicker at display rate: FG water vectors, glint filter, presented-frame scoring; wf5 job (branch wf5-fg-water, READY_FOR_LIVE, 2026-11-02)
+- Diagnosis from the kept logs (wf4 143137): every frame with a water pass was composed in every window, static and
+  turn (uncomposed 0, on/off flips 0, no scene / no lighting refusals 0). The compose reads the PREVIOUS frame's
+  lighting on 108-120 of 120 frames and this frame's on 0-12, in static and turn windows alike (an intermittent
+  one-frame source switch, visible only while the camera moves). The water's sun visibility is one sun-disc sample per
+  pixel per frame (rt_shadow's jitter): at shadow edges a ~1000 glint switches on / off from frame to frame. The
+  wf2-wf4 metric (pan_artifacts) scored only dips of RENDERED frames: a glint switching ON, and anything DLSS-G adds
+  in the generated (presented) frames, was invisible to it.
+- Tools: pan_artifacts now also reports peaks (`luma_peak`, the dip rule on -luma; water_mask.peak_rate);
+  scripts/qa/fg_present_flicker.py scores presented PNG sequences (second difference per present parity, water mask
+  vs rest). Layer: `fg_snap_any` (capture presents with FG off too), `fg_snap_delay` (start N frames after the
+  request, inside the turn). Unit tests in tests/pan_artifacts_test.py (20 pass).
+- Keys (off, live): `rt_water_fg_mv` (DLSS-G gets the water_mv vectors: the water surface's parallax; double-buffered
+  by frame parity), `rt_water_glint_aa` (rt/water_glint.hlsl pre-pass + WATER_GLINT_AA compose: each lit sun record's
+  sun term replaced by the (1 2 1)^2 tent mean of the valid neighbours', the mean kept). Screen-space, not the FS
+  roughness patch (a SPIR-V rewrite of the FS's roughness uses, not attempted here). No ABI change.
+- Job wf5-s8-fg2 (foreground, one launch, 271 s, 5 bursts + 6 x 32 presents): off-a / fgoff (fg=0 live) / fgmv /
+  glint / noshadow (rt_water_shadows=0) / off-b, wf3's turn protocol; predicted.json first. Dryrun + lints pass.
+- Result wf5-s8-fg2 160335 (INVALID by the presented-capture gate). Rendered K16 bursts (calibrated, water mask), dips /
+  peaks: off-a 3.96 / 5.31%, glint 5.06 / 5.52%, noshadow 5.07 / 5.82%, off-b 5.02 / 5.26%; whole frame 4.7-5.2 /
+  5.3-5.5% in every burst: the water flashes no more than the rest of the frame in rendered frames. rt_water_glint_aa
+  null (+0.09 ms compose GPU, 0.412 -> 0.501), rt_water_shadows=0 null: the 1-spp sun ray is not the cause. Energy:
+  glint +1.26%, fgmv +1.32% (band 2.05%): pass. Presented captures: 16-19 of 32 per turn, one present per ~180 ms
+  (the readback waited for the GPU and read uncached memory at every present): FG not measurable from this run.
+  Fix: the readback finishes at the next present, host-cached memory. Bursts deleted (11.9 GB).
+- wf6-s8-fg2 (foreground, 169 s, presented frames only): off-a / fgoff / fgmv / off-b; predicted.json first.
+- Result wf6-s8-fg2 162806 (VALID after the gate fix: the every-window select is now the "present capture done" line
+  only; re-gated: 8/8 ok). 32 consecutive presents per turn (0.35 s, 0.65 s with FG off). Presented second difference
+  (UNORM8 codes), water mask (59k px) / rest, even / odd presents: off-a 3.75/4.16 | 2.49/2.80, fgoff 6.04/6.10 |
+  4.00/4.04, fgmv 3.74/4.14 | 2.51/2.82, off-b 3.68/4.21 | 2.51/2.87. Parity ratio water = rest in every turn (1.11 /
+  1.12, 1.01 / 1.01, 1.11 / 1.12, 1.14 / 1.14); water / rest 1.47-1.51 with FG on and off alike. DLSS-G adds no
+  water-specific alternation; rt_water_fg_mv null (stays off).
+- Verdict (wf3-wf6): the port water flicker is not the RT water compose, RR's water inputs, the sun-shadow ray, glint
+  aliasing or DLSS-G: the game's animated water changes 1.5x more per present than the rest of the image at either
+  display rate. No key fixes it; all water flicker keys stay off.
+- wf7 (READY_FOR_LIVE): two launches, wf7a rt=1 (Ultra) and wf7b rt=0 rr=0 (the game's own rendering, DLSS SR),
+  same pose and turns, two snap turns of 32 presents each captured 2000 ms into the turn by wall clock (new layer key
+  fg_snap_delay_ms: the same pose at either frame rate), wf7a's rt_debug 21 mask from the same start pose and time
+  (wf6's mask turn started one turn away from the snaps), one static PNG shot per launch. predicted.json: water / rest
+  ~1.5 in both = the game's water, closed.

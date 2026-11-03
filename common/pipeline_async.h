@@ -30,6 +30,7 @@ struct Result {
   uint64_t pipeline = 0;   // VkPipeline (0: failed)
   uint64_t generation = 0;
   bool ok = false;
+  double pipeline_ms = 0;   // driver creation on the worker; preserves the pipeline timing log
 };
 
 enum class State { kStarted, kBuilding, kReady, kFailed };
