@@ -88,6 +88,13 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   strand pixels per groom of the last frame's pixel record, read back 3 publishes later; 2 counted frames in a row
   with the variant and no strand pixel fail that draw for the session (logged: "its strands drew no pixel"): its
   cards stay. Regression tests: hair_groom_asset_test (the crash's offsets, the no-variant draw, the strikes).
+- Device lost after the F8 reload (hv1 18:40, cause not confirmed): a new level reuses Vulkan handles for other
+  objects. The native hair FS module map is erased on vkDestroyShaderModule and on reuse (a reused handle could give
+  a non-hair pipeline a strand variant). `hair_primary::LoadGuard`: a new G-buffer depth image marks a level load;
+  the groom gate, pixel record and feedback reset and strand swaps pause 300 frames. bvhsplit drops the groom join
+  verdicts, UV joins and UV readbacks in flight at the same boundary (their identities are built from handles).
+  Live bisect: hair_validation hv5 (one F8 per stage: native + scalp, + physical origin, + groom, + primary, 60 s
+  each); hv4 repeats the reload under GPU-AV.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

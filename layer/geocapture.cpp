@@ -1842,6 +1842,7 @@ bool geo_native_tileset_enabled() { return g_tileset_capture; }
 void geo_native_tileset_disable(){g_tileset_capture=false;g_stride=g_stride_without_tileset;}
 
 void geo_render_size(uint32_t* width, uint32_t* height) { *width = g_gbuf_w.load(); *height = g_gbuf_h.load(); }
+uint64_t geo_gbuffer_depth_image() { return g_gbuf_depth.load(); }
 void geo_gbuffer_viewport(float out[4]) {
   std::lock_guard<std::mutex> lock(g_gbuf_viewport_mu);
   std::memcpy(out, g_gbuf_viewport, sizeof g_gbuf_viewport);

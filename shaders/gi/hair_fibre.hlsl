@@ -150,13 +150,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float3 Ls = normalize(cam.v0.xyz);
   const float3 Esun = bg3_sun_colour() * (clouds * asfloat(lScale.Load(0)));
   if (any(Esun > 0.0)) {
-    if (m * clouds > 0.0) {
+    const uint vs = trace_light(s.P, s.N, s.org, s.P + Ls * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
+    if (vs != kRtUnknown && m * clouds > 0.0) {   // unknown: the game's sun term stays (as D-LS keeps it)
       float3 sd, ss;
       bg3_sun_eval_mat(sf, mt, Ls, Esun * m, m * clouds, sd, ss);
       sub_d += sd;
       sub_s += ss;
     }
-    const uint vs = trace_light(s.P, s.N, s.org, s.P + Ls * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
     if (vs == kRtLit) add += Esun * hd_shade_pixel(T, sf.V, Ls, hf_strands(s.P, Ls, 1.0e4), colour, beta);
   }
   const float3 od = max(gDiffuse[fp] - sub_d + add, 0.0), os = max(gSpecular[fp] - sub_s, 0.0);

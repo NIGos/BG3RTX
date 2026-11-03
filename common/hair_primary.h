@@ -106,6 +106,24 @@ struct SwapGate {
   }
 };
 
+// Level loads (and resolution changes) recreate the game's G-buffer images. At such a boundary every published groom,
+// G-buffer proof and feedback is dropped and no draw is swapped for kLoadQuietFrames frames: the scene's draws,
+// buffers and descriptors are all new (hv1 2026-11-03 18:40: device lost 3 s after the selected-save reload, with
+// the strand variants active). After it the usual rule holds again (two publishes, then the G-buffer, then the rest).
+constexpr uint64_t kLoadQuietFrames = 300;
+struct LoadGuard {
+  uint64_t image = 0, quiet_until = 0;
+  // The G-buffer depth image of this frame; true at a boundary (a different image after a first one).
+  bool observe(uint64_t depth_image, uint64_t now) {
+    if (!depth_image || depth_image == image) return false;
+    const bool boundary = image != 0;
+    image = depth_image;
+    if (boundary) quiet_until = now + kLoadQuietFrames;
+    return boundary;
+  }
+  bool quiet(uint64_t now) const { return now < quiet_until; }
+};
+
 inline uint32_t key(uint32_t groom, uint32_t segment) {
   return groom < 255u && segment <= kMaxSegment ? (groom << 24) | segment : kNoStrand;
 }

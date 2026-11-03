@@ -164,6 +164,33 @@ int main() {
     g.publish(nullptr, 0);
     CHECK(!g.allow_gbuffer(k2) && !g.allow_prepass(k2));
   }
+  {   // level reload (hv1 2026-11-03 18:40, device lost after F8): LoadGuard + SwapGate as hair_primary_publish uses them
+    hair_primary::LoadGuard load;
+    hair_primary::SwapGate g;
+    const uint64_t k = 0x77;
+    uint64_t frame = 100;
+    auto publish = [&](uint64_t depth_image) {   // one frame's publish: boundary check first, then the keys
+      if (load.observe(depth_image, frame)) g.clear();
+      g.publish(&k, 1);
+      ++frame;
+    };
+    publish(0xA);
+    publish(0xA);
+    g.gbuffer_drew(k);
+    publish(0xA);
+    CHECK(!load.quiet(frame) && g.allow_gbuffer(k) && g.allow_prepass(k));
+    publish(0xB);   // F8: the reload recreated the G-buffer images
+    CHECK(load.quiet(frame) && !g.allow_prepass(k));
+    CHECK(load.quiet(frame + hair_primary::kLoadQuietFrames - 3));
+    frame += hair_primary::kLoadQuietFrames;
+    CHECK(!load.quiet(frame));
+    publish(0xB);
+    CHECK(g.allow_gbuffer(k) && !g.allow_prepass(k));   // the G-buffer has to prove it again in the new scene
+    g.gbuffer_drew(k);
+    publish(0xB);
+    CHECK(g.allow_prepass(k));
+    CHECK(!load.observe(0, frame) && !load.observe(0xB, frame));   // no image or the same image: no boundary
+  }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
 }

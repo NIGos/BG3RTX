@@ -131,6 +131,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   }
   if (e.x == hair_primary_no_strand) discard;
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
+  if (k >= grooms) discard;   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
   const float v = asfloat(e.y);
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   const uint i0 = ld(pool + row.z + seg * 4u);
