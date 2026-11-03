@@ -171,9 +171,9 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_water_hit_shade", "label": "Water: hidden-surface reflections",
-     "description": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "description": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "apply": "live", "apply_note": "live; needs captured materials at startup", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+     "category": "Advanced", "summary": "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
@@ -259,9 +259,9 @@
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_compose_shift": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_native_coverage", "label": "Native hair + scalp",
-     "description": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
+     "description": "Uses native hair/scalp coverage in RT. Hair + scalp leaves tileset coverage off; only the separate + Tilesets choice enables it (restart required). Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
      "apply": "live", "apply_note": "hair + scalp: live; tilesets: restart", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
+     "category": "Advanced", "summary": "Uses native hair/scalp coverage in RT. Hair + scalp leaves tileset coverage off; only the separate + Tilesets choice enables it (restart required). Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {"rt": "1", "rt_alpha": "1", "rt_bvh_split": "1"},
      "required_from_choice": {"rt": 1, "rt_alpha": 1, "rt_bvh_split": 1},

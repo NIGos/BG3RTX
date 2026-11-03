@@ -472,6 +472,9 @@ void ngx_init();                       // hooks _nvngx.dll now or when it loads
 // G-buffer discovery; with rr=1 also records the RR guide dispatch into `cmd`.
 void ngx_note_pass(VkCommandBuffer cmd, const Bg3PassInfo& p, const VkImageLayout* layouts, VkImageLayout depth_layout);
 void ngx_on_destroy_image(VkImage img);
+void ngx_join_prewarm();
+void rrpost_prewarm(DeviceData* dd);
+void rrpost_join_prewarm();
 void ngx_on_present();
 // ABI 7: Ray Reconstruction evaluated in the last few frames (not the rr key):
 // false with FSR/TAA, SR fallback, or a failed RR creation.

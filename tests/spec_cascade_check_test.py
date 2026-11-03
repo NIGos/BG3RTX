@@ -72,7 +72,9 @@ class WaterHairRequestsTest(unittest.TestCase):
         request = "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_SPEC_NATIVE=1;RT_CASCADE_MASKS=1"
         self.assertEqual(old_requests_waterhair(request), [
             ({1008: 0, 1010: 0}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_CASCADE_MASKS=1"),
-            ({1008: 0, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1")])
+            ({1008: 0, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1"),
+            ({1008: 1, 1010: 0}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_TILESET=1;RT_CASCADE_MASKS=1"),
+            ({1008: 1, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_TILESET=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1")])
 
 
 class WaterHitMappingTest(unittest.TestCase):

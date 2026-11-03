@@ -92,6 +92,7 @@ struct Query {
  Buffer data,rows;VkDescriptorPool pool{};VkDescriptorSet set{};
  uint64_t command{},recording{},source{};uint32_t slot{},generation{};std::shared_ptr<Deferred> deferred;
  PendingPublication publication;std::vector<Material> materials;
+ QueryOwners users;
  // Pool material rows (row.reserved 3, row.valid = slot + 1): their gather inputs (engine and
  // physical UBO images of the record's captured bytes, 512 B each) and the samplers they add.
  std::vector<Material> pool_rows;Buffer pool_ubo;std::vector<VkSampler> pool_samplers;VkDeviceSize rows_bytes{};
@@ -518,13 +519,13 @@ void collect(bool force=false){
  static uint64_t last=UINT64_MAX;const uint64_t now=frame_index(); // under mutex
  if(!force && last==now && lean_hooks())return;last=now;
  CpuTimer timer(CpuCollect);recycle_trim();
- for(auto i=queries.begin();i!=queries.end();)if(retired(i->first)){destroy_query(*i->second);i=queries.erase(i);}else ++i;
+ for(auto i=queries.begin();i!=queries.end();)if(i->second->users.retired(retired)){destroy_query(*i->second);i=queries.erase(i);}else ++i;
  for(auto i=packets.begin();i!=packets.end();)if(i->second.use_count()==1 && retired(i->first)){destroy_packet(*i->second);i=packets.erase(i);}else ++i;
  // Only slots whose frame can still get a query (or whose owners still run) keep their source copy (source_releasable).
  for(auto& s:slots)if(source_releasable(bool(s.data.b),s.frame,now,std::all_of(s.owners.begin(),s.owners.end(),[&](uint64_t id){return retired(id);}))){
   destroy(s.data);s.data_bytes=0;}
  std::set<uint64_t> live;for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
- for(const auto& [id,p]:packets)live.insert(id);for(const auto& [id,q]:queries){live.insert(id);live.insert(q->source);live.insert(q->deferred->recording);}
+ for(const auto& [id,p]:packets)live.insert(id);for(const auto& [id,q]:queries){live.insert(q->users.ids.begin(),q->users.ids.end());live.insert(id);live.insert(q->source);live.insert(q->deferred->recording);}
  for(auto i=owners.begin();i!=owners.end();)if(!live.contains(i->first) && retired(i->first)){submitted_queues.erase(i->first);i=owners.erase(i);}else ++i;
  for(auto i=marked.begin();i!=marked.end();)if(!owners.contains(i->second))i=marked.erase(i);else ++i;
 }
@@ -1182,6 +1183,16 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
     (unsigned long long)frame_index(),state?unsigned(state->level):UINT32_MAX,state?unsigned(state->begin_flags):0u);return false;
  }
  CpuTimer timer(CpuQuery);std::unique_lock lock(mutex,std::defer_lock);lock_timed(lock);const bool lean=recycle_live();if(!lean)collect();auto& slot=slots[index];
+ if(slot.prepared && slot.attached && slot.frame<frame_index()){
+  // Reuse F-1's immutable rows and camera proof; never create a query with F's camera.
+  for(auto& [id,query]:queries){auto& q=*query;
+   if(q.set && borrow_query(slot.frame,frame_index(),q.slot,index,q.generation,slot.generation)){
+    if(!mark_owner(cmd,slot))return false;
+    q.users.add(state->recording);*query_alpha=q.set;return true;
+   }
+  }
+  return false;
+ }
  if(!slot.prepared || !slot.attached || slot.frame!=frame_index()){
   if(cfg_hot(CfgHot::rt_stats) && frame_index()%120==0)log("[hit material query reject] source epoch current %llu source %llu prepared %u attached %u",
    (unsigned long long)frame_index(),(unsigned long long)slot.frame,unsigned(slot.prepared),unsigned(slot.attached));return false;
@@ -1201,7 +1212,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   static uint64_t logged=UINT64_MAX;if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0 && logged!=slot.frame){logged=slot.frame;log("[hit material query] unavailable frame %llu scene %u packet %u pending packets %zu queries %zu source camera %p+%llu",
    (unsigned long long)slot.frame,slot.generation,unsigned(bool(packet)),packets.size(),queries.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);}return false;
  }
- auto query=std::make_unique<Query>();auto& q=*query;q.command=handle(cmd);q.recording=state->recording;q.source=slot.recording;q.slot=index;q.generation=slot.generation;q.deferred=packet;
+ auto query=std::make_unique<Query>();auto& q=*query;q.command=handle(cmd);q.recording=state->recording;q.source=slot.recording;q.slot=index;q.generation=slot.generation;q.deferred=packet;q.users.add(state->recording);
  // Candidate identity narrows the pair; exact GPU clip+UV comparison remains
  // mandatory. Neither CPU recording order nor a matching handle certifies it.
  VkDeviceSize cursor=0;uint32_t query_overflow=0,table_overflow=0,tables_used=0;

@@ -26,6 +26,11 @@ int main(int argc,char** argv){
   h.prepareReport=[&](const std::string& issue,bool logs,bool settings,bool system){++prepares;check(issue=="Line\n\"quoted\" \xe2\x98\x80");check(!logs&&settings&&system);launcher::diagnostics::Snapshot r;r.status=launcher::diagnostics::Status::Complete;r.files={{"ISSUE.txt",issue,""}};r.bytes=issue.size();return r;};
   h.exportReport=[&](const launcher::diagnostics::Snapshot& r,std::string&){++exports;check(r.files[0].text=="Line\n\"quoted\" \xe2\x98\x80");return true;};
   launcher::web::Bridge bridge(s,h);
+  s.values[st::knob_index("exp_native_coverage")]=2;
+  auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");
+  check(pos!=std::string::npos);
+  check(coverage.substr(pos,coverage.find("\"choices\"",pos)-pos).find("\"apply\":\"Restart to apply\"")!=std::string::npos);
+  s.values[st::knob_index("exp_native_coverage")]=0;
   check(bridge.dirty()==0);auto json=bridge.state_json();check(json.find("\"type\":\"state\"")!=std::string::npos);check(!bridge.dev);check(json.find("\"id\":\"ls_k\"")==std::string::npos);
   for(auto bad:{"", "[]", "{\"type\":\"discard\"} trailing", "{\"type\":\"discard\",\"type\":\"play\"}", "{\"type\":[]}","{\"type\":\"set\",\"value\":01}","{\"type\":\"set\",\"value\":1.2}","{\"type\":\"set\",\"value\":999999999999999}","{\"type\":\"\\uD800\"}"})check(bridge.handle(bad).find("Invalid launcher message")!=std::string::npos);
   bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.dirty()==1);check(s.values[st::knob_index("rr")]==1);

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 // GI shader requests and specialization constants (replaces the per-flag wrapper trees that were
 // shaders/{native_tileset,hair_origin,omm,sun_current,native_scalp}/.../gi/{cascade/}).
 // A request is "<file>?NAME=VALUE;NAME=VALUE": Bg3HostApi::get_shader (ABI 23) passes each
@@ -221,19 +222,10 @@ inline unsigned allowed(const char* file) {
   return f;
 }
 
-// The keys under which the water passes (core/water.cpp) have no variant and skip: each changes the
-// alpha set or the scene's primitives that the gi/ passes follow with refresh()'s flags. Counted as
-// "variant" in the [water] reflections line and logged "[water] reflections skipped: no variant for
-// <keys>" (the convention for every such skip; smoke_ultra forbids "skipped: no variant for").
-// `defines`: what a water variant would add. tests/variant_matrix_test.cpp builds those requests
-// (tools/shader_identity.py compiled all 24 on 2026-11-01), so routing them is the fix. A key added
-// here without updating that test's expected skips fails it.
+// Water supports native tilesets/scalp/hair via RT_SPEC_NATIVE (1008/1010).
+// It traces the same-generation OMM reference TLAS with the host's superset alpha layout.
 struct NoVariant { const char* key; const char* defines; };
-inline constexpr NoVariant kWaterNoVariant[] = {
-    {"rt_native_tileset", "RT_NATIVE_TILESET=1"}};
-// Water deliberately traces the same-generation OMM reference TLAS. Its alpha
-// layout is the host's superset layout; unused OMM bindings need no shader variant.
-// rt_native_scalp, rt_native_hair, rt_hair_physical_origin: routed (water_request's `scalp`, 2026-11-02).
+inline constexpr std::array<NoVariant, 0> kWaterNoVariant{};
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,

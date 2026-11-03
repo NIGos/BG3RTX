@@ -4,6 +4,8 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include "settings.h"
+#include "shader_variant.h"
 namespace bg3::pipe_async {
 struct PipelineSpecs {
   uint32_t data[12]{};
@@ -20,4 +22,37 @@ struct PipelineSpecs {
     return out;
   }
 };
+// Startup alternatives for the actual visible Experimental choices, not a Cartesian product.
+// Controls such as RR order, visibility and pool trim change data/dispatch, not specialization.
+inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, bool dev) {
+  using namespace shader_variant;
+  struct Binding { const char* key; uint32_t id; };
+  static constexpr Binding bindings[] = {
+      {"rt_native_scalp", kSpecIdScalpHair}, {"rt_native_hair", kSpecIdScalpHair},
+      {"rt_native_tileset", kSpecIdTileset}, {"rt_water_compose_shift", kSpecIdWaterComposeShift},
+      {"rt_water_hit_shade", kSpecWaterHitShade}, {"rt_hair_gi_cull", kSpecIdHairGiCull},
+      {"rt_hair_groom", kSpecIdHairGroom}, {"rt_hair_cheap", kSpecIdHairCheap},
+      {"rt_hair_gi_mean", kSpecIdHairGiMean}};
+  std::vector<PipelineSpecs> out;
+  for (const auto& knob : settings::kKnobs) {
+    if (!knob.experimental || !settings::knob_visible(knob, dev)) continue;
+    for (int c = 0; c < settings::choice_count(knob); ++c) {
+      const auto& choice = knob.choices[c];
+      if (!settings::choice_visible(knob, c, dev) || choice.apply == settings::Apply::Restart ||
+          choice.apply == settings::Apply::Unspecified) continue;
+      auto alt = base;
+      for (const auto& kv : choice.kv) {
+        if (!kv.key) break;
+        for (const auto& b : bindings) if (std::string(kv.key) == b.key)
+          for (uint32_t i = 0; i < alt.count; ++i)
+            if (alt.entries[i].constantID == b.id) alt.data[i] = uint32_t(std::atoi(kv.value));
+      }
+      if (alt.key() == base.key()) continue;
+      bool seen = false;
+      for (const auto& prior : out) if (prior.key() == alt.key()) seen = true;
+      if (!seen) out.push_back(alt);
+    }
+  }
+  return out;
+}
 }  // namespace bg3::pipe_async

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <future>
 #include <set>
 
 namespace pa = bg3::pipe_async;
@@ -15,6 +16,37 @@ static int checks = 0;
 #define CHECK(x) do { ++checks; if (!(x)) { std::printf("FAIL line %d: %s\n", __LINE__, #x); std::exit(1); } } while (0)
 
 int main() {
+  // Prewarming uses the visible live settings, excludes restart tilesets and developer controls.
+  pa::PipelineSpecs warm;
+  warm.add(1008, 0); warm.add(1010, 0); warm.add(1015, 0); warm.add(1016, 0);
+  const auto alternatives = pa::experimental_specs(warm, false);
+  CHECK(alternatives.size() == 4); // hair, compose shift, hit shading 1 and 2
+  for (const auto& alt : alternatives) CHECK(alt.data[0] == 0);
+  {
+    pa::Builds builds(1, {});
+    CHECK(builds.prewarm("warm", 1, [] { return pa::Result{42, 3, true}; }));
+    builds.wait_idle();
+    CHECK(!builds.prewarm("warm", 1, [] { return pa::Result{}; }));
+    pa::Result result;
+    CHECK(builds.poll("warm", 1, {}, &result) == pa::State::kReady);
+    CHECK(result.pipeline == 42 && builds.started_total() == 1);
+  }
+  // Demand is served before queued prewarming, and still consumes its result exactly once.
+  {
+    pa::Builds builds(1, {});
+    std::promise<void> started, release;
+    auto wait = release.get_future();
+    builds.poll("blocker", 1, [&] { started.set_value(); wait.wait(); return pa::Result{1, 1, true}; }, nullptr);
+    started.get_future().wait();
+    std::vector<int> order;
+    builds.prewarm("speculative", 1, [&] { order.push_back(2); return pa::Result{2, 1, true}; });
+    builds.prewarm("promoted", 1, [&] { order.push_back(4); return pa::Result{4, 1, true}; });
+    CHECK(builds.poll("promoted", 1, {}, nullptr) == pa::State::kBuilding);
+    builds.poll("demand", 1, [&] { order.push_back(3); return pa::Result{3, 1, true}; }, nullptr);
+    release.set_value();
+    builds.wait_idle();
+    CHECK(order == std::vector<int>({4, 3, 2}));
+  }
   // The queued payload owns its values after the render stack is changed/destroyed.
   pa::PipelineSpecs off;
   off.add(1008, 0); off.add(1010, 0); off.add(1014, 0); off.add(1017, 0);
@@ -154,6 +186,11 @@ int main() {
     for (int i = 0; i < 3; ++i) m.tick(0, 3, 1176 + 16 * i, 4, &w, &b);
     CHECK(m.tick(0, 3, 1224, 4, &w, &b) == pa::Monitor::kWindow);
     CHECK(w.waiting == 0 && w.started == 0 && w.pending == 0);
+  }
+  for (auto state : {pa::State::kStarted, pa::State::kBuilding, pa::State::kFailed, pa::State::kReady}) {
+    CHECK(pa::select_pipeline(state, 0u, 7u) == 7u);
+    CHECK(pa::select_pipeline(state, 0u, 0u) == 0u);
+    CHECK(pa::select_pipeline(state, 9u, 7u) == (state == pa::State::kReady ? 9u : 7u));
   }
   std::printf("pipeline_async_test: %d checks passed\n", checks);
   return 0;

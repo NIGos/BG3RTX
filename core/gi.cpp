@@ -96,12 +96,11 @@ struct Snapshot {
 struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
-  // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
-  // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
-  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline; so do both rt_hair_groom
-  // states (kHairGroomSlot). Sparse: a pass builds a handful of the kPipelineSlots indices.
+  VkPipelineLayout active_layout = VK_NULL_HANDLE;
+  // Cache by complete request, specialization values and layout. Live toggles retain both states,
+  // including values which previously collided in the same bit-indexed variant slot.
   struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
-  std::unordered_map<unsigned, Variant> variants;
+  std::unordered_map<std::string, Variant> variants;
 };
 
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
@@ -111,9 +110,14 @@ extern "C" __declspec(dllimport) int __stdcall SetThreadPriority(void* thread, i
 bg3::pipe_async::Builds g_builds(
     2, [](const bg3::pipe_async::Result& r) { host->defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
     [] { SetThreadPriority(GetCurrentThread(), -1); });   // THREAD_PRIORITY_BELOW_NORMAL
+std::recursive_mutex g_prewarm_mu;
+std::unordered_map<uint64_t, std::unordered_set<std::string>> g_prewarmed;
+uint64_t g_prewarm_count = 0;
 // A pipeline layout a background build may still read is destroyed once none does.
 void defer_layout_destroy(uint64_t layout) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   if (!layout) return;
+  g_prewarmed.erase(layout);
   g_builds.park(layout, [layout] { host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, layout); });
 }
 // On a worker: the SPIR-V (the layer's cache or DXC) and the compute pipeline of `req` for `layout`.
@@ -151,6 +155,26 @@ bg3::pipe_async::Result build_pipeline(const std::string& req, const std::string
   r.generation = blob.generation;
   r.ok = true;
   return r;
+}
+
+std::string build_key(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& specs) {
+  return req + specs.key() + "|" + entry + "|" + std::to_string(uint64_t(layout));
+}
+
+// Called when a pass first has its real layout (game descriptor layouts do not exist at DLL load).
+void prewarm_experimental(const std::string& req, const std::string& entry, VkPipelineLayout layout, const PipelineSpecs& base) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
+  if (!g_prewarmed[uint64_t(layout)].insert(req + "|" + entry).second) return;
+  unsigned count = 0;
+  for (const auto& specs : bg3::pipe_async::experimental_specs(base, host->cfg_int("dev", 0) != 0)) {
+    const auto key = build_key(req, entry, layout, specs);
+    count += g_builds.prewarm(key, uint64_t(layout), [req, entry, layout, specs] {
+      return build_pipeline(req, entry, layout, specs);
+    }) ? 1u : 0u;
+  }
+  g_prewarm_count += count;
+  if (count) host->log("gi: Experimental prewarm %s %s: %u extra pipelines, %llu startup total (below normal priority)",
+                       req.c_str(), entry.c_str(), count, (unsigned long long)g_prewarm_count);
 }
 
 // Bound pipeline capability, including a first-frame capability publication race.
@@ -1068,6 +1092,7 @@ bool ensure_rf_hit_contract() {
 }
 
 bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   namespace sv = bg3::shader_variant;
   // rt_cascade_casters (docs/TRACK_D_RT.md 6.7 item 2): the TLAS holds the sun cascade's
   // casters as instance mask 0x02; these variants trace 0x01 except the sun ray
@@ -1128,10 +1153,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool hit_family = sv::hit_material_entry(file);   // S2c: RT_SPEC_HIT_INST on every hit-material file
   if (hit_family) slot_key += std::string("#wr=") + char('0' + wind_rgb) + ",ig=" + char('0' + ip_grass);
   // A request never built in this slot compiles and creates its pipeline on a worker (common/pipeline_async.h):
-  // the pass skips until it is ready (never a pipeline of another request: kind3 records, other layouts).
+  // the previous pipeline of this pass/layout runs until it is ready.
   // A built one asks the layer for its generation (in memory: no compile here; hot reload rebuilt it already)
   // and a new generation is built in the background too, the current pipeline kept meanwhile.
   const VkPipelineLayout lay = layout ? layout : g_layout;
+  if (p.active_layout != lay) { p.pipeline = VK_NULL_HANDLE; p.active_layout = lay; }
   const uint32_t spec_value = sv::spec_cascade_value(file, cascade ? unsigned(sv::kCascade) : 0u);
   PipelineSpecs specs;
   if (sv::occ_stats_entry(file)) specs.add(sv::kSpecIdOccStats, occ_stats ? 1u : 0u);
@@ -1161,10 +1187,11 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();
-  Pipe::Variant& slot = p.variants[variant];
+  Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
-  // Diagnostic callers may ignore the return value: never expose a different specialization while building.
-  p.pipeline = known ? slot.pipeline : VK_NULL_HANDLE;
+  // Keep the last working specialization while a live replacement builds.
+  const VkPipeline previous = p.pipeline;
+  p.pipeline = known ? slot.pipeline : previous;
   if (known) {
     Bg3ShaderBlob blob{};
     if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
@@ -1177,14 +1204,15 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     }
   }
   bg3::pipe_async::Result r{};
-  const std::string key = slot_key + "|" + std::to_string(uint64_t(lay));
+  const std::string key = build_key(selected, "main", lay, specs);
   const auto st = g_builds.poll(key, uint64_t(lay), [req = selected, lay, specs] { return build_pipeline(req, "main", lay, specs); }, &r);
+  prewarm_experimental(selected, "main", lay, specs);
   if (st == bg3::pipe_async::State::kStarted)
     host->log("gi: %s building in the background (%s)", selected.c_str(),
-              known ? "hot reload: the current pipeline meanwhile" : "the pass waits");
+              p.pipeline ? "the previous pipeline meanwhile" : "the pass waits");
   if (st != bg3::pipe_async::State::kReady) {
-    if (known) p.pipeline = slot.pipeline;
-    return known;
+    p.pipeline = bg3::pipe_async::select_pipeline(st, VkPipeline{}, p.pipeline);
+    return p.pipeline != VK_NULL_HANDLE;
   }
   g_omm_pipelines.erase(slot.pipeline);
   if(omm)g_omm_pipelines.insert(VkPipeline(r.pipeline));
@@ -1199,6 +1227,18 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
             guards ? (std::string(" spec mv=") + char('0' + mv_sample) + " pg=" + char('0' + prev_guard)).c_str() : "",
             r.pipeline_ms);
   return true;
+}
+
+// Live developer controls can select another entry rather than another specialization.
+void prewarm_pass(Pipe& p, const char* file, VkPipelineLayout layout) {
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
+  if (!g_prewarmed[uint64_t(layout)].insert(std::string("entry:") + file).second) return;
+  const auto before = g_builds.started_total(), alternatives_before = g_prewarm_count;
+  refresh(p, file, layout);
+  const auto extra = g_builds.started_total() - before - (g_prewarm_count - alternatives_before);
+  g_prewarm_count += extra;
+  if (extra) host->log("gi: Experimental prewarm entry %s: %llu extra, %llu startup total", file,
+                      (unsigned long long)extra, (unsigned long long)g_prewarm_count);
 }
 
 void memory_barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkPipelineStageFlags dst) {
@@ -3195,6 +3235,14 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   timestamp(cmd, 2);
   // D-LS first: the GI composite keeps diffuse + specular as next frame's bounce source.
   // (the sun set first: none free means no D-LS this frame, before any transition)
+  if (host->cfg_int("dev", 0) && s.ls && g_ls_layout) {
+    prewarm_pass(g_ls_k, "gi/rt_local_shadows_k.hlsl", g_ls_layout);
+    prewarm_pass(g_ls_full_k, "gi/rt_local_shadows_full_k.hlsl", g_ls_layout);
+    if (s.box_ready && ensure_ls_box_layout(s.game_set1_layout)) {
+      prewarm_pass(g_ls_box_k, "gi/rt_local_shadows_box_k.hlsl", g_ls_box_layout);
+      prewarm_pass(g_ls_full_box_k, "gi/rt_local_shadows_full_box_k.hlsl", g_ls_box_layout);
+    }
+  }
   const VkDescriptorSet sun_set = s.ls && s.tlas && g_ls.pipeline ? write_sun_set(s) : VK_NULL_HANDLE;
   if (sun_set) {
     Bound lb;
@@ -3431,6 +3479,12 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   }
   // One cache-free reference renderer: direct or finite two-surface subset.
   // Normal RF/probe replacement remains separate and unchanged.
+  if (host->cfg_int("dev", 0) && s.tlas && s.ls_ok && host->cfg_int("rt_hit_material", 0) &&
+      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t)))) &&
+      ensure_hit_reference_layout()) {
+    prewarm_pass(g_hit_direct, "gi/rt_hit_direct.hlsl", g_hit_reference_layout);
+    prewarm_pass(g_hit_two_bounce, "gi/rt_hit_two_bounce.hlsl", g_hit_reference_layout);
+  }
   const int reference_mode=host->cfg_int("rt_hit_reference",0);
   if(s.tlas && s.ls_ok && (pc.rf_debug==7 || reference_mode==1 || reference_mode==2) && host->cfg_int("rt_hit_material",0) &&
      bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key,sizeof(uint32_t)))) && ensure_hit_reference_layout()){
@@ -3454,7 +3508,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     Push wpc = pc;
     wpc.rt_stats = 0;
     WaterRfIn win{s.cam, s.vp, s.mat, s.dep, s.dif, s.spe, s.l_cam2, s.tlas, s.alpha, &wpc, uint32_t(sizeof wpc), g_w, g_h};
-    if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
+    if (s.ls_ok && s.boxes_bound && host->rt_hit_material_use &&
         bg3::native_hit::capable(static_cast<uint32_t*>(host->persist(bg3::native_hit::capability_key, sizeof(uint32_t))))) {
       const VkDescriptorSet hs = sun_set ? sun_set : (ensure_ls_layout() ? write_sun_set(s) : VK_NULL_HANDLE);
       if (hs && ((g_sunt_ok && g_sunt.view) || g_ls_nodata.view)) {
@@ -3632,6 +3686,8 @@ void gi_on_frame(uint64_t) {
 
 void gi_release() {
   g_builds.join();   // the background builds read the layouts released below; their unclaimed pipelines are discarded
+  g_prewarmed.clear();
+  g_prewarm_count = 0;
   g_omm_pipelines.clear();
   bg3::omm::release_scene_consumer(static_cast<uint32_t*>(host->persist(bg3::omm::scene_capability_key,sizeof(uint32_t))));
   std::lock_guard<std::mutex> lock(g_mu);
@@ -3751,9 +3807,11 @@ int core_pipeline_async(const char* req, const char* entry, VkPipelineLayout lay
       specs.add(m.constantID, value);
     }
   }
+  std::lock_guard<std::recursive_mutex> lock(g_prewarm_mu);
   const std::string q = req, e = entry;
-  const std::string key = q + specs.key() + "|" + e + "|" + std::to_string(uint64_t(layout));
+  const std::string key = build_key(q, e, layout, specs);
   const auto st = g_builds.poll(key, uint64_t(layout), [q, e, layout, specs] { return build_pipeline(q, e, layout, specs); }, &r);
+  prewarm_experimental(q, e, layout, specs);
   if (st == bg3::pipe_async::State::kStarted) host->log("%s %s: building in the background", req, entry);
   if (st == bg3::pipe_async::State::kReady) {
     *out = VkPipeline(r.pipeline);
