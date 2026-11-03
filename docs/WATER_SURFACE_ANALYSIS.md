@@ -123,3 +123,27 @@ These motivate models; they do not establish BG3 instance parameters or predict 
 Analytic numbers above were recomputed with Python math at BelowNormal. All three modules
 decompiled successfully after selecting Vulkan GLSL. No source shader, setting, ABI or variant
 request changed. No runtime tests are warranted for this documentation-only change.
+
+## Coverage-layer correction (water-fresnel-zero2, 2026-11-03)
+
+The exact-zero predicate is unusable for the authored S8 pool materials. See the
+[material and mip evidence](evidence/water-foam-coverage.md): positive foam floors persist
+through every mip and flow/depth mask, independently of camera coverage. Template defaults
+alone were insufficient; the Waterqueenhouse instances also have positive exponents/multipliers.
+
+Use native colour weight 751 as c. Native reflectance/roughness weights 814/878 sample different
+phases, so a mixed native BRDF is not a clean-water endpoint. The candidate evaluates original
+native shading and clean material shading separately, blends c*C_native+(1-c)*C_clean, and
+scales every clean RT replacement coefficient by (1-c). The native foam contribution remains
+weighted c. Air terms retain their existing order. Coefficient partition is
+c+(1-c)*[E+(1-E)*a+(1-E)*(1-a)]=1, including endpoints and all intermediate coverage.
+This preserves authored foam appearance; it does not invent measured bubble extinction or
+change the resolved native normal field. It supersedes the clean-mask restriction above.
+
+The native colour weight remains full precision in shading; the compact record carries
+upward-rounded ceil(255c) coverage solely for the diagnostic histogram; bin 255 includes
+near-full coverage. Wave-rounded weighted ownership has at most 0.5 pixel rounding per wave. OFF retains the old arithmetic.
+ON's second FS evaluation adds unmeasured forward-pass cost, which the existing compose
+GPU timer excludes; the earlier incremental estimate is withdrawn.
+The only prepared live is wsf1, outside the watched inbox, with same-run float shots and cost
+windows. No diagnostic launch is needed to decide whether an exact-zero mask can participate.

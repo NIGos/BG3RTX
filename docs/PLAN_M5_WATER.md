@@ -623,43 +623,31 @@ All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, no
    Predict: shallow S8 rim retains column reflections; at a=.5 interface weight doubles in smooth limit.
    Gate: white-furnace/planar dielectric reference, energy partition including roughness and a=0/1;
    model brightness may change. Live S8 pool static/Q/E A/B and Ultra smoke required.
-   Status 2026-11-03: READY_FOR_LIVE, restricted pool candidate on water-shader-analysis; no quality pass.
-   Candidate is restricted to pool FS c4e92ccdb08dd777 with absent foam in all three samples:
-   pre-floor SSA 742/809/873 exactly zero, or their final weights 751/814/878 zero.
-   The native max(abs(signal), 1e-4) before pow makes final zero impossible for positive
-   multipliers/exponents even with absent foam (~3.19e-8 at template values). Keep the native
-   floor residue, normals and BRDF inputs; no tolerance accepts nonzero edge/flow coverage.
-   wsf1 provisioned this FS and selected 120 draws/window with missing 0, yet counted clean 0.
-   Follow-up water-fresnel-zero2: the second live also had clean 0 despite all draws patched.
-   Diagnostic w7 keeps high-half roughness and low-half validity: 0x8000 plus colour/F0/roughness
-   rejection bits 1/2/4, hypothetical FS-spec-off bit 8, and foam-texture and edge/flow-mask observations 16/32.
-   Source bits are not vetoes; clean ignores them. Native 0xffff cannot distinguish another family
-   from a missing candidate marker; unexpected low-bit patterns have a separate layout count.
-   Device-local group-reduced reasons share the existing 512 B statistics slot. Push flag 128
-   enables diagnostics independently of compose SpecId 1025, so a missed specialization is visible.
-   No further predicate relaxation is justified offline: exact products may really be nonzero.
-   Predict marked owned > 0 and at least one foam rejection > 0; clean may stay 0. A supported
-   correctly wired dispatch predicts FS/compose spec off and unmarked/layout 0; counts are pending.
-   The earlier > 0 clean/share prediction below is disproved by the second run, not a new gate.
-   Predict clean owned > 0 in both ON windows, invalid 0; a fully clean pool would be ~20%
-   of water records (old 2.05% view estimate / live ~10.1% records). Runtime masks were not
-   captured: this share is a conditional prediction, requiring fresh live evidence after restart;
-   every other family and foam-bearing pixel retains native surface shading. SpecId 1025;
-   original FS patch words and record sizes unchanged when not provisioning the candidate.
-   Ordinary water requests require raw byte identity against main. Changed capability requests
-   also require arithmetic-OFF identity against an otherwise identical declaration/record-capable
-   reference: this checks the old arithmetic, but is not raw module identity against main.
-   Full build passed; 144/144 existing CTests passed in 166.11 s, including all seven candidate
-   FS forms validated by spirv-val. Water CPU checks: 712,551, including 5,544 partition cases;
-   settings checks: 4,200, all passed. Final serial shader gate passed: 16/16 compose
-   arithmetic-OFF requests byte-identical against HEAD, 16/16 production modules validated,
-   2/2 raw ordinary requests byte-identical, no missing requests. Capability production modules
-   contain the specialization and are not claimed byte-identical to the old raw modules.
-   Visible Surfaces control, default/all presets 0.
-   Prepared tools/live_batches/water_surface_fresnel: lint and fake dryrun pass; one Ultra S8 launch,
-   static 0/1/0/1 float previews and held Q/E; 4.3 minutes, estimated 490 MB. Not queued or run.
-   Compose GPU cost unmeasured; +0.01-0.05 ms remains an estimate. Live image-space partition
-   reference remains required: participation/invalid counters and CPU algebra alone do not qualify it.
+   Superseded 2026-11-03 on water-fresnel-zero2: exact-zero foam gating is rejected.
+   Authored Waterqueenhouse BridgePools/Fountain use exponent 1.6 and multiplier .2/.3;
+   max(abs(signal), 1e-4) makes coverage strictly positive even for black texture/zero masks.
+   See [offline material evidence](evidence/water-foam-coverage.md) for packages and every mip.
+   Native colour weight c=SSA 751 is scattering coverage; 814/878 are independent animated
+   reflectance/roughness mixes and must not masquerade as a clean dielectric BRDF.
+   Evaluate the original native FS as the foam layer and a clean FS with those three mixes
+   set to zero; preserve native normals and authored flow. Final C=c*C_native+(1-c)*C_clean.
+   Clean Fresnel/column coefficients are (1-c)*E, (1-c)*(1-E)*a and
+   (1-c)*(1-E)*(1-a); foam retains c. Their sum is 1 for every c,a,E in [0,1].
+   All RT replacement deltas, A/B, direct/rest, local and refraction records carry (1-c).
+   At c=1 native foam shading remains intact; c=0 is the clean interface/column model.
+   No division by coverage/opacity and no residual subtraction from quantized sun glints.
+   SpecId 1025/key unchanged, off in all presets; no ABI/record stride/request delta.
+   Coverage ceil(255c) bins are telemetry only (bin 255 includes near-full coverage);
+   radiance uses full precision native c. Keep per-reason
+   device-local/group-reduced counters and specialization/marker checks, with coverage histogram.
+   Candidate ON now evaluates both native and clean FS: GPU cost is unmeasured; the old
+   +0.01-0.05 ms estimate does not cover this extra evaluation. Compose timing excludes
+   the added forward FS work; report that limit alongside the measured compose cost.
+   Prepared wsf1 is one unqueued S8 real-Ultra 0/1/0/1 static plus held E/Q A/B (127.4 s
+   scheduled, plus load). Every ON window requires weighted ownership > 0, invalid 0 and
+   partition validity; all eight static shots require finite post-water float colour/exposure.
+   Model brightness may change. CPU/encoding/participation gates do not grant image quality
+   approval; inspect the shallow rim and foam against this partition. No game launch authorized.
 3. Refracted path ramp: `rt_water_surface_path=0`, pool-only FS + compose, +0.01-0.04 ms.
    Reuse existing refraction hit distance, no extra ray; replace only column ramp d by physical L_t.
    Requires runtime ramp CB mapping and separated column/source terms; preserve shoreline/foam masks.

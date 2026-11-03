@@ -901,7 +901,7 @@ void maybe_log_compose() {
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
             (unsigned long long)w[kCsNonFinite]);
-  host->log("[water] surface partition: clean owned %llu, invalid %llu; rejected foam colour %llu, foam F0 %llu, foam roughness %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, rejected foam texture source %llu, edge/flow mask source %llu; reasons overlap; reference CPU energy partition, model mean may change",
+  host->log("[water] surface partition: coverage-weighted owned %llu, invalid %llu; coverage zero %llu, partial %llu, full %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, foam texture source %llu, edge/flow mask source %llu; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
             (unsigned long long)w[kCsSurfaceClean], (unsigned long long)w[kCsSurfaceInvalid],
             (unsigned long long)w[kCsSurfaceFoamColour], (unsigned long long)w[kCsSurfaceFoamF0],
             (unsigned long long)w[kCsSurfaceFoamRough], (unsigned long long)w[kCsSurfaceNative],

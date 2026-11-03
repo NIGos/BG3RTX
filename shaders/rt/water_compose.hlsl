@@ -432,7 +432,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   const float rough = float(r1.w >> 16) / 65535.0;
   const float3 Ct = has ? target[fp] : 0.0.xxx;
 #ifdef WATER_SPEC_RF_EDGE
-  const bool surface_fresnel = WATER_SURFACE_FRESNEL_ON && (r1.w & 65487u) == 32768u;
+  const bool surface_fresnel = WATER_SURFACE_FRESNEL_ON && (r1.w & 49160u) == 32768u;
 #endif
   const bool own = has && same_encoded(Crec.r, Ct.r, 6) && same_encoded(Crec.g, Ct.g, 6) && same_encoded(Crec.b, Ct.b, 5);
   const float ln = length(N);
@@ -776,19 +776,21 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #if defined(WATER_SPEC_RF_EDGE) && (!defined(WATER_SURFACE_FRESNEL_REFERENCE) || WATER_SURFACE_FRESNEL_REFERENCE != 0)
   if (surface_diagnostics()) {
     const uint marker = r1.w & 65535u;
-    const bool marked = (marker & 65472u) == 32768u;
-    surface_stat(0u, own && surface_fresnel);
-    surface_stat(1u, own && surface_fresnel && (!valid || !cfin));
-    surface_stat(2u, own && marked && (marker & 1u) != 0u);
-    surface_stat(3u, own && marked && (marker & 2u) != 0u);
-    surface_stat(4u, own && marked && (marker & 4u) != 0u);
+    const bool marked = (marker & 49152u) == 32768u;
+    const uint coverage = (marker >> 6u) & 255u;
+    const float cleanOwned = WaveActiveSum(own && surface_fresnel ? float(255u-coverage)/255.0 : 0.0);
+    if (WaveIsFirstLane()) InterlockedAdd(gsSurface[0], uint(round(cleanOwned)));
+    surface_stat(1u, own && surface_fresnel && (!valid || !cfin || (marker & 1u) != 0u));
+    surface_stat(2u, own && marked && coverage == 0u);
+    surface_stat(3u, own && marked && coverage > 0u && coverage < 255u);
+    surface_stat(4u, own && marked && coverage == 255u);
     surface_stat(5u, own && marker == 65535u);
     surface_stat(6u, own && marker != 65535u && !marked);
     surface_stat(7u, own && marked && (marker & 8u) != 0u);
     surface_stat(8u, own && !WATER_SURFACE_FRESNEL_ON);
     surface_stat(9u, own && marked);
-    surface_stat(10u, own && marked && !surface_fresnel && (marker & 16u) != 0u);
-    surface_stat(11u, own && marked && !surface_fresnel && (marker & 32u) != 0u);
+    surface_stat(10u, own && marked && (marker & 16u) != 0u);
+    surface_stat(11u, own && marked && (marker & 32u) != 0u);
   }
 #endif   // kCsNonFinite
   const float d = lum(Cn) - lum(Ct);

@@ -88,7 +88,7 @@
   "live_batch": "water-surface-fresnel",
   "stop_on_dump": false,
   "energy_fs": "water-compose",
-  "purpose": "M5.6 step 2: one-launch Ultra static and held Q/E interface partition A/B, not authorized or queued.",
+  "purpose": "M5.6 coverage-layer S8 static 0/1/0/1 and short held Q/E A/B in real Ultra; post-water float colour, coverage and energy partition. Prepared only, lives paused.",
   "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,dump_images=1,dump_raw=0,dump_png_width=1280,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_surface_fresnel=1,fg_snap=0",
   "args": [
     "-RealPresent",
@@ -96,14 +96,15 @@
     "-MovePlan",
     "captures/live_batches/water_surface_fresnel/plans/wsf1_s8.json"
   ],
-  "estimated_phase_seconds": 139,
+  "estimated_phase_seconds": 127.4,
   "expect": [
     "\\[auto\\] scene ready",
     "\\[hot\\] core generation \\d+ loaded",
     "\\[ngx\\] RR create .*: Success",
     "\\[cfg\\] settings read",
     "\\[trace\\] frame \\d+ written",
-    "\\[water\\] compose GPU"
+    "\\[water\\] compose GPU",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\)"
   ],
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
@@ -260,9 +261,9 @@
       ]
     },
     {
-      "name": "clean-water pixel partition participates and coefficients remain valid in both ON windows",
+      "name": "coverage-weighted clean contribution participates, invalid 0 and energy partition holds in every ON window",
       "select": "\\[water\\] surface partition:",
-      "match": "clean owned [1-9]\\d*, invalid 0; reference CPU energy partition",
+      "match": "coverage-weighted owned [1-9]\\d*, invalid 0; coverage zero \\d+, partial \\d+, full \\d+.*energy partition checked \\(8 float eps\\)",
       "min": 1,
       "period_frames": 120,
       "windows": [
@@ -272,5 +273,7 @@
         "cost-turn-3"
       ]
     }
-  ]
+  ],
+  "post": "py -3 tools/water_surface_gate.py \"{log}\"",
+  "post_gate": true
 }

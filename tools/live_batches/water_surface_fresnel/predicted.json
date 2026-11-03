@@ -1,5 +1,5 @@
 {
-  "status": "PREPARED, no live authorization; offline checks required before READY_FOR_LIVE",
+  "status": "READY_FOR_LIVE offline checks passed; lives paused, no launch or queue submission authorized",
   "scene": "S8 Water Queens House, shallow pool rim",
   "key": "rt_water_surface_fresnel",
   "sequence": [
@@ -8,14 +8,15 @@
     0,
     1
   ],
-  "reference": "Interface E from native probe DFG; transmitted column (1-E)*((1-a)*bed+a*column); direct Fresnel evaluated at L.H. Foam remains its own layer. Reflected plus transmitted white-furnace partition equals 1 over a, roughness and angle. Matching native probe radiance has A*L-B=0.",
-  "prediction": "Shallow clean pool retains reflections as a approaches 0; smooth-limit interface weight doubles at a=.5. Brightness MAY change. No equal-mean gate for this shading-model change.",
-  "acceptance": "Both ON static and Q/E windows must retain finite nonnegative terms and reference partition within CPU/half-encoding precision; inspect post-water float colour dumps and in-frame replacement accounting at the shallow rim. Derive any image residual bound from OFF-repeat noise and reference precision, never tune it. Invalid/missing reference records or no clean-water participation => INVALID, not a pass.",
+  "reference": "c is native colour foam SSA 751. Separate original native and clean-material FS evaluations: c*native+(1-c)*clean. Clean coefficient partition E,(1-E)*a,(1-E)*(1-a), scaled (1-c), plus foam c, sums to 1 for every c,a,E in [0,1]. F(L.H) stays direct; E remains native DFG weighting of the clean material. Foam term remains authored native shading.",
+  "prediction": "Authored BridgePools/Fountain exact-zero foam share is 0%; floor at least 7.96e-8/1.19e-7. Coverage-weighted clean ownership > 0 despite no exact-zero samples; invalid 0 in every ON window. Native/clean blend preserves native at c=1 and clean at c=0. Shallow pool retains interface reflections as opacity approaches 0; model brightness may change.",
+  "acceptance": "Each ON static/turn window: coverage-weighted owned > 0, invalid 0, emitted energy partition checked within 8 float eps (operation-count bound). Histogram/source/spec counters explain participation without a diagnostic run. Every static phase requires two finite post-water float colour shots and valid lighting exposure through the post gate. Inspect pool rim and foam appearance; no equal-mean gate.",
   "float_observable": "Post-water scene colour referenced by energy_fs=water-compose; retain dumps.json full-resolution float means, exposure b0[0], and existing RR post-preview _p.f32 colour shots for every partition-static phase (layer/dump.cpp writes post_preview float data independently of dump_raw). PNGs only for framing, never energy. Static camera begins at save pool rim; verify framing before judging.",
-  "gpu": "Report existing compose GPU median/p90 and compose dispatch ms for all capture-free cost-turn windows, ON minus OFF. Incremental estimate +0.01-0.05 ms is not a timing gate. No builds or shader compiles during costs.",
+  "gpu": "ON evaluates a second complete native FS. Previous +0.01-0.05 ms estimate withdrawn. Report compose/copy/dispatch and whole water pass cost, ON minus adjacent OFF; actual cost unmeasured. No builds during live cost windows. Existing compose timing excludes the added forward FS evaluation; report that measurement limit explicitly if no forward-pass timer is available.",
   "motion": "Hold E for cost-turn-0/1 and Q for cost-turn-2/3. Keep pool rim in view. One launch, visible_unfocused_fg; occlusion invalidates presented/frame-time judgement, use GPU ms and float/log evidence.",
   "smoke_ultra": "All windows use real Ultra with qualified water, OMM, box and off-screen bounce settings retained. No isolated preset substitutions.",
-  "budget": "8 static traces with post-water float previews and dump_raw=0; estimated 490 MB at lean helper 60 MB per trace; 139 s phases plus one load, under 5 minutes at 120 s load.",
+  "budget": "127.4 s scheduled phases (static windows 11.1 s, capture-free E/Q windows 12 s), plus one load; 8 traces, about 490 MB. Static cadence minimum >11 s = 1 s apply + 2 s trace stalls + two 120-frame intervals at 30 fps. Restore kept 5 s for existing fake-runner phase-size contract.",
   "restore": "Last phase resets candidate 0 and releases exposure hold; serial queue restores original INI after job. Startup candidate=1 provisions FS before live toggles, no restart within batch.",
-  "reference_limit": "The unchanged compact record does not expose all native column inputs for an image-space automated furnace reconstruction. CPU reference and encoding are offline gates; live draw/record participation and finite coefficient checks plus post-water float images confirm behavior only. A complete image-space reference comparison remains required for qualification; neither equal mean nor successful log gates grants a quality pass."
+  "reference_limit": "Runtime FS partition check independently checks c+(1-c)*(E+(1-E)*a+(1-E)*(1-a)); float post gate rejects missing or nonfinite full-resolution RR colour evidence. Algebra/log validity does not qualify image quality or prove a measured physical reference match. No additional diagnostic launch is needed to establish exact-zero impossibility.",
+  "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c."
 }

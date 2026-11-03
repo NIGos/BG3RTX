@@ -54,8 +54,8 @@ def counter_contract(blob):
         return f"missing reason atomic lanes {sorted(set(range(12))-atomic_lanes)}"
     # Decode clean/reason bits, rather than merely carrying unused integer literals.
     bit_masks = {constants[x] for op,a in instructions if op == 199 for x in a[2:] if x in constants}
-    if not {1,2,4,8,16,32,65472,65487} <= bit_masks:
-        return f"missing marker/reason decoding masks {sorted({1,2,4,8,16,32,65472,65487}-bit_masks)}"
+    if not {1,8,16,32,255,49152,49160} <= bit_masks:
+        return f"missing marker/reason decoding masks {sorted({1,8,16,32,255,49152,49160}-bit_masks)}"
     if not any(op == 71 and len(a) == 3 and a[1:] == (1,1025) for op,a in instructions):
         return "missing specialization 1025"
     return None
