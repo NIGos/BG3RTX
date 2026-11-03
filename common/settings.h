@@ -392,21 +392,23 @@ inline constexpr Knob kKnobs[] = {
 
   {"perf_hitmat_lists", "Hit material CPU batching",
    "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. "
-   "Preserves material validation and shading. Requires Hidden-surface shading at startup.",
+   "No measured gain: G-buffer hooks 1.16 ms in both states. Keep off. "
+   "Requires Hidden-surface shading at startup.",
    Kind::Choice, Apply::Live, "live; native materials need startup", false,
    {{"off", "Off", 0, {{"perf_hitmat_lists", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"perf_hitmat_lists", "1"}}, {{"exp_hidden_surface", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"}}, true},
   {"perf_hook_state", "Reuse capture hook state",
    "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. "
-   "Experimental CPU optimization; geometry and material coverage stay the same.",
+   "REJECTED: submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build. Keep off.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true},
 
   {"perf_submit_batch", "Batch descriptor and submit bookkeeping",
-   "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. Unqualified CPU experiment.",
+   "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. "
+   "Within noise: submit CPU 20.2/20.7 ms off versus 20.3/20.3 ms on. Keep off.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"perf_submit_batch", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}, {}, false, false, false, Apply::Live}},

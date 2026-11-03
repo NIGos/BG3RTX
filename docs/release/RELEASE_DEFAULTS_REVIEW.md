@@ -24,6 +24,23 @@ User-approved fixed box shadows now use `ls_box=2` in Ultra only, retaining
 `ls_box_honour_shadow=1`. Valid ba1 S6 08:02 evidence and cost are recorded below.
 Combined Ultra smoke remains a separate check; shader request delta: 0.
 
+## qs4 CPU defaults verdicts (2026-11-03)
+
+Keep all three developer CPU experiments off in repository, release and every preset:
+
+| Key | User-supplied qs4 evidence | Release disposition |
+|---|---|---|
+| `perf_hook_state` | Submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build | **REJECTED**. Keep off. |
+| `perf_hitmat_lists` | G-buffer hooks 1.16 ms both ways | **No gain**. Keep off. |
+| `perf_submit_batch` | Submit CPU OFF 20.2/20.7 ms versus ON 20.3/20.3 ms | **Within noise**. Keep off. |
+
+The settings option text records these reasons. `perf_hook_state` remains available
+only to developers because the requested S8 cost-hooks rerun depends on its toggle.
+The same implementation header contains matrix validation/scatter helpers used by
+the default uncached path, so wholesale deletion would also remove live dependencies.
+Retaining this diagnostic toggle does not qualify or promote its optimization.
+No defaults, shader requests or ABI change follows from these verdicts.
+
 ## Recommendation and load order
 
 Keep the qualified Ultra features and every new experimental switch at its current value.

@@ -190,4 +190,10 @@ foreach ($batch in 'water_flicker_wf9','water_offscreen') {
     }
   }
 }
+$readyStep=@{wait_log=@('temporal spec mv=1 pg=0, pipeline', 'trace spec mv=0 pg=0, pipeline')}
+Check (-not (Test-CameraPlanReady $readyStep 'temporal spec mv=1 pg=0, pipeline')) 'partial pipeline readiness blocks capture'
+Check (-not (Test-CameraPlanReady $readyStep "temporal spec mv=0 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline")) 'wrong specialization blocks capture'
+Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline") 'all matching specializations release capture'
+Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($step.trace_at -and')) 'runner checks readiness before any phase trace'
+Check ($runner -match '(?s)phaseWaitAt -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
 Write-Host "$count camera-input and permission checks passed"
