@@ -13,10 +13,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from tools.assets.mesh_paks import signature, binary_table
 from tools.assets.mesh_paks_compact import compact
-from tools.mesh_paks_compact_audit import candidates
+from tools.mesh_paks_compact_audit import candidates, audit_log
 
 
 class CompactTests(unittest.TestCase):
+    def test_log_keeps_on_windows_and_does_not_invent_screen_coverage(self):
+        text = ('[hit material paks UV] 3 corners: missing candidate\n'
+                '[hit material paks UV] 6 corners: missing candidate\n'
+                '[hit material paks join] attempts 10 unique 1 missing 9 draws 20\n'
+                '[hit material paks] frame 120 enabled 1: exact 0/20 attempts; records 0 basis ready 0\n'
+                '[hit material paks] frame 240 enabled 0: exact 0/20 attempts; records 0 basis ready 0\n')
+        result = audit_log(text, {3: [object()]})
+        self.assertEqual(result['missing_readbacks'], dict(count_present=1, count_absent=1))
+        self.assertEqual([w['enabled'] for w in result['windows']], [1, 0])
+        self.assertEqual(result['missing_attempt_percent'], 90)
+        self.assertEqual(result['missing_draw_percent'], 45)
+        self.assertIsNone(result['screen_share'])
+        self.assertIsNone(result['missing_family_shares'])
+
     def fixture(self, root):
         vertices = np.array([[0, 0, 0, .1, .2], [1, 0, 0, .3, .4], [0, 1, 0, .5, .6]], '<f4')
         sig, raw = signature(vertices, [0, 1, 2])

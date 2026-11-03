@@ -150,6 +150,12 @@ std::vector<mesh_paks::Row> pak_meshes;
 std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
 // Candidate counts and publication rejections are separate: UV is not proof.
 std::atomic<uint64_t> pak_uv_attempts{0},pak_uv_unique{0},pak_missing{0},pak_ambiguous{0},pak_invalid{0},pak_witness{0},pak_recipe{0},pak_inputs{0},pak_id_equal{0},pak_id_different{0};
+std::atomic<uint64_t> pak_missing_count{0},pak_missing_uv{0};
+// A count absent from the immutable catalogue is terminal, not an input wait.
+bool paks_count_missing(uint32_t count){
+ if(mesh_paks::has_candidates(pak_meshes,count))return false;
+ ++pak_uv_attempts;++pak_missing;++pak_missing_count;return true;
+}
 struct PakInputAttempt {bool candidate{};~PakInputAttempt(){if(!candidate)++pak_inputs;}};
 mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
  ++pak_uv_attempts;
@@ -157,7 +163,7 @@ mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
  const auto last=std::upper_bound(first,pak_meshes.end(),count,[](uint32_t n,const auto& row){return n<row.index_count;});
  auto r=mesh_paks::lookup(std::span<const mesh_paks::Row>(first,last),count,nullptr,uv);
  switch(r.status){case mesh_paks::Match::Unique:++pak_uv_unique;break;
- case mesh_paks::Match::Missing:++pak_missing;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
+ case mesh_paks::Match::Missing:++pak_missing;++pak_missing_uv;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
  case mesh_paks::Match::Invalid:++pak_invalid;break;}return r;
 }
 void paks_load(){
@@ -192,6 +198,7 @@ void pak_uv_live_owners(std::set<uint64_t>&);
 const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
  PakInputAttempt attempt;
  if(!paks_rows()||!ip.ok||ip.pos_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
+ if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
  // Raw layout restrictions apply only to CPU sampling, not to decoded XFB.
  if(ip.pos_float3 && ip.uv_ok && ip.uv_binding<CmdState::kMaxVertexBindings){
   const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
@@ -516,6 +523,7 @@ bool material_current(const Material& m){
 const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& args){
  PakInputAttempt attempt;
  if(!paks_rows() || !tileset_deferred(state.vs,state.fs) || args.kind!=1)return nullptr;
+ if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
  TilesetInputs inputs{};if(!geo_native_tileset_material_inputs(state.pipe[0],&inputs)||!inputs.valid)return nullptr;
  const auto& pa=inputs.attributes[0];const auto& ca=inputs.attributes[4];const auto& ua=inputs.attributes[5];
  if(pa.format!=VK_FORMAT_R32G32B32_SFLOAT || ua.format!=VK_FORMAT_R32G32_SFLOAT)return nullptr;
@@ -741,6 +749,7 @@ PoolObserved& pool_observed(uint64_t frame){
 void pool_log(uint64_t frame){
  if(paks_on){
   log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load());
+  log("[hit material paks reasons] cumulative draw observations: missing_count %llu missing_uv %llu witness_rejected %llu inputs_unavailable %llu; inputs_pending is not queue depth",(unsigned long long)pak_missing_count.load(),(unsigned long long)pak_missing_uv.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_inputs.load());
   uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
   log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
   log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
