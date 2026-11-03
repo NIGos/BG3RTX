@@ -37,6 +37,7 @@ plan = [
     step("settle-cam", 10, qa_exposure_hold="0", **RT),
     step("warm-strands", 20, qa_exposure_hold="0", **SCREEN),
     step("warm-crowd", 15, qa_exposure_hold="0", **CROWD),
+    step("warm-cards", 10, qa_exposure_hold="0", **CARDS),   # every judged key value runs once before warm-back
     step("warm-back", 10, qa_exposure_hold="0", **RT),
     step("shot-cards", SHOT, True, **CARDS),
     step("shot-strands", SHOT, True, **SCREEN),
@@ -64,6 +65,14 @@ GROOM_ON = ["cost-rt", "cost-strands", "cost-crowd"]
 def job(name, save):
     j = hp.job(name, save)
     j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hc_plan.json"
+    # The user may be at the PC: the game never takes focus (AGENTS.md). A full pool is a measured outcome here
+    # (the crowd budget's point), not a failure; refusals are counted by the strand gates.
+    j["window_mode"] = "visible_unfocused_fg"
+    j["args"] = [a for a in j["args"] if a != "-Foreground"]
+    j["expect_runner"] = [r"window-mode.*visible_unfocused" if "pointer centred" in e else e for e in j["expect_runner"]]
+    j["forbid"] = [p for p in j["forbid"] if p not in (r"\[hair primary\] .*refused", r"\[bvh\] mesh pool full at")]
+    j["forbid"] += [r"\[hair primary\].*\b[1-9]\d* pipelines refused", r"(?i)device (?:was )?lost"]
+    j["patterns"] += ["pool full"]
     j["expect"] = [e for e in j["expect"] if "hair fibre" not in e]
     j["expect"].append(r"\[hair groom\] crowd plan: \d+ instances, budget 1800 k segments")
     g = []
@@ -74,13 +83,19 @@ def job(name, save):
             x = dict(x, windows=["cost-strands", "cost-crowd"])
         if x["name"].startswith("groom participation"):
             x = dict(x, windows=GROOM_ON)
+        if x.get("windows") and "warmup" in x["windows"]:   # startup bursts are not judged
+            x = dict(x, windows=hp.judged)
         g.append(x)
     g += [
         {"name": "crowd plan: logged in the crowd cost window (budget 1800 k segments)",
          "select": r"\[hair groom\] crowd plan:", "match": r"budget 1800 k segments: LOD \d+/\d+/\d+, \d+ keep their cards",
          "min": 1, "windows": ["cost-crowd"]},
     ]
+    for i, x in enumerate(g):   # the strand, groom and crowd lines log every 300 frames (layer/hair_primary.cpp, bvhsplit)
+        if x["name"].startswith(("strand ", "groom ", "crowd ")):
+            g[i] = dict(x, period_frames=300)
     j["expect_every"] = g
+    j["live_flow"] = dict(settings_latency_s=1, trace_stall_s=1)
     j["purpose"] = ("Every converted hairstyle and the crowd budget (docs/RTX_HAIR_PRIMARY.md increment 5): cards / strands "
                     "in RT / strands on screen / strands with rt_hair_groom_crowd_ksegments=1800 in one launch; groom "
                     "instances and matched styles per scene, cost per mode (rt passes, gi, scene build GPU, strand G-buffer "

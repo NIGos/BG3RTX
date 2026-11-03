@@ -1,4 +1,5 @@
 """tools/hair_groom (card -> strand groom experiment) on synthetic cards and masks (CTest hair_groom_test)."""
+import dataclasses
 import json
 import struct
 import sys
@@ -186,6 +187,15 @@ def test_asset():
             check("asset never overwrites", False)
         except FileExistsError:
             check("asset never overwrites", True)
+        # A LOD the layer would refuse (a zero radius) raises before the file exists: no header-only stub.
+        bad = [(k, g) for k, g in lods]
+        bad[1] = (bad[1][0], dataclasses.replace(bad[1][1], radii=np.where(np.arange(len(bad[1][1].radii)) == 0, 0.0,
+                                                                         bad[1][1].radii).astype(np.float32)))
+        try:
+            asset.write(Path(d) / "bad.hgrm", 0x1234, card, bad)
+            check("refused LOD writes no file", False)
+        except ValueError:
+            check("refused LOD writes no file", not (Path(d) / "bad.hgrm").exists())
     magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
     check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 2, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
     uvs = np.frombuffer(raw, "<f4", 64, 40).reshape(32, 2)

@@ -4,13 +4,12 @@
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 547,
+ "timeout": 557,
  "repeat": 1,
  "live_batch": "hair-crowd",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=0,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1",
  "args": [
   "-RealPresent",
-  "-Foreground",
   "-Move",
   "-MovePlan",
   "captures/live_batches/hair_crowd/plans/hc_plan.json"
@@ -42,7 +41,8 @@
   "skipped: no variant for",
   "\\[bvh\\]",
   "\\[rrpost\\] exposure (held|hold|probe)",
-  "\\[core\\] guard:"
+  "\\[core\\] guard:",
+  "pool full"
  ],
  "expect": [
   "\\[auto\\] scene ready",
@@ -75,28 +75,28 @@
   "pipeline creation failed",
   "shader module creation failed",
   "\\[hair primary\\] UNAVAILABLE",
-  "\\[hair primary\\] .*refused",
   "\\[hair primary\\] .*could not be allocated",
   "\\[hair primary\\] strand fragment shader unavailable",
   "\\[hair groom\\] device WITHOUT",
   "\\[hair groom\\] .*malformed",
   "\\[geo\\] rt_native_hair rejected",
-  "\\[bvh\\] mesh pool full at",
   "\\[cascade\\] could not allocate",
-  "set 1 [1-9]\\d* out-of-range reads skipped"
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hair primary\\].*\\b[1-9]\\d* pipelines refused",
+  "(?i)device (?:was )?lost"
  ],
  "expect_runner": [
-  "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=5 label=shot-cards repeat=0",
-  "\\[motion-trace\\] phase=6 label=shot-strands repeat=0",
-  "\\[motion-trace\\] phase=7 label=shot-crowd repeat=0",
-  "\\[motion-trace\\] phase=8 label=shot-cards-b repeat=0",
-  "\\[motion-plan\\] complete phases=16\\b",
+  "window-mode.*visible_unfocused",
+  "\\[motion-trace\\] phase=6 label=shot-cards repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-strands repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-crowd repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-cards-b repeat=0",
+  "\\[motion-plan\\] complete phases=17\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
  "purpose": "Every converted hairstyle and the crowd budget (docs/RTX_HAIR_PRIMARY.md increment 5): cards / strands in RT / strands on screen / strands with rt_hair_groom_crowd_ksegments=1800 in one launch; groom instances and matched styles per scene, cost per mode (rt passes, gi, scene build GPU, strand G-buffer draws), the crowd plan's LOD mix, full-resolution shots for the user.",
- "estimated_phase_seconds": 247,
+ "estimated_phase_seconds": 257,
  "expect_every": [
   {
    "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -215,22 +215,16 @@
    "min": 0,
    "event": true,
    "windows": [
-    "warmup",
-    "settle-cam",
-    "warm-strands",
-    "warm-crowd",
     "warm-back",
     "shot-cards",
     "shot-strands",
     "shot-crowd",
     "shot-cards-b",
-    "settle",
     "cost-cards",
     "cost-rt",
     "cost-strands",
     "cost-crowd",
-    "cost-cards-b",
-    "restore"
+    "cost-cards-b"
    ]
   },
   {
@@ -259,7 +253,8 @@
    "windows": [
     "cost-strands",
     "cost-crowd"
-   ]
+   ],
+   "period_frames": 300
   },
   {
    "name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
@@ -269,7 +264,8 @@
    "windows": [
     "cost-strands",
     "cost-crowd"
-   ]
+   ],
+   "period_frames": 300
   },
   {
    "name": "groom participation in every cost window",
@@ -280,7 +276,8 @@
     "cost-rt",
     "cost-strands",
     "cost-crowd"
-   ]
+   ],
+   "period_frames": 300
   },
   {
    "name": "rt passes GPU cost: a complete diagnostic-free sample in every cost window",
@@ -328,7 +325,13 @@
    "min": 1,
    "windows": [
     "cost-crowd"
-   ]
+   ],
+   "period_frames": 300
   }
- ]
+ ],
+ "window_mode": "visible_unfocused_fg",
+ "live_flow": {
+  "settings_latency_s": 1,
+  "trace_stall_s": 1
+ }
 }

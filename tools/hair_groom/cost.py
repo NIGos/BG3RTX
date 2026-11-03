@@ -30,19 +30,23 @@ PRIMARY_POINT_BYTES = 8 + 12                # rt_hair_groom_primary: point UV, p
 
 
 def lods_of(path):
-    """[(keep, points, segments)] from the file's LOD headers (common/hair_groom_asset.h layout)."""
-    b = Path(path).read_bytes()
-    if b[:4] != b"HGRM":
-        raise ValueError(f"{path}: not a groom file")
-    version, _, _, _, indices, lods, _ = struct.unpack_from("<IQQIIII", b, 4)
-    at = 40 + (32 * 8 if version == 2 else 0)
-    out = []
-    for _ in range(lods):
-        keep, points, segments, _ = struct.unpack_from("<fIII", b, at)
-        out.append((keep, points, segments))
-        at += 16 + points * 17 + segments * 4
-    if at != len(b):
-        raise ValueError(f"{path}: {len(b) - at} trailing bytes")
+    """[(keep, points, segments)] from the file's LOD headers (common/hair_groom_asset.h layout). Reads only the
+    headers (the arrays are skipped by their sizes; the file size must end exactly after the last LOD)."""
+    size = Path(path).stat().st_size
+    with open(path, "rb") as f:
+        head = f.read(40)
+        if head[:4] != b"HGRM" or len(head) < 40:
+            raise ValueError(f"{path}: not a groom file")
+        version, _, _, _, indices, lods, _ = struct.unpack_from("<IQQIIII", head, 4)
+        at = 40 + (32 * 8 if version == 2 else 0)
+        out = []
+        for _ in range(lods):
+            f.seek(at)
+            keep, points, segments, _ = struct.unpack("<fIII", f.read(16))
+            out.append((keep, points, segments))
+            at += 16 + points * 17 + segments * 4
+    if at != size:
+        raise ValueError(f"{path}: {size - at} trailing bytes")
     return indices, out
 
 

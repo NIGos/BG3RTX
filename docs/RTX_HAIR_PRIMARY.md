@@ -78,10 +78,21 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 `python -m tools.hair_groom.cost --crowd`: per groom file and LOD the mesh-pool arrays, the per-instance memory
 (points, primary UV and previous points, compacted BLAS at 70 B per segment), refit ms and trace ms per 100k hair
 rays, from the RTX 5090 bench constants (Shadowheart 2 mm: BLAS 60 MB, refit 0.10 ms per 857k segments; shadow
-rays 0.25 / 0.19 / 0.17 ns at LOD 0 / 1/2 / 1/4). 53 converted styles (batch in progress): LOD 0 segments median
-504k (93k-2.15M), instance memory median 53 MB (10-227 MB), static arrays median 13 MB, refit median 0.06 ms.
-Scenario (2 close, 4 mid, 8 far characters, median style, primary + shadow ray per hair pixel): 0.77 ms and
-320 MB at screen-size LODs. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+rays 0.25 / 0.19 / 0.17 ns at LOD 0 / 1/2 / 1/4). 527 converted styles: LOD 0 segments median 541k
+(33k-3.08M), instance memory median 57 MB (3-322 MB), static arrays median 14 MB (1-78 MB), refit median 0.06 ms
+(max 0.36 ms). Scenario (2 close, 4 mid, 8 far characters, median style, primary + shadow ray per hair pixel):
+0.80 ms and 343 MB at screen-size LODs (3.26 M segments: a 3500 k budget does not bind, 1800 k does).
+
+Coverage (tools.hair_groom.batch, 2026-11-03, 1217 LOD0/LOD1 CHAR_Hair meshes, 4 jobs, 1 h 52 min, 22 s CPU per
+style; report captures/hair_groom_batch/summary.md): 519 pass (written), 553 needs review (not written), 145 reject.
+LOD 0 meshes: 465 / 296 / 106; LOD 1 meshes: 54 / 257 / 39 (the LOD 1 cards are coarser: IoU and coverage drift).
+Min-view silhouette IoU median: pass 0.94 (p10 0.90), review 0.91, reject 0.70. Rejects, first reason: silhouette
+IoU 74, root channel not along the atlas rows 48, a zero or invalid radius in a thinned LOD 22 (follow-up), one
+converter IndexError. Review, first reason: mirrored UV triangles 203, coverage delta 192, mean radiance 72,
+silhouette 25, roots away from the head 50. Written: 517 files, 13.3 GB in data/assetdb/hair_grooms (median
+20.6 MB, max 115 MB; LOD arrays are read from disk on first use). `asset.write` now checks every LOD before it
+creates the file: the 22 radius rejects of this run left header-only stubs (296 B), which the layer ignores and
+logs as malformed. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
