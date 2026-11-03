@@ -1,0 +1,19 @@
+{
+  "status": "READY_FOR_LIVE",
+  "game_launched": false,
+  "catalogue_rows": 40983,
+  "catalogue_binary_bytes": 41956440,
+  "hypothesis": "Ordered UV0 at byte 16 survives native XFB position transformation in 64/88 byte captures. UV is only a candidate; full ordered SHA-256 gates publication.",
+  "predicted": {
+    "loader_rows": 40983,
+    "uv_attempts": null,
+    "uv_unique": null,
+    "exact_material_matches": null,
+    "rejections": "missing/ambiguous/invalid/witness/recipe_cull/inputs_pending logged",
+    "id_equal": null,
+    "id_different": null,
+    "gpu_cost_ms": null,
+    "draw_attempts": ">0 in each ON window"
+  },
+  "result_rule": "A missing loaded/draw-attempts/rejection line is INVALID. Zero UV candidates or full matches is a valid diagnosis, not a quality pass. No shader/ABI changes; no promotion or visual claim."
+}

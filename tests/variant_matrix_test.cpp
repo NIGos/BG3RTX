@@ -33,7 +33,7 @@ static unsigned key_flags(const std::string& k) {
   if (k == "rt_native_scalp" || k == "rt_native_hair") return sv::kScalp;
   if (k == "rt_hair_physical_origin") return sv::kScalp | sv::kHairOrigin;
   if (k == "rt_omm") return sv::kOmm;
-  if (k == "rt_native_tileset") return sv::kTileset;
+  if (k == "rt_native_tileset" || k == "rt_hit_material_paks") return sv::kTileset;
   if (k == "rt_hit_material_instanced") return sv::kHitInstanced;
   if (k == "rt_hit_material_wind_rgb") return sv::kHitInstanced | sv::kHitWindRgb;
   if (k == "gi_far") return sv::kGiFar;
@@ -41,7 +41,7 @@ static unsigned key_flags(const std::string& k) {
 }
 
 // Water traces the OMM reference tuple (ordinary shaders with the host superset
-// AlphaDSL). Tileset remains unsupported; scalp/hair are routed since 2026-11-02.
+// AlphaDSL). Tileset (including pak COLOR rows) and scalp/hair use RT_SPEC_NATIVE.
 static const std::array<const char*, 0> kExpectedWaterSkips{};
 
 int main(int argc, char** argv) {

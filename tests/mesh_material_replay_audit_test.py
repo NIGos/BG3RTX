@@ -2,10 +2,12 @@
 import struct
 import sys
 import unittest
+import tempfile
+import hashlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.mesh_material_replay_audit import POOL_BASE, active_rows, preservation
+from tools.mesh_material_replay_audit import POOL_BASE, active_rows, preservation, pak_geometry
 
 
 class PreservationTest(unittest.TestCase):
@@ -63,6 +65,30 @@ class PreservationTest(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertEqual(result["active_rows_compared"], 0)
         self.assertFalse(result["evaluated_energy_proved"])
+
+    def test_exact_pool_candidate_is_not_a_join_and_hash_is_not_proof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            full = struct.pack('<15f', 0,0,0,0,0, 1,0,0,1,0, 0,1,0,0,1)
+            native = b''.join(full[i:i+12] + b'\0'*4 + full[i+12:i+20] for i in range(0,60,20))
+            (pack/'pool').write_bytes(native)
+            (pack/'manifest.txt').write_text('buffer 1 8 72 pool\n')
+            (pack/'s1b7.bin').write_bytes(struct.pack('<4I', 0, 256|24, 0, 1))
+            corners = pack/'corners'; corners.write_bytes(full)
+            row = dict(material_id='one', full_geometry_cache=str(corners))
+            index = {(3, hashlib.sha256(full).hexdigest()): [row]}
+            result = pak_geometry(pack, index)
+            self.assertEqual(result['unique_candidate'], 1)
+            self.assertEqual(result['proven_joined_rows'], 0)
+            self.assertIsNone(result['joined_coverage_estimate'])
+            index[next(iter(index))].append(dict(row, material_id='two'))
+            self.assertEqual(pak_geometry(pack, index)['ambiguous'], 1)
+            index[next(iter(index))][1] = dict(row, color_layout=1, color_sha256='different native colors')
+            self.assertEqual(pak_geometry(pack, index)['ambiguous'], 1)
+            corners.write_bytes(b'changed')
+            self.assertEqual(pak_geometry(pack, index)['missing'], 1)
+            (pack/'s1b7.bin').write_bytes(struct.pack('<4I', 0, 256|16, 0, 1))
+            self.assertEqual(pak_geometry(pack, index)['no_uv'], 1)
 
 
 if __name__ == "__main__":

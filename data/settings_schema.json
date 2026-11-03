@@ -501,6 +501,18 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": [], "keys": {"perf_submit_batch": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
+    {"id": "exp_hit_paks", "label": "Pak material coverage",
+     "description": "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+     "apply": "restart", "apply_note": "restart to enable; off is live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt_hit_material": "1", "rt_hit_material_instanced": "1"},
+     "required_from_choice": {"rt_hit_material": 1, "rt_hit_material_instanced": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hit_material_paks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hit_material_paks": "1"}, "needs": {"exp_hidden_surface": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
     {"id": "exp_hit_reference", "label": "Experimental lighting reference",
      "description": "Shows a limited reference using point and spot lights on supported opaque surfaces. Two surfaces adds one indirect bounce; incomplete paths retain direct-only lighting and are counted. Requires Hidden-surface shading at startup. No sunlight, sky, emission or full-scene quality claim. This replaces the display for inspection; it is not a gameplay quality preset.",
      "apply": "live", "apply_note": "live; native materials need startup", "advanced": false, "experimental": true, "developer": true,

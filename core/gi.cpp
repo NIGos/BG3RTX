@@ -1771,7 +1771,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
               g_stats_n, 100.0 * t[47] / px, 100.0 * t[45] / px, 100.0 * t[44] / px, 100.0 * t[46] / px,
               100.0 * t[40] / px, 100.0 * t[41] / tr, 100.0 * t[42] / tr, 100.0 * t[43] / tr);
   }
-  if(host->cfg_int("rt_native_tileset",0) && host->cfg_int("rt_hit_material",0))
+  if(bg3::native_tileset::requested(host->cfg_int("rt_native_tileset",0)!=0,host->cfg_int("rt_hit_material_paks",0)!=0) && host->cfg_int("rt_hit_material",0))
     host->log("hit material tileset (%u frames): qualified family2 %llu; native primary matches %llu",g_stats_n,
       (unsigned long long)t[bg3::transport::NtsStatQualified],(unsigned long long)t[bg3::transport::NtsStatPrimaryMatch]);
   if(t[282])host->log("GI hit direct (%u frames): candidates %llu qualified %llu direct supported %llu nonzero %llu; added weighted luminance sum %.7f; fallback0 ambient occlusion unchanged; supported zero: no positive light term %llu, all occluded %llu; non-finite hit terms (fallback0) %llu, bounce over the half-float max (stored 65504) %llu px",g_stats_n,t[282],t[283],t[284],t[285],double(t[286])/8192.0,t[134],t[135],t[kGiHitNfFirst],t[kGiHitNfFirst+1]);
