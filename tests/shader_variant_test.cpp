@@ -92,6 +92,13 @@ int main(int argc, char** argv) {
     CHECK(off == base && on != off && on < kPipelineSlots);
   }
   CHECK(hair_gi_cull_slot("gi/rt_shadow.hlsl", true) == 0u);
+  // rt_hair_groom (constant 1020): its own slot bit above every other, on every gi/ file only.
+  CHECK(kSpecIdHairGroom == 1020);
+  for (unsigned base = 0; base < kHairGroomSlot; ++base) {
+    const auto on = base | hair_groom_slot("gi/rt_shadow.hlsl", true);
+    CHECK((base | hair_groom_slot("gi/rt_shadow.hlsl", false)) == base && on != base && on < kPipelineSlots);
+  }
+  CHECK(hair_groom_slot("rt/water_reflect.hlsl", true) == 0u);
   CHECK(hair_gi_cull_entry("gi/gi_trace_rt.hlsl"));
   CHECK(hair_gi_cull_entry("gi/gi_trace_rt_sharc_hit_sun_em.hlsl"));
   CHECK(!hair_gi_cull_entry("gi/gi_trace.hlsl"));

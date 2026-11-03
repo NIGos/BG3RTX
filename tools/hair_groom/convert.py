@@ -11,11 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.sparse.csgraph import connected_components
-from scipy.spatial import cKDTree
-
-from . import strands2d
+from . import geom, strands2d
 
 EPS = 1e-4
 
@@ -44,10 +40,7 @@ class Groom:
 
 def cards(tris, vertex_count):
     """Card index per triangle: connected components over shared vertices."""
-    rows = np.r_[tris[:, 0], tris[:, 1], tris[:, 2]]
-    cols = np.r_[tris[:, 1], tris[:, 2], tris[:, 0]]
-    graph = coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(vertex_count, vertex_count))
-    count, label = connected_components(graph, directed=False)
+    count, label = geom.connected_components(tris, vertex_count)
     return count, label[tris[:, 0]]
 
 
@@ -236,7 +229,7 @@ def dedupe(groom, distance=0.0005, share=0.8):
     same painted strands put the same fibre twice in one place; the lower strand index is kept.
     Returns (groom, dropped strand count)."""
     strand_of = np.repeat(np.arange(groom.strands), np.diff(groom.offsets))
-    pairs = cKDTree(groom.points).query_pairs(distance, output_type="ndarray")
+    pairs = geom.pairs_within(groom.points, distance)
     pairs = np.concatenate([pairs, pairs[:, ::-1]])
     a, b = strand_of[pairs[:, 0]], strand_of[pairs[:, 1]]
     other_card = groom.card[a] != groom.card[b]

@@ -43,6 +43,8 @@ enum SpecId : unsigned {
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
   kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
   kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
+  // 1018 rt_hair_cheap, 1019 rt_hair_gi_mean: reserved by branch hair-cost2 (next bundle).
+  kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
 // compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
@@ -51,9 +53,15 @@ enum SpecId : unsigned {
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
 inline bool hair_gi_cull_entry(const char* file) { return std::strncmp(file, "gi/gi_trace_rt", 14) == 0; }
 // Separate installed slots preserve both warmed cull states during same-run A/B.
-inline constexpr unsigned kHairGiCullSlot = 256u, kPipelineSlots = 512u;
+// kHairCheapSlot 512 and kHairGiMeanSlot 1024: branch hair-cost2 (next bundle); kPipelineSlots bounds the index.
+inline constexpr unsigned kHairGiCullSlot = 256u, kHairGroomSlot = 2048u, kPipelineSlots = 4096u;
 inline unsigned hair_gi_cull_slot(const char* file, bool enabled) {
   return hair_gi_cull_entry(file) && enabled ? kHairGiCullSlot : 0u;
+}
+// rt_hair_groom (constant 1020 on every gi/ file): its own installed slots, so a live A/B toggles between two
+// warmed pipelines instead of rebuilding (a pass waiting for its build is skipped).
+inline unsigned hair_groom_slot(const char* file, bool enabled) {
+  return std::strncmp(file, "gi/", 3) == 0 && enabled ? kHairGroomSlot : 0u;
 }
 inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 

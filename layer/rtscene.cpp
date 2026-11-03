@@ -27,6 +27,7 @@
 #include "host.h"
 #include "hit_material.h"
 #include "omm_backend.h"
+#include "hair_groom.h"
 #include "omm_submit.h"
 #include "../common/omm_scene_capability.h"
 #include "omm_content.h"
@@ -708,6 +709,7 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
   else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
   next = omm::device_features(id, phys, next, g_ext_names);
+  next = hair_groom::device_features(id, phys, next, g_ext_names);
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
   g_f_rq.rayQuery = VK_TRUE;
   g_f_rq.pNext = const_cast<void*>(next);
@@ -1109,6 +1111,9 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.camera = cap.ubo;
     ab.camera_offset = cap.ubo_offset;
     ab.reference_tlas=res.tlas;
+    ab.groom_tlas = res.groom_tlas;
+    ab.groom_count = res.groom_count;
+    ab.groom_first = res.groom_first;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
     restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);

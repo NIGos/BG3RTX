@@ -41,6 +41,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/sun_scene.cpp
   layer/omm_backend.cpp
+  layer/hair_groom.cpp
   layer/omm_submit.cpp
   layer/omm_content.cpp
   layer/omm_sampler.cpp

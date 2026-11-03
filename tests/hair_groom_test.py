@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, bench_data, convert, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, bench_data, convert, geom, mesh, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -201,6 +201,17 @@ def test_asset():
     check("asset LODs thin", sizes[0][1] > sizes[1][1] > sizes[2][1], sizes)
 
 
+def test_geom():
+    count, label = geom.connected_components(np.array([[0, 1, 2], [2, 3, 4], [5, 6, 7]]), 9)
+    check("components", count == 3 and len(set(label[:5])) == 1 and label[5] == label[7] != label[0] and label[8] not in label[:8])
+    rng = np.random.default_rng(3)
+    pts = rng.random((400, 3)) * 0.01
+    got = {tuple(sorted(x)) for x in geom.pairs_within(pts, 0.001).tolist()}
+    d = np.linalg.norm(pts[:, None] - pts[None], axis=2)
+    want = {(i, j) for i, j in zip(*np.nonzero(d < 0.001)) if i < j}
+    check("pairs within distance = brute force", got == want and len(want) > 10, (len(got), len(want)))
+
+
 def test_locate_overlap():
     uv = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], np.float32)
     tris = np.array([[0, 1, 2], [0, 1, 2]])  # the same UV triangle twice: an overlap
@@ -284,7 +295,7 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

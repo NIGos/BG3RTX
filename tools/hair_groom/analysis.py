@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.spatial import cKDTree
+from .geom import pairs_within
 
 # Bytes per element of a GPU layout (assumptions stated in the doc).
 LSS_POINT = 16          # float3 position + float radius
@@ -46,8 +46,7 @@ def layered_duplicates(groom, distance=0.0005):
     (layered cards that repeat or touch the same strands)."""
     strand_of = np.repeat(np.arange(groom.strands), np.diff(groom.offsets))
     card_of_point = groom.card[strand_of]
-    tree = cKDTree(groom.points)
-    pairs = tree.query_pairs(distance, output_type="ndarray")
+    pairs = pairs_within(groom.points, distance)
     other = pairs[card_of_point[pairs[:, 0]] != card_of_point[pairs[:, 1]]]
     touched = np.zeros(len(groom.points), bool)
     touched[other.ravel()] = True

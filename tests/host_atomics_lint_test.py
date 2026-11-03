@@ -73,6 +73,9 @@ ATOMIC_TARGETS = {
     "shaders/rt/hair_bounds.hlsl:Status": [
         ("layer/alphatest.cpp", "VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)",
          H, "g_stamp_buf slot (alpha_hair_build_status)")],
+    "shaders/rt/hair_groom_update.hlsl:Pool": [
+        ("layer/bvhsplit.cpp", "VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |",
+         D, "g_pool (the mesh pool; rt_hair_groom bounds, group-reduced, copied to the groom readback)")],
     "shaders/rt/mesh_extract.hlsl:Status": [
         ("layer/bvhsplit.cpp", 'VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "split status");',
          H, "g_status (DEVICE_LOCAL|HOST_VISIBLE tried first)")],

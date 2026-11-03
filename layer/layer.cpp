@@ -8,6 +8,7 @@
 #include "../common/submit_batch.h"
 #include "omm_submit.h"
 #include "omm_backend.h"
+#include "hair_groom.h"
 #include "omm_content.h"
 #include "hit_material_submit.h"
 #include "hit_material.h"
@@ -237,6 +238,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     sl_scratch = sl_device_pre(id, phys, use_ci, patched);
     r = create(phys, &patched, alloc, out);
   }
+  if (r != VK_SUCCESS && rt_on && hair_groom::device_requested()) {
+    log("[layer] optional linear swept spheres device request failed (%d); retrying without (card hair path)", r);
+    sl_device_post(sl_scratch, nullptr, r);
+    rt_device_features_undo();
+    hair_groom::disable_device_request();
+    rt_use = rt_device_create_info(id, phys, geo_use, &rt_ci);
+    rt_on = rt_use != geo_use;
+    use_ci = rt_use;
+    sl_scratch = sl_device_pre(id, phys, use_ci, patched);
+    r = create(phys, &patched, alloc, out);
+  }
   if (r != VK_SUCCESS && rt_on && omm::device_requested()) {
     log("[layer] optional EXT opacity micromap device request failed (%d); retrying ordinary RT",r);
     sl_device_post(sl_scratch,nullptr,r);
@@ -333,6 +345,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
   if (dd == g_main) {
     geo_device_created(dd, geo_use != ci_orig);
     rt_device_created(dd, rt_on);
+    hair_groom::device_created(dd, rt_on);
     fault_device_created(dd, rt_on && fault_on);
     if (rt_on && rt_enabled()) alpha_device_created(dd);
     if (rt_on && rt_enabled()) bvh_device_created(dd);

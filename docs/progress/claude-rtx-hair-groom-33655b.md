@@ -18,3 +18,13 @@
 - Optimisation sweep: 2 mm segments + BLAS compaction (60 MB, -17%) is the near setting; LOD by strand
   thinning (radius widened) 1/2: trace -22% (0.71/0.62/1.03 ms), 1/4: 0.63/0.61/0.92 ms, IoU 0.91/0.89.
   ALLOW_UPDATE costs ~15% trace but refit (0.1 ms) beats rebuild (1.3 ms); end caps NONE gains 0..3%: kept CHAINED.
+
+## rt_hair_groom integration prototype (branch claude/rtx-hair-groom-33655b, READY_FOR_LIVE, key off, 2026-11-03)
+- Key `rt_hair_groom` (on at startup for VK_NV_ray_tracing_linear_swept_spheres, then live A/B; Developer GUI).
+  Matched native hair draws (index-only content ID -> data/assetdb/hair_grooms/<id>.hgrm, generated locally by
+  `python -m tools.hair_groom.asset`) get strand points (rt/hair_groom_update.hlsl from the captured card triangles),
+  a compacted LSS BLAS with refit and screen-size LOD, and a groom TLAS per scene slot traced by the secondary
+  queries (constant 1020); the card stays for primary queries. No ABI bump: TLAS address via scene stamp 48..63.
+- Offline: build and all CTests pass (+ hair_groom_asset_test); key-off identity in the commit notes.
+- Live job (not queued): tools/live_batches/hair_groom (camp + Test Dialogue1, groom off/on shots, cost
+  off/groom/off/no-hair), predicted.json committed. Gate: groom instances > 0 in groom-on windows.

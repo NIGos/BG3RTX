@@ -2,6 +2,7 @@
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
 #include "mesh_content_id.h"
+#include "hair_groom.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -84,6 +85,7 @@ void bvh_cpu_mark(int phase) {   // phase -1 closes the build
 
 constexpr uint32_t kInfoPool = 1u << 8, kInfoLegacy = 1u << 9, kInfoAlpha = 1u << 10;   // rt_common.hlsli
 constexpr uint32_t kInfoHairProcedural = 1u << 12;
+constexpr uint32_t kInfoGroomReplaced = 1u << 13;   // rt_hair_groom: the card of a groom instance (rt_common.hlsli)
 // rt_primary_fade_class (diagnostics): the draw's camera-occlusion fade cut is enabled
 // (gi/pan_primary.hlsl RT_PRIMARY_FADE). Set only with the key on; no ray reads it otherwise.
 constexpr uint32_t kInfoCameraFade = 1u << 14;
@@ -421,6 +423,22 @@ struct HairBoundsPush {
   uint32_t stride,camera,bounded,pad;
 };
 static_assert(sizeof(HairBoundsPush)==112);
+// rt_hair_groom: the strand groom of a per-draw slot's matched hair draw (groom_decide).
+constexpr uint32_t kGroomMax = 64;     // groom instances per scene (one per matched hair draw)
+constexpr uint32_t kGroomLods = 4;
+struct GroomSlot {
+  uint64_t id = 0;
+  int lod = -1, lod_votes = 0;
+  VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
+  AsAlloc as;
+  VkDeviceSize build_scratch = 0, update_scratch = 0;
+  bool built = false;          // the BLAS holds a full build of this LOD
+  uint64_t rec = 0;            // build record of its last build/refit (refit once that was submitted)
+  Buf readback;                // host-visible: bounds (24 bytes) and the compacted size (at 32)
+  int compact = 0;             // 0 none, 1 size queried (query, query_frame), 2 compacted
+  uint32_t query = 0;
+  uint64_t query_frame = 0;
+};
 struct DynSlot {
   AsAlloc as;
   uint32_t prims = 0, cap_prims = 0;
@@ -441,6 +459,7 @@ struct DynSlot {
   // rt_omm_dyn: the micro-map its BLAS was built with (0 none) and its per-triangle index range in the pool.
   uint64_t omm_ticket = 0;
   VkDeviceSize omm_index_off = 0, omm_index_size = 0;
+  std::shared_ptr<GroomSlot> groom;   // rt_hair_groom
 };
 std::unordered_map<uint64_t, DynSlot> g_dyn;
 // rt_cascade_casters: the BLAS of last frame's cascade-only soup, a new one every build (the
@@ -456,6 +475,8 @@ uint64_t g_hold_why[7] = {};
 // ---- this capture's draws ----
 struct FrameDraw {
   uint64_t content_id = 0;
+  uint64_t groom_id = 0;        // rt_hair_groom: the groom file joined to this draw's index range (0 none)
+  uint32_t groom_indices = 0;
   std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
@@ -751,6 +772,236 @@ bool ensure_hair_pipeline() {
   VkPipeline pipe{};const auto result=vk.CreateComputePipelines(g_dd->device,VK_NULL_HANDLE,1,&ci,nullptr,&pipe);
   vk.DestroyShaderModule(g_dd->device,module,nullptr);if(result!=VK_SUCCESS)return false;
   defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_pipe));g_hair_pipe=pipe;g_hair_gen=blob.generation;return true;
+}
+
+
+// ---- rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md) ----
+// A matched native hair draw also gets its strand groom: points moved each frame from the draw's soup triangles
+// (rt/hair_groom_update.hlsl), an opaque linear swept sphere BLAS (refit; compacted after its first build) and an
+// instance in the scene slot's groom TLAS, which only the secondary ray queries trace (rt_common.hlsli). The groom
+// files' arrays are uploaded once into the mesh pool, never repacked while native hair is on (pool_repack_begin).
+bool g_groom_on = false;                 // this capture: device feature, rt_hair_groom and native hair
+std::unordered_map<uint64_t, uint64_t> g_groom_join;   // draw identity (index range) -> groom index id (0: none)
+struct GroomAsset {
+  struct Lod { VkDeviceSize tri = 0, bary = 0, radius = 0, seg = 0, segtri = 0; uint32_t points = 0, segments = 0; float keep = 1; };
+  std::vector<Lod> lods;
+  uint32_t indices = 0;
+  bool ready = false, failed = false;
+};
+std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
+struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
+std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
+VkDescriptorSetLayout g_groom_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_groom_pl = VK_NULL_HANDLE;
+VkPipeline g_groom_pipe = VK_NULL_HANDLE;
+uint64_t g_groom_gen = 0;
+VkQueryPool g_groom_qp = VK_NULL_HANDLE;
+std::vector<uint32_t> g_groom_free_queries;
+TlasSlot g_groom_tlas[kSceneSlots];
+Buf g_groom_inst[kSceneSlots];
+Buf g_groom_scratch;
+struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, pad; };
+static_assert(sizeof(GroomPush) == 32);
+struct GroomStats { uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0; uint32_t lod[kGroomLods] = {}; } g_groom_st;
+std::unordered_set<uint32_t> g_groom_logged_counts;
+
+bool ensure_groom_pipeline() {
+  Bg3ShaderBlob blob{};
+  if (!shader_get("rt/hair_groom_update.hlsl", "main", "cs_6_6", &blob)) return false;
+  if (g_groom_pipe && g_groom_gen == blob.generation) return true;
+  auto& vk = g_dd->vk;
+  if (!g_groom_dsl) {
+    VkDescriptorSetLayoutBinding b[2];
+    for (uint32_t i = 0; i < 2; ++i) b[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR; ci.bindingCount = 2; ci.pBindings = b;
+    if (vk.CreateDescriptorSetLayout(g_dd->device, &ci, nullptr, &g_groom_dsl) != VK_SUCCESS) return false;
+    VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(GroomPush)};
+    VkPipelineLayoutCreateInfo pc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pc.setLayoutCount = 1; pc.pSetLayouts = &g_groom_dsl; pc.pushConstantRangeCount = 1; pc.pPushConstantRanges = &range;
+    if (vk.CreatePipelineLayout(g_dd->device, &pc, nullptr, &g_groom_pl) != VK_SUCCESS) return false;
+  }
+  if (!g_groom_qp) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR;
+    qi.queryCount = kGroomMax;
+    if (vk.CreateQueryPool(g_dd->device, &qi, nullptr, &g_groom_qp) != VK_SUCCESS) return false;
+    for (uint32_t q = kGroomMax; q-- > 0;) g_groom_free_queries.push_back(q);
+  }
+  VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
+  VkShaderModule module{};
+  if (vk.CreateShaderModule(g_dd->device, &mi, nullptr, &module) != VK_SUCCESS) return false;
+  VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"};
+  ci.layout = g_groom_pl;
+  VkPipeline pipe{};
+  const auto result = vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &pipe);
+  vk.DestroyShaderModule(g_dd->device, module, nullptr);
+  if (result != VK_SUCCESS) return false;
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_groom_pipe));
+  g_groom_pipe = pipe; g_groom_gen = blob.generation;
+  return true;
+}
+
+void groom_release(GroomSlot& g, uint64_t now) {
+  if (g.pos_size) g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+  as_destroy(g.as);
+  if (g.readback.b) free_buf(g.readback);
+  if (g.compact == 1) g_groom_free_queries.push_back(g.query);
+  g = GroomSlot{};
+}
+
+// The groom's arrays in the mesh pool (uploaded by this build's GPU section); nullptr when the file is
+// missing or malformed (never retried) or the pool cannot take it now (retried next frame).
+const GroomAsset* groom_asset(VkCommandBuffer cmd, uint64_t id, uint32_t indices) {
+  GroomAsset& a = g_groom_assets[id];
+  if (a.failed) return nullptr;
+  if (a.ready) return a.indices == indices ? &a : nullptr;
+  const hair_groom::Loaded* src = hair_groom::find(id, indices);
+  if (!src) { a.failed = true; return nullptr; }
+  auto up = [](VkDeviceSize v) { return (v + 15) / 16 * 16; };
+  VkDeviceSize total = 0;
+  a.lods.clear();
+  for (const auto& l : src->asset.lods) {
+    GroomAsset::Lod d;
+    d.points = l.points; d.segments = l.segments; d.keep = l.keep;
+    d.tri = total; total += up(VkDeviceSize(l.points) * 4);
+    d.bary = total; total += up(VkDeviceSize(l.points) * 8);
+    d.radius = total; total += up(VkDeviceSize(l.points) * 4);
+    d.seg = total; total += up(VkDeviceSize(l.segments) * 4);
+    d.segtri = total; total += up(VkDeviceSize(l.segments) * 4);
+    a.lods.push_back(d);
+    if (a.lods.size() == kGroomLods) break;
+  }
+  VkDeviceSize base = 0;
+  if (!pool_alloc(cmd, total, &base)) return nullptr;
+  GroomUpload u{};
+  if (!make_buf(u.staging, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "hair groom upload")) {
+    g_pending_free.push_back({frame_index(), -1, base, total});
+    return nullptr;
+  }
+  for (size_t i = 0; i < a.lods.size(); ++i) {
+    const auto& l = src->asset.lods[i];
+    GroomAsset::Lod& d = a.lods[i];
+    std::memcpy(u.staging.map + d.tri, l.triangle, size_t(l.points) * 4);
+    std::memcpy(u.staging.map + d.bary, l.bary, size_t(l.points) * 8);
+    std::memcpy(u.staging.map + d.radius, l.radius, size_t(l.points) * 4);
+    std::memcpy(u.staging.map + d.seg, l.segment, size_t(l.segments) * 4);
+    for (uint32_t s = 0; s < l.segments; ++s) {   // the card triangle of each segment's first point (hit remap)
+      uint32_t first, tri;
+      std::memcpy(&first, l.segment + s, 4);
+      std::memcpy(&tri, l.triangle + first, 4);
+      std::memcpy(u.staging.map + d.segtri + VkDeviceSize(s) * 4, &tri, 4);
+    }
+    d.tri += base; d.bary += base; d.radius += base; d.seg += base; d.segtri += base;
+  }
+  u.dst = base; u.bytes = total;
+  g_groom_uploads.push_back(u);
+  a.indices = indices;
+  a.ready = true;
+  log("[hair groom] %016llx uploaded: %zu LODs, %.1f MB in the mesh pool at %llu", (unsigned long long)id, a.lods.size(),
+      double(total) / 1048576.0, (unsigned long long)base);
+  return &a;
+}
+
+VkAccelerationStructureGeometryKHR groom_geometry(const GroomAsset::Lod& l, VkDeviceSize pos_off,
+                                                  VkAccelerationStructureGeometryLinearSweptSpheresDataNV& d) {
+  d = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV};
+  d.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+  d.vertexData.deviceAddress = g_pool.addr + pos_off;
+  d.vertexStride = 12;
+  d.radiusFormat = VK_FORMAT_R32_SFLOAT;
+  d.radiusData.deviceAddress = g_pool.addr + l.radius;
+  d.radiusStride = 4;
+  d.indexType = VK_INDEX_TYPE_UINT32;
+  d.indexData.deviceAddress = g_pool.addr + l.seg;
+  d.indexStride = 4;
+  d.indexingMode = VK_RAY_TRACING_LSS_INDEXING_MODE_SUCCESSIVE_NV;
+  d.endCapsMode = VK_RAY_TRACING_LSS_PRIMITIVE_END_CAPS_MODE_CHAINED_NV;
+  VkAccelerationStructureGeometryKHR g{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+  g.pNext = &d;
+  g.geometryType = VK_GEOMETRY_TYPE_LINEAR_SWEPT_SPHERES_NV;
+  g.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+  return g;
+}
+constexpr VkBuildAccelerationStructureFlagsKHR kGroomFlags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+                                                            VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR |
+                                                            VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+VkAccelerationStructureBuildSizesInfoKHR groom_sizes(const GroomAsset::Lod& l) {
+  VkAccelerationStructureGeometryLinearSweptSpheresDataNV d;
+  VkAccelerationStructureGeometryKHR g = groom_geometry(l, 0, d);
+  VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+  bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+  bi.flags = kGroomFlags;
+  bi.geometryCount = 1;
+  bi.pGeometries = &g;
+  VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &l.segments, &sz);
+  return sz;
+}
+
+// Screen-size LOD from the points' bounds of an earlier frame (camera-relative: |centre| is the distance).
+// The angular size extent / distance picks LOD 0 above 0.09 rad (about a tenth of a 50-degree view), LOD 1
+// above 0.03, LOD 2 (or the last) below; a change needs 30 consecutive frames (no flicker at a threshold).
+int groom_pick_lod(GroomSlot& g, int lods) {
+  int want = g.lod < 0 ? 0 : g.lod;
+  if (g.readback.map && g.lod >= 0) {
+    uint32_t w[6];
+    std::memcpy(w, g.readback.map, sizeof w);
+    float lo[3], hi[3];
+    bool ok = true;
+    for (int c = 0; c < 3; ++c) {
+      auto decode = [](uint32_t u) { u = (u & 0x80000000u) ? (u & 0x7FFFFFFFu) : ~u; float f; std::memcpy(&f, &u, 4); return f; };
+      lo[c] = decode(w[c]); hi[c] = decode(w[3 + c]);
+      ok = ok && std::isfinite(lo[c]) && std::isfinite(hi[c]) && lo[c] <= hi[c];
+    }
+    if (ok) {
+      const float ex = hi[0] - lo[0], ey = hi[1] - lo[1], ez = hi[2] - lo[2];
+      const float cx = (hi[0] + lo[0]) / 2, cy = (hi[1] + lo[1]) / 2, cz = (hi[2] + lo[2]) / 2;
+      const float size = std::sqrt(ex * ex + ey * ey + ez * ez) / (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
+      want = size > 0.09f ? 0 : size > 0.03f ? 1 : 2;
+    }
+  }
+  want = (std::min)(want, lods - 1);
+  if (g.lod < 0) return want;
+  if (want == g.lod) { g.lod_votes = 0; return g.lod; }
+  return ++g.lod_votes >= 30 ? (g.lod_votes = 0, want) : g.lod;
+}
+
+// Reads the index range of an indexed draw from existing host mappings (as content_sample) and returns its groom
+// index id when a groom file has that id and index count; cached per draw identity. 0: none or not host data.
+uint64_t groom_join(const BvhDraw& d, uint64_t identity) {
+  const auto cached = g_groom_join.find(identity);
+  if (cached != g_groom_join.end()) return cached->second;
+  uint64_t id = 0;
+  const CmdState* s = d.s;
+  const uint32_t ib = s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 : s->ib_type == VK_INDEX_TYPE_UINT16 ? 2 : 0;
+  if (ib && d.args.kind == 1 && s->ib) {
+    const uint64_t size = geo_buffer_size(s->ib);
+    const uint64_t offset = s->ib_offset + uint64_t(d.args.first) * ib, bytes = uint64_t(d.args.count) * ib;
+    std::shared_lock lock(tracker().mu);
+    const auto bm = tracker().buffer_mem.find(s->ib);
+    if (bm != tracker().buffer_mem.end() && offset <= size && bytes <= size - offset) {
+      const auto mp = tracker().mapped.find(bm->second.first);
+      const auto range = tracker().mapped_ranges.find(bm->second.first);
+      const uint64_t start = bm->second.second + offset;
+      if (mp != tracker().mapped.end() && range != tracker().mapped_ranges.end() && start >= range->second.first &&
+          start + bytes <= range->second.second) {
+        const uint8_t* p = mp->second + start;
+        const uint64_t candidate = hair_groom::index_content_id([&](uint32_t i) {
+          if (ib == 2) { uint16_t v; std::memcpy(&v, p + uint64_t(i) * 2, 2); return uint32_t(v); }
+          uint32_t v; std::memcpy(&v, p + uint64_t(i) * 4, 4); return v;
+        }, d.args.count);
+        if (hair_groom::find(candidate, d.args.count)) id = candidate;
+        else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64)
+          log("[hair groom] draw with %u indices: index id %016llx has no groom file", d.args.count, (unsigned long long)candidate);
+      }
+    } else if (g_groom_logged_counts.insert(d.args.count).second && g_groom_logged_counts.size() <= 64) {
+      log("[hair groom] draw with %u indices: index buffer not host-mapped, no join", d.args.count);
+    }
+  }
+  g_groom_join[identity] = id;
+  return id;
 }
 
 bool ensure_ring(uint32_t inst, uint32_t mats) {
@@ -1417,7 +1668,11 @@ void bvh_device_destroyed(DeviceData* dd) {
     as_destroy(m.as);
   }
   for(auto& ranges:g_omm_ranges)ranges.clear();
-  for (auto& [k, s] : g_dyn) as_destroy(s.as);
+  for (auto& [k, s] : g_dyn) {
+    as_destroy(s.as);
+    if (s.groom) as_destroy(s.groom->as);
+    if (s.groom && s.groom->readback.b) free_buf(s.groom->readback);
+  }
   as_destroy(g_casc_as);
   for (SunCloneSlot& s : g_sun_clone) {
     for(auto& cascade:s.cascade) as_destroy(cascade);
@@ -1467,6 +1722,20 @@ void bvh_device_destroyed(DeviceData* dd) {
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT,uint64_t(g_hair_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_hair_dsl));
   g_hair_pipe=VK_NULL_HANDLE;g_hair_pl=VK_NULL_HANDLE;g_hair_dsl=VK_NULL_HANDLE;g_hair_gen=0;
+  defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_groom_pipe));
+  defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_groom_pl));
+  defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_groom_dsl));
+  defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_groom_qp));
+  g_groom_pipe = VK_NULL_HANDLE; g_groom_pl = VK_NULL_HANDLE; g_groom_dsl = VK_NULL_HANDLE; g_groom_qp = VK_NULL_HANDLE;
+  g_groom_gen = 0; g_groom_free_queries.clear();
+  for (uint32_t i = 0; i < kSceneSlots; ++i) {
+    if (g_groom_tlas[i].as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(g_groom_tlas[i].as));
+    for (Buf* b : {&g_groom_tlas[i].buf, &g_groom_inst[i]}) if (b->b) free_buf(*b);
+    g_groom_tlas[i] = TlasSlot{};
+  }
+  if (g_groom_scratch.b) free_buf(g_groom_scratch);
+  for (auto& u : g_groom_uploads) if (u.staging.b) free_buf(u.staging);
+  g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear();
   defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, uint64_t(g_pl));
   defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, uint64_t(g_dsl));
   g_compact_qp = VK_NULL_HANDLE;
@@ -1518,6 +1787,7 @@ void bvh_begin_capture(VkCommandBuffer) {
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
   g_capture_all_meshes = cfg_int("rt_mesh_capture", 0) != 0;
+  g_groom_on = cfg_hot(CfgHot::rt_hair_groom) != 0 && hair_groom::lss_enabled() && geo_native_hair_enabled();
 }
 
 BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, uint32_t* mesh_tris) {
@@ -1540,6 +1810,10 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
   dk = mix(dk, d.alpha);
   fd.dyn_key = mix(dk, g_dyn_seen[dk]++);   // the n-th draw with that identity this frame
   fd.omm_key = dk;
+  if (g_groom_on && indexed && d.alpha && hair_groom::count_known(d.args.count)) {
+    fd.groom_id = groom_join(d, dk);
+    fd.groom_indices = d.args.count;
+  }
   if (!d.inst || !d.inst->ok) {
     ++g_st.not_inst_pattern;
     return BVH_CAPTURE;
@@ -1876,7 +2150,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   for (uint32_t i : cached) n_static += g_draws[i].instances;
   const bool casc = cap.cascade_tris && cap.cascade_xfb && cap.cascade_stride >= 12;
   const uint32_t n_inst = n_static + uint32_t(dyn.size()) + (casc ? 1u : 0u);
-  if (!ensure_ring(n_inst, n_mats) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
+  if (!ensure_ring(n_inst + (g_groom_on ? kGroomMax : 0u), n_mats) || !ensure_tlas(slot, (std::max)(n_inst, 1u))) {
     g_failed = true;
     log("[bvh] allocation failed (%u instances); the split is off, the legacy build takes over", n_inst);
     return false;
@@ -1900,6 +2174,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool dyn_refit_ok = cfg_int("rt_dyn_refit", 1) != 0;
   struct HoldCopy { VkDeviceSize src, dst, bytes; };
   std::vector<HoldCopy> hold_copies;
+  // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
+  struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
+                     uint64_t key; uint32_t card = UINT32_MAX; };
+  std::vector<GroomWork> groom_work;
+  std::unordered_map<uint64_t, size_t> groom_of_key;
+  const bool groom_ready = g_groom_on && ensure_groom_pipeline();
   // rt_omm_dyn (live): needs the EXT backend (rt_omm=1 at startup), the alpha test and a transfer-source ring.
   // Bakes of new micro-maps (dispatched after the soup conversion) and this frame's uv checks.
   const bool omm_dyn_on = cfg_int("rt_omm_dyn", 0) != 0 && alpha_test && omm::available_for(g_dd) && g_ring_transfer_source && g_pool.b &&
@@ -2085,6 +2365,68 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       s.hair_push=hp;hair_bounds_work.push_back({hp,false});
     }
     dyn_builds.push_back({&s, fd.soup_off, fd.prims, refit,hp, omm_want, omm_entry ? omm_entry->tris : 0u});
+    // rt_hair_groom: the matched hair draw's groom (its card instance stays for primary queries).
+    const GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
+                                      ? groom_asset(cmd, fd.groom_id, fd.groom_indices) : nullptr;
+    if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
+    if (hair && groom_ready && !fd.groom_id && !s.groom) ++g_groom_st.unmatched;
+    if (!groom_src) {
+      if (s.groom) { groom_release(*s.groom, now); s.groom.reset(); }
+    } else {
+      if (!s.groom || s.groom->id != fd.groom_id) {
+        if (s.groom) groom_release(*s.groom, now);
+        s.groom = std::make_shared<GroomSlot>();
+        s.groom->id = fd.groom_id;
+      }
+      GroomSlot& g = *s.groom;
+      const int lod = groom_pick_lod(g, int(groom_src->lods.size()));
+      const GroomAsset::Lod& l = groom_src->lods[size_t(lod)];
+      GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
+      if (lod != g.lod) {   // a new LOD: new points range and a full build into a new BLAS
+        if (g.pos_size) g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+        as_destroy(g.as);
+        if (g.compact == 1) g_groom_free_queries.push_back(g.query);
+        g.pos_size = 0; g.built = false; g.compact = 0; g.lod = lod;
+      }
+      bool ok = true;
+      if (!g.pos_size) {
+        const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
+        ok = pool_alloc(cmd, pos + 32, &g.pos_off);
+        if (ok) { g.pos_size = pos + 32; g.bounds_off = g.pos_off + pos; }
+      }
+      if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
+      if (ok && !g.as.as) {
+        const auto sz = groom_sizes(l);
+        g.build_scratch = sz.buildScratchSize; g.update_scratch = sz.updateScratchSize;
+        ok = as_create(sz.accelerationStructureSize, g.as, "hair groom BLAS", 1);
+        g.built = false; g.compact = 0;
+      }
+      // Compaction: the size queried after the first build, read once that frame completed on the GPU.
+      if (ok && g.compact == 1 && life_gpu_done() > g.query_frame + 1) {
+        uint64_t size = 0;
+        std::memcpy(&size, g.readback.map + 32, 8);
+        g_groom_free_queries.push_back(g.query);
+        g.compact = 2;
+        AsAlloc c;
+        if (size && size < g.as.size && as_create(size, c, nullptr, 1)) {
+          w.compact_copy = true; w.old = g.as; g.as = c;
+          ++g_groom_st.compacted;
+        }
+      }
+      if (ok) {
+        w.refit = g.built && rec_submitted(g.rec) && dyn_refit_ok;
+        if (!w.refit) g.built = false;   // a full build (also after an unsubmitted one)
+        g.rec = rec;
+        groom_of_key[key] = groom_work.size();
+        groom_work.push_back(w);
+        ++g_groom_st.matched;
+        ++g_groom_st.lod[size_t(lod)];
+        w.refit ? ++g_groom_st.refits : ++g_groom_st.builds;
+      } else {
+        groom_release(g, now);
+        s.groom.reset();
+      }
+    }
     s.rec = rec;
     // Only small draws are snapshotted: BG3's LOD swaps are props of a few hundred to a few
     // thousand triangles, while the terrain/large meshes (up to 131k) were most of the copy cost.
@@ -2221,7 +2563,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     in.accelerationStructureReference = s.as.addr;
     const bool opaque_material=!alpha && !fd.held && fd.material_record>=native_hit::nh_alpha_rows && fd.material_record<native_hit::nh_material_rows;
-    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u),
+    uint32_t groom_bit = 0;
+    if (const auto gw = groom_of_key.find(key); gw != groom_of_key.end() && !fd.held) {
+      groom_work[gw->second].card = n;
+      groom_bit = kInfoGroomReplaced;
+    }
+    const uint32_t inf[4] = {uint32_t(fd.soup_off), (stride & 0xffu) | (fd.held ? kInfoPool | kInfoHeld : 0u) | (alpha ? kInfoAlpha : 0u) | (s.hair?kInfoHairProcedural:0u) | (opaque_material?native_hit::nh_opaque_meta:0u) | (fd.camera_fade?kInfoCameraFade:0u) | groom_bit,
                              alpha ? 16 + fd.rec * kRecBytes : opaque_material?fd.material_record:0u, fd.prims};
     if (fd.camera_fade) camera_fade_marked(1, fd.prims);
     std::memcpy(inst_out + n, &in, sizeof in);
@@ -2348,6 +2695,48 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     dd->vk.CmdDispatch(cmd,work.push.step/128u,1,1);
   }
   if(hair_status)barrier(cmd,kCS,VK_ACCESS_SHADER_WRITE_BIT,kAS|kCS,kRW);
+  if (!groom_work.empty() || !g_groom_uploads.empty()) {
+    // rt_hair_groom: groom arrays into the pool, compacted copies of last builds, then this frame's points.
+    barrier(cmd, kCS | kXfer | kAS, VK_ACCESS_MEMORY_WRITE_BIT, kXfer | kAS, kRW);
+    for (auto& u : g_groom_uploads) {
+      const VkBufferCopy c{0, u.dst, u.bytes};
+      dd->vk.CmdCopyBuffer(cmd, u.staging.b, g_pool.b, 1, &c);
+      free_buf(u.staging);
+    }
+    g_groom_uploads.clear();
+    for (GroomWork& w : groom_work) {
+      if (w.compact_copy) {
+        VkCopyAccelerationStructureInfoKHR cp{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
+        cp.src = w.old.as; cp.dst = w.g->as.as; cp.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
+        dd->vk.CmdCopyAccelerationStructureKHR(cmd, &cp);
+        as_destroy(w.old);
+      }
+      dd->vk.CmdFillBuffer(cmd, g_pool.b, w.g->bounds_off, 12, 0xFFFFFFFFu);
+      dd->vk.CmdFillBuffer(cmd, g_pool.b, w.g->bounds_off + 12, 12, 0u);
+    }
+    barrier(cmd, kXfer | kAS, VK_ACCESS_MEMORY_WRITE_BIT, kCS | kAS, kRW);
+    if (!groom_work.empty()) {
+      const VkDescriptorBufferInfo b[2] = {{cap.xfb, 0, cap.xfb_size}, {g_pool.b, 0, g_pool.size}};
+      VkWriteDescriptorSet wr[2];
+      for (uint32_t i = 0; i < 2; ++i) {
+        wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}; wr[i].dstBinding = i; wr[i].descriptorCount = 1;
+        wr[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; wr[i].pBufferInfo = b + i;
+      }
+      dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pipe);
+      dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pl, 0, 2, wr);
+      for (const GroomWork& w : groom_work) {
+        const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
+                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), 0};
+        dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
+        dd->vk.CmdDispatch(cmd, (w.l->points + 127) / 128, 1, 1);
+      }
+      barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kCS | kXfer, kRW);
+      for (const GroomWork& w : groom_work) {
+        const VkBufferCopy c{w.g->bounds_off, 0, 24};
+        dd->vk.CmdCopyBuffer(cmd, g_pool.b, w.g->readback.b, 1, &c);
+      }
+    }
+  }
   if (!hold_copies.empty()) {
     // Conversion -> copy source; prior frame's shader reads -> snapshot writes.
     barrier(cmd, kCS | kXfer, kRW, kXfer, kRW);
@@ -2487,6 +2876,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   }
 
   bvh_cpu_mark(4);
+  VkDeviceAddress groom_tlas_address = 0;   // rt_hair_groom: this slot's groom TLAS (0: none)
+  uint32_t groom_count = 0;
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
     std::vector<VkAccelerationStructureGeometryKHR> geo;
@@ -2546,6 +2937,22 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       infos.push_back(bi);
       scratch_off.push_back(scratch);
       scratch += ((db.refit ? db.slot->update_scratch : db.slot->build_scratch) + al - 1) / al * al;
+    }
+    std::vector<VkAccelerationStructureGeometryLinearSweptSpheresDataNV> groom_lss(groom_work.size());
+    for (size_t k = 0; k < groom_work.size(); ++k) {
+      GroomWork& w = groom_work[k];
+      geo.push_back(groom_geometry(*w.l, w.g->pos_off, groom_lss[k]));
+      ranges.push_back({w.l->segments, 0, 0, 0});
+      VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+      bi.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+      bi.flags = kGroomFlags;
+      bi.mode = w.refit ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      bi.srcAccelerationStructure = w.refit ? w.g->as.as : VK_NULL_HANDLE;
+      bi.dstAccelerationStructure = w.g->as.as;
+      bi.geometryCount = 1;
+      infos.push_back(bi);
+      scratch_off.push_back(scratch);
+      scratch += ((w.refit ? w.g->update_scratch : w.g->build_scratch) + al - 1) / al * al;
     }
     if (casc_build) {   // rt_cascade_casters: converted in place after last frame's cascade pass
       geo.push_back(tri_geometry(rt_buffer_address(cap.cascade_xfb), cap.cascade_tris, cap.cascade_stride, false));
@@ -2613,6 +3020,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       batch.compact.push_back({mesh_builds[k].key, m.gen, sslot});
     }
     g_compact_next = (g_compact_next + n_cq) % kCompactSlots;
+    for (GroomWork& w : groom_work) {
+      if (w.refit || w.g->compact != 0 || g_groom_free_queries.empty()) continue;
+      w.g->query = g_groom_free_queries.back();
+      g_groom_free_queries.pop_back();
+      dd->vk.CmdResetQueryPool(cmd, g_groom_qp, w.g->query, 1);
+      dd->vk.CmdWriteAccelerationStructuresPropertiesKHR(cmd, 1, &w.g->as.as, VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+                                                         g_groom_qp, w.g->query);
+      dd->vk.CmdCopyQueryPoolResults(cmd, g_groom_qp, w.g->query, 1, w.g->readback.b, 32, 8,
+                                     VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+      w.g->compact = 1;
+      w.g->query_frame = now;
+    }
+    for (GroomWork& w : groom_work) w.g->built = true;
     // All fallible build allocations have succeeded. A recorded relocation
     // must reach g_batches, even if an earlier scratch allocation would fail.
     if (ext.empty() && !n_cq) relocate_cached_blas(cmd, batch);
@@ -2664,6 +3084,56 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     VkAccelerationStructureBuildRangeInfoKHR tr{n, 0, 0, 0};
     const VkAccelerationStructureBuildRangeInfoKHR* trp = &tr;
     dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &tbi, &trp);
+    // rt_hair_groom: the groom TLAS (own scratch: no barrier against the main TLAS build).
+    groom_tlas_address = 0;
+    groom_count = 0;
+    if (!groom_work.empty() && ensure_tlas(slot, kGroomMax, &g_groom_tlas[slot]) &&
+        (g_groom_inst[slot].b || make_buf(g_groom_inst[slot], VkDeviceSize(kGroomMax) * sizeof(VkAccelerationStructureInstanceKHR),
+                                          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, true, "hair groom instances"))) {
+      auto* gi = reinterpret_cast<VkAccelerationStructureInstanceKHR*>(g_groom_inst[slot].map);
+      for (const GroomWork& w : groom_work) {
+        if (w.card == UINT32_MAX) continue;   // its card instance was not written (cannot happen; be safe)
+        VkAccelerationStructureInstanceKHR in{};
+        in.transform.matrix[0][0] = in.transform.matrix[1][1] = in.transform.matrix[2][2] = 1.0f;
+        in.instanceCustomIndex = groom_count;
+        in.mask = 0xFF;
+        in.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR | VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR;
+        in.accelerationStructureReference = w.g->as.addr;
+        std::memcpy(gi + groom_count, &in, sizeof in);
+        // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
+        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
+        std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
+        ++groom_count;
+      }
+      VkAccelerationStructureGeometryKHR gg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+      gg.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+      gg.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+      gg.geometry.instances.data.deviceAddress = g_groom_inst[slot].addr;
+      VkAccelerationStructureBuildGeometryInfoKHR gbi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+      gbi.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+      gbi.flags = kTlasFlags;
+      gbi.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+      gbi.geometryCount = 1;
+      gbi.pGeometries = &gg;
+      gbi.dstAccelerationStructure = g_groom_tlas[slot].as;
+      uint32_t gcap = g_groom_tlas[slot].cap;
+      VkAccelerationStructureBuildSizesInfoKHR gsz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+      dd->vk.GetAccelerationStructureBuildSizesKHR(dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &gbi, &gcap, &gsz);
+      const VkDeviceSize need = gsz.buildScratchSize + al;
+      if (groom_count && (g_groom_scratch.size >= need ||
+                          ((g_groom_scratch.b ? (free_buf(g_groom_scratch), true) : true) &&
+                           make_buf(g_groom_scratch, need, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, "hair groom TLAS scratch")))) {
+        gbi.scratchData.deviceAddress = (g_groom_scratch.addr + al - 1) / al * al;
+        VkAccelerationStructureBuildRangeInfoKHR gr{groom_count, 0, 0, 0};
+        const VkAccelerationStructureBuildRangeInfoKHR* grp = &gr;
+        dd->vk.CmdBuildAccelerationStructuresKHR(cmd, 1, &gbi, &grp);
+        VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+        ai.accelerationStructure = g_groom_tlas[slot].as;
+        groom_tlas_address = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
+      } else {
+        groom_count = 0;
+      }
+    }
   }
   // Preserve the baseline mesh BLAS and TLAS. Material-specific variants are
   // separate, and expose instance ranges for the accelerated scene clone.
@@ -2718,7 +3188,18 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->dynamic_tris = dyn_tris;
   out->info = g_ring.b;
   out->info_off = rbase + g_info_off;
-  out->info_bytes = VkDeviceSize((std::max)(n, 1u)) * 16;
+  out->info_bytes = VkDeviceSize((std::max)(n + groom_count, 1u)) * 16;
+  out->groom_tlas = groom_tlas_address;
+  out->groom_count = groom_count;
+  out->groom_first = n;
+  if (g_groom_on && now % 300 == 0) {
+    log("[hair groom] frame %llu: %u groom instances; last 300 frames: matched %llu (LOD %u/%u/%u), full builds %llu, "
+        "refits %llu, compacted %llu, unmatched hair draws %llu",
+        (unsigned long long)now, groom_count, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
+        g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
+        (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched);
+    g_groom_st = GroomStats{};
+  }
   out->pool = g_pool.b;
   out->pool_bytes = g_pool.size;
   if (cfg_int("rt_vram_compact", 0) || g_pool_snapshots) {
@@ -3411,6 +3892,7 @@ void bvh_on_present() {
         g_pending_free.push_back({now,-1,it->second.hair_bounds_off,it->second.hair_bounds_size});
       if (it->second.omm_index_size)
         g_pending_free.push_back({now, -1, it->second.omm_index_off, it->second.omm_index_size});
+      if (it->second.groom) groom_release(*it->second.groom, now);
       it = g_dyn.erase(it);
     } else {
       ++it;

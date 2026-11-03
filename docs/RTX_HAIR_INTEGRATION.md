@@ -5,6 +5,24 @@ Decision so far: the converted groom replaces the card hair **in secondary rays 
 shadows, AO, GI, reflections). The game's raster cards stay the primary image. Off by default behind
 one key (`rt_hair_groom`, proposed), A/B in one run against the current native hair path.
 
+## Prototype status (2026-11-03, branch claude/rtx-hair-groom-33655b, key off)
+Implemented as below, with three simplifications against the design:
+- No new set-1 binding and no ABI bump: the groom TLAS device address, its instance count and first InstInfo row
+  go into scene stamp bytes 48..63; shaders turn the address into a TLAS with `OpConvertUToAccelerationStructureKHR`
+  (uint2, no Int64; verified in the bench with zero validation errors). Groom rows follow the TLAS's InstInfo rows.
+- The matched card instance is skipped in software in the three secondary queries (InstInfo bit 13 before
+  `hair_intersect`), not by instance mask: masks are shared with the cascade and current-sun passes. Its AABBs are
+  still traversed. A groom hit is reported as a procedural hair hit on the card triangle of the segment (a
+  segment -> triangle table in the mesh pool), so hit material, normals and occluder kind are the card path's.
+- Join by an index-only content ID (`common/hair_groom_asset.h`): hair draws have no host-mapped float3 positions,
+  so `rt_mesh_content_id` v1 is never computed for them. Needs a host-mapped index buffer (logged when not).
+Layer: `layer/hair_groom.cpp` (device feature, groom files), `layer/bvhsplit.cpp` (`groom_*`: pool upload,
+screen-size LOD 0/1/2 with 30-frame hysteresis, `rt/hair_groom_update.hlsl`, LSS BLAS refit, compaction after the
+first build, groom TLAS per scene slot). Shaders: `rt_common.hlsli` constant 1020 (`rt_groom_trace`). Core:
+`core/gi.cpp` constant 1020 on gi/ files with its own pipeline slot (512). Key `rt_hair_groom` (Developer GUI
+"Strand hair in ray-traced lighting"): on at startup for the device feature, then live A/B. Asset:
+`python -m tools.hair_groom.asset`. Live job prepared: `tools/live_batches/hair_groom` (not queued).
+
 ## Why secondary only
 - Primary hair stays the game's (its shading, dither, TAA/DLSS inputs and motion vectors unchanged).
 - Secondary rays are where the card path costs (+2.3..4.5 ms rt, +3.4..6.9 ms GI measured live) and

@@ -1232,6 +1232,12 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const VkDeviceSize stamp_base = VkDeviceSize(slot) * kStampStride;
   if(geo_native_hair_enabled())g_hair_bounds_invalid.fetch_add(g_stamp_map[stamp_base/4+3]);
   g_stamp_map[stamp_base / 4] = g_stamp_gen;
+  // rt_hair_groom (rt_common.hlsli rt_groom_trace): the groom TLAS address, count and first InstInfo row; the
+  // slot is retired, so no pass reads these words while they change. Zero count: no groom.
+  g_stamp_map[stamp_base / 4 + 12] = uint32_t(ab.groom_tlas);
+  g_stamp_map[stamp_base / 4 + 13] = uint32_t(ab.groom_tlas >> 32);
+  g_stamp_map[stamp_base / 4 + 14] = ab.groom_tlas ? ab.groom_count : 0u;
+  g_stamp_map[stamp_base / 4 + 15] = ab.groom_first;
   // Snapshot the very same native UBO used by XFB conversion (rt_primary_epoch). This read
   // is executed on the GPU with the build, not a CPU observation at record time.
   const bool pose_wanted = cfg_int("rt_primary_epoch", 0) != 0;
