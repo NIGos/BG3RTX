@@ -2166,6 +2166,35 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_pool_grew = false;
   pool_repack_begin(cmd, rec, now);
 
+  // Procedural bounds are required for correctness, unlike mesh-cache and
+  // hold uploads. Allocate every current draw's bounds before either optional
+  // user can consume the load burst's remaining pool space.
+  const bool native_pool = geo_native_hair_enabled();
+  const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
+  if (native_pool) {
+    // Equal-key draws can be reordered by the later dynamic sort. Reserve
+    // the maximum of every native recipe, whichever duplicate wins there.
+    std::unordered_map<uint64_t,uint32_t> needed;
+    for (const FrameDraw& fd : g_draws) {
+      if (fd.cached || !fd.captured || !fd.prims) continue;
+      AlphaRec ar{};
+      if (!fd.cap_alpha || fd.rec==kNone || !alpha_native_hair_record(fd.rec,&ar)) continue;
+      auto& prims=needed[fd.dyn_key];prims=(std::max)(prims,fd.prims);
+    }
+    for (const auto& [key,prims] : needed) {
+      DynSlot& s = g_dyn[key];
+      if (s.hair_bounds_size >= VkDeviceSize(prims)*24u+hair_mean_tail) continue;
+      if (s.hair_bounds_size) g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+      s.hair_bounds_size=0;
+      // Mark newly discovered slots for normal expiry even if this scene fails.
+      s.last_used=now;
+      const VkDeviceSize bytes=(VkDeviceSize(prims)+prims/4u)*24u+hair_mean_tail;
+      if (!pool_alloc(cmd,bytes,&s.hair_bounds_off)) return false;
+      s.hair_bounds_size=bytes;
+    }
+  }
+  const VkDeviceSize cache_budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb",2048),64)) << 20;
+
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
   struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; };
@@ -2212,6 +2241,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.created = m.last_used = m.last_audit = now;
       m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
+      // Old LRU policy reacted only after all uploads: one load could allocate
+      // millions of wide vertices while evicted ranges still awaited GPU use.
+      // A declined extraction keeps this draw's captured dynamic BLAS path.
+      if (native_pool && !capture_budget::mesh_cache_admit(g_pool_ra.used,as_bytes(),
+              m.pool_size,sz.accelerationStructureSize,cache_budget)) {
+        ++g_st.budget_deferred;
+        continue;
+      }
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
       if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
@@ -2395,14 +2432,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     }
     // Mean mode needs eight trailing bytes after the active AABBs. Key-off
     // retains the original allocation sizes (the Vulkan AABB stride is 24).
-    const VkDeviceSize hair_mean_tail = cfg_int("rt_hair_gi_mean",0) ? 8u : 0u;
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail){
-      if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
-      s.hair_bounds_size=0;
-      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u+hair_mean_tail;
-      if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
-      s.hair_bounds_size=bytes;
-    }
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u+hair_mean_tail)return false;
     if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
       // procedural sidecar otherwise never expires with the inactive slot LRU.
