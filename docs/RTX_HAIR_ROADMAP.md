@@ -113,6 +113,8 @@ the screen) 0.2-0.6 ms. Gates: offline: PT reference vs shader on a fixture (cov
 A/B cards/strands, edge-flicker metric (temporal variance on hair pixels) lower, character energy within the
 BSDF expectation, RR/FG artefact review (PNG + short float burst), cost < budget the user sets. Deps: 1, 4, 5.
 
+Step 6 design and increments: docs/RTX_HAIR_PRIMARY.md (2026-11-03, started on the user's request).
+
 ## Top 3 next steps
 1. Live run of `hair_groom` (step 1): proves the join, the energy and the real cost.
 2. Batch over all 872 styles on the user's PC (step 2), review the needs-review list; then converter

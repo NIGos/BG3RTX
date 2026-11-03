@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "../common/host_api.h"
+#include "../common/hair_primary.h"
 
 // BG3RTX_DIAGNOSTICS (CMake option, default ON): 0 compiles out diagnostic-only host
 // code (terrain packet dump, pan bursts, rt_order_trace, cpu_timing hook timers, the
@@ -73,7 +74,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, perf_hook_state, rt_hair_groom, Count
+  perf_hitmat_lists, perf_hook_state, rt_hair_groom, rt_hair_groom_primary, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -272,6 +273,7 @@ struct CmdState {
   std::array<VertexBinding, kMaxVertexBindings> vb{};
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
+  uint32_t hp_query = UINT32_MAX;      // rt_hair_groom_primary: the timestamp pair of the swapped draw
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
   // Game images, views and buffers this recording's work (ours or the game's
   // passes our hooks read) references; merged into the lifetime registry at
@@ -901,6 +903,24 @@ void water_note_module(VkShaderModule m, uint64_t hash, const uint32_t* code, si
 void water_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
                           const VkPipeline* out);
 void water_forget_pipeline(VkPipeline p);
+// rt_hair_groom_primary (layer/hair_primary.cpp, docs/RTX_HAIR_PRIMARY.md): strand variants of the static hair
+// pipelines (from the tracker's creation hooks), the draw-time swap (bound before the draw's XFB begins, rebound
+// after it ends) and the per-frame header published after the groom TLAS build.
+void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci);
+void hair_primary_device_destroyed(DeviceData* dd);
+void hair_primary_note_module(VkShaderModule m, uint64_t hash);
+void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
+                                 const VkPipeline* out);
+void hair_primary_forget_pipeline(VkPipeline p);
+bool hair_primary_wanted();
+uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
+bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
+void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, const hair_primary::Row* rows,
+                          const uint64_t* keys, uint32_t count, uint32_t width, uint32_t height, const float* viewport);
+// The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.
+void geo_render_size(uint32_t* width, uint32_t* height);
+void geo_gbuffer_viewport(float out[4]);
 // After the pass, outside it: the captured ranges to camera-relative world (pass camera UBO).
 void water_pass_done(VkCommandBuffer cmd, VkBuffer ubo, VkDeviceSize ubo_off, uint32_t stride,
                      const std::vector<WaterRange>& ranges, uint32_t pass_draws, uint32_t water_draws);

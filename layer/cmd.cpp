@@ -696,9 +696,13 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
                                                  uint32_t fin) {
   CmdState* gs = cmd_state(cmd);
   const bool geo = gs && gs->geo;
+  // rt_hair_groom_primary: the strand variant is bound before the capture's XFB begins (no pipeline bind while
+  // transform feedback is active) and the game's pipeline after it ended.
+  const bool hp = gs && hair_primary_wanted() && hair_primary_swap(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin); } else vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
+  if (hp) hair_primary_unswap(cmd, gs);
   note_draw(cmd, "draw", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 

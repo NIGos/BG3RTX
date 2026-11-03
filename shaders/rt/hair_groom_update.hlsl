@@ -4,9 +4,12 @@
 // live in the mesh pool. A triangle with a non-finite vertex keeps last frame's point (refits stay valid).
 // Also the points' bounds (orderable uints, min xyz then max xyz) for the layer's screen-size LOD; the pool is
 // device-local, the layer copies the six words to a host-visible buffer.
+// rt_hair_groom_primary (uv_off nonzero): also the point's card UV (soup vertex bytes 16..23, the captured UV0),
+// read by the strand G-buffer variant (hair_primary_gbuffer.hlsl); prev_off nonzero: last frame's points are copied
+// there first (the velocity variant's previous positions, camera-relative to last frame's camera).
 [[vk::binding(0, 0)]] ByteAddressBuffer Soup;
 [[vk::binding(1, 0)]] RWByteAddressBuffer Pool;
-struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, pad; };
+struct Push { uint points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad0, pad1, pad2; };
 [[vk::push_constant]] Push pc;
 
 uint orderable(float f) { const uint u = asuint(f); return (u & 0x80000000u) != 0u ? ~u : u | 0x80000000u; }
@@ -20,6 +23,7 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   GroupMemoryBarrierWithGroupSync();
   const uint i = id.x;
   if (i < pc.points) {
+    if (pc.prev_off != 0u) Pool.Store3(pc.prev_off + i * 12u, Pool.Load3(pc.pos_off + i * 12u));
     const uint tri = Pool.Load(pc.tri_off + i * 4u);
     const float2 b = asfloat(Pool.Load2(pc.bary_off + i * 8u));
     float3 v[3];
@@ -31,6 +35,11 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (ok) {
       const float3 p = v[0] * (1.0 - b.x - b.y) + v[1] * b.x + v[2] * b.y;
       Pool.Store3(pc.pos_off + i * 12u, asuint(p));
+      if (pc.uv_off != 0u && pc.stride >= 24u) {
+        float2 t[3];
+        [unroll] for (uint k = 0; k < 3; ++k) t[k] = asfloat(Soup.Load2(pc.soup_base + (3u * tri + k) * pc.stride + 16u));
+        Pool.Store2(pc.uv_off + i * 8u, asuint(t[0] * (1.0 - b.x - b.y) + t[1] * b.x + t[2] * b.y));
+      }
       [unroll] for (uint c = 0; c < 3; ++c) {
         InterlockedMin(gsLo[c], orderable(p[c]));
         InterlockedMax(gsHi[c], orderable(p[c]));

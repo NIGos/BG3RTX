@@ -1,0 +1,29 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). rt_hair_groom_primary A/B with native hair and rt_hair_groom on throughout (hair_groom's startup). Cost = 300-frame 'rt passes' / 'gi' / 'scene build GPU' lines of cost-strands minus mean(cost-cards-a, cost-cards-b), |a - b| its noise, plus the '[hair primary] strand G-buffer draws GPU' line. Energy = float mean of the pre-post scene colour, character ROI by tools/live_batches/dialogue_shadows/char_energy.py, spread = relative std of shot-cards-a/b/c.",
+ "_all": {
+  "participation": {
+   "predicted": "'[hair primary] header at', the G-buffer and velocity pipeline lines (native compare op logged), a pixel record of the render size (2560x1067: 41.7 MB), and in cost-strands 'N grooms published; ... G-buffer and V velocity strand draws' with N, G, V > 0 (5 Shadowheart LOD1 instances in hg-20261103e)",
+   "invalid_if": "no strand draws while on (UNAVAILABLE: shaderInt64 / fragmentStoresAndAtomics / LSS; or no matched draw), or a refused pipeline"
+  },
+  "look": {
+   "predicted": "in shot-strands-a/b Shadowheart's hair is fibres: no ribbon edges or dither; same hue (the native material code at the strand's UV); the shading normal is the fibre's, so highlights run across the strands. Unmatched hair, the scalp and accessories unchanged. Possible failure modes to look for: hair missing (wrong ray: viewport/projection convention), hair offset from the head (camera frame), dark speckles (pixel record race), smearing in motion (velocity)",
+   "judged_by": "the user on the full-resolution PNG pairs"
+  },
+  "cost": {
+   "predicted": "strand G-buffer draws 0.2-0.6 ms per close character (one trace per pixel on the first card fragment, the others read the record; bench 0.25 ns per hair ray, coherent primary rays cheaper); rt passes and gi unchanged within noise (secondary rays already strands); scene build GPU +0.01-0.03 ms (UV and previous-point writes)",
+   "kept_if": "the look is accepted by the user and the strand draw cost is reported"
+  },
+  "energy": {
+   "predicted": "character ROI within +-10% of cards (same material code; coverage now the strands' instead of the dither): direction unknown, reported",
+   "kept_if": "ON >= OFF - spread, or a darker result explained by coverage"
+  },
+  "fibre (rt_hair_fibre, shot-fibre-a vs shot-strands-c, cost-fibre vs cost-strands)": {
+   "predicted": "the strands brighter and warmer than with the game's hair shading: the fibre BSDF with dual scattering is the path-traced hair response (1.01-1.02 x a path-traced fibre slab for the CHAR_Hair colour), forward scattering gives a backlit rim; hair ROI float mean up, by a factor the user judges on the PNG pair. Lights with a game shadow map, box lights and AO-on-direct keep the game's terms. Cost: D-LS ms +0.1-0.4 (one scene ray, one sun ray and up to 8 groom hits per light on strand pixels)",
+   "invalid_if": "no '[hair fibre] strand pixels lit' line in shot-fibre-a and cost-fibre",
+   "kept_if": "the user accepts the look; energy is not gated against key-off (physically brighter by design)"
+  }
+ },
+ "hp1-dialogue1-fg2": {
+  "same_as": "_all"
+ }
+}
