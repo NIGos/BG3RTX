@@ -155,7 +155,7 @@ static void rebuild() {
         c=add(g.body,WC_COMBOBOXW,L"",WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST,KNOB+i);place(c,32,y,w-32,240);
         auto append=[&](int v){int row=int(SendMessageW(c,CB_ADDSTRING,0,LPARAM(choice_label(k,v).c_str())));SendMessageW(c,CB_SETITEMDATA,row,v);if(v==g.st.values[i])SendMessageW(c,CB_SETCURSEL,row,0);};
         if(g.st.values[i]<0)append(-1);
-        for(int ch=0;ch<st::choice_count(k);++ch)if(st::choice_visible(k,ch,g.dev)&&(g.experimental||std::string(st::choice_maturity(k,ch))!="experimental"))append(ch);
+        for(int ch=0;ch<st::choice_count(k);++ch)if(st::choice_visible(k,ch,g.dev)&&(g.experimental||!st::choice_requires_experimental(k,ch)))append(ch);
         if(g.st.values[i]>=0&&SendMessageW(c,CB_GETCURSEL,0,0)==CB_ERR){int row=int(SendMessageW(c,CB_ADDSTRING,0,LPARAM(L"Custom value preserved")));SendMessageW(c,CB_SETITEMDATA,row,-1);SendMessageW(c,CB_SETCURSEL,row,0);}
       } else {
         c=add(g.body,TRACKBAR_CLASSW,L"",WS_TABSTOP|TBS_HORZ|TBS_NOTICKS,KNOB+i);place(c,32,y,w-160,32);
@@ -163,10 +163,10 @@ static void rebuild() {
         SetWindowTextW(c,widen(k.label).c_str());label(g.body,g.st.values[i]<0?L"Custom":g.st.values[i]==0?L"Off":std::to_wstring(g.st.values[i])+L" "+widen(k.slider.unit),w-112,y,112,32);
       }
       y+=48;label(g.body,widen(k.desc),32,y,w-32,72);y+=80;
-      std::wstring badge=L"GPU: "+widen(k.cost.status)+(std::string(k.cost.gpu)=="Unknown"?L"":L" "+widen(k.cost.gpu))+L" | VRAM: "+(std::string(k.cost.vram)=="Unknown"?std::wstring(L"Unknown"):widen(k.cost.status)+L" "+widen(k.cost.vram));
+      std::wstring badge=L"GPU cost: "+(std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured"?std::wstring(L"Not measured"):widen(k.cost.gpu))+L" | VRAM: "+(std::string(k.cost.vram)=="Unknown"?std::wstring(L"Unknown"):widen(k.cost.status)+L" "+widen(k.cost.vram));
       label(g.body,badge,32,y,w-32,48);y+=56;
       auto need=st::unmet_need(k,g.st.values[i],g.st.values);if(need.empty())need=st::unmet_key_need(k,g.st.values[i],effective_settings());
-      label(g.body,widen(st::apply_label(st::knob_apply(k,g.st.values[i]))),32,y,w-32,28,true);y+=36;
+      label(g.body,widen(st::apply_label(st::transition_apply(k,i<int(g.saved.size())?g.saved[i]:-1,g.st.values[i]))),32,y,w-32,28,true);y+=36;
       if(!need.empty()){label(g.body,widen(need),32,y,w-32,48);y+=56;}
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
@@ -238,7 +238,7 @@ static void command(int id,int code,HWND source) {
     if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility or enable Experimental.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
     g.ab_selection.touch(k,c);g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
-  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(st::knob_apply(k,g.st.values[id-DETAILS])))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
+  if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.details)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(st::transition_apply(k,id-DETAILS<int(g.saved.size())?g.saved[id-DETAILS]:-1,g.st.values[id-DETAILS])))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
   if(id==GAME&&code==EN_CHANGE){int n=GetWindowTextLengthW(source);std::wstring t(n+1,L'\0');GetWindowTextW(source,t.data(),n+1);t.resize(n);g.dir=t;footer();return;}
   if(id==PRESET&&code==CBN_SELCHANGE){select_preset(int(SendMessageW(source,CB_GETCURSEL,0,0)));return;}
   if(code!=BN_CLICKED)return;

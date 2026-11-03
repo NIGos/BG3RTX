@@ -33,11 +33,15 @@ def check(what, ok):
 dumps = wa.default_dumps()
 dis, val = wa.tool("spirv-dis"), wa.tool("spirv-val")
 db = ROOT / "data" / "assetdb" / "bg3rtx_assetdb.bin"
+# Match the dump lookup in an isolated worktree; read shared data without adding
+# a junction or silently skipping the FS validation because the local DB is absent.
+if not db.exists() and len(ROOT.parents) > 2:
+    db = ROOT.parents[2] / "data" / "assetdb" / "bg3rtx_assetdb.bin"
 if not dumps or not dis or not val or not db.exists() or not wa.find_dump(dumps, 0x7b44a567771ecbec):
     print(f"water_audit_test: SKIP (dumps {len(dumps)}, spirv-dis {bool(dis)}, spirv-val {bool(val)}, DB {db.exists()})")
     sys.exit(0)
 
-check("water_audit --check", wa.main(["--check"]) == 0)
+check("water_audit --check", wa.main(["--db", str(db), "--check"]) == 0)
 
 _, ids = wa.header_tables()
 check("kFsIds parsed (11 rows)", len(ids) == 11)
@@ -93,8 +97,12 @@ if len(sys.argv) > 1:
         if not wa.find_dump(dumps, fs):
             print(f"no dump of {fs:016x}: its patched modules are not validated")
             continue
-        for kind in ("patched", "patched_sun", "patched_ls", "patched_refr", "patched_sun_gsh", "patched_ls_gsh",
-                     "patched_refr_gsh"):
+        kinds = ["patched", "patched_sun", "patched_ls", "patched_refr", "patched_sun_gsh", "patched_ls_gsh",
+                 "patched_refr_gsh"]
+        if fs == 0xc4e92ccdb08dd777:
+            kinds += ["patched_surface", "patched_surface_sun", "patched_surface_ls", "patched_surface_refr",
+                      "patched_surface_sun_gsh", "patched_surface_ls_gsh", "patched_surface_refr_gsh"]
+        for kind in kinds:
             p = out / f"water_fs_{fs >> 32:08x}_{kind}.spv"
             if not p.exists():
                 check(f"{p.name} written by water_compose_test", False)

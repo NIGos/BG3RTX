@@ -180,6 +180,7 @@ function Wait-LogLine([string]$pattern, [long]$from, [double]$sec) {
   $end = (Get-Date).AddSeconds($sec)
   while ($true) {
     Assert-QueueActive
+    if (Test-SessionFailFast) { return $null }
     $gone = $s.proc.HasExited
     foreach ($line in ((Read-LogText $s.log $from) -split "`r?`n")) {
       $m = [regex]::Match($line, $pattern)
@@ -195,10 +196,34 @@ function Wait-Session([double]$sec) {
   $end = (Get-Date).AddSeconds($sec)
   while ((Get-Date) -lt $end) {
     Assert-QueueActive
+    if (Test-SessionFailFast) { return $false }
     if ($script:sess.proc.HasExited) { return $false }
     Start-Sleep -Milliseconds 250
   }
   -not $script:sess.proc.HasExited
+}
+
+function Test-SessionFailFast {
+  if (-not $script:sessionEvidence -or $script:sessionEvidence.job.fail_fast -eq $false) { return $false }
+  $ctx=$script:sessionEvidence
+  $text=Read-LogText $script:sess.log $ctx.from
+  foreach($pattern in @($ctx.job.forbid | Where-Object { $_ })) {
+    if($text -match $pattern) { $ctx.failure="forbidden log pattern: $pattern"; return $true }
+  }
+  if($ctx.start -and $env:BG3RTX_QUEUE_CONTEXT_FILE -and (Get-Date) -ge $ctx.nextPoll) {
+    $ctx.nextPoll=(Get-Date).AddSeconds(1)
+    $python=if(Get-Command py -ErrorAction SilentlyContinue){'py'}else{'python'}
+    $pythonArgs=@();if($python -eq 'py'){$pythonArgs+='-3'}
+    $guard=Join-Path $PSScriptRoot 'live_guard.py'
+    $elapsed=((Get-Date)-$ctx.start).TotalSeconds.ToString('R',[Globalization.CultureInfo]::InvariantCulture)
+    try {
+      $answer=@(& $python @pythonArgs $guard --context $env:BG3RTX_QUEUE_CONTEXT_FILE --log $script:sess.log --runner ($script:sess.log+'.session-no-plan') --session-elapsed $elapsed --from $ctx.from)
+      if($LASTEXITCODE -ne 0){throw 'live guard failed'}
+      $failure=($answer -join "`n") | ConvertFrom-Json
+      if($failure){$ctx.failure=$failure.check;return $true}
+    } catch { $ctx.failure='fail-fast monitor: '+$_.Exception.Message;return $true }
+  }
+  return $false
 }
 
 # The session's auto.ini with the job's "set" keys replacing or adding lines.
@@ -312,12 +337,14 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   }
   $s.scanPos = Get-LogSize $s.log
   $from = $s.scanPos
+  $script:sessionEvidence=@{job=$job;from=$from;failure=$null;start=$null;nextPoll=[datetime]::MinValue}
   $caps = @()
   $phase = $null
   try {
   if (-not $fault) {
     $set = @($job.set) -join ','
     if (-not (Set-SessionIni (Merge-Ini $s.base $set))) { $fault = "settings not re-read (game not presenting?)" }
+    $script:sessionEvidence.start=Get-Date
   }
   if (-not $fault -and $job.phases) {
     $phase = Start-Process py -ArgumentList "-3", (Join-Args @((Join-Path $tree "scripts\live_phases.py"), (Join-Path $tree $job.phases))), "--offset", $from `
@@ -334,11 +361,16 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
     $dir = $m.Groups[1].Value
     $caps += $dir
     $w = (Get-Date).AddSeconds(30)   # dumps and geometry finish after the log line
-    while (-not (Test-Path (Join-Path $dir "done.txt")) -and (Get-Date) -lt $w) { Start-Sleep -Milliseconds 250 }
+    while (-not (Test-Path (Join-Path $dir "done.txt")) -and (Get-Date) -lt $w) {
+      if (Test-SessionFailFast) { $fault=$script:sessionEvidence.failure; break }
+      Start-Sleep -Milliseconds 250
+    }
     if ($t -lt $traces -and -not (Wait-Session $gap)) { $fault = "game gone between traces" }
   }
   if (-not $fault -and $job.hold -and -not (Wait-Session ([double]$job.hold))) { $fault = "game gone during hold" }
   $to = Get-LogSize $s.log
+  if ($script:sessionEvidence.failure) { $fault=$script:sessionEvidence.failure }
+  $script:sessionEvidence=$null # settings restoration must still wait for its acknowledgement
   if ($phase) { Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue }
   Remove-Item $s.request -ErrorAction SilentlyContinue
   if (-not $s.proc.HasExited -and -not (Set-SessionIni $s.base) -and -not $fault) { $fault = "settings not restored" }
@@ -360,9 +392,11 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
   $tagText = "session $($s.id)#$k, core gen $($s.generation)"
   $outcome = if ($fault) { "Run ended: $fault after ${sec}s ($tagText)" } else { "Run ended: done after ${sec}s ($tagText)" }
   $r = @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
-          session = "$($s.id)#$k"; generation = $s.generation; saved = $(if ($k -gt 1) { $s.readySec } else { 0 }); fault = $fault; completed = -not $fault }
+          session = "$($s.id)#$k"; generation = $s.generation; saved = $(if ($k -gt 1) { $s.readySec } else { 0 }); fault = $fault; completed = -not $fault;
+          failed_check=$fault; failed_phase=-1; slice_failures=@() }
   $r   # after a fault the caller closes the session, once the run is recorded
   } finally {
+    $script:sessionEvidence=$null
     if($phase){Stop-Process -Id $phase.Id -ErrorAction SilentlyContinue}
     if($s.base){[IO.File]::WriteAllText($s.ini,$s.base)}
   }
@@ -451,9 +485,12 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   $completed = -not $cancelled -and $(if ($job.command) { $childExit -eq 0 } else { $outcome -match '^Run ended: done\b' })
   $statusFile = Join-Path $tree 'captures\run-status.json'
   $statusCopy = $null
+  $runStatus = $null
   if ((Test-Path -LiteralPath $statusFile) -and (Get-Item -LiteralPath $statusFile).LastWriteTime -ge $t0) {
     $statusCopy = Join-Path $logs "$name.$i.$($t0.ToString('HHmmss')).status.json"
     Copy-Item -LiteralPath $statusFile -Destination $statusCopy
+    $runStatus = Get-Content -LiteralPath $statusCopy -Raw | ConvertFrom-Json
+    if ($runStatus.PSObject.Properties['completed'] -and -not $runStatus.completed) { $completed = $false }
   }
   $nv = Get-Nv153 $tree $t0
   $log = Get-ChildItem (Join-Path $tree "bg3rtx*.log") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
@@ -473,7 +510,8 @@ function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeo
   }
   @{ outcome = $outcome; nv = $nv; dumps = $dumps; keptLog = $keptLog; captures = $caps; lines = $lines
      session = ""; generation = $null; saved = 0; completed = $completed;
-     runner_missing = $runnerMissing; status = $statusCopy; runner_log = $runnerLog; cancelled=[bool]$cancelled }
+     runner_missing = $runnerMissing; status = $statusCopy; runner_log = $runnerLog; cancelled=[bool]$cancelled;
+     failed_check=$runStatus.failed_check; failed_phase=$runStatus.failed_phase; slice_failures=@($runStatus.slice_failures | Where-Object { $null -ne $_ }) }
 }
 
 function Run-Job($file) {
@@ -580,6 +618,10 @@ function Run-Job($file) {
                        build_changed = ($before -ne $after -or (Get-QueueBuildIdentity $tree) -cne $actualBuild); log = $r.keptLog; captures = $caps; lines = $lines
                        session = $r.session; core_gen = $r.generation; saved_sec = $r.saved;
                        process_status = $r.status; runner_log = $r.runner_log; window_mode=$job.window_mode; candidate_build=$actualBuild; live_batch=$job.live_batch; authorization_session=$PermissionSession }
+    $rec.completed = [bool]$r.completed
+    $rec.failed_check = $r.failed_check
+    $rec.failed_phase = $r.failed_phase
+    $rec.slice_failures = @($r.slice_failures | Where-Object { $null -ne $_ })
     ($rec | ConvertTo-Json -Compress -Depth 4) | Write-Record $jsonl
     $flag = if ($before -ne $after) { " BUILD CHANGED" } else { "" }
     $sessText = if ($r.session) { " session=$($r.session) gen=$($r.generation) saved~$($r.saved)s" } else { "" }
@@ -600,6 +642,40 @@ function Get-InboxDirs {
 }
 
 $script:blockedQueueMessages=@{}
+function Get-QueuePreflightBlock($file, $job) {
+  # Non-plan commands have only their deadline as a bound. A session also needs
+  # its per-run trace waits (60 s write + 30 s completion), gaps and hold.
+  if (@($job.args) -notcontains '-MovePlan') {
+    $seconds=if($job.timeout){[double]$job.timeout}else{300.0}
+    if($job.session -and -not $job.command) {
+      $warmup=if($null -ne $job.warmup){[double]$job.warmup}else{10.0}
+      $traces=if($null -ne $job.traces){[double]$job.traces}else{2.0}
+      $gap=if($null -ne $job.trace_gap){[double]$job.trace_gap}else{8.0}
+      $seconds += $warmup + $traces*90 + [Math]::Max(0,$traces-1)*$gap + [double]$job.hold
+    }
+    $minutes=if($null -ne $job.max_minutes){[double]$job.max_minutes}else{15.0}
+    if([double]::IsNaN($minutes) -or [double]::IsInfinity($minutes) -or $minutes -le 0){return 'live-flow preflight: max_minutes must be finite and positive'}
+    if([double]::IsNaN($seconds) -or [double]::IsInfinity($seconds) -or $seconds -le 0){return 'live-flow preflight: duration must be finite and positive'}
+    if($seconds -gt $minutes*60){return "live-flow preflight: expected duration ${seconds} s exceeds $minutes minutes; split launch or declare max_minutes"}
+    Write-Host "expected duration: at most $seconds s (deadline and session trace/load bounds)"
+    return $null
+  }
+  # MovePlan jobs use the same evidence-backed check as preparation, before
+  # consuming a receipt, and lint the exact plan the child will read.
+  $python = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
+  $pythonArgs = @(); if ($python -eq 'py') { $pythonArgs += '-3' }
+  $lint = Join-Path $PSScriptRoot '..\tools\live_batches\live_flow.py'
+  $eap = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = @(& $python @pythonArgs $lint $file.FullName --preflight --tree (Get-JobTree $job) 2>&1)
+    $exit = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $eap }
+  if ($exit -ne 0) { return 'live-flow preflight: ' + ($output -join ' | ') }
+  foreach ($line in $output) { Write-Host $line }
+  return $null
+}
+
 function Get-NextJob {
   $candidates=@(Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } | Sort-Object LastWriteTime)
   $shown=0
@@ -609,6 +685,7 @@ function Get-NextJob {
       $tree=Get-JobTree $job
       $blocked=Get-QueuePermissionBlock $job $root $tree (Get-QueueBuildIdentity $tree) $PermissionSession $script:permissionRunner
       if(-not $blocked){$blocked=Get-QueueDependencyBlock $job $root (Stamp $tree)}
+      if(-not $blocked){$blocked=Get-QueuePreflightBlock $next $job}
     } catch {$blocked='Invalid queued job: '+$_.Exception.Message}
     if(-not $blocked){return $next}
     # Leave blocked files untouched. At most one message per unchanged reason in

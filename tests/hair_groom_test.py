@@ -1,4 +1,5 @@
 """tools/hair_groom (card -> strand groom experiment) on synthetic cards and masks (CTest hair_groom_test)."""
+import dataclasses
 import json
 import struct
 import sys
@@ -9,7 +10,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, dual, geom, mesh, primary, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -107,6 +108,23 @@ def test_convert():
     check("orientation: root nearer the head", o["strands_reversed"] == 0 and o["strands_decided"] == 1, o)
     o = analysis.orientation(groom, np.array([0.0, -0.3, 0.0]))
     check("orientation: reversed card detected", o["strands_reversed"] == 1 and o["cards_mostly_reversed"] == 1, o)
+    # Mirrored UVs: the same card with u reflected (every UV triangle's winding flips) places the same strand,
+    # reflected across the card, exactly embedded: the embedding does not depend on the UV orientation.
+    mir = card_mesh()
+    mir.uv = np.c_[1 - mir.uv[:, 0], mir.uv[:, 1]].astype(np.float32)
+    gm, rm = convert.convert(mir, m, tile_grid=(1, 1), step=16)
+    emb_m = np.einsum("pk,pkd->pd", gm.bary, mir.positions[mir.tris[gm.triangle]])
+    check("mirrored UV card: same strand, exactly embedded", gm.strands == 1 and np.allclose(emb_m, gm.points, atol=1e-6)
+          and np.allclose(gm.points[:, 1], p[:, 1], atol=1e-6) and np.allclose(gm.radii, groom.radii, rtol=1e-4)
+          and rm["unmapped_samples"] == 0, (gm.strands, rm))
+    # Collapsed card vertices (a triangle without world area: no UV -> world Jacobian, width 0 there): the strand
+    # keeps a positive radius from its measured samples (the layer refuses r <= 0).
+    col = card_mesh()
+    col.positions = col.positions.copy()
+    col.positions[4:6] = col.positions[2:4]   # row 2 onto row 1
+    gc, _ = convert.convert(col, m, tile_grid=(1, 1), step=16)
+    check("collapsed triangle: every radius positive", gc.strands == 1 and np.all(gc.radii > 0) and np.all(np.isfinite(gc.radii)),
+          gc.radii.min() if gc.strands else None)
     # A second identical card on top: every point is a layered duplicate.
     two = card_mesh()
     two.positions = np.concatenate([two.positions, two.positions + [0, 0, 1e-4]]).astype(np.float32)
@@ -186,6 +204,15 @@ def test_asset():
             check("asset never overwrites", False)
         except FileExistsError:
             check("asset never overwrites", True)
+        # A LOD the layer would refuse (a zero radius) raises before the file exists: no header-only stub.
+        bad = [(k, g) for k, g in lods]
+        bad[1] = (bad[1][0], dataclasses.replace(bad[1][1], radii=np.where(np.arange(len(bad[1][1].radii)) == 0, 0.0,
+                                                                         bad[1][1].radii).astype(np.float32)))
+        try:
+            asset.write(Path(d) / "bad.hgrm", 0x1234, card, bad)
+            check("refused LOD writes no file", False)
+        except ValueError:
+            check("refused LOD writes no file", not (Path(d) / "bad.hgrm").exists())
     magic, ver, cid, iid, nv, ni, nl, _ = struct.unpack("<4sIQQ4I", raw[:40])
     check("asset header", (magic, ver, cid, nv, ni, nl) == (b"HGRM", 2, 0x1234, 10, 24, 3) and iid == asset.index_id(card.tris))
     uvs = np.frombuffer(raw, "<f4", 64, 40).reshape(32, 2)
@@ -417,6 +444,15 @@ def test_primary():
             wrong += ok and not mine
     check("ownership: every strand pixel kept by its own card only", owned == hits2.hit.sum() and wrong == 0,
           (owned, wrong, int(hits2.hit.sum())))
+    # Pool bounds (2026-11-03 19:53: a strand read at pool + 0xFA000000 of a 2 GB pool lost the device).
+    pool = 2146435072
+    row = (468596768, 470000000, 476000000, 0)
+    check("pool bound: a valid segment passes", primary.segment_ok(row, 1000, 5000, pool))
+    check("pool bound: the crash's read (i0 * 12 = 3.9 GB past the points) fails closed",
+          not primary.segment_ok(row, 1000, (0xFA000000 - row[0]) // 12, pool))
+    check("pool bound: 64-bit offsets (i0 * 12 wraps in 32 bits)", not primary.segment_ok(row, 1000, 0x15555556, pool)
+          and (row[0] + 0x15555556 * 12) % 2 ** 32 < pool)
+    check("pool bound: a segment index past the pool fails", not primary.segment_ok(row, 0xFFFFFF, 0, 476000000 + 1000))
     s = primary.seal(5 << 24 | 7, 0x3F000000, 0x3F400000, 1234)
     check("pixel seal: changes with any word, never matches a zeroed entry",
           s != primary.seal(4 << 24 | 7, 0x3F000000, 0x3F400000, 1234) and s != primary.seal(5 << 24 | 7, 0, 0x3F400000, 1234)
@@ -483,7 +519,28 @@ def test_dual():
     check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
 
 
-for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_cost():
+    h, w = 256, 64
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 60, 4.0)], 2)
+    m[..., 2] = np.linspace(0, 255, h)[:, None].astype(np.uint8)
+    card = card_mesh()
+    lods = asset.build(card, m)
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "x.hgrm"
+        asset.write(path, 0x1234, card, lods)
+        indices, got = cost.lods_of(path)
+        rows = cost.report(d)
+    want = [(g.points.shape[0], g.segments) for _, g in lods]
+    check("cost: LOD headers give every LOD's points and segments", indices == 24 and [(p, s) for _, p, s in got] == want, (got, want))
+    check("cost: one row per file", len(rows) == 1 and len(rows[0]["lods"]) == len(lods))
+    c = cost.groom_cost(100, cost.BENCH_SEGMENTS, 0)
+    check("cost: the bench groom costs the bench numbers (60 MB BLAS, 0.10 ms refit)",
+          abs(c["refit_ms"] - 0.10) < 1e-9 and abs(c["instance_mb"] - (60.0 + 1200e-6)) < 1e-6, c)
+    check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
+
+
+for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

@@ -426,7 +426,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 12);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading remain.
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
   CHECK(dev == (std::vector<std::string>{"exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
@@ -539,6 +539,26 @@ static void test_gui_levels() {
   CHECK(find_knob("local_shadows")->choices[3].dev);
   CHECK(find_knob("exp_hidden_surface")->apply == Apply::Restart);
   CHECK(find_knob("exp_water")->apply == Apply::Restart);
+  const auto* water_fresnel = find_knob("water_surface_fresnel");
+  CHECK(water_fresnel != nullptr);
+  if (water_fresnel) {
+    CHECK_EQ(water_fresnel->category, "Advanced");
+    CHECK(!water_fresnel->dev_only && water_fresnel->experimental);
+    CHECK(knob_visible(*water_fresnel, false));
+    CHECK(knob_apply(*water_fresnel, 0) == Apply::Live);
+    CHECK(knob_apply(*water_fresnel, 1) == Apply::Restart);
+    CHECK(water_fresnel->choices[1].awaiting_qualification);
+    CHECK_EQ(code_default("rt_water_surface_fresnel"), "0");
+    for (int p = 0; p < kPresetCount; ++p) {
+      CHECK(water_fresnel->preset[p] == 0);
+      Map m; for (const auto& kv : expand_preset(p)) m[kv.first] = kv.second;
+      CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0");
+    }
+    CHECK(key_change_needs_restart("rt_water_surface_fresnel", "0", "1"));
+    CHECK(!key_change_needs_restart("rt_water_surface_fresnel", "1", "0"));
+    CHECK(!key_change_needs_restart("rt_water_surface_fresnel", "1", "1"));
+  }
+
   CHECK(find_knob("exp_native_coverage")->apply == Apply::Restart);   // 88-byte capture layout is startup-only
   CHECK(find_knob("exp_hair_physical_origin")->advanced);
 
@@ -934,6 +954,47 @@ static void test_product_policy() {
   CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
 }
 
+static void test_gui_review_safety() {
+  const auto& primary=*find_knob("exp_hair_groom_primary");
+  CHECK(primary.experimental && primary.apply==Apply::Restart);
+  CHECK(key_change_needs_restart("rt_hair_groom_primary","0","1"));
+  CHECK(key_change_needs_restart("rt_hair_groom_primary","1","0"));
+  CHECK(unmet_key_need(primary,1,parse_ini("rt=1\nsharc_device=0\n")).find("64-bit")!=std::string::npos);
+  const unsigned hair=kCapRayQuery|kCapLinearSweptSpheres|kCapShaderInt64|kCapFragmentStores|kCapHairGrooms;
+  CHECK(choice_supported(primary,1,hair));
+  for (unsigned bit : {unsigned(kCapRayQuery),unsigned(kCapLinearSweptSpheres),unsigned(kCapShaderInt64),unsigned(kCapFragmentStores),unsigned(kCapHairGrooms)})
+    CHECK(!choice_supported(primary,1,hair & ~bit));
+  Gpu gpu; gpu.ray_query=true;gpu.linear_swept_spheres=true;gpu.shader_int64=true;gpu.fragment_stores=true;gpu.hair_grooms=true;
+  CHECK((gpu_caps(gpu)&hair)==hair);
+  const auto& fg=*find_knob("frame_generation");
+  for(int from=0;from<4;++from)for(int to=0;to<4;++to)
+    CHECK(transition_apply(fg,from,to)==((from==0)!=(to==0)?Apply::Restart:Apply::Live));
+  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"Advanced");
+  const auto& fresnel=*find_knob("water_surface_fresnel");
+  CHECK(!choice_available(fresnel,1,false,false,~0u));
+  CHECK(choice_available(fresnel,1,false,true,~0u));
+  const auto& cost=*find_knob("exp_water_hit_cost");
+  CHECK(choice_count(cost)==5);
+  CHECK_EQ(get(on_map(cost,4),"rt_water_hit_cost"),"7");
+  CHECK(knob_value(cost,parse_ini("rt_water_hit_cost=7\n"))==4);
+  auto values=preset_values(kUltra);
+  values[knob_index("exp_water_hit_shade")]=0;
+  for(int c=1;c<choice_count(cost);++c) {
+    CHECK(!unmet_need(cost,c,values).empty());
+    values[knob_index("exp_water_hit_shade")]=1;
+    CHECK(unmet_need(cost,c,values).empty());
+    values[knob_index("exp_water_hit_shade")]=0;
+  }
+  CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[1].label,"3.5 million segments");
+  CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[2].label,"1.8 million segments");
+  CHECK(std::string(find_knob("exp_hair_groom")->cost.gpu).find("ms")!=std::string::npos);
+  // Device-startup latch, not a hot INI poll: a saved On cannot activate the current device.
+  const auto source=read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
+  CHECK(source.find("g_startup_enabled = cfg_int(\"rt_hair_groom_primary\", 0) != 0")!=std::string::npos);
+  CHECK(source.find("return g_startup_enabled &&")!=std::string::npos);
+  CHECK(source.find("cfg_hot(CfgHot::rt_hair_groom_primary)")==std::string::npos);
+}
+
 static void test_apply_modes() {
   for(const auto& k:kKnobs) {
     CHECK(k.apply!=Apply::Unspecified);
@@ -1032,6 +1093,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   test_retired_hair_ini();
+  test_gui_review_safety();
   test_apply_modes();
   test_product_policy();
   test_parse();

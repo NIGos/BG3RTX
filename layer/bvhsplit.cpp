@@ -432,6 +432,11 @@ constexpr uint32_t kGroomLods = 4;
 struct GroomSlot {
   uint64_t id = 0;
   int lod = -1, lod_votes = 0;
+  // rt_hair_groom_crowd_ksegments (hair_groom::plan_crowd): last frame's screen size and screen-size LOD, the
+  // segments per LOD, and this frame's plan (-2 none, -1 cards, else the finest LOD it may use).
+  float size = 0;
+  int want = 0, crowd = -2;
+  uint32_t segments[kGroomLods] = {};
   VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
   VkDeviceSize uv_off = 0;     // rt_hair_groom_primary: per-point card UV after the bounds (0: not allocated)
   VkDeviceSize prev_off = 0;   // and last frame's points after the UVs (valid once prev_frames > 0)
@@ -840,7 +845,8 @@ struct GroomAsset {
 // Mesh-pool bytes held by grooms (LOD arrays and slot points) against common/hair_groom_budget.h pool_budget.
 VkDeviceSize g_groom_pool_used = 0;
 uint64_t g_groom_budget_refusals = 0;
-uint64_t g_groom_soup_refused = 0;   // matched draws without a live soup range this frame (held, not captured)
+uint64_t g_groom_soup_refused = 0;
+std::vector<std::shared_ptr<GroomSlot>> g_groom_seen;   // this frame's groom slots (next frame's crowd plan)   // matched draws without a live soup range this frame (held, not captured)
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
 struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
@@ -1073,9 +1079,11 @@ int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
       const float cx = (hi[0] + lo[0]) / 2, cy = (hi[1] + lo[1]) / 2, cz = (hi[2] + lo[2]) / 2;
       const float size = std::sqrt(ex * ex + ey * ey + ez * ez) / (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
       want = size > 0.09f ? 0 : size > 0.03f ? 1 : 2;
+      g.size = size;
     }
   }
   want = (std::min)(want, lods - 1);
+  g.want = want;
   if (g.lod < 0) return want;
   if (want == g.lod) { g.lod_votes = 0; return g.lod; }
   return ++g.lod_votes >= 30 ? (g.lod_votes = 0, want) : g.lod;
@@ -1862,7 +1870,7 @@ void bvh_device_destroyed(DeviceData* dd) {
   }
   if (g_groom_scratch.b) free_buf(g_groom_scratch);
   for (auto& u : g_groom_uploads) if (u.staging.b) free_buf(u.staging);
-  g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear(); g_groom_logged_unmatched.clear();
+  g_groom_uploads.clear(); g_groom_assets.clear(); g_groom_join.clear(); g_groom_logged_unmatched.clear(); g_groom_seen.clear();
   g_groom_pool_used = 0; g_groom_budget_refusals = 0;
   if (g_groom_uv_rb.b) free_buf(g_groom_uv_rb);
   g_groom_uv.clear(); g_groom_uv_logged.clear();
@@ -2360,6 +2368,30 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const bool groom_ready = g_groom_on && ensure_groom_pipeline() &&
       (g_groom_uv_rb.b || make_buf(g_groom_uv_rb, VkDeviceSize(kGroomUvJobs) * 256, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true,
                                    "hair groom UV join readback"));
+  // rt_hair_groom_crowd_ksegments (docs/RTX_HAIR_PRIMARY.md increment 5): last frame's groom instances share a
+  // segment budget, largest on screen first (hair_groom::plan_crowd); 0: off, every instance its screen-size LOD.
+  {
+    const uint64_t budget = uint64_t((std::max)(cfg_int("rt_hair_groom_crowd_ksegments", 0), 0)) * 1000u;
+    std::vector<hair_groom::CrowdCandidate> cand;
+    cand.reserve(g_groom_seen.size());
+    for (const auto& g : g_groom_seen) {
+      hair_groom::CrowdCandidate c;
+      c.size = g->size;
+      c.want = g->want;
+      c.lods = int(kGroomLods);
+      for (uint32_t l = 0; l < kGroomLods && l < 4; ++l) c.segments[l] = g->segments[l];
+      cand.push_back(c);
+    }
+    const std::vector<int> plan = hair_groom::plan_crowd(cand, budget);
+    for (size_t i = 0; i < g_groom_seen.size(); ++i) g_groom_seen[i]->crowd = budget ? plan[i] : -2;
+    if (budget && (now % 300) == 0 && !plan.empty()) {
+      uint32_t per[kGroomLods] = {}, cards = 0;
+      for (int l : plan) l < 0 ? ++cards : ++per[l];
+      log("[hair groom] crowd plan: %zu instances, budget %llu k segments: LOD %u/%u/%u, %u keep their cards",
+          plan.size(), (unsigned long long)(budget / 1000), per[0], per[1], per[2], cards);
+    }
+    g_groom_seen.clear();
+  }
   // A level load (a new G-buffer depth image, hair_primary::LoadGuard): the join caches are keyed by draw identities
   // made of Vulkan handles, which the new level reuses for other meshes; a stale verdict would give a new mesh with
   // the same index count another style's groom, and a UV readback issued before the load would land on a reused
@@ -2633,8 +2665,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         s.groom->id = fd.groom_id;
       }
       GroomSlot& g = *s.groom;
-      const int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done());
-      const GroomAsset::Lod* lp = groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
+      int lod = groom_pick_lod(g, int(groom_src->lods.size()), life_gpu_done());
+      if (const auto* src = hair_groom::find(fd.groom_id, groom_src->indices))
+        for (uint32_t l = 0; l < kGroomLods; ++l) g.segments[l] = l < groom_src->lods.size() ? src->asset.lod_segments[l] : 0u;
+      g_groom_seen.push_back(s.groom);
+      // This frame's crowd plan: a coarser LOD, or the cards (the slot is kept, no groom instance this frame).
+      const bool crowd_cards = g.crowd == -1;
+      if (g.crowd >= 0) lod = (std::max)(lod, (std::min)(g.crowd, int(groom_src->lods.size()) - 1));
+      const GroomAsset::Lod* lp = crowd_cards ? nullptr : groom_lod(cmd, fd.groom_id, *groom_src, lod, now);
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
@@ -2690,7 +2728,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         ++g_groom_st.matched;
         ++g_groom_st.lod[size_t(lod)];
         w.refit ? ++g_groom_st.refits : ++g_groom_st.builds;
-      } else {
+      } else if (!crowd_cards) {
         groom_release(g, now);
         s.groom.reset();
       }
@@ -3191,6 +3229,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   VkDeviceAddress groom_tlas_address = 0;   // rt_hair_groom: this slot's groom TLAS (0: none)
   hair_primary::Row hp_rows[hair_primary::kMaxGrooms] = {};   // rt_hair_groom_primary: groom k's pool offsets
   uint64_t hp_keys[hair_primary::kMaxGrooms] = {};            // and its draw's index-range key
+  uint8_t hp_lods[hair_primary::kMaxGrooms] = {};             // and its LOD (diagnostics)
   uint32_t groom_count = 0;
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
@@ -3422,6 +3461,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
                                   w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
           hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
+          hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
         ++groom_count;
       }
@@ -3455,7 +3495,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           float viewport[4];
           geo_render_size(&w, &h);
           geo_gbuffer_viewport(viewport);
-          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, hp_rows, hp_keys, groom_count, w, h, viewport);
+          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
         }
       } else {
         groom_count = 0;

@@ -23,7 +23,7 @@ class BatchJobsLintTests(unittest.TestCase):
         warm = []
         for phase in plan:
             state = dict(part.split('=', 1) for part in phase['set'].split(','))
-            self.assertEqual(state['rt_stats'], '1' if phase['label'].startswith('observe-') else '0')
+            self.assertEqual(state['rt_stats'], '1' if phase['label'].startswith(('observe-', 'producer-sanity-')) else '0')
             if phase['label'].startswith('warm'):
                 warm.append(state['rt_hit_material_paks'])
         self.assertEqual(set(warm), {'0', '1'})

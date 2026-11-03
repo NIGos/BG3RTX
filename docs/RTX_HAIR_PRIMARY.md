@@ -2,8 +2,10 @@
 
 2026-11-03. Roadmap step 6 (docs/RTX_HAIR_ROADMAP.md), started on the user's decision after the trial build:
 "i capelli mi sembrano sempre card based", so the strand groom in secondary rays alone is not enough.
-Key `rt_hair_groom_primary` (proposed, off, live toggle, needs `rt_hair_groom=1`). Matched styles only; scalp,
+Key `rt_hair_groom_primary` (experimental, off, restart required, needs `rt_hair_groom=1`). Matched styles only; scalp,
 accessories and unmatched styles keep the game's draws. Status: design + offline increment 1a.
+
+Activation is latched at device creation after a reported hot-enable device loss; INI reloads and A/B cannot enable it. The safety gate does not qualify the pending crash fix.
 
 ## 1. Where the strands enter the frame (decision)
 The game draws CHAR_Hair cards in four camera passes (FRAME_MAP, NATIVE_HAIR "Native source"):
@@ -73,6 +75,67 @@ Measured live by `[hair primary] strand G-buffer draws GPU X ms/frame` (a BOTTOM
 each swapped G-buffer draw, up to 64 per frame, averaged per 300 frames). VRAM: pixel record 16 B per render pixel
 (41.7 MB at 2560x1067) plus per point 8 B UV + 12 B previous position (LOD 0 ~19 MB, LOD 1/2 ~10 MB per character).
 Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
+
+## 5a. Cost per character and the crowd budget (increment 5, 2026-11-03, offline)
+`python -m tools.hair_groom.cost --crowd`: per groom file and LOD the mesh-pool arrays, the per-instance memory
+(points, primary UV and previous points, compacted BLAS at 70 B per segment), refit ms and trace ms per 100k hair
+rays, from the RTX 5090 bench constants (Shadowheart 2 mm: BLAS 60 MB, refit 0.10 ms per 857k segments; shadow
+rays 0.25 / 0.19 / 0.17 ns at LOD 0 / 1/2 / 1/4). 527 converted styles: LOD 0 segments median 541k
+(33k-3.08M), instance memory median 57 MB (3-322 MB), static arrays median 14 MB (1-78 MB), refit median 0.06 ms
+(max 0.36 ms). Scenario (2 close, 4 mid, 8 far characters, median style, primary + shadow ray per hair pixel):
+0.80 ms and 343 MB at screen-size LODs (3.26 M segments: a 3500 k budget does not bind, 1800 k does).
+
+Coverage (tools.hair_groom.batch, 2026-11-03, 1217 LOD0/LOD1 CHAR_Hair meshes, 4 jobs, 1 h 52 min, 22 s CPU per
+style; report captures/hair_groom_batch/summary.md): 519 pass (written), 553 needs review (not written), 145 reject.
+LOD 0 meshes: 465 / 296 / 106; LOD 1 meshes: 54 / 257 / 39 (the LOD 1 cards are coarser: IoU and coverage drift).
+Min-view silhouette IoU median: pass 0.94 (p10 0.90), review 0.91, reject 0.70. Rejects, first reason: silhouette
+IoU 74, root channel not along the atlas rows 48, a zero or invalid radius in a thinned LOD 22 (follow-up), one
+converter IndexError. Review, first reason: mirrored UV triangles 203, coverage delta 192, mean radiance 72,
+silhouette 25, roots away from the head 50. Written: 517 files, 13.3 GB in data/assetdb/hair_grooms (median
+20.6 MB, max 115 MB; LOD arrays are read from disk on first use). `asset.write` now checks every LOD before it
+creates the file: the 22 radius rejects of this run left header-only stubs (296 B), which the layer ignores and
+logs as malformed.
+
+Game use and the unconverted styles (`python -m tools.hair_groom.reach`: references in the paks: character creation,
+character visual slots and the templates using them, hat hair-type maps, item and scenery templates; "unused": no
+pak file outside its own visual bank names it, checked by a byte search of every lsf/lsx). After the fixes below
+(rerun of the 200 affected styles: all 200 pass): 719 pass (was 519), 372 needs review, 126 reject; 717 files, 17 GB.
+
+| Category | Styles | Pass | Review | Reject | Reachable |
+|---|---|---|---|---|---|
+| player (character creation) | 432 | 349 | 54 | 29 | yes |
+| companion | 6 | 4 | 1 | 1 | yes |
+| named NPC (S_ templates) | 211 | 148 | 37 | 26 | yes |
+| generic NPC | 25 | 5 | 10 | 10 | yes |
+| hat variant (hair under a hat or helmet) | 337 | 154 | 151 | 32 | yes, with that item |
+| item or scenery (corpses, fur trims) | 49 | 32 | 17 | 0 | yes |
+| character visual no template uses | 3 | 0 | 2 | 1 | no |
+| unused | 154 | 27 | 100 | 27 | no |
+
+Of the 698 unconverted styles of the first run, 130 are not reachable (127 unused, 3 CV only); 568 are. 150 of
+those are LOD1 meshes whose LOD0 passed (drawn at distance), 55 are beards, brows or fur. Still unconverted and
+reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 64, roots away 45, root channel 38.
+- Fixed: zero radii (19 reachable): a sample on a card triangle without world area (collapsed vertices) had width 0;
+  it now takes its strand's median radius (`convert`, tested). Mirrored UV triangles (181 reachable, the only
+  reason): the barycentric embedding is orientation-independent (tested); a fold can at most lose the strands of
+  its cards, so the mixed-card share is reviewed against the coverage tolerance (median share 0.8%, p90 2.2%).
+- Coverage (+0.08..+0.20, beards and hat hair) and radiance: the gates hold. Two hypotheses tested and rejected on
+  34 styles: alpha-weighted strand width (the game's depth pass is a dithered alpha test, coverage = alpha, but the
+  masks are nearly binary: deltas unchanged) and the reference mip from the cards' texel size (unchanged). The
+  previews show the grooms faithful and the card reference noisy (holes); the next step is a reference that
+  averages the game's dithered alpha test over several noise phases.
+- Silhouette IoU 0: the leather headwear meshes that use CHAR_Hair for fur trim (no strand atlas). Other low IoU:
+  LOD1 cards merge several LOD0 cards (63 of 205).
+- Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
+  cannot follow them (needs a 2-D curve tracer).
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+memory follow the segments: so the crowd budget is in segments.
+`rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
+groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
+first coarser one that fits; one that fits at none keeps its cards (the slot is kept: no rebuild when it fits
+again). `hair_groom::plan_crowd` (unit-tested); segment counts per LOD come from the files' LOD headers at index
+time. Log: `[hair groom] crowd plan: N instances, budget B k segments: LOD a/b/c, d keep their cards`. Live job:
+tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / crowd; READY_FOR_LIVE).
 
 ## 5b. Fail-safes (after the 2026-11-03 user trial: device lost twice, the player's hair gone)
 - Device lost (17:01, 17:04, main ac1380e5): the groom point update read the matched draw's card triangles at its

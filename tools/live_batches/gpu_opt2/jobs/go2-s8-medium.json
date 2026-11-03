@@ -137,18 +137,18 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=11\\b",
-    "\\[motion-trace\\] phase=4 label=shot-off-a repeat=0",
-    "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
-    "\\[motion-trace\\] phase=10 label=shot-off-b repeat=0"
+    "\\[motion-plan\\] complete phases=12\\b",
+    "\\[motion-trace\\] phase=5 label=shot-off-a repeat=0",
+    "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
+    "\\[motion-trace\\] phase=11 label=shot-off-b repeat=0"
   ],
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
-    "trace_stall_s": 1,
+    "trace_stall_s": 4,
     "startup_only": [
       "rt_xfb_mb"
     ]
   },
-  "estimated_phase_seconds": 140
+  "estimated_phase_seconds": 151.0
 }

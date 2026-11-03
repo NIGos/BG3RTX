@@ -47,6 +47,7 @@ enum SpecId : unsigned {
   kSpecIdWaterHitCost = 1021,        // rt_water_hit_cost: sparse scan / zero incident / unordered K
   kSpecIdCompactHitState = 1024,     // gpu-opt1: exact hit-state lifetime
   kSpecIdAlphaMetadataCache = 1022,  // gpu-opt1: query-local immutable alpha metadata
+  kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdWaterEmptyTiles = 1023,     // gpu-opt1: exact empty compose tiles
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };

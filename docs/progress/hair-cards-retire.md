@@ -6,3 +6,7 @@
 - Defaults regenerated and checked; retired keys absent from defaults/GUI/schema; legacy INIs with all four keys 0 or 1 load unchanged in every preset (settings_test: 3,865 checks, 0 failed).
 - Full build passed; 145/145 CTests passed in 154.70 s, BelowNormal and serial; VS Installer directory added to PATH for vcvars discovery.
 - Evidence: build/hair-retire-identity.json, build/hair-retire-identity-current.log, build/hair-retire-final-build-test.log. No game launch, commit or git metadata writes; mean device-loss cause remains unknown.
+- Bundle10 22fd8ad008cc: resolved conflicts; kept surviving GUI review changes and water Fresnel cache key; regenerated all five hair-validation jobs/plans.
+- Retirement identity: 139/260 requests byte-identical; other 121 requests / 140 modules equivalent with only retired SpecIds 1017-1019 fixed at 0; 297 entries validated per side, zero errors. Variants 165 -> 165 (delta 0).
+- Full build passed; regenerated defaults/schema; settings 4,103 checks passed; live_flow hair-validation lint 5/5 passed. No game launch or Git metadata write commands.
+- CTests: 146/147 passed in 353.04 s; water_surface_shader_test fails raw identity against old merge-base 71f92bd3 (1/16 arithmetic-OFF, 1/2 ordinary identical; 16/16 production validated), which retains retired hair constants. Gate left unchanged; logs: build/hair-retire-bundle10-*.log.

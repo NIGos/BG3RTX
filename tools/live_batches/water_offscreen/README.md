@@ -21,14 +21,17 @@ Existing m4 energy post gate checks every ON; cost reporting is separate (no bud
 Mode 1 shares cone/zero culling, but sparse/order only affect out-of-grid mode 2;
 mode 1 remains covered by offline specialization checks, not claimed live-qualified.
 
-461 s phases + loading (9.7 min dryrun estimate), 32 PNG traces, no float bursts,
+557 s phases + loading (11.3 min dryrun estimate), 32 PNG traces, no float bursts,
 1930 MB conservative estimate. Final restore clears experimental keys/exposure;
 runner restores per-run overrides. Run dryrun.ps1 for synthetic queue verification.
 The synthetic receipt grants no live authorization. Commit predicted.json through
 the coordinator before an authorized run (Git metadata is read only here).
 
-Lint assumptions: 30 rendered FPS, 1 s settings latency, 1 s per trace stall.
-Energy shots last 12 s (exclusive minimum > 11 s); cost windows last 14 s
+Lint assumptions: 30 rendered FPS, 1 s settings latency, 4 s per trace stall.
+Energy shots last 18 s (exclusive minimum > 17 s); cost windows last 14 s
 (two retained GPU reports after the skipped first line). Load-time roof overflow
 and mesh-pool warnings are rejected with zero tolerance in measured windows.
-No generator exists for this batch; checked-in plan and trace indices are updated directly.
+Regenerate with `python tools/live_batches/water_offscreen/make_jobs.py`; canonical JSON is the seed.
+The 18:56 shots had no complete periodic lines in several windows: two trace
+stalls consume the cadence budget. All existing every-window gates remain; the
+longer shots reserve 8 s for trace stalls plus apply and two 120-frame periods.

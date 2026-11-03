@@ -21,6 +21,9 @@ and the runner's skipped first line after settings apply. The window endpoint is
 exclusive. Every required line must fit; `when_present` does not excuse an
 insufficient window when its pass runs. Known periodic events also have their
 cadence checked. One-off trace/burst events retain event semantics.
+Trace-write events must have enough scheduled `trace_at` requests and time for
+serialized completion (two presents plus the declared write stall per request).
+A missing request or a completion beyond the exclusive endpoint fails offline.
 
 Required pool-log lines also need `rt_stats=1` in each gated window; startup
 candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
@@ -46,6 +49,42 @@ gate, with the source of the cadence recorded in the batch's documentation.
 The lint reports the minimum window length and guaranteed complete-line count.
 These are planning assumptions, not a promise about an arbitrarily stalled GPU.
 
+Scene settling and failure survival are wall-clock observations, not log cadence.
+Warm/prefetch bounds are retained even with readiness waits; the first warmup also
+waits for scene-ready. Recent VALID logs show time after scene-ready until both
+a zero-timeout/no-skip scene-wait interval and a zero-build pipeline watch interval:
+
+| Save | Deciding VALID log | Scene ready | Last required observation | Derived floor |
+| --- | --- | --- | --- | --- |
+| S8 | wf9-s8-compose-shift.1.151625.log | 15:17:38.316 | 15:17:53.858 | 17 s |
+| Dialogue3 | ef1-dialogue3-attribution.1.121018.log | 12:11:25.123 | 12:11:42.441 | 19 s |
+| Dialogue1 | ds1-dialogue1-fg2.1.061453.log | 06:15:53.358 | 06:16:07.852 | 16 s |
+| Camp | om3-camp-option-b-fg2.1.133450.log | 13:36:07.168 | 13:36:34.795 | 29 s |
+
+Each floor is ceil(max observed delay across the newest three VALID logs) + 1 s
+settings/alignment allowance. Existing longer bounds remain, including su1's 45 s.
+These observed floors are not proof that every future load settles as quickly.
+The reported hair failures at 2 s after enable and 25 s after reload require hv5's
+three adjacent same-key 20 s survival windows (60 s uninterrupted per reload).
+Other hair post-reload observations retain 26.1 s (25 + 1 s apply, exclusive end).
+Repeated hair toggles retain their source's 5 s each, covering the observed 2 s
+enable failure plus settings latency before a later toggle can mask the fault.
+
+Queue preflight runs the same lint before starting a MovePlan job and prints its
+scheduled duration and readiness allowance. The default launch limit is 15 minutes;
+an explicit positive `max_minutes` overrides it. Duration reports include each
+window, the plan total, and savings findings above 1.5 times the window minimum
+or 1.3 times the plan minimum. Unresolved observation bounds remain explicit.
+
+Fail-fast is on unless a job sets `"fail_fast": false`. The runner checks forbids,
+closed every-window gates after their settling margin, and required periodic
+producer expectations. A silent producer reports `producer silent: <pattern>`.
+Combined jobs carry each source's checks; a local failure skips to the next
+settings reset. Crash and device loss end the launch. Status records retain
+`completed`, `failed_check`, `failed_phase`, and `slice_failures`; failed slices
+never acquire a successful completion marker during extraction. The runner uses
+its normal close path and restores the prior automatic settings file.
+
 Rendering values used during measurement must run in earlier non-capture phases.
 Only capture commands, exposure latching and diagnostic switches are exempt;
 they schedule observations. Startup-only keys must remain constant after warmup.
@@ -62,6 +101,8 @@ python tools/live_batches/combine.py <job.json> <job.json> --out captures/offlin
 The tool groups by save, writes one job/plan/manifest per save, and immediately
 runs the shared offline design checks. It rejects incompatible trees, window
 modes, runner args, declared startup keys and timing assumptions.
+Trace-write stall budgets may differ by source; each combined window uses its
+source segment's budget. Expected FPS and settings latency must still agree.
 Only single MovePlan jobs are supported. It never writes a pending inbox.
 
 A reset before each later batch sets every key used by any batch to the next

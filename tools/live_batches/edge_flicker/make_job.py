@@ -94,3 +94,5 @@ def make():
 
 if __name__ == '__main__':
     make()
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(Path(__file__).resolve().parent)

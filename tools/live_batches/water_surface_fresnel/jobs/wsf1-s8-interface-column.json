@@ -1,0 +1,276 @@
+{
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "repeat": 1,
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[water\\]",
+    "gi: GPU cost",
+    "\\[rrpost\\] exposure (held|probe)",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material\\] buffer reuse",
+    "\\[sl\\] fg_letterbox",
+    "sun stats",
+    "^\\S+\\s+\\[core\\] sun:",
+    "\\[core\\] guard:",
+    "skipped: no variant for",
+    "\\[bvh\\] mesh pool",
+    "\\[hit material pool basis\\]",
+    "\\[cascade\\] buffer full",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[water\\]",
+    "rf: reflection pass",
+    "gi: GPU cost",
+    "\\[pan\\]",
+    "\\[sl\\] capturing \\d+ presented frames",
+    "\\[sl\\] present capture done",
+    "slDLSSGSetOptions",
+    "\\[sl\\] DLSS-G gets",
+    "\\[pan\\] burst",
+    "\\[pan\\].*water",
+    "\\[pan\\].*REFUSED",
+    "PNG write failed",
+    "capture writer backlog",
+    "\\[water\\] surface Fresnel",
+    "\\[water\\] surface partition:"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[water\\] water geometry UNAVAILABLE",
+    "\\[water\\] build submission failed",
+    "\\[water\\] reflections unavailable",
+    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+    "\\[water\\] compose UNAVAILABLE",
+    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+    "\\[water\\] compose: variant pipeline creation failed",
+    "\\[water\\] compose: a water pipeline blends",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[cascade\\] could not allocate",
+    "skipped: no variant for",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hit material pool basis\\] over kBasisCapBytes",
+    "\\[pan\\].*(REFUSED|failed|dropped)",
+    "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)",
+    "\\[pan\\].*transport INVALID",
+    "\\[pan\\].*refused",
+    "PNG write failed",
+    "capture writer backlog"
+  ],
+  "window_mode": "visible_unfocused_fg",
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": []
+  },
+  "name": "wsf1-s8-interface-column",
+  "timeout": 450,
+  "live_batch": "water-surface-fresnel",
+  "stop_on_dump": false,
+  "energy_fs": "water-compose",
+  "purpose": "M5.6 step 2: one-launch Ultra static and held Q/E interface partition A/B, not authorized or queued.",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,dump_images=1,dump_raw=0,dump_png_width=1280,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_surface_fresnel=1,fg_snap=0",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/water_surface_fresnel/plans/wsf1_s8.json"
+  ],
+  "estimated_phase_seconds": 139,
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[cfg\\] settings read",
+    "\\[trace\\] frame \\d+ written",
+    "\\[water\\] compose GPU"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=11\\b",
+    "\\[motion-trace\\] phase=2 label=partition-static-0 repeat=0",
+    "\\[motion-trace\\] phase=3 label=partition-static-1 repeat=0",
+    "\\[motion-trace\\] phase=4 label=partition-static-2 repeat=0",
+    "\\[motion-trace\\] phase=5 label=partition-static-3 repeat=0",
+    "\\[rotation-input\\] phase=6 mode=keys label=cost-turn-0 direction=1\\b",
+    "\\[rotation-input\\] phase=7 mode=keys label=cost-turn-1 direction=1\\b",
+    "\\[rotation-input\\] phase=8 mode=keys label=cost-turn-2 direction=-1\\b",
+    "\\[rotation-input\\] phase=9 mode=keys label=cost-turn-3 direction=-1\\b"
+  ],
+  "expect_every": [
+    {
+      "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "when_present": true,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "continuity",
+      "select": "\\[core\\] \\[water\\] compose stability",
+      "match": "uncomposed 0 \\(on/off flips 0\\)",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "reflection stats",
+      "select": "\\[core\\] \\[water\\] reflections \\(",
+      "match": "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "compose tiers",
+      "select": "\\[core\\] \\[water\\] compose \\(",
+      "match": "screen hit \\(composed\\) [0-9.]+%, hidden [0-9.]+%.*aborted 0, invalid 0",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "compose GPU ms",
+      "select": "\\[core\\] \\[water\\] compose GPU",
+      "match": "compose GPU [0-9.]+ ms median.*compose dispatches [0-9.]+ ms median",
+      "min": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3",
+        "cost-turn-0",
+        "cost-turn-1",
+        "cost-turn-2",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "post-water float shots at the pool rim",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 2,
+      "settle_s": 1,
+      "windows": [
+        "partition-static-0",
+        "partition-static-1",
+        "partition-static-2",
+        "partition-static-3"
+      ]
+    },
+    {
+      "name": "surface pipeline selected in every ON window",
+      "select": "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+      "match": "enabled 1, draws [1-9]\\d*, missing 0\\b",
+      "min": 1,
+      "period_frames": 120,
+      "windows": [
+        "partition-static-1",
+        "partition-static-3",
+        "cost-turn-1",
+        "cost-turn-3"
+      ]
+    },
+    {
+      "name": "clean-water pixel partition participates and coefficients remain valid in both ON windows",
+      "select": "\\[water\\] surface partition:",
+      "match": "clean owned [1-9]\\d*, invalid 0; reference CPU energy partition",
+      "min": 1,
+      "period_frames": 120,
+      "windows": [
+        "partition-static-1",
+        "partition-static-3",
+        "cost-turn-1",
+        "cost-turn-3"
+      ]
+    }
+  ]
+}

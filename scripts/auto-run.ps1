@@ -150,6 +150,17 @@ function Tagged([string]$dir, [string]$name, [string]$ext) {
   if ($Tag) { Join-Path $dir "$name.$Tag$ext" } else { Join-Path $dir "$name$ext" }
 }
 $ini = Tagged $caps "auto" ".ini"
+$failFastFailures = @(); $guardNextPhase=0
+$guardRunner = Tagged $caps 'live-guard' '.runner.txt'
+$guardPollAt=[datetime]::MinValue; $guardFinalAt=$null
+$guardPython = if(Get-Command py -ErrorAction SilentlyContinue){'py'}else{'python'}
+$guardMargin=1.0
+if($env:BG3RTX_QUEUE_CONTEXT_FILE){
+  $guardContext=Get-Content -LiteralPath $env:BG3RTX_QUEUE_CONTEXT_FILE -Raw | ConvertFrom-Json
+  if($null -ne $guardContext.job.live_flow.settling_margin_s){$guardMargin=[double]$guardContext.job.live_flow.settling_margin_s}
+}
+[IO.File]::WriteAllText($guardRunner,'')
+$guardIniBytes=if(Test-Path -LiteralPath $ini){[IO.File]::ReadAllBytes($ini)}else{$null}
 $doneFile = Tagged $caps "auto" ".done"
 $log = Tagged $root "bg3rtx" ".log"
 $pidFile = Tagged $caps "game" ".pid"
@@ -644,6 +655,36 @@ function Release-Rotation {
   $script:rotationInput.at=$script:planClock.Elapsed.TotalSeconds
 }
 while ((Get-Date) -lt $deadline) {
+  # Poll independently of the motion/readiness paths, which can otherwise keep
+  # waiting after a gate has already become impossible. Python shares the final
+  # queue gate semantics and never holds the game log open between polls.
+  $guardLogFresh = -not (Test-Path -LiteralPath $log) -or (Get-Item -LiteralPath $log).LastWriteTime -ge $start
+  if ($env:BG3RTX_QUEUE_CONTEXT_FILE -and $guardLogFresh -and (Get-Date) -ge $guardPollAt) {
+    $guardPollAt=(Get-Date).AddSeconds(1)
+    $failedOffsets=(@($failFastFailures | Where-Object {$_.slice -ge 0} | ForEach-Object {$_.slice}) -join ',')
+    $guardArgs=@((Join-Path $PSScriptRoot 'live_guard.py'),'--context',$env:BG3RTX_QUEUE_CONTEXT_FILE,
+      '--log',$log,'--runner',$guardRunner,'--phase',[string]$panIndex,
+      '--now',(Get-Date).TimeOfDay.TotalSeconds.ToString([Globalization.CultureInfo]::InvariantCulture))
+    if($MovePlan){$guardArgs+=@('--plan',$MovePlan)}
+    if($failedOffsets){$guardArgs+=@('--failed',$failedOffsets)}
+    if($guardPython -eq 'py'){$guardArgs=@('-3')+$guardArgs}
+    $guardOutput=& $guardPython @guardArgs
+    if($LASTEXITCODE -ne 0){$result='fail-fast guard failed';break}
+    $failure=$guardOutput | ConvertFrom-Json
+    if($failure){
+      $failFastFailures+=@($failure)
+      Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [fail-fast] phase=$($failure.phase) slice=$($failure.slice) check=$($failure.check)"
+      if($failure.next_phase -lt 0){$result='fail-fast: '+$failure.check;break}
+      if($moving){Send-MoveKey $false;$moving=$false}; Release-Rotation
+      $guardNextPhase=[int]$failure.next_phase
+      Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] skipped slice=$($failure.slice) next_phase=$guardNextPhase"
+      if($panIndex -ge 0 -and $guardNextPhase -gt $panIndex){
+        $panIndex=$guardNextPhase; $panAt=Get-Date; $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
+        $panCaptureSent=$false; $rotateSegment=-1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
+        $wheelSent=0; $wheelNext=[datetime]::MinValue; $hairReload=$null
+      }
+    }
+  }
   if($env:BG3RTX_QUEUE_QUIT_FILE -and (Test-Path -LiteralPath $env:BG3RTX_QUEUE_QUIT_FILE)){
     $result='queue cancelled';break
   }
@@ -660,7 +701,7 @@ while ((Get-Date) -lt $deadline) {
   if ($NoActivate) { Focus-Game }
   if ($MovePlan) {
     if ($panIndex -lt 0 -and (Test-Path $doneFile)) {
-      $panIndex = 0; $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
+      $panIndex = $guardNextPhase; $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
       # A foreground test must not start with the user's pointer at a screen edge.
       if ($Foreground) {
         Focus-Game
@@ -683,13 +724,21 @@ while ((Get-Date) -lt $deadline) {
       $step = $panPlan[$panIndex]
       $elapsed = ($planClock.Elapsed.TotalMilliseconds-$phaseStartMs)/1000.0
       if ($elapsed -ge $step.seconds -and (-not $step.wait_log -or $phaseReady)) {
+        # Let the final closed window settle and be checked before normal exit.
+        if($panIndex -eq $panPlan.Count-1 -and $env:BG3RTX_QUEUE_CONTEXT_FILE){
+          if(-not $guardFinalAt){
+            $guardFinalAt=Get-Date
+            Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] complete phases=$($panPlan.Count)"
+          }
+          if(((Get-Date)-$guardFinalAt).TotalSeconds -lt $guardMargin+1){Start-Sleep -Milliseconds 100;continue}
+        }
         if ($moving) { Send-MoveKey $false; $moving = $false }
         Release-Rotation
         $panIndex++
         if ($panIndex -ge $panPlan.Count) {
-          $planCompleted = $true
+          $planCompleted = -not $failFastFailures.Count
           Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] complete phases=$($panPlan.Count)"
-          $result = 'done'; break
+          $result = if($failFastFailures.Count){'done with failed slices'}else{'done'}; break
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
         $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
@@ -711,6 +760,7 @@ while ((Get-Date) -lt $deadline) {
         if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
         $iniLines | Set-Content -LiteralPath $ini
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) hover=$($step.hover_x),$($step.hover_y) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
+        Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex set=$($step.set)"
         $panCaptureSent = $true
       }
       # Optional selected-save reload stress test. F8 is load only (never F5).
@@ -762,7 +812,12 @@ while ((Get-Date) -lt $deadline) {
         $phaseReady=Test-CameraPlanReady $step $readyText
         if (-not $phaseReady) {
           if ($planClock.Elapsed.TotalSeconds-$phaseWaitAt -ge $step.wait_log_timeout) {
-            $result="pipeline readiness timed out: $($step.label)"; break
+            $result="pipeline readiness timed out: $($step.label)"
+            if($step.label -match '(?:^|--)producer-sanity-'){
+              $silent=@($step.wait_log | Where-Object {$readyText -notmatch $_})
+              $result='producer silent: '+($silent -join '; ')
+            }
+            break
           }
           $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
           Start-Sleep -Milliseconds 100
@@ -770,6 +825,7 @@ while ((Get-Date) -lt $deadline) {
         }
         $phaseStartMs=$planClock.Elapsed.TotalMilliseconds; $elapsed=0
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
+        Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
       }
       if ($step.recenter -and -not $phaseRecentered) {
         $h=Get-GameWindow; $rect=New-Object BG3RTX.Win2+RECT
@@ -1007,8 +1063,14 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
     Write-Host "KeepRunning: saves written during the run are not parked"
   }
   if ($Background -and $displayUser) { Exit-BackgroundDisplay $ensureHere $displayUser ([bool]$KeepRunning) }
+  if(-not $KeepRunning){
+    if($null -ne $guardIniBytes){[IO.File]::WriteAllBytes($ini,$guardIniBytes)}else{Remove-Item -LiteralPath $ini -ErrorAction SilentlyContinue}
+  }
   @{ result=$result; game_pid=$(if($game){$game.Id}else{0}); observed_exit_code=$observedExitCode;
      plan_completed=$planCompleted; last_phase=$panIndex; expected_phases=$panPlan.Count;
+     completed=($result -eq 'done' -and -not $failFastFailures.Count);
+     failed_check=$(if($failFastFailures.Count){$failFastFailures[0].check}else{''});
+     failed_phase=$(if($failFastFailures.Count){$failFastFailures[0].phase}else{-1}); slice_failures=@($failFastFailures);
      script_close_requested=$scriptCloseRequested; exception=$exceptionText;
      timeout_seconds=$TimeoutSec; foreground=[bool]$Foreground; real_present=[bool]$RealPresent;
      visible_unfocused=[bool]$NoActivate; unfocused_checks=$unfocusedChecks;

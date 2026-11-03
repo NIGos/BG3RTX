@@ -238,7 +238,14 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) 
   return true;
 }
 
+// The soup buffer detached by the last elastic resize (rtscene.cpp tracks every soup it publishes).
+VkBuffer g_untrack_on_free = VK_NULL_HANDLE;
+
 void free_buf(Buf& b) {
+  if (b.b == g_untrack_on_free) {   // a retired soup (elastic shrink): its range leaves the device-fault registry
+    fault_untrack(rt_buffer_address(b.b));
+    g_untrack_on_free = VK_NULL_HANDLE;
+  }
   if (b.map) g_dd->vk.UnmapMemory(g_dd->device, b.m);
   defer_destroy(BG3_DEFER_BUFFER, uint64_t(b.b));
   defer_destroy(BG3_DEFER_MEMORY, uint64_t(b.m));
@@ -491,6 +498,7 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
               "[geo] RT capture capacity %llu -> %llu MB (elastic, detached slot)",
       (unsigned long long)(c.xfb.size>>20),(unsigned long long)(wanted>>20));
   c.elastic_old=c.xfb;c.elastic_detached=now;c.xfb=replacement;c.elastic_target=0;
+  if(!cascade)g_untrack_on_free=c.elastic_old.b;
 }
 
 void barrier(VkCommandBuffer cmd, VkPipelineStageFlags src, VkAccessFlags sa, VkPipelineStageFlags dst,

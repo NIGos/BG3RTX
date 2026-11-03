@@ -28,6 +28,120 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_readiness_does_not_replace_scene_settle_or_failure_latency(self):
+        j, p = fixture()
+        p[0].update(seconds=45, wait_log=["pipelines ready"])
+        p += [phase("toggle-1", 5), phase("survive-native-1", 20), phase("validation-after-reload", 26.1)]
+        # Prefetch readiness does not cover scene/exposure/BVH settling. The
+        # post-reload bound covers the observed 25 s failure plus apply latency.
+        f.tighten(j, p)
+        self.assertEqual(p[0]["seconds"], 45)
+        # The source's 5 s toggle observation covers the reported 2 s enable
+        # failure plus 1 s apply; 1.1 s would disable hair before that failure.
+        self.assertEqual(p[-3]["seconds"], 5)
+        self.assertEqual(p[-2]["seconds"], 20)
+        self.assertEqual(p[-1]["seconds"], 26.1)
+
+    def test_reload_bisect_observes_failure_latency_without_resets(self):
+        from tools.live_batches.hair_validation.make_job import make_bisect, STAGES
+        j, _ = fixture()
+        plan = make_bisect()
+        f.tighten(j, plan)
+        # The reported 2 s enable / 25 s reload failures need continuous time,
+        # not one producer cadence or a sum across separate reloads.
+        for name, _ in STAGES:
+            start = next(i for i,p in enumerate(plan) if p["label"] == "survive-"+name+"-1")
+            windows = plan[start:start+3]
+            # The primary stage's windows hold a whole 300-frame strand line at 30 fps (its strand-draw gate).
+            want = 25 if name == "d-primary" else 20
+            self.assertEqual([p["seconds"] for p in windows], [want, want, want])
+            self.assertEqual(len({p["set"] for p in windows}), 1)
+            self.assertFalse(any(p.get("reload_selected") for p in windows))
+            self.assertGreater(sum(p["seconds"] for p in windows), 25+1)
+
+    def test_duration_ignores_absence_gates_and_uses_period_counts(self):
+        j, p = fixture()
+        j["expect_every"].append(dict(select="failure", match="(?!)", event=True, min=0, windows=["cost-off"]))
+        p[2]["seconds"] = 60
+        budget = f.duration_budget(j, p)
+        cost = next(w for w in budget["windows"] if w["window"] == "cost-off")
+        self.assertEqual(cost["minimum_seconds"], 11.1)  # 1s apply + 2 x 5s cadence
+        self.assertTrue(budget["findings"])
+        f.tighten(j, p)
+        self.assertEqual(p[2]["seconds"], 11.1)
+        self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_duration_trace_uses_segment_stall_and_exclusive_endpoint(self):
+        j, p = fixture()
+        p[2].update(seconds=30, trace_at=[1, 6])
+        j["live_flow"] = dict(trace_stall_s=1, segments=[dict(offset=2,count=1,live_flow=dict(trace_stall_s=4))])
+        j["expect_every"] = [dict(select=r"\[trace\] frame", match="ok", event=True,min=2,windows=["cost-off"])]
+        result = f.duration_budget(j, p)
+        shot = next(w for w in result["windows"] if w["window"] == "cost-off")
+        self.assertAlmostEqual(shot["minimum_seconds"], 10.1)
+
+    def test_extract_skipped_slice_preserves_later_and_final_failure_preserves_earlier(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        for j in (a, b):
+            for field in ("expect", "expect_every", "expect_runner", "forbid"):
+                j[field] = []
+        _, plan, manifest = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        manifest["plan"] = plan
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            log, run = folder / "fake.log", folder / "fake.runner.txt"
+            log.write_text("00:00:00.000 preamble\n00:00:02.000 scene\n")
+            offset = manifest["slices"][1]["offset"]
+            for failed_first in (True, False):
+                indices = [0] + list(range(offset-1, len(plan))) if failed_first else list(range(offset+1))
+                runner = []
+                for t, index in enumerate(indices, 1):
+                    runner.append(f"00:00:{t:02}.000 [pan-plan] window {index} set={plan[index]['set']}")
+                    if index == (0 if failed_first else offset):
+                        runner.append(f"00:00:{t:02}.500 [fail-fast] phase={index} slice={0 if failed_first else offset} check=forbidden test")
+                if failed_first:
+                    runner.append(f"00:00:20.000 [motion-plan] complete phases={len(plan)}")
+                runner.append("Run ended: fail-fast")
+                run.write_text("\n".join(runner))
+                result = c.extract(manifest, log, run, folder / str(failed_first))
+                self.assertEqual([r["valid"] for r in result], [False, True] if failed_first else [True, False])
+                failed = result[0 if failed_first else 1]
+                self.assertFalse(failed["completed"])
+                self.assertEqual(failed["failed_check"], "forbidden test")
+                self.assertNotIn("[motion-plan] complete", Path(failed["log"]).with_suffix(".runner.txt").read_text())
+
+    def test_preflight_uses_only_actual_tree_plan_and_rejects_long_launch(self):
+        job, plan = fixture()
+        job["args"] = ["-MovePlan", "actual/only.json"]
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            f.write(folder / "job.json", job)
+            f.write(folder / "actual/only.json", plan)
+            index = dict(entries=[dict(path="fake",lines=[])],saves=[],logs=[],matches={})
+            with patch.object(f, "corpus", return_value=index):
+                self.assertEqual(f.main([str(folder / "job.json"), "--preflight", "--tree", str(folder), "--cache", str(folder / "cache")]), 0)
+                plan[0]["seconds"] = 901
+                f.write(folder / "actual/only.json", plan)
+                self.assertEqual(f.main([str(folder / "job.json"), "--preflight", "--tree", str(folder), "--cache", str(folder / "cache")]), 1)
+
+    def test_startup_producer_uses_on_warmup_and_preserves_trace_indices(self):
+        job, plan = fixture()
+        pattern = r"\[hair primary\] draws [1-9]\d*"
+        job["expect"] = [pattern, r"\[hit material paks\] loaded 40983 candidates"]
+        job["expect_every"] = [dict(select=r"\[hair primary\]", match=pattern, period_frames=300, windows=["cost-on"])]
+        job["expect_runner"].append(r"phase=3 label=cost-on")
+        f.startup_producers(job, plan)
+        self.assertEqual(plan[2]["label"], "producer-sanity-warm-on")
+        self.assertEqual(plan[2]["wait_log"], [pattern])
+        self.assertIn("rr=1", plan[2]["set"])
+        self.assertEqual(plan[2]["wait_log_timeout"], 15)
+        self.assertIn(r"phase=4 label=cost-on", job["expect_runner"])
+        self.assertIsNone(f.period(dict(select=r"\[hit material paks\] loaded 40983 candidates"), {}, 30))
+        old = deepcopy(plan)
+        f.startup_producers(job, plan)
+        self.assertEqual(plan, old)
+
     def test_single_measured_value_needs_warming_and_startup_match(self):
         j, p = fixture()
         p[1]["set"] = "rr=0"
@@ -160,6 +274,34 @@ class FlowTests(unittest.TestCase):
         p[2]["seconds"] = 5
         self.assertFalse(f.window_problems(j, p)[0])
 
+    def test_trace_events_need_scheduled_requests_and_serial_write_time(self):
+        j, p = fixture()
+        j["live_flow"] = dict(trace_stall_s=4)
+        j["expect_every"] = [dict(select=r"\[trace\] frame \d+ written", match="written",
+                                  event=True, min=3, settle_s=1, windows=["cost-off"])]
+        p[2].update(seconds=5, trace_at=[1, 2, 3])
+        errors, budgets = f.window_problems(j, p)
+        self.assertTrue(errors)
+        self.assertEqual(budgets[0]["complete"], 0)
+        p[2].update(seconds=16, trace_at=[1, 6, 11])
+        self.assertFalse(f.window_problems(j, p)[0])
+        p[2].pop("trace_at")
+        self.assertIn("0 complete events", f.window_problems(j, p)[0][0])
+
+    def test_scene_wait_shot_window_needs_complete_periods_even_as_event(self):
+        j, p = fixture()
+        j["set"] += ",rt_scene_wait_log_frames=120"
+        j["live_flow"] = dict(trace_stall_s=4)
+        j["expect_every"] = [dict(select=r"\[rt\] scene wait: \d+ frames", match="0 timeouts",
+                                  windows=["cost-off"])]
+        p[2].update(seconds=12, trace_at=[1, 6])
+        self.assertTrue(f.window_problems(j, p)[0])
+        p[2]["seconds"] = 18
+        self.assertFalse(f.window_problems(j, p)[0])
+        j["expect_every"][0]["event"] = True
+        p[2]["seconds"] = 12
+        self.assertTrue(f.window_problems(j, p)[0])
+
     def test_cadence_unknown_missing_label_foreground_and_min_zero(self):
         j, p = fixture()
         j["expect_every"] = [dict(select="new statistic", match="ok", windows=["cost-off"])]
@@ -234,6 +376,19 @@ class FlowTests(unittest.TestCase):
             b.update(change)
             with self.assertRaises(ValueError):
                 c.combine_group([("a", a, p), ("b", b, q)], "plan")
+
+    def test_combined_trace_stall_budgets_remain_local_to_source_windows(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        for job, plan, stall in ((a, p, 1), (b, q, 4)):
+            job["live_flow"] = dict(trace_stall_s=stall)
+            job["expect_every"] = [dict(select=r"\[trace\] frame \d+ written", event=True,
+                                        min=3, windows=["cost-off"])]
+            plan[2].update(seconds=5, trace_at=[1, 2, 3])
+        combined, plan, _ = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        errors, _ = f.window_problems(combined, plan)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("b2-two--cost-off", errors[0])
 
     def test_combine_restores_each_real_preset_and_rejects_startup_only_changes(self):
         a, p = fixture()

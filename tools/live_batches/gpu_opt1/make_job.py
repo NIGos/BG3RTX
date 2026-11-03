@@ -66,3 +66,5 @@ def main():
     (HERE/'predicted.json').write_text(json.dumps(predicted,indent=1)+'\n',encoding='utf-8')
     print(f'2 jobs, {len(plan)} phases, {sum(p["seconds"] for p in plan)}s per scene')
 if __name__=='__main__': main()
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(Path(__file__).resolve().parent)

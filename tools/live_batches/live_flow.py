@@ -19,6 +19,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from scripts.queue_gates import phase_states, _apply
 
+# Recent VALID logs, scene-ready -> both a zero-timeout scene interval and
+# a watch interval with zero pipeline builds. See LIVE_FLOW.md for timestamps.
+# ceil(max observed seconds) + the one-second settings/observation alignment.
+SCENE_SETTLE_SECONDS = {"Water Queens House": 17, "Test Dialogue3": 19,
+                        "Test Dialogue1": 16, "Campsite - 27h": 29}
+
 
 def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
@@ -172,6 +178,8 @@ def period(gate, state, fps):
     if "period_frames" in gate:
         return float(gate["period_frames"]) / fps
     sel = gate["select"].replace("\\", "")
+    if "[hit material paks] loaded" in sel:
+        return None  # unconditional startup event, not the periodic pool producer
     if producer_requirements(gate["select"]):
         return 120 / fps  # layer/hit_material.cpp: pool_counter_frame / pool_log
     if "mem] device-local VRAM" in sel:
@@ -275,6 +283,28 @@ def judged_labels(job, plan):
     return labels
 
 
+def trace_event_budget(gate, phase, fps, latency, stall):
+    """Trace requests serialize through tracer.cpp's two-present recording and write.
+
+    auto-run.ps1 queues one request file at a time; a dense trace_at list cannot
+    promise simultaneous completions. Include the declared disk/write stall for
+    each request, not just the last request's nominal timestamp.
+    """
+    if not gate.get("event") or "[trace] frame" not in gate["select"].replace("\\", ""):
+        return None
+    finish, completions = latency, []
+    for at in phase.get("trace_at", []):
+        finish = max(float(at), finish) + 2 / fps + stall
+        completions.append(finish)
+    end = float(phase.get("seconds", 0))
+    settled = latency + float(gate.get("settle_s", 0))
+    complete = sum(settled <= t < end for t in completions)
+    need = int(gate.get("min", 1))
+    eligible = [t for t in completions if t >= settled]
+    minimum = eligible[need - 1] if len(eligible) >= need else None
+    return dict(complete=complete, required=need, minimum_seconds_exclusive=minimum)
+
+
 def window_problems(job, plan):
     meta = job.get("live_flow", {})
     labels = [p.get("label") for p in plan]
@@ -290,6 +320,9 @@ def window_problems(job, plan):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
     phases = {p.get("label"): (p, s) for p, s in zip(plan, phase_states(job, plan))}
+    segment_meta = {p.get("label"): seg.get("live_flow", {})
+                    for seg in meta.get("segments", [])
+                    for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
     for g in job.get("expect_every", []):
         if not g.get("windows"):
             continue  # whole-run gates have no every-window promise
@@ -298,11 +331,25 @@ def window_problems(job, plan):
                 errors.append(f"windows: unknown gate window {label!r}")
                 continue
             p, state = phases[label]
+            window_meta = segment_meta.get(label, meta)
+            trace_stall = float(window_meta.get("trace_stall_s", 1))
+            if not math.isfinite(trace_stall) or trace_stall < 0:
+                errors.append(f"windows: {label}: trace stall budget must be finite and nonnegative")
+                continue
             need = int(g.get("min", 1))
             if need == 0:
                 continue
-            dt = period(g, state, fps)
             name = g.get("name", g["select"])
+            trace = trace_event_budget(g, p, fps, latency, trace_stall)
+            if trace is not None:
+                if "trace_stall_s" not in window_meta:
+                    errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
+                budgets.append(dict(window=label, gate=name, **trace))
+                if trace["complete"] < need:
+                    errors.append(f"windows: {label}: {name}: trace schedule guarantees {trace['complete']} complete events, need {need}; "
+                                  f"minimum > {trace['minimum_seconds_exclusive']} s including serialized trace stalls")
+                continue
+            dt = period(g, state, fps)
             if dt is None:
                 if not g.get("event"):
                     errors.append(f"windows: {label}: {name}: unknown cadence; declare period_frames or period_s")
@@ -310,7 +357,7 @@ def window_problems(job, plan):
             if dt <= 0 or not math.isfinite(dt):
                 errors.append(f"windows: {label}: {name}: invalid cadence {dt}")
                 continue
-            if p.get("trace_at") and "trace_stall_s" not in meta:
+            if p.get("trace_at") and "trace_stall_s" not in window_meta:
                 errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
             # Endpoint is exclusive. Worst alignment puts the first line one full
             # period after apply; one further line is consumed by the straddle rule.
@@ -369,6 +416,209 @@ def warmup_problems(job, plan):
     return out
 
 
+def duration_budget(job, plan):
+    """Derived lower bounds, with exclusive endpoints rounded to the next 0.1 s.
+
+    Readiness waits are conditional and reported separately from scheduled time.
+    Unknown event captures retain their existing observation bound: guessing a
+    shorter capture completion time would turn savings into INVALID runs.
+    """
+    _, gates = window_problems(job, plan)
+    by_label = {}
+    for gate in gates:
+        minimum = gate.get("minimum_seconds_exclusive")
+        if minimum is not None:
+            by_label[gate["window"]] = max(by_label.get(gate["window"], 0), minimum)
+    latency = float(job.get("live_flow", {}).get("settings_latency_s", 1))
+    fps = 30 if str(job.get("window_mode", "")).startswith("visible_unfocused") else float(job.get("live_flow", {}).get("expected_fps", 30))
+    stall = float(job.get("live_flow", {}).get("trace_stall_s", 1))
+    windows = []
+    segment_meta = {p.get("label"): seg.get("live_flow", {})
+                    for seg in job.get("live_flow", {}).get("segments", [])
+                    for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
+    for phase, state in zip(plan, phase_states(job, plan)):
+        current = float(phase.get("seconds", 0))
+        label = phase.get("label", "")
+        bare_label = label.rsplit("--", 1)[-1]
+        minimum = by_label.get(label, latency)
+        unresolved = []
+        stall = float(segment_meta.get(label, job.get("live_flow", {})).get("trace_stall_s", 1))
+        if phase.get("trace_at"):
+            finish = latency
+            for at in phase["trace_at"]:
+                finish = max(finish, float(at)) + 2 / fps + stall
+            minimum = max(minimum, finish)
+        # dump.cpp: edge9 / water(raw_frames+1) / ordinary17 samples,
+        # then three presents before completion; include settings and write budget.
+        selected = [g for g in job.get("expect_every", []) if g.get("event") and int(g.get("min",1)) > 0
+                    and label in g.get("windows", [])]
+        if phase.get("serial") or any("[pan] burst" in g["select"].replace("\\", "") for g in selected):
+            frames = 9 if state.get("pan_edge") == "1" else (min(16,max(2,int(state.get("pan_water_frames",8))))+1 if state.get("pan_water") == "1" else 17)
+            minimum = max(minimum, latency + float(phase.get("capture_at",0)) + float(state.get("pan_delay_ms",0))/1000 + (frames+3)/fps + stall)
+        # streamline.cpp: requested captures plus the next present's snap_finish.
+        if any("present capture done" in g["select"] for g in selected):
+            delay = float(state.get("fg_snap_delay_ms",0))/1000 or float(state.get("fg_snap_delay",0))/fps
+            ready = 0 if state.get("fg_snap_any") == "1" else float(state.get("fg_snap_after",60))/fps
+            minimum = max(minimum, latency + delay + ready + (float(state.get("fg_snap",1))+1)/fps + stall)
+        # Held-turn endpoints define the requested camera travel. Wheel steps
+        # post one notch per wheel_ms; neither needs a generic five-second sleep.
+        if phase.get("kind") not in (None,"static"):
+            minimum = max(minimum, float(phase.get("motion_end", phase.get("seconds",0))))
+        if phase.get("wheel"):
+            minimum = max(minimum, latency + abs(int(phase["wheel"]))*float(phase.get("wheel_ms",150))/1000)
+        if bare_label.startswith("settle"):
+            # 16 Halton phases plus alignment for ordinary reconstruction. For
+            # rr_post_temporal, decay old EMA history below fp16's 1/1024 step.
+            frames = 32
+            if state.get("rr_post_temporal") == "1":
+                frames = max(frames, math.ceil(math.log(1/1024)/math.log(15/16)))
+            minimum = max(minimum, latency + frames/fps)
+        # Readiness is not scene settling. Prefetch/GI creation can complete
+        # before streaming, exposure and the first stable BVH windows. Preserve
+        # the declared observation bound even when a wait_log is present.
+        if bare_label.startswith(("warm", "prefetch")):
+            if not phase.get("wait_log"):
+                unresolved.append("pipeline readiness has no completion signal")
+            unresolved.append("scene/pipeline settle bound retained; not a producer cadence")
+            minimum = max(minimum,current)
+        # Survival and reload regressions are measured in wall-clock time, not
+        # in the number of periodic log lines. Hair failures were observed at
+        # 2 s after enable and 25 s after reload (HAIR_VALIDATION.md).
+        if (bare_label.startswith(("survive-", "set-", "toggle-")) or phase.get("reload_selected")
+                or "after-reload" in bare_label or bare_label == "validation-strands"):
+            unresolved.append("failure-latency observation bound retained")
+            minimum = max(minimum,current)
+        motion_endpoint = phase.get("kind") not in (None,"static") and minimum == float(phase.get("motion_end",phase.get("seconds",0)))
+        minimum = minimum if unresolved or motion_endpoint else math.floor(minimum * 10 + 1e-7) / 10 + .1
+        windows.append(dict(window=label, seconds=current, minimum_seconds=round(minimum, 3),
+                            savings_seconds=round(max(0, current-minimum), 3), unresolved=unresolved,
+                            readiness_timeout_seconds=float(phase.get("wait_log_timeout", 0)),
+                            minimum_readiness_wait_seconds=0))
+    readiness = {}
+    for phase in plan:
+        if phase.get("wait_log"):
+            patterns = phase["wait_log"]
+            key = (patterns,) if isinstance(patterns, str) else tuple(patterns)
+            readiness[key] = max(readiness.get(key, 0), float(phase.get("wait_log_timeout", 0)))
+    total = sum(w["seconds"] for w in windows)
+    minimum = sum(w["minimum_seconds"] for w in windows)
+    findings = [f"duration: {w['window']}: {w['seconds']:g} s > 1.5x minimum {w['minimum_seconds']:g} s; save {w['savings_seconds']:g} s"
+                for w in windows if w["seconds"] > 1.5*w["minimum_seconds"]]
+    if total > 1.3*minimum:
+        findings.append(f"duration: plan {total:g} s > 1.3x minimum {minimum:g} s; save {total-minimum:g} s")
+    return dict(seconds=total, minimum_seconds=round(minimum, 3),
+                unresolved=[dict(window=w["window"], reasons=w["unresolved"]) for w in windows if w["unresolved"]],
+                readiness_timeout_seconds=sum(readiness.values()),
+                windows=windows, findings=findings)
+
+
+def tighten(job, plan):
+    """Use the shared lower bounds without changing gate counts or camera paths."""
+    before = sum(float(p["seconds"]) for p in plan)
+    budget = duration_budget(job, plan)
+    for phase, window in zip(plan, budget["windows"]):
+        old = float(phase["seconds"])
+        new = min(old, window["minimum_seconds"])
+        phase["seconds"] = new
+        for key in ("motion_start", "motion_end"):
+            if phase.get(key) == old:
+                phase[key] = new
+    job["estimated_phase_seconds"] = round(sum(float(p["seconds"]) for p in plan), 3)
+    return dict(name=job["name"], before_seconds=before, after_seconds=job["estimated_phase_seconds"])
+
+
+def startup_producers(job, plan):
+    """Put exact periodic producer checks after pipeline warmup, before captures."""
+    if any(p.get("label", "").startswith("producer-sanity-") for p in plan):
+        original = [i for i,p in enumerate(plan) if not p.get("label", "").startswith("producer-sanity-")]
+        old_count = len(original)
+        if any("complete phases="+str(old_count)+r"\b" in rx for rx in job.get("expect_runner", [])):
+            job["expect_runner"] = [re.sub(r"phase=(\d+)", lambda m: "phase="+str(original[int(m[1])]), rx)
+                                    .replace("complete phases="+str(old_count), "complete phases="+str(len(plan)))
+                                    for rx in job.get("expect_runner", [])]
+        return
+    states = phase_states(job, plan)
+    warm = [i for i,p in enumerate(plan) if p.get("label", "").startswith(("warm", "prefetch"))]
+    if not warm:
+        return
+    fps = 30 if str(job.get("window_mode", "")).startswith("visible_unfocused") else float(job.get("live_flow", {}).get("expected_fps", 30))
+    groups = {}
+    for pattern in job.get("expect", []):
+        related = next((g for g in job.get("expect_every", []) if g.get("match") == pattern and not g.get("event")), None)
+        dt = period(related or dict(select=pattern), states[0], fps)
+        if dt is None or not math.isfinite(dt) or dt <= 0:
+            continue
+        target = next((states[i] for i,p in enumerate(plan) if related and p.get("label") in related.get("windows", [])), None)
+        candidates = warm
+        if target:
+            varied = set().union(*(set(settings(p.get("set", ""))) for p in plan)) - CONTROL - {"qa_exposure_hold"}
+            candidates = [i for i in warm if all(states[i].get(k) == target.get(k) for k in varied)] or warm
+        groups.setdefault(candidates[0], []).append((pattern, dt))
+    mapping, updated = {}, []
+    for index, phase in enumerate(plan):
+        mapping[index] = len(updated)
+        updated.append(phase)
+        if index not in groups:
+            continue
+        checks = groups[index]
+        state = settings(phase.get("set", ""))
+        requirements = {k:v for pattern,_ in checks for k,v in producer_requirements(pattern).items()}
+        state.update(requirements)
+        updated.append(dict(label="producer-sanity-"+phase["label"], kind="static", seconds=1.1,
+                            capture_at=0, serial=0, set=",".join(k+"="+v for k,v in state.items()),
+                            wait_log=[pattern for pattern,_ in checks],
+                            wait_log_timeout=max(dt for _,dt in checks)+5))
+        if index+1 < len(plan) and requirements:
+            restored = settings(plan[index+1].get("set", ""))
+            restored.update({k:states[index+1].get(k,"0") for k in requirements})
+            plan[index+1]["set"] = ",".join(k+"="+v for k,v in restored.items())
+    old_count = len(plan)
+    plan[:] = updated
+    job["expect_runner"] = [re.sub(r"phase=(\d+)", lambda m: "phase="+str(mapping.get(int(m[1]),int(m[1]))), rx)
+                            .replace("complete phases="+str(old_count), "complete phases="+str(len(plan)))
+                            for rx in job.get("expect_runner", [])]
+    job.get("live_flow", {}).pop("producer_windows", None)
+
+
+def settings(text):
+    state = {}
+    _apply(state, text)
+    return state
+
+
+def tighten_files(directory):
+    """Refresh checked-in artifacts with the same model used by lint/preflight."""
+    reports = []
+    for path in job_files(directory):
+        job, plan, plan_path = load_job(path)
+        first_warm = next((p for p in plan if p.get("label", "").startswith(("warm", "prefetch"))), None)
+        if first_warm is not None:
+            old = float(first_warm["seconds"])
+            first_warm["seconds"] = max(old, SCENE_SETTLE_SECONDS.get(job.get("save"), old))
+            for key in ("motion_start", "motion_end"):
+                if first_warm.get(key) == old:
+                    first_warm[key] = first_warm["seconds"]
+        # Cold-start prefetch is a completion signal, unlike a fixed sleep.
+        for phase in plan:
+            if phase.get("label", "").startswith(("warm", "prefetch")) and not phase.get("wait_log"):
+                phase.update(wait_log=[r"\[shaders\] cache: prefetched ",
+                                       r"gi: gi/[^ ]+ generation "], wait_log_timeout=180)
+        if first_warm is not None:
+            patterns = first_warm.get("wait_log", [])
+            if isinstance(patterns, str):
+                patterns = [patterns]
+            first_warm["wait_log"] = list(dict.fromkeys(
+                [p for p in patterns if p != r"\[auto\] scene ready"] + [r"\[auto\] scene ready"]))
+        startup_producers(job, plan)
+        reports.append(tighten(job, plan))
+        for target, value in ((plan_path, plan), (path, job)):
+            text = target.read_text(encoding="utf-8-sig")
+            match = re.search(r"\n( +)\S", text)
+            indent = len(match[1]) if match else 2
+            target.write_text(json.dumps(value, indent=indent) + "\n", encoding="utf-8")
+    return reports
+
+
 def repair_known_forbids(job, plan):
     """Narrow known false positives without dropping the measured-window gate."""
     scoped = []
@@ -402,7 +652,7 @@ def plan_field_problems(plan):
 def lint(job, plan, evidence, memo=None):
     regex, coverage = regex_problems(job, evidence, memo)
     windows, budgets = window_problems(job, plan)
-    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
+    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets, duration=duration_budget(job, plan))
 
 
 def markdown_report(report):
@@ -448,6 +698,8 @@ def main(argv=None):
     ap.add_argument("--cache", default=str(ROOT / "captures/.cache/live_flow_corpus.json"))
     ap.add_argument("--newest", type=int, default=3)
     ap.add_argument("--report")
+    ap.add_argument("--tree", help="actual runner tree for preflight plan resolution")
+    ap.add_argument("--preflight", action="store_true", help="refuse invalid or overlong launches before starting the runner")
     a = ap.parse_args(argv)
     if a.newest < 1:
         ap.error("--newest must be positive")
@@ -458,8 +710,23 @@ def main(argv=None):
     memo = index.get("matches", {})
     for path in job_files(a.target):
         try:
-            job, plan, _ = load_job(path)
+            if a.preflight and a.tree:
+                job = read(path)
+                args = job["args"]
+                plan_path = Path(a.tree) / args[args.index("-MovePlan") + 1]
+                plan = read(plan_path)
+            else:
+                job, plan, _ = load_job(path)
             result = lint(job, plan, index["entries"], memo)
+            duration = result["duration"]
+            print(f"{job.get('name', path.stem)}: expected duration {duration['seconds']:g} s after load; minimum {duration['minimum_seconds']:g} s; readiness timeout allowance {duration['readiness_timeout_seconds']:g} s", flush=True)
+            for finding in duration["findings"]:
+                print(f"{job.get('name', path.stem)}: {finding}", flush=True)
+            limit = float(job.get("max_minutes", 15))
+            if a.preflight and (not math.isfinite(limit) or limit <= 0):
+                result["problems"].append("duration: max_minutes must be finite and positive")
+            if a.preflight and duration["seconds"] + duration["readiness_timeout_seconds"] > 60 * limit:
+                result["problems"].append("duration: launch exceeds max_minutes (default 15); split the batch or explicitly set max_minutes")
             if not index["entries"]:
                 result["problems"].append("corpus: no readable VALID logs; regex validation has no evidence")
         except (OSError, ValueError, KeyError, TypeError) as e:

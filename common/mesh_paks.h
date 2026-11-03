@@ -1,6 +1,7 @@
 // Offline pak mesh candidate table. A sampled match is never a qualified GPU row.
 #pragma once
 #include "../layer/mesh_content_id.h"
+#include <algorithm>
 #include <cmath>
 #include <span>
 #include <string>
@@ -182,6 +183,12 @@ inline bool hlod_compatible(const Row& row,uint64_t vs,uint64_t fs,bool cull_kno
 }
 enum class Match { Missing, Unique, Ambiguous, Invalid };
 struct Result {Match status=Match::Missing;const Row* row{};};
+// Rows are sorted by index_count by the transactional loader. A count admits
+// discovery for every family; recipe/cull checks authorize publication later.
+inline bool has_candidates(std::span<const Row> rows,uint32_t count){
+ const auto it=std::lower_bound(rows.begin(),rows.end(),count,[](const Row& r,uint32_t n){return r.index_count<n;});
+ return count && it!=rows.end() && it->index_count==count;
+}
 // Draw-order UV signature: independent of position space, vertex numbering,
 // index width and padding. XFB 64/88-byte streams use UV at byte 16.
 inline bool uv_sample(const mesh_content::Input& in,mesh_content::Bytes uv,uint32_t stride,std::array<float,64>& out){

@@ -74,10 +74,10 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=6\\b"
+    "\\[motion-plan\\] complete phases=7\\b"
   ],
   "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-  "estimated_phase_seconds": 80,
+  "estimated_phase_seconds": 55.5,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,

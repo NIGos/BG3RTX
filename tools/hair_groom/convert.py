@@ -230,6 +230,13 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diam
             # A painted strand keeps its width: samples on near-degenerate UV triangles (LOD1 cards) blow the
             # UV -> world Jacobian up; cap each at 3x the strand's median radius.
             r = width[a0:b0] / 2
+            # A sample on a triangle without area in world space (collapsed card vertices) has no width: it takes
+            # the median of the strand's measured samples; a strand with none is dropped (the layer refuses r <= 0).
+            ok_r = np.isfinite(r) & (r > 0)
+            if not ok_r.any():
+                report["strands_without_width"] = report.get("strands_without_width", 0) + 1
+                continue
+            r = np.where(ok_r, r, np.median(r[ok_r]))
             r = np.minimum(np.minimum(r, 3 * np.median(r)), MAX_RADIUS)
             pts.append(p[a0:b0]); rad.append(r); jnt.append(j[a0:b0]); wgt.append(w[a0:b0])
             root.append(rp[a0:b0]); offsets.append(offsets[-1] + b0 - a0); card_ids.append(c)

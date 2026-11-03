@@ -1,302 +1,302 @@
 {
- "name": "su1-ultra-s8-fg2",
- "save": "Water Queens House",
- "session": false,
- "traces": 0,
- "hold": 120,
- "timeout": 521,
- "repeat": 1,
- "live_batch": "smoke-ultra",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
- "args": [
-  "-RealPresent",
-  "-Move",
-  "-MovePlan",
-  "captures/live_batches/smoke_ultra/plans/su1_s8.json"
- ],
- "patterns": [
-  "\\[hot\\]",
-  "\\[ngx\\] RR create",
-  "\\[sl\\] DLSS-G frame",
-  "\\[pace\\]",
-  "\\[watch\\]",
-  "rt passes: GPU cost",
-  "\\[rt\\] scene wait",
-  "\\[rt\\] scene build GPU",
-  "\\[trace\\]",
-  "\\[shaders\\].*\\?",
-  "\\[crash\\]",
-  "FAILED",
-  "\\[water\\]",
-  "gi: GPU cost",
-  "\\[rrpost\\] exposure (held|probe)",
-  "\\[geo\\] RT capture",
-  "\\[cascade\\] casters",
-  "\\[hit material\\] buffer reuse",
-  "\\[sl\\] fg_letterbox",
-  "sun stats",
-  "^\\S+\\s+\\[core\\] sun:",
-  "\\[core\\] guard:",
-  "skipped: no variant for",
-  "\\[bvh\\] mesh pool",
-  "\\[hit material pool basis\\]",
-  "\\[cascade\\] buffer full",
-  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-  "\\[ab\\]",
-  "\\[mem\\] ours \\(",
-  "\\[omm",
-  "omm check"
- ],
- "expect": [
-  "\\[auto\\] scene ready",
-  "\\[hot\\] core generation \\d+ loaded",
-  "\\[ngx\\] RR create .*: Success",
-  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
-  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
-  "\\[cfg\\] settings read",
-  "\\[trace\\] frame \\d+ written",
-  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
-  "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
-  "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
-  "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
-  "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
-  "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
-  "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
-  "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
-  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-  "\\[ab\\] ab_off: ray tracing OFF",
-  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
-  "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
-  "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
-  "\\[omm\\] requesting EXT micromap \\+ synchronization2",
-  "\\[omm\\] EXT backend available max_four_state_level=\\d+",
-  "gi: GPU cost [0-9.]+ ms/frame"
- ],
- "expect_every": [
-  {
-   "name": "water reflections traced in every window with the casters on",
-   "select": "\\[water\\] reflections \\(\\d+ frames, ",
-   "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ],
-   "min": 1
+  "name": "su1-ultra-s8-fg2",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 521,
+  "repeat": 1,
+  "live_batch": "smoke-ultra",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/smoke_ultra/plans/su1_s8.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[water\\]",
+    "gi: GPU cost",
+    "\\[rrpost\\] exposure (held|probe)",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material\\] buffer reuse",
+    "\\[sl\\] fg_letterbox",
+    "sun stats",
+    "^\\S+\\s+\\[core\\] sun:",
+    "\\[core\\] guard:",
+    "skipped: no variant for",
+    "\\[bvh\\] mesh pool",
+    "\\[hit material pool basis\\]",
+    "\\[cascade\\] buffer full",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[ab\\]",
+    "\\[mem\\] ours \\(",
+    "\\[omm",
+    "omm check"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+    "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+    "\\[cfg\\] settings read",
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
+    "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+    "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+    "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+    "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+    "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+    "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+    "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[ab\\] ab_off: ray tracing OFF",
+    "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+    "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+    "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+    "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+    "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+    "gi: GPU cost [0-9.]+ ms/frame"
+  ],
+  "expect_every": [
+    {
+      "name": "water reflections traced in every window with the casters on",
+      "select": "\\[water\\] reflections \\(\\d+ frames, ",
+      "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "one trace written in each static window",
+      "select": "\\[trace\\] frame \\d+ written: ",
+      "match": "\\[trace\\] frame \\d+ written: ",
+      "windows": [
+        "static-a",
+        "static-b"
+      ],
+      "min": 1,
+      "event": true
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ]
+    },
+    {
+      "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "; non-finite terms 0 \\(",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+      "select": "\\[mem\\] ours \\(",
+      "match": "\\(within budget\\); guard (normal|LOW)",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b"
+      ]
+    },
+    {
+      "name": "OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+      "select": "omm check \\(\\d+ frames\\):",
+      "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+      "windows": [
+        "diag-omm"
+      ],
+      "min": 1
+    },
+    {
+      "name": "OMM diagnostic: scene wait has zero timeouts",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "diag-omm"
+      ],
+      "min": 1
+    },
+    {
+      "name": "no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b",
+        "diag-warm-omm",
+        "diag-omm"
+      ]
+    },
+    {
+      "name": "no roof overflow in measured windows",
+      "select": "sun: WARNING \\d+ roof volumes within",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b",
+        "diag-warm-omm",
+        "diag-omm"
+      ]
+    },
+    {
+      "name": "no roof overflow in measured windows",
+      "select": "over kSunMaxVolumes on [1-9]",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l",
+        "static-b",
+        "diag-warm-omm",
+        "diag-omm"
+      ]
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[water\\] water geometry UNAVAILABLE",
+    "\\[water\\] build submission failed",
+    "\\[water\\] reflections unavailable",
+    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+    "\\[water\\] compose UNAVAILABLE",
+    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+    "\\[water\\] compose: variant pipeline creation failed",
+    "\\[water\\] compose: a water pipeline blends",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[cascade\\] could not allocate",
+    "skipped: no variant for",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hit material pool basis\\] over kBasisCapBytes",
+    "\\[omm\\] VK_EXT_opacity_micromap unavailable",
+    "\\[omm\\] producer disabled after EXT record failure",
+    "\\[omm dyn\\] WARNING"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=14\\b",
+    "\\[motion-trace\\] phase=4 label=static-a repeat=0",
+    "\\[motion-trace\\] phase=9 label=static-b repeat=0"
+  ],
+  "stop_on_dump": true,
+  "purpose": "Ultra smoke at S8 Water Queens House, inheriting qualified box shadows (ls_box=2, default ls_box_honour_shadow=1) and the qualified OMM bundle from preset=ultra (rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod). Existing static/pan/rotation windows gate zero capture drops, within-budget VRAM, zero scene-wait timeouts, water traced/composed and finite, with RT/GI cost lines. Separate warm-up and same-ray OMM diagnostic windows require compared > 0, not compared 0 and violations 0; diagnostics stay off during cost windows. Final ab-off / ab-on exercise toggle latency. VRAM management uses automatic defaults and real driver budget.",
+  "estimated_phase_seconds": 156.7,
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_xfb_mb"
+    ]
   },
-  {
-   "name": "one trace written in each static window",
-   "select": "\\[trace\\] frame \\d+ written: ",
-   "match": "\\[trace\\] frame \\d+ written: ",
-   "windows": [
-    "static-a",
-    "static-b"
-   ],
-   "min": 1,
-   "event": true
-  },
-  {
-   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
-   "select": "\\[geo\\] RT capture, last \\d+ frames:",
-   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
-   "min": 1,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ]
-  },
-  {
-   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
-   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
-   "match": ", buffer full 0\\.0, added ",
-   "min": 1,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ],
-   "when_present": true
-  },
-  {
-   "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
-   "select": "\\[rt\\] scene wait: \\d+ frames",
-   "match": "got this frame's scene, 0 timeouts",
-   "min": 1,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ]
-  },
-  {
-   "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
-   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
-   "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ],
-   "min": 1
-  },
-  {
-   "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
-   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
-   "match": "; non-finite terms 0 \\(",
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ],
-   "min": 1
-  },
-  {
-   "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
-   "select": "\\[mem\\] ours \\(",
-   "match": "\\(within budget\\); guard (normal|LOW)",
-   "event": true,
-   "settle_s": 1,
-   "min": 1,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b"
-   ]
-  },
-  {
-   "name": "OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
-   "select": "omm check \\(\\d+ frames\\):",
-   "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
-   "windows": [
-    "diag-omm"
-   ],
-   "min": 1
-  },
-  {
-   "name": "OMM diagnostic: scene wait has zero timeouts",
-   "select": "\\[rt\\] scene wait: \\d+ frames",
-   "match": "got this frame's scene, 0 timeouts",
-   "windows": [
-    "diag-omm"
-   ],
-   "min": 1
-  },
-  {
-   "name": "no mesh pool exhaustion in measured windows (load excluded)",
-   "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
-   "match": "(?!)",
-   "event": true,
-   "min": 0,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b",
-    "diag-warm-omm",
-    "diag-omm"
-   ]
-  },
-  {
-   "name": "no roof overflow in measured windows",
-   "select": "sun: WARNING \\d+ roof volumes within",
-   "match": "(?!)",
-   "event": true,
-   "min": 0,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b",
-    "diag-warm-omm",
-    "diag-omm"
-   ]
-  },
-  {
-   "name": "no roof overflow in measured windows",
-   "select": "over kSunMaxVolumes on [1-9]",
-   "match": "(?!)",
-   "event": true,
-   "min": 0,
-   "windows": [
-    "static-a",
-    "pan-q",
-    "pan-e",
-    "rotate-r",
-    "rotate-l",
-    "static-b",
-    "diag-warm-omm",
-    "diag-omm"
-   ]
-  }
- ],
- "forbid": [
-  "\\[crash\\] exception 0x",
-  "VK_ERROR_DEVICE_LOST",
-  "\\[hot\\] core (rejected|faulted)",
-  "FAILED, keeping previous",
-  "compile call failed",
-  "RR creation failed",
-  "RR evaluate failed",
-  "\\[water\\] water geometry UNAVAILABLE",
-  "\\[water\\] build submission failed",
-  "\\[water\\] reflections unavailable",
-  "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
-  "\\[water\\] compose UNAVAILABLE",
-  "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
-  "\\[water\\] compose: variant pipeline creation failed",
-  "\\[water\\] compose: a water pipeline blends",
-  "\\[rrpost\\] exposure hold REFUSED",
-  "\\[cascade\\] could not allocate",
-  "skipped: no variant for",
-  "set 1 [1-9]\\d* out-of-range reads skipped",
-  "\\[hit material pool basis\\] over kBasisCapBytes",
-  "\\[omm\\] VK_EXT_opacity_micromap unavailable",
-  "\\[omm\\] producer disabled after EXT record failure",
-  "\\[omm dyn\\] WARNING"
- ],
- "expect_runner": [
-  "\\[window-mode\\].*visible_unfocused",
-  "^Run ended: done",
-  "\\[motion-plan\\] complete phases=13\\b",
-  "\\[motion-trace\\] phase=3 label=static-a repeat=0",
-  "\\[motion-trace\\] phase=8 label=static-b repeat=0"
- ],
- "stop_on_dump": true,
- "purpose": "Ultra smoke at S8 Water Queens House, inheriting qualified box shadows (ls_box=2, default ls_box_honour_shadow=1) and the qualified OMM bundle from preset=ultra (rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod). Existing static/pan/rotation windows gate zero capture drops, within-budget VRAM, zero scene-wait timeouts, water traced/composed and finite, with RT/GI cost lines. Separate warm-up and same-ray OMM diagnostic windows require compared > 0, not compared 0 and violations 0; diagnostics stay off during cost windows. Final ab-off / ab-on exercise toggle latency. VRAM management uses automatic defaults and real driver budget.",
- "estimated_phase_seconds": 221,
- "live_flow": {
-  "expected_fps": 30,
-  "settings_latency_s": 1,
-  "trace_stall_s": 1,
-  "startup_only": [
-   "rt_xfb_mb"
-  ]
- },
- "window_mode": "visible_unfocused_fg"
+  "window_mode": "visible_unfocused_fg"
 }

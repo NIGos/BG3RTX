@@ -53,6 +53,10 @@ enum Cap : unsigned {
   kCapDlss = 1u << 1,       // NVIDIA RTX (DLSS SR/RR): Ray Reconstruction
   kCapFg = 1u << 2,         // RTX 40 and later: DLSS-G 2x
   kCapOpacityMicromap = 1u << 4, // EXT opacity micromap + core BDA/timeline/sync2
+  kCapLinearSweptSpheres = 1u << 5,
+  kCapShaderInt64 = 1u << 6,
+  kCapFragmentStores = 1u << 7,
+  kCapHairGrooms = 1u << 8, // Verified local groom files, supplied by the launcher.
   kCapMfg = 1u << 3,        // RTX 50 and later: DLSS-G 3x/4x
 };
 
@@ -124,7 +128,7 @@ struct Knob {
   Apply apply;
   const char* apply_note;   // shown next to the control
   bool advanced;
-  Choice choices[4];        // Kind::Choice (id == nullptr ends the list)
+  Choice choices[5];        // Kind::Choice (id == nullptr ends the list)
   Slider slider;            // Kind::Slider
   int preset[kPresetCount]; // choice index or slider value per preset
   bool experimental = false; // shown under "Experimental": off in every preset, being tested
@@ -132,6 +136,7 @@ struct Knob {
   bool dev_only = false;     // developer tools: the GUI shows them only with dev=1
   const char* category = "Advanced";
   Cost cost = {};
+  const char* details = "";
 };
 
 // Apply audit: core/gi.cpp reads lighting/strength each frame; refresh() builds variants on demand.
@@ -248,6 +253,14 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  {"water_surface_fresnel", "Water interface Fresnel",
+   "Experimental: adjusts reflections at the water surface.",
+   Kind::Choice, Apply::Restart, "on: restart; off: live", true,
+   {{"off", "Off", 0, {{"rt_water_surface_fresnel", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On (unqualified)", kCapRayQuery, {{"rt_water_surface_fresnel", "1"}}, {{"exp_water", 1}},
+     {"rt_water_surface_fresnel"}, false, true, true, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}, "Separates clean-water reflection from column opacity. Awaiting qualification at S8 Water Queens House; compare shallow pool reflections."},
+
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
   {"exp_omm", "Opacity micromaps",
@@ -263,30 +276,31 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rt_vt_alpha_masks", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Neutral at camp", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Not measured", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
-   "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+   "Experimental: adds lighting from hidden surfaces to water reflections.",
    Kind::Choice, Apply::Live, "live; needs captured materials at startup", false,
    {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
     {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
-   {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
+   {}, {0,0,0,0}, true, {}, false, "Advanced", {}, "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms."},
 
   {"exp_water_hit_cost", "Water reflection optimizations",
-   "Experimental: compare sparse light lookup, zero-light rejection and candidate order. Energy qualification pending.",
+   "Experimental: reduces the work needed to shade water reflections.",
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rt_water_hit_cost","0"}}, {}, {}, false, false, false, Apply::Hitch},
-    {"sparse", "Sparse lights", kCapRayQuery, {{"rt_water_hit_cost","1"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
-    {"zero", "Zero light rejection", kCapRayQuery, {{"rt_water_hit_cost","2"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
-    {"order", "Unsorted candidates", kCapRayQuery, {{"rt_water_hit_cost","4"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch}},
-   {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
+    {"sparse", "Sparse lights", kCapRayQuery, {{"rt_water_hit_cost","1"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
+    {"zero", "Zero light rejection", kCapRayQuery, {{"rt_water_hit_cost","2"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
+    {"order", "Unsorted candidates", kCapRayQuery, {{"rt_water_hit_cost","4"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
+    {"combined", "Combined", kCapRayQuery, {{"rt_water_hit_cost","7"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch}},
+   {}, {0,0,0,0}, true, {}, false, "Advanced", {}, "Sparse light lookup, zero-light rejection and candidate order; Combined enables all three. Energy qualification pending."},
 
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
-   "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
+   "Adds indirect light from surfaces hidden from the camera.",
    Kind::Choice, Apply::Restart, "Restart to first enable capture or turn it off; Near/Far/reflection changes may hitch while pipelines compile.", true,
    {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"}, {"rt_hit_material_wind_rgb", "0"},
       {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"},
@@ -305,7 +319,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}, {"gi", 2}, {"reflections", 1}}, {"rf_hit_shade", "rf_hit_gi"}, false, true, false, Apply::Restart}},
    {}, {0, 0, 0, 2}, false,
    {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"},
-    {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",1}}, false, "Advanced", {"Estimate", "Near ~+0.6 ms; Far ~+4 ms; reflections ~+6 ms", "Unknown", "RTX 5090; 4K-class output; Far 6 m; includes emission +0.08 ms and far-field GI trace +3.2-3.7 ms; reflection level experimental. Reference only."}},
+    {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",1}}, false, "Advanced", {"Estimate", "Near ~+0.6 ms; Far ~+4 ms; reflections ~+6 ms", "Unknown", "RTX 5090; 4K-class output; Far 6 m; includes emission +0.08 ms and far-field GI trace +3.2-3.7 ms; reflection level experimental. Reference only."}, "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental)."},
 
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
@@ -318,25 +332,25 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.13 ms S6", "Unknown", "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."}},
 
   {"rr_hair_resolve", "RR hair dither resolve",
-   "Smooths hair coverage before RR. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured; may soften edges.",
+   "Experimental: smooths dotted hair edges and may soften them.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rr_hair_resolve", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}, "Smooths hair coverage before RR. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured; may soften edges."},
 
   {"rr_post", "RR order",
-   "Moves RR before/after game post-processing. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured.",
+   "Experimental: changes how fine hair edges appear through depth of field.",
    Kind::Choice, Apply::Live, "live", false,
    {{"before", "Before post (default)", 0, {{"rr_post", "1"}}, {}, {}, false, false, false, Apply::Live},
     {"after", "After post", kCapDlss, {{"rr_post", "0"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}, "Moves RR before/after game post-processing. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured."},
 
   {"rr_post_temporal", "Temporal depth of field and bloom",
-   "Smooths depth of field and bloom around fine edges. Experimental; quality and GPU cost await a live comparison.",
+   "Experimental: smooths depth of field and bloom around fine edges.",
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rr_post_temporal", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}, "Quality and GPU cost await a live comparison in Dialogue3."},
 
   {"exp_compact_hit_state", "Compact ray hit state",
    "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
@@ -377,32 +391,41 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Lighting", {"Measured", "RT +2.3-6.3 ms, GI +3.2-8.8 ms over cards (S8, dialogues)", "88-byte capture vertices", "RTX 5090; hair_qual 2026-11-03; user decision: hair shadows need it, cost accepted"}},
 
   {"exp_hair_groom", "Strand hair in ray-traced lighting",
-   "Uses strands in RT shadows/AO/GI/reflections. Dialogue1: hair shadows on faces/necks. RTX 5090 vs native cards: RT -1.1-1.5 ms, GI -1.6-1.8 ms; refit +0.57 ms.",
+   "Experimental: uses individual strands for hair shadows and reflected light.",
    Kind::Choice, Apply::Live, "live; supported LSS hardware and local groom files required", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapHairGrooms, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {"Measured", "RT -1.1-1.5 ms; GI -1.6-1.8 ms; refit +0.57 ms", "Unknown", "RTX 5090; Dialogue1 versus native cards. Reference only; qualification incomplete."}, "Uses strands in RT shadows/AO/GI/reflections. Inspect hair shadows on faces and necks in Dialogue1."},
 
   {"exp_hair_groom_primary", "Strand hair on screen",
-   "The visible hair of converted styles becomes strands (needs strand hair in RT lighting). Moving hair keeps camera motion vectors for now. Cost and look unqualified.",
-   Kind::Choice, Apply::Live, "live; supported LSS hardware, local groom files and shaderInt64 required", false,
-   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_groom_primary", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+   "Experimental: displays converted hairstyles as individual strands.",
+   Kind::Choice, Apply::Restart, "restart required; experimental activation safety gate", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "On", kCapRayQuery | kCapLinearSweptSpheres | kCapShaderInt64 | kCapFragmentStores | kCapHairGrooms, {{"rt_hair_groom_primary", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Advanced", {}, "Requires linear swept spheres, shaderInt64, fragment stores and local groom files. Moving hair currently keeps camera motion vectors. Cost and appearance remain unqualified; activation requires restart after a reported device-loss incident."},
 
   {"exp_hair_fibre", "Physical strand shading",
-   "Lights the on-screen strands with a fibre BSDF and multiple scattering instead of the game's hair shading. Brighter, warmer hair; cost and look unqualified.",
+   "Experimental: gives on-screen hair brighter, warmer shading.",
    Kind::Choice, Apply::Live, "live; needs Strand hair on screen", false,
    {{"off", "Off", 0, {{"rt_hair_fibre", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_fibre", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}, "Uses a fibre BSDF with multiple scattering instead of the game hair shading. Cost and appearance remain unqualified."},
+
+  {"exp_hair_groom_crowd", "Strand hair crowd budget",
+   "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_crowd_ksegments", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"large", "3.5 million segments", kCapRayQuery, {{"rt_hair_groom_crowd_ksegments", "3500"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live},
+    {"small", "1.8 million segments", kCapRayQuery, {{"rt_hair_groom_crowd_ksegments", "1800"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}, "Budgets total groom segments, not characters. Approximately 4 or 2 close characters respectively; actual counts depend on groom size. Refit and memory scale with the budget."},
 
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
-   "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
+   "Reclaims unused hair capture memory.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {}, false, "Performance", {"Measured", "Neutral", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Performance", {"Measured", "Not measured", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}, "Reclaims and packs unused native hair snapshots. Mesh pool reduction of 26-50% in the reference scenes; no numeric GPU timing available."},
+
   {"exp_cascade_static_only", "Static roof casters only",
    "Excludes animated and unclassified shadow-map copies from roof sun shadows. "
    "May omit some roofs; dialogue motion and roof coverage are unqualified.",
@@ -682,6 +705,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_hit_cost", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
+    {"rt_water_surface_fresnel", "0"},
     {"rt_water_compose", "0"},
     {"rt_water_shadows", "0"},
     {"rt_water_ls_shadows", "0"},
@@ -718,6 +742,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_fibre", "0"},
+    {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},
@@ -912,6 +937,7 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (from == to) return false;
   // core/gi.cpp initialize_hair_origin persists the startup reservation across core reloads.
   if (key == "rt_hair_physical_origin") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  if (key == "rt_hair_groom_primary") return true; // Safety gate until hot activation is verified.
   if (key == "fg") return (std::atoi(from.c_str()) >= 2) != (std::atoi(to.c_str()) >= 2);
   // M5.3: the water FS variants exist only if the key was on when the pipelines were created.
   if (key == "rt_water_compose") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
@@ -921,6 +947,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_ls_shadows") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.5: likewise (the refraction words of the record are patched in at creation).
   if (key == "rt_water_refraction") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // M5.6: the interface/column FS patch is provisioned at pipeline creation.
+  if (key == "rt_water_surface_fresnel") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // M5.4c: likewise (the game-shadow words of the record are patched in at creation).
   if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).
@@ -946,8 +974,15 @@ inline void retain_startup_tilesets(Map& candidate,const Map& startup) {
 
 // Every choice is explicit. A custom value uses the control's most demanding mode.
 inline Apply knob_apply(const Knob& k,int value) {
-  if(k.kind==Kind::Choice && value>=0 && value<4 && k.choices[value].id)return k.choices[value].apply;
+  if(k.kind==Kind::Choice && value>=0 && value<5 && k.choices[value].id)return k.choices[value].apply;
   return k.apply;
+}
+
+// Frame generation only needs restart when crossing Off/on.
+inline Apply transition_apply(const Knob& k, int from, int to) {
+  if (std::string(k.id)=="frame_generation" && from>=0 && to>=0)
+    return (from==0)!=(to==0) ? Apply::Restart : Apply::Live;
+  return knob_apply(k,to);
 }
 
 // ---- small helpers ----
@@ -991,7 +1026,7 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 
 inline int choice_count(const Knob& k) {
   int n = 0;
-  while (n < 4 && k.choices[n].id) ++n;
+  while (n < 5 && k.choices[n].id) ++n;
   return n;
 }
 
@@ -1264,9 +1299,14 @@ inline bool choice_visible(const Knob& k, int c, bool dev) {
   return knob_visible(k, dev) && c >= 0 && c < choice_count(k) && (dev || !k.choices[c].dev);
 }
 
+inline bool choice_requires_experimental(const Knob& k, int c) {
+  return k.kind==Kind::Choice && c>=0 && c<choice_count(k) &&
+    (k.choices[c].awaiting_qualification || k.choices[c].experimental || (k.experimental && c>0));
+}
+
 inline bool choice_available(const Knob& k, int c, bool dev, bool experimental, unsigned caps) {
   return choice_visible(k, c, dev) && choice_supported(k, c, caps) &&
-         (experimental || std::string(choice_maturity(k, c)) != "experimental");
+         (experimental || !choice_requires_experimental(k,c));
 }
 
 // Pass these values to render_user_ini to preserve hidden/custom keys during an unrelated save.
@@ -1354,6 +1394,10 @@ struct Gpu {
   bool ray_query = false;   // VK_KHR_ray_query + VK_KHR_acceleration_structure
   bool discrete = false;
   bool opacity_micromap = false; // Required EXT/core features were queried, not inferred from GPU name.
+  bool linear_swept_spheres = false;
+  bool shader_int64 = false;
+  bool fragment_stores = false;
+  bool hair_grooms = false;
 };
 
 // NVIDIA RTX generation as the marketing series: 20, 30, 40, 50 (0 unknown / not RTX).
@@ -1378,6 +1422,10 @@ inline unsigned gpu_caps(const Gpu& g) {
   unsigned c = 0;
   if (g.ray_query) c |= kCapRayQuery;
   if (g.ray_query && g.opacity_micromap) c |= kCapOpacityMicromap;
+  if (g.linear_swept_spheres) c |= kCapLinearSweptSpheres;
+  if (g.shader_int64) c |= kCapShaderInt64;
+  if (g.fragment_stores) c |= kCapFragmentStores;
+  if (g.hair_grooms) c |= kCapHairGrooms;
   int s = nv_series(g);
   if (s >= 20) c |= kCapDlss;
   if (s >= 40) c |= kCapFg;
@@ -1497,13 +1545,14 @@ inline std::string schema_json() {
     o += std::string("}}") + (p + 1 < kPresetCount ? "," : "") + "\n";
   }
   o += "  ],\n  \"knobs\": [\n";
-  static const char* const kCapNames[] = {"ray_query", "dlss", "fg", "mfg", "opacity_micromap"};
+  static const char* const kCapNames[] = {"ray_query", "dlss", "fg", "mfg", "opacity_micromap", "linear_swept_spheres", "shader_int64", "fragment_stores", "hair_grooms"};
   for (int i = 0; i < kKnobCount; ++i) {
     const Knob& k = kKnobs[i];
     o += "    {\"id\": " + json_str(k.id) + ", \"label\": " + json_str(k.label) + ",\n     \"description\": " +
          json_str(k.desc) + ",\n     \"apply\": " + json_str(apply_name(k.apply)) + ", \"apply_note\": " +
          json_str(k.apply_note) + ", \"advanced\": " + (k.advanced ? "true" : "false") + ", \"experimental\": " + (k.experimental ? "true" : "false") + ", \"developer\": " + (k.dev_only ? "true" : "false") + ",\n";
     o += "     \"category\": " + json_str(k.category) + ", \"summary\": " + json_str(k.desc) + ",\n";
+    o += "     \"details\": " + json_str(k.details) + ",\n";
     o += "     \"cost\": {\"status\": " + json_str(k.cost.status) + ", \"gpu\": " + json_str(k.cost.gpu) +
          ", \"vram\": " + json_str(k.cost.vram) + ", \"provenance\": " + json_str(k.cost.provenance) + "},\n";
     o += "     \"required_on\": {";
@@ -1537,7 +1586,7 @@ inline std::string schema_json() {
         const Choice& ch = k.choices[c];
         o += "       {\"id\": " + json_str(ch.id) + ", \"label\": " + json_str(ch.label) + ", \"apply\": " + json_str(apply_name(ch.apply)) + ", \"caps\": [";
         bool first = true;
-        for (int b = 0; b < 5; ++b)
+        for (int b = 0; b < 9; ++b)
           if (ch.caps & (1u << b)) {
             o += std::string(first ? "" : ", ") + json_str(kCapNames[b]);
             first = false;

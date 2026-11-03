@@ -53,6 +53,31 @@ def hms(t):
     return "%02d:%02d:%06.3f" % (t // 3600, (t % 3600) // 60, t % 60)
 
 
+def water_capture_case():
+    with tempfile.TemporaryDirectory() as tmp:
+        cap = Path(tmp)
+        def dump(mean, fs, image='scene', nf=0):
+            return dict(mean=[mean]*3, pass_fs=fs, image=image, slot=0, nonfinite=nf)
+        d = {'d1': dump(1, g.SCENE_FS), 'd2': dump(4, '7b44a567'),
+             'd3': dump(3.5, '7b44a567', nf=2), 'd4': dump(99, 'other', image='bloom')}
+        events = [dict(op='pass'), dict(op='draw', fs=g.SCENE_FS), dict(op='end', dumps=['d1']),
+                  dict(op='pass'), dict(op='draw', fs='7b44a567'), dict(op='end', dumps=['d2'])]
+        def evaluate():
+            (cap/'frame.json').write_text(json.dumps(dict(submits=[dict(cmds=[dict(events=events)])])))
+            return g.water_compose_colour(cap, d)
+        check('legacy missing post-water colour stays invalid', isinstance(evaluate()[0], str))
+        events.append(dict(op='post_core', dumps=['d3']))
+        value, nf = evaluate()
+        check('explicit post-core delta cancels native water and counts nonfinite', abs(value-.5)<1e-12 and nf==2)
+        events[-1]['dumps'] = ['d4']
+        check('wrong-image post-core dump stays invalid', isinstance(evaluate()[0], str))
+        events[-1]['dumps'] = []
+        check('missing explicit readback stays invalid', isinstance(evaluate()[0], str))
+        events.pop()
+        events += [dict(op='pass'), dict(op='draw', fs='other'), dict(op='end', dumps=['d3'])]
+        check('legacy following same-image dump remains supported', abs(evaluate()[0]-.5)<1e-12)
+
+
 def exposure_case():
     """gi_far S8 2026-11-01 (gf2-s8-fg2): the eye adaptation raised the pre-exposure s1b13[0] by 3.2% in the ON
     shot, so the raw scene colour rose +2.87% while the lit image itself got 0.32% darker. The probe line of
@@ -252,6 +277,7 @@ def main():
     check("rf hit gi line parsed (ratio 1.012, without 0.917, screen source 66.7%)",
           m is not None and m.group(5) == "1.012" and m.group(6) == "0.917" and m.group(10) == "66.7")
     shadowed_tools_case()
+    water_capture_case()
     exposure_case()
     print("all checks passed" if not fails else f"{fails} check(s) failed")
     return 1 if fails else 0
