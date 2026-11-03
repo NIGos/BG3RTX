@@ -180,7 +180,9 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
     if (dd->vk.CreateFence(dd->device, &fci, nullptr, &fence) != VK_SUCCESS) fence = VK_NULL_HANDLE;
   }
   if (fence) {
-    if (dd->vk.QueueSubmit(queue, 0, nullptr, fence) == VK_SUCCESS) g_fences.push_back({frame, fence, queue, 0});
+    const VkResult submitted = dd->vk.QueueSubmit(queue, 0, nullptr, fence);
+    lost = lost || submitted == VK_ERROR_DEVICE_LOST;
+    if (submitted == VK_SUCCESS) g_fences.push_back({frame, fence, queue, 0});
     else g_free_fences.push_back(fence);   // never submitted: still unsignaled
   }
   // Drop entries whose last submission is known complete.
@@ -214,7 +216,7 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
         (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());
   }
   lock.unlock();
-  if (lost) fault_on_result(dd, VK_ERROR_DEVICE_LOST, "the present fence poll");
+  if (lost) fault_on_result(dd, VK_ERROR_DEVICE_LOST, "the present fence poll/submission");
 }
 
 void life_device_destroyed(DeviceData* dd) {
@@ -273,7 +275,7 @@ void life_before_destroy(uint64_t h, const char* what) {
   QueryPerformanceCounter(&t1);
   QueryPerformanceFrequency(&fq);
   const double ms = double(t1.QuadPart - t0.QuadPart) * 1000.0 / double(fq.QuadPart);
-  std::lock_guard<std::mutex> lock(g_life_mu);
+  std::unique_lock<std::mutex> lock(g_life_mu);
   const uint64_t fframe = f->frame;
   --f->waiters;
   if (res == VK_SUCCESS && f->queue == g_present_queue) g_life_done = (std::max)(g_life_done, fframe);
@@ -290,6 +292,8 @@ void life_before_destroy(uint64_t h, const char* what) {
         "present %llu's fence (%s)",
         what, (void*)h, (unsigned long long)r.frame, (unsigned long long)frame_index(), ms, (unsigned long long)fframe,
         res == VK_SUCCESS ? "complete" : res == VK_TIMEOUT ? "TIMEOUT, destroyed anyway" : "error");
+  lock.unlock();   // fault reporting reads life_gpu_done under g_life_mu
+  fault_on_result(dd, res, "resource lifetime fence wait");
 }
 
 static bool is_image_type(VkDescriptorType t) {

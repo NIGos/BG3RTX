@@ -153,6 +153,7 @@ void after_submit(DeviceData* dd,VkQueue queue,const PreparedSubmit& prepared,bo
     values.signalSemaphoreValueCount=1;values.pSignalSemaphoreValues=&value;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO,&values};submit.signalSemaphoreCount=1;submit.pSignalSemaphores=&timeline;
     const auto result=dd->vk.QueueSubmit(queue,1,&submit,VK_NULL_HANDLE);
+    fault_on_result(dd,result,"OMM timeline signal submission");
     if(!serial.signal(value,result==VK_SUCCESS)){poison("timeline signal submit failed");return;}
     for(auto ticket:tickets)if(!mark_submitted(ticket,value)){poison("ticket use after retirement or absent ticket");return;}
   }
