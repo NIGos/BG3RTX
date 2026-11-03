@@ -26,7 +26,7 @@ inline constexpr unsigned kSpecCascadeId = 1000;
 // Specialization constant ids, one per on/off key (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): the one
 // registry, so branches never pick the same id. Reserved for the steps that are not merged yet; an id is never reused.
 enum SpecId : unsigned {
-  kSpecIdCascade = kSpecCascadeId,   // S1  RT_CASCADE_MASKS (+ RT_CASCADE_SUN in rt_shadow)
+  kSpecIdCascade = kSpecCascadeId,   // GI and water cascade masks, including sun-ray selection
   kSpecIdTemporalMv = 1001,          // G   GI_TEMPORAL_MV_SAMPLE  (branch gi-reproj-guards)
   kSpecIdPrevRadiance = 1002,        // G   GI_PREV_RADIANCE_GUARD (branch gi-reproj-guards)
   kSpecIdHitInstanced = 1003,        // S2  RT_HIT_INSTANCED
@@ -169,15 +169,16 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
   return out;
 }
 
-// rt_cascade_casters for the water passes (core/water.cpp): the TLAS holds the cascade's casters
-// (mask 0x02), so the reflection, refraction and local-light rays trace 0x01 (RT_CASCADE_MASKS) and the
-// compose's sun ray (WATER_SHADOWS) sees them too (RT_CASCADE_SUN_HIT: g_rt_cascade_ray around it),
-// as gi_hit_sun's sun ray at a GI hit. Off: the request unchanged.
+// Water uses the existing cascade constant 1000 for both states. The sun-hit marker
+// describes the pass, never the toggle; only the sun ray sees cascade casters.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
 inline std::string water_request(const char* req, bool cascade) {
   std::string out = req;
-  if (!cascade) return out;
-  out += out.find('?') == std::string::npos ? "?RT_CASCADE_MASKS=1" : ";RT_CASCADE_MASKS=1";
+  (void)cascade;
+  if (out.compare(0, sizeof("rt/water_compose.hlsl") - 1, "rt/water_compose.hlsl") != 0 &&
+      out.compare(0, sizeof("rt/water_reflect.hlsl") - 1, "rt/water_reflect.hlsl") != 0 &&
+      out.compare(0, sizeof("rt/water_glint.hlsl") - 1, "rt/water_glint.hlsl") != 0) return out;
+  out += out.find('?') == std::string::npos ? "?WATER_SPEC_CASCADE=1" : ";WATER_SPEC_CASCADE=1";
   if (out.find("WATER_SHADOWS=1") != std::string::npos) out += ";RT_CASCADE_SUN_HIT=1";
   return out;
 }

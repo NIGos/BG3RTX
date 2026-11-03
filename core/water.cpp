@@ -197,14 +197,14 @@ VkDeviceSize stat_off(uint32_t slot) { return VkDeviceSize(slot) * kStatBytes; }
 VkDeviceSize param_off(uint32_t slot) { return kRing * kStatBytes + VkDeviceSize(slot) * kParamBytes; }
 
 bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout layout) {
-  // The variant of the scene layout (rt_cascade_casters); a pipeline of another request never runs.
-  // water_view and water_mv trace nothing: always their plain file.
-  const bool traces = std::strncmp(base, "rt/water_view", 13) != 0 && std::strncmp(base, "rt/water_mv", 11) != 0;
-  const std::string req = bg3::shader_variant::water_request(base, traces && cascade_on());
+  const std::string req = bg3::shader_variant::water_request(base, cascade_on());
+  const bool cascade_spec = req.find("WATER_SPEC_CASCADE=1") != std::string::npos;
+  const uint32_t cascade_value = cascade_spec && cascade_on() ? 1u : 0u;
   const char* file = req.c_str();
   const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
   const uint32_t edge_value = edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u;
-  const std::string pipe_key = edge_spec ? req + (edge_value ? "#edge=1" : "#edge=0") : req;
+  std::string pipe_key = edge_spec ? req + (edge_value ? "#edge=1" : "#edge=0") : req;
+  if (cascade_spec) pipe_key += cascade_value ? "#cascade=1" : "#cascade=0";
   Bg3ShaderBlob blob{};
   if (!host->get_shader(file, entry, "cs_6_6", &blob)) return p.p != VK_NULL_HANDLE && p.req == pipe_key;
   if (p.p && blob.generation == p.gen && p.req == pipe_key) return true;
@@ -217,9 +217,13 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, entry,
                nullptr};
-  const VkSpecializationMapEntry edge_entry{bg3::shader_variant::kSpecIdWaterRfEdge, 0, sizeof(edge_value)};
-  const VkSpecializationInfo edge_info{1, &edge_entry, sizeof(edge_value), &edge_value};
-  if(edge_spec) pci.stage.pSpecializationInfo = &edge_info;
+  const uint32_t spec_values[] = {cascade_value, edge_value};
+  VkSpecializationMapEntry spec_entries[2]{};
+  uint32_t spec_count = 0;
+  if (cascade_spec) spec_entries[spec_count++] = {bg3::shader_variant::kSpecIdCascade, 0, sizeof(uint32_t)};
+  if (edge_spec) spec_entries[spec_count++] = {bg3::shader_variant::kSpecIdWaterRfEdge, sizeof(uint32_t), sizeof(uint32_t)};
+  const VkSpecializationInfo spec_info{spec_count, spec_entries, sizeof(spec_values), spec_values};
+  if (spec_count) pci.stage.pSpecializationInfo = &spec_info;
   pci.layout = layout;
   VkPipeline np = VK_NULL_HANDLE;
   const VkResult r = vk.CreateComputePipelines(host->device, VK_NULL_HANDLE, 1, &pci, nullptr, &np);
@@ -654,7 +658,7 @@ bool ensure_compose(VkDescriptorSetLayout alpha_layout, uint32_t push_bytes, boo
     g_calpha = alpha_layout;
     g_cpush_bytes = push_bytes;
   }
-  // rt_water_rf_edge: the screen-edge fade variant of the same request (live: make_pipe rebuilds on a new request).
+  // rt_water_rf_edge: the screen-edge fade constant of the same request.
   // rt_water_glint_aa: the sun glint filter on the forms with the sun records (takes the place of the edge fade).
   const char* form =
                    refr && gsh ? "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1"
@@ -1350,7 +1354,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
     ++g_win.skip[u];
     return skip();
   }
-  // rt_cascade_casters runs the RT_CASCADE_MASKS requests (make_pipe). The keys of
+  // rt_cascade_casters selects constant 1000 in make_pipe. The keys of
   // shader_variant::kWaterNoVariant change the alpha set or the scene's primitives (core/gi.cpp
   // Pipe variants) and have no water variant: counted, logged once per change ("skipped: no
   // variant for", the convention smoke_ultra forbids), never traced with the wrong layout.
