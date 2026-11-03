@@ -1949,10 +1949,12 @@ Push make_push() {
   // rf_hit_shade hits follow D-LS's light policy (lights it leaves to the game unshadowed, stop
   // short by max(R, ls_clear)). Only those variants read it.
   pc.ls_flags |= host->cfg_int("hit_ls_policy", 1) ? (1u << 24) : 0u;
-  // Bit 27: ls_box=2 (rt_local_shadows.hlsl ls_box_all_lights): the box lights without a game shadow map
-  // are traced too (to the end of their light-side fade-in), and the shadow-mapped ones only over the
-  // segment their game shadow view covers. Only the LS_BOX variants read it.
+  // Bit 27: ls_box=2 bounded segments (shadow-view near plane, or the legacy fixture limit).
+  // Bit 29 separately permits legacy unshadowed boxes in LS_BOX variants only.
   pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 ? (1u << 27) : 0u;
+  // Bit 29: legacy unshadowed-box tracing for the within-run art-intent A/B only.
+  pc.ls_flags |= host->cfg_int("ls_box", 0) >= 2 && !host->cfg_int("ls_box_honour_shadow", 1)
+                     ? (1u << 29) : 0u;
   // Bit 28: rt_omm_reference (live A/B, rt/omm_scene_guard.hlsli): RT_OMM_SCENE variants keep the scene
   // guard but trace the reference scene (no micromaps). Only those variants read it.
   {

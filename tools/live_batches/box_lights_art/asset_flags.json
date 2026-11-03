@@ -1,0 +1,73 @@
+{
+ "database_sha256": "17af233f58e552fbe28e78738d9c3153dab954ea39cca3eece9fb4bed93e637a",
+ "level": "WLD_Main_A",
+ "scope": "S6 world level; includes other act 1 regions, not just the camera frustum. Source instance subsets below are exact, not a visible-light count.",
+ "box_count": 892,
+ "flags": {
+  "Shadow": "LGHT flags bit 2 (4)",
+  "CastShadow": "LGHT flags bit 9 (512)"
+ },
+ "combinations": [
+  {
+   "Shadow": false,
+   "CastShadow": false,
+   "count": 433
+  },
+  {
+   "Shadow": false,
+   "CastShadow": true,
+   "count": 89
+  },
+  {
+   "Shadow": true,
+   "CastShadow": false,
+   "count": 355
+  },
+  {
+   "Shadow": true,
+   "CastShadow": true,
+   "count": 15
+  }
+ ],
+ "forge_named_only": [
+  {
+   "name": "Light_Underdark_Directionnal_ForgePlatform_Green_004",
+   "Shadow": false,
+   "CastShadow": false
+  },
+  {
+   "name": "Light_Underdark_Directionnal_ForgePlatform_Green_005",
+   "Shadow": false,
+   "CastShadow": false
+  },
+  {
+   "name": "Light_Underdark_Directionnal_ForgePlatform_Green_003",
+   "Shadow": false,
+   "CastShadow": false
+  },
+  {
+   "name": "Light_Underdark_Directionnal_ForgePlatform_Green_001",
+   "Shadow": true,
+   "CastShadow": false
+  },
+  {
+   "name": "Light_Underdark_Directionnal_ForgePlatform_Green_002",
+   "Shadow": false,
+   "CastShadow": false
+  }
+ ],
+ "instances": [
+  {
+   "name": "WLD_UnderdarkSubs_C",
+   "count": 98,
+   "both_clear": 88,
+   "shadow_only": 10
+  },
+  {
+   "name": "PLT_UND_AdamantineForge",
+   "count": 5,
+   "both_clear": 4,
+   "shadow_only": 1
+  }
+ ]
+}
