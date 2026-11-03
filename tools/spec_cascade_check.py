@@ -183,6 +183,13 @@ def old_requests_hairgi(spec_request):
     return out
 
 
+def old_requests_groom(spec_request):
+    """rt_hair_groom (1020) off: the program without the groom code, hair absent or present (the literal native
+    references have none). On is a different program by design: --baseline <main> covers off against main."""
+    return [(assign | {1020: 0}, request) for assign, request in old_requests_native(spec_request)
+            if not assign[1008] and not assign.get(1009, 0)]
+
+
 def old_requests_haircost(spec_request):
     out = []
     for assign, request in old_requests_native(spec_request):
@@ -195,6 +202,7 @@ def old_requests_haircost(spec_request):
 
 
 KEYS = {"haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
+        "groom": ("RT_SPEC_NATIVE=1", old_requests_groom),
         "waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
         "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
         "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
@@ -359,7 +367,7 @@ def check_baseline(tool, tmp, i, spec_path, old_path, assign, assign_reference):
     if assign_reference:
         reference = opt(tool, old_path, Path(tmp) / f"{i}_baseline-assigned.spv",
                         "--set-spec-const-default-value=" + " ".join(
-                            f"{k}:{v}" for k, v in sorted(assign.items()) if k not in (1017, 1018, 1019)))
+                            f"{k}:{v}" for k, v in sorted(assign.items()) if k not in (1017, 1018, 1019, 1020)))
     return check_one(tool, tmp, i, spec_path, reference, assign)
 
 
@@ -469,12 +477,13 @@ def main():
                         assignments = ([a for a, _ in pairs[r] if a[1017] == 0]
                                        if args.key == "hairgi" else
                                        [a for a, _ in pairs[r] if a[1018] == 0 and a[1019] == 0]
-                                       if args.key == "haircost" else [pairs[r][0][0]])
+                                       if args.key == "haircost" else
+                                       [a for a, _ in pairs[r]] if args.key == "groom" else [pairs[r][0][0]])
                         for j, assign in enumerate(assignments):
                             baseline_jobs.append((f"base_{i}_{e.name}_{j}", r, e.name, newp, oldp, assign))
                 with Progress("spec baseline equivalence", len(baseline_jobs), every=30, verb="compared") as prog, \
                         concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
-                    futs = {pool.submit(check_baseline, tool, bt, i, newp, oldp, assign, args.key in ("hairgi", "haircost")):
+                    futs = {pool.submit(check_baseline, tool, bt, i, newp, oldp, assign, args.key in ("hairgi", "haircost", "groom")):
                             (r, entry, assign) for i, r, entry, newp, oldp, assign in baseline_jobs}
                     for f in concurrent.futures.as_completed(futs):
                         r, entry, assign = futs[f]
@@ -510,11 +519,13 @@ def main():
                     local[(r, e.name)] = dst
         P = lambda r, e="main": local[(r, e)]  # noqa: E731
         control_request = (next((r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"), pick[0])
-                           if args.key in ("native", "omm", "haircost") else pick[0])
+                           if args.key in ("native", "omm", "haircost") else
+                           next((r for r in pick if split_request(r)[0].startswith("gi/gi_trace_rt")), pick[0])
+                           if args.key == "groom" else pick[0])
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = ((control_pairs[4], control_pairs[6]) if args.key == "haircost" else
                            control_pairs[-2:] if args.key == "hairgi" else
-                           (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2])
+                           (control_pairs[0], control_pairs[-1]) if args.key in ("native", "groom") else control_pairs[:2])
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
         control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
                          "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else

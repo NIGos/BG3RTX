@@ -41,6 +41,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rtscene.cpp
   layer/sun_scene.cpp
   layer/omm_backend.cpp
+  layer/hair_groom.cpp
   layer/omm_submit.cpp
   layer/omm_content.cpp
   layer/omm_sampler.cpp
@@ -362,7 +363,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy)
+  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -419,6 +420,8 @@ add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
 add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
 add_executable(mesh_content_id_test tests/mesh_content_id_test.cpp)
 add_test(NAME mesh_content_id_test COMMAND mesh_content_id_test)
+add_executable(hair_groom_asset_test tests/hair_groom_asset_test.cpp)
+add_test(NAME hair_groom_asset_test COMMAND hair_groom_asset_test)
 add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
 add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 # rt_hit_material_instanced (common/native_hit_instanced.h): per-draw rows of instanced wind / 2S draws.
@@ -491,6 +494,28 @@ target_link_libraries(native_hit_gpu_fixture PRIVATE vulkan-1)
 add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
 add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
 set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
+# Hair cost gate (docs/RTX_HAIR_GROOM_EXPERIMENT.md): alpha-tested cards vs an LSS strand groom on a
+# standalone device. Needs VK_NV_ray_tracing_linear_swept_spheres and an input from
+# python -m tools.hair_groom.bench_data, so it is a manual tool, not a CTest.
+option(BG3RTX_HAIR_LSS_BENCH "Build the standalone hair LSS vs card cost bench" OFF)
+if(BG3RTX_HAIR_LSS_BENCH)
+  set(HAIR_LSS_SPV_DIR ${CMAKE_BINARY_DIR}/hair_lss_bench_spv)
+  set(HAIR_LSS_SPVS)
+  foreach(entry trace_opaque trace_alpha deform update)
+    add_custom_command(OUTPUT ${HAIR_LSS_SPV_DIR}/${entry}.spv
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${HAIR_LSS_SPV_DIR}
+      COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_lss_bench.hlsl -spirv -fspv-target-env=vulkan1.3
+              -HV 2021 -T cs_6_6 -E ${entry} -O3 -Fo ${HAIR_LSS_SPV_DIR}/${entry}.spv
+      DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_lss_bench.hlsl VERBATIM)
+    list(APPEND HAIR_LSS_SPVS ${HAIR_LSS_SPV_DIR}/${entry}.spv)
+  endforeach()
+  add_custom_target(hair_lss_bench_spv ALL DEPENDS ${HAIR_LSS_SPVS})
+  add_executable(hair_lss_bench tools/hair_lss_bench.cpp)
+  target_include_directories(hair_lss_bench PRIVATE ${VULKAN_SDK}/Include)
+  target_link_directories(hair_lss_bench PRIVATE ${VULKAN_SDK}/Lib)
+  add_dependencies(hair_lss_bench hair_lss_bench_spv)
+endif()
 
 # Offline frame replay (tools/frame_replay.md): loads a replay pack, rebuilds
 # the TLAS, dispatches the REAL production pass shader (compiled from this checkout's shaders/ at run

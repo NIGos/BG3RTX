@@ -98,10 +98,10 @@ struct Pipe {
   uint64_t generation = 0;
   // Variant bits: 2 cascade, 4 scalp, 8 OMM, 16 Hair origin, 32 tileset, 64 instanced hit rows
   // (request flag kHitInstanced), 128 gi_far (request flag kGiFar), 256 GI hair cull.
-  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline.
-  VkPipeline variants[bg3::shader_variant::kPipelineSlots] = {};
-  uint64_t variant_generations[bg3::shader_variant::kPipelineSlots] = {};
-  std::string variant_files[bg3::shader_variant::kPipelineSlots];
+  // Bit 1 was rt_scene_rebase. Both hair-cull states retain their warmed pipeline; so do both rt_hair_groom
+  // states (kHairGroomSlot). Sparse: a pass builds a handful of the kPipelineSlots indices.
+  struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
+  std::unordered_map<unsigned, Variant> variants;
 };
 
 // Background pipeline builds (common/pipeline_async.h): two workers below normal priority. Joined in
@@ -379,7 +379,7 @@ bool g_rg_ran = false;   // this frame's D-RF ran an RF_HIT_GI variant (its coun
 int g_rg_logged = -1;   // the logged (mode, built) state: mode x 2 + built, -1 none
 void rf_gi_drop() {
   for (Pipe& p : g_rf_shade_gi) {
-    for (VkPipeline v : p.variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
+    for (const auto& [slot, v] : p.variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v.pipeline);
     p = Pipe{};
   }
   for (VkPipelineLayout& l : g_rf_shade_gi_layout) {
@@ -725,7 +725,7 @@ bool ensure_rt_layout() {
 bool ensure_current_sun_layout(VkDescriptorSetLayout materials) {
   if(!materials) return false;
   if(g_current_sun_layout && g_current_sun_host_layout==materials) return true;
-  for(auto pipeline:g_rt_shadow_current.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(pipeline));
+  for(const auto& [slot,v]:g_rt_shadow_current.variants) host->defer_destroy(BG3_DEFER_PIPELINE,uint64_t(v.pipeline));
   g_rt_shadow_current=Pipe{};
   defer_layout_destroy(uint64_t(g_current_sun_layout));
   host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT,uint64_t(g_current_sun_set_layout));
@@ -1103,7 +1103,8 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   const bool hair_gi_cull = sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_cull", 0) != 0;
   const bool hair_cheap = scalp && host->cfg_int("rt_native_hair", 0) != 0 && host->cfg_int("rt_hair_cheap", 0) != 0;
   const bool hair_gi_mean = scalp && sv::hair_gi_cull_entry(file) && host->cfg_int("rt_hair_gi_mean", 0) != 0;
-  const unsigned variant = (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
+  const bool hair_groom = scalp && host->cfg_int("rt_hair_groom", 0) != 0;
+  const unsigned variant = (hair_cheap ? sv::kHairCheapSlot : 0u) | (hair_gi_mean ? sv::kHairGiMeanSlot : 0u) | sv::hair_gi_cull_slot(file, hair_gi_cull) | sv::hair_groom_slot(file, hair_groom) | (far_on?128u:0u) | (instanced?64u:0u) | (tileset?32u:0u) | (physical_origin?16u:0u) | (cascade ? 2u : 0u) | (scalp ? 4u : 0u) | (omm ? 8u : 0u);
   // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1, qualified): one RT_SPEC_CASCADE module for both
   // cascade values; specialization constant 1000 carries `cascade` (each value keeps its own slot and pipeline).
   // Not the current-caster sun pipe (its request keeps the cascade defines).
@@ -1150,6 +1151,9 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     specs.add(sv::kSpecIdTileset, tileset ? 1u : 0u);
     specs.add(sv::kSpecIdScalpHair, scalp ? 1u : 0u);
     if (bg3::hair_origin::alternate_entry(file)) specs.add(sv::kSpecIdHairOrigin, physical_origin ? 1u : 0u);
+    // rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md, live after a startup with it on): the strand groom in the
+    // secondary queries; nothing changes until the layer publishes a groom TLAS in the scene stamp.
+    specs.add(sv::kSpecIdHairGroom, hair_groom ? 1u : 0u);
   }
   if (std::strncmp(file, "gi/", 3) == 0) {
     specs.add(sv::kSpecIdHairCheap, hair_cheap ? 1u : 0u);
@@ -1157,17 +1161,18 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   }
   if (sv::hair_gi_cull_entry(file)) specs.add(sv::kSpecIdHairGiCull, hair_gi_cull ? 1u : 0u);
   slot_key += specs.key();
-  const bool known = p.variants[variant] && p.variant_files[variant] == slot_key;
+  Pipe::Variant& slot = p.variants[variant];
+  const bool known = slot.pipeline && slot.file == slot_key;
   // Diagnostic callers may ignore the return value: never expose a different specialization while building.
-  p.pipeline = known ? p.variants[variant] : VK_NULL_HANDLE;
+  p.pipeline = known ? slot.pipeline : VK_NULL_HANDLE;
   if (known) {
     Bg3ShaderBlob blob{};
     if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
-      p.pipeline = p.variants[variant];
+      p.pipeline = slot.pipeline;
       return true;
     }
-    if (p.variant_generations[variant] == blob.generation) {
-      p.pipeline = p.variants[variant]; p.generation = blob.generation;
+    if (slot.generation == blob.generation) {
+      p.pipeline = slot.pipeline; p.generation = blob.generation;
       return true;
     }
   }
@@ -1178,16 +1183,16 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     host->log("gi: %s building in the background (%s)", selected.c_str(),
               known ? "hot reload: the current pipeline meanwhile" : "the pass waits");
   if (st != bg3::pipe_async::State::kReady) {
-    if (known) p.pipeline = p.variants[variant];
+    if (known) p.pipeline = slot.pipeline;
     return known;
   }
-  g_omm_pipelines.erase(p.variants[variant]);
+  g_omm_pipelines.erase(slot.pipeline);
   if(omm)g_omm_pipelines.insert(VkPipeline(r.pipeline));
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.variants[variant]);
-  p.variants[variant] = VkPipeline(r.pipeline);
-  p.variant_generations[variant] = r.generation;
-  p.variant_files[variant] = slot_key;
-  p.pipeline = p.variants[variant];
+  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)slot.pipeline);
+  slot.pipeline = VkPipeline(r.pipeline);
+  slot.generation = r.generation;
+  slot.file = slot_key;
+  p.pipeline = slot.pipeline;
   p.generation = r.generation;
   host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
             spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",
@@ -2273,7 +2278,7 @@ bool rf_dispatch(VkCommandBuffer cmd, Bound& b, const Snapshot& s, const Push& p
 // ---- rt_hit_emission (M4.4): the emissive scene set for the hit-GI / rf_hit_shade variants ----
 void hit_em_drop() {
   for (Pipe* p : {&g_hit_gi_em[0], &g_hit_gi_em[1], &g_hit_gi_em[2], &g_hit_gi_em[3]}) {
-    for (VkPipeline v : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v);
+    for (const auto& [slot, v] : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)v.pipeline);
     *p = Pipe{};
   }
   for (VkPipelineLayout* l : {&g_hit_gi_em_layout[0], &g_hit_gi_em_layout[1], &g_hit_gi_em_layout[2], &g_hit_gi_em_layout[3]}) {
@@ -2528,8 +2533,8 @@ bool ensure_hit_gi_em_layout(VkDescriptorSetLayout alpha, bool sun, bool sharc) 
 // pack must compile what ran (RT_CASCADE_MASKS: GI rays trace 0x01, never the cascade instance).
 std::string pipe_defines(const Pipe& p){
  if(!p.pipeline)return {};
- for(unsigned i=0;i<bg3::shader_variant::kPipelineSlots;++i)if(p.variants[i]==p.pipeline){
-  const std::string& f=p.variant_files[i];const size_t q=f.find('?');
+ for(const auto& [slot,v]:p.variants)if(v.pipeline==p.pipeline){
+  const std::string& f=v.file;const size_t q=f.find('?');
   return q==std::string::npos?std::string():f.substr(q+1);
  }
  return {};
@@ -3643,7 +3648,7 @@ void gi_release() {
                   &g_ls_k, &g_ls_box_k, &g_ls_full_k, &g_ls_full_box_k, &g_occ, &g_ls_full_box_occ,
                   &g_sun_resolve, &g_trace_rt_sharc, &g_rf_sharc, &g_sharc_resolve, &g_sharc_inject, &g_sharc_inject_lock,
                   &g_sharc_debug, &g_sharc_roof}) {
-    for (VkPipeline variant : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant);
+    for (const auto& [slot, variant] : p->variants) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)variant.pipeline);
     *p = Pipe{};
   }
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rf_queries);

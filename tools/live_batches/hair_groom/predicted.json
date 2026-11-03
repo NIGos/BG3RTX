@@ -1,0 +1,27 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). rt_hair_groom A/B with native hair on throughout (hair_qual Ultra keys + hair startup latches + rt_hair_groom=1 at startup). Cost = 300-frame 'rt passes' / 'gi' lines of cost-groom minus mean(cost-off-a, cost-off-b), |off-a - off-b| its noise; native hair cost = cost-off minus cost-nohair. Energy = float mean of the pre-post scene colour, character ROI (skin + hair class) by tools/live_batches/dialogue_shadows/char_energy.py, spread = relative std of shot-off-a/b/c.",
+ "_all": {
+  "join": {
+   "predicted": "'[hair groom] loaded ...hgrm' once, '[hair groom] <id> uploaded: 3 LODs' once, '[hair groom] frame N: 1+ groom instances' in every groom-on window (gated: no instance = INVALID, e.g. Shadowheart absent or her hair index buffer not host-mapped: then the '[hair groom] draw with N indices' lines say why)"
+  },
+  "cost-groom vs cost-off (native hair on in both)": {
+   "predicted": "rt passes -0.5 to -1.5 ms and gi -0.8 to -2.0 ms: the card candidates of the matched style skip the procedural intersection and texture reads in shadow/AO/GI/reflection rays (bench: strands 2.0-2.3x cheaper per hair ray); the card AABBs are still traversed (software skip), so not the full card cost",
+   "kept_if": "rt + gi lower than cost-off and the character energy within spread"
+  },
+  "scene build GPU": {
+   "predicted": "+0.05 to +0.3 ms per matched character (point update 0.01 ms + LSS refit 0.1 ms at LOD 0 in the bench; full build 1.3 ms once per LOD change)"
+  },
+  "cost-nohair": {
+   "predicted": "native hair cost (cost-off minus cost-nohair) about +2.3 ms rt and +3.2 ms gi as in hq1 S8 (2026-11-03 03:55); the groom brings it down by the amount above"
+  },
+  "energy": {
+   "predicted": "character ROI groom-on within +-5% of groom-off (same painted coverage; fibres instead of ribbons); whole frame within the off spread",
+   "kept_if": "ON >= OFF - spread (AGENTS.md energy rule)"
+  },
+  "windows": {
+   "predicted": "toggle-off-a builds the constant-1020-off pipelines in the background (its own slot: later toggles do not rebuild); every judged window 0 pending/started, hair invalid 0"
+  }
+ },
+ "hg1-camp-fg2": {"same_as": "_all"},
+ "hg2-dialogue1-fg2": {"same_as": "_all"}
+}

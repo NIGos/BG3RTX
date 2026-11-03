@@ -325,6 +325,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_gi_cull", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
+  {"exp_hair_groom", "Strand hair in ray-traced lighting",
+   "Traces native hair as strands converted from the hair cards (generated groom files) in shadow, AO, GI and "
+   "reflection rays; the visible hair stays the game's. Needs linear swept sphere hardware. Quality and cost unqualified.",
+   Kind::Choice, Apply::Restart, "Enable at startup for the device feature; then live A/B is available.", true,
+   {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"}}, true, "Developer", {}},
+
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -653,6 +661,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_visibility", "0"},
     {"rt_hair_cheap", "0"},
     {"rt_hair_gi_mean", "0"},
+    {"rt_hair_groom", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},
@@ -857,6 +866,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).
   if (key == "rt_hit_material_instanced") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // rt_hair_groom negotiates the linear swept sphere device feature at startup; off and on again are live.
+  if (key == "rt_hair_groom") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
   if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",

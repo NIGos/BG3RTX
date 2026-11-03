@@ -73,7 +73,7 @@ enum class CfgHot : int {
   rt_emissive, rt_em_backdrop, rt_em_decal, rt_sun_cascade_current, rt_cascade_index, rt_alpha_cut,
   rt_alpha_stochastic, rt_alpha_unknown, rt_alpha_test, rt_water_geometry, rt_water_compose, rt_hit_material_instanced,
   rt_water_shadows, rt_water_ls_shadows, rt_water_refraction, rt_hit_material_recycle, rt_hit_material_capture_unlocked, rt_hit_material_lean_hooks,
-  perf_hitmat_lists, perf_hook_state, Count
+  perf_hitmat_lists, perf_hook_state, rt_hair_groom, Count
 };
 int cfg_hot(CfgHot key);
 
@@ -731,6 +731,9 @@ struct BvhResult {
   VkBuffer pool; VkDeviceSize pool_bytes;             // object-space vertices (binding 8)
   uint64_t rec;                                       // build record of the command buffer (bvh_rec_state)
   BvhSunBase sun_base;
+  // rt_hair_groom: this slot's groom TLAS (0: none), its instance count and first InstInfo row (scene stamp 48..63).
+  VkDeviceAddress groom_tlas = 0;
+  uint32_t groom_count = 0, groom_first = 0;
 };
 struct BvhSunCloneResult { VkAccelerationStructureKHR tlas = VK_NULL_HANDLE; uint64_t record = 0; };
 struct SunBaseCapture {
@@ -983,6 +986,9 @@ struct AlphaBindings {
   VkBuffer camera = VK_NULL_HANDLE;
   VkDeviceSize camera_offset = 0;
   VkAccelerationStructureKHR reference_tlas = VK_NULL_HANDLE;
+  // rt_hair_groom: written to scene stamp bytes 48..63 (rt_common.hlsli rt_groom_trace); zeros: no groom.
+  VkDeviceAddress groom_tlas = 0;
+  uint32_t groom_count = 0, groom_first = 0;
 };
 // Writes set `slot` (< kSceneSlots, retired on the GPU) and its record region;
 // returns that set (VK_NULL_HANDLE when alpha testing is off).

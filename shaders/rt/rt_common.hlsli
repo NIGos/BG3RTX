@@ -1149,6 +1149,49 @@ struct RtCone { float f0, spread; };
 #define RT_SKIP_PROCEDURAL (RT_HAIR_ON ? 0u : RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES)
 #define RT_HAS_COMMITTED(q) (RT_HAIR_ON ? (q.CommittedStatus()!=COMMITTED_NOTHING) : (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT))
 bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
+// rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md, constant 1020): matched native hair is also built as linear
+// swept sphere strands in a second TLAS that only the secondary queries trace (rt_visibility, rt_closest_hit
+// without camera_primary, rt_closest); there they skip the matched card instance (InstInfo kInfoGroomReplaced).
+// Scene stamp bytes 48..63: the groom TLAS device address (lo, hi), the groom instance count, the first groom
+// InstInfo row. Groom row first+k (k = the groom instance's index): {card instance, mesh pool byte offset of the
+// groom's segment -> card triangle table, 0, 0}. A groom hit then reads as a procedural hair hit on that card
+// triangle: hit material, normals and occluder kind stay the card path's. Key off folds all of it away.
+[[vk::constant_id(1020)]] const uint kSpecHairGroom = 0u;
+#define RT_GROOM_ON (RT_HAIR_ON && kSpecHairGroom != 0u)
+static const uint kInfoGroomReplaced = 1u << 13;
+[[vk::ext_instruction(/*OpConvertUToAccelerationStructureKHR*/ 4447)]]
+RaytracingAccelerationStructure rt_groom_scene(uint2 address);
+bool rt_groom_live() { return gSceneStamp.Load(56u) != 0u; }
+bool rt_groom_card(uint inst) { return (inst_info(inst).meta & kInfoGroomReplaced) != 0u; }
+struct RtGroomHit { float t; uint inst; uint prim; };
+// Closest (or any, first_hit) opaque strand hit in [0, tmax]; t < 0: none.
+RtGroomHit rt_groom_trace(RayDesc r, bool first_hit) {
+  RtGroomHit g = (RtGroomHit)0;
+  g.t = -1.0;
+  if (!rt_groom_live()) return g;
+  const RaytracingAccelerationStructure scene = rt_groom_scene(gSceneStamp.Load2(48u));
+  uint k = 0u, seg = 0u;
+  if (first_hit) {
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+    q.TraceRayInline(scene, 0u, 0xFFu, r);
+    while (q.Proceed()) {}
+    if (q.CommittedStatus() == COMMITTED_NOTHING) return g;
+    g.t = q.CommittedRayT(); k = q.CommittedInstanceIndex(); seg = q.CommittedPrimitiveIndex();
+  } else {
+    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+    q.TraceRayInline(scene, 0u, 0xFFu, r);
+    while (q.Proceed()) {}
+    if (q.CommittedStatus() == COMMITTED_NOTHING) return g;
+    g.t = q.CommittedRayT(); k = q.CommittedInstanceIndex(); seg = q.CommittedPrimitiveIndex();
+  }
+  const InstInfo row = inst_info(gSceneStamp.Load(60u) + k);
+  g.inst = row.base;
+  uint pool_bytes;
+  gMeshPool.GetDimensions(pool_bytes);
+  const uint at = row.meta + seg * 4u;
+  g.prim = at + 4u <= pool_bytes ? gMeshPool.Load(at) : 0u;
+  return g;
+}
 #else
 #ifdef RT_NATIVE_HAIR
 #include "native_hair_procedural.hlsli"
@@ -1319,6 +1362,7 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   while (q.Proceed()) {
 #ifdef RT_SPEC_NATIVE
       if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+      if(RT_GROOM_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && rt_groom_card(q.CandidateInstanceIndex()))continue;
 #else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
@@ -1388,6 +1432,9 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   if (RT_OCC_ON) { RT_OCC_RECORD(q, aborted) }
 #endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
+#ifdef RT_SPEC_NATIVE
+  if (RT_GROOM_ON && !aborted && rt_groom_trace(r, true).t >= 0.0) return kRtOccluded;
+#endif
   if (aborted) {
     rt_count_unknown(asuint(o.x) ^ asuint(o.z));
     return kRtUnknown;
@@ -1731,6 +1778,7 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   while (q.Proceed()) {
 #ifdef RT_SPEC_NATIVE
       if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+      if(RT_GROOM_ON && !camera_primary && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && rt_groom_card(q.CandidateInstanceIndex()))continue;
 #else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
@@ -1787,8 +1835,25 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
   h.inst = hit ? q.CommittedInstanceIndex() : 0u;
   h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+#ifdef RT_SPEC_NATIVE
+  bool groom_hit = false;
+  if (RT_GROOM_ON && !camera_primary && !aborted) {
+    RayDesc rg = r;
+    rg.TMax = hit ? h.t : tmax;
+    const RtGroomHit g = rt_groom_trace(rg, false);
+    if (g.t >= 0.0) {
+      groom_hit = hit = true;
+      h.t = g.t; h.geom = 0u; h.prim = g.prim; h.inst = g.inst;
+      h.o2w = float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+    }
+  }
+#endif
 #ifdef RT_HIT_MATERIAL
+#ifdef RT_SPEC_NATIVE
+  [branch]if(!groom_hit && q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)h.bary=q.CommittedTriangleBarycentrics();
+#else
   [branch]if(q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)h.bary=q.CommittedTriangleBarycentrics();
+#endif
 #if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
   h.dir=d;
 #endif
@@ -2088,6 +2153,7 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
   while (q.Proceed()) {
 #ifdef RT_SPEC_NATIVE
       if(RT_HAIR_ON && (q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex())))continue;
+      if(RT_GROOM_ON && q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && rt_groom_card(q.CandidateInstanceIndex()))continue;
 #else
 #ifdef RT_NATIVE_HAIR
     if(q.CandidateType()==CANDIDATE_PROCEDURAL_PRIMITIVE && hair_proven_inactive(q.CandidateInstanceIndex(),q.CandidatePrimitiveIndex()))continue;
@@ -2130,6 +2196,14 @@ float rt_closest(float3 o, float3 d, float tmax, RtCone cone, out bool aborted) 
 #endif
 #endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
+#ifdef RT_SPEC_NATIVE
+  if (RT_GROOM_ON && !aborted) {
+    RayDesc rg = r;
+    rg.TMax = RT_HAS_COMMITTED(q) ? q.CommittedRayT() : tmax;
+    const RtGroomHit g = rt_groom_trace(rg, false);
+    if (g.t >= 0.0) return g.t;
+  }
+#endif
   return RT_HAS_COMMITTED(q) ? q.CommittedRayT() : -1.0;
 }
 // (For callers that cannot act on an abort: the aborted query reads as above.)
