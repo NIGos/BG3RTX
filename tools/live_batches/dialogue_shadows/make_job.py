@@ -24,7 +24,7 @@ HAIR_START = "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_or
 NOHAIR_START = "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_origin=1,rt_xfb_mb=1024,rt_cascade_mb=427"
 BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,"
             "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,"
-            "dump_png_width=1024,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
+            "dump_png_width=960,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
             "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,"
             "rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
             "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,"
@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_cascade_static_only": "1"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -62,6 +62,8 @@ plan = [
     step("shot-charlights-on", SHOT, True, ls_owners="15"),          # lights owned by characters untraced
     step("shot-noart-on", SHOT, True, ls_noshadow="2"),              # lights the art leaves unshadowed untraced
     step("shot-off-c", SHOT, True),
+    step("shot-static-only-off", SHOT, True, rt_cascade_static_only="0"),
+    step("shot-static-only-on", SHOT, True, rt_cascade_static_only="1"),
     step("shot-nocascade-on", SHOT, True, rt_cascade_casters="0"),   # last frame's cascade soup out of the sun TLAS
     step("shot-nohold-on", SHOT, True, rt_dyn_hold="0"),             # no held (absent) draws while static
     step("shot-noao-on", SHOT, True, gi_ao="0"),                     # RT AO off
@@ -71,7 +73,8 @@ plan = [
     step("shot-off-e", SHOT, True),
     # H7 (moving shadows): two traces 0.5 s apart (the real gap is the frame numbers of the '[trace] frame N written'
     # lines), user config and the game's own sun map only. Moving with RT, still without = RT-only animated casters.
-    step("motion-base", 12, [6, 6.5]),
+    step("motion-base-fix-off", 12, [6, 6.5], rt_cascade_static_only="0"),
+    step("motion-base", 12, [6, 6.5], rt_cascade_static_only="1"),
     step("motion-nosun", 12, [6, 6.5], rt_shadows="0", contact_shadows="0"),
     step("view-lsremoved", 12, [6], ls_debug="2"),                # local light removed x4 (where D-LS darkens)
     step("view-lsowners", 12, [6], ls_debug="9"),                 # evaluated lights by owner (magenta character)
@@ -84,7 +87,7 @@ plan = [
     step("cost-off-a", 10),
     step("cost-hair", 10, **ORIGIN),
     step("cost-off-b", 10),
-    step("restore", 5, qa_exposure_hold="0"),
+    step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"),
 ]
 labels = [p["label"] for p in plan]
 shots = [l for l in labels if l.startswith(("shot-", "motion-"))]
@@ -95,6 +98,10 @@ seconds = sum(p["seconds"] for p in plan)
 cascade_on = [p["label"] for p in plan if "rt_cascade_casters=1" in p["set"] and p["label"] in judged]
 
 expect_every = [
+    {"name": "candidate host: key-zero coverage counter in every cascade fix control window",
+     "select": r"\[cascade\] casters: cascade \d+, \d+ frames;",
+     "match": r"cascade casters with key 0 [0-9.]+ per frame", "min": 1,
+     "windows": ["shot-static-only-off", "shot-static-only-on", "motion-base-fix-off", "motion-base"]},
     {"name": "scene wait: every judged window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
      "select": r"\[rt\] scene wait: \d+ frames", "match": r"got this frame's scene, 0 timeouts", "min": 1,
      "windows": judged},
@@ -107,9 +114,6 @@ expect_every = [
     {"name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every judged window with the casters on",
      "select": r"\[cascade\] casters: cascade \d+, \d+ frames;", "match": r", buffer full 0\.0, added ", "min": 1,
      "windows": cascade_on, "when_present": True},
-    {"name": "static camera: no 'camera moving' scene build in any shot (the dialogue shot held, PNG pairs comparable)",
-     "select": r"\[rt\] scene build GPU \(split, (static|camera moving), ", "match": r"\(split, static, ", "min": 1,
-     "windows": shots},
 ]
 
 
@@ -161,6 +165,8 @@ def job(name, save, first, hair):
                     "character lights off / art-unshadowed off / cascade casters off / dyn hold off / AO off / native hair+scalp "
                     "/ + physical origin, H7 moving-shadow PNG pairs 0.5 s apart (RT on and game sun only), ls_debug 2 and 9 "
                     "and rt_debug 2 views, ls_stats and rt_stats windows, hair cost OFF/ON/OFF. "
+                    "Static-only 0/1 and motion-base fix OFF/ON test the dynamic-cascade fallback; "
+                    "pair_registration.py requires integer image registration (0,0) per ON/OFF neighbour. "
                     "predicted.json names which shot removes the shadow under each hypothesis."),
         "estimated_phase_seconds": seconds,
         "expect_every": expect_every,
@@ -183,7 +189,7 @@ _warm_sets = [("base", {}), ("hair", ORIGIN), ("nocasc", dict(rt_cascade_casters
               ("views", dict(rt_debug="2", ls_debug="2")), ("owners", dict(ls_debug="9", ls_box="0")),
               ("nosun", dict(rt_shadows="0", contact_shadows="0", rt_local_shadows="0"))]
 warm_plan = [step(f"diag-warm-{n}-{p}", 25, **dict(STATS, **k)) for p in ("a", "b") for n, k in _warm_sets]
-warm_plan.append(step("restore", 5, qa_exposure_hold="0"))
+warm_plan.append(step("restore", 5, qa_exposure_hold="0", rt_cascade_static_only="0"))
 warm_seconds = sum(p["seconds"] for p in warm_plan)
 
 

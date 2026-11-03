@@ -47,21 +47,32 @@ is captured opaque as in the user's game. Fallback if job 1 fails at the hair st
 The motion plan has three kinds: `static` (no input at all), `pan` (camera keys), `rotate` (middle-mouse drag)
 (scripts/camera-plan.ps1). Every phase here is `static`: the runner sends nothing after the load, so nothing can
 advance a dialogue. There is no click step: the queue cannot open a dialogue (as noted for cb7). The user confirmed
-(2026-11-02) that these saves load already in dialogue. The `static camera` gate (no `camera moving` scene-build
-line in any shot) makes a drifting or cutting dialogue camera INVALID instead of comparing different shots.
+(2026-11-02) that these saves load already in dialogue. The old every-window `static camera` log gate is removed: real 5-7 px camera steps before a trace
+invalidated otherwise usable runs. Pair analysis instead requires integer G-buffer albedo registration `(0,0)`
+between each ON shot and BOTH nearest `shot-off-*` neighbours; missing albedo or a nonzero shift invalidates
+that comparison. Run `python tools/live_batches/dialogue_shadows/pair_registration.py trace-manifest.json`;
+the manifest maps each traced plan label to its capture directory list in trace order. Relative capture paths
+resolve against the manifest directory. The tool reports refined shifts too and never warps images.
 
-## Phases (290 s of plan per job)
+## Phases (318 s of plan per job)
 
 `warmup` 20 s; `settle-cam` 10 s; `shot-off-a`; `shot-nosun-on` (rt_shadows=0, contact_shadows=0: the game's sun map only);
 `shot-nolocal-on` (rt_local_shadows=0); `shot-off-b`; `shot-nobox-on` (ls_box=0); `shot-charlights-on` (ls_owners=15);
-`shot-noart-on` (ls_noshadow=2); `shot-off-c`; `shot-nocascade-on` (rt_cascade_casters=0); `shot-nohold-on`
+`shot-noart-on` (ls_noshadow=2); `shot-off-c`; `shot-static-only-off` (rt_cascade_static_only=0);
+`shot-static-only-on` (rt_cascade_static_only=1); `shot-nocascade-on` (rt_cascade_casters=0); `shot-nohold-on`
 (rt_dyn_hold=0); `shot-noao-on` (gi_ao=0); `shot-off-d`; `shot-hair-on` (rt_native_hair=1, rt_native_scalp=1);
-`shot-hairorigin-on` (+ rt_hair_physical_origin=1); `shot-off-e`; `motion-base` and `motion-nosun` (two traces 0.5 s
+`shot-hairorigin-on` (+ rt_hair_physical_origin=1); `shot-off-e`; `motion-base-fix-off`
+(static_only=0), `motion-base` (static_only=1) and `motion-nosun` (two traces 0.5 s
 apart each, user config and the game's sun map only: H7 moving foliage shadows; no key removes foliage casters only,
 see DIALOGUE_SHADOWS.md H7); `view-lsremoved` (ls_debug=2); `view-lsowners` (ls_debug=9); `diag-view-sunmask`
 (rt_debug=2: game mask vs traced); `diag-ls-stats`; `diag-rt-hairoff-a` / `diag-rt-hairon` / `diag-rt-hairoff-b` (rt_stats +
 rt_primary_check, ~80 ms/frame: never in cost windows); `settle` 5 s; `cost-off-a` / `cost-hair` / `cost-off-b` 10 s;
 `restore`. Shots 8 s with one trace at 5 s; exposure held from `shot-off-a` to `cost-off-b`.
+All baseline and attribution windows explicitly use `rt_cascade_static_only=1`; the two named OFF windows
+restore 0 as the old-behavior control. The product default stays 0. This fallback drops dynamic/skinned cascade
+copies; it is not a claim of robust skinned-source identity. With it ON, port character motion must be no more
+than the RT-sun-off noise (0.002 block luminance), and the nocascade character delta must drop to camp level.
+Compare temporal deltas within each motion pair, with `(0,0)` registration, rather than cross-state poses.
 Contact shadows are not toggled alone: with rt_shadows=1 they never run (core/gi.cpp:2816).
 
 ## Gates (read the deciding numbers in the log)
@@ -70,8 +81,8 @@ Contact shadows are not toggled alone: with rt_shadows=1 they never run (core/gi
   `ls box: active (mode 2;`, ls GPU lines with box 2 and box 0, `ls stats`, `rt stats`, exposure held/released,
   `TLAS ... previous frame 0, none 0`), no forbid line (hair rejected, crash, device lost, core rejected).
 - expect_every in every shot/view/cost window: scene wait 0 timeouts; opaque draws dropped 0.00; alpha draws made
-  opaque 0.00 (H6 excluded when it holds); cascade buffer full 0.0 (when present, casters on); in every shot: no
-  `camera moving` scene build (static dialogue shot).
+  opaque 0.00 (H6 excluded when it holds); cascade buffer full 0.0 (when present, casters on).
+  Pair analysis, rather than scene-build logs, requires `(0,0)` image registration as above.
 - Attribution (predicted.json): per toggle shot, character ROI (skin + hair class pixels of the trace's RT2.a)
   mean of the scene colour before post (dumps.json fs 5c3fdabc) against its OFF neighbours, beyond the
   shot-off-a..e spread in that ROI, and the shadow shape gone in `scripts/ab_compare.py <off> <on>` diff.
@@ -83,17 +94,18 @@ Contact shadows are not toggled alone: with rt_shadows=1 they never run (core/gi
   cost `rt passes: GPU cost` cost-hair minus mean(cost-off-a, cost-off-b) with that spread.
 - Report also `sun stats` (`game lit & RT shadowed`) and `ls stats` (`light removed`, `matched`) where printed.
 
-Duration: 255 + 3 x 260 s of plan + 4 loads, about 25 min (ds jobs at most 510 s of timeout). Disk: 22 traces x ~28 MB
-per job (1024 px; 44 MB measured at 1280 px on the 2026-11-02 su1/sh2 traces), about 1.9 GB for the batch: delete
+Duration: 305 + 3 x 318 s of plan + 4 loads, about 29 min (ds jobs 568 s of timeout). Disk: 26 traces x ~25 MB
+per job (960 px; derived from 28 MB at 1024 px), about 2 GB including logs for the batch: delete
 the raw traces after the ROI numbers and the crops are written.
 
 ## Start (only after the user's explicit go for this batch)
 
 As in ../lean_regression/README.md with this folder, prefix `ds` and receipt `dialogue-shadows.json` (test-main must
-be a main build: no layer or shader change in this batch). Results: `py -3 scripts/queue_results.py ds --lines`.
+hold the candidate host DLL and restart for the capture policy/counter changes; shaders are unchanged). Results: `py -3 scripts/queue_results.py ds --lines`.
 Rollback: delete the jobs from pending, revoke the receipt, remove test-main captures/live_batches/dialogue_shadows.
 No ini, save or default changes.
 
 Offline check: `powershell -File tools\live_batches\dialogue_shadows\dryrun.ps1 -Out <fresh scratch dir>`.
-Last result 2026-11-02 (with H7, unfocused): all checks pass (static, scene-wait and capacity lints, runs A and B,
-lean_dryrun `-Unfocused`); exposure-hold lint ok; box_lights dryrun (foreground path) still passes.
+Last result 2026-11-03: foreground dryrun passed all structural, scene-wait and capacity checks;
+run A failed closed and left all 3 dependent jobs unrun; run B completed all 4 synthetic jobs valid.
+Scratch result: `%TEMP%/bg3rtx-dialogue_shadows-dryrun/20261103-032552`. No game or real inbox was used.
