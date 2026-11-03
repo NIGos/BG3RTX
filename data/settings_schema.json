@@ -146,6 +146,30 @@
        {"id": "shadows", "label": "Reflections + shadows", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "0"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow"], "developer": false, "maturity": "qualified"},
        {"id": "refraction", "label": "Reflections + shadows + refraction", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_water_geometry": "1", "rt_water_reflections": "1", "rt_water_compose": "1", "rt_water_shadows": "1", "rt_water_ls_shadows": "1", "rt_water_game_shadow": "1", "rt_water_refraction": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": ["rt_water_refraction"], "developer": false, "maturity": "qualified"}
      ]},
+    {"id": "exp_omm", "label": "Opacity micromaps",
+     "description": "Accelerates cutout shadows with locally prepared foliage masks on compatible hardware. About 1 ms faster at camp on RTX 5090; requires a restart.",
+     "apply": "restart", "apply_note": "restart required", "advanced": true, "experimental": false, "developer": false,
+     "category": "Advanced", "summary": "Accelerates cutout shadows with locally prepared foliage masks on compatible hardware. About 1 ms faster at camp on RTX 5090; requires a restart.",
+     "cost": {"status": "Measured", "gpu": "About -1 ms", "vram": "Up to 256 MB micromap cache", "provenance": "RTX 5090; camp om4; 2026-11-03 08:10; RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms; 1.17G rays compared, 0 not compared, 0 violations. Reference only."},
+     "required_on": {"rt": "1", "rt_bvh_split": "1"},
+     "required_from_choice": {"rt": 1, "rt_bvh_split": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_omm": "0", "rt_omm_dyn": "0", "rt_alpha_fine_lod": "0", "rt_omm_reference": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1", "rt_omm_dyn": "1", "rt_alpha_fine_lod": "1", "rt_omm_reference": "0"}, "needs": {"rt_geometry": 2, "exp_vt_alpha_masks": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
+    {"id": "exp_vt_alpha_masks", "label": "Offline cutout masks",
+     "description": "Uses foliage masks prepared locally from your game installation. Required for accelerated cutout shadows; unavailable masks keep the original path.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": false, "developer": false,
+     "category": "Advanced", "summary": "Uses foliage masks prepared locally from your game installation. Required for accelerated cutout shadows; unavailable masks keep the original path.",
+     "cost": {"status": "Measured", "gpu": "Neutral at camp", "vram": "80.9 MB camp masks", "provenance": "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."},
+     "required_on": {"rt": "1", "rt_alpha": "1"},
+     "required_from_choice": {"rt": 1, "rt_alpha": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "qualified"}
+     ]},
     {"id": "exp_water_hit_shade", "label": "Water: hidden-surface reflections",
      "description": "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
      "apply": "live", "apply_note": "live; captured materials require first-enable restart", "advanced": true, "experimental": true, "developer": false,
@@ -246,30 +270,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_physical_origin": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_hair_physical_origin": "1"}, "needs": {"rt_geometry": 2, "exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_omm", "label": "Opacity micromaps",
-     "description": "Uses supported hardware to accelerate cutout shadows. Requires compatible hardware; quality and cost remain unqualified.",
-     "apply": "restart", "apply_note": "restart required", "advanced": false, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Uses supported hardware to accelerate cutout shadows. Requires compatible hardware; quality and cost remain unqualified.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {"rt": "1", "rt_bvh_split": "1"},
-     "required_from_choice": {"rt": 1, "rt_bvh_split": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "restart", "caps": [], "keys": {"rt_omm": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "restart", "caps": ["ray_query", "opacity_micromap"], "keys": {"rt_omm": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
-    {"id": "exp_vt_alpha_masks", "label": "Offline cutout masks",
-     "description": "Uses locally prepared foliage masks to improve cutout shadows. Coverage and brightness remain unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Uses locally prepared foliage masks to improve cutout shadows. Coverage and brightness remain unqualified.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {"rt": "1", "rt_alpha": "1"},
-     "required_from_choice": {"rt": 1, "rt_alpha": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_vt_alpha_masks": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_vt_alpha_masks": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
     {"id": "exp_alpha_spill", "label": "Preserve cutout capture on overflow",
      "description": "Preserves more cutout surfaces when scene capture fills. Quality and cost remain unqualified.",

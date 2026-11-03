@@ -7,11 +7,37 @@ Contents: 1 status, 2 native alpha predicate, 3 CPU groundwork, 4 EXT backend,
 5 submission and lifetime, 6 GPU producer, 7 content epochs and source identity,
 8 hardware fixtures, 9 remaining work, 10 user smoke test.
 
-## 1. Status: isolated runtime candidate
+## 1. Status: qualified for Ultra (2026-11-03)
 
-Default rt_omm=0, Experimental GUI off in all presets. Both DLLs must match
-(ABI 25 on 2026-11-02, `BG3RTX_ABI_VERSION` in `common/host_api.h`; OMM needs no ABI change since 19). Main/user build is unchanged. No current game/GPU validation
-or measured acceleration/cost is claimed. Restart is required to request the extension.
+Ultra now enables the qualified om4 combination: `rt_omm=1`, `rt_omm_dyn=1`,
+`rt_vt_alpha_masks=1`, `rt_alpha_fine_lod=1`, with `rt_omm_reference=0`.
+The normal Advanced Opacity micromaps option writes the bake and fine-LOD policy;
+Offline cutout masks is its qualified prerequisite. OMM stays hidden only until
+qualified (GUI audit decision); these controls are no longer experimental or developer-only.
+The static backend is requested by `rt_omm`; om4's dynamic mode skips the static pool-variant path.
+Bake limits stay 131072 triangles/build and 256 MB. Diagnostics remain off.
+High and lower presets, and the repository/package base defaults, stay off: no
+OMM rule requires High promotion, and High remains the developer-default baseline.
+Restart is required to request the extension. Unsupported hardware or unavailable
+locally generated masks retain the ordinary path; no game data is shipped.
+
+**Live qualification (user-confirmed):** om3 qualified option B earlier. om4,
+S3 camp, 2026-11-03 08:10: 1.17G rays compared, 0 not compared, 0 violations.
+RT passes were 8.65-8.75 ms accelerated versus 9.37-10.08 ms reference, about
+1 ms saved. This supersedes the pending/isolated-candidate status below; historical
+offline checkpoints and pre-run predictions are retained as history.
+In game: choose Ultra and restart at Campsite - 27h; foliage cutout shadows should
+remain stable. The same-run reference toggle is developer diagnostic evidence,
+not a player step. Combined Ultra smoke remains a separate regression check.
+Both DLLs must match (`BG3RTX_ABI_VERSION` in `common/host_api.h`); no ABI change.
+
+Combined-preset integration: water no longer skips under `rt_omm`. Its ordinary
+shaders trace the immutable reference TLAS of the selected generation, with the
+matching alpha set and host superset AlphaDSL (unused OMM bindings 10/11).
+Lighting and newer-scene composition both resolve/register the reference;
+unavailable or recycled tuples fail closed. CPU tests cover both acceleration
+permission results, generation reuse and newer/stash fallback. No shader request
+change or added GPU pass; integration GPU cost/live smoke remain unmeasured.
 
 The isolated renderer now wires alpha bindings 10/11 (original micromap-free
 reference and coherent content epochs), generation-matched scene selection and
@@ -49,12 +75,11 @@ the archived baseline source. No GPU execution follows from this shader gate.
 OMM variants compile, the key-off shaders are byte-identical (section 1a). Nothing
 was broken. Observables added for the live qualification (section 1a).
 
-OPEN: actual renderer descriptor/GPU traversal validation; nonzero useful known
+**Historical pre-qualification checklist (superseded by om3/om4 above):** actual renderer descriptor/GPU traversal validation; nonzero useful known
 coverage; same-ray reference violation counts; energy/movement/FG2 quality;
 capture/build/traversal GPU ms and real residency. All-UNKNOWN or missing RT never
-passes. Current code is an unqualified opt-in candidate, not a shipped speedup.
-READY_FOR_LIVE: tools/live_batches/omm_qual (S3 camp, 2 launches, about 7 min), not
-authorized, not run.
+passes. This described the pre-qualification candidate.
+Historical preparation: tools/live_batches/omm_qual (S3 camp); om4 is now qualified as recorded above.
 
 **Expected outcome (offline, before the run).** Known coverage is about 0 at camp,
 so no speedup is expected. (1) Only one audited recipe can bake
@@ -577,7 +602,7 @@ release ships the tools, the user's own install is the source, the output lives 
   to drop the .NET dependency. Integrity: masks keyed by the GTS GUID and the texture name, regenerated when a game
   patch changes the GTS (GUID check at startup, as the asset DB fingerprints its paks).
 
-**11.2i Implemented (2026-11-02, offline): `rt_omm_dyn` (live, off; needs rt_omm=1 at startup, masks + B on).**
+**11.2i Implemented (2026-11-02); qualified by om4 2026-11-03: `rt_omm_dyn` (live; Ultra on, needs rt_omm=1 at startup, masks + B on).**
 - Bake (`common/omm_mask_bake.h`, shared by the CPU tests and `shaders/rt/omm_bake_mask.hlsl` bake): subdivision 4,
   four-state, one workgroup per triangle of the draw's soup range, one thread per micro-triangle (EXT order, the
   spec's index -> barycentric "bird" curve). Known opaque: every texel a bilinear read inside the micro-triangle's
@@ -605,7 +630,7 @@ release ships the tools, the user's own install is the source, the output lives 
 - Log `[omm dyn]` (every rt_timing_frames builds): masked per-draw draws/triangles, with a micro-map (%), baked /
   deferred / failed, accelerated scenes, cache size and bytes, cumulative micro-triangle states, uv checks per window.
 - No ABI change (layer only; host_api.h untouched). Key-off SPIR-V: the guard is only in OMM variants.
-- READY_FOR_LIVE: `tools/live_batches/omm_qual` job om4 (camp, 123 s, one launch: REF / ON / REF via
+- Historical READY_FOR_LIVE preparation (now passed; section 1): `tools/live_batches/omm_qual` job om4 (camp, 123 s, one launch: REF / ON / REF via
   rt_omm_reference, diag-check with rt_stats=1); predictions in predicted.json (violations 0, micro-map share >= 90%
   of masked per-draw triangles, ~40-49% known, candidates 30-50% fewer, rt passes 1.5-3 ms lower, energy equal).
 

@@ -39,7 +39,12 @@ assert "reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; inv
 assert [c["label"] for c in box["choices"]] == ["Off", "Shadowed", "All"]
 assert not any(c["enabled"] for c in box["choices"][1:])
 assert "+0.32 ms S6 / +0.20 ms S7" in box["cost"]
-assert not any(s["id"] in {"roof_shadows", "exp_hit_emission", "exp_gi_far", "exp_omm", "exp_alpha_spill", "exp_hair_physical_origin"} for s in state["settings"])
+assert not any(s["id"] in {"roof_shadows", "exp_hit_emission", "exp_gi_far", "exp_alpha_spill", "exp_hair_physical_origin"} for s in state["settings"])
+omm = next(s for s in state["settings"] if s["id"] == "exp_omm")
+masks = next(s for s in state["settings"] if s["id"] == "exp_vt_alpha_masks")
+assert omm["maturity"] == masks["maturity"] == "qualified"
+assert not omm["experimental"] and not masks["experimental"]
+assert omm["apply"] == "Restart to apply" and "RTX 5090" in omm["provenance"]
 local = next(s for s in state["settings"] if s["id"] == "local_shadows")
 assert [c["label"] for c in local["choices"]] == ["Off", "Fast", "Full"]
 print("Consolidated cards, experimental box shadows and developer visibility verified.")

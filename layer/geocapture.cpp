@@ -333,7 +333,7 @@ struct Capture {
   std::vector<VkBufferCopy> c_legacy_copies;
   VkDeviceSize c_legacy_bytes=0;
   uint64_t c_legacy_sig=1469598103934665603ull;
-  capture_budget::ElasticWindow elastic;
+  capture_budget::CascadeElasticWindow elastic;
   capture_budget::RtElasticWindow rt_elastic;
   uint64_t elastic_target=0;
   Buf elastic_old;

@@ -241,6 +241,23 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 3}, false, {{"rt","1","RT device setup"},{"sharc_device","1","64-bit shader integers at startup"}}, false, "Surfaces", {"Estimate", "0.5-0.7 ms", "Up to 520 MB", "RTX 5090; Water Queens House; 4K-class output; 2026-11-02 progress; ABI 26; all water levels; total water chain. Reference only."}},
 
+  // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
+  // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
+  {"exp_omm", "Opacity micromaps",
+   "Accelerates cutout shadows with locally prepared foliage masks on compatible hardware. About 1 ms faster at camp on RTX 5090; requires a restart.",
+   Kind::Choice, Apply::Restart, "restart required", true,
+   {{"off", "Off", 0, {{"rt_omm", "0"}, {"rt_omm_dyn", "0"}, {"rt_alpha_fine_lod", "0"}, {"rt_omm_reference", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}, {"rt_omm_dyn", "1"}, {"rt_alpha_fine_lod", "1"}, {"rt_omm_reference", "0"}},
+     {{"rt_geometry", 2}, {"exp_vt_alpha_masks", 1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}, false, "Advanced", {"Measured", "About -1 ms", "Up to 256 MB micromap cache", "RTX 5090; camp om4; 2026-11-03 08:10; RT passes 8.65-8.75 ms vs reference 9.37-10.08 ms; 1.17G rays compared, 0 not compared, 0 violations. Reference only."}},
+
+  {"exp_vt_alpha_masks", "Offline cutout masks",
+   "Uses foliage masks prepared locally from your game installation. Required for accelerated cutout shadows; unavailable masks keep the original path.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_vt_alpha_masks", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Neutral at camp", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
+
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
    "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
    Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
@@ -274,7 +291,7 @@ inline constexpr Knob kKnobs[] = {
    {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"},
     {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",1}}, false, "Advanced", {"Estimate", "Near ~+0.6 ms; Far ~+4 ms; reflections ~+6 ms", "Unknown", "RTX 5090; 4K-class output; Far 6 m; includes emission +0.08 ms and far-field GI trace +3.2-3.7 ms; reflection level experimental. Reference only."}},
 
-  // Experimental features stay off in every preset. Hair origins, OMM and spill are developer-only
+  // Experimental features stay off in every preset. Hair origins and spill are developer-only
   // until qualified (user decisions 2026-11-03). Each level writes every key it covers.
   {"box_lights", "Box light shadows",
    "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
@@ -322,20 +339,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_hair_physical_origin", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
-
-  {"exp_omm", "Opacity micromaps",
-   "Uses supported hardware to accelerate cutout shadows. Requires compatible hardware; quality and cost remain unqualified.",
-   Kind::Choice, Apply::Restart, "restart required", false,
-   {{"off", "Off", 0, {{"rt_omm", "0"}}, {}, {}, false, false, false, Apply::Restart},
-    {"on", "On", kCapRayQuery | kCapOpacityMicromap, {{"rt_omm", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"}}, true, "Developer", {}},
-
-  {"exp_vt_alpha_masks", "Offline cutout masks",
-   "Uses locally prepared foliage masks to improve cutout shadows. Coverage and brightness remain unqualified.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_vt_alpha_masks", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {}},
 
   {"exp_alpha_spill", "Preserve cutout capture on overflow",
    "Preserves more cutout surfaces when scene capture fills. Quality and cost remain unqualified.",

@@ -1102,18 +1102,24 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
       ++g_cwin.newer_failed;
       return false;
     }
-    tlas = cur, alpha = set;
+    VkAccelerationStructureKHR ref=VK_NULL_HANDLE;
+    uint64_t id=0;
+    if(!reference_scene(cur,0,ref,id,[&](auto selected,auto* reference,auto* identity){
+         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
+       })) {++g_cwin.newer_failed;return false;}
+    tlas = ref, alpha = set;
     return true;
   };
   // The lighting's own pair, kept alive through this frame: rt_omm_scene_reference finds the slot of
   // that TLAS, refuses a retired one and stamps it (last_use = now, its set's views with it). With
-  // rt_omm off (water has no OMM variant) it returns false with the slot's baseline TLAS.
+  // either OMM state it may return false with a valid baseline TLAS.
   auto keep_stash = [&] {
     if (!host->rt_omm_scene_reference || !g_st.tlas || !g_st.alpha) return false;
     VkAccelerationStructureKHR ref = VK_NULL_HANDLE;
     uint64_t id = 0;
-    host->rt_omm_scene_reference(cmd, g_st.tlas, &ref, &id);
-    if (!ref || !id) return false;
+    if(!reference_scene(g_st.tlas,g_st.hit_identity,ref,id,[&](auto selected,auto* reference,auto* identity){
+         host->rt_omm_scene_reference(cmd,selected,reference,identity);
+       }))return false;
     tlas = ref, alpha = g_st.alpha;
     return true;
   };
@@ -1283,7 +1289,7 @@ void release_compose() {
 
 bool water_rf_wanted() { return host->cfg_int("rt_water_reflections", 0) != 0; }
 
-void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
+void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   if (!water_rf_wanted()) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = host->frame_index();
@@ -1324,6 +1330,14 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& in) {
       return skip();
     }
   }
+  // Use the immutable same-generation reference for primary/reflection rays
+  // and the lighting stash. The host AlphaDSL is a compatible superset: OMM
+  // bindings 10/11 remain unused by these ordinary water shaders.
+  WaterRfIn in=input;
+  if(!reference_scene(input.scene_tlas,input.hit_identity,in.scene_tlas,in.hit_identity,
+       [&](auto selected,auto* reference,auto* identity){
+         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
+       })) {++g_win.skip_layout;return skip();}
   g_hit=in.hit;
   VkDescriptorSet material_alpha=in.alpha;
   if(hit_active() && (!host->rt_hit_material_use ||

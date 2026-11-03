@@ -722,6 +722,42 @@ int main(int argc, char** argv) {
     CHECK(pick(LightingUse::kEarlier, false, false, 0, 100) == ScenePick::kNone);
   }
 
+  // OMM promotion: ordinary water must trace the immutable reference even
+  // when acceleration is permitted, and retain each command's generation.
+  {
+    uint64_t reference=99,identity=0;
+    unsigned calls=0;
+    for(bool accelerated:{false,true}){
+      auto query=[&](uint64_t selected,uint64_t* ref,uint64_t* id){
+        ++calls;CHECK(selected==100 && *id==7);*ref=10;*id=7;return accelerated;
+      };
+      CHECK(reference_scene(uint64_t(100),7,reference,identity,query));
+      CHECK(reference==10 && identity==7); // Never the accelerated input 100.
+    }
+    CHECK(calls==2); // Every recording registers its own use, no frame cache.
+    auto retired=[](uint64_t,uint64_t* ref,uint64_t* id){*ref=0;*id=0;return false;};
+    CHECK(!reference_scene(uint64_t(100),7,reference,identity,retired));
+    CHECK(!reference && !identity); // No fallback to stale/accelerated input.
+    auto recycled=[](uint64_t,uint64_t* ref,uint64_t* id){*ref=10;*id=8;return true;};
+    CHECK(!reference_scene(uint64_t(100),7,reference,identity,recycled));
+    CHECK(!reference && !identity); // Reused handle is not the stash generation.
+    CHECK(reference_scene(uint64_t(100),0,reference,identity,recycled));
+    CHECK(reference==10 && identity==8); // A fresh scene discovers its generation.
+    auto invalid=[](uint64_t,uint64_t* ref,uint64_t* id){*ref=10;*id=0;return true;};
+    CHECK(!reference_scene(uint64_t(100),0,reference,identity,invalid));
+    // A newer accelerated scene resolves before composition. If that tuple
+    // expires, keep the independently validated stash; if both expire, refuse.
+    auto newer=[&]{return reference_scene(uint64_t(100),0,reference,identity,recycled);};
+    auto keep=[&]{return reference_scene(uint64_t(10),7,reference,identity,
+      [](uint64_t selected,uint64_t* ref,uint64_t* id){*ref=selected;*id=7;return false;});};
+    CHECK(pick_scene(LightingUse::kEarlier,true,false,100,100,newer,keep)==ScenePick::kNewer);
+    CHECK(reference==10 && identity==8);
+    auto unavailable=[&]{return reference_scene(uint64_t(100),0,reference,identity,retired);};
+    CHECK(pick_scene(LightingUse::kEarlier,true,false,100,100,unavailable,keep)==ScenePick::kStashKept);
+    CHECK(reference==10 && identity==7);
+    CHECK(pick_scene(LightingUse::kEarlier,true,false,100,100,unavailable,unavailable)==ScenePick::kNone);
+  }
+
   // 4d2b. Fail-closed composition (kCsNonFinite): C + A L - B with a non-finite term keeps C.
   {
     const float inf = std::numeric_limits<float>::infinity();

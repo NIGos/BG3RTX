@@ -1027,6 +1027,24 @@ S8 smoke_ultra must pass buffer-full 0.00 in every pan/rotation window before
 qualification. No game launched. Unapplied, independently tested default-OFF
 alternative: [patch](alternatives/fix-elastic-drops-default-off.patch).
 
+### Elastic cascade inactivity regression (2026-11-03, promote-omm, offline fix)
+
+ds3 at 07:57:46-07:58:06 shrank cascade capture 320 -> 16 MiB after 24
+zero-demand samples. Returning casters then lost about 230 draws over 2-3
+frames before replacement. Already-recorded commands and offsets prevent a
+simple buffer replacement from recovering those draws in the same frame.
+
+Empty demand now cancels the shrink window and retains the current allocation.
+No finite inactivity timeout can guarantee first-return capacity: casters can
+remain disabled indefinitely. A shrink therefore needs 24 consecutive nonempty
+samples proving a smaller working set; inactivity never supplies that evidence.
+Demand still includes rejected bytes. Card/storage caps, allocation refusals,
+detachment and GPU retirement fences are unchanged. This retains more memory
+while inactive and adds no GPU commands, shader variants or ABI changes.
+CPU regression covers all three slots, 240 empty samples per slot, first-return
+fit, smaller active-set shrink, interrupted observations and tighter budget caps.
+Layer restart required; live confirmation has not been run for this fix.
+
 ### CPU hit-material lists candidate (2026-11-02, codex-perf-hitmat)
 
 `perf_hitmat_lists=0` preserves the existing path. On: prepass writers use a

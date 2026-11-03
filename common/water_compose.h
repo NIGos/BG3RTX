@@ -352,6 +352,20 @@ inline LightingRefusal lighting_refusal(uint64_t stash_frame, uint64_t now) {
 // take_newer() and keep_stash() are the host calls; take_newer is never called for a build older
 // than this frame (rt_scene_set would wait for this frame's scene on the game's recording thread).
 enum class ScenePick : uint32_t { kStash = 0, kNewer, kStashKept, kNone };
+
+// Water shaders do not consume OMM proof bindings. Resolve the immutable
+// baseline of the selected generation and register this recording's use.
+// The query's bool reports acceleration permission, NOT reference validity.
+// Missing/retired tuples must never fall back to the accelerated input handle.
+template<class Handle,class Query>
+bool reference_scene(Handle selected,uint64_t expected,Handle& reference,uint64_t& identity,Query query){
+  reference={};identity=expected;
+  if(selected!=Handle{})query(selected,&reference,&identity);
+  if(reference==Handle{} || !identity || (expected && identity!=expected)){
+    reference={};identity=0;return false;
+  }
+  return true;
+}
 template <class TakeNewer, class KeepStash>
 ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t built, uint64_t now, TakeNewer take_newer,
                      KeepStash keep_stash) {

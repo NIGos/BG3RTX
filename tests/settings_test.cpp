@@ -415,8 +415,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 5);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 4);   // Qualified VRAM controls retired; CPU perf experiments are developer-only.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -467,7 +467,7 @@ static void test_gui_levels() {
   CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
   CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
-  for (const char* id : {"exp_cascade_static_only", "exp_hair_physical_origin", "exp_omm", "exp_alpha_spill"}) {
+  for (const char* id : {"exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill"}) {
     CHECK(!knob_visible(*find_knob(id), false)); CHECK(knob_visible(*find_knob(id), true));
   }
 
@@ -822,7 +822,24 @@ static void test_product_policy() {
   CHECK_EQ(find_knob("exp_water")->category, "Surfaces");
   CHECK_EQ(find_knob("reflex")->category, "Performance");
   CHECK_EQ(find_knob("exp_water")->cost.status, "Estimate");
-  CHECK_EQ(find_knob("exp_omm")->cost.gpu, "Unknown");
+  CHECK_EQ(find_knob("exp_omm")->cost.status, "Measured");
+  const auto& omm = *find_knob("exp_omm");
+  const auto& masks = *find_knob("exp_vt_alpha_masks");
+  CHECK(!omm.experimental && !omm.dev_only && omm.advanced && knob_visible(omm, false));
+  CHECK(!masks.experimental && !masks.dev_only && knob_visible(masks, false));
+  CHECK_EQ(choice_maturity(omm, 1), "qualified");
+  CHECK(omm.apply == Apply::Restart);
+  for (int p = 0; p < kPresetCount; ++p) {
+    Map preset;
+    for (const auto& kv : expand_preset(p)) preset[kv.first] = kv.second;
+    for (const char* key : {"rt_omm", "rt_omm_dyn", "rt_vt_alpha_masks", "rt_alpha_fine_lod"})
+      CHECK_EQ(get(preset, key), p == kUltra ? "1" : "0");
+    CHECK_EQ(get(preset, "rt_omm_reference"), "0");
+    auto values = preset_values(p); CHECK(enforce_needs(values).empty());
+  }
+  Map disabled = on_map(omm, 0);
+  for (const char* key : {"rt_omm", "rt_omm_dyn", "rt_alpha_fine_lod", "rt_omm_reference"})
+    CHECK_EQ(get(disabled, key), "0");
   CHECK_EQ(find_knob("exp_water")->choices[3].label, "Reflections + shadows + refraction");
 
   auto edited = preset_values(kMedium);
