@@ -2,6 +2,7 @@
 // the .hgrm parser's range checks.
 #include "../common/hair_groom_asset.h"
 #include "../common/hair_groom_budget.h"
+#include "../common/hair_primary.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -123,6 +124,60 @@ int main() {
     CHECK((plan_crowd(c, 100000) == std::vector<int>{-1, -1, -1, -1}));        // nothing fits: cards
     std::swap(c[0], c[3]);                                                       // order comes from size, not position
     CHECK((plan_crowd(c, 1600000) == std::vector<int>{-1, 1, 2, 0}));
+  // ---- primary strand hair fail-safes (common/hair_primary.h) ----
+  {
+    using hair_primary::soup_update_ok;
+    const uint64_t soup = 2146435072ull;   // the 2 GB soup of the 2026-11-03 17:01 device loss
+    const uint32_t tris = 28372, stride = 88;   // the matched 85116-index draw
+    CHECK(soup_update_ok(true, false, 1000000, tris, stride, soup, tris));
+    // The crash: a held draw (its offset is a mesh-pool snapshot offset, ~1.97 GB) read as a soup offset.
+    CHECK(!soup_update_ok(true, true, 2063785984ull - 100000ull, tris, stride, soup, tris));
+    CHECK(!soup_update_ok(false, false, 1000000, tris, stride, soup, tris));                 // not captured this frame
+    CHECK(!soup_update_ok(true, false, soup - uint64_t(tris) * 3 * stride + 88, tris, stride, soup, tris));  // past the end
+    CHECK(soup_update_ok(true, false, soup - uint64_t(tris) * 3 * stride, tris, stride, soup, tris));        // exactly fits
+    CHECK(!soup_update_ok(true, false, soup + 16, tris, stride, soup, tris));
+    CHECK(!soup_update_ok(true, false, 0, tris - 1, stride, soup, tris));    // fewer captured triangles than the groom's
+    CHECK(!soup_update_ok(true, false, 0, tris, 16, soup, tris));            // no UV in the stream
+  }
+  {
+    hair_primary::SwapGate g;
+    const uint64_t k = 0x1234;
+    // Published twice: the G-buffer may swap, the prepass only after the G-buffer variant ran for this draw.
+    g.publish(&k, 1);
+    g.publish(&k, 1);
+    CHECK(g.allow_gbuffer(k) && !g.allow_prepass(k) && !g.allow_velocity(k));
+    // The bald player (2026-11-03): a matched draw whose G-buffer pipeline has no variant never ran it, so its
+    // prepass card depth is never dropped, frame after frame.
+    for (int f = 0; f < 5; ++f) { g.publish(&k, 1); CHECK(!g.allow_prepass(k)); }
+    g.gbuffer_drew(k);
+    g.publish(&k, 1);
+    CHECK(g.allow_prepass(k) && g.allow_velocity(k));
+    g.publish(&k, 1);   // a frame without the G-buffer variant: the prepass stops at once
+    CHECK(!g.allow_prepass(k));
+    // Feedback: strand pixels keep it; kStrikes counted frames with the variant and no strand pixel fail it for good.
+    CHECK(!g.feedback(k, true, 500));
+    CHECK(!g.feedback(k, false, 0));   // the variant did not run that frame: no evidence
+    CHECK(!g.feedback(k, true, 0));
+    CHECK(!g.feedback(k, true, 7));    // a strand pixel resets the strikes
+    CHECK(!g.feedback(k, true, 0));
+    CHECK(g.feedback(k, true, 0));     // the second strike in a row
+    g.gbuffer_drew(k);
+    g.publish(&k, 1);
+    g.publish(&k, 1);
+    CHECK(!g.allow_gbuffer(k) && !g.allow_prepass(k) && !g.allow_velocity(k));
+    g.clear();
+    g.publish(&k, 1);
+    g.publish(&k, 1);
+    CHECK(!g.allow_gbuffer(k));   // failed for the session, also across a reset
+    // A key that leaves the published set stops at once in every pass.
+    const uint64_t k2 = 0x99;
+    g.publish(&k2, 1);
+    g.publish(&k2, 1);
+    g.gbuffer_drew(k2);
+    g.publish(&k2, 1);
+    CHECK(g.allow_prepass(k2));
+    g.publish(nullptr, 0);
+    CHECK(!g.allow_gbuffer(k2) && !g.allow_prepass(k2));
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
