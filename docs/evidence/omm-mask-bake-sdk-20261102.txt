@@ -1,0 +1,20 @@
+# tools/omm_mask_bake_sdk_probe.cpp (OMM SDK 1.10 CPU baker, offline) and tests/omm_mask_bake_test.cpp, 2026-11-02
+PASS unit     level 1: bijective 1; order: SDK nearest known 1 of 4, contradictions 0; bound: ours known 0, SDK linear known 0, both 0, ours only 0, contradictions 0
+PASS unit     level 2: bijective 1; order: SDK nearest known 8 of 16, contradictions 0; bound: ours known 0, SDK linear known 0, both 0, ours only 0, contradictions 0
+PASS unit     level 3: bijective 1; order: SDK nearest known 49 of 64, contradictions 0; bound: ours known 0, SDK linear known 14, both 0, ours only 0, contradictions 0
+PASS unit     level 4: bijective 1; order: SDK nearest known 188 of 256, contradictions 0; bound: ours known 0, SDK linear known 109, both 0, ours only 0, contradictions 0
+PASS unit     level 5: bijective 1; order: SDK nearest known 778 of 1024, contradictions 0; bound: ours known 637, SDK linear known 701, both 637, ours only 0, contradictions 0
+PASS skewed   level 1: bijective 1; order: SDK nearest known 0 of 4, contradictions 0; bound: ours known 0, SDK linear known 0, both 0, ours only 0, contradictions 0
+PASS skewed   level 2: bijective 1; order: SDK nearest known 0 of 16, contradictions 0; bound: ours known 0, SDK linear known 0, both 0, ours only 0, contradictions 0
+PASS skewed   level 3: bijective 1; order: SDK nearest known 2 of 64, contradictions 0; bound: ours known 0, SDK linear known 24, both 0, ours only 0, contradictions 0
+PASS skewed   level 4: bijective 1; order: SDK nearest known 18 of 256, contradictions 0; bound: ours known 133, SDK linear known 160, both 133, ours only 0, contradictions 0
+PASS skewed   level 5: bijective 1; order: SDK nearest known 48 of 1024, contradictions 0; bound: ours known 742, SDK linear known 810, both 742, ours only 0, contradictions 0
+PASS mirrored level 1: bijective 1; order: SDK nearest known 0 of 4, contradictions 0; bound: ours known 0, SDK linear known 0, both 0, ours only 0, contradictions 0
+PASS mirrored level 2: bijective 1; order: SDK nearest known 0 of 16, contradictions 0; bound: ours known 0, SDK linear known 1, both 0, ours only 0, contradictions 0
+PASS mirrored level 3: bijective 1; order: SDK nearest known 5 of 64, contradictions 0; bound: ours known 0, SDK linear known 12, both 0, ours only 0, contradictions 0
+PASS mirrored level 4: bijective 1; order: SDK nearest known 21 of 256, contradictions 0; bound: ours known 93, SDK linear known 120, both 93, ours only 0, contradictions 0
+PASS mirrored level 5: bijective 1; order: SDK nearest known 65 of 1024, contradictions 0; bound: ours known 643, SDK linear known 728, both 643, ours only 0, contradictions 0
+omm_mask_bake_sdk_probe: 0 failures; order known 1183 of 4092 micro-triangles; bound: ours 2248, SDK 2679, both 2248 of 4092
+
+bound: 80155 of 92160 micro-triangles known (87.0%), 3206200 samples, 0 violations
+omm_mask_bake_test: all passed

@@ -13,6 +13,10 @@ void rt_omm_feedback_lost() {
 }
 bool rt_omm_scene_current() {
   const uint4 proof=gSceneStamp.Load4(128u);
+  // rt_omm_dyn (layer/bvhsplit.cpp bvh_omm_commit): micro-maps baked from immutable offline masks and checked per
+  // triangle against the frame's uvs before the BLAS build; no content epoch can change them, so the proof is the
+  // scene generation alone (magic 'OMM3', z = per-draw BLAS with a micro-map).
+  if(proof.w==0x4f4d4d33u)return proof.x!=0u && proof.x==gSceneStamp.Load(0u) && proof.z!=0u;
   if(proof.x==0u || proof.x!=gSceneStamp.Load(0u) || proof.z==0u || proof.w!=0x4f4d4d32u)return false;
   if(rt_omm_atomic_epoch(8u)!=0u){rt_omm_feedback_lost();return false;}
   DeviceMemoryBarrier();

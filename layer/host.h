@@ -948,6 +948,7 @@ struct AlphaSnapshot {
 // Caller retains source resources and assigns descriptor-local indices.
 bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& fs,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out);
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
+bool alpha_fine_mask(uint32_t index, AlphaRec* rec, VkImageView* view, uint32_t* width, uint32_t* height);   // rt_omm_dyn
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);

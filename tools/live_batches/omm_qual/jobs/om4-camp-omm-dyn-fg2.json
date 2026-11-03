@@ -1,0 +1,168 @@
+{
+ "name": "om4-camp-omm-dyn-fg2",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 427,
+ "repeat": 1,
+ "live_batch": "omm-qual",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=1,rt_omm_reference=0,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,rt_omm_dyn=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1",
+ "args": [
+  "-RealPresent",
+  "-Foreground",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/omm_qual/plans/om4_camp_dyn.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "gi: GPU cost",
+  "gi: trace pass",
+  "\\[rt\\] scene build GPU",
+  "\\[rt\\] scene wait",
+  "\\[bvh\\] last",
+  "\\[omm",
+  "omm check",
+  "gi: rt_omm_reference",
+  "rt stats",
+  "\\[core\\] guard",
+  "\\[mem\\]",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[vt alpha\\]",
+  "\\[fault\\]"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+  "\\[pace\\] rendered frame time over 600 frames",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "gi: GPU cost [0-9.]+ ms/frame",
+  "\\[rt\\] scene build GPU \\(split, static, \\d+ samples\\): median",
+  "\\[mem\\] device-local VRAM of this process: used \\d+ MB",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+  "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+  "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+  "\\[omm content\\] GPU epochs active slots=\\d+ stride=\\d+ bytes=\\d+ device_local=1",
+  "\\[omm\\] last \\d+ builds: alpha draws \\d+, native plain captures \\d+; alpha-tested triangles per build [0-9.]+M",
+  "omm check \\(\\d+ frames\\): compared \\d+, not compared \\(accelerated scene not current or an unknown answer\\) \\d+; violations \\d+;",
+  "gi: rt_omm_reference 1 \\(OMM variants trace the reference scene\\)",
+  "gi: rt_omm_reference 0 \\(OMM variants trace the accelerated scene\\)",
+  "\\[vt alpha\\] last \\d+ frames: [1-9][0-9.]* VT records per frame read an offline mask .*; [1-9][0-9.]* at mip 0 with the hard cut \\(rt_alpha_fine_lod 1\\)",
+  "\\[omm dyn\\] last \\d+ builds \\(rt_omm_dyn 1\\): masked per-draw draws [1-9][0-9.]* \\([0-9.]+M triangles\\) per build, with a micro-map [1-9][0-9.]*"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[cascade\\] could not allocate",
+  "\\[omm\\] producer disabled after EXT record failure",
+  "\\[omm\\] completion proof lost",
+  "\\[omm\\] VK_EXT_opacity_micromap unavailable",
+  "\\[omm dyn\\] WARNING",
+  "rejected ticket use without live ticket",
+  "\\[fault\\] VK_ERROR_DEVICE_LOST",
+  "\\[fault\\] device fault",
+  "\\[bvh\\] WARNING frame \\d+ slot \\d+: TLAS instance",
+  "\\[bvh\\] WARNING frame \\d+: per-draw BLAS vertices"
+ ],
+ "expect_runner": [
+  "\\[motion-plan\\] pointer centred in owned foreground game",
+  "\\[motion-trace\\] phase=1 label=smoke-refit1 repeat=0",
+  "\\[motion-trace\\] phase=5 label=shot-ref-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-ref-b repeat=0",
+  "\\[motion-plan\\] complete phases=11\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "rt_omm_dyn (docs/P4_OMM.md 11.2c) at S3 camp: B on (rt_vt_alpha_masks=1, rt_alpha_fine_lod=1) throughout, micro-maps on the masked per-draw BLAS (grass). One launch: rt_omm_reference REF / ON / REF switches the OMM variants between the reference scene (micro-maps disabled per instance) and the accelerated one, no rebuild. diag-check (rt_stats=1): omm check violations must be 0, candidates accelerated vs reference = work removed. Cost: rt passes / gi GPU ms per pass, cost-on vs the cost-ref mean. Energy: shot-on vs the shot-ref mean. Smoke-ultra startup, FG 2, static, exposure held from cost-ref-a.",
+ "estimated_phase_seconds": 127,
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-ref-a",
+    "cost-on",
+    "cost-ref-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-ref-a",
+    "cost-on",
+    "cost-ref-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-ref-a",
+    "cost-on",
+    "cost-ref-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "omm violations: the same rays give the same answer in the accelerated and the reference scene (docs/P4_OMM.md 9.5)",
+   "select": "omm check \\(\\d+ frames\\):",
+   "match": "; violations 0;",
+   "windows": [
+    "diag-check"
+   ],
+   "min": 1
+  },
+  {
+   "name": "omm dyn coverage in every cost window (masked per-draw BLAS with a micro-map; the share is the coverage)",
+   "select": "\\[omm dyn\\] last \\d+ builds",
+   "match": "with a micro-map [1-9][0-9.]* \\([0-9.]+M triangles, [0-9.]+%\\)",
+   "windows": [
+    "cost-ref-a",
+    "cost-on",
+    "cost-ref-b"
+   ],
+   "min": 1
+  },
+  {
+   "name": "omm dyn: accelerated scenes built in every cost window (the ON window traces them, the REF windows pay the same build)",
+   "select": "\\[omm dyn\\] last \\d+ builds",
+   "match": "accelerated scenes [1-9]\\d*;",
+   "windows": [
+    "cost-ref-a",
+    "cost-on",
+    "cost-ref-b"
+   ],
+   "min": 1
+  }
+ ]
+}

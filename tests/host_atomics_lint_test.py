@@ -79,6 +79,9 @@ ATOMIC_TARGETS = {
     "shaders/rt/omm_bake_plain.hlsl:bakeStats": [
         ("layer/omm_bake.cpp", "if(!allocate(dd,*device,kStatsBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,false) ||",
          D, "stats_device (wave-reduced bake state counters, copied to the transfer-only stats_host readback)")],
+    "shaders/rt/omm_bake_mask.hlsl:bakeStats": [
+        ("layer/bvhsplit.cpp", "if (!make_buf(g_omm_dyn_stats, kOmmDynStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT |",
+         D, "g_omm_dyn_stats (rt_omm_dyn: wave-reduced bake/check counters, copied to the transfer-only g_omm_dyn_readback)")],
     "shaders/rt/omm_bake_plain.hlsl:contentEpochs": [
         ("layer/omm_content.cpp", "(mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}",
          H, "omm content counters")],
