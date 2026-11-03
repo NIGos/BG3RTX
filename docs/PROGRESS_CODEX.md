@@ -6,6 +6,18 @@ Earlier history: [morning archive](archive/PROGRESS_20261102_morning.md), [11-01
 Branches write `docs/progress/<branch>.md`; fold only after verifying ancestry against main.
 Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 
+## Report 2026-11-03 night (main b76e3cc + bundle 2 pending) - stages 2-3 closed, 4 in progress
+- Stage 2 done: spec-constant migration on main; live scc1 valid (0 DXC on every converted toggle, rt 1.86 ms, gi 5.0 ms S8). Variants 2946 -> 147.
+- Dialogue moving shadow (port): fixed by default. Second fix (cascade identity without per-draw allocations) now matches 16-18 duplicates/frame at the port (was 0); no band in any motion pair (block change at RT-sun-off noise). rt_cascade_static_only must stay OFF: it drops every cascade caster (same as casters off).
+- AO / hair at camp confirmed: gi_ao=0 brightens faces +10..22%; native hair +4..14%.
+- Water on/off reflections while turning: cause in our compose (tier 1 25% -> 1% on camera-jump frames). Compose shift (rt_water_compose_shift) did not remove it; test confounded by jumpy turn input (45-90 deg per frame). Smooth turn modes + camera probe job prepared (bundle 2).
+- Native hair: costs +2.3 ms rt / +3.2 ms GI at S8 (keep rule < 1 ms): stays off. rt_hair_gi_cull (GI rays skip hair) prepared to cut the GI part.
+- Box lights: honour the game's shadow flag (88 Grymforge box lights have it off): fixed mode is closer to OFF energy, +0.13 ms. Still off (your visual check, question below).
+- OMM om4: check window confounded by scene-wait timeouts; gate fixed, rerun pending. rt passes -0.4..0.5 ms with OMM.
+- Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa (147 -> 135 variants). rf_edge / rr_hitdist kept (old metric invalid).
+- New, off: water hidden/off-screen hit shading with world-space lights (rt_water_hit_shade 1/2), mesh content ids (rt_mesh_content_id).
+- Try in game: port dialogue (Dialogue3 save): the shadow band on the still character should be gone with Roof sun shadows on. Grymforge with Box light shadows = All: are the art lights back? If yes, it can go to Ultra.
+
 ## Report 2026-11-02 19:30 (main 7929040, ABI 26) - consolidation paused, PC freed for the user
 - Merged: stream caps + source trim (-0.4 GB VRAM), NaN GI history fix, OMM option B + VT alpha masks (game-wide catalogue 1,677 materials, generated on the user's PC), recipe rows from the asset DB, water RR/FG motion vectors, preprocessed-text shader cache (header-only edit: 2892 compiles to 0, 35 s), AGENTS.md compile rules. All new keys off.
 - Rejected / stays off: IP grass (+1.9 ms, +1.5 GB, +3 points share), generated recipe rows (+2.3 points camp), every water flicker key. rf_hit_gi off (hit AO matches the screen offline; gap is in instanced hits, needs a pack with instanced rows).
