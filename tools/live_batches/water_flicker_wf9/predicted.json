@@ -8,7 +8,7 @@
     0,
     1
   ],
-  "hypothesis": "Compose must use the exact selected rt_scene TLAS build camera from the host-written 4-entry GPU ring, not the previous lighting copy camera.",
+  "hypothesis": "Compose must use the exact selected rt_scene TLAS build camera from the host-written 4-entry GPU ring, not the previous lighting copy camera. Both positions must come from the 224 B scene camera float4 13, never from the 400 B lighting camera.",
   "turning": {
     "off_evidence": {
       "screen_hit_percent": [
@@ -38,5 +38,13 @@
   "gpu": "Report existing compose GPU ms per state, capture-free cost windows; wf8 baseline 0.10-0.15 ms. No new pass.",
   "motion": "turn_mode=keys holds E (+1) or Q (-1) throughout motion interval, no mouse deltas. Q/E moved in 120/120 samples in the 10:08 live probe; invalidate if water leaves view or presented frames jump.",
   "quality": "Pending live evidence; no quality pass.",
-  "remaining_hidden": "If hits remain hidden, rt_water_hit_shade (F-1 consistent) shades tiers 2/3; do not add hysteresis."
+  "remaining_hidden": "If hits remain hidden, rt_water_hit_shade (F-1 consistent) shades tiers 2/3; do not add hysteresis.",
+  "static_camera_delta": {
+    "average_max_exclusive_m": 0.01,
+    "windows": [
+      "energy-static-1",
+      "energy-static-3"
+    ],
+    "prediction": "0 m at an unmoved camera; nonzero valid samples required. The 13:10 layout bug measured 294.80 m."
+  }
 }

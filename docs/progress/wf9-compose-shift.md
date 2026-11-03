@@ -22,3 +22,6 @@
 - Fix: subtract the current frame's cam2 float4 13 (copy in.cam2 +208, 16 B next to the ring entry, core/water.cpp:1265), and add a static gate: delta 0 at an unmoved camera.
 - Raw debug 25 tier 1: static 15.1%; turning shift 0 4.6% (13373 toggles, rate 7.2%), shift 1 0.0% (99101, 99103; 0 toggles, nothing left to toggle). Flips 0, except 1 at the first switch (8 uncomposed).
 - Energy (water-compose): OFF 0.187590 / 0.187820, ON 0.187536 / 0.187781, within noise, but ON drops the compose delta (-0.0013 to 0.0000 per owned). Compose GPU: OFF 0.104 static / 0.136-0.147 turning, ON 0.085-0.090 (nothing traced on screen).
+- Fixed: compose copies current cam2 bytes 208..223 beside the build camera; ray shift and stats now subtract the same 224 B layout. Synthetic capture fixture: static delta 0, moved delta exactly (1.25, -2, 0.5) m.
+- Offline: core build and targeted CTests pass; pp-diff main 220 unchanged / 16 changed; watershift 15/15, key-off 30/30, reference 60/60. ABI unchanged, variant request delta 0.
+- READY_FOR_LIVE: both static ON windows now require average build-camera delta < 0.01 m and nonzero samples. No game launched; corrected live quality and GPU cost remain unmeasured.

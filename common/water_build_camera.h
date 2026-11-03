@@ -1,4 +1,5 @@
 #pragma once
+#include "water_camera_layout.h"
 #include <atomic>
 #include <cstdint>
 
