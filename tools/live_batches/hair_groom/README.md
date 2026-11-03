@@ -8,8 +8,9 @@ and LOD1 (a97c222a4f2c0dda: the game draws LOD1 at camp distances; the 10:40 run
 user's paks (never shipped): `python -m tools.hair_groom.asset --gltf <LSLib export of HAIR_HUM_F_Shadowheart_Spring.GR2>`
 (the LSLib glTF export is the one in docs/RTX_HAIR_FEASIBILITY.md). And this branch merged into the test tree.
 
-Jobs (one foreground launch each, `py -3 make_job.py`, one plan `plans/hg_plan.json`, 255 s):
-1. `hg1-camp-fg2` (`Campsite - 27h`: the party at camp), 2. `hg2-dialogue1-fg2` (`Test Dialogue1`).
+Job (one foreground launch, `py -3 make_job.py`, plan `plans/hg_plan.json`, 255 s): `hg2-dialogue1-fg2`
+(`Test Dialogue1`: the only save where the 11:03 rerun saw Shadowheart's hair, LOD1, 6009 indices). The camp job
+was dropped: no Shadowheart hair draw there.
 
 Config: hair_qual's Ultra keys and hair startup latches, `rt_hair_gi_cull=0`, `rt_hair_groom=1` at startup (the
 device feature is negotiated there; later 0/1 is live).

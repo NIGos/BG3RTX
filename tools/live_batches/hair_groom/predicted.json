@@ -23,6 +23,5 @@
    "predicted": "toggle-off-a builds the constant-1020-off pipelines in the background (its own slot: later toggles do not rebuild); every judged window 0 pending/started, hair invalid 0"
   }
  },
- "hg1-camp-fg2": {"same_as": "_all"},
- "hg2-dialogue1-fg2": {"same_as": "_all"}
+  "hg2-dialogue1-fg2": {"same_as": "_all"}
 }

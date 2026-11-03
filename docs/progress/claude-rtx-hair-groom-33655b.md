@@ -36,3 +36,13 @@
   3x strand median, 2 mm; thinned LODs < 9 mm, the parser's bound 10 mm), and a one-time log per unmatched
   hair draw with its index count and reason (counters in the 300-frame line). Live plan: warm-nohair phase
   before the cost windows (no-hair pipelines built inside cost-nohair). Build, 131 CTests, dryrun pass.
+
+## rt_hair_groom rerun 2026-11-03 11:03: INVALID again, cause found, fixed offline
+- The new join log: hair draws carry their real index counts; most are styles not converted yet (many characters).
+  Shadowheart's LOD1 draw (6009 indices) was seen in Test Dialogue1 but its index buffer is not host-mapped,
+  so the index-ID join could never work for it. Fix: UV join. Asset v2 stores UV0 of 32 sampled corners; the layer
+  copies the same 32 corners' UVs from its own captured soup (+16 of the 88-byte vertex, deformation-independent)
+  to a host readback and matches within 1e-3 (v or 1 - v) against the files with that index count. Log line per
+  index count with the captured and expected UVs. Shadowheart LOD0/LOD1 files regenerated as v2.
+- Live: camp job dropped (no Shadowheart hair draw there); the batch over all styles waits until Shadowheart
+  works (user, 2026-11-03).
