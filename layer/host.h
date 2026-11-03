@@ -696,6 +696,9 @@ struct InstPipe {
   bool pos_float3 = false; // content identity supports raw float3 only
   uint8_t uv_binding = 0xff; // paks: audited copy of a raw per-vertex float2 input
   uint32_t uv_offset = 0, uv_stride = 0;
+  uint8_t paks_uv_binding = 0xff; // audited raw UV copy, including packed half2
+  uint32_t paks_uv_offset = 0, paks_uv_stride = 0;
+  bool paks_uv_half = false;
   bool paks_cull_known = false, paks_two_sided = false;
 };
 void bvh_device_created(DeviceData* dd);

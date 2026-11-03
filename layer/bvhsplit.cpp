@@ -3965,6 +3965,7 @@ void bvh_forget_buffer(VkBuffer b) {
 }
 
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size) {
+  native_hit::pak_uv_forget_buffer(b);
   if (!g_any_mesh.load(std::memory_order_relaxed)) return;
   std::lock_guard<std::mutex> lock(g_mu);
   auto it = g_buf_meshes.find(b);

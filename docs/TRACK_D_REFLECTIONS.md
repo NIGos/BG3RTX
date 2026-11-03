@@ -769,10 +769,37 @@ Reject absent count buckets before requesting raw/decoded inputs; they now
 count as terminal missing_count rather than waiting forever. Keep the old
 line for queue consumers; the reasons line identifies missing_count versus
 missing_uv and explicitly names witness_rejected/inputs_unavailable.
-Predicted next ON: exact/records/ready remain 0/0/0 for the same sampled-only
+Historical audit prediction: exact/records/ready remain 0/0/0 for the same sampled-only
 inputs; attempts + inputs_pending = draws, missing_count + missing_uv =
 missing. Some old input waits move to missing_count; their number is not
 recoverable from cp4. No shader request/ABI/default change or GPU cost claim.
+
+Full-witness follow-up (pakjoin-publish, offline candidate): unique UV keys now
+request raw object-space input evidence through the existing retired readback
+path. The catalogue SHA covers every ordered position3/UV2 corner, so sampled
+positions or inverse-transformed XFB positions cannot substitute for raw bytes.
+Half2/float2 UV decoding must preserve the catalogue canonical float values;
+88-byte XFB captures still supply only candidate UVs at byte 16. Buffer writes,
+capture reuse and changed input bindings invalidate retained evidence. A match
+continues through the existing recipe/cull/current-resource and checked-basis
+publication gates; native captured materials retain precedence.
+
+Transfers are bounded at 4 MiB/frame, 16 jobs and 16 MiB in flight. Raw ranges
+larger than one frame progress in chunks; jobs beyond the capacity stay unknown.
+At most two raw retirement/decode jobs run per frame. Mapped mutable source
+memory stays unknown on this path; mapping a retained source or a tracked GPU
+write invalidates its token and dependent records. No fence wait or queue idle
+is added.
+
+The cp4 follow-up requires witness_ok > 0, published_records > 0 and pak
+records/basis ready > 0 in each 19.1 s ON window. Mismatches and budget deferrals
+are explicit on the existing join line. These are predicted participation
+numbers, not observed coverage; 21,588 repeated UV joins do not predict a
+number of distinct published records. The key stays off in presets; GPU cost,
+energy and visible coverage remain unmeasured. No game launch is authorized.
+Host build and 7/7 focused CTests pass, including production-ring SHA replay,
+unsampled mismatch, budget retry, chunk discard and stale-token hit lookup.
+cp4 live_flow preflight passes (1 job, 0 failures).
 
 `tools.assets.mesh_paks` generates local-only JSON and binary join candidates
 from catalogue GR2s, initially lava / Tileset / HLOD. It preserves native ordering,

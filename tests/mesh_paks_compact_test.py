@@ -17,6 +17,23 @@ from tools.mesh_paks_compact_audit import candidates, audit_log
 
 
 class CompactTests(unittest.TestCase):
+    def test_witness_reaches_existing_material_publication_path(self):
+        # Complements the executable production-ring replay: it must remain
+        # wired into the actual draw observation and hit lookup, not a test-only
+        # witness consumer or a parallel publication mechanism.
+        source = (Path(__file__).resolve().parents[1]/'layer/hit_material.cpp').read_text()
+        match = source.split('const mesh_paks::Row* paks_match(', 1)[1].split('// The VS inputs', 1)[0]
+        self.assertIn('pak_witness_get(state,args,ip,candidate.row', match)
+        self.assertLess(match.index('mesh_paks::hlod_compatible(*candidate.row'),
+                        match.index('pak_witness_get(state,args,ip,candidate.row'))
+        observe = source.split('bool pool_observe(', 1)[1].split('PoolUse pool_lookup(', 1)[0]
+        for call in ('paks_match(*state,args,inst,&proof)', 'payload.pak=true', 'payload.pak_valid=std::move(proof)',
+                     'pool_table.observe(geometry,frame,o)', 'assign_material(', 'pool_job('):
+            self.assertIn(call, observe)
+        lookup = source.split('PoolUse pool_lookup(', 1)[1].split('void pool_evicted(', 1)[0]
+        for gate in ('pool_table.lookup(', 'pool_current(', 'pool::Basis::Ready', 'paks_rows()'):
+            self.assertIn(gate, lookup)
+
     def test_log_keeps_on_windows_and_does_not_invent_screen_coverage(self):
         text = ('[hit material paks UV] 3 corners: missing candidate\n'
                 '[hit material paks UV] 6 corners: missing candidate\n'
