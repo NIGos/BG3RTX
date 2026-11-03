@@ -360,6 +360,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_primary", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
+  {"exp_hair_fibre", "Physical strand shading",
+   "Lights the on-screen strands with a fibre BSDF and multiple scattering instead of the game's hair shading. Brighter, warmer hair; cost and look unqualified.",
+   Kind::Choice, Apply::Live, "live; needs Strand hair on screen", false,
+   {{"off", "Off", 0, {{"rt_hair_fibre", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_fibre", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -696,6 +703,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_gi_mean", "0"},
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
+    {"rt_hair_fibre", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},

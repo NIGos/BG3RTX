@@ -110,7 +110,16 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   relative error max 1.4e-5 (9000 samples, 0-6 fibres in front); table model vs per-colour Monte Carlo averages
   0.967/0.972/0.981 (CHAR_Hair colour). Found on the way: a `static const float x[8][3][6]` table read shifted
   fields on the GPU (DXC SPIR-V); the table is flat now.
-  **3b-2b (next, design):** where: D-LS (`shaders/gi/rt_local_shadows.hlsl`) already runs after the tiled
+  **3b-2b (done offline, key `rt_hair_fibre`, off, live, needs rt_hair_groom_primary):** `shaders/gi/hair_fibre.hlsl`
+  (includes D-LS with LS_NO_MAIN; dispatched by core/gi.cpp right after D-LS with its layout, sets and push
+  constants, inside its timed region). Instead of changing D-LS (its key-off identity), a separate pass replaces,
+  on strand pixels only, the sun and the local lights without a game shadow map: it subtracts what the buffer
+  holds for each (D-LS's c * t, the game's sun term) and adds E * hd_shade_pixel * v. v: the scene without the
+  strands (`RT_VIS_NO_GROOM` in rt_common's groom check: preprocessed text of every other request unchanged),
+  n: up to 8 groom hits toward the light. Checks: compiles + spirv-val (plain and both variants.txt requests,
+  +2), shader identity vs main 236/237 (only hair_groom_update), 134/134 CTests, GPU `hd_shade_pixel` vs
+  `dual.shade_table_pixel` max rel. 6.7e-6. Live: tools/live_batches/hair_primary shot-fibre-a / cost-fibre.
+  Original design notes: where: D-LS (`shaders/gi/rt_local_shadows.hlsl`) already runs after the tiled
   lighting at full resolution, re-evaluates every local light's exact game term c_i (bg3_light_eval_mat, class
   5 = the game's Marschner) and the sun's (`ls_sun`, bg3_sun_eval_mat), and adds deltas into the game's
   diffuse/specular buffers. For strand pixels (class 5 and a pixel entry with this frame's tag in the hair

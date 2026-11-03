@@ -293,6 +293,20 @@ def shade_table(t, wo, wi, h, n_front, color, roughness):
     return single + correction_table(color, roughness)[None, :] * (shade(t, wo, wi, h, n_front, color, roughness, av) - single)
 
 
+def shade_table_pixel(t, wo, wi, n_front, color, roughness):
+    """hd_shade_pixel's twin: the single scattering averaged over the offsets -0.75, -0.25, 0.25, 0.75."""
+    k = len(t)
+    f_s = sum(bsdf.evaluate(t, wo, wi, np.full(k, h), color, roughness) for h in (-0.75, -0.25, 0.25, 0.75)) / 4
+    av = averages_table(color, roughness)
+    n = np.asarray(n_front)
+    direct = (n == 0)[:, None]
+    # shade() with f_s replaced: the same dual terms (they do not depend on the offset).
+    zero = shade(t, wo, wi, np.zeros(k), n_front, color, roughness, av) -         np.where(direct, 1.0, D_F * av.a_f[None, :] ** np.asarray(n, float)[:, None]) * bsdf.evaluate(t, wo, wi, np.zeros(k), color, roughness)
+    F = np.where(direct, f_s, D_F * av.a_f[None, :] ** np.asarray(n, float)[:, None] * f_s) + zero
+    single = f_s * direct
+    return single + correction_table(color, roughness)[None, :] * (F - single)
+
+
 def hlsl_tables():
     """The generated body of shaders/rt/hair_dual_table.hlsli (CTest test_dual checks it is current)."""
     fmt = lambda x: f"{x:.4f}"

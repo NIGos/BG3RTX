@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 90,
- "timeout": 490,
+ "timeout": 531,
  "repeat": 1,
  "live_batch": "hair-primary",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=0,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1",
@@ -36,6 +36,7 @@
   "\\[alpha scalp\\]",
   "\\[hair groom\\]",
   "\\[hair primary\\]",
+  "\\[hair fibre\\]",
   "gi: background builds",
   "building in the background",
   "skipped: no variant for",
@@ -57,6 +58,7 @@
   "\\[hair primary\\] pixel record \\d+x\\d+: [0-9.]+ MB",
   "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
   "\\[hair primary\\] strand G-buffer draws GPU [0-9.]+ ms/frame",
+  "\\[hair fibre\\] strand pixels lit by the fibre BSDF after D-LS",
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
   "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
   "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+"
@@ -90,12 +92,14 @@
   "\\[motion-trace\\] phase=6 label=shot-cards-b repeat=0",
   "\\[motion-trace\\] phase=7 label=shot-strands-b repeat=0",
   "\\[motion-trace\\] phase=8 label=shot-cards-c repeat=0",
-  "\\[motion-plan\\] complete phases=14\\b",
+  "\\[motion-trace\\] phase=9 label=shot-fibre-a repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-strands-c repeat=0",
+  "\\[motion-plan\\] complete phases=17\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
  "purpose": "rt_hair_groom_primary A/B (docs/RTX_HAIR_PRIMARY.md): native hair and the strand groom in secondary rays on throughout; visible strands off/on/off/on/off full-resolution PNG shots for the user and the character float energy, cost cards/strands/cards (rt passes, gi, scene build GPU ms, strand G-buffer draw ms). Gated: strand G-buffer and velocity draws > 0 while on.",
- "estimated_phase_seconds": 190,
+ "estimated_phase_seconds": 231,
  "expect_every": [
   {
    "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
@@ -109,8 +113,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -126,8 +133,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -143,8 +153,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -160,8 +173,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ],
    "when_present": true
@@ -178,8 +194,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -196,8 +215,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -217,9 +239,12 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "settle",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b",
     "restore"
    ]
@@ -236,8 +261,11 @@
     "shot-cards-b",
     "shot-strands-b",
     "shot-cards-c",
+    "shot-fibre-a",
+    "shot-strands-c",
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -247,7 +275,8 @@
    "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
    "min": 1,
    "windows": [
-    "cost-strands"
+    "cost-strands",
+    "cost-fibre"
    ]
   },
   {
@@ -260,6 +289,17 @@
    ]
   },
   {
+   "name": "fibre pass: dispatched in the fibre cost window",
+   "select": "\\[hair fibre\\] strand pixels lit",
+   "match": "\\[hair fibre\\] strand pixels lit",
+   "event": true,
+   "min": 1,
+   "windows": [
+    "shot-fibre-a",
+    "cost-fibre"
+   ]
+  },
+  {
    "name": "groom participation in every cost window",
    "select": "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most",
    "match": "last 300 frames: at most [1-9]\\d* groom instances",
@@ -267,6 +307,7 @@
    "windows": [
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -278,6 +319,7 @@
    "windows": [
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -289,6 +331,7 @@
    "windows": [
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   },
@@ -300,6 +343,7 @@
    "windows": [
     "cost-cards-a",
     "cost-strands",
+    "cost-fibre",
     "cost-cards-b"
    ]
   }

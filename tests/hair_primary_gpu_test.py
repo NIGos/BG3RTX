@@ -173,7 +173,11 @@ def dual_check(exe, spv, n=3000, seed=13):
         t, wo, wi = unit(n), unit(n), unit(n)
         h = rng.uniform(-0.99, 0.99, n)
         nf = rng.integers(0, 7, n).astype(float)
-        want.append(dual.shade_table(t, wo, wi, h, nf, color, rough))
+        pix = rng.uniform(size=n) < 0.5          # half the samples: the pixel response (h = 2 selects it)
+        w = dual.shade_table(t, wo, wi, h, nf, color, rough)
+        w[pix] = dual.shade_table_pixel(t[pix], wo[pix], wi[pix], nf[pix], color, rough)
+        h[pix] = 2.0
+        want.append(w)
         block = np.zeros((n, 16), "<f4")
         block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, h, wo, rough
         block[:, 8:11], block[:, 11], block[:, 12:15] = wi, nf, color

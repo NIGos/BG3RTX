@@ -10,8 +10,9 @@ into the test tree.
 Job (one foreground launch, `py -3 make_job.py`, plan `plans/hp_plan.json`, 190 s): `hp1-dialogue1-fg2`
 (`Test Dialogue1`). Config: the hair_groom job's (hair_qual Ultra keys, hair startup latches, `rt_hair_groom=1`).
 Phases: `warmup` 25 s, `settle-cam` 10 s (strands off); `warm-strands` 20 s (first on: UV/previous-point ranges,
-rebuilds) and `warm-back` 10 s; shots cards / strands / cards / strands / cards (8 s, one full-resolution PNG trace
-at 5 s, exposure held); `settle` 5 s; cost `cost-cards-a` / `cost-strands` / `cost-cards-b` (25 s each); `restore`.
+rebuilds) and `warm-back` 10 s; shots cards / strands / cards / strands / cards, then `shot-fibre-a` / `shot-strands-c` (rt_hair_fibre on/off; 8 s,
+one full-resolution PNG trace at 5 s, exposure held); `settle` 5 s; cost `cost-cards-a` / `cost-strands` /
+`cost-fibre` / `cost-cards-b` (25 s each); `restore`. 231 s, 7 traces (~1.55 GB).
 
 Gates (expect_every): the hair_groom window gates (scene waits, capacity, cutouts, background builds, freeze, hair
 invalid 0) in judged windows; strand participation (G-buffer and velocity strand draws > 0, 0 pipelines refused)

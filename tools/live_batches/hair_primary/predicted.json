@@ -16,7 +16,14 @@
   "energy": {
    "predicted": "character ROI within +-10% of cards (same material code; coverage now the strands' instead of the dither): direction unknown, reported",
    "kept_if": "ON >= OFF - spread, or a darker result explained by coverage"
+  },
+  "fibre (rt_hair_fibre, shot-fibre-a vs shot-strands-c, cost-fibre vs cost-strands)": {
+   "predicted": "the strands brighter and warmer than with the game's hair shading: the fibre BSDF with dual scattering is the path-traced hair response (1.01-1.02 x a path-traced fibre slab for the CHAR_Hair colour), forward scattering gives a backlit rim; hair ROI float mean up, by a factor the user judges on the PNG pair. Lights with a game shadow map, box lights and AO-on-direct keep the game's terms. Cost: D-LS ms +0.1-0.4 (one scene ray, one sun ray and up to 8 groom hits per light on strand pixels)",
+   "invalid_if": "no '[hair fibre] strand pixels lit' line in shot-fibre-a and cost-fibre",
+   "kept_if": "the user accepts the look; energy is not gated against key-off (physically brighter by design)"
   }
  },
- "hp1-dialogue1-fg2": {"same_as": "_all"}
+ "hp1-dialogue1-fg2": {
+  "same_as": "_all"
+ }
 }

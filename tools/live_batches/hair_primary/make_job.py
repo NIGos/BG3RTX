@@ -20,8 +20,9 @@ _spec.loader.exec_module(hg)   # BASE, GROOM, step, FULL_RES, GROOM_START, the h
 BATCH = "hair_primary"
 LIVE = "hair-primary"
 SAVES = [("hp1-dialogue1-fg2", "Test Dialogue1")]   # Shadowheart's matched LOD1 hair (hg-20261103e: 5 instances)
-ON = dict(hg.GROOM, rt_hair_groom_primary="1")
-OFF = dict(hg.GROOM, rt_hair_groom_primary="0")
+ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0")
+OFF = dict(hg.GROOM, rt_hair_groom_primary="0", rt_hair_fibre="0")
+FIBRE = dict(ON, rt_hair_fibre="1")   # rt_hair_fibre: the strands lit by the fibre BSDF (3b-2b)
 
 
 def step(label, seconds, trace=False, **keys):
@@ -39,9 +40,12 @@ plan = [
     step("shot-cards-b", SHOT, True, **OFF),
     step("shot-strands-b", SHOT, True, **ON),
     step("shot-cards-c", SHOT, True, **OFF),
+    step("shot-fibre-a", SHOT, True, **FIBRE),
+    step("shot-strands-c", SHOT, True, **ON),
     step("settle", 5, **OFF),
     step("cost-cards-a", 25, **OFF),
     step("cost-strands", 25, **ON),
+    step("cost-fibre", 25, **FIBRE),
     step("cost-cards-b", 25, **OFF),
     step("restore", 5, qa_exposure_hold="0", **OFF),
 ]
@@ -73,10 +77,13 @@ def expect_every():
         # Participation: strands drawn in the G-buffer and velocity passes while on (else INVALID: nothing replaced).
         {"name": "strand participation: G-buffer and velocity strand draws > 0 in the strands-on cost window",
          "select": r"\[hair primary\] frame \d+: \d+ grooms published", "match": STRANDS, "min": 1,
-         "windows": ["cost-strands"]},
+         "windows": ["cost-strands", "cost-fibre"]},
         {"name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
          "select": r"\[hair primary\] strand G-buffer draws GPU", "match": r"GPU [0-9.]+ ms/frame \(average of \d+ frames",
          "min": 1, "windows": ["cost-strands"]},
+        {"name": "fibre pass: dispatched in the fibre cost window",
+         "select": r"\[hair fibre\] strand pixels lit", "match": r"\[hair fibre\] strand pixels lit", "event": True,
+         "min": 1, "windows": ["shot-fibre-a", "cost-fibre"]},
         {"name": "groom participation in every cost window",
          "select": r"\[hair groom\] frame \d+: \d+ groom instances; last 300 frames: at most",
          "match": r"last 300 frames: at most [1-9]\d* groom instances", "min": 1, "windows": cost},
@@ -106,6 +113,7 @@ def job(name, save):
         r"\[hair primary\] pixel record \d+x\d+: [0-9.]+ MB",
         STRANDS,
         r"\[hair primary\] strand G-buffer draws GPU [0-9.]+ ms/frame",
+        r"\[hair fibre\] strand pixels lit by the fibre BSDF after D-LS",
         r"rt passes: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
         r"gi: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
         r"\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+",
@@ -128,7 +136,7 @@ def job(name, save):
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "gi: GPU cost", r"\[rt\] scene wait", r"\[rt\] scene build GPU",
                      r"\[trace\]", r"\[shaders\].*\?", r"\[crash\]", "FAILED", "failed", r"\[cascade\] casters",
-                     r"\[geo\]", r"\[alpha hair\]", r"\[alpha scalp\]", r"\[hair groom\]", r"\[hair primary\]",
+                     r"\[geo\]", r"\[alpha hair\]", r"\[alpha scalp\]", r"\[hair groom\]", r"\[hair primary\]", r"\[hair fibre\]",
                      "gi: background builds", "building in the background", "skipped: no variant for", r"\[bvh\]",
                      r"\[rrpost\] exposure (held|hold|probe)", r"\[core\] guard:"],
         "expect": expect, "forbid": forbid, "expect_runner": runner, "stop_on_dump": True,

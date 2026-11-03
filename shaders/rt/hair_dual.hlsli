@@ -32,7 +32,19 @@ float3 hd_gauss(float3 x, float3 var) { return exp(-x * x / (2.0 * var)) / sqrt(
 
 // F(wi, wo) per unit irradiance for a fibre with colour `color` (the multiple-scattering albedo), roughness `beta`,
 // offset h, and n_front fibres on the light ray in front of it.
+float3 hd_shade_with(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta);
 float3 hd_shade(float3 t, float3 wo, float3 wi, float h, float n_front, float3 color, float beta) {
+  const float rough = clamp(beta, 0.05, 1.0);
+  return hd_shade_with(hb_eval(t, wo, wi, h, hb_sigma_a(color, rough), rough), t, wo, wi, n_front, color, beta);
+}
+// A pixel wider than the fibre: the single scattering averaged over four fibre offsets (hb_eval_pixel).
+float3 hd_shade_pixel(float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta) {
+  const float rough = clamp(beta, 0.05, 1.0);
+  return hd_shade_with(hb_eval_pixel(t, wo, wi, hb_sigma_a(color, rough), rough), t, wo, wi, n_front, color, beta);
+}
+
+// The dual-scattering response given the single-scattering term f_s at the chosen offset(s).
+float3 hd_shade_with(float3 f_s, float3 t, float3 wo, float3 wi, float n_front, float3 color, float beta) {
   const float3 a_f = hd_lookup3(color, beta, 0u), a_b = hd_lookup3(color, beta, 1u);
   const float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
   const float alpha_f = hd_lookup(lum, beta, 2u), alpha_b = hd_lookup(lum, beta, 3u);
@@ -45,8 +57,6 @@ float3 hd_shade(float3 t, float3 wo, float3 wi, float h, float n_front, float3 c
   const float3 sigma_b = (1.0 + kHdDb * af2) *
                          (ab * sqrt(2.0 * beta_f * beta_f + beta_b * beta_b) + ab3 * sqrt(2.0 * beta_f * beta_f + 3.0 * beta_b * beta_b)) /
                          max(ab + ab3 * (2.0 * beta_f + 3.0 * beta_b), 1e-12);
-  const float rough = clamp(beta, 0.05, 1.0);
-  const float3 f_s = hb_eval(t, wo, wi, h, hb_sigma_a(color, rough), rough);
   const float th_o = asin(clamp(dot(wo, t), -1.0, 1.0)), th_i = asin(clamp(dot(wi, t), -1.0, 1.0));
   const float th_h = 0.5 * (th_o + th_i), th_d = 0.5 * (th_o - th_i);
   const float3 var = n_front * beta_f * beta_f + sigma_b * sigma_b;

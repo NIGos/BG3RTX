@@ -16,5 +16,7 @@
   path-traced fibre slab (single scattering 0.21-0.40, plain dual 0.70-0.75); held-out colours 0.97-1.04.
 - 3b-2a: `hair_dual.hlsli` (generated tables) = `dual.shade_table` on the GPU (max rel. 1.4e-5). A 3-D static
   const HLSL array read shifted fields on the GPU: flattened (check other multi-dimensional tables).
+- 3b-2b: key `rt_hair_fibre` (off, live): `gi/hair_fibre.hlsl` after D-LS lights strand pixels with the fibre BSDF
+  (sun + unshadow-mapped local lights). Identity 236/237, CTests, GPU twin 6.7e-6. Not run live.
 - Live job READY_FOR_LIVE: tools/live_batches/hair_primary (Dialogue1, cards/strands shots at full resolution,
   cost cards/strands/cards; gated on G-buffer and velocity strand draws > 0). Dryrun pass, not run.

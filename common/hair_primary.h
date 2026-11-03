@@ -29,6 +29,11 @@ constexpr uint32_t kPixelBytes = 16;
 constexpr uint32_t kNoStrand = 0xFFFFFFFFu;
 constexpr uint32_t kMaxSegment = (1u << 24) - 1u;
 
+// The header's device address for the core (persist(kPersistKey, sizeof(Persist)); 0 until the layer made it):
+// gi/hair_fibre.hlsl (rt_hair_fibre) reads the same record. No ABI change.
+constexpr const char* kPersistKey = "bg3rtx.hair_primary";
+struct Persist { uint64_t header; uint32_t version, pad; };
+
 struct Row { uint32_t points, uv, starts, prev; };
 struct Header {
   uint32_t tag, width, height, count;
