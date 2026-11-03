@@ -651,6 +651,53 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   mean (L_b - L_a) within z x its standard error, else tier (b) is biased and stays off; then
   hard_dark on tier (b) pixels and crops.
 
+### Pak mesh materials: identity audit and remaining runtime work (cov-mesh-material, 2026-11-03)
+
+Status: offline catalogue only; runtime fallback is **not implemented or READY_FOR_LIVE**.
+`rt_hit_material_paks` is the proposed off-by-default key, not a registered working feature.
+No qualified row, descriptor, shader, setting or ABI changes accompany this audit.
+
+The existing mesh key is not a resource ID or vertex/index content hash. `common/native_hit_pool.h`
+`Geometry`, `geometry_key` and `position_key` hash Vulkan buffer handles, draw ranges and offsets.
+`layer/hit_material.cpp` `pool_keys` builds those keys; `layer/bvhsplit.cpp` `bvh_classify` similarly
+keys the BLAS cache by handles, layout and draw arguments. These identities work within the running
+process but cannot join a pak resource. The tracker retains mapped-memory addresses, not a device-local
+VB/IB byte shadow (`layer/tracker.cpp`, `BindBufferMemory` / `MapMemory`). `layer/cmd.cpp`
+`CmdCopyBuffer`, `CmdCopyBuffer2`, `CmdUpdateBuffer` and `CmdFillBuffer` invalidate BVH ranges only.
+No reliable runtime resource identity may be inferred from a shader family, triangle count or bounds.
+
+Three prerequisites are needed before a pak row can qualify:
+
+1. **Exact geometry join.** Export each GR2 ObjectID / LOD / submesh with its indexed object-space
+   positions, UV and native tangent-frame inputs. Define one versioned canonical byte stream and
+   compute it identically offline and from the runtime draw's raw indexed attributes. Preserve index
+   order, vertex offset, winding, attribute decode and float bits; reject unsupported formats,
+   non-finite inputs, unknown transforms and collisions or multiple material candidates. Hashes select
+   candidates; full canonical-byte equality must decide the match. Use mapped bytes when available;
+   otherwise a bounded GPU readback with submission retirement and buffer-write invalidation is
+   required. Existing handle keys may cache the verified join only for that buffer generation.
+2. **UV / basis without a G-buffer draw.** `PoolMesh` currently stores the pool position range, and
+   `pool_job` obtains UV / N / B / T from G-buffer XFB. A never-drawn mesh cannot run that job.
+   Decode the audited raw quaternion / UV attributes, or import an independently verified offline
+   basis, into the existing `nh_pool_basis_vertex` format. Match the pool's triangle order and mesh
+   generation and retain the basis header / position check in `rt_hit_material_pool`; do not mark
+   `Basis::Ready` merely because an ObjectID or fingerprint matched.
+3. **Textures and parameters.** The descriptor/cache path accepts current `VkImageView` / image
+   generations and sampler metadata (`ResourceBudget`, `capture`, query-owned pool rows). It does not
+   resolve asset texture UUIDs to those views. VT indirection, cache views, tile-set matrices, engine
+   UV transform, channel and exact material overrides must all resolve before constructing the same
+   256 B row. Build a verified UUID-to-current-view bridge, or owned pak texture uploads with equivalent
+   sampling semantics; reuse the existing budget, sampler clone, publication and retirement path.
+   Missing, stale or conflicting resources remain unknown.
+
+Integration must try pak rows only after the existing captured path fails, and must reserve captured
+rows and descriptors first. Offline gates: canonical fingerprint equality across buffer handles and
+index widths; reject position / UV / basis mutations, ambiguous materials, unsupported layouts and
+stale writes; exact 256 B row equality for matched captured fixtures; identical qualified-row resources
+and pre-post colour on replay with the key off and for previously qualified hits with the key on.
+Existing packs lack raw mesh resource identity, so they can freeze the old-row baseline but cannot
+establish a new pak join or predict its qualified-share gain. No GPU cost or energy improvement is claimed.
+
 ### Recipe-row branch progress details (verbatim)
 
 ```markdown
