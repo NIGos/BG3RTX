@@ -92,7 +92,41 @@ converter IndexError. Review, first reason: mirrored UV triangles 203, coverage 
 silhouette 25, roots away from the head 50. Written: 517 files, 13.3 GB in data/assetdb/hair_grooms (median
 20.6 MB, max 115 MB; LOD arrays are read from disk on first use). `asset.write` now checks every LOD before it
 creates the file: the 22 radius rejects of this run left header-only stubs (296 B), which the layer ignores and
-logs as malformed. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+logs as malformed.
+
+Game use and the unconverted styles (`python -m tools.hair_groom.reach`: references in the paks: character creation,
+character visual slots and the templates using them, hat hair-type maps, item and scenery templates; "unused": no
+pak file outside its own visual bank names it, checked by a byte search of every lsf/lsx). After the fixes below
+(rerun of the 200 affected styles: all 200 pass): 719 pass (was 519), 372 needs review, 126 reject; 717 files, 17 GB.
+
+| Category | Styles | Pass | Review | Reject | Reachable |
+|---|---|---|---|---|---|
+| player (character creation) | 432 | 349 | 54 | 29 | yes |
+| companion | 6 | 4 | 1 | 1 | yes |
+| named NPC (S_ templates) | 211 | 148 | 37 | 26 | yes |
+| generic NPC | 25 | 5 | 10 | 10 | yes |
+| hat variant (hair under a hat or helmet) | 337 | 154 | 151 | 32 | yes, with that item |
+| item or scenery (corpses, fur trims) | 49 | 32 | 17 | 0 | yes |
+| character visual no template uses | 3 | 0 | 2 | 1 | no |
+| unused | 154 | 27 | 100 | 27 | no |
+
+Of the 698 unconverted styles of the first run, 130 are not reachable (127 unused, 3 CV only); 568 are. 150 of
+those are LOD1 meshes whose LOD0 passed (drawn at distance), 55 are beards, brows or fur. Still unconverted and
+reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 64, roots away 45, root channel 38.
+- Fixed: zero radii (19 reachable): a sample on a card triangle without world area (collapsed vertices) had width 0;
+  it now takes its strand's median radius (`convert`, tested). Mirrored UV triangles (181 reachable, the only
+  reason): the barycentric embedding is orientation-independent (tested); a fold can at most lose the strands of
+  its cards, so the mixed-card share is reviewed against the coverage tolerance (median share 0.8%, p90 2.2%).
+- Coverage (+0.08..+0.20, beards and hat hair) and radiance: the gates hold. Two hypotheses tested and rejected on
+  34 styles: alpha-weighted strand width (the game's depth pass is a dithered alpha test, coverage = alpha, but the
+  masks are nearly binary: deltas unchanged) and the reference mip from the cards' texel size (unchanged). The
+  previews show the grooms faithful and the card reference noisy (holes); the next step is a reference that
+  averages the game's dithered alpha test over several noise phases.
+- Silhouette IoU 0: the leather headwear meshes that use CHAR_Hair for fur trim (no strand atlas). Other low IoU:
+  LOD1 cards merge several LOD0 cards (63 of 205).
+- Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
+  cannot follow them (needs a 2-D curve tracer).
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the

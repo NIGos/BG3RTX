@@ -1,67 +1,63 @@
-# Session handoff - 2026-11-03 afternoon
+# Session handoff - 2026-11-03 evening
 
-Main dc3ef899, ABI 26. Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md) next for questions and evidence,
-then [GOAL_NEXT.md](GOAL_NEXT.md) for stage order. Verbatim history: [11-03 archive](archive/PROGRESS_20261103.md).
+Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md), then [GOAL_NEXT.md](GOAL_NEXT.md).
+Full folded evidence: [evening archive](archive/PROGRESS_20261103_evening.md).
+Rendering main eca2023b, ABI 26; bundles 6, 7 and 8 merged. This branch is docs-consolidate-1103.
 
-## Current state
+## Resume conditions
 
-- Stages 2 and 3 done; corrected water flicker fix still awaits qualification. Stage 4 partly qualified, stage 5 active.
-- Ultra: water + Refraction, shading + Bounce, emission Hidden hits, gi_far 6 m, qualified OMM and box lights.
-- OMM: rt_omm/dyn, VT masks and fine LOD on; box ls_box=2 honours the game's shadow flag. Smoke valid.
-- Dialogue moving shadow fixed by default. User accepts AO self-occlusion; rt_cascade_static_only stays off.
-- Water camera correction looks right to the user; corrected wf9 gates and cost remain pending.
-- Converted RTX Hair grooms work in game, about 40% cheaper than native cards. Native cards stay off (+2.3-6.3 ms RT).
-- Hair/DoF shimmer cause found: replayed DoF/bloom weights flip each frame; rr_post_temporal is the pending fix.
-- User rejected rr_hair_resolve and CPU perf keys. Do not promote or queue them for qualification.
+- Lives are paused by the user until testing is fixed. No launch or queue submission is authorized here.
+- Testing fixes are on main, offline verified. Their first live use must still confirm actual behaviour.
+- Strand live enable can lose the device: stale soup address after elastic capture shrink.
+- Current user steering places its fix on claude/hair-reload-fix; the local ref does not yet expose it.
+- Do not enable strand hair until that fix lands. Earlier reload safeguards alone do not clear this blocker.
+- Finish dependent offline checks, prepare outside watched inboxes, then obtain fresh steering for the concrete batch.
+- Re-lint actual plans and dryrun manifests. Do not reuse oversized combined drafts or historical duration estimates.
 
-## On main
+## Next queue, in order, after authorization
 
-- Shader specialization migration, null water-key removal, cascade identity fix, OMM/box promotion and water integration fix.
-- Groom conversion/integration, native-hair pool/cost fixes, corrected compose camera shift and user trial controls.
-- Mesh content identity, generated material rows, VT alpha hit materials, capture/VRAM/AS policies and GI NaN fix.
-- Launcher category fix: experimental controls now appear in Advanced. Settings test validates visible categories.
-- New experimental renderer keys remain off unless explicitly qualified. User approval of appearance is not a gate pass.
+1. Land and verify the pending hair crash fix. Then run Test Dialogue1 reload bisect:
+   tools/live_batches/hair_validation/jobs/hv5-reload-bisect.json.
+   Check survival/frames at native + scalp, physical origin, groom and primary stages after F8.
+2. Real Ultra smoke: tools/live_batches/smoke_ultra/jobs/su1-ultra-s8-fg2.json.
+   Keep qualified keys on; do not enable unqualified hair merely to enlarge the smoke.
+   The earlier OMM/box smoke passed; the latest combined smoke was INVALID and needs replacement.
+3. S8 Fresnel A/B: tools/live_batches/water_surface_fresnel/jobs/wsf1-s8-interface-column.json.
+   Restart to provision rt_water_surface_fresnel, then same-run toggles; inspect pool rim and reference partition.
+   Report compose cost. This changes the shading model, so an equal-mean gate is inappropriate.
+4. Pak join camp: tools/live_batches/cov_paks_compact/jobs/cp4-compact-camp-join.json.
+   Restart the layer; require discovery and UV participation plus full witness/resource/recipe gates.
+   Discovery is fixed; candidate UV matches alone do not qualify material publication.
+5. rr_post_temporal Dialogue3: tools/live_batches/post_temporal/jobs/pt-dialogue3.json.
+   User sees much steadier DoF; S8 cost about 0.12 ms. Both ON windows need valid energy/quality evidence.
+6. Hit-cost quality: tools/live_batches/water_offscreen/jobs/wo1-s8-hit-shade.json.
+   Sparse reflection about 2.1 -> 0.53 ms is exploratory. Require post-water energy, coverage and zero truncation.
+7. At the first use of each repaired path, verify duration and fail-fast behaviour from runner/log evidence.
+   Check preflight, derived windows, loading/waits, 15-minute cap, silent producers and failed-window aborts.
+   Confirm combined slice rebasing/session fault invalidation, settings restoration and repaired water captures.
+   Do not trigger deliberate game faults; use offline failure fixtures for destructive failure cases.
 
-## Open branches
+## Open branches and dependencies
 
-- post-temporal: rr_post_temporal; offline checks pass, READY_FOR_LIVE. About 250 MiB history at 2560 x 1067; GPU ms pending.
-- genrows-gate: fixes parallel depth-source publication and generated two-sided row qualification jobs; rerun pending.
-- cov-paks2: COLOR_0/Tileset publication, device-local UV join, incremental catalogue; generation blocked on LSLib DLLs.
-- water-hit-cost: sparse light membership/cone/zero culling for hidden-hit shading; equivalent offline, live cost pending.
-- gpu-opt1: compact GI hit state, alpha metadata cache, empty water-tile skip; 36 byte-exact replay comparisons, all off.
-- rt-continuity: lane at main dc3ef899; no implementation/result recorded yet.
-- gpu-opt2: lane at main dc3ef899; no implementation/result recorded yet.
+- claude/hair-reload-fix: pending stale-soup crash fix, offline regression/build checks, then hv5 survival evidence.
+  Earlier module-map/load guards, resident keys, LOD ring, card ownership and sealed entries are already merged.
+- hair-cards-retire: preserve work; retiring cards depends on safe, visibly complete strand coverage and valid hair gates.
+  Native cards remain costly; no blanket strand promotion. Batch 519/1,217 passed; 698 remain under study.
+- anim-materials: unmerged. Branch history records repaired key-off equivalence, 45/45; publication remains blocked.
+  Lava/sprite work needs packs with current geometry, publication proof and dependent checks before a live request.
 
-## Next live queue (prepare only; explicit batch steering required)
+## Rules that matter now
 
-1. post_temporal: Dialogue3 white hair/DoF and static S8, Ultra 0/1/0/1; both ON windows, linear energy and GPU ms.
-2. Corrected wf9: S8 static zero-delta gate and held Q/E turns; reflection-only metric, stable energy and compose cost.
-3. genrows-gate: generated rows after offline checks; compare coverage/energy in every window, then real Ultra smoke.
-4. Water off-screen hit shading and water-hit-cost: retained F-1 tuple, nonzero attempts, equivalent energy and clean timing.
-5. gpu-opt1 after dependent offline checks: isolate each key, pass cost/energy/coverage gates, then integrated Ultra smoke.
-6. Remaining GI guards/one-ray/SHaRC only with their valid null/reference gates; keep unqualified keys off.
-
-Do not stage unauthorized jobs in any watched pending inbox. Group by save, toggle within one run, 2-5 minutes/scene.
-Finish each candidate's dependent offline checks before requesting that concrete batch; unrelated lanes need not finish.
-Groom style conversion and cov-paks2 data work can continue offline without live permission.
-
-## Rules learned today
-
-- No commits on main during merge-green; no lives while merge-green updates the test tree.
-- Mouse turns never become smooth here: use held Q/E, not mouse input, for camera-motion comparisons.
-- Launcher shows only Lighting/Surfaces/Performance/Memory/Advanced. Experimental is not a visible category.
-- Never judge reflection quality from whole-water glint metrics; never accept lower residual caused by lost energy.
-- Compare pre-post float energy and GPU pass ms; expensive diagnostics belong outside cost windows.
-- Give jobs patterns/expect and per-window expect_every. Snapshot lines are events with 1 s settle.
-- Heavy DXC one at a time; specialization constants for new on/off keys; cached preprocessed identity checks.
-
-## Safety and working pattern
-
-- Follow [AGENTS.md](../AGENTS.md): never touch saves, backups or snapshot tags; never hold queue results open.
-- Game launches only through the serial queue after fresh explicit user steering; no launch is authorized by this handoff.
-- Remove worktrees only with scripts/remove-worktree.ps1; shared NTFS junctions make recursive cleanup unsafe.
-- One hypothesis, smallest fix behind an off key, same-run A/B, keep or reject; core logic is hot-reloadable.
-- Branches write progress fragments; fold only heading branches verified as ancestors of main.
-- This consolidation folded 59 fragments, retained six unmerged fragments and archived the full folded text verbatim.
-- Open questions remain at the top of PROGRESS: GUI audit, licence, NVIDIA notification, water shadow edge, emission mode.
-- Keep HANDOFF <= 80 lines and PROGRESS about 150. No game, code changes or git metadata writes in this docs task.
+- Follow [AGENTS.md](../AGENTS.md). Never touch saves, backups or snapshot tags; never hold queue results open.
+- Launch only through scripts/test-queue.ps1 after explicit steering, never while the user plays.
+- Same-run A/B, held Q/E turns, every-window gates, patterns and expect. Missing evidence means INVALID.
+- Use float pre-post energy; reconstruction must preserve it. Lower energy is not better stability.
+- Inspect GPU pass ms, not covered-window frame time/presented captures. Keep diagnostics outside cost windows.
+- Target 2-5 minutes/scene; cap launches at 15 minutes. Mine invalid runs before rerunning.
+- No builds/heavy compiles during cost windows; no lives during merge-green. Heavy DXC is machine-wide serial.
+- Water energy/coverage fixes need a host restart. Failed shader requests are excluded from prefetch manifests.
+- rr_post_temporal, Fresnel, hit-cost and SHaRC remain unqualified/off; Medium trace scaling still lacks quality gates.
+- rr_hair_resolve and CPU perf keys were rejected. Do not requeue them. Dialogue AO is accepted.
+- Remove worktrees only with scripts/remove-worktree.ps1; shared junctions forbid recursive cleanup.
+- Branches write docs/progress/<branch>.md; keep this handoff <= 80 lines and progress about 150 lines.
+- This consolidation changes documentation only. No game, code, shaders, commits or Git metadata writes.
