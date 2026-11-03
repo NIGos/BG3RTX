@@ -204,6 +204,36 @@
     "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0"
   },
   {
+    "label": "diag-vt-masks-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 20,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 20,
+    "motion_end": 20,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_vt_alpha_masks=0,rt_hit_material_generated=1,rt_stats=1,qa_exposure_hold=1"
+  },
+  {
+    "label": "restore-vt-masks",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_vt_alpha_masks=1,rt_hit_material_generated=0,rt_stats=0,qa_exposure_hold=0"
+  },
+  {
     "label": "guard-shot-off-a",
     "kind": "static",
     "speed": "static",
@@ -219,7 +249,14 @@
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/gi_temporal\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/gi_trace_rt\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/rt_reflections\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms"
+    ],
+    "wait_log_timeout": 60,
+    "recenter": true
   },
   {
     "label": "guard-q-off-a",
@@ -235,7 +272,10 @@
     "pixels_per_second": 0,
     "direction": -1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-e-off-a",
@@ -251,7 +291,10 @@
     "pixels_per_second": 0,
     "direction": 1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-shot-mv",
@@ -269,7 +312,13 @@
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=1,gi_prev_radiance_guard=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/gi_temporal\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=1 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/gi_trace_rt\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/rt_reflections\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms"
+    ],
+    "wait_log_timeout": 60
   },
   {
     "label": "guard-q-mv",
@@ -285,7 +334,10 @@
     "pixels_per_second": 0,
     "direction": -1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=1,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-e-mv",
@@ -301,7 +353,10 @@
     "pixels_per_second": 0,
     "direction": 1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=1,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-shot-prev",
@@ -319,7 +374,13 @@
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=1",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/gi_temporal\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/gi_trace_rt\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=1, pipeline [0-9.]+ ms",
+      "gi: gi/rt_reflections\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=1, pipeline [0-9.]+ ms"
+    ],
+    "wait_log_timeout": 60
   },
   {
     "label": "guard-q-prev",
@@ -335,7 +396,10 @@
     "pixels_per_second": 0,
     "direction": -1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=1",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-e-prev",
@@ -351,7 +415,10 @@
     "pixels_per_second": 0,
     "direction": 1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=1",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-shot-off-b",
@@ -369,7 +436,14 @@
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/gi_temporal\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/gi_trace_rt\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms",
+      "gi: gi/rt_reflections\\S*\\.hlsl[^\\n]* generation \\d+[^\\n]* spec mv=0 pg=0, pipeline [0-9.]+ ms"
+    ],
+    "wait_log_timeout": 60,
+    "recenter": true
   },
   {
     "label": "guard-q-off-b",
@@ -385,7 +459,10 @@
     "pixels_per_second": 0,
     "direction": -1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "guard-e-off-b",
@@ -401,7 +478,10 @@
     "pixels_per_second": 0,
     "direction": 1,
     "set": "rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "trace_at": [
+      3
+    ]
   },
   {
     "label": "restore-guards",

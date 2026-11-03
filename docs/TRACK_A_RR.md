@@ -399,6 +399,43 @@ late RR's residual/sparkle within new repeat noise, without lost energy/detail.
 GPU cost is unmeasured; occupancy capture is outside existing evaluate timing.
 No game was launched. No quality pass or default promotion is claimed.
 
+### ef2 observations and ef3 decision (rr-hair2, 2026-11-03)
+
+`rr_hair_resolve` remains a **CANDIDATE, off in all presets**. The user watched
+live A/B and found it good at normal viewing. Analysis saw aligned 4x4 blocks
+only in 6x crops, hair edge gradient -24%, high-frequency detail -48%, RR
+output mean -0.6%, and no flicker gain above the static baseline. Both views
+must be retained: magnified artifacts alone do not establish normal-view harm.
+Dialogue camera drift of 10-18 px confounded ef2, including the late-RR ranking.
+There is no quality pass, definitive rejection, removal, or default promotion.
+
+Prepared ef3 (`tools/live_batches/rr_post_decision`) uses static S8 gameplay,
+close companion hair plus a rigid wall/armour control, no dialogue or Q/E.
+Actual framing remains unverified offline; confirm the proposed boxes before a
+future authorized run. Repeated post 1/0/1/0 is followed by resolve 0/1/0/1 at
+post 1, with separate K8, native-size P16, float traces and clean timing.
+Integer per-frame alignment tolerates slow drift, clips invalid borders and
+checks rigid structure, rather than rejecting displacement alone. The report
+saves fixed-ordinal, unscaled presented hair crops side by side; 6x differences
+are secondary. Capture ordinals cannot establish matching animation/FG parity.
+
+**What late RR gives up.** `rr_post=0` keeps the game's DoF, bloom and grading,
+but places all of them before RR at render resolution. It gives up denoising
+linear sharp colour before DoF and applying the game's grade after RR at output
+resolution. Bloom and DoF are therefore part of the signal RR filters; they are
+not disabled. Earlier static foundry A/B above measured new/old delta 1.79 PQ
+codes against 1.57 for new/new, 0.71% vs 0.74% above 16 codes, mean -0.79% vs
+-0.03%, high-frequency energy 15.8 vs 15.6. The early path removed a noise-linked
+grade bias: -0.49/-0.67/-1.01/-1.54% by input-noise quantile, versus repeat
++0.02/-0.05/-0.10/-0.06%. Late RR gives that bias removal up; it saves about
+0.2 ms of chain/grade overhead (RR evaluate stayed 2.5-2.7 ms). No historical
+measurement proves a temporal, DoF or highlight benefit of early RR: those
+were expected, unmeasured benefits. ef3 must weigh hair/detail against whole
+frame RGB histograms, mean, highlights and trace DoF/bloom/grade review.
+PQ means are appearance, not energy: use same-stage float dumps.json means,
+pre-post compose normalization and repeat bands. Never equate ungraded Xr/Z
+with late graded RR output. Future live GPU cost remains unmeasured.
+
 **The problem.** BG3 hands DLSS its *graded* image. Between the scene colour
 and the evaluate it runs, at render resolution: god rays (`a7466e4e`), depth of
 field (12 passes, composite `96bb806d`), a stencil-tagged dither resolve

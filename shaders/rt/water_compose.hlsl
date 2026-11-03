@@ -1,3 +1,4 @@
+#include "../../common/water_camera_layout.h"
 #ifdef WATER_SPEC_CASCADE
 #define RT_SPEC_CASCADE 1
 #endif
@@ -153,12 +154,12 @@ static const uint kHeaderBytes = 64u, kRecordBytes = 32u;   // common/water_comp
 static const uint kVpOffset = 512u;                         // cCam: CameraCB (25 float4) at 0, ViewportCB here
 
 // Host copies the selected TLAS build-camera ring entry here before each dispatch.
-static const uint kBuildCamOffset = 400u;
+static const uint kBuildCamOffset = WATER_COMPOSE_BUILD_CAMERA_OFFSET;
 float3 compose_scene_origin(float3 origin) {
   if (WATER_COMPOSE_SHIFT_ON && (cp.a.w & 32u) != 0u) {
     const float4 build = asfloat(cCam.Load4(kBuildCamOffset));
-    if (build.w == 0.0) return origin;
-    const float3 d = cam.x[3].xyz - build.xyz;
+    if (build.w == 0.0 || cCam.Load(WATER_COMPOSE_CURRENT_CAMERA_VALID_OFFSET) == 0u) return origin;
+    const float3 d = asfloat(cCam.Load4(WATER_COMPOSE_CURRENT_CAMERA_OFFSET)).xyz - build.xyz;
     if (all(isfinite(d)) && all(abs(d) <= 1e6)) return origin + d;
   }
   return origin;
@@ -341,9 +342,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     cStats.InterlockedAdd(0, 1u);
     if (WATER_COMPOSE_SHIFT_ON) {
       const float4 build = asfloat(cCam.Load4(kBuildCamOffset));
-      const float3 d = cam.x[3].xyz - build.xyz;
-      const bool valid = build.w != 0.0 && all(isfinite(d)) && all(abs(d) <= 1e6);
-      cCam.Store4(416u, asuint(float4(valid ? d : 0.0.xxx, valid ? 1.0 : 0.0)));
+      const float3 d = asfloat(cCam.Load4(WATER_COMPOSE_CURRENT_CAMERA_OFFSET)).xyz - build.xyz;
+      const bool valid = build.w != 0.0 && cCam.Load(WATER_COMPOSE_CURRENT_CAMERA_VALID_OFFSET) != 0u &&
+                         all(isfinite(d)) && all(abs(d) <= 1e6);
+      cCam.Store4(WATER_COMPOSE_CAMERA_DELTA_OFFSET, asuint(float4(valid ? d : 0.0.xxx, valid ? 1.0 : 0.0)));
     }
   }
 #ifdef WATER_LS

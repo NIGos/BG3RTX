@@ -1,6 +1,7 @@
 #include "host.h"
 
 #include "../common/settings.h"
+#include "../common/experimental_ab.h"
 #include "../common/log_rotate.h"
 
 #include <atomic>
@@ -199,7 +200,8 @@ static void cfg_log_effective(const settings::Map& raw, bool derived) {
   log("[cfg] keys:%s%s", keys.c_str(), derived ? " (rt_build from auto)" : "");
 }
 
-// A/B hotkey (ab_hotkey=1, the default): Ctrl+Shift+F9 switches every ray-traced effect
+// A/B hotkey (ab_hotkey=1): Ctrl+Shift+F9 flips the last saved Experimental GUI choice.
+// Without a selected target it switches every ray-traced effect
 // off and on while playing, so the game's own image can be compared with ours live. It only
 // overrides the settings the QA's all-off set uses (rt, gi, rt_reflections, rt_shadows,
 // rt_local_shadows, rt_emissive, sharc); everything else (DLSS, frame generation) is untouched.
@@ -244,7 +246,7 @@ static void ab_poll_hotkey() {
   if (latency_pending && frame_index() >= toggle_frame + 2) {
     latency_pending = false;
     log("[ab] toggle latency: %.1f ms from the toggle (frame %llu) to the present of frame %llu, the first recorded "
-        "entirely with ray tracing %s", double(now.QuadPart - toggle_t.QuadPart) * 1000.0 / double(freq.QuadPart),
+        "entirely after the A/B change (global ray tracing %s)", double(now.QuadPart - toggle_t.QuadPart) * 1000.0 / double(freq.QuadPart),
         (unsigned long long)toggle_frame, (unsigned long long)frame_index(), g_ab_off.load() ? "OFF" : "ON");
   }
   bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
@@ -255,11 +257,24 @@ static void ab_poll_hotkey() {
   const int ab_now = cfg_int("ab_off", 0) != 0 ? 1 : 0;
   const bool cfg_edge = ab_cfg >= 0 && ab_now != ab_cfg && (ab_now != 0) != g_ab_off.load();
   ab_cfg = ab_now;
-  if ((down && !was_down && cfg_int("ab_hotkey", 1)) || cfg_edge) {
-    bool off = !g_ab_off.load();
-    g_ab_off.store(off);
-    log("[ab] %s: ray tracing %s (the game's own image %s)", cfg_edge ? "ab_off" : "Ctrl+Shift+F9", off ? "OFF" : "ON",
-        off ? "shown" : "replaced again");
+  const bool hotkey_edge = down && !was_down && cfg_int("ab_hotkey", 1);
+  if (hotkey_edge || cfg_edge) {
+    std::string indicator;
+    bool targeted = false;
+    if (hotkey_edge && !cfg_edge) {
+      std::lock_guard<std::mutex> lock(g_cfg_mu);
+      targeted = experimental_ab::flip(g_cfg,indicator);
+    }
+    if (targeted) {
+      // There is no in-game text/notification renderer. Keep the requested line in the log.
+      log("%s",indicator.c_str());
+    } else {
+      bool off = !g_ab_off.load();
+      g_ab_off.store(off);
+      log("[ab] %s: ray tracing %s (the game's own image %s)", cfg_edge ? "ab_off" : "Ctrl+Shift+F9", off ? "OFF" : "ON",
+          off ? "shown" : "replaced again");
+      log("A/B: ab_off=%d",off ? 1 : 0);
+    }
     since = now;
     longest_ms = 0;
     presents = 0;

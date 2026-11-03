@@ -9,7 +9,7 @@
 #include <vector>
 namespace bg3 { struct DeviceData; struct InstanceData; }
 namespace bg3::hair_groom {
-// Chained by rtscene after the ordinary AS/RQ prerequisites pass. rt_hair_groom=1 (restart) only.
+// Chained by rtscene after the ordinary AS/RQ prerequisites pass. Optional supported feature is reserved even with rt_hair_groom=0 for live enable.
 const void* device_features(InstanceData*, VkPhysicalDevice, const void* next, std::vector<const char*>& extensions);
 bool device_requested();
 void disable_device_request();   // optional-device retry: ordinary RT and the card path are retained

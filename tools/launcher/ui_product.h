@@ -3,6 +3,7 @@
 #include <uxtheme.h>
 #pragma comment(lib, "uxtheme.lib")
 #include "ui_state.h"
+#include "../../common/experimental_ab.h"
 
 static std::wstring g_screenshot, g_review;
 static bool g_screenshot_bottom=false, g_no_game=false;
@@ -12,6 +13,7 @@ enum { PRESET=20, SUGGEST, TABS, EXPAND, SAVE, PLAY, DISCARD, CLOSE, REPORT, BRO
        GAME, CLEAN, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, KNOB=1000, DETAILS=2000 };
 struct Ui {
   HWND wnd{}, body{}; HFONT font{}, bold{}; HBRUSH bg{};
+  bg3::experimental_ab::Selection ab_selection;
   State st; st::Map baseline; std::vector<int> saved;
   int saved_preset{}, tab=0, scroll=0, height=0, stage=0;
   float scale=1; bool dev=false, experimental=false, updating=false, pending=false, high_contrast=false;
@@ -33,7 +35,7 @@ static st::Map saved_settings() { st::Map m; st::apply_layer(m,g.st.base);st::ap
 static st::Map effective_settings() {
   auto m=saved_settings();for(int i=0;i<st::kKnobCount;++i){st::KVList v;st::knob_kvs(st::kKnobs[i],g.st.values[i],v);for(auto& kv:v)m[kv.first]=kv.second;}return m;
 }
-static int dirty_count() {return launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir);}
+static int dirty_count() {return std::max(int(g.ab_selection.pending),launcher::ui_state::dirty(g.st.values,g.saved,g.st.preset,g.saved_preset,g.dir,g.saved_dir));}
 static bool needs_restart(const st::Map& a,const st::Map& b) {return launcher::ui_state::restart(a,b);}
 static std::string game_session() {
   HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);if(snapshot==INVALID_HANDLE_VALUE)return {};
@@ -199,6 +201,7 @@ static bool save(bool) {
   if(!preview.blocked.empty()){std::wstring t=L"Settings could not be saved. Review:\n";for(auto& b:preview.blocked)t+=L"\n"+widen(b);MessageBoxW(g.wnd,t.c_str(),L"Review requirements",MB_OK|MB_ICONWARNING);return false;}
   State candidate=g.st;candidate.values=preview.values;
   auto forced=forced_keys(candidate);forced.insert(forced.end(),preview.required_keys.begin(),preview.required_keys.end());
+  g.ab_selection.append(forced);
   auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced);
   auto after=st::parse_ini(text);st::Map effective;st::apply_layer(effective,candidate.base);st::apply_layer(effective,after);
   bool old_pending=g.pending;g.pending=game_running()&&needs_restart(g.baseline,effective);
@@ -206,9 +209,10 @@ static bool save(bool) {
   // Persist the warning before the settings transaction; a failed settings write may leave a conservative warning.
   if(!persist(&err)){g.pending=old_pending;status(L"Settings not saved: restart state could not be stored. "+err);return false;}
   if(!write_file_atomic(user_ini_path(),text,&err)){status(L"Settings could not be saved. Your edits are kept. "+err);return false;}
+  g.ab_selection.pending=false;
   g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;
   save_game_dir(g.dir);g.saved=g.st.values;g.saved_preset=g.st.preset;g.saved_dir=g.dir;
-  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved for next launch. Live changes have no runtime acknowledgement.");rebuild();return true;
+  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved. Live settings apply automatically; Ctrl+Shift+F9 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.");rebuild();return true;
 }
 static void select_preset(int p) {
   auto v=st::preset_values_for(p,g.st.caps);
@@ -232,7 +236,7 @@ static void command(int id,int code,HWND source) {
     int i=id-KNOB;const auto& k=st::kKnobs[i];int row=int(SendMessageW(source,CB_GETCURSEL,0,0));int c=int(SendMessageW(source,CB_GETITEMDATA,row,0));
     if(c<0)return;
     if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility or enable Experimental.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
-    g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
+    g.ab_selection.touch(k,c);g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
   if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(k.apply))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
   if(id==GAME&&code==EN_CHANGE){int n=GetWindowTextLengthW(source);std::wstring t(n+1,L'\0');GetWindowTextW(source,t.data(),n+1);t.resize(n);g.dir=t;footer();return;}
@@ -243,7 +247,7 @@ static void command(int id,int code,HWND source) {
     case EXPAND:g.experimental=!g.experimental;rebuild();SetFocus(control(g.body,EXPAND));break;
     case NEXT:{int previous=g.stage;g.stage=std::min(4,g.stage+1);std::wstring err;if(!persist(&err)){g.stage=previous;status(L"Setup progress could not be saved. "+err);}else rebuild();break;}
     case SAVE:save(false);break;case PLAY:play();break;
-    case DISCARD:g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;SendMessageW(control(g.wnd,PRESET),CB_SETCURSEL,g.st.preset,0);rebuild();break;
+    case DISCARD:g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;SendMessageW(control(g.wnd,PRESET),CB_SETCURSEL,g.st.preset,0);rebuild();break;
     case RESET:select_preset(g.st.preset);break;
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;

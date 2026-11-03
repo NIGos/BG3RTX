@@ -17,3 +17,9 @@
 - Shader pp-diff main: 235/235 identical inputs; both new entries compile and pass spirv-val.
 - Build and all 132 CTests pass; 13 analyzer fixtures pass; ef2 fake dryrun and git diff --check pass.
 - No game launch, queue staging, git metadata write or commit. Transparency guide and live quality remain open.
+
+## ef2 follow-up (rr-hair2, 2026-11-03)
+- Resolve stays CANDIDATE, off: user liked the live A/B at normal viewing.
+- Analysis: 4x4 blocks only in 6x crops; gradient -24%, high-frequency -48%, RR output -0.6%; no flicker gain over static baseline.
+- Dialogue drift 10-18 px confounded ef2 and late-RR ranking; neither rejection nor qualification is justified. No removal.
+- Static ef3 repeats both post order and resolve; native-size crops plus rigid-checked integer alignment are prepared in rr_post_decision.

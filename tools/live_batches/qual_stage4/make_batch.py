@@ -36,13 +36,17 @@ def gate(name, select, match, windows, **extra):
 
 def finish(job, plan, stem):
     job.update(name='qs4-' + stem, live_batch='qual-stage4', window_mode='visible_unfocused_fg',
-               session=False, hold=120, timeout=sum(p['seconds'] for p in plan) + 240,
+               session=False, hold=120, timeout=sum(p['seconds'] + p.get('wait_log_timeout', 0) for p in plan) + 240,
                estimated_phase_seconds=sum(p['seconds'] for p in plan), stop_on_dump=False)
     job['args'] = ['-RealPresent', '-Move', '-MovePlan',
                    f'captures/live_batches/qual_stage4/plans/{stem}.json']
     job['expect_runner'] = [r'\[window-mode\].*visible_unfocused', '^Run ended: done',
                             rf'\[motion-plan\] complete phases={len(plan)}\b']
     for i, p in enumerate(plan):
+        if p.get('wait_log'):
+            job['expect_runner'].append(rf'\[motion-ready\] phase={i} label={p["label"]}')
+        if p.get('recenter'):
+            job['expect_runner'].append(rf'\[motion-recenter\] phase={i} label={p["label"]}')
         if p.get('trace_at'):
             job['expect_runner'].append(rf'\[motion-trace\] phase={i} label={p["label"]} repeat=0')
     write(HERE / 'plans' / (stem + '.json'), plan)
@@ -94,13 +98,37 @@ def main():
         plan = json.loads((old / 'plans' / f'hgn_{scene}.json').read_text())
         # Keep every existing m4 gate and its labels. Use actual qualified Ultra.
         job['set'] += ',ls_box=2,rt_omm=1,rt_omm_dyn=1,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,gi_far=1,gi_far_m=6,rf_hit_shade=0,crash_dump=0,perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0'
+        # Compare the default Ultra mask path with its native VT source in one run.
+        diag = phase('diag-vt-masks-off', 20,
+                     'rt_vt_alpha_masks=0,rt_hit_material_generated=1,rt_stats=1,qa_exposure_hold=1')
+        restore_masks = phase('restore-vt-masks', 5,
+                              'rt_vt_alpha_masks=1,rt_hit_material_generated=0,rt_stats=0,qa_exposure_hold=0')
+        plan += [diag, restore_masks]
+        job['expect_every'].append(gate('native VT alpha-test 2S prepass with masks off',
+            r'\[hit material instanced\] frame \d+ key',
+            r'alpha-test 2S: prepass [1-9]\d*,', ['diag-vt-masks-off'], event=True, settle_s=1.0))
+        job['expect_every'].append(gate('native VT generated capture with masks off',
+            r'\[hit material generated\] frame \d+ key 1',
+            r'captured [1-9]\d*, mapped [1-9]\d* rows [1-9]\d* triangles',
+            ['diag-vt-masks-off'], event=True, settle_s=1.0))
         templates.append(copy.deepcopy(job))
         if scene == 'camp':
             for label, mv, prev in [('off-a', 0, 0), ('mv', 1, 0), ('prev', 0, 1), ('off-b', 0, 0)]:
                 settings = f'rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample={mv},gi_prev_radiance_guard={prev}'
-                plan += [phase('guard-shot-' + label, settings=settings, shot=True),
-                         phase('guard-q-' + label, settings=settings, direction=-1),
+                shot = phase('guard-shot-' + label, settings=settings, shot=True)
+                # Slots reused on OFF-b may have logged readiness earlier in this run.
+                shot['wait_log'] = [
+                    rf'gi: gi/gi_temporal\.hlsl[^\n]* generation \d+[^\n]* spec mv={mv} pg=0, pipeline [0-9.]+ ms',
+                    rf'gi: gi/gi_trace_rt\S*\.hlsl[^\n]* generation \d+[^\n]* spec mv=0 pg={prev}, pipeline [0-9.]+ ms',
+                    rf'gi: gi/rt_reflections\S*\.hlsl[^\n]* generation \d+[^\n]* spec mv=0 pg={prev}, pipeline [0-9.]+ ms']
+                shot['wait_log_timeout'] = 60
+                if label in ('off-a', 'off-b'):
+                    shot['recenter'] = True
+                turns = [phase('guard-q-' + label, settings=settings, direction=-1),
                          phase('guard-e-' + label, settings=settings, direction=1)]
+                for turn in turns:
+                    turn['trace_at'] = [3]  # During the held-key interval [1, 5).
+                plan += [shot, *turns]
             plan.append(phase('restore-guards', 5, 'gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=0'))
             job['purpose'] += ' GI static float-energy / Q/E PNG screening only; original temporal gate remains pending.'
         finish(job, plan, f'{idx:02d}-{scene}')
@@ -123,7 +151,7 @@ def main():
         for state in ('off-a', 'on-a', 'off-b', 'on-b'):
             label = f'cost-{short}-{state}'
             settings = ','.join(f'{k}={int(k == key and state.startswith("on"))}' for k in keys)
-            plan.append(phase(label, 20, settings))
+            plan.append(phase(label, 35 if short in ('hooks', 'submit') else 20, settings))
             names.append(label)
     plan.append(phase('restore', 5, ','.join(f'{k}=0' for k in keys) + ',cpu_timing=0,watchdog_s=0,qa_exposure_hold=0'))
     # Reuse existing per-window current-frame/capacity gates, applying to ALL cost windows.

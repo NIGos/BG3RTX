@@ -686,3 +686,12 @@ The existing compose line reports TLAS age avg/max and GPU-measured build-camera
 ~19%, hidden ~13%, static float energy unchanged. Cost remains unmeasured (prior compose
 0.131-0.146 ms turning). Remaining tier 2/3 hits use the F-1-consistent rt_water_hit_shade;
 no hysteresis. The unqueued wf9 batch remains pending live confirmation and a layer restart.
+
+The valid 13:10 live disproved the implementation: static delta was 294.80 m and
+compose screen hits fell to 0-0.8%. The ring uses the 224 B scene camera, while
+compose incorrectly read float4 13 of the 400 B lighting camera. Copy scene-camera
+bytes 208..223 alongside the lighting snapshot at byte 432; use that copy for both
+ray rebasing and delta stats. A synthetic dual-layout capture fixture now checks
+zero static delta and exact translated delta through the ring/copy layout. Static
+ON windows must report average delta < 0.01 m. Key remains off; live cost and
+quality after this correction are unmeasured. No ABI or variant request change.

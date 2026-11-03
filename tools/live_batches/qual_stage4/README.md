@@ -5,7 +5,7 @@ first by `python tools/live_batches/qual_stage4/make_batch.py`. This does not re
 The immutable main hash, branch tips and `main..<branch>` results are in merge_audit.json.
 Main can advance independently; HEAD is recorded separately. Variants delta: 0.
 
-One job/launch per save: camp 275 s, inn 174 s, S8 265 s, plus loading.
+One job/launch per save: camp 300 s, inn 199 s, S8 385 s, plus loading.
 All jobs use visible_unfocused_fg. Q/E are held for equal four-second outward/return
 intervals; no mouse turns. Check camera return registration before interpreting pairs.
 Cost windows have no traces or expensive diagnostics. Keep the PC free of compiles/builds
@@ -37,9 +37,23 @@ within OFF spread; GPU cost within OFF noise. Do not claim this gate from PNGs.
 
 Dryrun: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/qual_stage4/dryrun.ps1`.
 It uses the existing synthetic runner only, in TEMP, with no authority to run live.
-The estimate includes 120 s loading/save (about 17.9 min total), 10 traces, 630 MB.
-Loading is separate from the 2â€“5 minute phase target; no hard upper bound on load time is claimed.
+The estimate includes 120 s loading/save and up to 240 s pipeline readiness waits
+(24.7 min total upper estimate), 18 traces, 1,110 MB.
+Loading is separate from the 2ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“5 minute phase target; no hard upper bound on load time is claimed.
 Before any later authorized run: refresh/build from the recorded intended main, stage plans
 only then, record explicit permission using existing queue tools, and keep one launch/save.
 Queue runner restores the original INI on exit/failure; final phases also reset experimental
 keys, exposure and CPU diagnostics. Do not modify saves or copy this draft into pending now.
+
+Plan repair (vt-alpha-hitmat): hooks/submit windows last 35 s, allowing three
+CPU lines at 30 fps; discard the first straddling 300-frame interval.
+Guard shots wait up to 60 s for all exact temporal/RT-trace/reflection specialization
+ready records from this run; cached OFF slots reuse their earlier ready records.
+The wait stops the capture clock, fails closed on timeout, and counts in job timeouts.
+Home re-centres the selected character before both OFF guard shots; verify camera
+registration before comparing energy. Q/E traces at 3 s fall inside held motion.
+Camp/inn add diag-vt-masks-off (20 s): generated rows on, masks off, with positive
+2S-prepass/capture/mapping gates. Compare the logged 2S count against mask-on windows;
+historical native targets are about 71 at camp and 61 at inn, not fixed thresholds.
+Masks restore to 1 before the following phases. S8's 385 s screening is an explicit
+exception to the five-minute scene target, and remains below the original CPU contract.

@@ -418,13 +418,17 @@ void snap_finish(DeviceData* dd) {
   void* p = nullptr;
   if (dd->vk.MapMemory(dd->device, S.mem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS && p) {
     uint32_t w = g_sc_extent.width, h = g_sc_extent.height;
-    // half-size PNG, decoded from B8G8R8A8 / R8G8B8A8 / A2B10G10R10
-    uint32_t ow = w / 2, oh = h / 2;
+    // Keep P16 compact; optionally retain its first present at native resolution.
+    const uint32_t stride = 2u;
+    const bool native = cfg_int("fg_snap_full", 0) && g_snaps_left == cfg_int("fg_snap", 0);
+    std::vector<uint8_t> native_rgb;
+    if (native) native_rgb.resize(size_t(w) * h * 3);
+    uint32_t ow = w / stride, oh = h / stride;
     std::vector<uint8_t> rgb(size_t(ow) * oh * 3);
     const uint32_t* px = static_cast<const uint32_t*>(p);
     for (uint32_t y = 0; y < oh; ++y)
       for (uint32_t x = 0; x < ow; ++x) {
-        uint32_t v = px[size_t(y * 2) * w + x * 2];
+        uint32_t v = px[size_t(y * stride) * w + x * stride];
         uint8_t r, g, bl;
         if (g_sc_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
           r = uint8_t((v & 1023) >> 2), g = uint8_t(((v >> 10) & 1023) >> 2), bl = uint8_t(((v >> 20) & 1023) >> 2);
@@ -436,6 +440,19 @@ void snap_finish(DeviceData* dd) {
         uint8_t* o = &rgb[(size_t(y) * ow + x) * 3];
         o[0] = r, o[1] = g, o[2] = bl;
       }
+    if (native) {
+      for (uint32_t y = 0; y < h; ++y) for (uint32_t x = 0; x < w; ++x) {
+        uint32_t v = px[size_t(y) * w + x];
+        uint8_t* o = &native_rgb[(size_t(y) * w + x) * 3];
+        if (g_sc_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
+          o[0] = uint8_t((v & 1023) >> 2); o[1] = uint8_t(((v >> 10) & 1023) >> 2); o[2] = uint8_t(((v >> 20) & 1023) >> 2);
+        } else if (g_sc_format == VK_FORMAT_B8G8R8A8_UNORM || g_sc_format == VK_FORMAT_B8G8R8A8_SRGB) {
+          o[0] = uint8_t(v >> 16); o[1] = uint8_t(v >> 8); o[2] = uint8_t(v);
+        } else {
+          o[0] = uint8_t(v); o[1] = uint8_t(v >> 8); o[2] = uint8_t(v >> 16);
+        }
+      }
+    }
     dd->vk.UnmapMemory(dd->device, S.mem);
     char name[64];
     snprintf(name, sizeof name, "\\p%02d.png", S.index++);
@@ -444,6 +461,8 @@ void snap_finish(DeviceData* dd) {
       bool ok=write_png_rgb(p.path,p.w,p.h,p.rgb);
       log("[sl] presented frame %d -> %s (%s)",p.index,p.path.c_str(),ok ? "ok" : "PNG write failed");
     });
+    if (native && !writer.submit({g_snap_dir+"\\native.png",w,h,S.index-1,std::move(native_rgb)}))
+      log("[sl] PNG write failed: native capture writer backlog full");
     if (!writer.submit({g_snap_dir+name,ow,oh,S.index-1,std::move(rgb)}))
       log("[sl] PNG write failed: capture writer backlog full");
   }

@@ -20,9 +20,33 @@ transient gate needs ~11 GiB. The prepared 3-save batch is lean screening for CP
 not READY_FOR_LIVE qualification. No gates are relaxed: original contracts are embedded
 in predicted.json. Full CPU camp/energy/reference/OMM-fallback coverage and float GI
 transient evidence remain pending. Frame time is recorded, never judged unfocused.
-M4 retains its existing gates; all items stay off. No live result or GPU-cost claim.
+M4 retains its existing gates; all items stay off. No new live result or GPU-cost claim.
 
 Pending inventory: [other ready items](../tools/live_batches/qual_stage4/pending_items.md).
 Unmerged tips: hair groom 3, wf9 1, hm-camp-grass 1, release/long-session 4; old guards 8 superseded.
 All other audited owner tips have empty main..branch logs. Review unmerged commits; do not merge blindly.
-Dryrun: three synthetic jobs, scene-wait/capacity lints, 714 s phases / 630 MB estimate.
+Dryrun: three synthetic jobs, scene-wait/capacity lints, 884 s phases plus <=240 s ready waits / 1,110 MB estimate.
+
+## qs4 CPU verdicts (2026-11-03)
+
+User-supplied qs4 measurements supersede the CPU saving predictions above:
+
+| Key | Observed OFF -> ON | Verdict |
+|---|---|---|
+| `perf_hook_state` | Submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build | **REJECTED**; keep off in every preset. |
+| `perf_hitmat_lists` | G-buffer hooks 1.16 -> 1.16 ms | **No gain**; keep off in every preset. |
+| `perf_submit_batch` | Submit CPU OFF 20.2/20.7 ms, ON 20.3/20.3 ms | **Within noise**; keep off in every preset. |
+
+All three controls remain developer-only. The requested S8 cost-hooks rerun still
+references `perf_hook_state`; removing the key would invalidate that plan. Its
+matrix validation/scatter helpers are also used by the ordinary uncached path
+(`layer/bvhsplit.cpp`). Retain the key off and those shared helpers for this batch;
+this dependency audit does not imply that the rejected optimization should ship enabled.
+
+Plan repair (vt-alpha-hitmat): S8 hooks/submit windows are 35 s (discard the first
+300-frame straddling CPU line). GI shots wait for exact spec-pipeline ready records
+(up to 60 s each, included in timeout); cached OFF pipelines reuse this run's records.
+Home re-centres before both OFF guard shots. Q/E windows trace at 3 s during motion.
+Camp/inn include a masks-off generated-row diagnostic; compare 2S prepass against
+mask-on windows and historical native counts (~71 camp / ~61 inn). Positive prepass,
+capture and mapping are gated; the numeric recovery still needs live evidence.

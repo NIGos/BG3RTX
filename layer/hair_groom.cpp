@@ -87,7 +87,8 @@ namespace {
 
 const void* device_features(InstanceData* id, VkPhysicalDevice phys, const void* next, std::vector<const char*>& extensions) {
   g_requested = false;
-  if (g_suppressed || !cfg_int("rt_hair_groom", 0) || !id || !id->GetPhysicalDeviceFeatures2) return next;
+  // Prepare optional supported LSS hardware even while the live effect is off.
+  if (g_suppressed || !id || !id->GetPhysicalDeviceFeatures2) return next;
   uint32_t n = 0;
   id->EnumerateDeviceExtensionProperties(phys, nullptr, &n, nullptr);
   std::vector<VkExtensionProperties> avail(n);
