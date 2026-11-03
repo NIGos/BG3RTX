@@ -1,4 +1,4 @@
-﻿## Reflection-specific flicker preparation (branch wf8-reflection-flicker, PREPARED_OFFLINE, 2026-11-03)
+## Reflection-specific flicker preparation (branch wf8-reflection-flicker, PREPARED_OFFLINE, 2026-11-03)
 - Reopened reflection attribution: wf2-wf7 whole-water rates were dominated by native glints and did not isolate reflections.
 - Existing rt_debug 25 exposes signed relative compose delta and tier 1 / unresolved; no shader edit or DXC run.
 - Selective rendered capture saves same-frame record coverage, native water and debug output; 8 frames per burst.
