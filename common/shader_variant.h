@@ -16,7 +16,7 @@ namespace bg3::shader_variant {
 // Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
 // a different Pipe (the current-caster sun), not a slot.
 enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kTraceHalf = 1u << 17, kSpecCascade = 1u << 16 };
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kTraceHalf = 1u << 17, kSpecCascade = 1u << 16, kHairFibreGi = 1u << 18 };
 // kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
@@ -227,6 +227,7 @@ inline unsigned allowed(const char* file) {
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   if (occ_stats_entry(file)) f |= kOccStats;
   if (std::strncmp(file,"gi/rt_reflections",17)==0) f |= kTraceHalf;
+  if (std::strcmp(file, "gi/gi_composite.hlsl") == 0) f |= kHairFibreGi;
   return f;
 }
 
@@ -287,6 +288,8 @@ inline std::string request(const char* file, unsigned flags) {
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
   if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
   if (flags & kTraceHalf) add("RT_TRACE_HALF=1"); // extra storage binding 31: layout variant
+  // Adds shaderInt64 and physical storage buffer reads: keep those capabilities out of the base request.
+  if (flags & kHairFibreGi) add("RT_HAIR_FIBRE_GI_REFERENCE=1");
   if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }

@@ -215,18 +215,60 @@ def furnace(roughness, color=(1.0, 1.0, 1.0), n=200000, seed=1, model="chiang", 
     return S.mean(0) * 4 * np.pi
 
 
-def slab_albedo(color, roughness, n=20000, bounces=400, seed=2, candidates=32):
+def sample(t, wo, h, color, roughness, rng):
+    """Sample evaluate(t, wo, wi, h): lobe attenuation mixture, d'Eon longitudinal marginal
+    (a von Mises-Fisher ring), and inverse-CDF trimmed logistic azimuth. Returns wi and RGB S/pdf.
+    Sampling from the known wo side makes attenuation known before choosing a direction, avoiding
+    the multiplicative weight variance of resampling uniform candidates in near-conservative slabs.
+    """
+    beta = float(np.clip(roughness, 0.05, 1.0))
+    n = len(h)
+    so = np.clip(np.einsum('nd,nd->n', wo, t), -1, 1)
+    co = np.sqrt(np.maximum(1-so*so, 0))
+    a, gt = ap(co, h, sigma_a_from_color(color, beta))
+    lum = a @ np.array([0.2126, 0.7152, 0.0722])
+    total = lum.sum(0)
+    p = np.minimum((np.cumsum(lum, axis=0) < rng.uniform(size=n)[None,:]*total).sum(0), 3)
+    rows = np.arange(n)
+    weight = a[p, rows] * (total / np.maximum(lum[p, rows], 1e-30))[:,None]
+    tilt = np.radians(ALPHA_DEG) * np.array([-2, 1, 4, 0])[p]
+    s0, c0 = so*np.cos(tilt)+co*np.sin(tilt), np.abs(co*np.cos(tilt)-so*np.sin(tilt))
+    variance = longitudinal_variance(beta)[p]
+    u = rng.uniform(size=n).clip(1e-15, 1-1e-15)
+    ct = 1 + variance * np.log(u + (1-u)*np.exp(-2/variance))
+    si = np.clip(-s0*ct+c0*np.sqrt(np.maximum(1-ct*ct,0))*np.cos(rng.uniform(0,2*np.pi,n)), -1, 1)
+    scale = azimuthal_scale(beta)
+    lo = 1/(1+np.exp(np.pi/scale))
+    u = lo + rng.uniform(size=n)*(1-2*lo)
+    phi = scale*np.log(u/(1-u)) + 2*p*gt - 2*np.arcsin(h) + p*np.pi
+    phi = np.where(p == 3, rng.uniform(-np.pi,np.pi,n), phi)
+    x = wo-so[:,None]*t
+    x /= np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-15)
+    wi = si[:,None]*t + np.sqrt(np.maximum(1-si*si,0))[:,None]*(np.cos(phi)[:,None]*x+np.sin(phi)[:,None]*np.cross(t,x))
+    return wi, weight
+
+
+def slab_albedo(color, roughness, n=20000, bounces=400, seed=2, candidates=32, diffuse=False, progress=False):
     """Colour check of the sigma_a mapping: diffuse reflectance of a semi-infinite slab of randomly oriented
     fibres (normal incidence, exponential free paths, each event scatters by S with a fresh random tangent
     and offset h; direction sampled uniformly, weighted by 4 pi S). Chiang's eq. 9 was fitted so that this is
-    about the input colour."""
+    about the input colour. diffuse=True uses constant incident radiance (cosine-distributed flux)."""
+    import time
+    last_report = time.monotonic()
     rng = np.random.default_rng(seed)
     w = np.ones((n, 3))
     d = np.tile([0.0, 0.0, -1.0], (n, 1))
+    if diffuse:
+        # Constant incident radiance: photon flux is cosine distributed over the hemisphere.
+        u, phi = rng.uniform(size=n), rng.uniform(0, 2 * np.pi, n)
+        d = np.column_stack((np.sqrt(u) * np.cos(phi), np.sqrt(u) * np.sin(phi), -np.sqrt(1 - u)))
     z = np.zeros(n)
     out = np.zeros(3)
     alive = np.ones(n, bool)
-    for _ in range(bounces):
+    for bounce in range(bounces):
+        if progress and time.monotonic() - last_report >= 30:
+            print(f"slab: bounce {bounce}/{bounces}, {int(alive.sum())}/{n} paths alive, seed {seed}", flush=True)
+            last_report = time.monotonic()
         idx = np.flatnonzero(alive)
         if len(idx) == 0:
             break
@@ -241,6 +283,16 @@ def slab_albedo(color, roughness, n=20000, bounces=400, seed=2, candidates=32):
         # weight (mean candidate weight) * S / lum(S) is unbiased and avoids the heavy tail of plain uniform
         # sampling of the narrow TT lobe.
         m_ = len(idx)
+        if diffuse:
+            # Adjoint walk: wo is the known previous direction, sample wi from the same BSDF.
+            # Random orientation and offset at each fibre, as in the original slab walk below.
+            d[idx], weight = sample(_sphere(rng, m_), -d[idx], rng.uniform(-1,1,m_), color, roughness, rng)
+            w[idx] *= weight
+            q = np.minimum(1.0, w[idx].max(1))
+            keep = rng.uniform(size=m_) < q
+            w[idx[keep]] /= q[keep,None]
+            alive[idx[~keep]] = False
+            continue
         t = np.repeat(_sphere(rng, m_), candidates, 0)
         h = np.repeat(rng.uniform(-1, 1, m_), candidates)
         wi = np.repeat(-d[idx], candidates, 0)  # toward where the light came from

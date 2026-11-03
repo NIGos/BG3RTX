@@ -28,6 +28,26 @@ float3 hd_lookup3(float3 c, float beta, uint f) {
   return float3(hd_lookup(c.x, beta, f), hd_lookup(c.y, beta, f), hd_lookup(c.z, beta, f));
 }
 
+// Kept out of ordinary consumers, including their preprocessed input and SPIR-V capabilities.
+#if RT_HAIR_FIBRE_GI_REFERENCE
+#include "hair_volume_table.hlsli"
+float hd_volume_channel(float c, float beta) {
+  c = clamp(c, kHvC[0], 1.0);
+  beta = clamp(beta, kHdBeta[0], kHdBeta[2]);
+  uint i = 0u;
+  [unroll] for (uint a = 0u; a < 7u; ++a) i = c > kHvC[a + 1u] ? a + 1u : i;
+  const uint j = beta > kHdBeta[1] ? 1u : 0u;
+  const float u = (c - kHvC[i]) / (kHvC[i + 1u] - kHvC[i]);
+  const float v = (beta - kHdBeta[j]) / (kHdBeta[j + 1u] - kHdBeta[j]);
+  return lerp(lerp(kHvA[i*3u+j], kHvA[i*3u+j+1u], v),
+              lerp(kHvA[(i+1u)*3u+j], kHvA[(i+1u)*3u+j+1u], v), u);
+}
+// S + k_volume M, integrated and calibrated in make_volume_table.py. Nonabsorbing limit = 1.
+float3 hd_volume_albedo(float3 colour, float beta) {
+  return float3(hd_volume_channel(colour.x, beta), hd_volume_channel(colour.y, beta), hd_volume_channel(colour.z, beta));
+}
+#endif
+
 float3 hd_gauss(float3 x, float3 var) { return exp(-x * x / (2.0 * var)) / sqrt(2.0 * kHbPi * var); }
 
 // F(wi, wo) per unit irradiance for a fibre with colour `color` (the multiple-scattering albedo), roughness `beta`,

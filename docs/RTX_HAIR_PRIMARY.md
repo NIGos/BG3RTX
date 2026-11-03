@@ -57,6 +57,68 @@ Increment 1 uses the game's own hair lighting (class 5, Marschner R/TT/TRT in th
 with the fibre BSDF of `tools/hair_groom/bsdf.py` (Chiang 2016 from the papers, licence-clean) plus dual
 scattering, fed by the sun, the local-light lists and our GI; colour from Hair_Color via Chiang eq. 9.
 
+### M4.1: diffuse indirect response (offline, 2026-11-04)
+
+`rt_hair_fibre_gi=0/1` is live, Developer only, and off in every preset. It requires on-screen strands.
+The referenced `RTX_HAIR_COMPLETE_PLAN.md` is absent in this checkout; this implements C4 below.
+
+Source: [Zinke et al. 2008, Dual Scattering Approximation for Fast Multiple Scattering in Hair](https://www.cemyuksel.com/research/dualscattering/dualscattering.pdf),
+eq. 5 (forward attenuation), eqs. 10 and 14 (local backward scattering), eqs. 18-22 and Fig. 5
+(angular integration and direct/global combination). The following slab integral and its calibration are
+our extension, not a volume-albedo formula claimed by the paper.
+
+Let q = 1 - a_f^2. The local multiple-backward fraction is
+`B = a_b a_f^2/q + a_b^3 a_f^2/q^3`; `f_back` is its normalized angular kernel already implemented in
+`dual.shade`. For the first visible fibre, sample depth `z = mu_o Exp(1)` and incident crossings
+`n ~ Poisson(z/mu_i)`. Here `mu_i` and `mu_o` are positive slab-normal cosines, incident directions are
+cosine distributed, view directions uniform over the upper hemisphere, and fibre tangent and offset
+are random. With `I0 = 1[n=0]`, `I+ = 1[n>0]`, the integrated dual model is:
+
+```
+S = 2 pi mean[(mu_o/mu_i) I0 f_s]
+M = 2 pi mean[(mu_o/mu_i) k {
+      d_f a_f^n I+ f_s + d_b (I0 + pi d_f a_f^n I+) f_back }]
+A = S + k_volume M
+```
+
+The `1/mu_i` changes incident flux sampling to the fibre's radiance measure. `d_f = d_b = 0.7` and
+the existing directional correction `k` are unchanged. Directional `k` alone is not calibrated for
+uniform incident radiance. A separate `k_volume = (A_MC - S)/M` is fitted on grey diffuse slabs:
+100,000 adjoint paths per grid cell, two seeds, 4,000 bounces. The calibration JSON records S, M,
+k_volume and both references. We bake A for a cheap lookup, linear in colour and roughness.
+The nonabsorbing semi-infinite slab has `A(1,beta)=1` by conservation; it is an explicit endpoint,
+not the direct table's clamped colour 0.9. Other inputs inherit the calibrated ranges: colour >= 0.02,
+roughness 0.35-0.7 (clamped outside). This is an isotropic random-fibre volume response, not directional GI.
+
+The diffuse reference reuses `bsdf.slab_albedo` with an analytic attenuation-mixture sampler for
+`bsdf.evaluate`: longitudinal von Mises-Fisher marginal and inverse-CDF logistic azimuth. Its angular
+moments agree with independent uniform-direction integration within four standard errors. This avoids
+the old candidate walk's multiplicative weight noise near white; normal-incidence legacy tests are unchanged.
+
+`dual.volume_albedo` and `hd_volume_albedo` use generated twin tables. Independent held-out RGB slab
+walks (50,000 paths, seed 91) give maximum channel errors 1.3882% for CHAR_Hair at beta 0.41,
+0.7563% for (0.6, 0.45, 0.3) at 0.55, and 0.8466% for (0.85, 0.7, 0.5) at 0.7.
+White furnace: A = 1 at beta 0.35/0.5/0.7; an independent 20,000-bounce white walk returns 0.9842
+(finite-path truncation). GPU vs CPU: 2,006 volume samples, maximum relative error 1.46e-7.
+
+Integration is in `gi_composite.hlsl`, where `gather_history` already supplies the exact irradiance
+used for `gi.rgb * diffuse_colour * strength`. On class 5 pixels with a sealed, current-frame strand
+entry at the winning depth and a valid segment, replace the response with `gi.rgb * A * strength`
+before adding it and before storing next frame's bounce source. This avoids adding and subtracting the
+Lambert term, and needs no new irradiance binding or ABI. Native game ambient is not estimated or removed.
+The earlier direct fibre pass cannot use its D-LS bindings to access this gathered GI result.
+
+Only the two extra composite requests have `RT_HAIR_FIBRE_GI_REFERENCE=1`. The define isolates the
+physical-storage-buffer/shaderInt64 capabilities as well as the arithmetic. Key off uses the original
+Pipe, so a pending asynchronous feature pipeline cannot run after switching off. Request delta: +2.
+All seven ordinary requests depending on the edited shaders are byte-identical to starting HEAD;
+all nine explicit touched requests compile and pass spirv-val. Live appearance and GPU cost are unmeasured;
+no game launch is authorized for this task. Keep the key off pending those checks.
+Build succeeds and 145/146 CTests pass, including both hair tests. The inherited water surface gate fails
+13 OFF comparisons against merge-base 009f60f, although all its shader inputs are unchanged from starting
+HEAD 97e2487. The unmodified water gate passes with `--baseline HEAD` (16/16 OFF, 2/2 ordinary, 16/16
+production validation). Full-suite acceptance remains blocked by that unrelated baseline difference.
+
 ## 4. RR, DLSS-G, DoF
 RR guides are built from the G-buffer at its pass end (`layer/ngx.cpp record_guides_at_gbuffer`): strands
 there are ordinary pixels (albedo, normal, roughness). Specular hit distance: D-RF's, unchanged. Motion
