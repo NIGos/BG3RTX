@@ -90,6 +90,9 @@
     "if_a": "physically plausible (bright sun, the other character between the sun and his face), but the game's own lighting does not show it in dialogue framing; fix options in docs/DIALOGUE_SHADOWS.md 'Port moving band'",
     "user_2026-11-03": "the other character does NOT move: (a) cannot explain the MOVING part",
     "ranking": [
+     "e_cinematic_light",
+     "f_cascade_refit",
+     "g_roof_trust",
      "b_held_stale",
      "c_foliage_crane",
      "d_self_animated",
@@ -97,7 +100,11 @@
     ],
     "d_self_animated": "his own animated hair/cape/bow strap: 'moving' (or 'hair'/'scalp' with native hair) with near share >= 70% (< 0.5 m), swinging line to line in both frames windows; on-screen hair/skin share high",
     "a_other_character": "sun darkening led by 'moving' (opaque soup) >= 50% with its distance bins 0.5-5 m holding >= 50% of the sun darkening and the near (<= 0.5 m) share < 30%; on-screen skin/hair share of the occluded sun rays >= 30% (the occluder is a visible character); unchanged in diag-occ-nohold and nocascade; motion-base differs between its traces while motion-nosun does not (static occluder: no line-to-line swing; unlikely for the moving band)",
-    "limit": "v1 records the whole character mask per 4-frame line, not fixed face/chest pixels; a per-pixel probe needs a shader change, deferred until the spec-constant migration is on main (no compiles meanwhile)"
+    "limit": "v1 records the whole character mask per 4-frame line, not fixed face/chest pixels; a per-pixel probe needs a shader change, deferred until the spec-constant migration is on main (no compiles meanwhile)",
+    "user_2026-11-03b": "depends on where in the world the dialogue is: exterior shadow handling is wrong in dialogues",
+    "e_cinematic_light": "the dialogue shades with a cinematic key/sun whose direction differs from the one the RT pass traces (cam.v0 of the camera UBO: rt_shadow.hlsl:80), or it animates: diag-view-sunmask-first shows the band as green (traced shadow, game lit) offset from a red/game band of the same shape, or green with no red at all; the occ sun kinds are then ordinary (static/moving at metres) while the band persists in every frames window (hold/casc/roofs off do not remove it). MISSING observable: a per-frame log of the RT sun direction vs the game's cascade view direction (not built: needs the cascade pass's view matrix from the layer and the camera UBO's v0 read back; after the spec-constant migration)",
+    "f_cascade_refit": "the cascade copy (stale 1-2 frames, re-fitted around the close-up camera): 'cascade' >= 50% of the sun darkening on the frames-hold4 lines, swinging line to line; diag-occ-frames-casc0 'cascade' 0 and the sun darkening of character px down beyond the hold4 lines' spread",
+    "g_roof_trust": "the roof volumes / replace rule (camera low near buildings): the occ kinds and darkening do NOT see it (rtVis holds the traced visibility before rt_sun_resolve); judged by the traces of diag-view-occ-roofs0 / -replace0 against diag-view-occ-first: char_energy.py mask mean beyond the OFF spread (band brighter or gone), and the 'sun check' brightened % moving with the key"
    }
   }
  },

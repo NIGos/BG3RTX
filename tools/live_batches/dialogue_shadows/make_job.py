@@ -34,7 +34,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
 BASE = {"rt_shadows": "1", "contact_shadows": "1", "rt_local_shadows": "1", "ls_box": "2", "ls_owners": "31",
         "ls_noshadow": "1", "rt_cascade_casters": "1", "rt_dyn_hold": "4", "gi_ao": "1.0", "rt_native_hair": "0",
         "rt_native_scalp": "0", "rt_hair_physical_origin": "0", "ls_debug": "0", "rt_debug": "0", "ls_stats": "0",
-        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "gi": "1", "ls_box_cascade_old": "0"}
+        "rt_stats": "0", "rt_primary_check": "0", "qa_exposure_hold": "1", "rt_occ_stats": "0", "rt_occ_stats_frames": "60", "rt_sun_roofs": "1", "rt_sun_replace": "1", "gi": "1", "ls_box_cascade_old": "0"}
 HAIR = {"rt_native_hair": "1", "rt_native_scalp": "1"}
 ORIGIN = dict(HAIR, rt_hair_physical_origin="1")
 
@@ -61,6 +61,13 @@ plan = [
     # changing line to line; held/stale geometry as 'held' that vanishes with hold 0.
     step("diag-occ-frames-hold4", 6, rt_occ_stats="1", rt_occ_stats_frames="4", qa_exposure_hold="0"),
     step("diag-occ-frames-hold0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_dyn_hold="0", qa_exposure_hold="0"),
+    # (f) cascade copies re-fitted to the close-up camera; (g) the roof trust (rt_sun_roofs) and the whole replace rule.
+    step("diag-occ-frames-casc0", 6, rt_occ_stats="1", rt_occ_stats_frames="4", rt_cascade_casters="0", qa_exposure_hold="0"),
+    step("diag-view-occ-roofs0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_roofs="0", qa_exposure_hold="0"),
+    step("diag-view-occ-replace0", 6, [3], rt_occ_stats="1", rt_occ_stats_frames="4", rt_sun_replace="0", qa_exposure_hold="0"),
+    # (e) a cinematic light rig: the game's mask (red) vs our traced sun (green) in the same first shot; an offset band
+    # of the same shape = another light direction.
+    step("diag-view-sunmask-first", 8, [5], rt_debug="2", qa_exposure_hold="0"),
     step("shot-off-a", SHOT, True),
     step("shot-nosun-on", SHOT, True, rt_shadows="0", contact_shadows="0"),   # the game's own sun shadow map only
     step("shot-nolocal-on", SHOT, True, rt_local_shadows="0"),               # the game's own local-light shadows
