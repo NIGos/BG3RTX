@@ -1149,7 +1149,44 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 #define RT_SKIP_PROCEDURAL RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES
 #define RT_HAS_COMMITTED(q) (q.CommittedStatus()==COMMITTED_TRIANGLE_HIT)
 #endif
+#endif
 
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+#ifdef RT_SPEC_OCC_STATS
+[[vk::constant_id(1011)]] const uint kRtOccStats = 0;
+#define RT_OCC_ON (kRtOccStats != 0u)
+#else
+#define RT_OCC_ON true
+#endif
+// rt_occ_stats (common/occ_stats.h): the occluder of the last rt_visibility / rt_closest_hit query
+// of this lane. Shadow rays then find the CLOSEST occluder (no accept-first: same visibility,
+// more traversal), so the kind and the near test describe the nearest blocker.
+#include "../../common/occ_stats.h"
+static uint g_occ_kind = kOccKindUnknown;
+static float g_occ_t = -1.0;   // -1: no committed hit
+static bool g_occ_hit = false;
+static float3 g_occ_p = float3(0, 0, 0);   // the hit point (the ray's origin + t direction)
+uint occ_kind_of(bool procedural, uint inst, uint id, uint geom, uint prim) {
+  if (procedural) return kOccKindHair;
+  if (id >= 0xFFFFFCu) return kOccKindCascade;   // common/cascade_casters.h kCustomIndex - layer
+  InstInfo ii = inst_info(inst);
+  if ((ii.meta & kOccInfoHeld) != 0u && (ii.meta & kInfoLegacy) == 0u) return kOccKindHeld;
+  const bool alpha = (ii.meta & kInfoLegacy) != 0u ? geom == 1u : (ii.meta & kInfoAlpha) != 0u;
+  if (alpha) {
+    const uint k = alpha_kind_hit(inst, geom, prim);
+    return k == 3u ? kOccKindScalp : k == 4u ? kOccKindHair
+         : (ii.meta & kInfoPool) != 0u ? kOccKindCutoutStatic : kOccKindCutoutMoving;
+  }
+  return (ii.meta & kInfoPool) != 0u ? kOccKindStatic : kOccKindMoving;
+}
+#define RT_OCC_RECORD(q, aborted)                                                                              \
+  g_occ_hit = RT_HAS_COMMITTED(q);                                                                             \
+  g_occ_t = g_occ_hit ? q.CommittedRayT() : -1.0;                                                                g_occ_p = q.WorldRayOrigin() + q.WorldRayDirection() * max(g_occ_t, 0.0);                                    \
+  g_occ_kind = g_occ_hit ? occ_kind_of(q.CommittedStatus() != COMMITTED_TRIANGLE_HIT, q.CommittedInstanceIndex(), \
+                                       q.CommittedInstanceID(), q.CommittedGeometryIndex(),                    \
+                                       q.CommittedPrimitiveIndex())                                            \
+                         : kOccKindUnknown;
+#define RT_OCC_RESET() if (RT_OCC_ON) { g_occ_hit = false; g_occ_t = -1.0; g_occ_kind = kOccKindUnknown; }
 #endif
 #ifdef RT_SPEC_NATIVE
 #define RT_QUERY_FLAGS RT_SKIP_PROCEDURAL
@@ -1163,6 +1200,9 @@ bool hair_bounds_ok(){return gSceneStamp.Load(12u)==0u;}
 // real occluder: kRtOccluded). Invalid rays and an unbuilt scene stay kRtLit as before
 // (rt_ray_valid / rt_scene_ok, counted guards).
 uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  RT_OCC_RESET()
+#endif
 #ifdef RT_SPEC_NATIVE
   if (RT_TILESET_ON) {
   gTilesetUnknown=!tileset_scene_complete();
@@ -1204,10 +1244,16 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
 #endif
   if (!rt_scene_ok() || !rt_ray_valid(o, d, tmax)) return kRtLit;
-  #ifdef RT_SPEC_NATIVE
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  RayQuery<0> q;
+#define RT_VIS_QUERY_FLAGS (RT_SKIP_PROCEDURAL | (RT_OCC_ON ? 0u : RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH))
+#else
+#ifdef RT_SPEC_NATIVE
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
 #else
   RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RT_SKIP_PROCEDURAL> q;
+#endif
+#define RT_VIS_QUERY_FLAGS RT_QUERY_FLAGS
 #endif
   RayDesc r = (RayDesc)0;
   r.Origin = o;
@@ -1224,10 +1270,10 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   r.TMax = tmax;
 #ifdef RT_OMM_SCENE
   if (rt_omm_use_accelerated())
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
-  else q.TraceRayInline(gOmmReferenceScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
+  q.TraceRayInline(gScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
+  else q.TraceRayInline(gOmmReferenceScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
 #else
-  q.TraceRayInline(gScene, RT_QUERY_FLAGS, RT_VIS_MASK, r);
+  q.TraceRayInline(gScene, RT_VIS_QUERY_FLAGS, RT_VIS_MASK, r);
 #endif
   const uint cap = rt_max_candidates();
   uint cand_n = 0;
@@ -1299,6 +1345,9 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #ifdef RT_NATIVE_TILESET
   if(gTilesetUnknown){rt_count_unknown(asuint(o.x)^asuint(o.z));return kRtUnknown;}
 #endif
+#endif
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) { RT_OCC_RECORD(q, aborted) }
 #endif
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
   if (aborted) {
@@ -1572,6 +1621,9 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
                      ,bool camera_primary=false
 #endif
                      ) {
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  RT_OCC_RESET()
+#endif
 #ifdef RT_SPEC_NATIVE
   if (RT_TILESET_ON) {
   gTilesetUnknown=!tileset_scene_complete();
@@ -1686,6 +1738,9 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
 #endif
 #endif
   if (aborted) rt_count_unknown(asuint(o.x) ^ asuint(o.z));
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) { RT_OCC_RECORD(q, aborted) }
+#endif
   RtHit h = (RtHit)0;
   h.aborted = aborted;
   bool hit = RT_HAS_COMMITTED(q);

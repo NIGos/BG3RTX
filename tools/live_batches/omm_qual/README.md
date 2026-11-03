@@ -42,6 +42,19 @@ Exposure held (`qa_exposure_hold=1`) from the first cost window to the last shot
 - Reject when: violations > 0; or coverage ~0 (no traversal saving) with any fixed overhead; or ON is not faster
   than REF beyond the REF spread. Predictions in [predicted.json](predicted.json), written before the run.
 
+## om4: rt_omm_dyn, micro-maps on the masked per-draw BLAS (docs/P4_OMM.md 11.2i)
+`om4-camp-omm-dyn-fg2` (plan om4_camp_dyn.json, 123 s, 3 PNG): startup as om1 plus `rt_vt_alpha_masks=1`,
+`rt_alpha_fine_lod=1`, `rt_omm_dyn=1` (B on throughout). Smoke first (the micro-map refit path is unvalidated on
+hardware): `smoke-build` 8 s with `rt_dyn_refit=0` (full builds only), `smoke-refit1` 6 s with `rt_rebuild_frames=2`
+(one refit between full builds); a `[fault]` device-lost/fault line or an out-of-chunk BLAS warning is forbidden, and
+nv153 / a dump / a stall ends the run (not `Run ended: done`). `warmup-dyn` 15 s bakes the rest of the micro-maps (131072 triangles
+per build), then the om1 phases: `diag-check` (rt_stats=1: `omm check` violations 0 is the gate, candidates
+accelerated vs reference the work removed), REF / ON / REF cost + shot via rt_omm_reference (no rebuild: the
+reference TLAS disables the micro-maps per instance). Coverage: the `[omm dyn]` line in every cost window (masked
+per-draw triangles with a micro-map, known micro-triangle states). Cost: `rt passes: GPU cost`, `gi: GPU cost`
+(local shadows, reflections), cost-on vs the cost-ref mean; the uv check and the accelerated TLAS build are paid
+in REF and ON alike (`[rt] scene build GPU`). Energy: shot-on vs the shot-ref mean within |ref-b - ref-a|.
+
 Duration about 7.2 min (dry run estimate), disk about 0.26 GB (4 traces); delete the trace folders after reading.
 Offline check: `powershell -File tools\live_batches\omm_qual\dryrun.ps1 [-Out <scratch dir>]` (2026-11-02: all
 checks passed).

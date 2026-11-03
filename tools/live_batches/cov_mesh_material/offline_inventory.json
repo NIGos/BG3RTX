@@ -1,0 +1,179 @@
+{
+  "status": "INVENTORY_ONLY",
+  "packs": [
+    {
+      "pack": "replay-20261101-142819-1",
+      "frame": 4175,
+      "instances": 875,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 173,
+          "triangles": 437007
+        },
+        "pool with row": {
+          "instances": 429,
+          "triangles": 354878
+        },
+        "soup": {
+          "instances": 273,
+          "triangles": 1258387
+        }
+      },
+      "row_table_sha256": "a1b68ee492d004318c631d3315022f854885c5ca5d6c8e33fb472c1b8475d638",
+      "active_rows": 114,
+      "active_rows_sha256": "77de982bb462c6166455cd96719a19be11652d9da2e6497710ffb18db458e2d8",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "historical_replay_not_current_presets": {
+        "attempted": 280660,
+        "qualified": 148243,
+        "qualified_percent": 52.81942563956388,
+        "base_missing": 58301
+      }
+    },
+    {
+      "pack": "replay-20261102-013032-1",
+      "frame": 4426,
+      "instances": 1096,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 924,
+          "triangles": 1170855
+        },
+        "pool with row": {
+          "instances": 90,
+          "triangles": 341866
+        },
+        "soup": {
+          "instances": 82,
+          "triangles": 629050
+        }
+      },
+      "row_table_sha256": "09ce768b30b31ce4b53d805537f3e385e472f31e862b7887e7f3d4e7a79d4031",
+      "active_rows": 52,
+      "active_rows_sha256": "fab42f69dc6890da82200433f4248f40ef6f226935256c0bf0742c130168ad8f",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ]
+    },
+    {
+      "pack": "replay-20261102-013545-2",
+      "frame": 4112,
+      "instances": 1040,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 251,
+          "triangles": 264682
+        },
+        "pool with row": {
+          "instances": 220,
+          "triangles": 327332
+        },
+        "soup": {
+          "instances": 569,
+          "triangles": 2627205
+        }
+      },
+      "row_table_sha256": "868411ffb65039b6202f2be841ddaae2ca50021557ccc4e8f8800b6aa22eb7a2",
+      "active_rows": 174,
+      "active_rows_sha256": "f6f09c0ac8296089873916ed99b4700623e0d8c791ff914b48159992716bec27",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "existing_hm_blockers": {
+        "qualified": 0,
+        "base": 0,
+        "row": 0,
+        "other": 0,
+        "available": false,
+        "instance_limit": 1024
+      },
+      "historical_replay_not_current_presets": {
+        "attempted": 530538,
+        "qualified": 69236,
+        "qualified_percent": 13.050149093938606,
+        "base_missing": 84112
+      }
+    },
+    {
+      "pack": "replay-20261102-013914-3",
+      "frame": 4415,
+      "instances": 1507,
+      "geometry_inventory_not_hit_weighted": {
+        "pool without row": {
+          "instances": 616,
+          "triangles": 996002
+        },
+        "pool with row": {
+          "instances": 284,
+          "triangles": 1602996
+        },
+        "soup": {
+          "instances": 607,
+          "triangles": 2976165
+        }
+      },
+      "row_table_sha256": "d9bc3248204e0fe7c0c333c8457f0d68b315f2d3265ffdd0807e39605fe34ac6",
+      "active_rows": 185,
+      "active_rows_sha256": "a485901ea86bde7577f1e93719144ddb784207f728c962d84a658e298258c867",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ],
+      "existing_hm_blockers": {
+        "qualified": 0,
+        "base": 0,
+        "row": 0,
+        "other": 0,
+        "available": false,
+        "instance_limit": 1024
+      },
+      "historical_replay_not_current_presets": {
+        "attempted": 353766,
+        "qualified": 3674,
+        "qualified_percent": 1.0385395996223492,
+        "base_missing": 239138
+      }
+    },
+    {
+      "pack": "replay-20261102-035919-1",
+      "frame": 33862,
+      "instances": 1090,
+      "geometry_inventory_not_hit_weighted": {
+        "pool with row": {
+          "instances": 90,
+          "triangles": 341866
+        },
+        "pool without row": {
+          "instances": 925,
+          "triangles": 1170703
+        },
+        "soup": {
+          "instances": 75,
+          "triangles": 616894
+        }
+      },
+      "row_table_sha256": "512d3e40dfb1514b0c4622490e086a8655b2de90ac38cf805930c6e6210affdb",
+      "active_rows": 134,
+      "active_rows_sha256": "71378134273bf1fb739325be6103dfa1279fcfb526381ce991173bf856b29706",
+      "stable_mesh_identity_in_pack": false,
+      "limitations": [
+        "No mesh resource IDs/content fingerprints in InstInfo or hit rows",
+        "Active rows are a conservative superset of qualified rows",
+        "No new pak-derived rows or evaluated-energy proof"
+      ]
+    }
+  ]
+}

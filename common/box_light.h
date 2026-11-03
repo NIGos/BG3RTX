@@ -30,6 +30,14 @@ float bl_pow(float a, float b) { return pow(a, b); }
 float bl_dot4p(float4 r, float3 P) { return dot(r, float4(P, 1.0)); }
 #endif
 
+#if defined(__cplusplus) || (defined(LS_BOX) && LS_BOX)
+// Runtime projector _m8 bit 0 is the game's shadow-map flag. Other bits encode the atlas slot.
+// The legacy override is carried only for ls_box=2 A/B; art-unshadowed boxes stay lit by default.
+BL_INLINE bool bl_shadow_selected(uint flags, bool legacy_all) {
+  return (flags & 1u) != 0u || legacy_all;
+}
+#endif
+
 static const float kBlFar = 3.0e38f;
 
 // One ramp: _304[curve] . (t, t^2, smoothstep, smootherstep). A curve index past 3 reads past

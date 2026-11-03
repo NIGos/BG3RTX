@@ -175,6 +175,7 @@ struct Tracker {
   // Host-visible memory, so uniform buffer contents can be read on the CPU.
   std::unordered_map<VkBuffer, std::pair<VkDeviceMemory, VkDeviceSize>> buffer_mem;
   std::unordered_map<VkDeviceMemory, uint8_t*> mapped;   // base of the mapping (offset 0)
+  std::unordered_map<VkDeviceMemory, std::pair<VkDeviceSize, VkDeviceSize>> mapped_ranges;
   std::atomic<uint32_t> next_image_id{1}, next_pipeline_id{1};
   std::atomic<uint64_t> next_view_id{1};
 };
@@ -682,6 +683,8 @@ struct InstPipe {
   bool uv_ok = false;           // the captured UV output is a copy of a per-vertex input
   uint8_t pos_binding = 0xff;   // the position attribute's binding (0xff: none) and offset (pool material join)
   uint32_t pos_offset = 0;
+  uint32_t pos_stride = 0; // zero: dynamic binding stride
+  bool pos_float3 = false; // content identity supports raw float3 only
 };
 void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);
@@ -945,6 +948,7 @@ struct AlphaSnapshot {
 // Caller retains source resources and assigns descriptor-local indices.
 bool alpha_capture_source(VkCommandBuffer cmd,const AlphaFs& fs,uint32_t first_tri,uint32_t tris,AlphaSnapshot* out);
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out);
+bool alpha_fine_mask(uint32_t index, AlphaRec* rec, VkImageView* view, uint32_t* width, uint32_t* height);   // rt_omm_dyn
 uint32_t alpha_restore(const AlphaSnapshot& saved);   // UINT32_MAX on failure
 void alpha_device_created(DeviceData* dd);
 void alpha_device_destroyed(DeviceData* dd);

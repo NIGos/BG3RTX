@@ -2,7 +2,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\live_batches\lean_dryrun.ps1 -Batch lean_regression [-Out <scratch dir>]
 # 1. Static checks per job: plan parses and samples, foreground FG 2 single launch, timeout covers the
 #    plan, expect_runner names the phase count and every trace, no float bursts, diagnostics
-#    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug) on
+#    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug, rt_occ_stats) on
 #    exactly in "diag-*" phases, cost windows diag-off and without traces (debug-view traces only in
 #    "diag-view-*"), phases 5-25 s. Batch totals against -MaxMinutes / -MaxMB.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
@@ -44,7 +44,7 @@ function Apply-Set($state, [string]$set) {
   foreach ($a in ($set -split ',' | Where-Object { $_ })) { $kv = $a -split '=', 2; if ($kv.Count -ne 2) { return $false }; $state[$kv[0]] = $kv[1] }
   $true
 }
-function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
+function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug', 'rt_occ_stats') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
 $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })

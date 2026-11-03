@@ -735,6 +735,15 @@ int main(int argc, char** argv) {
     CHECK(kCsNonFinite >= kCsGshWords && kCsNonFinite < kCsLsRec && kCsGsWordsMin == 57);
   }
 
+  // wf9: scene selection and camera rebasing are independent of the image terms.
+  for (auto use : {LightingUse::kNone, LightingUse::kThisFrame, LightingUse::kEarlier}) {
+    for (auto pick : {ScenePick::kStash, ScenePick::kNewer, ScenePick::kStashKept, ScenePick::kNone}) {
+      CHECK(compose_shift_needed(use, pick) ==
+            (use == LightingUse::kEarlier && (pick == ScenePick::kStash || pick == ScenePick::kStashKept)));
+    }
+  }
+  CHECK((kFlagSceneShift & (kFlagRf | kFlagSun | kFlagLs | kFlagRefr | kFlagGsh)) == 0);
+
   // 4d3. Uncomposed frames and on/off flips per frame index.
   {
     ComposeContinuity c;

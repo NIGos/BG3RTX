@@ -149,8 +149,17 @@ def two(olds, id_of):
 
 
 # --key: the spec define marking a request and its [(constant assignment, old request)] list.
-KEYS = {"watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
-        "omm": ("RT_SPEC_OMM=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OMM=1", "RT_OMM_SCENE=1"), lambda f: 1012)),
+# OMM remains a layout define (RT_OMM_SCENE), not constant 1012: S4 was rejected
+# in BUILD_AND_PACKAGE_EFFICIENCY.md. It has no specialization request to check.
+def old_requests_waterhair(spec_request):
+    # Water has no tileset route or receiver-origin image: reuse 1008=0 / 1010=hair.
+    return [(a, r) for a, r in old_requests_native(spec_request) if a[1008] == 0]
+
+
+KEYS = {"waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
+        "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
+        "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
+        "occ": ("RT_SPEC_OCC_STATS=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OCC_STATS=1", "RT_OCC_STATS=1"), lambda f: 1011)),
         "rfgi": ("RF_SPEC_HIT_GI=1", two(lambda r: old_requests_swap(r, "RF_SPEC_HIT_GI=1", "RF_HIT_GI=1"), lambda f: 1013)),
         "wateredge": ("WATER_SPEC_RF_EDGE=1", two(lambda r: old_requests_swap(r, "WATER_SPEC_RF_EDGE=1", "WATER_RF_EDGE=1"), lambda f: 1014)),
         "native": ("RT_SPEC_NATIVE=1", old_requests_native),
@@ -351,13 +360,17 @@ def main():
     ap.add_argument("--jobs", type=int, default=default_jobs())
     ap.add_argument("--replay", help="replay pack directory (read only)")
     ap.add_argument("--key", choices=sorted(KEYS), default="cascade", help="which migration step's constants")
+    ap.add_argument("--baseline", help="also compare key-off programs against this revision")
     args = ap.parse_args()
     marker, olds = KEYS[args.key]
     lower_priority()
     tool = Toolchain()
     tree = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
     known = set(tree.requests())
-    spec = sorted(r for r in known if marker in split_request(r)[1])
+    spec = sorted(r for r in known if marker in split_request(r)[1] and
+                  (args.key != "waterhair" or split_request(r)[0].startswith("rt/water_")))
+    if args.key == "watershift":
+        spec = [r for r in spec if split_request(r)[0] == "rt/water_compose.hlsl"]
     if not spec:
         say(f"no {marker} request in shaders/variants.txt")
         return 1
@@ -389,6 +402,23 @@ def main():
         say(f"FAIL compile {r}\n{compiled[r].log[:3000]}")
     if bad:
         return 1
+    baseline_ok = True
+    if args.baseline:
+        base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
+        try:
+            refs = compile_requests(base, pick, tool=tool, cache=Cache(), jobs=args.jobs, label="spec baseline")
+            with tempfile.TemporaryDirectory(prefix="b3spec-base-") as bt:
+                for i, r in enumerate(pick):
+                    for e in compiled[r].entries:
+                        newp, oldp = Path(bt) / "new.spv", Path(bt) / "old.spv"
+                        newp.write_bytes(compiled[r].blob(e.name))
+                        oldp.write_bytes(refs[r].blob(e.name))
+                        n = check_one(tool, bt, f"base_{i}_{e.name}", newp, oldp, pairs[r][0][0])
+                        baseline_ok &= n == 0
+                        if n: say(f"BASELINE DIFFERENT: {r} [{e.name}]: {n}")
+            say(f"key-off baseline {args.baseline}: {'PASS' if baseline_ok else 'FAIL'} ({len(pick)} requests)")
+        finally:
+            base.cleanup()
     fails, lock = [], threading.Lock()
     with tempfile.TemporaryDirectory(prefix="b3sc-") as tmp:
         # Private copies: another run's prune may evict the shared blobs while this one works (seen 2026-11-02).
@@ -415,7 +445,10 @@ def main():
         control_pairs = pairs[control_request]
         (_, c0), (_, c1) = (control_pairs[0], control_pairs[-1]) if args.key == "native" else control_pairs[:2]
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
-        control_entry = "water_compose" if args.key in ("wateredge", "watercasc") else "main"
+        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
+                         "water_reflect" if args.key == "waterhair" and "water_reflect.hlsl" in control_request else
+                         "water_compose" if args.key == "waterhair" and "water_compose.hlsl" in control_request else
+                         "water_glint" if args.key == "waterhair" else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
@@ -441,7 +474,7 @@ def main():
     say(f"spec {args.key}: {len(pick) - len({r for r, _, _, _ in fails})}/{len(pick)} {marker} requests are, "
         f"specialized to every checked assignment, the same program as their define variants"
         f"{'' if ctrl else '; CONTROL BLIND'}{'' if ok_replay else '; REPLAY DIFFERS'}")
-    return 1 if fails or not ctrl or not ok_replay else 0
+    return 1 if fails or not ctrl or not ok_replay or not baseline_ok else 0
 
 
 if __name__ == "__main__":

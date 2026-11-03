@@ -1,0 +1,24 @@
+## Compose camera correction (branch wf9-compose-shift, READY_FOR_LIVE, 2026-11-03)
+- wf8 S8: about 95% of compose passes used the older camera-relative stash TLAS without rebasing rays.
+- Added rt_water_compose_shift, default 0 in INI and every preset; Experimental GUI Water camera correction.
+- SpecId 1015; no ABI change. shaders/variants.txt request delta 0.
+- water_copy preserves outgoing CameraCB float4 13 in cCam bytes 400-415 before overwrite.
+- Validity rejects the first copy; finite/range checks match water_reflect. CPU has no stash camera.
+- Earlier stash and stash-kept picks set the shift flag; same-frame, newer and refused picks do not.
+- Reflection, sun, local-light and refraction origins shift by cam_now - cam_build.
+- Distances are translation invariant; hits, light vectors and screen tests remain in current space.
+- Compose binds the already-declared camera buffer; glint and compose keep matching pipeline suffixes.
+- CPU unit tests cover all 12 scene-use/pick cases and disjoint flags; frame pacing tests cover stalls.
+- Build and all 118 CTests passed; final GUI dependency/schema update passed all 4 settings/launcher checks.
+- spec_cascade_check --key watershift --all --baseline main: 14/14 requests, 56/56 comparisons pass.
+- Both values match reference branches; frozen key-off matches main for all 28 compose/copy entries.
+- pp-diff main: 231 requests, 209 identical inputs, 22 changed preprocessing; no failed preprocessing.
+- Raw modules contain the new constant; key-off preservation is proved after specialization, not raw byte identity.
+- Unqueued S8 batch: 23 phases / 281 s; static and turning 0/1/0/1 within one launch.
+- Frame-paced turns post 1 pixel per 4 observed rendered frames, never wall-clock catch-up deltas.
+- Four raw bursts, 80 presents numbered p00-p79 across five folders, four static energy traces; bound 1.915 GB.
+- Fake dryrun and scene-wait/capacity lints pass. Initial 6 min allowance failed; corrected to 7 min including load.
+- Prediction: ON turning hidden share about 7-10%, covered-water tier 1 near 25%; static float energy within OFF noise.
+- GPU delta unmeasured; wf8 compose was 0.10-0.15 ms. Every cost window requires compose GPU ms and stability stats.
+- In game: S8 Water Queens House pool, look for stable column reflections during smooth turns; quality gate pending.
+- No game launched, no real job queued, no commit or git metadata write. git diff --check passes.

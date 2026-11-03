@@ -1082,6 +1082,19 @@ uint32_t alpha_record_count() {
   return uint32_t(g_recs.size());
 }
 
+// rt_omm_dyn (layer/bvhsplit.cpp): record `index` of this capture reads an offline mask through its mip-0 view
+// (rt_vt_alpha_masks + rt_alpha_fine_lod, vt_mask_substitute): the record, the view and the mask's size.
+bool alpha_fine_mask(uint32_t index, AlphaRec* rec, VkImageView* view, uint32_t* width, uint32_t* height) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (index >= g_recs.size() || g_vt_state != 2) return false;
+  const AlphaRec& r = g_recs[index];
+  if (r.kind != 2 || r.channel != 0 || !r.tex || r.tex > g_tex.size()) return false;
+  const VkImageView v = g_tex[r.tex - 1].first;
+  for (const VtMask& m : g_vt_masks)
+    if (m.fine && m.fine == v) { *rec = r; *view = v; *width = m.width; *height = m.height; return true; }
+  return false;
+}
+
 bool alpha_snapshot(uint32_t index, AlphaSnapshot* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (index >= g_recs.size()) return false;

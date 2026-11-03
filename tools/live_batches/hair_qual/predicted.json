@@ -1,0 +1,25 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). Native hair qualification at Ultra (smoke_ultra keys + the hair startup latches). Energy = float mean of the scene colour before post (pass 5c3fdabc): character ROI (skin + hair class of the trace's RT2.a) by char_energy.py (branch worktree-agent-a0c9be1ab336eae1a, needs dump_preview_f32=1: merge it first) and the whole frame from dumps.json. Spread = relative std of shot-off-a/b/c in that ROI. Cost = rt passes GPU cost (300-frame line) of cost-hair minus mean(cost-off-a, cost-off-b), with |off-a - off-b| as its noise.",
+ "_all": {
+  "startup burst (first enable)": {"predicted": "'gi: background builds done' with 20-60 builds; done before settle-cam ends (gated: 0 pending there); wall time < 30 s with the runtime DXC cache warm (hq2-hq4), < 45 s for hq1 (water hair requests cold); longest present interval < 1000 ms (gated)", "before_the_fix": "ds1 2026-11-02 10:03:51-10:04:52: about 60 s of render-thread compiles and creation, presents blocked 7-17 s at a time"},
+  "toggle-off-a (first live toggle)": {"predicted": "the non-origin variants of the alternate entries build in the background ('building in the background' lines, gated >= 1), done within the window (toggle-off-b gated 0 pending); longest present interval < 1000 ms"},
+  "measured windows": {"predicted": "every 'gi: background builds (N frames)' line 0 waiting, 0 pending, 0 started; no 'building in the background' line (gated): no pass skipped while energy or cost is measured"},
+  "hair/scalp records": {"predicted": "invalid/missing native state 0 and retired bounds-invalid 0 in every judged window; alpha draws made opaque 0.00 (gated)"},
+  "cost-hair": {"predicted": "+0.0 to +0.5 ms rt passes over mean(off-a, off-b) (prior 2026-10-31: 3.44 on / 3.41 off ms at a lower preset); report gi: GPU cost too", "kept_if": "within 1.0 ms (the Ultra RT budget allows it); else profile the hair any-hit"}
+ },
+ "hq1-s8-water-fg2": {
+  "same_as": "_all",
+  "water": "[water] reflections traced > 0 in every judged window, hair on and off (gated); '[water] rt/water_reflect.hlsl?...RT_SPEC_NATIVE=1... water_reflect: built (spec hair=1 edge=...)' once (expect); no 'skipped: no variant for' (forbid)",
+  "hair records": "report only (party at the port; not gated): records > 0 expected for the visible party",
+  "energy": "whole frame shot-hair-a/b >= OFF - spread; character ROI brighter by 0-10% (small characters in the isometric view)"
+ },
+ "hq2-dialogue1-fg2": {"same_as": "_dialogue"},
+ "hq3-dialogue2-fg2": {"same_as": "_dialogue"},
+ "hq4-dialogue3-fg2": {"same_as": "_dialogue"},
+ "_dialogue": {
+  "same_as": "_all",
+  "participation": "[alpha hair] native coverage records > 0 and [alpha scalp] hard or dither records > 0 in every hair-on window (gated; ds3 2026-11-02: 660 hair, 120 dither per line)",
+  "energy": "character ROI shot-hair-a/b above the mean of their OFF neighbours by more than the OFF spread: +20 to +30% (dialogue result 2026-11-02 at the port: native hair+scalp brightened characters 20-30%); whole frame >= OFF - spread. A darker ON is a defect (coverage only removes occlusion)",
+  "primary check": "diag-rt-hairon match within the diag-rt-hairoff-a/b spread or higher; [hair origin] matched > 0, unresolved reported (rt_stats 188-190)"
+ }
+}
