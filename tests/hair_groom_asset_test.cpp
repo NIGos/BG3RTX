@@ -34,6 +34,20 @@ static std::vector<uint8_t> asset(float radius = 0.0001f, uint32_t tri = 1, uint
 }
 
 int main() {
+  {   // C2 shadow transmittance: the row word (10 bits per channel, bit 31 = measured) and the mean over samples.
+    using namespace hair_primary;
+    const float a[3] = {0.25f, 0.5f, 1.0f}, nan3[3] = {NAN, -1.0f, 2.0f};
+    const uint32_t w = pack_transmit(a);
+    CHECK((w >> 31) == 1u && (w & 1023u) == 256u && ((w >> 10) & 1023u) == 512u && ((w >> 20) & 1023u) == 1023u);
+    CHECK(pack_transmit(nan3) == (1u << 31 | 1023u << 20));   // NaN and below 0 -> 0, above 1 -> 1
+    TransmitMean m;
+    CHECK(m.packed() == 0u);   // not measured: the strands block
+    m.add(a);
+    CHECK(m.packed() == w);    // the first sample is the mean
+    const float b2[3] = {0.75f, 0.5f, 0.0f};
+    for (int i = 0; i < 400; ++i) m.add(b2);
+    CHECK(std::fabs(m.a[0] - 0.75f) < 1e-3f && std::fabs(m.a[2]) < 1e-3f);   // converges to a steady colour
+  }
   const uint32_t quad[6] = {0, 1, 2, 0, 2, 3};
   CHECK(index_content_id([&](uint32_t i) { return quad[i]; }, 6) == 0xce53baad8d797436ull);
   // Offsets and index widths do not matter, only the referenced pattern.

@@ -925,6 +925,9 @@ bool hair_primary_wanted();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
+// rt_hair_groom_shadow_t (docs/RTX_HAIR_PRIMARY.md C2): the draw's packed strand transmittance for its groom InstInfo
+// row (hair_primary::pack_transmit; 0: key off or not measured yet, the strands block as before).
+uint32_t hair_primary_transmit(uint64_t key);
 void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
                           const uint64_t* keys, uint32_t count, uint32_t width, uint32_t height, const float* viewport);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.

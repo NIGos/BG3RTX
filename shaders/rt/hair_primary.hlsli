@@ -43,6 +43,7 @@ static const uint hair_primary_table_offset = 64u;
 static const uint hair_primary_pixel_bytes = 16u;
 static const uint hair_primary_no_strand = 0xFFFFFFFFu;
 static const uint hair_primary_max_segment = 0x00FFFFFFu;
+static const uint hair_primary_colour_offset = 1088u;   // common/hair_primary.h kColourOffset (32 bytes per groom)
 // The first point i0 of segment `seg` of groom table row `row` (mesh-pool byte offsets of the points, point UVs, segment
 // starts, previous points; common/hair_primary.h), when every pool byte the strand readers touch for that segment lies
 // inside the mesh pool (pool_bytes: header word 14). A pixel entry of another groom, LOD or frame then fails closed

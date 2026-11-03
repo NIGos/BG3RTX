@@ -64,6 +64,14 @@ VkPipeline g_cnt_pipe = VK_NULL_HANDLE;
 uint64_t g_cnt_gen = 0;
 uint32_t g_last_tag = 0, g_last_n = 0;   // the previous publish: its tag, pixel count and keys per groom k
 uint64_t g_last_keys[hair_primary::kMaxGrooms] = {};
+// C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
+std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
+// Diagnostics of the last read count (logged every 300 frames and at each strike): per groom k its draw key, strand
+// pixels and pool-bound refusals.
+struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint32_t pixels[hair_primary::kMaxGrooms] = {},
+                   refused[hair_primary::kMaxGrooms] = {}; };
+CountSeen g_seen;
+uint64_t g_refused_total = 0;
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
 // after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
 constexpr uint32_t kTimed = 64, kTimeSlots = 4;
@@ -104,7 +112,7 @@ bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* w
 bool make_readback(CountSlot& s) {
   DeviceData* dd = g_dd;
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  bci.size = hair_primary::kMaxGrooms * 4;
+  bci.size = hair_primary::kCountBytes;
   bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &s.rb) != VK_SUCCESS) return false;
   VkMemoryRequirements req;
@@ -174,15 +182,37 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
   CountSlot& s = g_cnt[g_cnt_next];
   if (s.valid) {
     if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
-    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
-      if (s.keys[k] && g_gate.feedback(s.keys[k], s.drew[k], s.map[k]))
+    g_seen.frame = s.frame;
+    uint32_t total = 0;
+    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
+      g_seen.keys[k] = s.keys[k];
+      g_seen.pixels[k] = s.map[k];
+      g_seen.refused[k] = s.map[hair_primary::kRefusedOffset / 4 + k];
+      g_refused_total += g_seen.refused[k];
+      total += s.map[k];
+    }
+    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
+      if (s.keys[k] && g_gate.feedback(s.keys[k], s.drew[k], s.map[k])) {
         log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards stay for this session",
             (unsigned long long)s.keys[k], hair_primary::kStrikes);
+        // Which groom k it was and what the other grooms of that counted frame got (an overlapping groom takes every
+        // ray: the same strands twice under two draw keys).
+        char other[512];
+        int at = 0;
+        for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 480; ++j)
+          if (s.keys[j]) at += std::snprintf(other + at, sizeof other - at, " %u:%u%s", j, s.map[j], s.keys[j] == s.keys[k] ? "*" : "");
+        log("[hair primary] strike detail: groom %u of the counted frame %llu, %u strand pixels in all; per groom:%s",
+            k, (unsigned long long)s.frame, total, at ? other : " none");
+      }
+      float t[4];
+      std::memcpy(t, s.map + hair_primary::kTransmitOffset / 4 + k * 4, sizeof t);
+      if (s.keys[k] && t[3] == 1.0f) g_transmit[s.keys[k]].add(t);
+    }
     s.valid = false;
   }
   if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
   if (!s.rb && !make_readback(s)) return false;
-  if (!g_counts.b && !make(g_counts, hair_primary::kMaxGrooms * 4,
+  if (!g_counts.b && !make(g_counts, hair_primary::kCountBytes,
                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                            "hair primary counts"))
     return false;
@@ -208,14 +238,14 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
   }
   dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pipe);
   dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pl, 0, 2, wr);
-  const uint32_t push[4] = {g_last_tag, g_last_n, 0u, 0u};
+  const uint32_t push[4] = {g_last_tag, g_last_n, uint32_t(g_header.addr), uint32_t(g_header.addr >> 32)};
   dd->vk.CmdPushConstants(cmd, g_cnt_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
-  dd->vk.CmdDispatch(cmd, (g_last_n + 255) / 256, 1, 1);
+  dd->vk.CmdDispatch(cmd, (std::max)((g_last_n + 255) / 256, 1u), 1, 1);
   mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0,
                             nullptr);
-  const VkBufferCopy c{0, 0, hair_primary::kMaxGrooms * 4};
+  const VkBufferCopy c{0, 0, hair_primary::kCountBytes};
   dd->vk.CmdCopyBuffer(cmd, g_counts.b, s.rb, 1, &c);
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
     s.keys[k] = g_last_keys[k];
@@ -248,7 +278,7 @@ bool header_ready() {
   const char* why = !g_dd ? "no device" : !rt_enabled() ? "rt=0" : !hair_groom::lss_enabled() ? "no linear swept spheres"
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
                   : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game" : nullptr;
-  if (!why && !make(g_header, hair_primary::kHeaderBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!why && !make(g_header, hair_primary::kHeaderAlloc, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
@@ -434,6 +464,13 @@ void hair_primary_forget_pipeline(VkPipeline p) {
   g_variant.erase(it);
 }
 
+uint32_t hair_primary_transmit(uint64_t key) {
+  if (!key || cfg_int("rt_hair_groom_shadow_t", 0) == 0) return 0u;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const auto it = g_transmit.find(key);
+  return it == g_transmit.end() ? 0u : it->second.packed();
+}
+
 bool hair_primary_wanted() {
   return cfg_hot(CfgHot::rt_hair_groom_primary) != 0 && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
 }
@@ -485,6 +522,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
     g_last_tag = 0;
     g_pixels_fresh = true;
     for (CountSlot& s : g_cnt) s.valid = false;
+    g_transmit.clear();
     log("[hair primary] level load (new G-buffer images): strand swaps paused for %llu frames, groom state reset",
         (unsigned long long)hair_primary::kLoadQuietFrames);
   }
@@ -541,6 +579,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
   }
   if (g_pixels_fresh) {   // tag 0 is never a frame tag
     dd->vk.CmdFillBuffer(cmd, g_pixels.b, 0, VK_WHOLE_SIZE, 0u);
+    dd->vk.CmdFillBuffer(cmd, g_header.b, hair_primary::kColourOffset, hair_primary::kMaxGrooms * hair_primary::kColourBytes, 0u);
     g_pixels_fresh = false;
   }
   hair_primary::Header h{};
@@ -574,6 +613,18 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) g_last_keys[k] = k < count ? keys[k] : 0;
   g_published = now + 1;
   ++g_st.publishes;
+  if (now % 300 == 0 && g_seen.frame) {
+    char per[640];
+    int at = 0;
+    uint32_t refused = 0;
+    for (uint32_t k = 0; k < hair_primary::kMaxGrooms && at < 600; ++k) {
+      refused += g_seen.refused[k];
+      if (g_seen.keys[k]) at += std::snprintf(per + at, sizeof per - at, " %u:%u(%04llx)", k, g_seen.pixels[k],
+                                              (unsigned long long)(g_seen.keys[k] >> 48));
+    }
+    log("[hair primary] counted frame %llu: strand pixels per groom (draw key prefix):%s; pool-bound refusals %u (session %llu)",
+        (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total);
+  }
   if (now % 300 == 0)
     log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused",

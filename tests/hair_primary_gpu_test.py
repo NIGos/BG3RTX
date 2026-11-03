@@ -237,6 +237,14 @@ def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):
           rep["candidates_dedup"]["equal"] >= 0.98, rep["candidates_dedup"])
     check("shadow: successive closest hits deduplicated count the same (>= 98%)", rep["successive_dedup"]["equal"] >= 0.98,
           rep["successive_dedup"])
+    # The stochastic transmittance (rt_groom_blocks): mean visibility d_f * a_f^n (n >= 1), a_f = 0.5, d_f = 0.7, 256 trials.
+    n = col(2)
+    lit = col(4)
+    want = np.where(n > 0, 0.7 * 0.5 ** n, 1.0) * 256
+    sigma = np.sqrt(np.sum(want * (1 - want / 256)))
+    err = float(lit.sum() - want.sum())
+    print(json.dumps({"transmit_lit": int(lit.sum()), "transmit_expected": round(float(want.sum()), 1), "sigma": round(float(sigma), 1)}))
+    check("shadow transmittance: mean visibility = d_f a_f^n within 4 sigma (binomial)", abs(err) <= 4 * sigma, (err, sigma))
 
 
 def main():

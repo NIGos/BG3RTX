@@ -3461,7 +3461,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         in.accelerationStructureReference = w.g->as.addr;
         std::memcpy(gi + groom_count, &in, sizeof in);
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
-        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
+        // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
+        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
         if (groom_count < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).

@@ -25,6 +25,16 @@ constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
 constexpr uint32_t kRowBytes = 16;
 constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 1088, one vkCmdUpdateBuffer
+// Strand colour samples (C2 shadow transmittance), after the header in the same buffer, never written by the layer's
+// update: per groom k 32 bytes, float4 (albedo rgb, fibre roughness) then the frame tag that wrote it. The strand
+// G-buffer variant stores one fragment's values per 8 x 8 pixel block (last writer wins: a sample of the groom's
+// colour); rt/hair_primary_count.hlsl turns the entries of the counted frame into a_f at the next publish.
+constexpr uint32_t kColourOffset = kHeaderBytes, kColourBytes = 32;
+constexpr uint32_t kHeaderAlloc = kColourOffset + kMaxGrooms * kColourBytes;   // 3136
+// Counts buffer: strand pixels per groom (kMaxGrooms uints), then per groom float4 (a_f rgb, 1 when measured).
+// Then per groom the strand pixels whose segment fails the pool bound (hp_segment: the readers discard them).
+constexpr uint32_t kTransmitOffset = kMaxGrooms * 4, kRefusedOffset = kTransmitOffset + kMaxGrooms * 16;
+constexpr uint32_t kCountBytes = kRefusedOffset + kMaxGrooms * 4;
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;
@@ -44,6 +54,30 @@ struct Header {
   uint32_t pool_bytes, reserved;
 };
 static_assert(sizeof(Header) == kHeaderWords * 4, "header words");
+
+// Shadow transmittance of one strand crossing (docs/RTX_HAIR_PRIMARY.md C2), the groom InstInfo row's word 2: the
+// fibre's forward-scattered fraction a_f per channel in 10 bits each, bit 31 set when measured. 0: not measured (or
+// the key off): the strand blocks, as before. The visibility ray passes n crossings with d_f * prod(a_f) in luminance
+// (rt_common.hlsli rt_groom_blocks), the dual-scattering transmittance T_f = d_f a_f^n of the fibre pass.
+inline uint32_t pack_transmit(const float a[3]) {
+  uint32_t w = 1u << 31;
+  for (int c = 0; c < 3; ++c) {
+    const float v = a[c] != a[c] ? 0.0f : a[c] < 0.0f ? 0.0f : a[c] > 1.0f ? 1.0f : a[c];
+    w |= uint32_t(v * 1023.0f + 0.5f) << (10 * c);
+  }
+  return w;
+}
+// The groom's a_f over the measured frames: an exponential mean (each sample is one fragment's colour), weight 1/16.
+struct TransmitMean {
+  float a[3] = {0, 0, 0};
+  uint32_t n = 0;
+  void add(const float s[3]) {
+    const float w = n == 0 ? 1.0f : 1.0f / 16.0f;
+    for (int c = 0; c < 3; ++c) a[c] += (s[c] - a[c]) * w;
+    ++n;
+  }
+  uint32_t packed() const { return n ? pack_transmit(a) : 0u; }
+};
 
 // The bytes one vkCmdUpdateBuffer writes: header then `count` rows (the rest of the table is not read).
 inline uint32_t pack(const Header& h, const Row* rows, uint32_t count, uint8_t* out /* kHeaderBytes */) {
