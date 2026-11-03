@@ -447,6 +447,10 @@ VKAPI_ATTR void VKAPI_CALL CmdSetScissor(VkCommandBuffer cmd,uint32_t first,uint
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreateInfo* ci,
                                             const VkAllocationCallbacks* alloc, VkBuffer* out) {
+  VkBufferCreateInfo patched=*ci;
+  if(cfg_int("rt_hit_material_paks",0) && (ci->usage&(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT))) {
+    patched.usage|=VK_BUFFER_USAGE_TRANSFER_SRC_BIT;ci=&patched;
+  }
   VkResult r = device_of(device)->vk.CreateBuffer(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2003,6 +2007,11 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   ip.paks_two_sided=ip.paks_cull_known && ci.pRasterizationState->cullMode==VK_CULL_MODE_NONE;
   if(ip.uv_ok && ua->format==VK_FORMAT_R32G32_SFLOAT && ua->binding<CmdState::kMaxVertexBindings){
     ip.uv_binding=uint8_t(ua->binding);ip.uv_offset=ua->offset;ip.uv_stride=dyn_stride?0:ub->stride;
+  }
+  if(ip.uv_ok && ua->binding<CmdState::kMaxVertexBindings &&
+     (ua->format==VK_FORMAT_R32G32_SFLOAT || ua->format==VK_FORMAT_R16G16_SFLOAT)){
+    ip.paks_uv_binding=uint8_t(ua->binding);ip.paks_uv_offset=ua->offset;
+    ip.paks_uv_stride=dyn_stride?0:ub->stride;ip.paks_uv_half=ua->format==VK_FORMAT_R16G16_SFLOAT;
   }
   ip.ok = true;
   return ip;

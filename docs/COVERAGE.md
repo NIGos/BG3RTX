@@ -187,6 +187,13 @@ placements → GR2 meshes, HLOD proxies). Gaps 1, 2, 3, 5, 6, 7, 8 and 9 use dat
 have: captures and shader dumps, the asset DB, and runtime GPU data. Gap 10 needs captures,
 which the queued jobs provide.
 
+Pak publication follow-up (2026-11-03, offline only): the camp audit's 21,588
+unique UV candidate observations produced 0 pak records and 0 ready bases.
+Bounded raw object-space witness readback now targets that publication blocker;
+cp4 requires records > 0 and basis ready > 0 in both ON windows. This is a
+prediction, not a coverage gain or screen-share measurement. Existing native
+materials retain precedence; see TRACK_D_REFLECTIONS.md, pak join increment.
+
 ## Unknown coverage: scenes and areas never captured
 
 | Area | Test save (`-Save` substring) | Level | Why it was missing |

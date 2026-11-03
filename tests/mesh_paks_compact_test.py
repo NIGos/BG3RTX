@@ -13,10 +13,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from tools.assets.mesh_paks import signature, binary_table
 from tools.assets.mesh_paks_compact import compact
-from tools.mesh_paks_compact_audit import candidates
+from tools.mesh_paks_compact_audit import candidates, audit_log
 
 
 class CompactTests(unittest.TestCase):
+    def test_witness_reaches_existing_material_publication_path(self):
+        # Complements the executable production-ring replay: it must remain
+        # wired into the actual draw observation and hit lookup, not a test-only
+        # witness consumer or a parallel publication mechanism.
+        source = (Path(__file__).resolve().parents[1]/'layer/hit_material.cpp').read_text()
+        match = source.split('const mesh_paks::Row* paks_match(', 1)[1].split('// The VS inputs', 1)[0]
+        self.assertIn('pak_witness_get(state,args,ip,candidate.row', match)
+        self.assertLess(match.index('mesh_paks::hlod_compatible(*candidate.row'),
+                        match.index('pak_witness_get(state,args,ip,candidate.row'))
+        observe = source.split('bool pool_observe(', 1)[1].split('PoolUse pool_lookup(', 1)[0]
+        for call in ('paks_match(*state,args,inst,&proof)', 'payload.pak=true', 'payload.pak_valid=std::move(proof)',
+                     'pool_table.observe(geometry,frame,o)', 'assign_material(', 'pool_job('):
+            self.assertIn(call, observe)
+        lookup = source.split('PoolUse pool_lookup(', 1)[1].split('void pool_evicted(', 1)[0]
+        for gate in ('pool_table.lookup(', 'pool_current(', 'pool::Basis::Ready', 'paks_rows()'):
+            self.assertIn(gate, lookup)
+
+    def test_log_keeps_on_windows_and_does_not_invent_screen_coverage(self):
+        text = ('[hit material paks UV] 3 corners: missing candidate\n'
+                '[hit material paks UV] 6 corners: missing candidate\n'
+                '[hit material paks join] attempts 10 unique 1 missing 9 draws 20\n'
+                '[hit material paks] frame 120 enabled 1: exact 0/20 attempts; records 0 basis ready 0\n'
+                '[hit material paks] frame 240 enabled 0: exact 0/20 attempts; records 0 basis ready 0\n')
+        result = audit_log(text, {3: [object()]})
+        self.assertEqual(result['missing_readbacks'], dict(count_present=1, count_absent=1))
+        self.assertEqual([w['enabled'] for w in result['windows']], [1, 0])
+        self.assertEqual(result['missing_attempt_percent'], 90)
+        self.assertEqual(result['missing_draw_percent'], 45)
+        self.assertIsNone(result['screen_share'])
+        self.assertIsNone(result['missing_family_shares'])
+
     def fixture(self, root):
         vertices = np.array([[0, 0, 0, .1, .2], [1, 0, 0, .3, .4], [0, 1, 0, .5, .6]], '<f4')
         sig, raw = signature(vertices, [0, 1, 2])
