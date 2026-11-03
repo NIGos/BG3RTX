@@ -285,3 +285,14 @@ if __name__ == "__main__":
     except (ValueError, KeyError, OSError) as e:
         print(f"combine: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+# Pure helper for hair_validation: concatenate disjoint phase groups into one plan.
+def combine(groups):
+    plan = [__import__('copy').deepcopy(step) for group in groups for step in group]
+    labels = [p["label"] for p in plan]
+    if not plan or len(labels) != len(set(labels)):
+        raise ValueError("combined plan needs unique labels")
+    if any(p.get("turn_mode") not in (None, "keys") for p in plan):
+        raise ValueError("camera turns must use held Q/E")
+    return plan
