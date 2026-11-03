@@ -31,6 +31,6 @@
   },
   "static_energy": "Pre-post scene float mean plus in-frame compose delta (energy_fs water-compose) unchanged within OFF-repeat noise; derive band from static OFF a/b, never PNGs.",
   "gpu": "Report existing compose GPU ms per state, capture-free cost windows; wf8 baseline 0.10-0.15 ms. No new pass.",
-  "motion": "1 pixel per 4 newly observed rendered frames, no catch-up; invalidate if frame markers absent, water leaves view, or presented frames still jump.",
+  "motion": "turn_mode=keys holds E (+1) or Q (-1) throughout motion interval, no mouse deltas. Q/E moved in 120/120 samples in the 10:08 live probe; invalidate if water leaves view or presented frames jump.",
   "quality": "Pending live evidence; no quality pass."
 }

@@ -1162,9 +1162,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     tlas = ref, alpha = g_st.alpha;
     return true;
   };
-  const ScenePick pick = pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
-  if (pick == ScenePick::kNewer) ++g_cwin.newer_scene;
-  if (pick == ScenePick::kStashKept) ++g_cwin.stash_kept;
+  ScenePick pick = pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
   if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
     g_ccont.note(now, false);
@@ -1182,10 +1180,32 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
       same_lights=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
     }
   }
-  const bool shifted = host->cfg_int("rt_water_compose_shift",0) != 0 && compose_shift_needed(use,pick);
-  const bool shade_pass=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game &&
+  const bool want_hit=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game;
+  const bool shift_on=host->cfg_int("rt_water_compose_shift",0) != 0;
+  bool previous_hit=false,shade_pass=false;
+  if(hit_shade_previous_frame(g_st.frame,now,want_hit,shift_on) && host->rt_hit_material_use){
+    // A changing ring TLAS is expected. Borrow one complete F-1 lighting tuple,
+    // rather than requiring this frame's selected TLAS/lights to equal F-1.
+    // Do not change the ordinary selection until BOTH retention and material
+    // publication validate the stash's exact build identity.
+    VkAccelerationStructureKHR ref=VK_NULL_HANDLE;
+    VkDescriptorSet material=VK_NULL_HANDLE;
+    if(reference_hit_scene(g_st.tlas,g_st.alpha,g_st.hit_identity,ref,material,[&](auto selected,auto* reference,auto* identity){
+         if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
+       },[&](auto selected,auto set,auto identity,auto* out){
+         return host->rt_hit_material_use(cmd,selected,set,identity,out);
+       })){
+      tlas=ref;alpha=g_st.alpha;material_alpha=material;
+      pick=ScenePick::kStashKept;previous_hit=shade_pass=true;
+    }
+  }
+  const bool shifted = shift_on && compose_shift_needed(use,pick);
+  if(!previous_hit)shade_pass=want_hit &&
       hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted) &&
       host->rt_hit_material_use && host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
+  const bool apply_ls=ls_list && hit_shade_local_shadows(shade_pass,previous_hit,same_lights);
+  if (pick == ScenePick::kNewer) ++g_cwin.newer_scene;
+  if (pick == ScenePick::kStashKept) ++g_cwin.stash_kept;
   select_compose_mode(shade_pass);
   // Both forms were prewarmed at lighting, using the same record layout.
   if(!g_compose.p) {++g_cwin.layout;return false;}
@@ -1204,11 +1224,11 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   const bool rr_copy = g_crr && copy_ok && copy && copy->view;
   if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
-    uint32_t flags = (ls_list ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
+    uint32_t flags = (apply_ls ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
     flags |= compose_shift_needed(use, pick) ? kFlagSceneShift : 0u;
     if(!shade_pass)flags&=~kFlagHitShade;
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
-    if (g_st.flags & kFlagLs) ++(ls_list ? g_cwin.ls_passes : g_cwin.ls_no_lights);
+    if (g_st.flags & kFlagLs) ++(apply_ls ? g_cwin.ls_passes : g_cwin.ls_no_lights);
     if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
   }
   memory_barrier(cmd, kAll, kCS);
@@ -1270,7 +1290,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   }
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, nw, wr);
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &material_alpha, 0, nullptr);
-  if(shade_pass) hit_sources(cmd,g_clayout,g_st.hit,g_cls);
+  if(shade_pass) hit_sources(cmd,g_clayout,g_st.hit,g_cls && !previous_hit);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);

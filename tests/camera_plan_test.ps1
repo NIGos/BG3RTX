@@ -158,4 +158,36 @@ $missing=@{turn_mode='hold_drag';kind='rotate';pixels_per_second=1;direction=1}
 $rejected=$false
 try { Get-CameraPlanSample $missing 0 1920 1080 | Out-Null } catch {$rejected=$true}
 Check $rejected 'smooth mode without frame pacing rejected before runner skips sampler'
+# Keys never use mouse motion, wraps, frame pacing, or duty cycling.
+foreach ($direction in -1,1) {
+  $keys=@{label='keys';kind='rotate';turn_mode='keys';motion_start=1;motion_end=121;direction=$direction;
+          key_period_ms=200;key_down_ms=1;frame_delta_pixels=999}
+  $expectedScan=if ($direction -eq -1) {0x10} else {0x12}
+  Check (-not (Get-CameraPlanSample $keys .99 1920 1080).active) 'key stays up before phase motion'
+  foreach ($t in 1,1.1,20,120.99) {
+    $sample=Get-CameraPlanSample $keys $t 1920 1080
+    Check ($sample.active -and $sample.kind -eq 'key_turn' -and $sample.scan -eq $expectedScan) 'Q/E held throughout interval including stalls'
+    Check ($null -eq (Get-RotationInputAction @{stage='released'} $sample $t)) 'key turn emits no mouse rotation action'
+  }
+  Check (-not (Get-CameraPlanSample $keys 121 1920 1080).active) 'key releases at exclusive motion end'
+}
+$keys.direction=0;$rejected=$false
+try {Get-CameraPlanSample $keys 1 1920 1080 | Out-Null} catch {$rejected=$true}
+Check $rejected 'key mode requires a signed direction'
+Check ($runner.Contains("`$MoveScan = if (`$sample.kind -eq 'key_turn') { [byte]`$sample.scan }")) 'runner uses Q/E scan from sample'
+Check ($runner -match 'if \(\$sample.kind -eq ''rotate'' -and \$step.frame_delta_pixels\)') 'key mode bypasses frame mouse sampler'
+foreach ($batch in 'water_flicker_wf9','water_offscreen') {
+  foreach ($file in Get-ChildItem (Join-Path $repo "tools/live_batches/$batch/plans") -Filter '*.json') {
+    $turns=@(Get-Content $file.FullName -Raw | ConvertFrom-Json | ForEach-Object {$_} | Where-Object kind -eq 'rotate')
+    Check ($turns.Count -gt 0) "$batch contains turn windows"
+    foreach ($turn in $turns) {Check ($turn.turn_mode -eq 'keys') "$batch uses held-key turns"}
+    $jobFile=Get-ChildItem (Join-Path $repo "tools/live_batches/$batch/jobs") -Filter '*.json' | Select-Object -First 1
+    $job=Get-Content $jobFile.FullName -Raw | ConvertFrom-Json
+    foreach ($turn in @($turns | Where-Object label -like 'cost-turn-*')) {
+      $phase=@(Get-Content $file.FullName -Raw | ConvertFrom-Json | ForEach-Object {$_}).label.IndexOf($turn.label)
+      $line="[rotation-input] phase=$phase mode=keys label=$($turn.label) direction=$($turn.direction) scan=18"
+      Check (@($job.expect_runner | Where-Object {$line -match $_}).Count -eq 1) "$batch key log satisfies cost window gate"
+    }
+  }
+}
 Write-Host "$count camera-input and permission checks passed"

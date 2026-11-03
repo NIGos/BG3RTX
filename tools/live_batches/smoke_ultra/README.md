@@ -1,7 +1,7 @@
 # smoke_ultra: qualified Ultra (READY_FOR_LIVE, not authorized)
 
-One job, `su1-ultra-s8-fg2`, S8 Water Queens House, one launch, 11 phases, 176 s
-(about 5 min with load). No game is launched by the offline dryrun.
+One job, `su1-ultra-s8-fg2`, S8 Water Queens House, one launch, 11 phases, 211 s
+(about 5.5 min with load). The 45 s initial warmup allows new-build shader prefetch. No game is launched by the offline dryrun.
 
 - `preset=ultra` supplies OMM (`rt_omm=1`, `rt_omm_dyn=1`, `rt_vt_alpha_masks=1`,
   `rt_alpha_fine_lod=1`, reference off), water and the capture budgets. Box shadows

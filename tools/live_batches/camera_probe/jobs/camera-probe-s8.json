@@ -36,12 +36,13 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=8\\b",
+    "\\[motion-plan\\] complete phases=10\\b",
     "\\[rotation-input\\] phase=2\\b",
     "\\[rotation-input\\] phase=4\\b",
-    "\\[rotation-input\\] phase=6\\b"
+    "\\[rotation-input\\] phase=6\\b",
+    "\\[rotation-input\\] phase=8\\b.*mode=keys"
   ],
-  "estimated_phase_seconds": 80,
+  "estimated_phase_seconds": 100,
   "window_mode": "visible_unfocused_fg",
   "stop_on_dump": false,
   "expect_every": [
@@ -53,7 +54,8 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2"
+        "turn-hold_drag-2",
+        "turn-keys"
       ]
     },
     {
@@ -66,7 +68,8 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2"
+        "turn-hold_drag-2",
+        "turn-keys"
       ]
     },
     {
@@ -79,7 +82,8 @@
       "windows": [
         "turn-legacy",
         "turn-hold_drag-1",
-        "turn-hold_drag-2"
+        "turn-hold_drag-2",
+        "turn-keys"
       ]
     }
   ]

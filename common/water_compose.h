@@ -335,6 +335,16 @@ inline constexpr bool hit_shade_frame_ok(uint64_t lighting_frame, uint64_t now, 
   return lighting_frame && same_tlas && same_lights &&
       (lighting_frame == now || (shifted && now > lighting_frame && now - lighting_frame == 1));
 }
+// F-1 must select the lighting stash, even if this frame already has a newer
+// TLAS. Validate/retain that exact generation before replacing the ordinary pair.
+inline constexpr bool hit_shade_previous_frame(uint64_t lighting_frame,uint64_t now,bool enabled,bool shift) {
+  return enabled && shift && lighting_frame && now>lighting_frame && now-lighting_frame==1;
+}
+// WATER_LS and hit shading share b22..28. A borrowed lighting list can replace
+// the forward list only if its identity matches; otherwise keep native LS energy.
+inline constexpr bool hit_shade_local_shadows(bool shade,bool previous,bool same_lights) {
+  return !shade || !previous || same_lights;
+}
 inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
 
 // Why lighting_use refused (the "[water] compose stability" line): the stash cleared, too old, ahead.
@@ -369,6 +379,17 @@ bool reference_scene(Handle selected,uint64_t expected,Handle& reference,uint64_
   }
   return true;
 }
+// Publish a borrowed hit-shading tuple only after both providers validate the
+// lighting generation. A failed query must not partially replace ordinary compose.
+template<class Handle,class Set,class Reference,class Material>
+bool reference_hit_scene(Handle selected,Set alpha,uint64_t expected,Handle& reference,Set& materials,
+                         Reference query,Material material){
+  reference={};materials={};Handle candidate{};Set candidate_material{};uint64_t identity=0;
+  if(!expected || alpha==Set{} || !reference_scene(selected,expected,candidate,identity,query) ||
+     !material(candidate,alpha,identity,&candidate_material) || candidate_material==Set{})return false;
+  reference=candidate;materials=candidate_material;return true;
+}
+
 template <class TakeNewer, class KeepStash>
 ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t built, uint64_t now, TakeNewer take_newer,
                      KeepStash keep_stash) {

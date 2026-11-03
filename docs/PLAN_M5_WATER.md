@@ -658,3 +658,17 @@ The Experimental GUI exposes Water camera correction, off in all presets. See th
 fragment and tools/live_batches/water_flicker_wf9 for offline checks and the unqueued S8 prediction:
 hidden share about 7-10%, covered-water tier 1 near 25%, static float energy within repeat noise.
 GPU delta remains unmeasured (wf8 compose 0.10-0.15 ms). This is READY_FOR_LIVE, not a quality pass.
+
+### F-1 hit-shading tuple correction (fixes4, 2026-11-03)
+
+The 10:00-10:17 analysis found zero compose hit-shading attempts: the normal scene
+selection picked F's new TLAS, then compared it with F-1's lighting TLAS. With hit
+shading and compose shift enabled, retain F-1's exact TLAS/build identity, material
+publication and lighting descriptors together. Commit that selection only after
+both scene retention and material validation succeed; failure keeps ordinary compose.
+Bind the complete stashed lighting list and use the existing outgoing-camera shift.
+WATER_LS shares b22..28: if the forward list differs from the stashed list, preserve
+the native local-shadow term for this experimental dispatch rather than evaluate
+current water records with F-1's froxel list. Matching lists keep local shadows.
+Off behavior, shaders, ABI and variant requests are unchanged. GPU cost and live
+hit-attempt confirmation remain pending; keys stay experimental/off.

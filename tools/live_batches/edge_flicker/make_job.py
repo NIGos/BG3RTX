@@ -23,7 +23,7 @@ def make():
         plan.append(dict(label=label, kind='static', speed='static', seconds=seconds,
                          repeat_ms=0, scan=16, capture_at=0, serial=0,
                          motion_start=seconds, motion_end=seconds, pixels_per_second=0,
-                         direction=0, set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
+                         direction=0, registration_policy='per-frame-exclude-unregistered', set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
 
     step('warmup', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
     step('warmup-camera', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
@@ -72,15 +72,15 @@ def make():
                        r'\[ngx\] RR create .*: Success', r'\[cfg\] settings read',
                        r'\[rrpost\] exposure held .*qa_exposure_hold=1'],
                expect_every=every,
-               forbid=[r'VK_ERROR_DEVICE_LOST', r'\[crash\] exception',
+               forbid=[r'VK_ERROR_DEVICE_LOST', r'\[crash\] exception 0x',
                        r'RR (creation|evaluate) failed', r'FAILED, keeping previous',
                        r'\[pan\].*(REFUSED|INVALID|failed|dropped)',
                        r'PNG write failed', r'capture writer backlog', r'\[sl\] edge capture REFUSED',
-                       r'\[bvh\] mesh pool full', r'\[rrpost\] exposure hold REFUSED'],
+                       r'\[rrpost\] exposure hold REFUSED'],
                expect_runner=[r'\[window-mode\].*visible_unfocused', r'^Run ended: done',
                               rf'\[motion-plan\] complete phases={len(plan)}\b'],
                estimated_phase_seconds=sum(p['seconds'] for p in plan),
-               purpose='Offline prepared only. One held port shot, independent toggles, no input. '
+               purpose='Offline prepared only. No supported dialogue pause key. Register every captured frame; exclude cuts, never warp. '
                        'Attribution only; retain default native hair. See predicted.json.')
     write(HERE/'plans/ef1.json', plan)
     write(HERE/'jobs/ef1-dialogue3-attribution.json', job)

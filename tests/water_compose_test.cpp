@@ -163,6 +163,48 @@ int main(int argc, char** argv) {
       CHECK(hit_shade_frame_ok(frame,100,tlas,lights,shift) ==
             (tlas && lights && (frame==100 || (frame==99 && shift))));
   CHECK(!hit_shade_frame_ok(0,0,true,true,true));
+  // A distinct TLAS in every ring frame must not suppress F-1 shading.
+  for(uint64_t now=100;now<220;++now){
+    const uint64_t lighting=now-1,stash_tlas=lighting+1000,current_tlas=now+1000;
+    CHECK(current_tlas!=stash_tlas);
+    CHECK(hit_shade_previous_frame(lighting,now,true,true));
+    CHECK(!hit_shade_frame_ok(lighting,now,current_tlas==stash_tlas,true,true));
+    CHECK(hit_shade_frame_ok(lighting,now,stash_tlas==stash_tlas,true,true));
+    CHECK(!hit_shade_previous_frame(lighting,now,false,true));
+    CHECK(!hit_shade_previous_frame(lighting,now,true,false));
+  }
+  for(uint64_t lighting:{0ull,98ull,100ull,101ull})
+    CHECK(!hit_shade_previous_frame(lighting,100,true,true));
+  // Shared light bindings cannot evaluate current forward local-shadow records
+  // with a different F-1 froxel list. Only that experimental mismatch falls back.
+  for(bool shade:{false,true})for(bool previous:{false,true})for(bool same:{false,true})
+    CHECK(hit_shade_local_shadows(shade,previous,same)==(!shade || !previous || same));
+  // Retaining a TLAS alone is insufficient. Publication needs its exact
+  // lighting-frame material generation, and a failure exposes no partial tuple.
+  for(bool scene_ok:{false,true})for(bool material_ok:{false,true})for(bool nonempty:{false,true}){
+    uint64_t ref=999,materials=999;unsigned queried=0;
+    auto scene=[&](uint64_t selected,uint64_t* out,uint64_t* identity){
+      CHECK(selected==101);CHECK(*identity==7);
+      *out=scene_ok?101:0;return false; // baseline reference is valid without OMM
+    };
+    auto material=[&](uint64_t selected,uint64_t alpha,uint64_t identity,uint64_t* out){
+      ++queried;CHECK(selected==101 && alpha==201 && identity==7);
+      *out=nonempty?301:0;return material_ok;
+    };
+    const bool ok=reference_hit_scene(uint64_t(101),uint64_t(201),7,ref,materials,scene,material);
+    CHECK(ok==(scene_ok && material_ok && nonempty));
+    CHECK(ref==(ok?101:0) && materials==(ok?301:0));
+    CHECK(queried==unsigned(scene_ok));
+  }
+  {
+    uint64_t ref=999,materials=999;unsigned queried=0;
+    auto recycled=[&](auto,auto* out,auto* identity){++queried;*out=101;*identity=8;return true;};
+    auto material=[](auto,auto,auto,auto* out){*out=301;return true;};
+    CHECK(!reference_hit_scene(uint64_t(101),uint64_t(201),7,ref,materials,recycled,material));
+    CHECK(!ref && !materials && queried==1);
+    CHECK(!reference_hit_scene(uint64_t(101),uint64_t(201),0,ref,materials,recycled,material));
+    CHECK(!ref && !materials && queried==1); // unknown lighting generation cannot discover a newer one
+  }
   // Two readback windows retain every reason counter, while 64-bit sums remain separate.
   uint64_t count[kCsSlotWordsLs]{};
   for(unsigned window=0;window<2;++window)

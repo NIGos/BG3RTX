@@ -12,7 +12,7 @@
     "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_hit_shade=0,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0"
+    "set": "rt_water_hit_shade=2,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0"
   },
   {
     "label": "shot-off-a",
@@ -108,8 +108,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "return-0",
@@ -125,8 +124,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-1",
@@ -142,8 +140,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "return-1",
@@ -159,8 +156,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-2",
@@ -176,8 +172,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "return-2",
@@ -193,8 +188,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=0,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "cost-turn-3",
@@ -210,8 +204,7 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "return-3",
@@ -227,8 +220,7 @@
     "pixels_per_second": 1,
     "direction": -1,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0",
-    "frame_delta_pixels": 1,
-    "frame_interval": 4
+    "turn_mode": "keys"
   },
   {
     "label": "restore",

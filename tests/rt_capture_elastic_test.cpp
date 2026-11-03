@@ -47,7 +47,7 @@ int main(){
  // Inactive duration is unbounded: even a long pause must preserve capacity.
  CascadeElasticWindow cascades[3];
  uint64_t cascade_sizes[3]={320*mib,320*mib,320*mib};
- for(unsigned frame=0;frame<3*ElasticWindow::samples*10;++frame){
+ for(unsigned frame=0;frame<3*CascadeElasticWindow::samples*10;++frame){
   const unsigned slot=frame%3;
   cascade_sizes[slot]=cascades[slot].observe(cascade_sizes[slot],
       elastic_capacity(0,cap,cap),0);
@@ -59,23 +59,34 @@ int main(){
   check(cascades[slot].observe(cascade_sizes[slot],
       elastic_capacity(returning,cap,cap),returning)==320*mib);
   // Real smaller active demand still releases memory after a full window.
-  for(unsigned i=1;i<ElasticWindow::samples;++i)
+  for(unsigned i=1;i<CascadeElasticWindow::samples;++i)
    check(cascades[slot].observe(320*mib,128*mib,100*mib)==320*mib);
   check(cascades[slot].observe(320*mib,128*mib,100*mib)==128*mib);
  }
  CascadeElasticWindow cascade;
  // Empty frames also cancel an incomplete low-demand shrink observation.
- for(unsigned i=1;i<ElasticWindow::samples;++i)
+ for(unsigned i=1;i<CascadeElasticWindow::samples;++i)
   check(cascade.observe(320*mib,128*mib,100*mib)==320*mib);
  check(cascade.observe(320*mib,16*mib,0)==320*mib && cascade.count==0);
  check(cascade.observe(320*mib,128*mib,100*mib)==320*mib);
  // A tighter card budget neither shrinks below active demand nor authorizes
  // growth beyond the guard cap. Overflow is included in the observed demand.
  cascade.reset();
- for(unsigned i=0;i<2*ElasticWindow::samples;++i)
+ for(unsigned i=0;i<2*CascadeElasticWindow::samples;++i)
   check(cascade.observe(320*mib,elastic_capacity(250*mib,cap,128*mib),250*mib)==320*mib);
  check(cascade.observe(128*mib,elastic_capacity(250*mib,cap,128*mib),250*mib)==128*mib);
  check(cascade.observe(128*mib,elastic_capacity(250*mib,cap,cap),250*mib)==320*mib);
+ // A turn's 271 MiB demand must remain covered throughout the 120-sample
+ // window, rather than shrinking to 256 MiB after only 24 quieter samples.
+ static_assert(CascadeElasticWindow::samples==RtElasticWindow::samples);
+ cascade.reset();
+ uint64_t turn_capacity=cascade.observe(256*mib,elastic_capacity(271*mib,cap,cap),271*mib);
+ check(turn_capacity>=271*mib);
+ for(unsigned i=1;i<CascadeElasticWindow::samples;++i){
+  turn_capacity=cascade.observe(turn_capacity,256*mib,200*mib);
+  check(turn_capacity>=271*mib);
+ }
+ check(cascade.observe(turn_capacity,elastic_capacity(271*mib,cap,cap),271*mib)>=271*mib);
  // Retired producers only; late submission and F+2 cascade consumers covered.
  check(!elastic_retired(10,11,false));check(elastic_retired(10,12,false));
  check(!elastic_retired(10,13,true));check(elastic_retired(10,14,true));
