@@ -9,6 +9,17 @@ static unsigned checks;
 static void check(bool ok){++checks;if(!ok){std::fprintf(stderr,"capture budget check %u failed\n",checks);std::exit(1);}}
 static uint64_t upper(double mb){return uint64_t(std::ceil(mb*double(mib)));}
 int main(){
+ // hq4 load: native 88-byte cache admission must account for BLAS and
+ // pending pool ownership before uploads; optional refusal retains capture.
+ check(mesh_cache_admit(819*mib,465*mib,500*mib,200*mib,2048*mib));
+ check(!mesh_cache_admit(819*mib,465*mib,1000*mib,200*mib,2048*mib));
+ check(!mesh_cache_admit(kMeshPoolHardCap,0,1,0,UINT64_MAX));
+ check(mesh_cache_admit(100,200,300,400,1000));
+ check(!mesh_cache_admit(100,200,300,401,1000));
+ check(!mesh_cache_admit(UINT64_MAX,1,1,1,1000));
+ check(!mesh_cache_admit(1,UINT64_MAX,1,1,1000));
+ check(!mesh_cache_admit(1,1,UINT64_MAX,1,1000));
+ check(!mesh_cache_admit(1,1,1,UINT64_MAX,1000));
  // Golden existing-policy outputs, including hysteresis and fixed-MB semantics.
  check(alpha_region(384*mib,64*mib,0,0,0,true,60)==64*mib);
  check(alpha_region(384*mib,64*mib,64*mib,100*mib,100*mib,true,60)==150*mib);

@@ -95,6 +95,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
   if (RT_HAIR_ORIGIN_ON) {
       // Class 5 also includes Scalp; class alone is not receiver identity.
       // A competing depth-compatible surface prevents physical publication.
+      // This identity requirement is unconditional: class 5 also belongs to
+      // Scalp, so a diagnostic switch must never authorize a Hair rebase.
       if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
          (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
         HairPrimitive primitive=hair_primitive(h.inst,h.prim);
@@ -103,8 +105,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // a large virtual displacement must not cause cancellation of tBase.
         float3 physical_o=0.0.xxx;
         if(primitive.valid && !primitive.inactive && primitive.camera &&
-           ((pc.ls_flags & (1u << 21)) == 0u ||
-            !hpo_competing_receiver(-V*t0,-V,t0,dist+w))) {
+           !hpo_competing_receiver(-V*t0,-V,t0,dist+w)) {
           HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
           float physical_t=card.t;
           float3 physical_n=normalize(primitive.n);
@@ -118,6 +119,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
       // Class 5 also includes Scalp; class alone is not receiver identity.
       // A competing depth-compatible surface prevents physical publication.
+      // This identity requirement is unconditional: class 5 also belongs to
+      // Scalp, so a diagnostic switch must never authorize a Hair rebase.
       if(mat_class(gMaterial.Load(int3(fp,0)))==kMatHair &&
          (inst_info(h.inst).meta&kInfoHairProcedural)!=0u) {
         HairPrimitive primitive=hair_primitive(h.inst,h.prim);
@@ -126,8 +129,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         // a large virtual displacement must not cause cancellation of tBase.
         float3 physical_o=0.0.xxx;
         if(primitive.valid && !primitive.inactive && primitive.camera &&
-           ((pc.ls_flags & (1u << 21)) == 0u ||
-            !hpo_competing_receiver(-V*t0,-V,t0,dist+w))) {
+           !hpo_competing_receiver(-V*t0,-V,t0,dist+w)) {
           HairTriangleHit card=hm_ray_triangle(primitive.p0,primitive.p1,primitive.p2,physical_o,-V);
           float physical_t=card.t;
           float3 physical_n=normalize(primitive.n);

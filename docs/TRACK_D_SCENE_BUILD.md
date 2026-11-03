@@ -1091,3 +1091,23 @@ A/B plan. No live performance or energy claim is qualified by offline tests.
   measured. Conditional estimates only: 0.1-0.3 ms/frame hooks, 0.1-0.3 ms/build with repeated matrices.
   A/B: S3 camp and S8 Water Queens House, OFF/ON/OFF/ON in one session per save, qualified Ultra keys on.
   Plan and gate details: [codex-perf-hooks](progress/codex-perf-hooks.md); nothing queued.
+
+### Native hair load admission (hairline-band, 2026-11-03)
+
+The retained hq4 Dialogue3 log (`captures/queue/logs/hq4-dialogue3-fg2.1.140457.log`
+in the main checkout) hits pool full at 14:06:33.182. The next sampled line is
+1857.8 / 2047 MiB, with 466 new meshes / 3.98 M triangles, 264 LRU evictions
+and 1017 MiB AS ownership in that window. It still reports 60 / 60 split builds;
+this event alone does not establish a dropped native-hair scene. A sampled
+post-eviction count cannot identify the instantaneous allocation or largest hole.
+
+Native capture uses 88-byte vertices. Optional mesh extraction previously ran
+before mandatory procedural AABBs, and the combined mesh/AS budget was enforced
+only by later LRU eviction; pending GPU ranges cannot be reclaimed immediately.
+Bounds are now allocated first. Native-layout cache extraction admits its
+vertices plus uncompressed BLAS only within the existing combined mesh budget,
+including pending ownership; rejected cache work retains the captured dynamic
+BLAS. No pool cap, GPU retirement fence or material coverage changes. Synthetic
+admission tests cover the recorded load scale, exact budget, signed pool cap and
+overflow rejection. Actual Dialogue3 peak, scene continuity and GPU cost need a
+live confirmation; no game launch was performed for this repair.

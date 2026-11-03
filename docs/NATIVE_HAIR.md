@@ -268,6 +268,27 @@ It closes the known admission hole but is NOT a raster-writer identity certifica
 or proof of the hairline cause. A/B windows must be capture-complete: the preserved
 trial had alpha-capacity fallbacks in 11 of 77 windows.
 
+**Hairline identity correction (2026-11-03).** The guard above had become a
+developer opt-in: `rt_hair_receiver_guard=0` bypassed it in both ordinary and
+specialization origin entries. This left the confirmed class-5 identity hole
+active whenever physical origins were enabled with default settings. Publication
+now always requires the competing-receiver check. The old configuration key is
+accepted for compatibility but cannot bypass receiver identity. Ordinary origins
+and physical-origin OFF keep their original path. No coverage, bias or epsilon
+changes are needed for this defect.
+
+Scalp is already identified by exact native recipes (kind 3), separately from
+Hair/Pubes (kind 4). Its material offsets 0/4 are smoothstep edge/root:
+`smoothstep(edge, clamp(edge + 0.7, 0, 1), A) * (1 + (B - 1) * root)`.
+Hair/Pubes instead use `A * (1 - B * root) * angular * density`, with canonical
+root/density at indices 8/9. These opposite root conventions are intentional
+native source equations. Synthetic shared-class cases check recipe separation,
+opposite root coverage and rejection of competing Scalp in the match interval.
+The preserved trial manifest records no F10 packet or same-run image A/B, and
+the later user report says the band was no longer reproducible. Thus this fixes
+a demonstrated admission defect; the historical screenshot cause and visible
+band removal remain unverified. No live run or GPU cost was measured here.
+
 **Checks.** `native_hair_origin_test`, `settings_test`, the scalp shader check and
 `tests/hair_origin_shader_test.py` (key-off SPIR-V byte-identical, feature modules
 validated, binding 12 unused in all 16 RF variants). Last gate: 100 origin checks,
