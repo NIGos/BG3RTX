@@ -838,6 +838,7 @@ struct GroomAsset {
 // Mesh-pool bytes held by grooms (LOD arrays and slot points) against common/hair_groom_budget.h pool_budget.
 VkDeviceSize g_groom_pool_used = 0;
 uint64_t g_groom_budget_refusals = 0;
+uint64_t g_groom_soup_refused = 0;   // matched draws without a live soup range this frame (held, not captured)
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
 struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
@@ -2344,7 +2345,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<DynHoldPackJob> hold_pack_jobs;
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
-                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; };
+                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0; };
   const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
   std::unordered_map<uint64_t, size_t> groom_of_key;
@@ -2566,6 +2567,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
                                 ? groom_asset(fd.groom_id, fd.groom_indices) : nullptr;
     if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
+    // The point update reads this frame's soup at the draw's offset: only a draw captured into it this frame, inside
+    // the live range (a held draw's offset is a mesh-pool snapshot offset: reading the soup there lost the device,
+    // 2026-11-03). Such a frame keeps the slot (no update, no groom instance: its cards in every pass).
+    bool groom_keep = false;
+    if (groom_src && !hair_primary::soup_update_ok(fd.captured, fd.held, fd.soup_off, fd.prims, stride, cap.xfb_size,
+                                                   groom_src->indices / 3u)) {
+      if (g_groom_soup_refused++ < 8)
+        log("[hair groom] %016llx: no point update this frame (captured %u, held %u, soup offset %llu, %u triangles, stride %u, "
+            "soup %llu bytes): cards", (unsigned long long)fd.groom_id, unsigned(fd.captured), unsigned(fd.held),
+            (unsigned long long)fd.soup_off, fd.prims, stride, (unsigned long long)cap.xfb_size);
+      groom_src = nullptr;
+      groom_keep = true;
+    }
     if (hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
         !g_groom_uv.count(fd.groom_identity) && fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
         fd.soup_off + VkDeviceSize(fd.groom_indices) * stride <= cap.xfb_size) {
@@ -2588,7 +2602,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             hair_groom::join_miss_name(fd.groom_miss));
     }
     if (!groom_src) {
-      if (s.groom) { groom_release(*s.groom, now); s.groom.reset(); }
+      if (s.groom && !groom_keep) { groom_release(*s.groom, now); s.groom.reset(); }
     } else {
       if (!s.groom || s.groom->id != fd.groom_id) {
         if (s.groom) groom_release(*s.groom, now);
@@ -2602,6 +2616,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
       w.hp_key = fd.hp_key;
+      w.prims = fd.prims;   // the shader bounds every triangle read by it
       // A new LOD, or primary strands turned on for a slot without per-point UVs: new points range and a full build.
       if (ok && (lod != g.lod || (hp_on && g.pos_size && !g.uv_off))) {
         if (g.pos_size) {
@@ -2967,7 +2982,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       for (const GroomWork& w : groom_work) {
         const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
                            uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off),
-                           uint32_t(w.g->prev_off), {0, 0, 0}};
+                           uint32_t(w.g->prev_off), {w.prims, 0, 0}};
         dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
         dd->vk.CmdDispatch(cmd, (w.l->points + 127) / 128, 1, 1);
         ++w.g->prev_frames;
