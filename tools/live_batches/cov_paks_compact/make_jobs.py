@@ -59,6 +59,9 @@ JOB = {'save': 'Campsite - 27h',
             'invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ '
             'id_different \\d+ draws [1-9]\\d*'],
  'expect_every': [{'name': 'draw attempts and rejection reasons in each ON observation',
+                   # cp4: 240 frames in 16.020 s = 8.010 s per 120-frame line.
+                   # Round up; do not infer diagnostic FPS from the 30 FPS cap.
+                   'period_s': 9,
                    'select': '\\[hit material paks join\\]',
                    'match': '\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ '
                             'ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ '
@@ -81,8 +84,8 @@ def make():
     plan = []
     for label, seconds, paks, stats in [
         ("warmup", 10, 1, 0), ("warmup-off", 5, 0, 0),
-        ("observe-on", 25, 1, 1), ("observe-off", 10, 0, 1),
-        ("observe-on-repeat", 25, 1, 1), ("restore", 5, 0, 0),
+        ("observe-on", 20, 1, 1), ("observe-off", 10, 0, 1),
+        ("observe-on-repeat", 20, 1, 1), ("restore", 5, 0, 0),
     ]:
         plan.append(dict(label=label, kind="static", speed="static", seconds=seconds,
                          repeat_ms=0, scan=16, capture_at=0, serial=0, motion_start=seconds,
@@ -98,6 +101,9 @@ def make():
         r"\[water\] rt/water_compose\.hlsl\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
     ], wait_log_timeout=600)
     job = dict(JOB)
+    # Participation now requires a retired UV attempt, not just keyed draws.
+    job["expect"] = [rx.replace(r"attempts \d+", r"attempts [1-9]\d*") for rx in job["expect"]]
+    job["expect_every"][0]["match"] = job["expect_every"][0]["match"].replace(r"attempts \d+", r"attempts [1-9]\d*")
     job["estimated_phase_seconds"] = sum(p["seconds"] for p in plan)
     job["timeout"] = job["estimated_phase_seconds"] + 300 + 600
     job["expect_runner"] = [r"\[window-mode\].*visible_unfocused", r"^Run ended: done",
