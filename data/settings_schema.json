@@ -222,6 +222,42 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_hair_resolve": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_hair_resolve": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
+    {"id": "exp_compact_hit_state", "label": "Compact ray hit state",
+     "description": "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_compact_hit_state": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_compact_hit_state": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_alpha_metadata_cache", "label": "Cache alpha metadata",
+     "description": "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_alpha_metadata_cache": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_alpha_metadata_cache": "1"}, "needs": {"rt_geometry": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
+    {"id": "exp_water_empty_tiles", "label": "Skip empty water tiles",
+     "description": "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
+     "category": "Advanced", "summary": "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_water_empty_tiles": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_water_empty_tiles": "1"}, "needs": {"exp_water": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
+     ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
      "description": "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,

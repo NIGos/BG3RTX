@@ -641,3 +641,24 @@ tracker write bookkeeping takes one lock per call, then preserves the existing
 OMM callback and sequential copy boundary. No ABI or shader request changes.
 Offline checks and pending A/B: [codex-perf-submit2](progress/codex-perf-submit2.md).
 No measured CPU or GPU saving yet; this is not a quality pass.
+
+## Immutable alpha header cache candidate (2026-11-03)
+
+`rt_alpha_metadata_cache=1` (specialization constant 1022, off by default) lazily
+caches the bound record-buffer size and header count, stride and policy inside
+one shader invocation. The descriptor and its header are immutable throughout
+that dispatch. No values survive into another invocation, frame or scene slot.
+Range arithmetic, texture reads, footprint-derived LOD, effective cutoff,
+stochastic threshold and UNKNOWN behavior remain unchanged. A range-only lookup
+does not read the header. This adds five live integer words in the enabled path;
+the performance gate must reject a register-pressure regression.
+The production helpers pass 3,840,000 exact integer output/range checks over
+10,000 descriptor epochs in `alpha_metadata_cache_test`. This is a helper proof,
+not a full-scene alpha/replay certificate. GPU output and key-off shader identity
+receipts belong in [gpu-opt1](progress/gpu-opt1.md). Planned camp alpha saving is
+0.1-0.3 ms; measured saving is unknown. Check camp and S8 foliage with the prepared
+same-run OFF/ON/OFF static identity and separate 300-sample cost windows.
+
+Production GPU replay also passes solid/clear native alpha fixtures (277 real candidates per case), independently and with the other candidates; GI/depth/statistics bytes match OFF. Full-scene coverage and GPU savings remain unmeasured.
+
+Key-off gate: 173 requests/194 entries match HEAD after specialization and unused-capability removal; validation passes. All keys remain off until live cost and combined Ultra qualification.

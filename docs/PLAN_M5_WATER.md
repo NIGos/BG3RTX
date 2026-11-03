@@ -686,3 +686,10 @@ The existing compose line reports TLAS age avg/max and GPU-measured build-camera
 ~19%, hidden ~13%, static float energy unchanged. Cost remains unmeasured (prior compose
 0.131-0.146 ms turning). Remaining tier 2/3 hits use the F-1-consistent rt_water_hit_shade;
 no hysteresis. The unqueued wf9 batch remains pending live confirmation and a layer restart.
+
+### gpu-opt1 exact empty compose tiles (2026-11-03, unmeasured)
+
+`rt_water_empty_tiles` is off by default, specialization constant 1023, no request delta.
+The compose workgroup reduces its exact existing `has` validity predicate; only when all 64 lanes have no valid record does the whole group return before ray/material work. Dispatch padding participates in both barriers. Header dispatch count and compose camera forwarding still execute. The native target is neither loaded nor stored by an empty group; nonempty groups execute the same path, including record consumption, ownership and all debug outputs. No CPU stale-record inference or altered water copy is used.
+
+`tests/gpu_opt1_water_test.py` checks the integer/bit control model (1065 empty, single-lane, mixed and padded groups); it is not GPU replay evidence. Production compose replay now passes exact native target, record, camera and statistics bytes for empty, mixed, debug and invalid fixtures, each key and combined. Empty native packed colour is independently checked. Mixed: 39 owned records, 26 rays; invalid: 39 invalid records. Key-off gate passes against HEAD across all 173 requests/194 entries after specialization and removal of unused capabilities. Live cost remains required before qualification. Planning: WI compose 0.313 ms, hoped empty-view saving 0.08-0.16 ms; guaranteed saving 0 ms. Camp/S8 draft in `tools/live_batches/gpu_opt1`, static OFF/ON/OFF and isolated cost states. No game was launched. Verify native colour in an empty view and unchanged populated water; actual GPU cost is pending live evidence.

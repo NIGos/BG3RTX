@@ -212,7 +212,10 @@ def cost2_job(name, save, kind):
               ("combined", {key: "1" for key in COST_KEYS})]
     phases = [step("warmup", 25, qa_exposure_hold="0", **ON)]
     phases += [step("warm-" + label, 25, **dict(ON, **keys)) for label, keys in states if "rt_hair_gi_mean" not in keys]
-    phases += [step("settle-cam", 10, **ON), step("shot-cards", SHOT, True),
+    # hq1 13:32: cards/origin-off first selected during shot-cards. Prebuild
+    # that exact state, then warm full hair again before any judged shot.
+    phases += [step("warm-cards", 25), step("warm-full", 25, **ON),
+               step("settle-cam", 10, **ON), step("shot-cards", SHOT, True),
                step("cost-cards", 25), step("shot-full-0", SHOT, True, **ON),
                step("cost-full-0", 25, **ON)]
     # Shared full-hair repeats bracket each individual ON for both observables.

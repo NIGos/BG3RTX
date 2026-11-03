@@ -6,11 +6,11 @@
 #include <string>
 namespace bg3::pipe_async {
 struct PipelineSpecs {
-  uint32_t data[12]{};
-  VkSpecializationMapEntry entries[12]{};
+  uint32_t data[16]{};
+  VkSpecializationMapEntry entries[16]{};
   uint32_t count = 0;
   void add(uint32_t id, uint32_t value) {
-    assert(count < 12);
+    assert(count < 16);
     entries[count] = {id, count * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
     data[count++] = value;
   }

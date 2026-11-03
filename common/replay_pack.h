@@ -40,6 +40,7 @@
 // (layer/bvhsplit.cpp tri_geometry); opaque unless kInfoAlpha. So the pack holds those buffers
 // (sparse ranges) and the instance array as read at submit.
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <iterator>
@@ -164,8 +165,23 @@ struct Pass {
   const Slot* slots;
   uint32_t slot_count, set_count, push_bytes;
 };
+// Offline-only production water adapter. Reuses the existing GI/TLAS fixtures;
+// the extra resources are the real compose contract, including native target format.
+inline constexpr auto kWaterComposeFixture = [] {
+  std::array<Slot, std::size(kGiHitDirect) + 10> slots{};
+  for (size_t i = 0; i < std::size(kGiHitDirect); ++i) slots[i] = kGiHitDirect[i];
+  const Slot extra[] = {
+      {0, 27, kSsbo, 1, 0, "lShadows"}, {0, 28, kSampled2D, 1, 0, "lAtlas"},
+      {0, 60, kUbo, 1, 0, "cp"}, {0, 61, kSsbo, 1, 0, "cStats"},
+      {0, 62, kStorage, 1, kRgba16Sfloat, "wRad"}, {0, 63, kStorage, 1, kR32Sfloat, "wDepOut"},
+      {0, 64, kSsbo, 1, 0, "cCam"}, {0, 66, kSsbo, 1, 0, "cRec"},
+      {0, 67, kStorage, 1, 122, "waterTarget"}, {0, 68, kSampled2D, 1, 0, "wCopy"}};
+  for (size_t i = 0; i < std::size(extra); ++i) slots[std::size(kGiHitDirect) + i] = extra[i];
+  return slots;
+}();
 inline constexpr Pass kPasses[] = {
     {"gi_hit_direct", "gi/gi_trace_rt_hit_direct.hlsl", kGiHitDirect, uint32_t(std::size(kGiHitDirect)), 4, 256},
+    {"water_compose_fixture", "rt/water_compose_fixture.hlsl", kWaterComposeFixture.data(), uint32_t(kWaterComposeFixture.size()), 4, 256},
 };
 inline const Pass* find_pass(const std::string& name) {
   for (const Pass& p : kPasses) if (name == p.name) return &p;

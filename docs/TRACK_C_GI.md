@@ -430,3 +430,22 @@ along the view ray by at most
 - `qa_zero` bit 2 (gi_ao_apply.hlsl) writes the AO 0: the diffuse AND the specular ambient go
   (SO = 0 at AO 0); direct light keeps 1 − m0.y = half (traced local lights get it back with
   ao_direct=1); the GI bounce and the reflections stay.
+
+### gpu-opt1: exact state and immutable metadata candidate (2026-11-03)
+
+`rt_compact_hit_state` is off by default (specialization constant 1021). Closest-hit
+transform retrieval moves after traversal, groom selection and barycentric extraction.
+Only proven non-pool instances omit the query transform: every transform consumer
+uses object-to-world only for pool geometry. Out-of-range instance metadata retains
+the original query transform and existing consumer guards. Pool matrices retain all
+float32 operations, including scene rebase. This is a limited lifetime reduction;
+removing the pool matrix across projection needs a separate transform source and is
+not implemented. GI reuses the same hit normal for direct, sun and AO, and lazily
+caches read-only light descriptor ranges and b13[0] across this invocation's rays.
+No lighting, ray, material, alpha, precision or sampling policy changes.
+Offline equivalence and camp/S8 OFF/ON/OFF cost/identity results are recorded in
+`docs/progress/gpu-opt1.md`; no GPU saving or qualification is claimed before them.
+
+GPU fixtures: lit/dark GI, 4,096 rigidly transformed pool hits and real solid/clear alpha candidates pass exact giRaw, depth and statistics bytes for each candidate and combined. This is fixture coverage, not full-scene or cost qualification.
+
+Key-off gate: all 173 requests/194 entries match HEAD after specialization; SPIR-V validation passes. GPU ms remain unmeasured. Camp/S8 live drafts and the static identity analyzer are in `tools/live_batches/gpu_opt1`.

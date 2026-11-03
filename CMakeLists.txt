@@ -340,6 +340,8 @@ if(BG3RTX_OMM_GPU_SMOKE)
 endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
+add_executable(alpha_metadata_cache_test tests/alpha_metadata_cache_test.cpp)
+add_test(NAME alpha_metadata_cache_test COMMAND alpha_metadata_cache_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
@@ -365,7 +367,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom)
+  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom gpu_opt1_water)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()

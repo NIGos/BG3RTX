@@ -1,3 +1,10 @@
+// gpu-opt1: offline legacy override removes the opt-in code for key-off identity.
+#ifndef BG3RTX_GPU_OPT_LEGACY
+[[vk::constant_id(1023)]] const uint kSpecWaterEmptyTiles = 0;
+#define WATER_EMPTY_TILES_ON (kSpecWaterEmptyTiles != 0u)
+#else
+#define WATER_EMPTY_TILES_ON false
+#endif
 #ifdef WATER_SPEC_CASCADE
 #define RT_SPEC_CASCADE 1
 #endif
@@ -181,6 +188,9 @@ static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (kCs
 static const uint kGsWords = 57u;   // common/water_compose.h kCsGsWordsMin (32 words, kCsNonFinite 56)
 #endif
 groupshared uint gsStat[kGsWords];
+#ifndef BG3RTX_GPU_OPT_LEGACY
+groupshared uint gsWaterPresent;
+#endif
 void cstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
   if (WaveIsFirstLane() && n != 0u) InterlockedAdd(gsStat[word], n);
@@ -351,6 +361,9 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #else
   if (gi < kGsWords) gsStat[gi] = 0u;
 #endif
+#ifndef BG3RTX_GPU_OPT_LEGACY
+  if (WATER_EMPTY_TILES_ON && gi == 0u) gsWaterPresent = 0u;
+#endif
   GroupMemoryBarrierWithGroupSync();
   const bool inside = all(fp < pc.full);
   const uint idx = fp.y * cp.a.x + fp.x;
@@ -362,6 +375,17 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     r1 = cRec.Load4(at + 16u);
   }
   has = has && (r1.w & 0xffffu) != 0u;
+#ifndef BG3RTX_GPU_OPT_LEGACY
+  if (WATER_EMPTY_TILES_ON) {
+    // Every lane participates, including dispatch padding. The FS validity word is
+    // the exact baseline has predicate; no inference from colour, roughness or rays.
+    if (WaveActiveAnyTrue(has) && WaveIsFirstLane()) InterlockedOr(gsWaterPresent, 1u);
+    GroupMemoryBarrierWithGroupSync();
+    // Empty groups have no target/record writes and all per-record statistics are
+    // zero. Dispatch count and camera forwarding above still run, even for WI.
+    if (gsWaterPresent == 0u) return;
+  }
+#endif
   if (has) cRec.Store(at + 28u, 0u);   // consumed
   const float2 a01 = f16tof32(uint2(r0.x, r0.x >> 16)), ab = f16tof32(uint2(r0.y, r0.y >> 16));
   const float2 b12 = f16tof32(uint2(r0.z, r0.z >> 16)), n01 = f16tof32(uint2(r0.w, r0.w >> 16));

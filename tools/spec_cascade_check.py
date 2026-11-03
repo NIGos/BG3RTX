@@ -1,6 +1,11 @@
 """rt_spec_cascade equivalence gate (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, step S1). Offline, no game.
 
     py -3 tools/spec_cascade_check.py [--all | --sample N] [--seed S] [--jobs J] [--replay <pack dir>]
+    python tools/spec_cascade_check.py --key gpuopt --all --baseline HEAD
+
+GPU optimization candidates: cached compile/validation of every rt_common consumer and water compose;
+frozen key-off compares directly against baseline. Unused interface variables and capabilities are
+removed symmetrically before canonical comparison; executable instructions must still match.
 
 Every RT_SPEC_CASCADE request of shaders/variants.txt stands for two old requests: constant 1000 = 0 is the
 request without the spec defines (the plain variant), = 1 the same request with RT_CASCADE_MASKS=1 (and
@@ -201,7 +206,14 @@ def old_requests_haircost(spec_request):
     return out
 
 
-KEYS = {"haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
+
+def gpu_opt_requests(request):
+    """Key-off reference; output exactness of ON is checked by numeric fixtures, separately."""
+    return [({1021: 0, 1022: 0, 1023: 0}, request +
+             (";" if "?" in request else "?") + "BG3RTX_GPU_OPT_LEGACY=1")]
+
+
+KEYS = {"gpuopt": ("gpuopt", gpu_opt_requests), "haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_SPEC_NATIVE=1", old_requests_hairgi),
         "groom": ("RT_SPEC_NATIVE=1", old_requests_groom),
         "waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
         "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
@@ -353,11 +365,13 @@ def check_one(tool, tmp, i, spec_path, old_path, assign):
     s = opt(tool, spec_path, d / "s.spv",
             "--set-spec-const-default-value=" + " ".join(f"{k}:{v}" for k, v in sorted(assign.items())))
     s = opt(tool, s, d / "f.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
+    # Unused capabilities (e.g. vote in gpuopt empty tiles) describe no live operation after folding.
+    # Trim them symmetrically, without changing any executable instruction.
     # S2b: the far main() declares SV_GroupID / SV_GroupIndex even with the constant 0; dropping unused interface
     # variables on both sides compares the programs, not the declarations.
-    s = opt(tool, s, d / "sO.spv", "-O", "--remove-unused-interface-variables")
+    s = opt(tool, s, d / "sO.spv", "-O", "--remove-unused-interface-variables", "--trim-capabilities")
     o = opt(tool, old_path, d / "of.spv", "--freeze-spec-const", "--fold-spec-const-op-composite")
-    o = opt(tool, o, d / "oO.spv", "-O", "--remove-unused-interface-variables")
+    o = opt(tool, o, d / "oO.spv", "-O", "--remove-unused-interface-variables", "--trim-capabilities")
     return differ(canonical(tool, s), canonical(tool, o))
 
 
@@ -410,6 +424,56 @@ def replay(tool, P, pack, tmp, spec, olds):
     return ok
 
 
+def gpu_opt_gate(args, tree, tool, pick):
+    """Compare frozen key-off directly to baseline, without a redundant legacy compile set."""
+    if not args.baseline:
+        raise SystemExit("--key gpuopt requires --baseline")
+    base = SourceTree.commit(args.baseline).with_sharc(tool.sharc)
+    try:
+        new = compile_requests(tree, pick, tool=tool, cache=Cache(), jobs=args.jobs,
+                               validate=True, label="gpuopt union")
+        old = compile_requests(base, pick, tool=tool, cache=Cache(), jobs=args.jobs,
+                               label="gpuopt baseline")
+        bad = [r for r in pick if not new[r].ok or new[r].valid is False or not old[r].ok]
+        if bad:
+            for r in bad: say(f"FAIL {r}: {new[r].log} {old[r].log}")
+            return 1
+        failures = []
+        with tempfile.TemporaryDirectory(prefix="b3gpuopt-") as tmp:
+            work = []
+            byte_equal = 0
+            for i, r in enumerate(pick):
+                for e in new[r].entries:
+                    if new[r].blob(e.name) == old[r].blob(e.name):
+                        byte_equal += 1
+                        continue
+                    n, o = Path(tmp)/f"n{i}_{e.name}.spv", Path(tmp)/f"o{i}_{e.name}.spv"
+                    n.write_bytes(new[r].blob(e.name)); o.write_bytes(old[r].blob(e.name))
+                    work.append((f"{i}_{e.name}", r, n, o))
+            say(f"gpuopt key-off: {byte_equal} entries byte-identical before specialization")
+            # Positive control uses a real changed function, with the same comparator.
+            cr = next(r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl")
+            cn = Path(tmp)/"control.spv"; cn.write_bytes(new[cr].blob("main"))
+            control = check_one(tool, tmp, "control", cn, cn, {1021: 1, 1022: 1, 1023: 0})
+            say(f"gpuopt enabled positive control: {control} differing lines (must be > 0)")
+            with Progress("gpuopt key-off baseline", len(work), every=30, verb="compared") as prog, \
+                    concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:
+                futs = {pool.submit(check_one, tool, tmp, i, n, o, {1021: 0, 1022: 0, 1023: 0}): r
+                        for i, r, n, o in work}
+                for f in concurrent.futures.as_completed(futs):
+                    r = futs[f]
+                    try: diff = f.result()
+                    except Exception as ex: diff = repr(ex)
+                    if diff:
+                        failures.append((r, diff)); say(f"KEY-OFF DIFFERENT {r}: {diff}")
+                    prog.step(failed=bool(diff))
+        say(f"gpuopt key-off {len(pick)} requests/{len(work) + byte_equal} entries: "
+            f"{'PASS' if not failures and control else 'FAIL'}; baseline {args.baseline}")
+        return int(bool(failures) or not control)
+    finally:
+        base.cleanup()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--all", action="store_true")
@@ -431,9 +495,13 @@ def main():
         spec = [r for r in spec if split_request(r)[0] == "rt/water_compose.hlsl"]
     if args.key == "hairgi":
         spec = [r for r in spec if split_request(r)[0].startswith("gi/gi_trace_rt")]
-    if not spec:
+    if not spec and args.key != "gpuopt":
         say(f"no {marker} request in shaders/variants.txt")
         return 1
+    if args.key == "gpuopt":
+        # Each rt_common consumer plus compose, including raw (no variant defines) requests.
+        spec = sorted(r for r in known if "shaders/rt/rt_common.hlsli" in dict(tree.closure("shaders/" + split_request(r)[0]))
+                      or split_request(r)[0] == "rt/water_compose.hlsl")
     by_file = {}
     for r in spec:
         f = split_request(r)[0]
@@ -447,6 +515,8 @@ def main():
         replay_spec = min((r for r in spec if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl"),
                           key=lambda r: len(split_request(r)[1]))
         pick = sorted(set(pick) | {replay_spec})
+    if args.key == "gpuopt":
+        return gpu_opt_gate(args, tree, tool, pick)
     pairs = {r: olds(r) for r in pick}
     # Once the spec build is the only cascade path the old requests are no longer listed; they still compile
     # from the same sources (the reference programs), so they are built here on demand.
@@ -523,16 +593,23 @@ def main():
                            next((r for r in pick if split_request(r)[0].startswith("gi/gi_trace_rt")), pick[0])
                            if args.key == "groom" else pick[0])
         control_pairs = pairs[control_request]
-        (_, c0), (_, c1) = ((control_pairs[4], control_pairs[6]) if args.key == "haircost" else
-                           control_pairs[-2:] if args.key == "hairgi" else
-                           (control_pairs[0], control_pairs[-1]) if args.key in ("native", "groom") else control_pairs[:2])
-        # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
-        control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
-                         "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else
-                         "water_compose" if args.key in ("waterhair", "waterhit") and "water_compose.hlsl" in control_request else "main")
-        ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
-                      canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
-        say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
+        if args.key == "gpuopt":
+            control_request = next(r for r in pick if split_request(r)[0] == "gi/gi_trace_rt_hit_direct.hlsl")
+            reference = pairs[control_request][0][1]
+            ctrl = check_one(tool, tmp, "gpuopt_control", P(control_request), P(reference),
+                             {1021: 1, 1022: 1, 1023: 0})
+            say(f"gpuopt positive control: enabled versus legacy differs in {ctrl} lines (must be > 0)")
+        else:
+            (_, c0), (_, c1) = ((control_pairs[4], control_pairs[6]) if args.key == "haircost" else
+                               control_pairs[-2:] if args.key == "hairgi" else
+                               (control_pairs[0], control_pairs[-1]) if args.key in ("native", "groom") else control_pairs[:2])
+            # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
+            control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
+                             "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else
+                             "water_compose" if args.key in ("waterhair", "waterhit") and "water_compose.hlsl" in control_request else "main")
+            ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
+                          canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
+            say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")
         jobs = [(i, r, e.name, v) for i, r in enumerate(pick) for e in compiled[r].entries for v in range(len(pairs[r]))]
         with Progress("spec cascade equivalence", len(jobs), every=30, verb="compared") as prog, \
                 concurrent.futures.ProcessPoolExecutor(args.jobs, initializer=lower_priority) as pool:

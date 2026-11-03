@@ -308,6 +308,27 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {}},
 
+  {"exp_compact_hit_state", "Compact ray hit state",
+   "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_compact_hit_state", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_compact_hit_state", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
+  {"exp_alpha_metadata_cache", "Cache alpha metadata",
+   "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_alpha_metadata_cache", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_alpha_metadata_cache", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
+  {"exp_water_empty_tiles", "Skip empty water tiles",
+   "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_water_empty_tiles", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_water_empty_tiles", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
   {"exp_water_compose_shift", "Water camera correction",
    "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Live, "live", false,
@@ -787,6 +808,9 @@ inline constexpr KV kDefaults[] = {
     {"fg_tag_ui", "1"},
     {"fg_letterbox", "1"},
     {"fg_ui_pq", "0"},
+    {"rt_compact_hit_state", "0"},
+    {"rt_alpha_metadata_cache", "0"},
+    {"rt_water_empty_tiles", "0"},
 };
 // The keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
