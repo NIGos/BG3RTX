@@ -275,6 +275,15 @@ inline constexpr Knob kKnobs[] = {
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
    {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
 
+  {"exp_water_hit_cost", "Water reflection optimizations",
+   "Experimental: compare sparse light lookup, zero-light rejection and candidate order. Energy qualification pending.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_water_hit_cost","0"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"sparse", "Sparse lights", kCapRayQuery, {{"rt_water_hit_cost","1"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
+    {"zero", "Zero light rejection", kCapRayQuery, {{"rt_water_hit_cost","2"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
+    {"order", "Unsorted candidates", kCapRayQuery, {{"rt_water_hit_cost","4"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch}},
+   {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
+
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
    "Lights bounce from hidden surfaces, including glowing ones. Near ~+0.6 ms, Far ~+4 ms; Far + reflections ~+6 ms (experimental).",
@@ -678,6 +687,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
     {"rt_water_hit_shade", "0"},
+    {"rt_water_hit_cost", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
     {"rt_water_compose", "0"},

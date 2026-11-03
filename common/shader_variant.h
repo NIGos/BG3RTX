@@ -46,7 +46,7 @@ enum SpecId : unsigned {
   kSpecIdHairCheap = 1018,           // rt_hair_cheap: physical secondary coverage
   kSpecIdHairGiMean = 1019,          // rt_hair_gi_mean: stored hard-coverage probability
   kSpecIdHairGiCull = 1017,          // rt_hair_gi_cull: GI closest rays only
-  // 1021 reserved for water-hit-cost; do not reuse.
+  kSpecIdWaterHitCost = 1021,        // rt_water_hit_cost: sparse scan / zero incident / unordered K
   kSpecIdCompactHitState = 1024,     // gpu-opt1: exact hit-state lifetime
   kSpecIdAlphaMetadataCache = 1022,  // gpu-opt1: query-local immutable alpha metadata
   kSpecIdWaterEmptyTiles = 1023,     // gpu-opt1: exact empty compose tiles

@@ -120,7 +120,7 @@ bool scalp_on() {
 }
 Pipe g_primary, g_reflect, g_view, g_world_prepare;
 VkBuffer g_world_lights=VK_NULL_HANDLE; VkDeviceMemory g_world_memory=VK_NULL_HANDLE;
-constexpr VkDeviceSize kWorldBytes=4097*4;
+constexpr VkDeviceSize kWorldBytes=(4097+128)*4;
 bool g_building = false;   // a make_pipe this frame waits for its background build (not "unavailable")
 
 Bg3Image g_out{}, g_t{};
@@ -265,6 +265,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   const bool native_spec = req.find("RT_SPEC_NATIVE=1") != std::string::npos;
   const bool edge_spec = req.find("WATER_SPEC_RF_EDGE=1") != std::string::npos;
   const bool shift_spec = cascade_spec && (req.find("rt/water_compose.hlsl") == 0);
+  const bool cost_spec = hit || std::strcmp(base,"rt/water_light_prepare.hlsl")==0;
   const bool empty_spec = std::strcmp(entry, "water_compose") == 0;
   const uint32_t values[] = {native_spec && bg3::native_tileset::enabled(static_cast<uint32_t*>(host->persist(bg3::native_tileset::capability_key, sizeof(uint32_t)))) ? 1u : 0u, native_spec && scalp_on() ? 1u : 0u,
                             edge_spec && host->cfg_int("rt_water_rf_edge", 0) != 0 ? 1u : 0u,
@@ -273,8 +274,9 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
                             native_spec && host->cfg_int("rt_hair_cheap",0) != 0 ? 1u : 0u,
                             empty_spec && host->cfg_int("rt_water_empty_tiles",0) != 0 ? 1u : 0u,
                             std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_compact_hit_state",0) != 0 ? 1u : 0u,
-                            std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_alpha_metadata_cache",0) != 0 ? 1u : 0u};
-  VkSpecializationMapEntry entries[10]{};
+                            std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_alpha_metadata_cache",0) != 0 ? 1u : 0u,
+                            cost_spec ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_cost",0),0,7)) : 0u};
+  VkSpecializationMapEntry entries[11]{};
   uint32_t count = 0;
   if (native_spec) {
     entries[count++] = {bg3::shader_variant::kSpecIdTileset, 0, sizeof(uint32_t)};
@@ -290,10 +292,11 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
     entries[count++] = {bg3::shader_variant::kSpecIdCompactHitState, 8 * sizeof(uint32_t), sizeof(uint32_t)};
     entries[count++] = {bg3::shader_variant::kSpecIdAlphaMetadataCache, 9 * sizeof(uint32_t), sizeof(uint32_t)};
   }
+  if (cost_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterHitCost, 10 * sizeof(uint32_t), sizeof(uint32_t)};
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
   const std::string pipe_key = req + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]) + "#haircheap=" + std::to_string(values[6]) + "#empty=" + std::to_string(values[7])
-      + "#compact=" + std::to_string(values[8]) + "#alphacache=" + std::to_string(values[9]);
+      + "#compact=" + std::to_string(values[8]) + "#alphacache=" + std::to_string(values[9]) + "#hitcost=" + std::to_string(values[10]);
   // Specialization toggles retain their pipelines until the owning layout is retired.
   if (p.req != pipe_key) {
     for (auto& v : p.cached) if (v.req == pipe_key) {

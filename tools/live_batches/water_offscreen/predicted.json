@@ -1,19 +1,45 @@
 {
-  "_rule": "Written before dryrun; uncommitted because Git metadata is read only. No live authorization.",
+  "_rule": "Written before dryrun; Git read only. No game launch authorized. Budgets are optimization targets, never quality hard stops.",
   "wo1-s8-hit-shade": {
-    "shot-on-a": {
+    "shot-sparse-on-a": {
       "predicted": 0.0,
-      "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
-      "cost_gpu_ms": 1.0,
-      "coverage": "Mode 2: offscreen shaded > 0 and hidden shaded > 0 in EVERY ON window, in both reflection and compose. Current-frame union of active froxel lights queried by world position; not every raw b25 slot (unlisted slots are stale). Truncation > 32 retains probe, counted; no preset promotion.",
-      "cost_budget_source": "Acceptance budget: added reflection + compose median <= 1.0 ms (about 1.5x the qualified 0.67 ms water chain); p90 <= OFF p90 + 1.0 ms. Budget only, not measured prediction; use matched diagnostic-free GPU windows."
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
     },
-    "shot-on-b": {
+    "shot-sparse-on-b": {
       "predicted": 0.0,
-      "source": "Static float pre-post scene plus same-frame compose delta / exposure (water-compose). Band derived from OFF repeats and encoding uncertainty; no radiance gain correction.",
-      "cost_gpu_ms": 1.0,
-      "coverage": "Mode 2: offscreen shaded > 0 and hidden shaded > 0 in EVERY ON window, in both reflection and compose. Current-frame union of active froxel lights queried by world position; not every raw b25 slot (unlisted slots are stale). Truncation > 32 retains probe, counted; no preset promotion.",
-      "cost_budget_source": "Acceptance budget: added reflection + compose median <= 1.0 ms (about 1.5x the qualified 0.67 ms water chain); p90 <= OFF p90 + 1.0 ms. Budget only, not measured prediction; use matched diagnostic-free GPU windows."
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-cone-on-a": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-cone-on-b": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-order-on-a": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-order-on-b": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-combined-on-a": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+    },
+    "shot-combined-on-b": {
+      "predicted": 0.0,
+      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
+      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
     }
   }
 }

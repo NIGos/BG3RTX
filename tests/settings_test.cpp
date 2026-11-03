@@ -387,7 +387,7 @@ static const char* const kOldOn[][2] = {
     {"exp_native_tileset", "rt_native_tileset"}};
 
 static void test_gui_levels() {
-  // Qualified memory management is automatic; three user-facing experimental entries remain.
+  // Count the merged user-facing experimental knobs and pin developer-only ordering.
   int user_exp = 0;
   std::vector<std::string> dev;
   for (const Knob& k : kKnobs) {
@@ -426,7 +426,7 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 11);   // Includes the three default-off exact GPU candidates and the temporal post candidate.
+  CHECK(user_exp == 12);   // Includes water hit cost, the three exact GPU candidates and temporal post.
   CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
