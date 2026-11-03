@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "status": "OFFLINE_ONLY",
+  "hypothesis": "Visible strands retain every baseline character's hair through motion, LOD and toggles without invalid memory reads.",
+  "observed_regression": "2026-11-03 17:01 and 17:04: device loss and player bald; XFB invalid read at offset 2063785984 reported in parent checkout logs.",
+  "stability": {"device_faults": 0, "exceptions": 0, "hair_guards": 0, "pool_full": 0},
+  "visual": "Per-character coverage/IoU loss <= OFF/OFF Student prediction interval plus one-pixel silhouette boundary; zero visible strands always fails. Duplicates and invalid depth count = 0.",
+  "temporal": "Backward-MV warp error, trailing residual and registered edge_flicker second-difference residual <= same-run matched OFF repeat interval plus code precision, separately rendered/presented.",
+  "lighting": "Character pre-post linear energy delta within two-sided OFF-repeat interval; matched PT shadow/backlight error within PT repeat noise.",
+  "performance": "Report observed cohorts 1/5/10, amortized hair GPU ms per character, VRAM <= driver budget and p99 <= declared 1000/targetHz; no budget inferred from previews.",
+  "limitations": ["GPU crash owner must clear runtime before any authorized live batch", "No local external Vulkan SDK validation layer found", "F8 selected-save reload and sampled lifecycle evidence are unverified live; missing transition fails closed", "Separate visible cards/strands masks and FG motion/depth provenance required; generic G-buffer hair class alone is insufficient"],
+  "shader_request_delta": 0
+}

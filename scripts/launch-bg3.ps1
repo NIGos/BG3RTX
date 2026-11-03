@@ -21,7 +21,21 @@ if (-not (Test-Path (Join-Path $bin "VkLayer_bg3rtx.dll"))) { throw "Build first
 $env:VK_ADD_LAYER_PATH = $bin
 $layers = @("VK_LAYER_BG3RTX_host")
 # Validation goes below our layer (later in the list), so it also checks what the layer records.
-if ($Validation) { $layers = $layers + @("VK_LAYER_KHRONOS_validation") }
+if ($Validation) {
+  $layers = $layers + @("VK_LAYER_KHRONOS_validation")
+  # Prefer the local SDK without installing/registering a machine-wide layer.
+  $validationRoots = @((Join-Path $root 'external'))
+  if ($env:VULKAN_SDK) { $validationRoots += $env:VULKAN_SDK }
+  $validationManifest = @($validationRoots | Where-Object { Test-Path -LiteralPath $_ } |
+    ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter 'VkLayer_khronos_validation.json' -Recurse -File } |
+    Where-Object {
+      $metadata=Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+      $library=Join-Path $_.DirectoryName $metadata.layer.library_path
+      Test-Path -LiteralPath $library
+    } | Select-Object -First 1)
+  if (-not $validationManifest.Count) { throw 'Khronos validation SDK layer absent: external/ or VULKAN_SDK must contain its manifest and DLL' }
+  $env:VK_ADD_LAYER_PATH = "$bin;$($validationManifest[0].DirectoryName)"
+}
 $env:VK_INSTANCE_LAYERS = ($layers -join ";")
 $env:VK_LOADER_LAYERS_ENABLE = ($layers -join ",")
 if ($Clean) {

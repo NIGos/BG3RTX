@@ -1,0 +1,329 @@
+{
+ "name": "go1-camp",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 120,
+ "timeout": 621,
+ "repeat": 1,
+ "live_batch": "gpu-opt1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/gpu_opt1/plans/gpu_opt1.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "\\[water\\]",
+  "gi: GPU cost",
+  "\\[rrpost\\] exposure (held|probe)",
+  "\\[geo\\] RT capture",
+  "\\[cascade\\] casters",
+  "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+  "gi: trace pass",
+  "gi: GPU cost",
+  "gi: background builds",
+  "building in the background",
+  "\\[em\\]",
+  "\\[geo\\]",
+  "\\[rrpost\\] exposure",
+  "rf: reflection pass",
+  "ls: local-light shadow pass"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "gi: trace pass .*GPU median",
+  "gi: GPU cost .*average of 300 frames",
+  "\\[trace\\] frame \\d+ written",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+ ],
+ "expect_every": [
+  {
+   "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ],
+   "min": 1
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ],
+   "min": 1
+  },
+  {
+   "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+   "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+   "match": "; non-finite terms 0 \\(",
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ],
+   "min": 1
+  },
+  {
+   "name": "no pipeline builds in every measured window",
+   "select": "gi: background builds \\(\\d+ frames\\):",
+   "match": ": 0 frames waiting, 0 pending, 0 started",
+   "min": 1,
+   "windows": [
+    "shot-off-a",
+    "cost-off-a",
+    "shot-compact",
+    "cost-compact",
+    "shot-off-b",
+    "cost-off-b",
+    "shot-alpha",
+    "cost-alpha",
+    "shot-off-c",
+    "cost-off-c",
+    "shot-water",
+    "cost-water",
+    "shot-off-d",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "no skipped background pass in measured windows",
+   "select": "building in the background",
+   "match": "(?!)",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "shot-off-a",
+    "cost-off-a",
+    "shot-compact",
+    "cost-compact",
+    "shot-off-b",
+    "cost-off-b",
+    "shot-alpha",
+    "cost-alpha",
+    "shot-off-c",
+    "cost-off-c",
+    "shot-water",
+    "cost-water",
+    "shot-off-d",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "complete trace timer every cost state",
+   "select": "gi: trace pass",
+   "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "complete GI timer every cost state",
+   "select": "gi: GPU cost",
+   "match": "average of 300 frames",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "rf: reflection pass complete timer per cost state",
+   "select": "rf: reflection pass",
+   "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+   "period_frames": 300,
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "ls: local-light shadow pass complete timer per cost state",
+   "select": "ls: local-light shadow pass",
+   "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+   "period_frames": 300,
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "enclosing RT cost complete timer",
+   "select": "rt passes: GPU cost",
+   "match": "average of 300 frames",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "water compose GPU timer present",
+   "select": "\\[water\\] compose GPU",
+   "match": "\\([1-9]\\d* timed frames:",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  },
+  {
+   "name": "water reflection GPU timer present",
+   "select": "\\[water\\] reflections GPU",
+   "match": "\\([1-9]\\d* timed;",
+   "min": 1,
+   "windows": [
+    "cost-off-a",
+    "cost-compact",
+    "cost-off-b",
+    "cost-alpha",
+    "cost-off-c",
+    "cost-water",
+    "cost-off-d"
+   ]
+  }
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "\\[water\\] water geometry UNAVAILABLE",
+  "\\[water\\] build submission failed",
+  "\\[water\\] reflections unavailable",
+  "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
+  "\\[water\\] compose UNAVAILABLE",
+  "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+  "\\[water\\] compose: variant pipeline creation failed",
+  "\\[water\\] compose: a water pipeline blends",
+  "\\[rrpost\\] exposure hold REFUSED",
+  "\\[cascade\\] could not allocate",
+  "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
+  "skipped: no variant for"
+ ],
+ "expect_runner": [
+  "\\[window-mode\\].*visible_unfocused",
+  "\\[motion-trace\\] phase=5 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=7 label=shot-compact repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-off-b repeat=0",
+  "\\[motion-trace\\] phase=11 label=shot-alpha repeat=0",
+  "\\[motion-trace\\] phase=13 label=shot-off-c repeat=0",
+  "\\[motion-trace\\] phase=15 label=shot-water repeat=0",
+  "\\[motion-trace\\] phase=17 label=shot-off-d repeat=0",
+  "\\[motion-plan\\] complete phases=20\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.",
+ "estimated_phase_seconds": 321,
+ "window_mode": "visible_unfocused_fg",
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 1,
+  "startup_only": [
+   "rt_xfb_mb"
+  ]
+ }
+}

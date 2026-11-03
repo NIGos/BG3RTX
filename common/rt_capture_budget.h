@@ -21,6 +21,15 @@ inline uint64_t mesh_pool_capacity(uint64_t current,uint64_t needed,uint64_t fir
  while(cap<current+needed)cap*=2;
  return (std::min)(cap,cap_max);
 }
+// Admission precedes optional native-layout cache uploads. Pending GPU ranges
+// remain charged in used; LRU eviction cannot make them immediately reusable.
+inline bool mesh_cache_admit(uint64_t pool,uint64_t acceleration,uint64_t vertices,
+                              uint64_t blas,uint64_t budget){
+ if(pool>kMeshPoolHardCap || vertices>kMeshPoolHardCap-pool ||
+    pool>budget || acceleration>budget-pool)return false;
+ const uint64_t free=budget-pool-acceleration;
+ return vertices<=free && blas<=free-vertices;
+}
 // The cascade capture after a frame that overflowed: its demand (captured + left-out bytes) + 25%, in
 // 16 MB steps, under the same 2047 MB / device-range cap; never below `current`.
 inline uint64_t cascade_grow(uint64_t current,uint64_t demand,uint64_t storage_limit){

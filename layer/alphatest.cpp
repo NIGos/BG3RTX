@@ -739,7 +739,7 @@ void alpha_device_destroyed(DeviceData* dd) {
 // Only the rich current-Sun stream has per-draw material records. Do not add
 // these hashes to global alpha_lookup: legacy F-1 would merely skip cutouts.
 bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
- if(!g_on || !g_tileset_layout || !cfg_hot(CfgHot::rt_native_tileset))return false;
+ if(!g_on || !g_tileset_layout || !native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0))return false;
  const auto* recipe=native_tileset_coverage::lookup_shadow(fs);if(!recipe)return false;
  *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe->uv;out->tex_set=1;out->tex_bind=recipe->green_binding;
  out->ubo_set=1;out->ubo_bind=recipe->material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
@@ -781,10 +781,10 @@ void camera_fade_marked(uint32_t instances, uint64_t tris) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && cfg_hot(CfgHot::rt_native_tileset)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
+  if(g_tileset_layout && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
     const auto& recipe=*native_tileset_coverage::lookup_camera(fs);
     *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe.uv;out->tex_set=1;out->tex_bind=recipe.green_binding;
     out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;

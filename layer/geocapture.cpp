@@ -104,6 +104,8 @@ uint64_t cascade_bytes() {
   return (std::max)(uint64_t(cascade_mb()) << 20, g_cc_grown.load());
 }
 std::atomic<uint32_t> g_gbuf_w{0}, g_gbuf_h{0};   // render resolution, from the last G-buffer pass
+std::mutex g_gbuf_viewport_mu;
+float g_gbuf_viewport[4] = {};                     // its viewport 0 (rt_hair_groom_primary)
 std::atomic<uint64_t> g_gbuf_depth{0};            // the last G-buffer pass's depth image (the prepass writes it)
 thread_local int t_last_uv = -1;       // UV location of the module patched last on this thread
 thread_local uint32_t t_last_hair_outputs = 0;
@@ -422,6 +424,11 @@ VKAPI_ATTR void VKAPI_CALL CmdSetViewport(VkCommandBuffer cmd, uint32_t first, u
     if (CmdState* s = cmd_state(cmd)) {
       s->viewport = vps[0];
       s->has_viewport = true;
+      if (s->in_pass && s->pass.width == g_gbuf_w.load() && s->pass.height == g_gbuf_h.load() && is_gbuffer(s->pass)) {
+        std::lock_guard<std::mutex> lock(g_gbuf_viewport_mu);
+        const float v[4] = {vps[0].x, vps[0].y, vps[0].width, vps[0].height};
+        std::memcpy(g_gbuf_viewport, v, sizeof v);
+      }
     }
 }
 
@@ -1804,15 +1811,16 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
     // Track D phase 3: the UV goes along with the position, and the scene
     // comes from the depth prepass (rt_alpha needs rt=1; both are read here, once).
     g_alpha_mode = cfg_int("rt", 1) && cfg_int("rt_alpha", 1);
-    // Reserve a stable native-hair layout for live GUI enable; coverage remains key-gated.
-    const bool hair_requested=true;
+    // The 88-byte native-hair layout costs every capture (+37.5% bytes, about +2 ms GI on Ultra S8,
+    // smoke 2026-11-03), so it is reserved only when native hair is on at startup.
+    const bool hair_requested=cfg_int("rt_native_hair",0)!=0;
     const bool hair_split=cfg_int("rt_bvh_split",1)!=0;
     if(hair_requested && !hair_split)
       log("[geo] rt_native_hair rejected: requires rt_bvh_split=1 at startup; legacy procedural range not implemented");
     g_stride = g_alpha_mode ? (hair_requested && hair_split ? 88 : cfg_int("rt_hit_material",0) && hair_split ? 64 : 24) : 16;
     g_stride_without_tileset=g_stride;
-    g_tileset_capture=g_alpha_mode && hair_split && cfg_hot(CfgHot::rt_native_tileset)!=0;
-    if(cfg_hot(CfgHot::rt_native_tileset) && !g_tileset_capture)log("[geo] rt_native_tileset rejected: restart with rt_alpha=1 rt_bvh_split=1");
+    g_tileset_capture=g_alpha_mode && hair_split && (cfg_hot(CfgHot::rt_native_tileset)!=0 || cfg_hot(CfgHot::rt_hit_material_paks)!=0);
+    if((cfg_hot(CfgHot::rt_native_tileset) || cfg_hot(CfgHot::rt_hit_material_paks)) && !g_tileset_capture)log("[geo] native Tileset / pak COLOR rejected: restart with rt_alpha=1 rt_bvh_split=1");
     if(g_tileset_capture)g_stride=(std::max)(g_stride,cfg_int("rt_hit_material",0)?80u:40u);
     log("[geo] transform feedback %s: vertex shaders get Position%s XFB decorations (stride %u)%s",
         g_on ? "enabled" : "FAILED to load", g_alpha_mode ? " + UV" : "", g_stride,
@@ -1830,6 +1838,11 @@ void geo_device_created(DeviceData* dd, bool xfb_enabled) {
 bool geo_native_tileset_enabled() { return g_tileset_capture; }
 void geo_native_tileset_disable(){g_tileset_capture=false;g_stride=g_stride_without_tileset;}
 
+void geo_render_size(uint32_t* width, uint32_t* height) { *width = g_gbuf_w.load(); *height = g_gbuf_h.load(); }
+void geo_gbuffer_viewport(float out[4]) {
+  std::lock_guard<std::mutex> lock(g_gbuf_viewport_mu);
+  std::memcpy(out, g_gbuf_viewport, sizeof g_gbuf_viewport);
+}
 bool geo_native_hair_enabled() { return g_stride >= 88u && g_alpha_mode; }
 VkDeviceSize geo_ubo_align() { return g_ubo_align ? g_ubo_align : 256; }
 
@@ -1970,6 +1983,13 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   const auto* ua = vi.uv_input_location >= 0 ? attr(vi.uv_input_location) : nullptr;
   const auto* ub = ua ? binding(ua->binding) : nullptr;
   ip.uv_ok = ub && ub->inputRate == VK_VERTEX_INPUT_RATE_VERTEX;
+  ip.paks_cull_known=ci.pRasterizationState && !ci.pRasterizationState->pNext;
+  if(ci.pDynamicState)for(uint32_t d=0;d<ci.pDynamicState->dynamicStateCount;++d)
+    if(ci.pDynamicState->pDynamicStates[d]==VK_DYNAMIC_STATE_CULL_MODE)ip.paks_cull_known=false;
+  ip.paks_two_sided=ip.paks_cull_known && ci.pRasterizationState->cullMode==VK_CULL_MODE_NONE;
+  if(ip.uv_ok && ua->format==VK_FORMAT_R32G32_SFLOAT && ua->binding<CmdState::kMaxVertexBindings){
+    ip.uv_binding=uint8_t(ua->binding);ip.uv_offset=ua->offset;ip.uv_stride=dyn_stride?0:ub->stride;
+  }
   ip.ok = true;
   return ip;
 }
@@ -2616,7 +2636,7 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   if (c->rt && !alpha && (d.skip == 3 || (d.skip == 0 && c->cursor + d.reserved > c->opaque_end)))
     ++c->opaque_overflow, c->opaque_overflow_bytes += d.reserved;
-  if(c->rt && g_tileset_capture && cfg_hot(CfgHot::rt_native_tileset) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
+  if(c->rt && g_tileset_capture && (cfg_hot(CfgHot::rt_native_tileset) || cfg_hot(CfgHot::rt_hit_material_paks)) && native_tileset_coverage::lookup_camera(s->fs)!=nullptr && (!alpha || !capture))alpha_tileset_incomplete();
   uint32_t materialRecord=UINT32_MAX;
   if(capture && c->rt && !alpha && !audit && pi.topo==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
     materialRecord=native_hit::note_opaque_prepass(cmd,s,args,d.offset,g_stride,uint32_t(prims));
@@ -2999,6 +3019,7 @@ void geo_device_destroyed(DeviceData* dd) {
 
 // From the tracker's vkDestroyBuffer hook (the one hook for it).
 void geo_forget_buffer(VkBuffer b) {
+  native_hit::pak_uv_forget_buffer(b);
   std::lock_guard<std::mutex> lock(g_mu);
   g_buffer_usage.erase(b);
   g_buffer_size.erase(b);

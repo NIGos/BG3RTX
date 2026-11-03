@@ -9,7 +9,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, geom, mesh, render, strands2d  # noqa: E402
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, dual, geom, mesh, primary, render, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -344,7 +344,120 @@ def test_bsdf():
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
 
-for t in (test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_primary():
+    rng = np.random.default_rng(5)
+    v = rng.normal(size=(20000, 3))
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    # RT0 is RG16F: round through float16 like the target. Normals facing the camera (view z < 0.5) only:
+    # near the pole n.z = 1 the stereographic value diverges, the game's own precision limit.
+    nv = v[v[:, 2] < 0.5]
+    back = primary.stereo_decode(primary.stereo_encode(nv).astype(np.float16).astype(np.float64))
+    err = np.degrees(np.arccos(np.clip((back * nv).sum(1), -1, 1)))
+    check("RT0 stereographic normal round trip through the game's decode < 0.2 deg", err.max() < 0.2, err.max())
+    back = primary.oct12_decode(primary.oct12_encode(v))
+    err = np.degrees(np.arccos(np.clip((back * v).sum(1), -1, 1)))
+    # 12 bits over [-1, 1] per octahedral axis: a step of 2/4094; the angle error stays below ~0.06 deg.
+    check("RT3 12:12 octahedral tangent round trip through bg3_oct12 < 0.1 deg", err.max() < 0.1, err.max())
+    bytes_ok = np.allclose(primary.oct12_encode(v) * 255, np.rint(primary.oct12_encode(v) * 255))
+    check("RT3 encoding is whole bytes", bytes_ok)
+    check("RT2.w class 5 with light mask 3", primary.rt2_w_decode(primary.rt2_w(5, 3)) == (5, False, 3))
+    # Depth along the camera ray: explicit native projection vs the ratio formula.
+    near, far = 0.1, 1000.0
+    a = primary.depth_a(near, far)
+    b = -a * far
+    check("native reversed depth: near 1, far 0", abs(a + b / near - 1) < 1e-9 and abs(a + b / far) < 1e-12)
+    dirs = rng.normal(size=(1000, 3))
+    dirs[:, 2] = np.abs(dirs[:, 2]) + 0.5
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    tc, ts = rng.uniform(0.3, 50, 1000), rng.uniform(0.3, 50, 1000)
+    dc, ds = a + b / (tc * dirs[:, 2]), a + b / (ts * dirs[:, 2])
+    rel = np.abs(primary.strand_depth(dc, tc, ts, a) - ds) / ds
+    check("strand depth from the card fragment's depth equals the projected hit", rel.max() < 1e-9, rel.max())
+    check("orthographic strand depth is affine", abs(primary.strand_depth_ortho(0.5, 2.0, 3.0, -0.01) - 0.49) < 1e-12)
+    t = rng.normal(size=(500, 3))
+    t /= np.linalg.norm(t, axis=1, keepdims=True)
+    to_cam = rng.normal(size=(500, 3))
+    n = primary.fibre_normal(t, to_cam)
+    check("fibre normal perpendicular to the tangent, facing the camera",
+          np.abs((n * t).sum(1)).max() < 1e-9 and np.all((n * to_cam).sum(1) >= -1e-12))
+    # Tracer: one horizontal strand of radius 2 mm, 1 m in front of a 65 px camera (row 32 on the axis), 10 deg field.
+    r = 0.002
+    pts = np.array([[-0.05, 0.0, 1.0], [0.05, 0.0, 1.0]])
+    cam = primary.Camera(np.zeros(3), np.array([0.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), np.radians(10.0), (65, 65))
+    hits = primary.trace(pts, np.array([r, r]), np.array([0, 2]), cam)
+    pixel = 2 * np.tan(np.radians(5.0)) / 65            # metres per pixel at 1 m
+    rows = np.flatnonzero(hits.hit[:, 32])
+    check("tracer: strand covers 2 r / pixel rows", abs(len(rows) - 2 * r / pixel) <= 1, (len(rows), 2 * r / pixel))
+    centre = hits.t[rows, 32].min()
+    check("tracer: front distance 1 m - r on the axis row", abs(centre - (1.0 - r)) < 2e-4, centre)
+    check("tracer: tangent +x, parameter at the centre column ~0.5",
+          np.allclose(hits.tangent[rows[0], 32], [1, 0, 0]) and abs(hits.v[rows[0], 32] - 0.5) < 0.02)
+    p0, p1 = pts[0], pts[1]
+    hit = hits.t[rows[0], 32] * cam.rays().reshape(65, 65, 3)[rows[0], 32]
+    check("segment parameter of the hit equals the tracer's", abs(primary.segment_param(hit, p0, p1) - hits.v[rows[0], 32]) < 1e-9)
+    gb = primary.gbuffer(hits, cam)
+    nb = primary.stereo_decode(gb["rt0"][rows[0], 32])
+    check("tracer: G-buffer normal faces the camera (view z < 0)", nb[2] < -0.9, nb)
+    # Motion vector: a world-static point, camera moved 5 cm; the jitter-free pixels of both frames differ by the MV.
+    size = np.array([1280.0, 720.0])
+
+    def vp_at(cam_pos):
+        f, r, u = np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])
+        m = np.zeros((4, 4))
+        k = np.tan(np.radians(25.0))
+        m[:3, 0], m[:3, 1], m[:3, 3] = r / (k * size[0] / size[1]), u / k, f
+        m[:3, 2], m[3, 2] = -1e-4 * f, 0.1
+        return m
+
+    def pixel(p_rel, vp):
+        c = np.append(p_rel, 1.0) @ vp
+        return ((c[:2] / c[3]) * np.array([0.5, -0.5]) + 0.5) * size
+
+    world, cam0, cam1 = np.array([0.1, 1.6, 2.0]), np.array([0.0, 1.5, 0.0]), np.array([0.05, 1.5, 0.0])
+    jit, pjit = np.array([0.3, -0.2]), np.array([-0.1, 0.4])
+    frag = pixel(world - cam1, vp_at(cam1)) - np.array([jit[0], -jit[1]])   # the jittered raster position
+    mv = primary.motion_vector(frag, world - cam0, vp_at(cam0), np.ones(2), np.zeros(2), size, jit, pjit)
+    want = pixel(world - cam1, vp_at(cam1)) - pixel(world - cam0, vp_at(cam0)) - np.array([pjit[0], -pjit[1]])
+    check("motion vector of a static point = jitter-free pixel difference (native b70cadc5 form)",
+          np.allclose(mv, want, atol=1e-9), (mv, want))
+    check("tracer: G-buffer tangent decodes to +x", np.allclose(primary.oct12_decode(gb["rt3"][rows[0], 32]), [1, 0, 0], atol=1e-3))
+
+
+def test_dual():
+    # Dual scattering (Zinke 2008, paper densities 0.7) and its path-traced per-channel correction (TABLE_K) vs a
+    # path-traced slab of random fibres, flux leaving toward the upper hemisphere. Measured 2026-11-03 for the
+    # CHAR_Hair colour: single 0.21/0.29/0.40, dual 0.70/0.73/0.75, corrected 1.02/1.01/1.01 of the reference;
+    # held-out colours corrected 0.97-1.04 (one 1.12 at 18% reference spread).
+    c, r = bsdf.CHAR_HAIR["color"], bsdf.CHAR_HAIR["roughness"]
+    ref = dual.slab_retro_reference(c, r, n=6000, seed=21)
+    ss = dual.slab_retro_dual(c, r, n=60000, single_only=True)
+    ds = dual.slab_retro_dual(c, r, n=60000)
+    dk = dual.slab_retro_dual(c, r, n=60000, corrected=True)
+    # Bounds: two 12000-path references of this colour spread <= 3%; 6000 paths and a 10% margin.
+    check("corrected dual scattering within 10% of the path-traced hair", np.all(np.abs(dk / ref - 1) < 0.1), dk / ref)
+    check("uncorrected dual scattering below it (0.6..0.85)", np.all(ds / ref > 0.6) and np.all(ds / ref < 0.85), ds / ref)
+    check("single scattering alone well below dual scattering", np.all(ss / ref < ds / ref - 0.2), (ss / ref, ds / ref))
+    hue = lambda v: v / v.sum()
+    check("corrected model keeps the reference hue (chromaticity within 0.02)", np.abs(hue(dk) - hue(ref)).max() < 0.02,
+          (hue(dk), hue(ref)))
+    av = dual.averages((1, 1, 1), r, n=100000)
+    check("white fibre: forward + backward fractions ~1 (energy)", np.all(np.abs(av.a_f + av.a_b - 1) < 0.03), av.a_f + av.a_b)
+    check("correction table: k > 1 everywhere (the model misses multiple scattering, never adds)",
+          np.all(np.asarray(dual.TABLE_K) > 1))
+    gen = (ROOT / "shaders" / "rt" / "hair_dual_table.hlsli").read_text(encoding="utf-8")
+    check("shaders/rt/hair_dual_table.hlsli is current (python -m tools.hair_groom.dual --hlsl)", gen == dual.hlsl_tables())
+    # The shader's table model against the per-colour Monte Carlo averages (interpolation over the grid).
+    rng = np.random.default_rng(9)
+    k = 20000
+    tt, wo, wi = (rng.normal(size=(k, 3)) for _ in range(3))
+    tt, wo, wi = (v / np.linalg.norm(v, axis=1, keepdims=True) for v in (tt, wo, wi))
+    h, nf = rng.uniform(-1, 1, k), rng.integers(0, 4, k)
+    a = dual.shade_table(tt, wo, wi, h, nf, c, r).mean(0)
+    b_ = dual.shade(tt, wo, wi, h, nf, c, r, corrected=True).mean(0)
+    check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
+
+
+for t in (test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

@@ -52,6 +52,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/bvhsplit.cpp
   layer/emissive.cpp
   layer/water.cpp
+  layer/hair_primary.cpp
   layer/devfault.cpp
   layer/aftermath.cpp
   layer/streamline.cpp
@@ -338,6 +339,8 @@ if(BG3RTX_OMM_GPU_SMOKE)
 endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
+add_executable(alpha_metadata_cache_test tests/alpha_metadata_cache_test.cpp)
+add_test(NAME alpha_metadata_cache_test COMMAND alpha_metadata_cache_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
@@ -363,7 +366,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom)
+  foreach(py_test host_atomics_lint queue_gates dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom gpu_opt1_water mesh_paks_offline mesh_paks_compact live_flow launcher_ui hair_validation)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -420,6 +423,10 @@ add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
 add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
 add_executable(mesh_content_id_test tests/mesh_content_id_test.cpp)
 add_test(NAME mesh_content_id_test COMMAND mesh_content_id_test)
+add_executable(mesh_paks_test tests/mesh_paks_test.cpp layer/shader_cache.cpp)
+add_test(NAME mesh_paks_test COMMAND mesh_paks_test)
+add_executable(pak_uv_join_test tests/pak_uv_join_test.cpp)
+add_test(NAME pak_uv_join_test COMMAND pak_uv_join_test)
 add_executable(hair_groom_asset_test tests/hair_groom_asset_test.cpp)
 add_test(NAME hair_groom_asset_test COMMAND hair_groom_asset_test)
 add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
@@ -494,6 +501,38 @@ target_link_libraries(native_hit_gpu_fixture PRIVATE vulkan-1)
 add_dependencies(native_hit_gpu_fixture native_hit_gpu_fixture_spv)
 add_test(NAME native_hit_gpu_fixture COMMAND native_hit_gpu_fixture ${NATIVE_HIT_FIXTURE_SPV})
 set_tests_properties(native_hit_gpu_fixture PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
+# Primary strand hair GPU check (docs/RTX_HAIR_PRIMARY.md 1b): LSS camera rays and the G-buffer variant's helpers
+# against the CPU reference (tests/hair_primary_gpu_test.py); skips (77) without linear swept spheres.
+set(HAIR_PRIMARY_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_primary_gpu_check.spv)
+add_custom_command(OUTPUT ${HAIR_PRIMARY_CHECK_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_primary_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_PRIMARY_CHECK_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_primary_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_primary.hlsli VERBATIM)
+set(HAIR_BSDF_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_bsdf_gpu_check.spv)
+add_custom_command(OUTPUT ${HAIR_BSDF_CHECK_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_bsdf_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_BSDF_CHECK_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_bsdf_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_bsdf.hlsli VERBATIM)
+set(HAIR_DUAL_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_dual_gpu_check.spv)
+add_custom_command(OUTPUT ${HAIR_DUAL_CHECK_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_DUAL_CHECK_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual.hlsli
+          ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual_table.hlsli ${CMAKE_SOURCE_DIR}/shaders/rt/hair_bsdf.hlsli VERBATIM)
+add_custom_target(hair_primary_gpu_check_spv ALL DEPENDS ${HAIR_PRIMARY_CHECK_SPV} ${HAIR_BSDF_CHECK_SPV} ${HAIR_DUAL_CHECK_SPV})
+add_executable(hair_primary_gpu_check tools/hair_primary_gpu_check.cpp)
+target_include_directories(hair_primary_gpu_check PRIVATE ${VULKAN_SDK}/Include)
+target_link_directories(hair_primary_gpu_check PRIVATE ${VULKAN_SDK}/Lib)
+target_link_libraries(hair_primary_gpu_check PRIVATE vulkan-1)
+add_dependencies(hair_primary_gpu_check hair_primary_gpu_check_spv)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME hair_primary_gpu_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/hair_primary_gpu_test.py
+           $<TARGET_FILE:hair_primary_gpu_check> ${HAIR_PRIMARY_CHECK_SPV} --bsdf-spv ${HAIR_BSDF_CHECK_SPV}
+           --dual-spv ${HAIR_DUAL_CHECK_SPV}
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set_tests_properties(hair_primary_gpu_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+endif()
 
 # Hair cost gate (docs/RTX_HAIR_GROOM_EXPERIMENT.md): alpha-tested cards vs an LSS strand groom on a
 # standalone device. Needs VK_NV_ray_tracing_linear_swept_spheres and an input from

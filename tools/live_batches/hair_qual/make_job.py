@@ -3,6 +3,10 @@
 The rejected card batch can no longer generate jobs or plans (README.md).
 """
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tools.live_batches.live_flow import repair_known_forbids
 
 HERE = Path(__file__).resolve().parent
 BATCH = "hair_qual"

@@ -4,6 +4,7 @@
 #include "mesh_content_id.h"
 #include "hair_groom.h"
 #include "../common/hair_groom_budget.h"
+#include "../common/hair_primary.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -426,11 +427,15 @@ struct HairBoundsPush {
 static_assert(sizeof(HairBoundsPush)==112);
 // rt_hair_groom: the strand groom of a per-draw slot's matched hair draw (groom_decide).
 constexpr uint32_t kGroomMax = 64;     // groom instances per scene (one per matched hair draw)
+static_assert(kGroomMax == hair_primary::kMaxGrooms, "the primary header table has one row per groom instance");
 constexpr uint32_t kGroomLods = 4;
 struct GroomSlot {
   uint64_t id = 0;
   int lod = -1, lod_votes = 0;
   VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
+  VkDeviceSize uv_off = 0;     // rt_hair_groom_primary: per-point card UV after the bounds (0: not allocated)
+  VkDeviceSize prev_off = 0;   // and last frame's points after the UVs (valid once prev_frames > 0)
+  uint32_t prev_frames = 0;    // updates since the points range was allocated (the first copies garbage)
   AsAlloc as;
   VkDeviceSize build_scratch = 0, update_scratch = 0;
   bool built = false;          // the BLAS holds a full build of this LOD
@@ -480,6 +485,7 @@ struct FrameDraw {
   uint32_t groom_indices = 0;   // the draw's index count (also when unmatched: the log names it)
   hair_groom::JoinMiss groom_miss = hair_groom::JoinMiss::None;
   uint64_t groom_identity = 0;  // the draw's identity without the per-frame occurrence (the join caches)
+  uint64_t hp_key = 0;          // rt_hair_groom_primary: the index-range key its G-buffer draw is swapped by
   std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
@@ -832,6 +838,7 @@ struct GroomAsset {
 // Mesh-pool bytes held by grooms (LOD arrays and slot points) against common/hair_groom_budget.h pool_budget.
 VkDeviceSize g_groom_pool_used = 0;
 uint64_t g_groom_budget_refusals = 0;
+uint64_t g_groom_soup_refused = 0;   // matched draws without a live soup range this frame (held, not captured)
 std::unordered_map<uint64_t, GroomAsset> g_groom_assets;
 struct GroomUpload { Buf staging; VkDeviceSize dst, bytes; };
 std::vector<GroomUpload> g_groom_uploads;   // recorded at the start of this build's GPU section
@@ -844,8 +851,8 @@ std::vector<uint32_t> g_groom_free_queries;
 TlasSlot g_groom_tlas[kSceneSlots];
 Buf g_groom_inst[kSceneSlots];
 Buf g_groom_scratch;
-struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, pad; };
-static_assert(sizeof(GroomPush) == 32);
+struct GroomPush { uint32_t points, soup_base, stride, tri_off, bary_off, pos_off, bounds_off, uv_off, prev_off, pad[3]; };
+static_assert(sizeof(GroomPush) == 48);
 struct GroomStats {
   uint64_t matched = 0, builds = 0, refits = 0, compacted = 0, unmatched = 0;
   uint32_t max_instances = 0;   // the most groom instances of one scene in the window
@@ -1923,6 +1930,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     // Every draw gets its join verdict (cheap: the count filter before any index read); only hair draws use it.
     fd.groom_indices = d.args.count;
     fd.groom_identity = dk;
+    fd.hp_key = hair_primary_draw_key(s, d.args);
     if (!indexed) fd.groom_miss = hair_groom::JoinMiss::NotIndexed;
     else if (!hair_groom::count_known(d.args.count)) fd.groom_miss = hair_groom::JoinMiss::CountUnknown;
     else fd.groom_id = groom_join(d, dk, &fd.groom_miss);
@@ -2153,6 +2161,34 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   g_pool_grew = false;
   pool_repack_begin(cmd, rec, now);
 
+  // Procedural bounds are required for correctness, unlike mesh-cache and
+  // hold uploads. Allocate every current draw's bounds before either optional
+  // user can consume the load burst's remaining pool space.
+  const bool native_pool = geo_native_hair_enabled();
+  if (native_pool) {
+    // Equal-key draws can be reordered by the later dynamic sort. Reserve
+    // the maximum of every native recipe, whichever duplicate wins there.
+    std::unordered_map<uint64_t,uint32_t> needed;
+    for (const FrameDraw& fd : g_draws) {
+      if (fd.cached || !fd.captured || !fd.prims) continue;
+      AlphaRec ar{};
+      if (!fd.cap_alpha || fd.rec==kNone || !alpha_native_hair_record(fd.rec,&ar)) continue;
+      auto& prims=needed[fd.dyn_key];prims=(std::max)(prims,fd.prims);
+    }
+    for (const auto& [key,prims] : needed) {
+      DynSlot& s = g_dyn[key];
+      if (s.hair_bounds_size >= VkDeviceSize(prims)*24u) continue;
+      if (s.hair_bounds_size) g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
+      s.hair_bounds_size=0;
+      // Mark newly discovered slots for normal expiry even if this scene fails.
+      s.last_used=now;
+      const VkDeviceSize bytes=(VkDeviceSize(prims)+prims/4u)*24u;
+      if (!pool_alloc(cmd,bytes,&s.hair_bounds_off)) return false;
+      s.hair_bounds_size=bytes;
+    }
+  }
+  const VkDeviceSize cache_budget = VkDeviceSize((std::max)(cfg_int("rt_mesh_budget_mb",2048),64)) << 20;
+
   bvh_cpu_mark(0);
   // ---- 1. decide: new meshes, checks, per-draw BLAS, instances ----
   struct Ext { uint64_t key; VkDeviceSize soup, soup_n, pool; uint32_t tris, mat0, matn, status; JobKind kind; uint32_t draw; };
@@ -2199,6 +2235,14 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       m.created = m.last_used = m.last_audit = now;
       m.pool_size = VkDeviceSize(m.tris) * tri_bytes;
       VkAccelerationStructureBuildSizesInfoKHR sz = blas_sizes(m.tris, stride, !m.alpha, mesh_flags);
+      // Old LRU policy reacted only after all uploads: one load could allocate
+      // millions of wide vertices while evicted ranges still awaited GPU use.
+      // A declined extraction keeps this draw's captured dynamic BLAS path.
+      if (native_pool && !capture_budget::mesh_cache_admit(g_pool_ra.used,as_bytes(),
+              m.pool_size,sz.accelerationStructureSize,cache_budget)) {
+        ++g_st.budget_deferred;
+        continue;
+      }
       if (!pool_alloc(cmd, m.pool_size, &m.pool_off)) continue;
       if (!as_create(sz.accelerationStructureSize, m.as, "BLAS chunk for a new cached mesh (stays uncached)")) {
         g_pending_free.push_back({now, -1, m.pool_off, m.pool_size});
@@ -2294,7 +2338,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<DynHoldPackJob> hold_pack_jobs;
   // rt_hair_groom: this frame's matched hair draws (groom_decide), in TLAS-instance order of their cards.
   struct GroomWork { GroomSlot* g; const GroomAsset::Lod* l; VkDeviceSize soup_off; bool refit, compact_copy; AsAlloc old;
-                     uint64_t key; uint32_t card = UINT32_MAX; };
+                     uint64_t key; uint32_t card = UINT32_MAX; uint64_t hp_key = 0; uint32_t prims = 0; };
+  const bool hp_on = hair_primary_wanted();   // rt_hair_groom_primary: per-point UVs and the published header
   std::vector<GroomWork> groom_work;
   std::unordered_map<uint64_t, size_t> groom_of_key;
   const bool groom_ready = g_groom_on && ensure_groom_pipeline() &&
@@ -2379,14 +2424,9 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if(hair && !ensure_hair_pipeline()){
       log("[hair geometry] bounds pipeline unavailable: scene rejected, RT must not pass its gate");return false;
     }
-    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u){
-      if(s.hair_bounds_size)g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
-      s.hair_bounds_size=0;
-      const VkDeviceSize bytes=(VkDeviceSize(fd.prims)+fd.prims/4u)*24u;
-      if(!pool_alloc(cmd,bytes,&s.hair_bounds_off))return false;
-      s.hair_bounds_size=bytes;
-    }
-    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",1) && s.hair_bounds_size){
+    // The bounds were reserved before the decisions (the native pool pass above; the Vulkan AABB stride is 24).
+    if(hair && s.hair_bounds_size<VkDeviceSize(fd.prims)*24u)return false;
+    if(!hair && geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim",0) && s.hair_bounds_size){
       // A toggled-to-triangle slot can remain active indefinitely. Its old
       // procedural sidecar otherwise never expires with the inactive slot LRU.
       g_pending_free.push_back({now,-1,s.hair_bounds_off,s.hair_bounds_size});
@@ -2519,6 +2559,19 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     GroomAsset* groom_src = hair && groom_ready && fd.groom_id && groom_work.size() < kGroomMax
                                 ? groom_asset(fd.groom_id, fd.groom_indices) : nullptr;
     if (groom_src && fd.prims * 3u != groom_src->indices) groom_src = nullptr;   // a partial draw of the mesh
+    // The point update reads this frame's soup at the draw's offset: only a draw captured into it this frame, inside
+    // the live range (a held draw's offset is a mesh-pool snapshot offset: reading the soup there lost the device,
+    // 2026-11-03). Such a frame keeps the slot (no update, no groom instance: its cards in every pass).
+    bool groom_keep = false;
+    if (groom_src && !hair_primary::soup_update_ok(fd.captured, fd.held, fd.soup_off, fd.prims, stride, cap.xfb_size,
+                                                   groom_src->indices / 3u)) {
+      if (g_groom_soup_refused++ < 8)
+        log("[hair groom] %016llx: no point update this frame (captured %u, held %u, soup offset %llu, %u triangles, stride %u, "
+            "soup %llu bytes): cards", (unsigned long long)fd.groom_id, unsigned(fd.captured), unsigned(fd.held),
+            (unsigned long long)fd.soup_off, fd.prims, stride, (unsigned long long)cap.xfb_size);
+      groom_src = nullptr;
+      groom_keep = true;
+    }
     if (hair && groom_ready && !fd.groom_id && fd.groom_miss == hair_groom::JoinMiss::NotHostMapped &&
         !g_groom_uv.count(fd.groom_identity) && fd.captured && !fd.held && fd.groom_indices == fd.prims * 3u &&
         fd.soup_off + VkDeviceSize(fd.groom_indices) * stride <= cap.xfb_size) {
@@ -2541,7 +2594,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
             hair_groom::join_miss_name(fd.groom_miss));
     }
     if (!groom_src) {
-      if (s.groom) { groom_release(*s.groom, now); s.groom.reset(); }
+      if (s.groom && !groom_keep) { groom_release(*s.groom, now); s.groom.reset(); }
     } else {
       if (!s.groom || s.groom->id != fd.groom_id) {
         if (s.groom) groom_release(*s.groom, now);
@@ -2554,19 +2607,29 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       bool ok = lp != nullptr;
       const GroomAsset::Lod& l = lp ? *lp : groom_src->lods[size_t(lod)];
       GroomWork w{&g, &l, fd.soup_off, false, false, {}, key};
-      if (ok && lod != g.lod) {   // a new LOD: new points range and a full build into a new BLAS
+      w.hp_key = fd.hp_key;
+      w.prims = fd.prims;   // the shader bounds every triangle read by it
+      // A new LOD, or primary strands turned on for a slot without per-point UVs: new points range and a full build.
+      if (ok && (lod != g.lod || (hp_on && g.pos_size && !g.uv_off))) {
         if (g.pos_size) {
           g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
           g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
         }
         as_destroy(g.as);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
-        g.pos_size = 0; g.built = false; g.compact = 0; g.lod = lod;
+        g.pos_size = 0; g.uv_off = 0; g.prev_off = 0; g.prev_frames = 0; g.built = false; g.compact = 0; g.lod = lod;
       }
       if (ok && !g.pos_size) {
         const VkDeviceSize pos = (VkDeviceSize(l.points) * 12 + 15) / 16 * 16;
-        ok = groom_make_room(pos + 32, now) && pool_alloc(cmd, pos + 32, &g.pos_off);
-        if (ok) { g.pos_size = pos + 32; g.bounds_off = g.pos_off + pos; g_groom_pool_used += g.pos_size; }
+        const VkDeviceSize uv = hp_on ? (VkDeviceSize(l.points) * 8 + 15) / 16 * 16 : 0, prev = hp_on ? pos : 0;
+        ok = groom_make_room(pos + 32 + uv + prev, now) && pool_alloc(cmd, pos + 32 + uv + prev, &g.pos_off);
+        if (ok) {
+          g.pos_size = pos + 32 + uv + prev; g.bounds_off = g.pos_off + pos;
+          g.uv_off = uv ? g.pos_off + pos + 32 : 0;
+          g.prev_off = prev ? g.pos_off + pos + 32 + uv : 0;
+          g.prev_frames = 0;
+          g_groom_pool_used += g.pos_size;
+        }
       }
       if (ok && !g.readback.b) ok = make_buf(g.readback, 64, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "hair groom readback");
       if (ok && !g.as.as) {
@@ -2910,9 +2973,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_groom_pl, 0, 2, wr);
       for (const GroomWork& w : groom_work) {
         const GroomPush gp{w.l->points, uint32_t(w.soup_off), stride, uint32_t(w.l->tri), uint32_t(w.l->bary),
-                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), 0};
+                           uint32_t(w.g->pos_off), uint32_t(w.g->bounds_off), uint32_t(w.g->uv_off),
+                           uint32_t(w.g->prev_off), {w.prims, 0, 0}};
         dd->vk.CmdPushConstants(cmd, g_groom_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof gp, &gp);
         dd->vk.CmdDispatch(cmd, (w.l->points + 127) / 128, 1, 1);
+        ++w.g->prev_frames;
       }
       barrier(cmd, kCS, VK_ACCESS_SHADER_WRITE_BIT, kAS | kCS | kXfer, kRW);
       for (const GroomWork& w : groom_work) {
@@ -3091,6 +3156,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
 
   bvh_cpu_mark(4);
   VkDeviceAddress groom_tlas_address = 0;   // rt_hair_groom: this slot's groom TLAS (0: none)
+  hair_primary::Row hp_rows[hair_primary::kMaxGrooms] = {};   // rt_hair_groom_primary: groom k's pool offsets
+  uint64_t hp_keys[hair_primary::kMaxGrooms] = {};            // and its draw's index-range key
   uint32_t groom_count = 0;
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
@@ -3317,6 +3384,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
         const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
+        if (groom_count < hair_primary::kMaxGrooms) {
+          // Previous points: valid from the second update of this points range (the first copies stale bytes).
+          hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
+                                  w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
+          hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
+        }
         ++groom_count;
       }
       VkAccelerationStructureGeometryKHR gg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -3344,6 +3417,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         VkAccelerationStructureDeviceAddressInfoKHR ai{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
         ai.accelerationStructure = g_groom_tlas[slot].as;
         groom_tlas_address = dd->vk.GetAccelerationStructureDeviceAddressKHR(dd->device, &ai);
+        if (hp_on) {
+          uint32_t w = 0, h = 0;
+          float viewport[4];
+          geo_render_size(&w, &h);
+          geo_gbuffer_viewport(viewport);
+          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, hp_rows, hp_keys, groom_count, w, h, viewport);
+        }
       } else {
         groom_count = 0;
       }

@@ -1,0 +1,14 @@
+## Lower-preset trace scaling (branch gpu-opt2, offline candidate, 2026-11-03)
+- Baseline dc3ef899939b; no commits, git metadata edits, game launches or real queue submissions.
+- Added rt_trace_scale: half-width/height GI and reflection traces, 1 RT spp, full-grid reconstruction and RR guides.
+- Low/Medium use 0.5; High/Ultra stay 1.0 per PERF_AUDIT_GPU. Low preserves screen-space GI 2 rays and reflections off.
+- Far/bounce/emission remain off below Ultra; existing levels are unchanged and protected by settings tests.
+- Scale 1.0: 236/236 baseline shader requests byte-identical. ABI unchanged.
+- Manifest 145 -> 163 (+18): reflection binding 31 requires a layout variant; scaled requests 19/19 compile/validate.
+- Corrected synthetic replay, 32 frames: GI mean error -3.94%, within noise band +/-10.16% (4 paired SE); matched pixels exact.
+- Initial seed sweep INVALID: material epochs did not follow seeds; fixture corrected and zero-energy frames now fail.
+- PT furnace 4.996864 vs 5.0 (-0.063%, SE 0.012); replay/PT CTests and 5 targeted CPU/tool CTests pass; core builds.
+- Prepared gpu_opt2 batch: camp High, S8 Medium, one launch each; 1.0/0.5/1.0, held static shots, complete 300-frame costs.
+- Dry-run passes: 270 s phases, estimated 1,100 MB. predicted.json is uncommitted as requested.
+- Actual GPU ms UNMEASURED (audit prediction: 0.4-1.3 ms saved); real-scene/reflection/RR energy and thin-detail quality pending.
+- Check camp foliage and S8 reflections; analyze float pre-post energy against same-run OFF repeats. No quality promotion claimed.

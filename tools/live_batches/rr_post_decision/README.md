@@ -1,5 +1,7 @@
 # ef3: static S8 RR post-order decision
 
+Historical: superseded by `post_temporal`. The user rejected `rr_hair_resolve`; this attribution job must not enter the next live series. Its original job, gates and predictions remain as history.
+
 Prepared outside every watched inbox. No game launch or queue staging is part
 of this task. `predicted.json` was written before the job and plan.
 

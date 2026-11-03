@@ -351,6 +351,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     if (rt_on && rt_enabled()) bvh_device_created(dd);
     if (rt_on && rt_enabled()) em_device_created(dd);
     if (rt_on && rt_enabled()) water_device_created(dd);   // M5.1: allocates only once rt_water_geometry=1
+    if (rt_on && rt_enabled()) hair_primary_device_created(dd, ci_orig);   // allocates with the first hair pipeline
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -362,11 +363,14 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
   if (!dd) return;
   sl_device_destroy(dd);
   if (dd == g_main) {
+    ngx_join_prewarm();
+    rrpost_join_prewarm();
     core_shutdown();
     replay_device_destroyed(dd);
     terrain_capture_device_destroyed(dd);
     em_device_destroyed(dd);
     water_device_destroyed(dd);
+    hair_primary_device_destroyed(dd);
     bvh_device_destroyed(dd);
     alpha_device_destroyed(dd);
     rt_device_destroyed(dd);

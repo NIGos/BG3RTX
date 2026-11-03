@@ -137,3 +137,40 @@ function Get-RotationMouseMessages($action) {
   }
   @{message=$message;buttons=$buttons;x=$action.x;y=$action.y}
 }
+
+# Search the whole current run, including cached pipelines from earlier phases.
+# Match individual lines and use the latest matching record for each requirement.
+function Test-CameraPlanReady($step, [string]$text) {
+  foreach ($pattern in @($step.wait_log)) {
+    $latest=$null
+    foreach ($line in ($text -split "`n")) {
+      if ($line -match $pattern) { $latest=$line }
+    }
+    if ($null -eq $latest) { return $false }
+  }
+  return $true
+}
+
+# Central list of phase fields consumed by auto-run and the camera samplers.
+# Fail offline on typos instead of silently accepting an ignored instruction.
+function Assert-CameraPlanFields($step) {
+  $allowed=@('label','kind','speed','seconds','repeat_ms','scan','capture_at','serial',
+    'motion_start','motion_end','pixels_per_second','direction','set','trace_at',
+    'turn_mode','frame_delta_pixels','frame_interval','key_period_ms','key_down_ms',
+    'hover_x','hover_y','shift','shift_hold','wheel','wheel_ms','wait_log','wait_log_timeout','recenter','reload_selected')
+  $names=if ($step -is [System.Collections.IDictionary]) { @($step.Keys) } else { @($step.PSObject.Properties.Name) }
+  foreach ($name in $names) {
+    if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
+  }
+  if ($step.wait_log) {
+    if (-not ($step.wait_log_timeout -gt 0) -or [double]::IsInfinity([double]$step.wait_log_timeout)) {
+      throw 'wait_log requires a finite positive wait_log_timeout'
+    }
+    foreach ($pattern in @($step.wait_log)) {
+      if (-not ($pattern -is [string]) -or -not $pattern.Trim()) { throw 'wait_log requires nonempty regex strings' }
+      [void][regex]::new($pattern)
+    }
+  } elseif ($step.wait_log_timeout) { throw 'wait_log_timeout requires wait_log' }
+  if ('recenter' -in $names -and -not ($step.recenter -is [bool])) { throw 'recenter requires a boolean' }
+  if ('reload_selected' -in $names -and -not ($step.reload_selected -is [bool])) { throw 'reload_selected requires a boolean' }
+}

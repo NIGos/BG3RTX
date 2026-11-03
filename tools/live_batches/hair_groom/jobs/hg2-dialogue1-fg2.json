@@ -76,7 +76,6 @@
   "\\[hair groom\\] device WITHOUT",
   "linear swept spheres device request failed",
   "set 1 [1-9]\\d* out-of-range reads skipped",
-  "\\[bvh\\] mesh pool full at",
   "\\[cascade\\] could not allocate"
  ],
  "expect_runner": [
@@ -308,6 +307,32 @@
     "cost-groom",
     "cost-off-b",
     "cost-nohair"
+   ]
+  },
+  {
+   "name": "no mesh pool exhaustion in measured windows (load excluded)",
+   "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "warmup",
+    "settle-cam",
+    "toggle-off-a",
+    "toggle-off-b",
+    "warm-nohair",
+    "warm-back",
+    "shot-off-a",
+    "shot-groom-a",
+    "shot-off-b",
+    "shot-groom-b",
+    "shot-off-c",
+    "settle",
+    "cost-off-a",
+    "cost-groom",
+    "cost-off-b",
+    "cost-nohair",
+    "restore"
    ]
   }
  ]

@@ -1,0 +1,23 @@
+# Hair validation: FAIL
+
+- device_faults: FAIL: device_faults: VK_ERROR_DEVICE_LOST; [fault]   read invalid
+- exceptions: FAIL: exceptions: [crash] exception 0x
+- pool_full: FAIL: pool_full: pool full
+- hair_guards: PASS: hair_guards: zero forbidden events
+- guard_evidence: PASS: guard_evidence: required log evidence
+- completion: FAIL: completion: required log evidence
+- strand_participation: FAIL: strand_participation: required log evidence
+- gpuav: INVALID: gpuav: dedicated validation log absent
+- missing_hair: INVALID: missing_hair: required capture evidence absent
+- silhouette_iou_loss: INVALID: silhouette_iou_loss: required capture evidence absent
+- depth_sanity: INVALID: depth_sanity: required capture evidence absent
+- z_fighting: INVALID: z_fighting: required capture evidence absent
+- duplicates: INVALID: duplicates: required capture evidence absent
+- character_energy: INVALID: character_energy: required capture evidence absent
+- pt_shadow_backlight: INVALID: pt_shadow_backlight: required capture evidence absent
+- rendered/motion_reprojection: INVALID: rendered/motion_reprojection: required capture evidence absent
+- rendered/trailing_residual: INVALID: rendered/trailing_residual: required capture evidence absent
+- rendered/flicker_residual: INVALID: rendered/flicker_residual: required capture evidence absent
+- presented/motion_reprojection: INVALID: presented/motion_reprojection: required capture evidence absent
+- presented/trailing_residual: INVALID: presented/trailing_residual: required capture evidence absent
+- presented/flicker_residual: INVALID: presented/flicker_residual: required capture evidence absent

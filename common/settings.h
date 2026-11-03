@@ -176,6 +176,13 @@ inline constexpr Knob kKnobs[] = {
     {"rt_high", "Ray-traced High", kCapRayQuery, {{"gi", "1"}, {"gi_rt", "1"}, {"gi_rr_rays", "2"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
    {}, {1, 2, 2, 3}, false, {}, false, "Lighting", {}},
 
+  {"rt_trace_scale", "Lighting trace resolution",
+   "Half width and height saves tracing work. May soften thin detail; full resolution in High and Ultra.",
+   Kind::Choice, Apply::Hitch, "resets lighting history", true,
+   {{"half", "Half", 0, {{"rt_trace_scale", "0.5"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"full", "Full", 0, {{"rt_trace_scale", "1.0"}}, {}, {}, false, false, false, Apply::Hitch}},
+   {}, {0, 0, 1, 1}, false, {}, false, "Performance", {}},
+
   {"local_shadows", "Local light shadows",
    "Adds shadows from torches, lamps and spells. Fast requires Ray Reconstruction; Full keeps native shadows where needed.",
    Kind::Choice, Apply::Live, "", false,
@@ -259,13 +266,22 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Neutral at camp", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
-   "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+   "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
    Kind::Choice, Apply::Live, "live; needs captured materials at startup", false,
    {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
     {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
+   {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
+
+  {"exp_water_hit_cost", "Water reflection optimizations",
+   "Experimental: compare sparse light lookup, zero-light rejection and candidate order. Energy qualification pending.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_water_hit_cost","0"}}, {}, {}, false, false, false, Apply::Hitch},
+    {"sparse", "Sparse lights", kCapRayQuery, {{"rt_water_hit_cost","1"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
+    {"zero", "Zero light rejection", kCapRayQuery, {{"rt_water_hit_cost","2"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch},
+    {"order", "Unsorted candidates", kCapRayQuery, {{"rt_water_hit_cost","4"}}, {{"exp_water",1},{"exp_hidden_surface",1}}, {}, false, true, false, Apply::Hitch}},
    {}, {0,0,0,0}, true, {}, false, "Advanced", {}},
 
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
@@ -322,22 +338,43 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {}},
 
+  {"exp_compact_hit_state", "Compact ray hit state",
+   "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_compact_hit_state", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_compact_hit_state", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
+  {"exp_alpha_metadata_cache", "Cache alpha metadata",
+   "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_alpha_metadata_cache", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_alpha_metadata_cache", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
+  {"exp_water_empty_tiles", "Skip empty water tiles",
+   "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"off", "Off", 0, {{"rt_water_empty_tiles", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_water_empty_tiles", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+
   {"exp_water_compose_shift", "Water camera correction",
-   "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
+   "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_water_compose_shift", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_water_compose_shift", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Surfaces", {"Measured", "+0.00 ms (compose 0.12 ms on and off) S8", "Unknown", "RTX 5090; wf9 2026-11-03: turning screen hits 7% -> 17%, hidden 25% -> 15.5%, static delta 0 m, energy within noise"}},
 
   {"exp_native_coverage", "Native hair + scalp",
-   "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
-   Kind::Choice, Apply::Live, "hair + scalp: live; tilesets: restart", false,
+   "Hair and scalp cast correct shadows and occlusion in ray tracing (needed for hair shadows on faces and necks). + Tilesets also enables tileset coverage.",
+   Kind::Choice, Apply::Restart, "restart", false,
    {{"off", "Off", 0, {{"rt_native_hair", "0"}, {"rt_native_scalp", "0"}, {"rt_native_tileset", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"hair", "Hair + scalp", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "0"}},
-     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Live},
+     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Restart},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Lighting", {"Measured", "RT +2.3-6.3 ms, GI +3.2-8.8 ms over cards (S8, dialogues)", "88-byte capture vertices", "RTX 5090; hair_qual 2026-11-03; user decision: hair shadows need it, cost accepted"}},
 
   {"exp_hair_groom", "Strand hair in ray-traced lighting",
    "Uses strands in RT shadows/AO/GI/reflections. Dialogue1: hair shadows on faces/necks. RTX 5090 vs native cards: RT -1.1-1.5 ms, GI -1.6-1.8 ms; refit +0.57 ms.",
@@ -346,13 +383,26 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
 
+  {"exp_hair_groom_primary", "Strand hair on screen",
+   "The visible hair of converted styles becomes strands (needs strand hair in RT lighting). Moving hair keeps camera motion vectors for now. Cost and look unqualified.",
+   Kind::Choice, Apply::Live, "live; supported LSS hardware, local groom files and shaderInt64 required", false,
+   {{"off", "Off", 0, {{"rt_hair_groom_primary", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom_primary", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+
+  {"exp_hair_fibre", "Physical strand shading",
+   "Lights the on-screen strands with a fibre BSDF and multiple scattering instead of the game's hair shading. Brighter, warmer hair; cost and look unqualified.",
+   Kind::Choice, Apply::Live, "live; needs Strand hair on screen", false,
+   {{"off", "Off", 0, {{"rt_hair_fibre", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_fibre", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
-   "Reclaims stale native capture snapshots. Used mesh pool -26-50%; no measured GPU cost or character-light change (hq1-hq4).",
+   "Reclaims and packs unused native hair snapshots (mesh pool -26-50%, no GPU cost).",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {}, {}, false, false, false, Apply::Live}},
-   {}, {1, 1, 1, 1}, false, {}, false, "Advanced", {}},
-
+    {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Performance", {"Measured", "Neutral", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}},
   {"exp_cascade_static_only", "Static roof casters only",
    "Excludes animated and unclassified shadow-map copies from roof sun shadows. "
    "May omit some roofs; dialogue motion and roof coverage are unqualified.",
@@ -398,6 +448,13 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"perf_submit_batch", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {}, true},
+
+  {"exp_hit_paks", "Pak material coverage",
+   "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+   Kind::Choice, Apply::Restart, "restart to enable; off is live", false,
+   {{"off", "Off", 0, {{"rt_hit_material_paks", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_paks", "1"}}, {{"exp_hidden_surface",1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"},{"rt_hit_material_instanced","1","Instanced material startup"}}, false},
 
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
@@ -523,6 +580,7 @@ inline constexpr KV kDefaults[] = {
     {"gi", "1"},
     {"gi_rays", "4"},
     {"gi_rr_rays", "1"},
+    {"rt_trace_scale", "1.0"},
     {"gi_steps", "16"},
     {"gi_radius", "0.15"},
     {"gi_thickness", "0.03"},
@@ -621,6 +679,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_reflections", "0"},
     {"rt_water_rr_hitdist", "0"},
     {"rt_water_hit_shade", "0"},
+    {"rt_water_hit_cost", "0"},
     {"rt_water_rf_edge", "0"},
     {"rt_water_compose_shift", "0"},
     {"rt_water_compose", "0"},
@@ -647,6 +706,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
     {"rt_hit_material_generated", "0"},
+    {"rt_hit_material_paks", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_omm_reference", "0"},
@@ -654,8 +714,10 @@ inline constexpr KV kDefaults[] = {
     {"rt_omm_dyn_bake_tris", "131072"},
     {"rt_omm_dyn_mb", "256"},
     {"rt_native_hair", "0"},
-    {"rt_hair_pool_trim", "1"},
+    {"rt_hair_pool_trim", "0"},
     {"rt_hair_groom", "0"},
+    {"rt_hair_groom_primary", "0"},
+    {"rt_hair_fibre", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},
@@ -773,6 +835,9 @@ inline constexpr KV kDefaults[] = {
     {"fg_tag_ui", "1"},
     {"fg_letterbox", "1"},
     {"fg_ui_pq", "0"},
+    {"rt_compact_hit_state", "0"},
+    {"rt_alpha_metadata_cache", "0"},
+    {"rt_water_empty_tiles", "0"},
 };
 // The keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
@@ -863,12 +928,20 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   // Native hair capture and optional LSS support are prepared at startup for live toggles.
   // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
   if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  if (key == "rt_hit_material_paks") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_bvh_split", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
                                          "rt_hit_material_wind_rgb"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
   return false;
+}
+
+// Native tileset capture is allocated at startup. Saving its next-launch value
+// must not change shaders or scene publication in the running process.
+inline void retain_startup_tilesets(Map& candidate,const Map& startup) {
+  auto i=startup.find("rt_native_tileset");
+  candidate["rt_native_tileset"]=i==startup.end()?"0":i->second;
 }
 
 // Every choice is explicit. A custom value uses the control's most demanding mode.

@@ -1,31 +1,25 @@
-## Strand hair (rt_hair_groom): experiment, cost gate, prototype (branch claude/rtx-hair-groom-33655b, 2026-11-03)
-- Converter `tools/hair_groom/` (cards -> strands from the CHAR_Hair mask), CTest `hair_groom_test`.
-  Shadowheart LOD0: 656 cards / 40,090 tris -> 86k strands, 855k LSS segments; silhouette IoU 0.92-0.94.
-- GPU bench `tools/hair_lss_bench` (RTX 5090, 3.7M rays from the hair): shadow/AO/GI cards 1.94/1.71/2.99 ms,
-  groom 2 mm compacted 0.91/0.74/1.27 ms, refit 0.1 ms, BLAS 60 MB; LOD 1/2 0.71/0.62/1.03 ms.
-- Prototype (key off, live A/B after a startup with it on): LSS groom TLAS traced by the secondary queries
-  (constant 1020), card kept for primary; no ABI bump (TLAS address in scene stamp 48..63). Docs:
-  RTX_HAIR_GROOM_EXPERIMENT.md, RTX_HAIR_INTEGRATION.md, RTX_HAIR_ROADMAP.md.
-- Batch tool `tools.hair_groom.batch` (all CHAR_Hair styles, validation, incremental): 9 companions 7 pass,
-  2 review. Full run on hold until Shadowheart works in game (user).
-
-## rt_hair_groom live runs 2026-11-03: INVALID twice (no join), fixed offline, READY_FOR_LIVE
-- 10:40: device feature and file OK, no hair draw with Shadowheart's LOD0 count: Dialogue1/camp draw LOD1.
-  Added LOD1 grooms, radius caps, per-draw join verdict log, warm-nohair phase.
-- 11:03: her LOD1 draw (6009 indices, Test Dialogue1) has no host-mapped index buffer. Fix: UV join (asset v2:
-  32 corner UVs; the layer reads the same corners from its own soup and matches within 1e-3).
-- Check in game: Test Dialogue1, `[hair groom] UV join 6009 indices: matched` and `frame N: K groom instances`
-  with K > 0; job tools/live_batches/hair_groom (Dialogue1 only). Build, CTests, dryrun pass.
-
-## rt_hair_groom pool budget and fibre BSDF prototype (2026-11-03)
-- Groom pool: at most 1/4 of the mesh pool (min of rt_mesh_pool_max_mb and VRAM cap); only the selected LOD
-  uploaded; headers indexed at start, files read on first match; LRU eviction after 120 unused frames.
-- Fibre BSDF offline (tools/hair_groom/bsdf.py, Chiang 2016): white furnace 1.00; GI hit today (Lambert)
-  3-6x darker than Chiang; single-scatter Chiang is pale, needs dual scattering for the brown (ROADMAP step 4).
-
-## rt_hair_groom live hg-20261103e (Test Dialogue1, 17 grooms): works, cheaper; INVALID on two gate bugs
-- 5 groom instances, 1500 matched per 300 frames (LOD 600/0/900), refit +0.57 ms (BLAS 1.04 vs 0.47 ms).
-- Cost groom vs cards: rt 9.07 vs 10.2-10.57 ms, gi 12.51 vs 14.1-14.3 ms; no hair 7.14 / 9.08 ms.
-- Character energy on vs off +0.17% / +2.83% (off spread 1.38%); overcast shot, no visible change beyond animation.
-- Gates fixed: participation only in cost-groom (8 s shots < 300 frames); freeze judged inside the plan
-  (the 1088 ms startup burst was the vt_alpha mask load). The old log passes the new gates.
+## Primary strand hair, increments 1a-1c (offline, 2026-11-03; user: "si facciamolo")
+- Design docs/RTX_HAIR_PRIMARY.md: the matched static hair draws run strand variants (pipeline clones):
+  prepass without depth writes, G-buffer `shaders/rt/hair_primary_gbuffer.hlsl` (camera ray into this frame's
+  groom TLAS, discard on miss, strand depth/normal/tangent, native material FS 42a95e17 at the strand's UV).
+- 1a: `hair_primary.hlsli` + twin `tools/hair_groom/primary.py`: depth on the card ray exact (< 1e-9),
+  encodings through the game's decoders (normal < 0.2 deg, tangent < 0.1 deg), CPU tracer.
+- 1b: GPU check `hair_primary_gpu_check` + CTest `hair_primary_gpu_test` (RTX 5090): synthetic IoU 1.000,
+  depth rel. 7e-7, normal 0.0004 deg; Shadowheart (tapered radii) IoU 0.995 (report only).
+- 1c: key `rt_hair_groom_primary` (off, live, GUI "Strand hair on screen", needs rt_hair_groom);
+  `layer/hair_primary.cpp` (variants, draw swap, header after the groom TLAS), per-point UVs in the groom
+  update. Requires LSS, shaderInt64, fragmentStoresAndAtomics. Not run live.
+- 2: velocity variant `hair_primary_velocity.hlsl` (native FS b70cadc5 form, last frame's strand points,
+  +12 B/point). Cost line `[hair primary] strand G-buffer draws GPU X ms/frame` (per-draw timestamps).
+- 3a: fibre BSDF in HLSL (`hair_bsdf.hlsli`), GPU vs CPU max rel. error 1.5e-5; not wired yet.
+- 3b-1: dual scattering `tools/hair_groom/dual.py` + path-traced per-channel correction: CHAR_Hair colour 1.01-1.02 of a
+  path-traced fibre slab (single scattering 0.21-0.40, plain dual 0.70-0.75); held-out colours 0.97-1.04.
+- 3b-2a: `hair_dual.hlsli` (generated tables) = `dual.shade_table` on the GPU (max rel. 1.4e-5). A 3-D static
+  const HLSL array read shifted fields on the GPU: flattened (check other multi-dimensional tables).
+- 3b-2b: key `rt_hair_fibre` (off, live): `gi/hair_fibre.hlsl` after D-LS lights strand pixels with the fibre BSDF
+  (sun + unshadow-mapped local lights). Identity 236/237, CTests, GPU twin 6.7e-6. Not run live.
+- Live job READY_FOR_LIVE: tools/live_batches/hair_primary (Dialogue1, cards/strands shots at full resolution,
+  cost cards/strands/cards; gated on G-buffer and velocity strand draws > 0). Dryrun pass, not run.
+- Fix after the user trial (device lost x2, player bald): no groom update for held/uncaptured draws (pool offset read
+  as soup offset), every soup read bounded; card hiding gated on the G-buffer variant having run and on GPU-counted
+  strand pixels (2 empty frames: cards back for the session). Tests in hair_groom_asset_test. Not run live.

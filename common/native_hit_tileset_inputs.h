@@ -6,7 +6,7 @@ inline constexpr uint64_t tileset_deferred_vs=0xa618ddae98c2d1cfull,tileset_defe
 inline bool tileset_depth(uint64_t vs,uint64_t fs){return vs==tileset_depth_vs && fs==tileset_depth_fs;}
 inline bool tileset_deferred(uint64_t vs,uint64_t fs){return vs==tileset_deferred_vs && fs==tileset_deferred_fs;}
 inline bool tileset_material_enabled(bool startup,bool active){return startup && active;}
-struct TilesetInputs {std::array<InputAttribute,6> attributes{};bool valid{};};
+struct TilesetInputs {std::array<InputAttribute,6> attributes{};bool valid{},cull_known{},two_sided{};};
 // Exact active position, three instance rows, COLOR and UV. Quaternion location6
 // belongs only to deferred shading; its actual output frame is captured by XFB.
 inline TilesetInputs tileset_inputs(const VkGraphicsPipelineCreateInfo& ci){
@@ -32,6 +32,10 @@ inline TilesetInputs tileset_inputs(const VkGraphicsPipelineCreateInfo& ci){
   if(!dynamic && !b->stride)return out;
   out.attributes[location]={a->binding,a->offset,b->stride,a->format,dynamic};
  }
+ out.cull_known=ci.pRasterizationState && !ci.pRasterizationState->pNext;
+ if(ci.pDynamicState)for(uint32_t i=0;i<ci.pDynamicState->dynamicStateCount;++i)
+  if(ci.pDynamicState->pDynamicStates[i]==VK_DYNAMIC_STATE_CULL_MODE)out.cull_known=false;
+ out.two_sided=out.cull_known && ci.pRasterizationState->cullMode==VK_CULL_MODE_NONE;
  out.valid=true;return out;
 }
 inline bool tileset_vertex_count(uint32_t count,uint32_t instances,uint32_t& vertices){

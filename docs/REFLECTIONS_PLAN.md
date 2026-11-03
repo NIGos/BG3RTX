@@ -171,8 +171,9 @@ No TLAS miss acquires sky in this step. Missing captured geometry remains a gap.
 Offline culling/selection tests cover empty, boundary, invalid/channel cases,
 nearest sorting, ties, truncation and shuffled 4096-slot populations. The live
 draft toggles 0/2/0/2 and predicts offscreen shaded > 0 in every ON window, equal
-static mean within OFF noise/encoding uncertainty, and added median/p90 GPU cost
-<= 1.0 ms in matched diagnostic-free windows. Cost is unmeasured. No launch or
+static mean within OFF noise/encoding uncertainty, and reports added median/p90 GPU cost
+in matched diagnostic-free windows. The 1.0 ms budget is an optimization target,
+never a hard stop. Optimize and report measured cost honestly. No launch or
 queue submission is authorized; this is not a quality pass or preset promotion.
 
 For opaque receivers continue subtracting only the audited `Tp` term, weighted by w. At w=1
@@ -223,3 +224,44 @@ Ultra is the first possible shipping preset, after energy, visibility, stability
 smoke gates pass. Until then the key stays off in every preset and the feature is Experimental.
 No lower preset promotion, live quality claim or GPU-cost claim follows from an offline compile.
 
+
+### Water hit cost candidate (water-hit-cost, 2026-11-03)
+
+`rt_water_hit_cost` (SpecId 1021, bit mask, default 0) independently selects:
+1: sparse 128-word active-slot mask; 2: spot cone before falloff plus exact-zero
+incident before BRDF; 4: append candidates instead of sorting; 7 combines them.
+The Experimental GUI exposes each step; combinations also accept INI values.
+No requests, bindings or ABI added. The existing world buffer grows by 512 B;
+preparation ORs the mask once per unique slot only with bit 1. Existing clear/barriers cover its range.
+Bit 1 changes 4096 per-hit type reads to 128 mask reads plus N active slot reads
+(at N=39: 167 reads, 24.5x fewer membership reads, not a GPU speedup prediction).
+It preserves ascending slot traversal and checks conflicting types before culling.
+Bit 2 avoids falloff pow for excluded cones and BRDF calls for known-zero incident;
+no visibility ray is saved for zero terms (the reference already skips those).
+CPU reference compares 10,000 randomized cases, invalid domains and cone boundaries.
+A nonzero cutoff is unsafe: even half-float 2^-25 half-subnormal error at a stored
+radiance does not bound post-water A/exposure amplification or the sum over lights.
+Therefore the only accepted threshold here is exact zero, with zero discarded energy.
+Effective K already equals the number of reaching candidates, capped at 32. Bit 4
+removes up to 496 insertion moves per nontruncated hit (<=32 candidates), keeps all contributions and retains
+the native probe above 32. Only summation order changes; static energy must pass.
+Ascending slots also give common lights a consistent order across lanes; this is
+light traversal ordering, not a new hit-sort dispatch.
+Material is already decoded exactly once in either path and passed to local/sun/sky;
+there is no redundant material fetch to remove. Geometry/froxel repeats remain.
+Temporal/checkerboard reuse is deferred: no matching water replay validates hit
+stability, moving visibility or energy. Without live evidence it cannot meet the
+"only if energy stays within noise" condition. A wave material/cluster sort needs
+a new hit work list, synchronization and dispatch; the current per-slot scan is
+already coherent across active lanes. No speculative sort or history buffer added.
+Draft water_offscreen has isolated and combined A/B, static energy and separate
+reflection GPU cost windows. Supplied baseline: 0.15 ms off, 0.8-2.4 ms median
+with hit shading, p90 up to 3.3 ms. Candidate cost unmeasured; no quality promotion.
+
+Final offline checks: build and 132 CTests pass; waterhit 9 layouts / 96 comparisons,
+9 key-off matches; active hit modes 1/2 with cost 0 match the original in all 64
+entry/shift comparisons. Preserving the original selection loop in its own branch
+was needed for that program identity. Cost modes pass 60 comparisons over both files;
+preparation validates in both states and matches its baseline when off. pp-diff:
+145 input-identical + 80 pp-identical, 11 changed of 236 common requests. Draft dryrun
+passes (349 s / 32 captures / 1930 MB). GPU cost and live energy remain unmeasured.

@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[2]))
+from tools.live_batches.live_flow import repair_known_forbids
 sys.path.insert(0, str(HERE.parent / "hair_qual"))
 import make_job as hq  # noqa: E402  (ULTRA, HAIR_START, the window gate shapes)
 
@@ -174,7 +176,8 @@ def main():
     (out / "plans").mkdir(parents=True, exist_ok=True)
     (out / "plans" / "hg_plan.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
     for name, save in SAVES:
-        (out / "jobs" / f"{name}.json").write_text(json.dumps(job(name, save), indent=1) + "\n", encoding="utf-8")
+        prepared = repair_known_forbids(job(name, save), plan)
+        (out / "jobs" / f"{name}.json").write_text(json.dumps(prepared, indent=1) + "\n", encoding="utf-8")
     print(f"{len(SAVES)} jobs; hg_plan {len(plan)} phases/{seconds} s -> {out}")
 
 

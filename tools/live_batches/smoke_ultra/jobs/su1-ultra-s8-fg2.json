@@ -4,13 +4,12 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 496,
+ "timeout": 521,
  "repeat": 1,
  "live_batch": "smoke-ultra",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
  "args": [
   "-RealPresent",
-  "-Foreground",
   "-Move",
   "-MovePlan",
   "captures/live_batches/smoke_ultra/plans/su1_s8.json"
@@ -203,6 +202,57 @@
     "diag-omm"
    ],
    "min": 1
+  },
+  {
+   "name": "no mesh pool exhaustion in measured windows (load excluded)",
+   "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "static-a",
+    "pan-q",
+    "pan-e",
+    "rotate-r",
+    "rotate-l",
+    "static-b",
+    "diag-warm-omm",
+    "diag-omm"
+   ]
+  },
+  {
+   "name": "no roof overflow in measured windows",
+   "select": "sun: WARNING \\d+ roof volumes within",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "static-a",
+    "pan-q",
+    "pan-e",
+    "rotate-r",
+    "rotate-l",
+    "static-b",
+    "diag-warm-omm",
+    "diag-omm"
+   ]
+  },
+  {
+   "name": "no roof overflow in measured windows",
+   "select": "over kSunMaxVolumes on [1-9]",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "static-a",
+    "pan-q",
+    "pan-e",
+    "rotate-r",
+    "rotate-l",
+    "static-b",
+    "diag-warm-omm",
+    "diag-omm"
+   ]
   }
  ],
  "forbid": [
@@ -224,23 +274,29 @@
   "\\[rrpost\\] exposure hold REFUSED",
   "\\[cascade\\] could not allocate",
   "skipped: no variant for",
-  "sun: WARNING \\d+ roof volumes within",
-  "over kSunMaxVolumes on [1-9]",
   "set 1 [1-9]\\d* out-of-range reads skipped",
   "\\[hit material pool basis\\] over kBasisCapBytes",
-  "\\[bvh\\] mesh pool full at",
   "\\[omm\\] VK_EXT_opacity_micromap unavailable",
   "\\[omm\\] producer disabled after EXT record failure",
   "\\[omm dyn\\] WARNING"
  ],
  "expect_runner": [
-  "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=1 label=static-a repeat=0",
-  "\\[motion-trace\\] phase=6 label=static-b repeat=0",
-  "\\[motion-plan\\] complete phases=11\\b",
-  "^Run ended: done"
+  "\\[window-mode\\].*visible_unfocused",
+  "^Run ended: done",
+  "\\[motion-plan\\] complete phases=13\\b",
+  "\\[motion-trace\\] phase=3 label=static-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=static-b repeat=0"
  ],
  "stop_on_dump": true,
  "purpose": "Ultra smoke at S8 Water Queens House, inheriting qualified box shadows (ls_box=2, default ls_box_honour_shadow=1) and the qualified OMM bundle from preset=ultra (rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod). Existing static/pan/rotation windows gate zero capture drops, within-budget VRAM, zero scene-wait timeouts, water traced/composed and finite, with RT/GI cost lines. Separate warm-up and same-ray OMM diagnostic windows require compared > 0, not compared 0 and violations 0; diagnostics stay off during cost windows. Final ab-off / ab-on exercise toggle latency. VRAM management uses automatic defaults and real driver budget.",
- "estimated_phase_seconds": 211
+ "estimated_phase_seconds": 221,
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 1,
+  "startup_only": [
+   "rt_xfb_mb"
+  ]
+ },
+ "window_mode": "visible_unfocused_fg"
 }

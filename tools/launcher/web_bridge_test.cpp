@@ -26,6 +26,11 @@ int main(int argc,char** argv){
   h.prepareReport=[&](const std::string& issue,bool logs,bool settings,bool system){++prepares;check(issue=="Line\n\"quoted\" \xe2\x98\x80");check(!logs&&settings&&system);launcher::diagnostics::Snapshot r;r.status=launcher::diagnostics::Status::Complete;r.files={{"ISSUE.txt",issue,""}};r.bytes=issue.size();return r;};
   h.exportReport=[&](const launcher::diagnostics::Snapshot& r,std::string&){++exports;check(r.files[0].text=="Line\n\"quoted\" \xe2\x98\x80");return true;};
   launcher::web::Bridge bridge(s,h);
+  s.values[st::knob_index("exp_native_coverage")]=2;
+  auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");
+  check(pos!=std::string::npos);
+  check(coverage.substr(pos,coverage.find("\"choices\"",pos)-pos).find("\"apply\":\"Restart to apply\"")!=std::string::npos);
+  s.values[st::knob_index("exp_native_coverage")]=0;
   check(bridge.dirty()==0);auto json=bridge.state_json();check(json.find("\"type\":\"state\"")!=std::string::npos);check(!bridge.dev);check(json.find("\"id\":\"ls_k\"")==std::string::npos);
   for(auto bad:{"", "[]", "{\"type\":\"discard\"} trailing", "{\"type\":\"discard\",\"type\":\"play\"}", "{\"type\":[]}","{\"type\":\"set\",\"value\":01}","{\"type\":\"set\",\"value\":1.2}","{\"type\":\"set\",\"value\":999999999999999}","{\"type\":\"\\uD800\"}"})check(bridge.handle(bad).find("Invalid launcher message")!=std::string::npos);
   bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.dirty()==1);check(s.values[st::knob_index("rr")]==1);
@@ -42,7 +47,7 @@ int main(int argc,char** argv){
   check(json.find("Far-field sun bounce")==std::string::npos);
   check(json.find("Opacity micromaps")!=std::string::npos);
   check(json.find("Physical hair ray origins")==std::string::npos);
-  auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==-1);s.values=saved;
+  auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==0);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
   launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("Graphics compatibility unavailable")!=std::string::npos);
@@ -90,27 +95,59 @@ int main(int argc,char** argv){
   st::KVList written;bool reject=false;launcher::web::Hooks th;
   th.save=[&](launcher::State&,const st::KVList& keys,std::string&){if(reject)return false;written=keys;return true;};
   launcher::web::Bridge tb(trial,th);tb.experimental=true;
-  tb.handle("{\"type\":\"set\",\"id\":\"exp_native_coverage\",\"value\":1}");
+  tb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom\",\"value\":1}");
   check(written.empty());tb.handle("{\"type\":\"discard\"}");check(tb.dirty()==0);
-  tb.handle("{\"type\":\"set\",\"id\":\"exp_native_coverage\",\"value\":1}");
+  tb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom\",\"value\":1}");
   reject=true;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");check(written.empty()&&tb.dirty()>0);
   reject=false;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
   st::Map ab=st::code_defaults();for(auto& kv:written)ab[kv.first]=kv.second;
-  check(st::lookup(ab,"ab_target")=="exp_native_coverage");
-  std::string line;check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="1"&&ab["rt_native_scalp"]=="1");
-  check(line.find("A/B: rt_native_hair=1") == 0);
-  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="0"&&ab["rt_native_scalp"]=="0");
+  check(st::lookup(ab,"ab_target")=="exp_hair_groom");
+  std::string line;check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="1");
+  check(line.find("A/B: rt_hair_groom=1") == 0);
+  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="0");
   auto reloaded=st::code_defaults();for(auto& kv:written)reloaded[kv.first]=kv.second;
-  reloaded["rt_native_hair"]="1";reloaded["rt_native_scalp"]="1";ab=reloaded;
-  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_native_hair"]=="0");
+  reloaded["rt_hair_groom"]="1";ab=reloaded;
+  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="0");
   ab["ab_target"]="rr_post";ab["ab_choice"]="1";ab["rr_post"]="1";
   check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="0");
   check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="1");
   ab["ab_target"]="exp_hair_gi_mean";check(!bg3::experimental_ab::flip(ab,line));
   ab["ab_target"]="rr";check(!bg3::experimental_ab::flip(ab,line));
-  ab["ab_target"]="exp_native_coverage";ab["ab_choice"]="2";check(!bg3::experimental_ab::flip(ab,line));
+  ab["ab_target"]="exp_native_coverage";ab["ab_choice"]="2";check(!bg3::experimental_ab::flip(ab,line));   // qualified (non-experimental) knobs are never A/B targets
   written.clear();tb.handle("{\"type\":\"set\",\"id\":\"fps_cap\",\"value\":60}");tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
   bool target_written=false;for(auto& kv:written)target_written|=kv.first=="ab_target";check(!target_written);
+
+  // Every serialized card uses the current choice's Apply, and every
+  // prerequisite is surfaced even when already satisfied.
+  for(int i=0;i<st::kKnobCount;++i){
+    auto& k=st::kKnobs[i];
+    for(int c=0;c<st::choice_count(k);++c){
+      launcher::State qs;qs.caps=~0u;qs.base={{"dev","1"}};qs.values=st::preset_values(st::kUltra);qs.values[i]=c;
+      launcher::web::Bridge qb(qs);qb.experimental=true;auto text=qb.state_json();
+      auto start=text.find("\"id\":\""+std::string(k.id)+"\"");check(start!=std::string::npos);
+      auto end=text.find("\"choices\":[",start);auto card=text.substr(start,end-start);
+      check(card.find("\"apply\":\""+std::string(st::apply_label(st::knob_apply(k,c)))+"\"")!=std::string::npos);
+      for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find("needs "+std::string(st::kKnobs[st::knob_index(n.knob)].label))!=std::string::npos);
+      for(auto& n:k.choices[c].need)if(n.knob){
+        qs.values[st::knob_index(n.knob)]=0;
+        int writes=0;launcher::web::Hooks hooks;hooks.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++writes;check(st::unmet_need(k,c,candidate.values).empty());return true;};
+        launcher::web::Bridge dependencies(qs,hooks);dependencies.experimental=true;
+        dependencies.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);
+        dependencies.handle("{\"type\":\"confirm\"}");check(writes==1);
+      }
+    }
+  }
+  // Preset review replaces every visible custom value, retains hidden controls,
+  // and matches the central table on fully supported hardware.
+  for(int p=0;p<st::kPresetCount;++p){
+    launcher::State ps;ps.caps=~0u;ps.preset=st::kLow;ps.values=st::preset_values(st::kLow);
+    launcher::web::Bridge qb(ps);ps.values[st::knob_index("rr")]=-1;
+    check(qb.state_json().find("\"custom\":true")!=std::string::npos);
+    auto old=ps.values;qb.handle("{\"type\":\"preset\",\"value\":"+std::to_string(p)+"}");
+    check(ps.values==old);qb.handle("{\"type\":\"confirm\"}");
+    for(int i=0;i<st::kKnobCount;++i)check(ps.values[i]==(st::knob_visible(st::kKnobs[i],false)?st::kKnobs[i].preset[p]:old[i]));
+    check(qb.state_json().find("\"custom\":false")!=std::string::npos);
+  }
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }
 

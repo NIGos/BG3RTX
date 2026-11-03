@@ -1,0 +1,71 @@
+// dxc: -T ps_6_6
+// Primary strand hair, motion-vector variant (docs/RTX_HAIR_PRIMARY.md increment 2, key rt_hair_groom_primary):
+// replaces the fragment shader of a matched static CHAR_Hair velocity draw (native FS b70cadc5dd3adcbd,
+// captures/alpha_cache/b70cadc5dd3adcbd.glsl) in a pipeline clone (layer/hair_primary.cpp; depth test
+// GREATER_OR_EQUAL, no writes). It reads the pixel entry the G-buffer variant stored this frame (no trace), takes
+// the strand point at the same parameter from the previous frame's points and writes the native motion vector:
+// current pixel minus previous pixel, both without their jitter, in pixels (TRACK_B_FG "Motion vectors").
+// No previous points yet (first frame of a slot): the current point moved with the camera only.
+#include "hair_primary.hlsli"
+
+[[vk::constant_id(1100)]] const uint kRecordLo = 0u;
+[[vk::constant_id(1101)]] const uint kRecordHi = 0u;
+
+struct Camera {               // set 0 binding 2
+  row_major float4x4 view, proj, vp;
+  float near_z, far_z;
+  float2 m5;
+  float3 position;            // m6: camera world position
+};
+struct Viewport { float m0, m1, m2, m3; };   // set 0 binding 3: render size in pixels (m0, m1)
+struct Screen { float2 scale, offset; };      // set 0 binding 4: m0, m1 (UV scale and offset)
+struct Previous {             // set 0 binding 5: the previous frame's camera
+  row_major float4x4 m0, m1, vp;               // m2: previous camera-relative view-projection
+  float3 position;            // m3: previous camera position
+  float m4;
+  float2 jitter, prev_jitter; // m5 current, m6 previous jitter in pixels
+};
+[[vk::binding(2, 0)]] ConstantBuffer<Camera> gCam;
+[[vk::binding(3, 0)]] ConstantBuffer<Viewport> gSize;
+[[vk::binding(4, 0)]] ConstantBuffer<Screen> gScreen;
+[[vk::binding(5, 0)]] ConstantBuffer<Previous> gPrev;
+
+uint64_t record() { return (uint64_t(kRecordHi) << 32) | uint64_t(kRecordLo); }
+uint64_t addr2(uint2 a) { return (uint64_t(a.y) << 32) | uint64_t(a.x); }
+uint ld(uint64_t a) { return vk::RawBufferLoad<uint>(a, 4); }
+float3 ldf3(uint64_t a) { return asfloat(vk::RawBufferLoad<uint3>(a, 4)); }
+
+struct Out {
+  float2 mv : SV_Target0;
+  float depth : SV_Depth;
+};
+
+Out main(float4 pos : SV_Position) {
+  const uint64_t rec = record();
+  const uint tag = ld(rec), width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
+  if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  const uint64_t pool = addr2(vk::RawBufferLoad<uint2>(rec + 24u, 4)), pixels = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));
+  const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
+  const uint4 e = vk::RawBufferLoad<uint4>(pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes, 16);
+  if (e.w != tag || e.x == hair_primary_no_strand) discard;
+  const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
+  if (k >= grooms) discard;
+  const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
+  const uint i0 = ld(pool + row.z + seg * 4u);
+  const float v = asfloat(e.y);
+  float3 prev;
+  if (row.w != 0u) {
+    prev = lerp(ldf3(pool + row.w + i0 * 12u), ldf3(pool + row.w + (i0 + 1u) * 12u), v);   // previous camera-relative
+  } else {
+    const float3 cur = lerp(ldf3(pool + row.x + i0 * 12u), ldf3(pool + row.x + (i0 + 1u) * 12u), v);
+    prev = cur + gCam.position - gPrev.position;
+  }
+  const float4 c = mul(float4(prev, 1.0), gPrev.vp);
+  // 42a95e17's sibling b70cadc5:49, with the strand's previous clip position in place of the card's.
+  const float2 prev_px = ((c.xy / c.w) * float2(0.5, -0.5) + 0.5) * gScreen.scale + gScreen.offset;
+  Out o;
+  o.mv = (pos.xy + float2(gPrev.jitter.x, -gPrev.jitter.y)) -
+         (prev_px * float2(gSize.m0, gSize.m1) + float2(gPrev.prev_jitter.x, -gPrev.prev_jitter.y));
+  o.depth = asfloat(e.z);
+  return o;
+}
