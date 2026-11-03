@@ -915,6 +915,9 @@ void water_forget_pipeline(VkPipeline p);
 void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci);
 void hair_primary_device_destroyed(DeviceData* dd);
 void hair_primary_note_module(VkShaderModule m, uint64_t hash);
+void hair_primary_forget_module(VkShaderModule m);
+// The depth image of the last main G-buffer pass (0 before the first): a new one marks a level load.
+uint64_t geo_gbuffer_depth_image();
 void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_t n, const VkGraphicsPipelineCreateInfo* cis,
                                  const VkPipeline* out);
 void hair_primary_forget_pipeline(VkPipeline p);

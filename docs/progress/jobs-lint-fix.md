@@ -11,3 +11,9 @@
 - Shared dryrun Python fallback fixed; live_flow regression tests 19/19 pass. Shader request delta 0, ABI unchanged.
 - Reproduce: combined_20261103/make_jobs.py then dryrun.py; source batch dryrun.ps1 scripts.
 - Live evidence and GPU costs remain unmeasured. Draft jobs stay outside watched pending inboxes.
+- 18:03-18:25 combined runs were INVALID: oversized context, disabled pool stats, and cold baseline shaders.
+- Runner context now uses a file; actual oversized Water payload passes the synthetic child test; env lengths are linted.
+- cp4 generator enables rt_stats only for observations, warms paks 0/1, and waits for prefetch/GI/water readiness.
+- Camp full/half reflections wait for distinct ready pipelines; baseline compiles ended 18:08:33, prefetch 18:08:48.
+- Python regressions 23/23, combined dryrun (3 saves/10 slices), combined/compact/edge lints and queue safety checks pass.
+- hair_validation is absent (lint fails: no jobs); separate hair_qual audit has 4 existing failures. No live rerun or commit.

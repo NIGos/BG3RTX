@@ -22,6 +22,12 @@ exclusive. Every required line must fit; `when_present` does not excuse an
 insufficient window when its pass runs. Known periodic events also have their
 cadence checked. One-off trace/burst events retain event semantics.
 
+Required pool-log lines also need `rt_stats=1` in each gated window; startup
+candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
+The runner sends the full job context through a JSON file. Lint checks the remaining
+job-derived environment values against the Windows 32767 UTF-16-unit limit
+(including the terminator), including tags and generated INI/log paths.
+
 Jobs can declare these planning assumptions in a top-level `live_flow` object:
 
 ```json
@@ -95,3 +101,9 @@ Only the serial queue may launch a game, with fresh authorization. An offline
 dryrun, missing observables, or a draw-count log never grants a quality pass.
 Every ON window and baseline character must be represented in the analyzer input.
 Keep raw capture provenance; report FAIL/INVALID per check in JSON and Markdown.
+
+Camera plan fields are shared by the runner and lint in `scripts/camera-plan-fields.json`.
+`registration_policy` is analysis-only metadata for edge_flicker, rr_hair_guide and
+rr_post_decision; it does not schedule runner actions. Unknown fields fail before launch.
+Combined jobs retain external `requires_success_of` prerequisites; inputs depending
+on another input must run separately.

@@ -111,7 +111,9 @@ These rules come from mistakes already made in this repo. They apply on every br
 - PNG pairs instead of float bursts, unless a flicker analysis needs bursts.
 - Disk budget ~2 GB per batch; delete raw dumps after analysis, keep the summaries. More is fine when a
   one-off pack helps (replay, PT reference), as long as nothing dead accumulates.
-- Target 2-5 minutes per scene.
+- Target 2-5 minutes per scene; never one launch over 15 minutes. A live runs only for a decision-critical
+  observable; the runner aborts as soon as the result cannot be valid (fail-fast). An INVALID run is mined for
+  its numbers before any rerun.
 - The window may take focus when the user allows it (removes the unfocused 30 fps cap).
 - When the user is at the PC, run jobs with `"window_mode": "visible_unfocused_fg"`: the game never takes
   focus (PostMessage input, FG kept). A covered window is only counted (`unfocused_occluded_checks`), not

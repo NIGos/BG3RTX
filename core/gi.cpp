@@ -98,6 +98,7 @@ struct Pipe {
   VkPipeline pipeline = VK_NULL_HANDLE;
   uint64_t generation = 0;
   VkPipelineLayout active_layout = VK_NULL_HANDLE;
+  bool trace_half = false;   // Resolution mode of the installed reflection pipeline.
   // Cache by complete request, specialization values and layout. Live toggles retain both states,
   // including values which previously collided in the same bit-indexed variant slot.
   struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; uint64_t generation = 0; std::string file; };
@@ -1212,8 +1213,12 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   Pipe::Variant& slot = p.variants[slot_key + "|" + std::to_string(uint64_t(lay))];
   const bool known = slot.pipeline && slot.file == slot_key;
   // Keep the last working specialization while a live replacement builds.
-  const VkPipeline previous = p.pipeline;
+  // Binding 8, dispatch and resolve already use the requested resolution. A
+  // pipeline compiled for the other grid cannot run while its replacement builds.
+  const VkPipeline previous = bg3::pipe_async::select_pipeline(bg3::pipe_async::State::kBuilding,
+      VkPipeline{}, p.pipeline, std::strncmp(file,"gi/rt_reflections",17)!=0 || p.trace_half==rf_half);
   p.pipeline = known ? slot.pipeline : previous;
+  if (known) p.trace_half = rf_half;
   if (known) {
     Bg3ShaderBlob blob{};
     if (!host->get_shader(selected.c_str(), "main", "cs_6_6", &blob)) {   // a failed hot reload: the built pipeline stays
@@ -1243,6 +1248,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
   slot.generation = r.generation;
   slot.file = slot_key;
   p.pipeline = slot.pipeline;
+  p.trace_half = rf_half;
   p.generation = r.generation;
   host->log("gi: %s generation %llu%s%s, pipeline %.1f ms", selected.c_str(), (unsigned long long)r.generation,
             spec_cascade ? (spec_value ? " spec cascade=1" : " spec cascade=0") : "",

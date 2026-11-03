@@ -4,7 +4,7 @@
     {
       "prefix": "b1-cp4-compact-camp-join--",
       "offset": 0,
-      "count": 5,
+      "count": 6,
       "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\cov_paks_compact\\jobs\\cp4-compact-camp-join.json",
       "job": {
         "save": "Campsite - 27h",
@@ -55,7 +55,7 @@
         "window_mode": "visible_unfocused_fg",
         "name": "cp4-compact-camp-join",
         "live_batch": "cov-paks-compact",
-        "timeout": 370,
+        "timeout": 980,
         "args": [
           "-RealPresent",
           "-Move",
@@ -82,10 +82,10 @@
         "expect_runner": [
           "\\[window-mode\\].*visible_unfocused",
           "^Run ended: done",
-          "\\[motion-plan\\] complete phases=5\\b"
+          "\\[motion-plan\\] complete phases=6\\b"
         ],
         "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-        "estimated_phase_seconds": 75,
+        "estimated_phase_seconds": 80,
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -109,7 +109,29 @@
           "motion_end": 10,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/gi_trace_rt_hit_sun_em\\.hlsl\\?[^ ]* generation ",
+            "\\[water\\] rt/water_reflect\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_reflect: built",
+            "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built"
+          ],
+          "wait_log_timeout": 600
+        },
+        {
+          "label": "warmup-off",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
         },
         {
           "label": "observe-on",
@@ -124,7 +146,7 @@
           "motion_end": 25,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
         },
         {
           "label": "observe-off",
@@ -139,7 +161,7 @@
           "motion_end": 10,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
         },
         {
           "label": "observe-on-repeat",
@@ -154,7 +176,7 @@
           "motion_end": 25,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
         },
         {
           "label": "restore",
@@ -169,13 +191,13 @@
           "motion_end": 5,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=0"
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
         }
       ]
     },
     {
       "prefix": "b2-go1-camp--",
-      "offset": 6,
+      "offset": 7,
       "count": 20,
       "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\gpu_opt1\\jobs\\go1-camp.json",
       "job": {
@@ -833,7 +855,7 @@
     },
     {
       "prefix": "b3-go2-camp-high--",
-      "offset": 27,
+      "offset": 28,
       "count": 11,
       "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\gpu_opt2\\jobs\\go2-camp-high.json",
       "job": {
@@ -842,7 +864,7 @@
         "session": false,
         "traces": 0,
         "hold": 90,
-        "timeout": 480,
+        "timeout": 840,
         "repeat": 1,
         "live_batch": "gpu-opt2",
         "window_mode": "visible_unfocused_fg",
@@ -995,13 +1017,22 @@
           "label": "warmup",
           "kind": "static",
           "seconds": 30,
-          "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
+          "set": "qa_exposure_hold=0,rt_trace_scale=1.0",
+          "wait_log": [
+            "gi: gi/rt_reflections\\.hlsl\\?(?![^ ]*RT_TRACE_HALF=1)[^ ]* generation [^\\n]*spec cascade=0"
+          ],
+          "wait_log_timeout": 180
         },
         {
           "label": "warmup-scaled",
           "kind": "static",
           "seconds": 5,
-          "set": "qa_exposure_hold=0,rt_trace_scale=0.5"
+          "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
+          "wait_log": [
+            "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
+            "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
+          ],
+          "wait_log_timeout": 180
         },
         {
           "label": "settle-off-a",
@@ -1089,7 +1120,29 @@
       "motion_end": 10,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/gi_trace_rt_hit_sun_em\\.hlsl\\?[^ ]* generation ",
+        "\\[water\\] rt/water_reflect\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_reflect: built",
+        "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built"
+      ],
+      "wait_log_timeout": 600
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--warmup-off",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
     },
     {
       "label": "b1-cp4-compact-camp-join--observe-on",
@@ -1104,7 +1157,7 @@
       "motion_end": 25,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
     },
     {
       "label": "b1-cp4-compact-camp-join--observe-off",
@@ -1119,7 +1172,7 @@
       "motion_end": 10,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
     },
     {
       "label": "b1-cp4-compact-camp-join--observe-on-repeat",
@@ -1134,7 +1187,7 @@
       "motion_end": 25,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
     },
     {
       "label": "b1-cp4-compact-camp-join--restore",
@@ -1149,7 +1202,7 @@
       "motion_end": 5,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=0"
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
     },
     {
       "label": "b2-go1-camp--settings-reset",
@@ -1498,13 +1551,22 @@
       "label": "b3-go2-camp-high--warmup",
       "kind": "static",
       "seconds": 30,
-      "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
+      "set": "qa_exposure_hold=0,rt_trace_scale=1.0",
+      "wait_log": [
+        "gi: gi/rt_reflections\\.hlsl\\?(?![^ ]*RT_TRACE_HALF=1)[^ ]* generation [^\\n]*spec cascade=0"
+      ],
+      "wait_log_timeout": 180
     },
     {
       "label": "b3-go2-camp-high--warmup-scaled",
       "kind": "static",
       "seconds": 5,
-      "set": "qa_exposure_hold=0,rt_trace_scale=0.5"
+      "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
+      "wait_log": [
+        "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
+        "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
+      ],
+      "wait_log_timeout": 180
     },
     {
       "label": "b3-go2-camp-high--settle-off-a",

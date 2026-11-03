@@ -127,8 +127,14 @@ function New-QueueChildContext($job,[string]$queueRoot,[string]$tree,[string]$bu
 }
 function Get-QueueChildPermissionBlock([string]$tree,[switch]$ReceiptOnly) {
   try {
-    if(-not $env:BG3RTX_QUEUE_CONTEXT){return 'Queue child context required for auto-run'}
-    $ctx=$env:BG3RTX_QUEUE_CONTEXT | ConvertFrom-Json
+    # Combined jobs exceed Windows' 32,767-character environment value limit.
+    # The queue passes only a file path; descendants still validate its owner,
+    # frozen build and consumed receipt on every check.
+    if($env:BG3RTX_QUEUE_CONTEXT_FILE){
+      $ctx=Get-Content -LiteralPath $env:BG3RTX_QUEUE_CONTEXT_FILE -Raw | ConvertFrom-Json
+    } elseif($env:BG3RTX_QUEUE_CONTEXT){
+      $ctx=$env:BG3RTX_QUEUE_CONTEXT | ConvertFrom-Json
+    } else {return 'Queue child context required for auto-run'}
     if($ctx.version -ne 1 -or -not $ctx.job -or -not $ctx.parent_pid -or -not $ctx.parent_start_ticks){return 'Malformed queue child context'}
     if([IO.Path]::GetFullPath($ctx.tree) -ine [IO.Path]::GetFullPath($tree)){return 'Queue child tree mismatch'}
     if(-not $env:BG3RTX_QUEUE_ROOT -or [IO.Path]::GetFullPath($ctx.queue_root) -ine [IO.Path]::GetFullPath($env:BG3RTX_QUEUE_ROOT)){return 'Queue child root mismatch'}

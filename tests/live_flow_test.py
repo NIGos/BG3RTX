@@ -28,6 +28,71 @@ def fixture(name="one"):
 
 
 class FlowTests(unittest.TestCase):
+    def test_single_measured_value_needs_warming_and_startup_match(self):
+        j, p = fixture()
+        p[1]["set"] = "rr=0"
+        p[2]["set"] = p[3]["set"] = "rr=1"
+        self.assertTrue(f.warmup_problems(j, p))
+        j["live_flow"] = dict(startup_only=["rr"])
+        self.assertIn("startup-only", f.warmup_problems(j, p)[0])
+        j["set"] += ",rt_stats=0"
+        j["live_flow"] = dict(startup_only=["rt_stats"])
+        p[2]["set"] += ",rt_stats=1"
+        p[3]["set"] += ",rt_stats=1"
+        self.assertTrue(any("startup-only key rt_stats" in e for e in f.warmup_problems(j, p)))
+
+    def test_plan_fields_allow_analysis_metadata_reject_typo(self):
+        self.assertFalse(f.plan_field_problems([dict(registration_policy="per-frame-exclude-unregistered")]))
+        self.assertIn("Unknown camera plan field: trace_att", f.plan_field_problems([dict(trace_att=[1])])[0])
+
+    def test_combine_preserves_external_prerequisites_rejects_internal(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        a["requires_success_of"] = ["external"]
+        b["requires_success_of"] = ["external", "other"]
+        job, _, _ = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        self.assertEqual(job["requires_success_of"], ["external", "other"])
+        for dependent, prerequisite in ((a, "two"), (b, "one")):
+            dependent["requires_success_of"].append(prerequisite)
+            with self.assertRaisesRegex(ValueError, "depend on each other"):
+                c.combine_group([("a", a, p), ("b", b, q)], "plan")
+            dependent["requires_success_of"].pop()
+
+    def test_pool_producer_requires_stats_in_each_observe_window(self):
+        j, p = fixture()
+        j["set"] += ",rt_stats=0"
+        j["expect_every"] = [dict(select=r"\[hit material paks join\]", match="ok", windows=["cost-off", "cost-on"])]
+        self.assertEqual(len(f.producer_problems(j, p)), 2)
+        p[2]["set"] += ",rt_stats=1"
+        self.assertFalse(f.producer_problems(j, p))  # inherited by the next window
+        p[3]["set"] += ",rt_stats=0"
+        self.assertEqual(len(f.producer_problems(j, p)), 1)
+        j["expect_every"][0]["min"] = 0
+        self.assertFalse(f.producer_problems(j, p))  # absence gate
+        j["expect"] = [r"\[hit material paks\] loaded 40983 candidates"]
+        self.assertFalse(f.producer_problems(j, p))  # startup is unconditional
+        j["expect"] = [r"\[hit material pool basis\] frame"]
+        j["expect_every"] = []
+        p[2]["set"] += ",rt_stats=0"
+        self.assertTrue(f.producer_problems(j, p))
+
+    def test_environment_checks_scalars_not_file_backed_job_and_counts_utf16(self):
+        j, _ = fixture()
+        j["expect"] = ["x" * 40000]
+        j["set"] += ",unused=" + "x" * 40000
+        self.assertFalse(f.environment_problems(j))
+        j["args"] += ["-Tag", "x" * 32768]
+        self.assertTrue(any("BG3RTX_RUN_TAG" in e for e in f.environment_problems(j)))
+        j["args"][-1] = "\U0001f600" * 16384
+        self.assertTrue(any("32768 UTF-16" in e for e in f.environment_problems(j)))
+        j["args"] = ["-UserIni", "x" * 32768]
+        self.assertTrue(any("BG3RTX_USER_INI" in e for e in f.environment_problems(j)))
+        j["args"] = []
+        j["save"] = "x" * 32766
+        self.assertFalse(f.environment_problems(j))
+        j["save"] += "x"
+        self.assertTrue(any("BG3RTX_SAVE_ONLY" in e for e in f.environment_problems(j)))
+
     def test_regex_forbid_quotes_normal_line_and_is_case_insensitive(self):
         evidence = [dict(path="valid.log", lines=["[water] nonfinite 0", "[crash] exception diagnostics active"])]
         errors, coverage = f.regex_problems(dict(forbid=["NONFINITE", r"\[crash\] exception"], expect=["future effect"]), evidence)
@@ -120,12 +185,13 @@ class FlowTests(unittest.TestCase):
         self.assertIn("startup-only", f.warmup_problems(j, p)[0])
         for step in p:
             step["set"] = "rr=1"
+        j["set"] = "rr=1"
         self.assertFalse(f.warmup_problems(j, p))
 
     def test_restore_and_capture_commands_do_not_need_warming(self):
         j, p = fixture()
         p.append(phase("restore", values="rr=7,fg_snap=0"))
-        p[2]["set"] += ",fg_snap=8"
+        p[2]["set"] += ",fg_snap=8,fg_snap_any=1,replay_pack=1,rt_mesh_audit_frames=120,rt_mesh_audits=8"
         self.assertFalse(f.warmup_problems(j, p))
 
     def test_known_repairs_preserve_failure_detection_after_load(self):
@@ -149,6 +215,7 @@ class FlowTests(unittest.TestCase):
         b, q = fixture("two")
         b["set"] += ",gi_strength=2"
         p[-1]["set"] += ",gi_strength=3"
+        p[1]["set"] += ",gi_strength=3"
         b["expect_runner"].append(r"\[motion-trace\] phase=2 label=cost-off repeat=0")
         j, phases, manifest = c.combine_group([("a", a, p), ("b", b, q)], "combined.json")
         self.assertEqual(len(phases), 9)
@@ -214,6 +281,8 @@ class FlowTests(unittest.TestCase):
         b, q = fixture("two")
         a.update(post='analyzer "{log}" --runner "{runner}"', post_gate=True)
         a["expect_every"] = b["expect_every"] = []
+        for record in ('motion-trace', 'rotation-input', 'motion-ready', 'motion-recenter'):
+            b["expect_runner"].append(rf"\[{record}\] phase=0 label=warm-off")
         j, phases, manifest = c.combine_group([("a", a, p), ("b", b, q)], "plan")
         manifest["plan"] = phases
         with tempfile.TemporaryDirectory() as t:
@@ -222,6 +291,8 @@ class FlowTests(unittest.TestCase):
             runner = []
             for i, step in enumerate(phases):
                 runner.append(f"00:00:{i + 1:02}.000 [pan-plan] window {i} set={step['set']}")
+                for record in ('motion-trace', 'rotation-input', 'motion-ready', 'motion-recenter'):
+                    runner.append(f"00:00:{i + 1:02}.050 [{record}] phase={i} label={step['label']}")
                 logs.append(f"00:00:{i + 1:02}.100 [cfg] settings read")
                 logs.append(f"00:00:{i + 1:02}.200 batch-{i}")
             runner += ["00:00:10.000 [motion-plan] complete phases=9", "Run ended: done"]
@@ -232,7 +303,13 @@ class FlowTests(unittest.TestCase):
             second = Path(results[1]["log"])
             self.assertNotIn("batch-0", second.read_text())
             self.assertIn("batch-5", second.read_text())
-            self.assertIn("window 0", second.with_suffix(".runner.txt").read_text())
+            slice_runner = second.with_suffix(".runner.txt").read_text()
+            self.assertIn("window 0", slice_runner)
+            self.assertNotIn("b1-", slice_runner)
+            self.assertNotIn("b2-", slice_runner)
+            for record in ('motion-trace', 'rotation-input', 'motion-ready', 'motion-recenter'):
+                self.assertIn(f"[{record}] phase=0 label=warm-off", slice_runner)
+                self.assertNotIn(f"[{record}] phase=4", slice_runner)
             with patch.object(c.subprocess, "run") as post:
                 post.return_value.returncode = 7
                 post.return_value.stdout = "gate failed"

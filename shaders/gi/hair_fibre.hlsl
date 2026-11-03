@@ -32,7 +32,7 @@ bool hf_strand(uint2 fp, float d, out float3 T) {
   const uint tag = hf_ld(rec), width = hf_ld(rec + 4u), height = hf_ld(rec + 8u), grooms = hf_ld(rec + 12u);
   if (tag == 0u || grooms == 0u || any(fp >= uint2(width, height))) return false;
   const uint4 e = vk::RawBufferLoad<uint4>(hf_addr(rec + 32u) + uint64_t(fp.y * width + fp.x) * hair_primary_pixel_bytes, 16);
-  if (e.w != tag || e.x == hair_primary_no_strand || (e.x >> 24) >= grooms) return false;
+  if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand || (e.x >> 24) >= grooms) return false;
   if (abs(asfloat(e.z) - d) > 1e-6 * max(abs(d), 1e-6)) return false;   // something else won this pixel
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + (e.x >> 24) * 16u, 16);
   const uint64_t pool = hf_addr(rec + 24u);
@@ -150,13 +150,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const float3 Ls = normalize(cam.v0.xyz);
   const float3 Esun = bg3_sun_colour() * (clouds * asfloat(lScale.Load(0)));
   if (any(Esun > 0.0)) {
-    if (m * clouds > 0.0) {
+    const uint vs = trace_light(s.P, s.N, s.org, s.P + Ls * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
+    if (vs != kRtUnknown && m * clouds > 0.0) {   // unknown: the game's sun term stays (as D-LS keeps it)
       float3 sd, ss;
       bg3_sun_eval_mat(sf, mt, Ls, Esun * m, m * clouds, sd, ss);
       sub_d += sd;
       sub_s += ss;
     }
-    const uint vs = trace_light(s.P, s.N, s.org, s.P + Ls * 1.0e4, fp, 0xFFFFu, s.cone, 0.0);
     if (vs == kRtLit) add += Esun * hd_shade_pixel(T, sf.V, Ls, hf_strands(s.P, Ls, 1.0e4), colour, beta);
   }
   const float3 od = max(gDiffuse[fp] - sub_d + add, 0.0), os = max(gSpecular[fp] - sub_s, 0.0);

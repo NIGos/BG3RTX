@@ -12,7 +12,29 @@
     "motion_end": 10,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/gi_trace_rt_hit_sun_em\\.hlsl\\?[^ ]* generation ",
+      "\\[water\\] rt/water_reflect\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_reflect: built",
+      "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built"
+    ],
+    "wait_log_timeout": 600
+  },
+  {
+    "label": "b1-cp4-compact-camp-join--warmup-off",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5,
+    "motion_end": 5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
   },
   {
     "label": "b1-cp4-compact-camp-join--observe-on",
@@ -27,7 +49,7 @@
     "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
   },
   {
     "label": "b1-cp4-compact-camp-join--observe-off",
@@ -42,7 +64,7 @@
     "motion_end": 10,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
   },
   {
     "label": "b1-cp4-compact-camp-join--observe-on-repeat",
@@ -57,7 +79,7 @@
     "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
   },
   {
     "label": "b1-cp4-compact-camp-join--restore",
@@ -72,7 +94,7 @@
     "motion_end": 5,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
   },
   {
     "label": "b2-go1-camp--settings-reset",
@@ -421,13 +443,22 @@
     "label": "b3-go2-camp-high--warmup",
     "kind": "static",
     "seconds": 30,
-    "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
+    "set": "qa_exposure_hold=0,rt_trace_scale=1.0",
+    "wait_log": [
+      "gi: gi/rt_reflections\\.hlsl\\?(?![^ ]*RT_TRACE_HALF=1)[^ ]* generation [^\\n]*spec cascade=0"
+    ],
+    "wait_log_timeout": 180
   },
   {
     "label": "b3-go2-camp-high--warmup-scaled",
     "kind": "static",
     "seconds": 5,
-    "set": "qa_exposure_hold=0,rt_trace_scale=0.5"
+    "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
+    "wait_log": [
+      "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
+      "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
+    ],
+    "wait_log_timeout": 180
   },
   {
     "label": "b3-go2-camp-high--settle-off-a",

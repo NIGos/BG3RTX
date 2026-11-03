@@ -17,7 +17,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.queue_gates import phase_states
+from scripts.queue_gates import phase_states, _apply
 
 
 def read(path):
@@ -172,6 +172,8 @@ def period(gate, state, fps):
     if "period_frames" in gate:
         return float(gate["period_frames"]) / fps
     sel = gate["select"].replace("\\", "")
+    if producer_requirements(gate["select"]):
+        return 120 / fps  # layer/hit_material.cpp: pool_counter_frame / pool_log
     if "mem] device-local VRAM" in sel:
         return 600 / fps  # layer/layer.cpp, immediately after [pace]
     if "rrpost] gpu" in sel or "ngx] gpu RR" in sel or "watch]" in sel:
@@ -193,6 +195,78 @@ def period(gate, state, fps):
     if "gi: background builds (" in sel:
         return max(1, float(state.get("rt_timing_frames", 120))) / fps
     return None
+
+
+# Literal producer signatures in required regexes -> settings needed to emit them.
+# pool_log is called only with rt_stats enabled (layer/hit_material.cpp).
+# The paks startup "loaded" line is deliberately absent: it is unconditional.
+PRODUCER_SETTINGS = {
+    "[hit material paks join]": {"rt_stats": "1"},
+    "[hit material paks] frame": {"rt_stats": "1"},
+    "[hit material paks COLOR]": {"rt_stats": "1"},
+    "[hit material pool]": {"rt_stats": "1"},
+    "[hit material pool basis]": {"rt_stats": "1"},
+}
+
+
+def producer_requirements(pattern):
+    plain = pattern.replace("\\", "")
+    return {k: v for signature, requirements in PRODUCER_SETTINGS.items()
+            if signature in plain for k, v in requirements.items()}
+
+
+def producer_problems(job, plan):
+    states = phase_states(job, plan)
+    phases = {p.get("label"): s for p, s in zip(plan, states)}
+    errors = []
+    for gate in job.get("expect_every", []):
+        if int(gate.get("min", 1)) == 0:
+            continue
+        for key, value in producer_requirements(gate["select"]).items():
+            labels = gate.get("windows", [])
+            if not labels and not any(s.get(key) == value for s in states):
+                errors.append(f"producer: /{gate['select']}/ requires a window with {key}={value}")
+            for label in labels:
+                if label in phases and phases[label].get(key) != value:
+                    errors.append(f"producer: {label}: /{gate['select']}/ requires {key}={value}")
+    for pattern in job.get("expect", []):
+        for key, value in producer_requirements(pattern).items():
+            if not any(s.get(key) == value for s in states):
+                errors.append(f"producer: expect /{pattern}/ requires a window with {key}={value}")
+    return errors
+
+
+def environment_problems(job):
+    """Only paths/scalars cross the environment; the full job uses a context file.
+
+    Mirror auto-run's job-derived values, counting UTF-16 code units on Windows.
+    The terminator takes one of the 32767 units available for a value.
+    """
+    args = job.get("args", [])
+    options = {str(k).lower(): str(v) for k, v in zip(args, args[1:])
+               if str(k).startswith("-")}
+    tree = Path(job.get("tree") or ROOT)
+    if not tree.is_absolute():
+        tree = ROOT / tree
+    tag = options.get("-tag", "")
+    suffix = "." + tag if tag else ""
+    values = {
+        "BG3RTX_QUEUE_ROOT": str(ROOT),
+        "BG3RTX_QUEUE_CONTEXT_FILE": str(ROOT / "captures/queue" / ("child-context." + "0" * 32 + ".json")),
+        "BG3RTX_QUEUE_QUIT_FILE": str(ROOT / "captures/queue" / ("single." + "0" * 32 + ".quit")),
+        "BG3RTX_RUN_TAG": tag,
+        "BG3RTX_INI": str(tree / "captures" / f"auto{suffix}.ini"),
+        "BG3RTX_SAVE_LOG": str(tree / "captures" / f"saves{suffix}.txt"),
+        "BG3RTX_SAVE_ONLY": options.get("-save", str(job.get("save", ""))),
+    }
+    if "-userini" in options:
+        path = Path(options["-userini"])
+        values["BG3RTX_USER_INI"] = str(path if path.is_absolute() else tree / path)
+    if "-validation" in {str(a).lower() for a in args}:
+        values["VK_LAYER_SETTINGS_PATH"] = str(tree / "captures" / f"vk_layer_settings{suffix}.txt")
+    return [f"environment: {name} value has {size} UTF-16 units; maximum 32766"
+            for name, value in values.items()
+            if (size := len(value.encode("utf-16-le")) // 2) > 32766]
 
 
 def judged_labels(job, plan):
@@ -257,7 +331,8 @@ def window_problems(job, plan):
 # pipeline variants. All rendering keys (including fg/rr) still require warming.
 CONTROL = {"qa_exposure_hold", "fg_snap", "pan_capture", "pan_prepare", "pan_post", "pan_edge", "pan_water",
            "rt_stats", "rt_primary_check", "rt_primary_identity", "rt_primary_epoch", "ls_stats", "ls_check",
-           "rf_stats", "rt_debug", "ls_debug", "gi_debug", "rf_debug", "rt_occ_stats", "rr_show"}
+           "rf_stats", "rt_debug", "ls_debug", "gi_debug", "rf_debug", "rt_occ_stats", "rr_show",
+           "fg_snap_any", "replay_pack", "rt_mesh_audit_frames", "rt_mesh_audits"}
 
 
 def warmup_problems(job, plan):
@@ -274,14 +349,17 @@ def warmup_problems(job, plan):
     states = phase_states(job, plan)
     keys = set().union(*(s.keys() for s in states))
     startup = set(job.get("live_flow", {}).get("startup_only", []))
+    initial = {}
+    _apply(initial, job.get("set", ""))
     out = []
-    for key in sorted(keys - CONTROL):
+    for key in sorted(keys):
         values = {s.get(key) for p, s in zip(plan[first:], states[first:])
                   if p.get("label") in labels and s.get(key) is not None}
-        if len(values) < 2:
-            continue
         if key in startup:
-            out.append(f"warmup: startup-only key {key} changes after the first measured window")
+            if values - {initial.get(key)}:
+                out.append(f"warmup: startup-only key {key} differs from its startup value")
+            continue
+        if key in CONTROL:
             continue
         warmed = {s.get(key) for p, s in zip(plan[:first], states[:first])
                   if float(p.get("seconds", 0)) > 0 and not p.get("trace_at") and not p.get("serial")}
@@ -314,10 +392,17 @@ def repair_known_forbids(job, plan):
     return job
 
 
+def plan_field_problems(plan):
+    registry = read(ROOT / "scripts/camera-plan-fields.json")
+    allowed = set(registry["runner"]) | set(registry["analysis_only"])
+    return [f"Unknown camera plan field: {key} (phase {i})"
+            for i, step in enumerate(plan) for key in sorted(set(step) - allowed)]
+
+
 def lint(job, plan, evidence, memo=None):
     regex, coverage = regex_problems(job, evidence, memo)
     windows, budgets = window_problems(job, plan)
-    return dict(problems=regex + windows + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
+    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
 
 
 def markdown_report(report):

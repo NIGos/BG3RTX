@@ -3,13 +3,22 @@
     "label": "warmup",
     "kind": "static",
     "seconds": 30,
-    "set": "qa_exposure_hold=0,rt_trace_scale=1.0"
+    "set": "qa_exposure_hold=0,rt_trace_scale=1.0",
+    "wait_log": [
+      "gi: gi/rt_reflections\\.hlsl\\?(?![^ ]*RT_TRACE_HALF=1)[^ ]* generation [^\\n]*spec cascade=0"
+    ],
+    "wait_log_timeout": 180
   },
   {
     "label": "warmup-scaled",
     "kind": "static",
     "seconds": 5,
-    "set": "qa_exposure_hold=0,rt_trace_scale=0.5"
+    "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
+    "wait_log": [
+      "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
+      "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
+    ],
+    "wait_log_timeout": 180
   },
   {
     "label": "settle-off-a",

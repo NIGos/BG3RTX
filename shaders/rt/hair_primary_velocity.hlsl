@@ -43,16 +43,31 @@ struct Out {
 Out main(float4 pos : SV_Position) {
   const uint64_t rec = record();
   const uint tag = ld(rec), width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
+  // The card fragment's camera-relative point, as in the G-buffer variant (derivatives before any discard).
+  const float4 view = asfloat(vk::RawBufferLoad<uint4>(rec + 40u, 8));
+  const float2 ndc = (pos.xy - view.xy) / view.zw * 2.0 - 1.0;
+  const float4x4 inv = hp_inverse4(gCam.vp);
+  const float4 h = mul(float4(ndc, pos.z, 1.0), inv);
+  const float3 pc = h.xyz / h.w;
+  const float t_card = length(pc);
+  const float3 cn = cross(ddx(pc), ddy(pc));
+  const float cos_card = abs(dot(pc / max(t_card, 1e-30), cn)) / max(length(cn), 1e-30);
+  const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
   const uint64_t pool = addr2(vk::RawBufferLoad<uint2>(rec + 24u, 4)), pixels = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint4 e = vk::RawBufferLoad<uint4>(pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes, 16);
-  if (e.w != tag || e.x == hair_primary_no_strand) discard;
+  if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand) discard;
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
   if (k >= grooms) discard;
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   const uint i0 = ld(pool + row.z + seg * 4u);
   const float v = asfloat(e.y);
+  {   // the G-buffer variant's ownership test: only the card fragment that wrote this strand (hp_on_card)
+    const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
+    const float seg_len = length(ldf3(pool + row.x + (i0 + 1u) * 12u) - ldf3(pool + row.x + i0 * 12u));
+    if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, seg_len)) discard;
+  }
   float3 prev;
   if (row.w != 0u) {
     prev = lerp(ldf3(pool + row.w + i0 * 12u), ldf3(pool + row.w + (i0 + 1u) * 12u), v);   // previous camera-relative

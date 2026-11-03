@@ -111,6 +111,26 @@ def strand_depth_ortho(d_card, t_card, t_strand, dd_dt):
     return d_card + (t_strand - t_card) * dd_dt
 
 
+MAX_RADIUS = 0.01   # common/hair_groom_asset.h rejects radii >= 10 mm (hair_primary_max_radius)
+
+
+def on_card(t_card, t_hit, cos_card, foot, seg_len):
+    """hp_on_card: the hit lies on the card fragment's own card (strand points lie on their card triangles)."""
+    return abs(t_hit - t_card) <= (MAX_RADIUS + 0.5 * seg_len) / max(cos_card, 1e-6) + foot
+
+
+def _mix(x):
+    x &= 0xFFFFFFFF
+    x ^= x >> 16; x = (x * 0x7feb352d) & 0xFFFFFFFF
+    x ^= x >> 15; x = (x * 0x846ca68b) & 0xFFFFFFFF
+    return x ^ (x >> 16)
+
+
+def seal(x, y, z, tag):
+    """hp_seal: word 3 of a pixel entry."""
+    return ((tag ^ _mix(x ^ _mix(y ^ _mix(z)))) | 0x80000000) & 0xFFFFFFFF
+
+
 # ---- reference tracer ----
 @dataclass
 class Camera:

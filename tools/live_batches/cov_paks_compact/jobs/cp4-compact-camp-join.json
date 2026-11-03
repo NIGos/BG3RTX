@@ -47,7 +47,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "cp4-compact-camp-join",
   "live_batch": "cov-paks-compact",
-  "timeout": 370,
+  "timeout": 980,
   "args": [
     "-RealPresent",
     "-Move",
@@ -74,10 +74,10 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=5\\b"
+    "\\[motion-plan\\] complete phases=6\\b"
   ],
   "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-  "estimated_phase_seconds": 75,
+  "estimated_phase_seconds": 80,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,

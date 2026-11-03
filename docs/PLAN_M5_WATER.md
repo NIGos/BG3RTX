@@ -673,6 +673,11 @@ current water records with F-1's froxel list. Matching lists keep local shadows.
 Off behavior, shaders, ABI and variant requests are unchanged. GPU cost and live
 hit-attempt confirmation remain pending; keys stay experimental/off.
 
+Core review follow-up (core-review-fixes, 2026-11-03): scene/material retention
+does not retain borrowed game lighting resources. No complete lighting lifetime
+query exists in the current ABI, so F-1 hit shading now refuses the tuple and
+keeps ordinary compose. Same-frame shading remains available; key-off is unchanged.
+
 ### wf9 exact build-camera correction (2026-11-03, offline)
 Smooth Q/E turns disproved the previous-copy camera premise: compose screen hits 6.4-7.9%,
 hidden 24-28%, versus water_reflect 18.6-19.8% / 12-14% in the same windows; shift 0/1 matched.

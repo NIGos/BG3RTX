@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 480,
+  "timeout": 840,
   "repeat": 1,
   "live_batch": "gpu-opt2",
   "window_mode": "visible_unfocused_fg",

@@ -3541,6 +3541,692 @@
           "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,qa_exposure_hold=0,pan_prepare=0,pan_water=0,pan_delay_ms=0"
         }
       ]
+    },
+    {
+      "prefix": "b6-pt-s8--",
+      "offset": 111,
+      "count": 23,
+      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\post_temporal\\jobs\\pt-s8.json",
+      "job": {
+        "name": "pt-s8",
+        "save": "Water Queens House",
+        "session": false,
+        "live_batch": "post-temporal",
+        "window_mode": "visible_unfocused_fg",
+        "traces": 0,
+        "hold": 90,
+        "timeout": 480,
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ]
+        },
+        "repeat": 1,
+        "stop_on_dump": false,
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
+        "args": [
+          "-RealPresent",
+          "-Move",
+          "-MovePlan",
+          "captures/live_batches/post_temporal/plans/pt_s8.json"
+        ],
+        "patterns": [
+          "\\[pan\\]",
+          "\\[sl\\]",
+          "\\[ngx\\]",
+          "\\[hot\\]",
+          "\\[watch\\]",
+          "\\[pace\\]",
+          "\\[cfg\\]",
+          "\\[rrpost\\]",
+          "GPU cost",
+          "FAILED",
+          "\\[crash\\]",
+          "\\[trace\\]",
+          "\\[dump\\]",
+          "\\[trace\\]",
+          "\\[dump\\]"
+        ],
+        "expect": [
+          "\\[auto\\] scene ready",
+          "\\[hot\\] core generation \\d+ loaded",
+          "\\[ngx\\] RR create .*: Success",
+          "\\[cfg\\] settings read",
+          "\\[rrpost\\] exposure held .*qa_exposure_hold=1"
+        ],
+        "expect_every": [
+          {
+            "name": "AC/EB K8 off-a",
+            "select": "\\[pan\\] burst 98710 complete",
+            "match": "\\[pan\\] burst 98710 complete: 8 frames, 36 samples, transport ok",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "rendered-off-a"
+            ]
+          },
+          {
+            "name": "presented K8 off-a",
+            "select": "\\[sl\\] present capture done",
+            "match": "\\[sl\\] present capture done",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "presented-off-a"
+            ]
+          },
+          {
+            "name": "float energy off-a",
+            "select": "\\[trace\\] frame \\d+ written:",
+            "match": "\\[trace\\] frame \\d+ written:",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "energy-off-a"
+            ]
+          },
+          {
+            "name": "post GPU cost off-a",
+            "select": "\\[rrpost\\] gpu:",
+            "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+            "min": 1,
+            "windows": [
+              "timing-off-a"
+            ]
+          },
+          {
+            "name": "FG actually presenting off-a",
+            "select": "\\[sl\\] DLSS-G frame",
+            "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+            "event": true,
+            "settle_s": 1,
+            "min": 1,
+            "windows": [
+              "presented-off-a"
+            ]
+          },
+          {
+            "name": "AC/EB K8 on-a",
+            "select": "\\[pan\\] burst 98711 complete",
+            "match": "\\[pan\\] burst 98711 complete: 8 frames, 36 samples, transport ok",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "rendered-on-a"
+            ]
+          },
+          {
+            "name": "presented K8 on-a",
+            "select": "\\[sl\\] present capture done",
+            "match": "\\[sl\\] present capture done",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "presented-on-a"
+            ]
+          },
+          {
+            "name": "float energy on-a",
+            "select": "\\[trace\\] frame \\d+ written:",
+            "match": "\\[trace\\] frame \\d+ written:",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "energy-on-a"
+            ]
+          },
+          {
+            "name": "post GPU cost on-a",
+            "select": "\\[rrpost\\] gpu:",
+            "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+            "min": 1,
+            "windows": [
+              "timing-on-a"
+            ]
+          },
+          {
+            "name": "FG actually presenting on-a",
+            "select": "\\[sl\\] DLSS-G frame",
+            "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+            "event": true,
+            "settle_s": 1,
+            "min": 1,
+            "windows": [
+              "presented-on-a"
+            ]
+          },
+          {
+            "name": "temporal GPU cost on-a",
+            "select": "\\[rrpost\\] gpu temporal:",
+            "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+            "min": 1,
+            "windows": [
+              "timing-on-a"
+            ]
+          },
+          {
+            "name": "AC/EB K8 off-b",
+            "select": "\\[pan\\] burst 98712 complete",
+            "match": "\\[pan\\] burst 98712 complete: 8 frames, 36 samples, transport ok",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "rendered-off-b"
+            ]
+          },
+          {
+            "name": "presented K8 off-b",
+            "select": "\\[sl\\] present capture done",
+            "match": "\\[sl\\] present capture done",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "presented-off-b"
+            ]
+          },
+          {
+            "name": "float energy off-b",
+            "select": "\\[trace\\] frame \\d+ written:",
+            "match": "\\[trace\\] frame \\d+ written:",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "energy-off-b"
+            ]
+          },
+          {
+            "name": "post GPU cost off-b",
+            "select": "\\[rrpost\\] gpu:",
+            "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+            "min": 1,
+            "windows": [
+              "timing-off-b"
+            ]
+          },
+          {
+            "name": "FG actually presenting off-b",
+            "select": "\\[sl\\] DLSS-G frame",
+            "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+            "event": true,
+            "settle_s": 1,
+            "min": 1,
+            "windows": [
+              "presented-off-b"
+            ]
+          },
+          {
+            "name": "AC/EB K8 on-b",
+            "select": "\\[pan\\] burst 98713 complete",
+            "match": "\\[pan\\] burst 98713 complete: 8 frames, 36 samples, transport ok",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "rendered-on-b"
+            ]
+          },
+          {
+            "name": "presented K8 on-b",
+            "select": "\\[sl\\] present capture done",
+            "match": "\\[sl\\] present capture done",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "presented-on-b"
+            ]
+          },
+          {
+            "name": "float energy on-b",
+            "select": "\\[trace\\] frame \\d+ written:",
+            "match": "\\[trace\\] frame \\d+ written:",
+            "event": true,
+            "min": 1,
+            "windows": [
+              "energy-on-b"
+            ]
+          },
+          {
+            "name": "post GPU cost on-b",
+            "select": "\\[rrpost\\] gpu:",
+            "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+            "min": 1,
+            "windows": [
+              "timing-on-b"
+            ]
+          },
+          {
+            "name": "FG actually presenting on-b",
+            "select": "\\[sl\\] DLSS-G frame",
+            "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+            "event": true,
+            "settle_s": 1,
+            "min": 1,
+            "windows": [
+              "presented-on-b"
+            ]
+          },
+          {
+            "name": "temporal GPU cost on-b",
+            "select": "\\[rrpost\\] gpu temporal:",
+            "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
+            "min": 1,
+            "windows": [
+              "timing-on-b"
+            ]
+          },
+          {
+            "name": "no mesh pool exhaustion in measured windows (load excluded)",
+            "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+            "match": "(?!)",
+            "event": true,
+            "min": 0,
+            "windows": [
+              "rendered-off-a",
+              "presented-off-a",
+              "energy-off-a",
+              "timing-off-a",
+              "rendered-on-a",
+              "presented-on-a",
+              "energy-on-a",
+              "timing-on-a",
+              "rendered-off-b",
+              "presented-off-b",
+              "energy-off-b",
+              "timing-off-b",
+              "rendered-on-b",
+              "presented-on-b",
+              "energy-on-b",
+              "timing-on-b"
+            ]
+          }
+        ],
+        "forbid": [
+          "VK_ERROR_DEVICE_LOST",
+          "\\[crash\\] exception 0x",
+          "RR (creation|evaluate) failed",
+          "FAILED, keeping previous",
+          "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
+          "PNG write failed",
+          "capture writer backlog",
+          "\\[sl\\] edge capture REFUSED",
+          "\\[rrpost\\] exposure hold REFUSED",
+          "\\[rrpost\\] temporal REFUSED",
+          "\\bnon-?finite(?: terms)?\\s*[:=]?\\s+[1-9]\\d*\\b"
+        ],
+        "expect_runner": [
+          "\\[window-mode\\].*visible_unfocused",
+          "^Run ended: done",
+          "\\[motion-plan\\] complete phases=23\\b",
+          "\\[motion-trace\\] phase=5 label=energy-off-a repeat=0",
+          "\\[motion-trace\\] phase=10 label=energy-on-a repeat=0",
+          "\\[motion-trace\\] phase=15 label=energy-off-b repeat=0",
+          "\\[motion-trace\\] phase=20 label=energy-on-b repeat=0"
+        ],
+        "estimated_phase_seconds": 173,
+        "purpose": "READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized.",
+        "framing_status": "PROPOSED_STATIC_S8_REQUIRES_VERIFICATION"
+      },
+      "plan": [
+        {
+          "label": "warmup",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 20,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 20,
+          "motion_end": 20,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+        },
+        {
+          "label": "warmup-camera",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 20,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 20,
+          "motion_end": 20,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+        },
+        {
+          "label": "settle-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "rendered-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0.1,
+          "serial": 98710,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98710,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "presented-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+        },
+        {
+          "label": "energy-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "trace_at": [
+            1
+          ]
+        },
+        {
+          "label": "timing-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 12,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 12,
+          "motion_end": 12,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "settle-on-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "rendered-on-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0.1,
+          "serial": 98711,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98711,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "presented-on-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+        },
+        {
+          "label": "energy-on-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "trace_at": [
+            1
+          ]
+        },
+        {
+          "label": "timing-on-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 12,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 12,
+          "motion_end": 12,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "settle-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "rendered-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0.1,
+          "serial": 98712,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98712,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "presented-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+        },
+        {
+          "label": "energy-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "trace_at": [
+            1
+          ]
+        },
+        {
+          "label": "timing-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 12,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 12,
+          "motion_end": 12,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "settle-on-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "rendered-on-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0.1,
+          "serial": 98713,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98713,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "presented-on-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+        },
+        {
+          "label": "energy-on-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "trace_at": [
+            1
+          ]
+        },
+        {
+          "label": "timing-on-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 12,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 12,
+          "motion_end": 12,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+        },
+        {
+          "label": "restore",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5,
+          "motion_end": 5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+        }
+      ]
     }
   ],
   "plan": [
@@ -3754,7 +4440,7 @@
       "serial": 0,
       "motion_start": 5,
       "motion_end": 5,
-      "set": "ab_off=0,crash_dump=1,dump_images=1,dump_png_width=1280,dump_preview_f32=1,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_inputs=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+      "set": "ab_off=0,crash_dump=1,dump_images=1,dump_png_width=1280,dump_preview_f32=1,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
     },
     {
       "label": "b2-go2-s8--warmup",
@@ -4086,7 +4772,7 @@
       "serial": 0,
       "motion_start": 5,
       "motion_end": 5,
-      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,fps_cap=0,gi_debug=0,gi_far=0,gi_hit_direct=0,gi_hit_sun=0,gi_rr_rays=1,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=1,ls_shadowed=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_inputs=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=medium,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.4,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=0,rt_alpha_fine_lod=0,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=0,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_emissive=0,rt_hair_physical_origin=0,rt_hair_pool_trim=0,rt_hit_emission=0,rt_hit_material=0,rt_hit_material_instanced=0,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=0,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_rebuild_frames=60,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=0,rt_water_compose=0,rt_water_compose_shift=0,rt_water_empty_tiles=0,rt_water_game_shadow=0,rt_water_geometry=0,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=0,rt_water_reflections=0,rt_water_refraction=0,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,fps_cap=0,gi_debug=0,gi_far=0,gi_hit_direct=0,gi_hit_sun=0,gi_rr_rays=1,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=1,ls_shadowed=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=medium,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.4,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=0,rt_alpha_fine_lod=0,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=0,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_emissive=0,rt_hair_physical_origin=0,rt_hair_pool_trim=0,rt_hit_emission=0,rt_hit_material=0,rt_hit_material_instanced=0,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=0,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_rebuild_frames=60,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=0,rt_water_compose=0,rt_water_compose_shift=0,rt_water_empty_tiles=0,rt_water_game_shadow=0,rt_water_geometry=0,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=0,rt_water_reflections=0,rt_water_refraction=0,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1"
     },
     {
       "label": "b3-go2-s8-medium--warmup",
@@ -4178,7 +4864,7 @@
       "serial": 0,
       "motion_start": 5,
       "motion_end": 5,
-      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_inputs=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=0,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
     },
     {
       "label": "b4-wo1-s8-hit-shade--warmup",
@@ -4823,7 +5509,7 @@
       "serial": 0,
       "motion_start": 5,
       "motion_end": 5,
-      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=1,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=2000,pan_inputs=0,pan_prepare=1,pan_water=1,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=0,rt_water_empty_tiles=0,rt_water_game_shadow=0,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=0,rt_water_reflections=1,rt_water_refraction=0,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+      "set": "ab_off=0,crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=1,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=2000,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=1,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=0,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=0,rt_water_empty_tiles=0,rt_water_game_shadow=0,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=0,rt_water_reflections=1,rt_water_refraction=0,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1"
     },
     {
       "label": "b5-wf9-s8-compose-shift--warmup",
@@ -5212,6 +5898,374 @@
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,qa_exposure_hold=0,pan_prepare=0,pan_water=0,pan_delay_ms=0"
+    },
+    {
+      "label": "b6-pt-s8--settings-reset",
+      "kind": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "set": "ab_off=0,crash_dump=0,dump_images=0,dump_png_width=384,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=1,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=600,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+    },
+    {
+      "label": "b6-pt-s8--warmup",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 20,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 20,
+      "motion_end": 20,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+    },
+    {
+      "label": "b6-pt-s8--warmup-camera",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 20,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 20,
+      "motion_end": 20,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+    },
+    {
+      "label": "b6-pt-s8--settle-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--rendered-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0.1,
+      "serial": 98710,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98710,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--presented-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--energy-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "trace_at": [
+        1
+      ]
+    },
+    {
+      "label": "b6-pt-s8--timing-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 12,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 12,
+      "motion_end": 12,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--settle-on-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--rendered-on-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0.1,
+      "serial": 98711,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98711,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--presented-on-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--energy-on-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "trace_at": [
+        1
+      ]
+    },
+    {
+      "label": "b6-pt-s8--timing-on-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 12,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 12,
+      "motion_end": 12,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--settle-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--rendered-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0.1,
+      "serial": 98712,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98712,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--presented-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--energy-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "trace_at": [
+        1
+      ]
+    },
+    {
+      "label": "b6-pt-s8--timing-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 12,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 12,
+      "motion_end": 12,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--settle-on-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--rendered-on-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0.1,
+      "serial": 98713,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98713,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--presented-on-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--energy-on-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "trace_at": [
+        1
+      ]
+    },
+    {
+      "label": "b6-pt-s8--timing-on-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 12,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 12,
+      "motion_end": 12,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    },
+    {
+      "label": "b6-pt-s8--restore",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5,
+      "motion_end": 5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
     }
   ]
 }
