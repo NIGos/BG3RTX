@@ -3,7 +3,11 @@
   style in captures/hair_groom_batch/state.json), 1 h 52 min: 519 pass (written, 13.3 GB), 553 needs review (not
   written: mirrored UVs, coverage, radiance), 145 reject (silhouette IoU, root channel, 22 zero radii in a thinned
   LOD). Pass min-view IoU median 0.94. Details in docs/RTX_HAIR_PRIMARY.md 5a. The 22 radius rejects left 296 B
-  header-only stubs in data/assetdb/hair_grooms (asset.write fixed and tested; the stubs await a decision).
+  header-only stubs in data/assetdb/hair_grooms (asset.write fixed and tested; the stubs were removed).
+- Game use (tools.hair_groom.reach): of the 698 unconverted styles 130 are unreachable, 568 reachable (150 LOD1 of a
+  passed LOD0). Fixes: zero radii from collapsed card triangles, mirrored UVs reviewed against the coverage bound;
+  the 200 affected reachable styles rerun: all pass. Now 719 pass, 372 review, 126 reject (368 reachable still
+  unconverted). Table and per-class causes in docs/RTX_HAIR_PRIMARY.md 5a.
 - Crowd budget `rt_hair_groom_crowd_ksegments` (off, live; GUI Performance): largest characters first within a
   per-frame segment budget, coarser LODs or cards beyond (`hair_groom::plan_crowd`, unit tests); LOD segment
   counts read from the file headers at index time.
