@@ -316,11 +316,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
 
   {"exp_water_compose_shift", "Water camera correction",
-   "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
+   "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_water_compose_shift", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_water_compose_shift", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Surfaces", {"Measured", "+0.00 ms (compose 0.12 ms on and off) S8", "Unknown", "RTX 5090; wf9 2026-11-03: turning screen hits 7% -> 17%, hidden 25% -> 15.5%, static delta 0 m, energy within noise"}},
 
   {"exp_native_coverage", "Native hair + scalp",
    "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
