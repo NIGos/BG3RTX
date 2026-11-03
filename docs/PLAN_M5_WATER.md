@@ -630,6 +630,17 @@ All costs below are unmeasured incremental RTX 5090 estimates at 2560 x 1067, no
    multipliers/exponents even with absent foam (~3.19e-8 at template values). Keep the native
    floor residue, normals and BRDF inputs; no tolerance accepts nonzero edge/flow coverage.
    wsf1 provisioned this FS and selected 120 draws/window with missing 0, yet counted clean 0.
+   Follow-up water-fresnel-zero2: the second live also had clean 0 despite all draws patched.
+   Diagnostic w7 keeps high-half roughness and low-half validity: 0x8000 plus colour/F0/roughness
+   rejection bits 1/2/4, hypothetical FS-spec-off bit 8, and foam-texture and edge/flow-mask observations 16/32.
+   Source bits are not vetoes; clean ignores them. Native 0xffff cannot distinguish another family
+   from a missing candidate marker; unexpected low-bit patterns have a separate layout count.
+   Device-local group-reduced reasons share the existing 512 B statistics slot. Push flag 128
+   enables diagnostics independently of compose SpecId 1025, so a missed specialization is visible.
+   No further predicate relaxation is justified offline: exact products may really be nonzero.
+   Predict marked owned > 0 and at least one foam rejection > 0; clean may stay 0. A supported
+   correctly wired dispatch predicts FS/compose spec off and unmarked/layout 0; counts are pending.
+   The earlier > 0 clean/share prediction below is disproved by the second run, not a new gate.
    Predict clean owned > 0 in both ON windows, invalid 0; a fully clean pool would be ~20%
    of water records (old 2.05% view estimate / live ~10.1% records). Runtime masks were not
    captured: this share is a conditional prediction, requiring fresh live evidence after restart;

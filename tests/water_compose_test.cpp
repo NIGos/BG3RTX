@@ -167,6 +167,48 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  // Every low-half pattern is either native, a valid diagnostic marker or an unknown layout.
+  // Roughness bits never affect classification. Rejections overlap for foam products.
+  for (uint32_t low = 0; low <= 65535u; ++low) {
+    const bool marked = low >= 0x8000u && low <= 0x803fu;
+    CHECK(surface_marker_valid(low) == marked);
+    CHECK(surface_clean(low) == ((low & 0xffcfu) == 0x8000u));
+    CHECK(surface_diagnostic_mask(true,true,true,low) == surface_diagnostic_mask(true,true,true,low | 0xabcd0000u));
+    const uint32_t reasons = surface_diagnostic_mask(true,true,true,low);
+    CHECK(bool(reasons & (1u<<5)) == (low == 65535u));
+    CHECK(bool(reasons & (1u<<6)) == (!marked && low != 65535u));
+    CHECK(bool(reasons & (1u<<9)) == marked);
+    CHECK(surface_diagnostic_mask(false,true,true,low) == 0u);
+    CHECK(surface_diagnostic_mask(true,false,true,low) == 0u);
+  }
+  for (uint32_t reasons = 0; reasons < 16u; ++reasons) {
+    const uint32_t marker = kSurfaceMarker | reasons;
+    const uint32_t counters = surface_diagnostic_mask(true,true,true,marker);
+    for (uint32_t bit = 0; bit < 3u; ++bit) CHECK(bool(counters & (1u<<(bit+2u))) == bool(reasons & (1u<<bit)));
+    CHECK(bool(counters & (1u<<7u)) == bool(reasons & kSurfaceFsOff));
+    CHECK(bool(counters & 1u) == (reasons == 0u));
+    CHECK((surface_diagnostic_mask(true,true,false,marker) & (1u<<8u)) != 0u);
+  }
+  for (uint32_t sources : {0u, kSurfaceFlow, kSurfaceEdge, kSurfaceFlow | kSurfaceEdge}) {
+    CHECK(surface_clean(kSurfaceMarker | sources));
+    CHECK((surface_diagnostic_mask(true,true,true,kSurfaceMarker | sources) & ((1u<<10u)|(1u<<11u))) == 0u);
+    const uint32_t diagnostic = surface_diagnostic_mask(true,true,true,kSurfaceMarker | sources | kSurfaceFoamColour);
+    CHECK(bool(diagnostic & (1u<<10u)) == bool(sources & kSurfaceFlow));
+    CHECK(bool(diagnostic & (1u<<11u)) == bool(sources & kSurfaceEdge));
+  }
+  CHECK(surface_diagnostic_mask(true,true,true,kSurfaceMarker,false) == (1u | 2u | (1u<<9u)));
+  CHECK(surface_diagnostic_mask(true,true,true,kSurfaceMarker,true,false) == (1u | 2u | (1u<<9u)));
+  CHECK(kCsSurfaceComposeOff >= kCsLsWords && kCsSurfaceMarked < kCsRrRec);
+  CHECK(kCsSurfaceFsOff < kCsSlotWordsLs && kCsSurfaceWords == 12u);
+  { // Every diagnostic must survive the real CPU readback filter across windows.
+    uint64_t totals[kCsSlotWordsLs]{};
+    for (uint32_t window = 0; window < 2u; ++window)
+      for (uint32_t word = 0; word < kCsSlotWordsLs; ++word)
+        if (compose_plain_counter(word)) totals[word] += word + window;
+    for (uint32_t word = kCsSurfaceClean; word <= kCsSurfaceFsOff; ++word) CHECK(totals[word] == 2u*word+1u);
+    for (uint32_t word = kCsSurfaceComposeOff; word <= kCsSurfaceEdge; ++word) CHECK(totals[word] == 2u*word+1u);
+  }
+
   // Coverage must use the shared marker word at every supported record stride,
   // including the optional game-shadow tail. Roughness alone is not coverage.
   for (uint32_t stride : {32u, 40u, 48u, 96u, 104u, 112u}) {
@@ -1201,34 +1243,54 @@ int main(int argc, char** argv) {
         // Exercise the emitted predicate, including the native pow floor.
         // All three independently sampled foam masks must be absent; a
         // nonzero texture/flow signal must never be accepted by a tolerance.
-        for (unsigned sample = 0; sample < 6; ++sample) {
+        for (unsigned sample = 0; sample < 8; ++sample) {
           std::map<uint32_t, float> value;
           const uint32_t raw[] = {742,809,873}, weight[] = {751,814,878};
+          const uint32_t flow[] = {724,791,855}, edge[] = {741,808,872};
           for (unsigned m = 0; m < 3; ++m) {
-            value[raw[m]] = sample == m + 1 ? 1e-20f : 0.0f;
+            value[flow[m]]=sample==m+1 || sample==4 || sample==6 ? 1.0f : 0.0f;
+            value[edge[m]]=sample==m+1 || sample==4 || sample==7 ? 1.0f : 0.0f;
+            value[raw[m]] = value[flow[m]]*value[edge[m]]*1e-20f;
             value[weight[m]] = std::pow(std::fmax(std::fabs(value[raw[m]]), 1e-4f), 1.8621f) * 0.8952f;
-            CHECK(value[weight[m]] > 0.0f); // old exact-zero predicate rejects even no foam
+            CHECK(value[weight[m]] > 0.0f);
           }
-          // Disabled multiplier must still qualify, even with nonzero raw masks.
-          if (sample == 4) for (unsigned m = 0; m < 3; ++m) value[raw[m]]=1.0f, value[weight[m]]=0.0f;
+          // A zero runtime multiplier makes foam absent even with nonzero sources.
+          if (sample == 4) for (unsigned m = 0; m < 3; ++m) value[weight[m]]=0.0f;
           std::map<uint32_t, bool> truth;
+          std::map<uint32_t, uint32_t> integer;
           bool guard = false;
           unsigned comparisons = 0;
+          uint32_t diagnostic=0;
           for (size_t p = 5; p < on.size(); p += on[p] >> 16) {
             const unsigned op = on[p] & 65535u;
-            if (op == 49u) truth[on[p+2]] = sample != 5; // specialization 1025
-            if (op == 180u && value.count(on[p+3])) {
-              truth[on[p+2]] = value[on[p+3]] == 0.0f;
-              ++comparisons;
+            if (op == 43u && (on[p]>>16)==4) integer[on[p+2]]=on[p+3];
+            if (op == 49u) truth[on[p+2]] = sample != 5;
+            if ((op == 180u || op == 182u) && value.count(on[p+3])) {
+              truth[on[p+2]] = op==180u ? value[on[p+3]]==0.0f : value[on[p+3]]!=0.0f;
+              if(op==180u) ++comparisons;
             }
-            if ((op == 166u || op == 167u) && truth.count(on[p+3]) && truth.count(on[p+4])) {
-              guard = op == 166u ? truth[on[p+3]] || truth[on[p+4]] : truth[on[p+3]] && truth[on[p+4]];
-              truth[on[p+2]] = guard;
-              if (comparisons == 6 && op == 167u) break;
+            if (op==168u && truth.count(on[p+3])) truth[on[p+2]]=!truth[on[p+3]];
+            if ((op == 166u || op == 167u) && truth.count(on[p+3]) && truth.count(on[p+4]))
+              truth[on[p+2]] = op == 166u ? truth[on[p+3]] || truth[on[p+4]] : truth[on[p+3]] && truth[on[p+4]];
+            if(op==80u && (on[p]>>16)==6 && on[p+3]==on[p+4] && on[p+4]==on[p+5] && truth.count(on[p+3]))
+              guard=truth[on[p+3]];
+            if(op==169u && truth.count(on[p+3]) && integer.count(on[p+4]) && integer.count(on[p+5]))
+              integer[on[p+2]]=truth[on[p+3]] ? integer[on[p+4]] : integer[on[p+5]];
+            if(op==197u && integer.count(on[p+3]) && integer.count(on[p+4])) {
+              const uint32_t result=integer[on[p+3]]|integer[on[p+4]];
+              integer[on[p+2]]=result;
+              if((result&0xffc0u)==kSurfaceMarker) diagnostic=result;
             }
           }
           CHECK(comparisons == 6);
-          CHECK(guard == (sample == 0 || sample == 4));
+          CHECK(guard == (sample == 0 || sample == 4 || sample==6 || sample==7));
+          uint32_t expected=kSurfaceMarker;
+          if(sample>=1 && sample<=3) expected|=1u<<(sample-1);
+          if(sample==5) expected|=kSurfaceFsOff;
+          if((sample>=1 && sample<=4)||sample==6) expected|=kSurfaceFlow;
+          if((sample>=1 && sample<=4)||sample==7) expected|=kSurfaceEdge;
+          CHECK(diagnostic==expected);
+          CHECK(surface_clean(diagnostic)==guard);
         }
         // Only the final colour output gains a store; record words do not grow.
         auto stores = [](const std::vector<uint32_t>& mod) {

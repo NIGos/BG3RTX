@@ -169,7 +169,7 @@ enum : uint32_t {
   OpAccessChain = 65, OpDecorate = 71, OpMemberDecorate = 72, OpCompositeConstruct = 80,
   OpCompositeExtract = 81, OpConvertFToU = 109, OpConvertUToF = 112, OpConvertUToPtr = 120, OpBitcast = 124, OpIAdd = 128,
   OpFAdd = 129, OpFSub = 131, OpIMul = 132, OpFMul = 133, OpFDiv = 136, OpVectorTimesScalar = 142, OpDot = 148, OpLogicalOr = 166, OpLogicalAnd = 167,
-  OpSelect = 169, OpBitwiseAnd = 199,
+  OpSelect = 169, OpBitwiseOr = 197, OpBitwiseAnd = 199,
   OpULessThan = 176, OpPhi = 245, OpLabel = 248, OpKill = 252, OpReturn = 253, OpTerminateInvocation = 4416,
   OpDemoteToHelperInvocation = 5380,
   CapInt64 = 11, CapPsb = 5347, AddrPsb64 = 5348, ScInput = 1, ScPsb = 5349, ModeEarlyTests = 9,
@@ -425,9 +425,9 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
                               {2679,2680,2690},{3258,0,3287}};
   std::map<size_t,std::vector<uint32_t>> surface_insert;
   std::map<uint32_t,uint32_t> surface_remap;
-  uint32_t clean=0, clean3=0;
+  uint32_t clean=0, clean3=0, surface_diagnostic=0;
   if(surface) {
-    for(uint32_t v: {742u,751u,809u,814u,873u,878u,2803u,3323u})
+    for(uint32_t v: {724u,741u,742u,751u,791u,808u,809u,814u,855u,872u,873u,878u,2803u,3323u})
       if(!is(v,v<2803u?t_float:t_v3)) return PatchStatus::kIdMismatch;
     for(const auto& q:splits)
       if(!is(q.product,t_v3)||!is(q.fresnel,t_v3)||(q.accum&&!is(q.accum,t_v3))) return PatchStatus::kIdMismatch;
@@ -442,11 +442,35 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
         // no epsilon admits real edge/flow foam. Final zero also covers a
         // runtime multiplier of zero, as the original predicate did.
         clean=surface_spec;
+        auto uint_constant = [&](uint32_t value) {
+          const uint32_t r=id(); emit(types,OpConstant,{t_uint,r,value}); return r;
+        };
+        // Diagnostic bits occupy only the existing validity half-word. The
+        // marker distinguishes this provisioned family from native FS stores.
+        surface_diagnostic=uint_constant(kSurfaceMarker);
+        auto reason = [&](uint32_t condition, uint32_t bit) {
+          surface_diagnostic=op2(OpBitwiseOr,t_uint,{surface_diagnostic,
+              op2(OpSelect,t_uint,{condition,uint_constant(bit),c_u[0]})});
+        };
+        reason(op2(168 /*OpLogicalNot*/,t_bool,{surface_spec}),kSurfaceFsOff);
+        uint32_t bit=kSurfaceFoamColour;
         for(const auto& mask : {std::pair<uint32_t,uint32_t>{742,751}, {809,814}, {873,878}}) {
           const uint32_t absent=op2(OpLogicalOr,t_bool,{
               op2(180 /*OpFOrdEqual*/,t_bool,{mask.first,surface_zero}),
               op2(180 /*OpFOrdEqual*/,t_bool,{mask.second,surface_zero})});
+          reason(op2(168 /*OpLogicalNot*/,t_bool,{absent}),bit);
+          bit <<= 1;
           clean=op2(OpLogicalAnd,t_bool,{clean,absent});
+        }
+        // Factors of the exact pre-floor products: raw = flow * edge/depth.
+        // These are source observations, not additional rejection predicates;
+        // a zero multiplier may still make the final foam contribution absent.
+        const uint32_t factor_sources[][4]={{724,791,855,kSurfaceFlow},{741,808,872,kSurfaceEdge}};
+        for(const auto& factors : factor_sources) {
+          uint32_t nonzero=op2(182 /*OpFOrdNotEqual*/,t_bool,{factors[0],surface_zero});
+          for(uint32_t source : {factors[1],factors[2]})
+            nonzero=op2(OpLogicalOr,t_bool,{nonzero,op2(182,t_bool,{source,surface_zero})});
+          reason(nonzero,factors[3]);
         }
         clean3=op2(OpCompositeConstruct,surface_bool3,{clean,clean,clean});
         surface_insert[x.at+x.n]=body; body.clear();
@@ -524,6 +548,10 @@ inline PatchStatus patch_fs(const uint32_t* code, size_t words, const FsIds& ids
   v[5] = half2(c(C, 1), c(C, 2));
   v[6] = op2(OpBitcast, t_uint, {t});
   v[7] = ext(t_uint, GlslPackUnorm2x16, {op2(OpCompositeConstruct, t_v2, {surface ? op2(OpSelect,t_float,{clean,surface_half,c_one}):c_one, ids.rough})});
+  if (surface) {
+    const uint32_t high_mask=id(); emit(types,OpConstant,{t_uint,high_mask,0xffff0000u});
+    v[7]=op2(OpBitwiseOr,t_uint,{op2(OpBitwiseAnd,t_uint,{v[7],high_mask}),surface_diagnostic});
+  }
   for (uint32_t k = 0; k < kRecordWords; ++k) {
     const uint32_t at = op2(OpIAdd, t_uint, {w0, c_u[k]});
     const uint32_t p = op2(OpAccessChain, t_puint, {base, c_u[0], at});

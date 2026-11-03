@@ -539,7 +539,7 @@ constexpr uint32_t kMaxComposePasses = 4;                 // timed compose dispa
 constexpr uint32_t kCQ = 2 + 2 * kMaxComposePasses;      // timestamps per frame slot
 // 32 M5.3 words + the M5.4 sun words + the M5.4b local-light words (64..90) + the M5.5 refraction words
 // (96..119) of a 128-word slot.
-constexpr uint32_t kCStatWords = 122; // M5.6 counters after the existing refraction table
+constexpr uint32_t kCStatWords = 128; // M5.6 counters after the existing refraction table
 constexpr VkDeviceSize kCStatBytes = 512, kCParamBytes = 256, kCCamBytes = 768;   // cam at 0, vp at 512
 static_assert(kCStatBytes == bg3::water::kCsSlotWordsLs * 4 && kCStatWords * 4 <= kCStatBytes, "the slot holds every word");
 constexpr VkDeviceSize kCVpOff = 512, kCSlotBytes = kCStatBytes + kCParamBytes;
@@ -901,8 +901,13 @@ void maybe_log_compose() {
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
             (unsigned long long)w[kCsNonFinite]);
-  host->log("[water] surface partition: clean owned %llu, invalid %llu; reference CPU energy partition, model mean may change",
-            (unsigned long long)w[120],(unsigned long long)w[121]);
+  host->log("[water] surface partition: clean owned %llu, invalid %llu; rejected foam colour %llu, foam F0 %llu, foam roughness %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, rejected foam texture source %llu, edge/flow mask source %llu; reasons overlap; reference CPU energy partition, model mean may change",
+            (unsigned long long)w[kCsSurfaceClean], (unsigned long long)w[kCsSurfaceInvalid],
+            (unsigned long long)w[kCsSurfaceFoamColour], (unsigned long long)w[kCsSurfaceFoamF0],
+            (unsigned long long)w[kCsSurfaceFoamRough], (unsigned long long)w[kCsSurfaceNative],
+            (unsigned long long)w[kCsSurfaceLayout], (unsigned long long)w[kCsSurfaceFsOff],
+            (unsigned long long)w[kCsSurfaceComposeOff], (unsigned long long)w[kCsSurfaceMarked],
+            (unsigned long long)w[kCsSurfaceFlow], (unsigned long long)w[kCsSurfaceEdge]);
   g_ccont.reset_counts();
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
   host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
@@ -1107,6 +1112,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
                        (want_gsh ? kFlagGsh : 0u)
                  : 1u;
   if(hit_active()) prm.a[3]|=kFlagHitShade;
+  if(host->cfg_int("rt_water_surface_fresnel",0) != 0) prm.a[3]|=kFlagSurfaceDiagnostics;
   g_st.hit=g_hit;g_st.hit_identity=in.hit_identity;
   g_st.flags = prm.a[3];
   prm.b[0] = host->cfg_float("rf_mirror_rough", 0.1f);
