@@ -291,15 +291,15 @@ inline constexpr Knob kKnobs[] = {
    {{"rt","1","RT device setup"},{"rt_alpha","1","Native prepass capture"},{"rt_bvh_split","1","Split hit identity"},
     {"gi_rt_fallback","0","GI fallback 0 (zero-bounce hidden hits)",1}}, false, "Advanced", {"Estimate", "Near ~+0.6 ms; Far ~+4 ms; reflections ~+6 ms", "Unknown", "RTX 5090; 4K-class output; Far 6 m; includes emission +0.08 ms and far-field GI trace +3.2-3.7 ms; reflection level experimental. Reference only."}},
 
-  // Experimental features stay off in every preset. Hair origins and spill are developer-only
-  // until qualified (user decisions 2026-11-03). Each level writes every key it covers.
+  // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
+  // stay off in every preset; hair origins and spill are developer-only until qualified.
   {"box_lights", "Box light shadows",
-   "Shadows from projector lights in interiors. May hide artist-unshadowed lights in Grymforge; investigation pending. Off in every preset; +0.32 ms at the forge / +0.20 ms at the inn (RTX 5090).",
+   "Shadows from projector lights in interiors, preserving the game's non-shadow-casting art lights. All in Ultra, Off in lower presets; +0.13 ms at the forge (RTX 5090).",
    Kind::Choice, Apply::Live, "", false,
    {{"off", "Off", 0, {{"ls_box", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "Shadowed", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live},
     {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Lighting", {"Measured", "+0.32 ms S6 / +0.20 ms S7", "Unknown", "RTX 5090; ls_box=2; S6 forge and S7 inn; reverted 2026-11-03: may hide artist-unshadowed lights in Grymforge; investigation pending. Reference only."}},
+   {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.13 ms S6", "Unknown", "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."}},
 
   {"exp_water_compose_shift", "Water camera correction",
    "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
