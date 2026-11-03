@@ -200,8 +200,19 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
   HdLight source;source.position=light.pos;source.color=light.col;source.direction=light.dir;
   source.inverse_radius=light.inv_r;source.cos_outer=light.cos_outer;source.cos_inner=light.cos_inner;
   source.global_selector=light.m3;source.falloff_exponent=light.m4;source.falloff_bias=light.m5;source.channels=light.chan;
+#ifdef WATER_HIT_COST
+  HdIncident incident;
+  if((kWaterHitCost&2u)!=0u)incident=wl_incident(source,item>=points,surface_position,material.channel,global_scale);
+  else
+  incident=hd_native_incident(source,item>=points,surface_position,material.channel,global_scale);
+#else
   HdIncident incident=hd_native_incident(source,item>=points,surface_position,material.channel,global_scale);
+#endif
   if(incident.status!=HdOk){result.status=incident.status;return result;}
+#ifdef WATER_HIT_COST
+  // hd_scatter returns HdOk immediately for this same exact zero incident.
+  if((kWaterHitCost&2u)!=0u && wl_known_zero(incident)){hd_stat(6u,true);hd_stat(7u,true);continue;}
+#endif
   // Validate material/normal domain before spending a visibility ray.
   HdDirect term=HD_SCATTER(material,material.normal,geometric_normal,outgoing,incident,true,1);
   if(term.status!=HdOk){result.status=term.status;return result;}

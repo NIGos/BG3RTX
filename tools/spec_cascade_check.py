@@ -171,6 +171,12 @@ def old_requests_waterhit(spec_request):
     return out
 
 
+def old_requests_watercost(spec_request):
+    return [(a | {1021: cost}, r + f";WATER_HIT_COST_REFERENCE={cost}")
+            for a, r in old_requests_waterhit(spec_request) if a[1016] in (1, 2)
+            for cost in (0, 1, 2, 4, 7)]
+
+
 def old_requests_hairgi(spec_request):
     """Hair absent/present crossed with GI culling off/on; native coverage stays literal in references."""
     out = []
@@ -205,6 +211,7 @@ KEYS = {"haircost": ("RT_SPEC_NATIVE=1", old_requests_haircost), "hairgi": ("RT_
         "groom": ("RT_SPEC_NATIVE=1", old_requests_groom),
         "waterhair": ("RT_SPEC_NATIVE=1", old_requests_waterhair),
         "waterhit": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_waterhit),
+        "watercost": ("WATER_HIT_SHADE_LAYOUT=1", old_requests_watercost),
         "watershift": ("WATER_SPEC_CASCADE=1", lambda r: [({1015: v}, r + f";WATER_COMPOSE_SHIFT_REFERENCE={v}") for v in (0, 1)]),
         "watercasc": ("WATER_SPEC_CASCADE=1", two(old_requests_watercasc, lambda f: SPEC_ID)),
         "occ": ("RT_SPEC_OCC_STATS=1", two(lambda r: old_requests_swap(r, "RT_SPEC_OCC_STATS=1", "RT_OCC_STATS=1"), lambda f: 1011)),
@@ -523,13 +530,14 @@ def main():
                            next((r for r in pick if split_request(r)[0].startswith("gi/gi_trace_rt")), pick[0])
                            if args.key == "groom" else pick[0])
         control_pairs = pairs[control_request]
-        (_, c0), (_, c1) = ((control_pairs[4], control_pairs[6]) if args.key == "haircost" else
+        (_, c0), (_, c1) = ((control_pairs[0], control_pairs[2]) if args.key == "watercost" else
+                           (control_pairs[4], control_pairs[6]) if args.key == "haircost" else
                            control_pairs[-2:] if args.key == "hairgi" else
                            (control_pairs[0], control_pairs[-1]) if args.key in ("native", "groom") else control_pairs[:2])
         # Water's copy entry is invariant; the compose entry must distinguish edge off/on.
         control_entry = ("water_compose" if args.key in ("wateredge", "watercasc", "watershift") else
-                         "water_reflect" if args.key in ("waterhair", "waterhit") and "water_reflect.hlsl" in control_request else
-                         "water_compose" if args.key in ("waterhair", "waterhit") and "water_compose.hlsl" in control_request else "main")
+                         "water_reflect" if args.key in ("waterhair", "waterhit", "watercost") and "water_reflect.hlsl" in control_request else
+                         "water_compose" if args.key in ("waterhair", "waterhit", "watercost") and "water_compose.hlsl" in control_request else "main")
         ctrl = differ(canonical(tool, opt(tool, P(c0, control_entry), Path(tmp) / "c0.spv", "-O")),
                       canonical(tool, opt(tool, P(c1, control_entry), Path(tmp) / "c1.spv", "-O")))
         say(f"control: {c0} vs its define variant differ in {ctrl} lines (must be > 0)")

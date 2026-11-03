@@ -86,6 +86,18 @@ class WaterHitMappingTest(unittest.TestCase):
             for shift in (0, 1) for v in (0, 1, 2)])
 
 
+class WaterCostMappingTest(unittest.TestCase):
+    def test_independent_bits_and_modes(self):
+        from tools.spec_cascade_check import KEYS
+        request = "rt/water_compose.hlsl?WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1"
+        pairs = KEYS["watercost"][1](request)
+        self.assertEqual(len(pairs), 20)
+        self.assertEqual({a[1021] for a, _ in pairs}, {0, 1, 2, 4, 7})
+        self.assertEqual({(a[1016], a[1015]) for a, _ in pairs}, {(1,0),(1,1),(2,0),(2,1)})
+        for a, r in pairs:
+            self.assertIn(f"WATER_HIT_COST_REFERENCE={a[1021]}", r)
+
+
 class PhiOrderTest(unittest.TestCase):
     def setUp(self):
         self.types = {"%1": "bool", "%2": "uint"}

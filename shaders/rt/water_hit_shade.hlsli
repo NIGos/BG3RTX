@@ -7,6 +7,8 @@ static const uint kWaterHitShade = WATER_HIT_SHADE_REFERENCE;
 #else
 [[vk::constant_id(1016)]] const uint kWaterHitShade = 0u;
 #endif
+#include "water_hit_cost.hlsli"
+#define WATER_HIT_COST
 #include "bg3_lights.hlsli"
 #include "bg3_ambient.hlsli"
 #define BG3_SUN_SET 3
@@ -19,6 +21,7 @@ static const uint kWaterHitShade = WATER_HIT_SHADE_REFERENCE;
 #define NATIVE_HIT_DLS_POLICY 1
 #define NATIVE_HIT_SLOTS_SET 3
 #define NATIVE_HIT_SLOTS_BINDING 7
+#include "../../common/water_world_lights.h"
 #include "native_hit_direct.hlsli"
 #define NATIVE_HIT_SUN_ROOF 1
 #define NATIVE_HIT_SHADE_FULL 1
@@ -32,12 +35,31 @@ uint water_world_shade(RtHit h,float3 H,float3 R,float footprint,out float3 L){
  NativeHitMaterial m=rt_hit_material(h,footprint);if(m.status!=0u)return kHitShadeMaterial;
  float3 P=native_hit_position(h,H),ng=rt_hit_normal(h);
  WlSelection selected=wl_empty();uint bytes;lLights.GetDimensions(bytes);
+ if((kWaterHitCost&5u)==0u){
  [loop]for(uint id=0u;id<min(bytes/80u,4096u);++id){
   uint type=waterWorldLights.Load(id*4u);if(type==0u)continue;
   if(type==3u)return kHitShadeDirect; // inconsistent type: fail closed
   float4 sphere=asfloat(lLights.Load4(id*80u));uint channels=lLights.Load(id*80u+60u);
   if(!wl_reaches(P,sphere.xyz,sphere.w,channels,m.channel))continue;
   float3 d=P-sphere.xyz;wl_insert(selected,id,dot(d,d));
+ }
+ }else{
+ uint limit=min(bytes/80u,4096u),word=0u,bits=0u;
+ [loop]for(uint id=0u;id<limit;++id){
+  if((kWaterHitCost&1u)!=0u){
+   while(bits==0u && word*32u<limit){bits=waterWorldLights.Load((4097u+word)*4u);++word;}
+   if(bits==0u)break;
+   id=(word-1u)*32u+uint(firstbitlow(bits));bits&=bits-1u;
+   if(id>=limit)break;
+  }
+  uint type=waterWorldLights.Load(id*4u);if(type==0u)continue;
+  if(type==3u)return kHitShadeDirect; // inconsistent type: fail closed
+  float4 sphere=asfloat(lLights.Load4(id*80u));uint channels=lLights.Load(id*80u+60u);
+  if(!wl_reaches(P,sphere.xyz,sphere.w,channels,m.channel))continue;
+  float3 d=P-sphere.xyz;
+  if((kWaterHitCost&4u)!=0u)wl_append(selected,id,dot(d,d));
+  else wl_insert(selected,id,dot(d,d));
+ }
  }
  g_water_truncated=selected.candidates>WlK;
  // Truncation loses unknown energy. Retain the receiver probe rather than
@@ -49,7 +71,10 @@ uint water_world_shade(RtHit h,float3 H,float3 R,float footprint,out float3 L){
   HdLight l;l.position=b.pos;l.color=b.col;l.direction=b.dir;l.inverse_radius=b.inv_r;
   l.cos_outer=b.cos_outer;l.cos_inner=b.cos_inner;l.global_selector=b.m3;
   l.falloff_exponent=b.m4;l.falloff_bias=b.m5;l.channels=b.chan;
-  HdIncident i=hd_native_incident(l,waterWorldLights.Load(id*4u)==2u,P,m.channel,scale);
+  HdIncident i;
+  if((kWaterHitCost&2u)!=0u)i=wl_incident(l,waterWorldLights.Load(id*4u)==2u,P,m.channel,scale);
+  else i=hd_native_incident(l,waterWorldLights.Load(id*4u)==2u,P,m.channel,scale);
+  if((kWaterHitCost&2u)!=0u && wl_known_zero(i))continue;
   HdDirect t=HD_SCATTER(m,m.normal,ng,-R,i,true,1.0);
   if(i.status!=HdOk || t.status!=HdOk)return kHitShadeDirect;
   if(!any(t.radiance>0))continue;
