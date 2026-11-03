@@ -7,10 +7,16 @@ from the pending actual GPU/in-game gate and the user's darker-Hair attribution.
 
 ## Status: procedural CHAR_Hair/Pubes candidate, family and live gates remain open
 
-`rt_native_hair=0` is default. Enabling requires a restart with `rt_alpha=1` and
-`rt_bvh_split=1`. The latter requirement is enforced: legacy startup rejects this
-mode, logs the reason and never mixes 24/88-byte geometry. Hot-enabling after a
-24-byte startup is also explicitly rejected. No live build was deployed.
+`rt_native_hair=0` remains default. The user-trial layer prepares the 88-byte
+capture layout whenever `rt=1`, `rt_alpha=1` and `rt_bvh_split=1` at startup, so
+Experimental > Native hair + scalp can turn coverage on/off live. Ordinary
+24/64-byte startups become 88-byte captures (extra 64/24 bytes per vertex);
+actual capture memory and GPU cost of this reservation remain unmeasured.
+Coverage still uses the existing live keys; incompatible startup layouts reject
+enable instead of mixing strides. Tilesets remain developer-only and need restart.
+`rt_hair_pool_trim` and `rt_hair_cheap` are normal Experimental live controls;
+`rt_hair_gi_mean` stays quarantined/developer-only. No live verification of this
+startup reservation was performed; no rendering quality/default promotion.
 
 The current increment implements actual native CHAR_Hair coverage and procedural
 primary depth. It is not an alpha-A surrogate. Console GPU gate passes; native G-buffer

@@ -259,8 +259,8 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, false, "Advanced", {"Measured", "Neutral at camp", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
   {"exp_water_hit_shade", "Water: hidden-surface reflections",
-   "Experimental: shades qualified hidden water reflection hits. Unsupported hits keep the probe.",
-   Kind::Choice, Apply::Live, "live; captured materials require first-enable restart", true,
+   "Shades hidden/off-screen objects reflected in water. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms.",
+   Kind::Choice, Apply::Live, "live; needs captured materials at startup", false,
    {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
      {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
@@ -301,29 +301,36 @@ inline constexpr Knob kKnobs[] = {
     {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.13 ms S6", "Unknown", "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."}},
 
-  {"rr_hair_resolve", "Hair coverage resolve",
-   "Experimental spatial hair smoothing before Ray Reconstruction. May soften hair silhouettes; quality and GPU cost await a live comparison.",
-   Kind::Choice, Apply::Live, "live", true,
+  {"rr_hair_resolve", "RR hair dither resolve",
+   "Smooths hair coverage before RR. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured; may soften edges.",
+   Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rr_hair_resolve", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {}},
+   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Experimental", {}},
+
+  {"rr_post", "RR order",
+   "Moves RR before/after game post-processing. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured.",
+   Kind::Choice, Apply::Live, "live", false,
+   {{"before", "Before post (default)", 0, {{"rr_post", "1"}}, {}, {}, false, false, false, Apply::Live},
+    {"after", "After post", kCapDlss, {{"rr_post", "0"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
 
   {"exp_water_compose_shift", "Water camera correction",
-   "Keeps traced water reflections aligned while turning the camera. Quality and cost remain unqualified.",
+   "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
    Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_water_compose_shift", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_water_compose_shift", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
 
-  {"exp_native_coverage", "Native coverage",
-   "Improves the shape of hair, scalp and cutout surfaces in ray-traced lighting. Quality and cost remain unqualified.",
-   Kind::Choice, Apply::Restart, "restart required", false,
-   {{"off", "Off", 0, {{"rt_native_hair", "0"}, {"rt_native_scalp", "0"}, {"rt_native_tileset", "0"}}, {}, {}, false, false, false, Apply::Restart},
+  {"exp_native_coverage", "Native hair + scalp",
+   "Uses native hair/scalp coverage in RT. Dialogue1/Dialogue3: face and neck shadows. Cost: RT +2.3-4.5 ms; GI +3.4-6.9 ms (RTX 5090).",
+   Kind::Choice, Apply::Live, "hair + scalp: live; tilesets: restart", false,
+   {{"off", "Off", 0, {{"rt_native_hair", "0"}, {"rt_native_scalp", "0"}, {"rt_native_tileset", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"hair", "Hair + scalp", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "0"}},
-     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Restart},
+     {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Live},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
-     {{"rt_geometry", 2}}, {"rt_native_tileset"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}},
+     {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture at startup"},{"rt_bvh_split","1","Static geometry cache at startup"}}, false, "Experimental", {}},
 
   {"exp_hair_gi_cull", "Omit hair from indirect rays",
    "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
@@ -333,12 +340,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
   {"exp_hair_groom", "Strand hair in ray-traced lighting",
-   "Traces native hair as strands converted from the hair cards (generated groom files) in shadow, AO, GI and "
-   "reflection rays; the visible hair stays the game's. Needs linear swept sphere hardware. Quality and cost unqualified.",
-   Kind::Choice, Apply::Restart, "Enable at startup for the device feature; then live A/B is available.", true,
+   "Uses strands in RT shadows/AO/GI/reflections. Dialogue1: hair shadows on faces/necks. RTX 5090 vs native cards: RT -1.1-1.5 ms, GI -1.6-1.8 ms; refit +0.57 ms.",
+   Kind::Choice, Apply::Live, "live; supported LSS hardware and local groom files required", false,
    {{"off", "Off", 0, {{"rt_hair_groom", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"}}, true, "Developer", {}},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Experimental", {}},
 
   {"exp_hair_visibility", "Subpixel distant hair cards",
    "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
@@ -348,18 +354,18 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
-   "Reclaims native capture snapshots after their held-draw horizon. Pool usage and scene validity remain unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
+   "Reclaims and packs native capture snapshots. Dialogue3: compare missing scene/hair after pool pressure. Pool memory -11-42%; GPU cost unmeasured.",
+   Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_pool_trim", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
 
   {"exp_hair_cheap", "Single-sample hair coverage",
-   "Uses one mask sample for secondary rays and ends dedicated hit-AO rays at their first hit. Primary hair stays full; energy and cost are unqualified.",
-   Kind::Choice, Apply::Live, "live", true,
+   "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",
+   Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rt_hair_cheap", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_cheap", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+   {}, {0, 0, 0, 0}, true, {}, false, "Experimental", {}},
 
   {"exp_hair_gi_mean", "Mean hair coverage for GI",
    "Uses stored empirical strand coverage probabilities for GI bounce rays. Indirect energy and cost remain unqualified.",
@@ -874,12 +880,11 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_water_game_shadow") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).
   if (key == "rt_hit_material_instanced") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
-  // rt_hair_groom negotiates the linear swept sphere device feature at startup; off and on again are live.
-  if (key == "rt_hair_groom") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  // Native hair capture and optional LSS support are prepared at startup for live toggles.
   // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
   if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
-                                         "sharc_device", "rt_bvh_split", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
+                                         "sharc_device", "rt_bvh_split", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
                                          "rt_hit_material_wind_rgb"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
