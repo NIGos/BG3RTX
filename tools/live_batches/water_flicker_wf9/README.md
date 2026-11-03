@@ -13,6 +13,8 @@ cost window. Check adjacent presented views/minimap before scoring; camera jumps
 or water leaving view invalidate the moving comparison. The 10:08 camera probe
 showed Q/E movement in 120/120 samples while posted mouse turns jumped.
 Return windows are approximate: compare static energy only at the unmoved camera.
+Both static ON windows require build-camera delta average < 0.01 m, with nonzero
+samples. This rejects the 13:10 buffer-layout regression (294.80 m at rest).
 
 Four capture-free cost-turn windows collect compose stability, compose tiers, water reflection stats
 and compose GPU ms with expect_every. Read compose dispatch ms separately from the lighting copy.

@@ -1049,6 +1049,17 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   vk.CmdUpdateBuffer(cmd, rb, 0, sizeof header, header);
   vk.CmdFillBuffer(cmd, g_cdev, cslot_off(slot), kCStatBytes, 0);    // the shader's counters
   vk.CmdFillBuffer(cmd, g_chost, cslot_off(slot), kCStatBytes + 16, 0);   // the readback, if no pass copies
+  // Keep the scene camera with the lighting camera copied by water_copy. The
+  // latter is a different 400 B layout and cannot supply the TLAS translation.
+  if (host->cfg_int("rt_water_compose_shift", 0) != 0) {
+    const uint32_t valid = in.cam2.buffer && in.cam2.range >= 224 ? 1u : 0u;
+    if (valid) {
+      const VkBufferCopy camera{in.cam2.offset + WATER_SCENE_CAMERA_ORIGIN_OFFSET,
+                               kCCamOff + WATER_COMPOSE_CURRENT_CAMERA_OFFSET, 16};
+      vk.CmdCopyBuffer(cmd, in.cam2.buffer, g_cdev, 1, &camera);
+    } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + WATER_COMPOSE_CURRENT_CAMERA_OFFSET, 16, 0);
+    vk.CmdUpdateBuffer(cmd, g_cdev, kCCamOff + WATER_COMPOSE_CURRENT_CAMERA_VALID_OFFSET, 4, &valid);
+  } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + WATER_COMPOSE_CURRENT_CAMERA_VALID_OFFSET, 4, 0);
   ComposeParams prm{};
   prm.a[0] = in.w;
   prm.a[1] = cb.capacity;
@@ -1262,9 +1273,10 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     flags |= shifted ? kFlagSceneShift : 0u;
     if (shift_on) {
       if (camera_buffer && build_camera.frame) {
-        const VkBufferCopy camera{build_camera_index(build_camera.frame) * kBuildCameraBytes, kCCamOff + 400, 16};
+        const VkBufferCopy camera{build_camera_index(build_camera.frame) * kBuildCameraBytes,
+                                 kCCamOff + WATER_COMPOSE_BUILD_CAMERA_OFFSET, 16};
         vk.CmdCopyBuffer(cmd, VkBuffer(camera_buffer), g_cdev, 1, &camera);
-      } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + 400, 16, 0);
+      } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + WATER_COMPOSE_BUILD_CAMERA_OFFSET, 16, 0);
     }
     if(!shade_pass)flags&=~kFlagHitShade;
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
@@ -1343,7 +1355,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   const VkBufferCopy sc{cslot_off(slot), cslot_off(slot), kCStatBytes};
   vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &sc);
   if (shift_on) {
-    const VkBufferCopy camera{kCCamOff + 416, cslot_off(slot) + kCStatBytes, 16};
+    const VkBufferCopy camera{kCCamOff + WATER_COMPOSE_CAMERA_DELTA_OFFSET, cslot_off(slot) + kCStatBytes, 16};
     vk.CmdCopyBuffer(cmd, g_cdev, g_chost, 1, &camera);
   }
   memory_barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, kAll | VK_PIPELINE_STAGE_HOST_BIT);

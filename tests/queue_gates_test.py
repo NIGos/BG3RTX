@@ -67,6 +67,15 @@ def main():
 
     bad_run = log(["2.6286", "3.1362", "0.0000"])
     import re
+    wf9 = json.loads((ROOT / "tools/live_batches/water_flicker_wf9/jobs/wf9-s8-compose-shift.json").read_text())
+    static_camera_gate = next(g for g in wf9["expect_every"] if g["name"] == "static build-camera delta < 0.01 m")
+    check("wf9 checks both static ON windows", static_camera_gate["windows"] == ["energy-static-1", "energy-static-3"])
+    for delta, samples, expected in [("0.000000", 120, True), ("0.009999", 120, True),
+                                      ("0.010000", 120, False), ("294.800000", 120, False), ("0.000000", 0, False)]:
+        line = f"[core] [water] compose (120 frames): build-camera delta avg/max {delta}/294.800000 m ({samples} last-pass samples)"
+        check(f"wf9 static delta {delta}, samples {samples}",
+              bool(re.search(static_camera_gate["select"], line)) and
+              bool(re.search(static_camera_gate["match"], line)) == expected)
     check("the old any-line expect passes the bad run (the bug)", bool(re.search(OK, bad_run)))
     f = queue_gates.check(gate(windows=["diag-on"]), bad_run, RUNNER, PLAN)
     check("every-window gate fails the bad run", len(f) == 1 and "1 of 2 line(s) fail" in f[0] and "3.1362" in f[0])
