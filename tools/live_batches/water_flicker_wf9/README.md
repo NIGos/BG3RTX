@@ -59,3 +59,8 @@ Prewarm shift 1 for 5 s before the first measured window (shift 0 warms at start
 Lint assumptions: 30 rendered FPS, 1 s settings latency, 1 s per trace stall.
 Load-time roof overflow is rejected with zero tolerance in measured windows.
 Held Q/E turns and selective capture counts are unchanged. No generator exists.
+
+18:56 run: all four raw bursts report transport INVALID and lack water_coverage
+in their manifests (16 rather than 24 samples). The producer also logs coverage
+REFUSED (requires 32 B records covering the target). This is a capture defect;
+transport/coverage gates stay intact and reflection residuals are not usable.

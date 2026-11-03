@@ -84,7 +84,7 @@ def combine_group(sources, plan_arg):
             raise ValueError("same-save jobs require compatible tree, window_mode and non-plan args")
         if job.get("command") or job.get("session") or job.get("phases") or job.get("repeat", 1) != 1:
             raise ValueError("combine requires single MovePlan jobs, no command/session/phases/repeat")
-        for key in ("expected_fps", "settings_latency_s", "trace_stall_s"):
+        for key in ("expected_fps", "settings_latency_s"):
             if job.get("live_flow", {}).get(key) != first.get("live_flow", {}).get(key):
                 raise ValueError(f"incompatible live_flow.{key} timing assumptions")
     startup = [settings(j.get("set", "")) for _, j, _ in sources]

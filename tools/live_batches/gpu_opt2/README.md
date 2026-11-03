@@ -11,4 +11,9 @@ Coordinator analysis: `python tools/m4_promotion_gate.py --batch gpu_opt2 --pool
 Keep predicted.json before running; this task forbids commits, so the coordinator must preserve
 its pre-run provenance when promoting the batch. Do not claim a committed prediction here.
 
-Offline lint assumptions: 30 rendered FPS, 1 s settings latency and 1 s per trace stall. Reflection and local-light timers use 300 frames from core/gi.cpp rf_timing_collect / ls_timing_collect. All toggled render states run before measurement.
+Offline lint assumptions: 30 rendered FPS, 1 s settings latency and 4 s per trace stall. Reflection and local-light timers use 300 frames from core/gi.cpp rf_timing_collect / ls_timing_collect. All toggled render states run before measurement.
+
+Regenerate with `python tools/live_batches/gpu_opt2/make_jobs.py` (canonical JSON is the seed).
+The 18:56 run completed only 2 of 3 trace events in 5 s shots: dump completion
+was about 3 s apart. Shots now allow 17 s, scheduled at 1/6/11 s with a 4 s bound;
+all three completions remain required. Cost windows and expectations are unchanged.

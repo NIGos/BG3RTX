@@ -160,6 +160,34 @@ class FlowTests(unittest.TestCase):
         p[2]["seconds"] = 5
         self.assertFalse(f.window_problems(j, p)[0])
 
+    def test_trace_events_need_scheduled_requests_and_serial_write_time(self):
+        j, p = fixture()
+        j["live_flow"] = dict(trace_stall_s=4)
+        j["expect_every"] = [dict(select=r"\[trace\] frame \d+ written", match="written",
+                                  event=True, min=3, settle_s=1, windows=["cost-off"])]
+        p[2].update(seconds=5, trace_at=[1, 2, 3])
+        errors, budgets = f.window_problems(j, p)
+        self.assertTrue(errors)
+        self.assertEqual(budgets[0]["complete"], 0)
+        p[2].update(seconds=16, trace_at=[1, 6, 11])
+        self.assertFalse(f.window_problems(j, p)[0])
+        p[2].pop("trace_at")
+        self.assertIn("0 complete events", f.window_problems(j, p)[0][0])
+
+    def test_scene_wait_shot_window_needs_complete_periods_even_as_event(self):
+        j, p = fixture()
+        j["set"] += ",rt_scene_wait_log_frames=120"
+        j["live_flow"] = dict(trace_stall_s=4)
+        j["expect_every"] = [dict(select=r"\[rt\] scene wait: \d+ frames", match="0 timeouts",
+                                  windows=["cost-off"])]
+        p[2].update(seconds=12, trace_at=[1, 6])
+        self.assertTrue(f.window_problems(j, p)[0])
+        p[2]["seconds"] = 18
+        self.assertFalse(f.window_problems(j, p)[0])
+        j["expect_every"][0]["event"] = True
+        p[2]["seconds"] = 12
+        self.assertTrue(f.window_problems(j, p)[0])
+
     def test_cadence_unknown_missing_label_foreground_and_min_zero(self):
         j, p = fixture()
         j["expect_every"] = [dict(select="new statistic", match="ok", windows=["cost-off"])]
@@ -234,6 +262,19 @@ class FlowTests(unittest.TestCase):
             b.update(change)
             with self.assertRaises(ValueError):
                 c.combine_group([("a", a, p), ("b", b, q)], "plan")
+
+    def test_combined_trace_stall_budgets_remain_local_to_source_windows(self):
+        a, p = fixture()
+        b, q = fixture("two")
+        for job, plan, stall in ((a, p, 1), (b, q, 4)):
+            job["live_flow"] = dict(trace_stall_s=stall)
+            job["expect_every"] = [dict(select=r"\[trace\] frame \d+ written", event=True,
+                                        min=3, windows=["cost-off"])]
+            plan[2].update(seconds=5, trace_at=[1, 2, 3])
+        combined, plan, _ = c.combine_group([("a", a, p), ("b", b, q)], "plan")
+        errors, _ = f.window_problems(combined, plan)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("b2-two--cost-off", errors[0])
 
     def test_combine_restores_each_real_preset_and_rejects_startup_only_changes(self):
         a, p = fixture()

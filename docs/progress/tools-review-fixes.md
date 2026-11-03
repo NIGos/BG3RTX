@@ -6,3 +6,8 @@
 - Re-extracted 2 Dialogue3 runs offline; original forbidden-log failures remain. Camp extraction rejects manifest drift.
 - Existing queue tests: 6 pass, 2 blocked by missing py/pwsh; existing camera test fails its water turn-window assumption.
 - No game, real queue, commits or repository Git metadata changes. Shader request delta 0; offline receipts in captures/offline/tools-review-extracted.
+- 18:56 Water run: all 6 slices INVALID; measurements and limits in combined_20261103/RESULT_WATER_185612.md (no qualification).
+- Source generators extend go2 shots to 17 s and wo1 to 18 s; all gates retained. Lint budgets serialized traces per source segment.
+- wf9 transport INVALID is a real missing-coverage capture defect; water energy lacks post-water scene dumps. Both remain unresolved.
+- Exploratory savings: empty tiles compose ~0.156 ms; combined hit-cost reflection ~1.574 ms / compose ~2.498 ms; temporal ~0.12 ms.
+- 27 unit tests, 7 job lints and all 3 combined dryrun manifests pass; no game or Git metadata writes. Shader request delta 0.

@@ -35,11 +35,11 @@
   {
     "label": "shot-off-a",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   },
@@ -58,11 +58,11 @@
   {
     "label": "shot-on",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   },
@@ -81,11 +81,11 @@
   {
     "label": "shot-off-b",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   }

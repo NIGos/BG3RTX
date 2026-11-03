@@ -53,7 +53,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "combined-Campsite---27h",
   "live_batch": "combined",
-  "timeout": 1811,
+  "timeout": 1847,
   "args": [
     "-RealPresent",
     "-Move",
@@ -424,7 +424,7 @@
   ],
   "requires_success_of": [],
   "post_gate": true,
-  "estimated_phase_seconds": 551.0,
+  "estimated_phase_seconds": 587.0,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -466,7 +466,7 @@
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
-          "trace_stall_s": 1,
+          "trace_stall_s": 4,
           "startup_only": [
             "rt_xfb_mb"
           ]

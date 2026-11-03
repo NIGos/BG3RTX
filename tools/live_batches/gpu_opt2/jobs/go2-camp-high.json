@@ -145,10 +145,10 @@
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
-    "trace_stall_s": 1,
+    "trace_stall_s": 4,
     "startup_only": [
       "rt_xfb_mb"
     ]
   },
-  "estimated_phase_seconds": 140
+  "estimated_phase_seconds": 176
 }

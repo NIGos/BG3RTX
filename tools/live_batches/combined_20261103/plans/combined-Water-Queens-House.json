@@ -570,11 +570,11 @@
   {
     "label": "b3-go2-s8-medium--shot-off-a",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   },
@@ -593,11 +593,11 @@
   {
     "label": "b3-go2-s8-medium--shot-on",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   },
@@ -616,11 +616,11 @@
   {
     "label": "b3-go2-s8-medium--shot-off-b",
     "kind": "static",
-    "seconds": 5,
+    "seconds": 17,
     "trace_at": [
       1,
-      2,
-      3
+      6,
+      11
     ],
     "set": "qa_exposure_hold=1"
   },
@@ -714,76 +714,76 @@
     "label": "b4-wo1-s8-hit-shade--shot-sparse-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-sparse-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-sparse-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-sparse-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
@@ -850,76 +850,76 @@
     "label": "b4-wo1-s8-hit-shade--shot-cone-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-cone-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-cone-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-cone-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
@@ -986,76 +986,76 @@
     "label": "b4-wo1-s8-hit-shade--shot-order-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-order-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-order-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-order-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
@@ -1122,76 +1122,76 @@
     "label": "b4-wo1-s8-hit-shade--shot-combined-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-combined-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-combined-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {
     "label": "b4-wo1-s8-hit-shade--shot-combined-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12,
+    "seconds": 18,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12,
-    "motion_end": 12,
+    "motion_start": 18,
+    "motion_end": 18,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
     "trace_at": [
       4,
-      7
+      9
     ]
   },
   {

@@ -1321,12 +1321,12 @@
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
-          "trace_stall_s": 1,
+          "trace_stall_s": 4,
           "startup_only": [
             "rt_xfb_mb"
           ]
         },
-        "estimated_phase_seconds": 140
+        "estimated_phase_seconds": 176
       },
       "plan": [
         {
@@ -1356,11 +1356,11 @@
         {
           "label": "shot-off-a",
           "kind": "static",
-          "seconds": 5,
+          "seconds": 17,
           "trace_at": [
             1,
-            2,
-            3
+            6,
+            11
           ],
           "set": "qa_exposure_hold=1"
         },
@@ -1379,11 +1379,11 @@
         {
           "label": "shot-on",
           "kind": "static",
-          "seconds": 5,
+          "seconds": 17,
           "trace_at": [
             1,
-            2,
-            3
+            6,
+            11
           ],
           "set": "qa_exposure_hold=1"
         },
@@ -1402,11 +1402,11 @@
         {
           "label": "shot-off-b",
           "kind": "static",
-          "seconds": 5,
+          "seconds": 17,
           "trace_at": [
             1,
-            2,
-            3
+            6,
+            11
           ],
           "set": "qa_exposure_hold=1"
         }
@@ -1423,7 +1423,7 @@
         "session": false,
         "traces": 0,
         "hold": 90,
-        "timeout": 701,
+        "timeout": 797,
         "repeat": 1,
         "live_batch": "water-offscreen",
         "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,rt_hit_material_wind_rgb=1,rt_water_hit_shade=0,rf_hit_shade=0,rf_hit_gi=0,rt_water_compose_shift=1,rt_water_rf_edge=0,rt_water_rr_hitdist=0,rt_water_hit_cost=0",
@@ -1552,7 +1552,7 @@
         ],
         "stop_on_dump": false,
         "purpose": "Water hit cost: sparse, cone, unordered and combined 0/value/0/value at fixed hit shading 2, Ultra; static energy and diagnostic-free reflection GPU windows. Draft only.",
-        "estimated_phase_seconds": 461,
+        "estimated_phase_seconds": 557,
         "expect_every": [
           {
             "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -2104,7 +2104,7 @@
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
-          "trace_stall_s": 1,
+          "trace_stall_s": 4,
           "startup_only": [
             "rt_xfb_mb"
           ]
@@ -2190,76 +2190,76 @@
           "label": "shot-sparse-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-sparse-on-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-sparse-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-sparse-on-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
@@ -2326,76 +2326,76 @@
           "label": "shot-cone-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-cone-on-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-cone-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-cone-on-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
@@ -2462,76 +2462,76 @@
           "label": "shot-order-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-order-on-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-order-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-order-on-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
@@ -2598,76 +2598,76 @@
           "label": "shot-combined-off-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-combined-on-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-combined-off-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
           "label": "shot-combined-on-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 12,
+          "seconds": 18,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 12,
-          "motion_end": 12,
+          "motion_start": 18,
+          "motion_end": 18,
           "pixels_per_second": 0,
           "direction": 0,
           "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
           "trace_at": [
             4,
-            7
+            9
           ]
         },
         {
@@ -4801,11 +4801,11 @@
     {
       "label": "b3-go2-s8-medium--shot-off-a",
       "kind": "static",
-      "seconds": 5,
+      "seconds": 17,
       "trace_at": [
         1,
-        2,
-        3
+        6,
+        11
       ],
       "set": "qa_exposure_hold=1"
     },
@@ -4824,11 +4824,11 @@
     {
       "label": "b3-go2-s8-medium--shot-on",
       "kind": "static",
-      "seconds": 5,
+      "seconds": 17,
       "trace_at": [
         1,
-        2,
-        3
+        6,
+        11
       ],
       "set": "qa_exposure_hold=1"
     },
@@ -4847,11 +4847,11 @@
     {
       "label": "b3-go2-s8-medium--shot-off-b",
       "kind": "static",
-      "seconds": 5,
+      "seconds": 17,
       "trace_at": [
         1,
-        2,
-        3
+        6,
+        11
       ],
       "set": "qa_exposure_hold=1"
     },
@@ -4945,76 +4945,76 @@
       "label": "b4-wo1-s8-hit-shade--shot-sparse-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-sparse-on-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-sparse-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-sparse-on-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=1",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
@@ -5081,76 +5081,76 @@
       "label": "b4-wo1-s8-hit-shade--shot-cone-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-cone-on-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-cone-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-cone-on-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=2",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
@@ -5217,76 +5217,76 @@
       "label": "b4-wo1-s8-hit-shade--shot-order-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-order-on-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-order-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-order-on-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
@@ -5353,76 +5353,76 @@
       "label": "b4-wo1-s8-hit-shade--shot-combined-off-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-combined-on-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-combined-off-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {
       "label": "b4-wo1-s8-hit-shade--shot-combined-on-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 12,
+      "seconds": 18,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 12,
-      "motion_end": 12,
+      "motion_start": 18,
+      "motion_end": 18,
       "pixels_per_second": 0,
       "direction": 0,
       "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=7",
       "trace_at": [
         4,
-        7
+        9
       ]
     },
     {

@@ -21,6 +21,9 @@ and the runner's skipped first line after settings apply. The window endpoint is
 exclusive. Every required line must fit; `when_present` does not excuse an
 insufficient window when its pass runs. Known periodic events also have their
 cadence checked. One-off trace/burst events retain event semantics.
+Trace-write events must have enough scheduled `trace_at` requests and time for
+serialized completion (two presents plus the declared write stall per request).
+A missing request or a completion beyond the exclusive endpoint fails offline.
 
 Required pool-log lines also need `rt_stats=1` in each gated window; startup
 candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
@@ -62,6 +65,8 @@ python tools/live_batches/combine.py <job.json> <job.json> --out captures/offlin
 The tool groups by save, writes one job/plan/manifest per save, and immediately
 runs the shared offline design checks. It rejects incompatible trees, window
 modes, runner args, declared startup keys and timing assumptions.
+Trace-write stall budgets may differ by source; each combined window uses its
+source segment's budget. Expected FPS and settings latency must still agree.
 Only single MovePlan jobs are supported. It never writes a pending inbox.
 
 A reset before each later batch sets every key used by any batch to the next

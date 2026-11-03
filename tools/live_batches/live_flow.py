@@ -275,6 +275,28 @@ def judged_labels(job, plan):
     return labels
 
 
+def trace_event_budget(gate, phase, fps, latency, stall):
+    """Trace requests serialize through tracer.cpp's two-present recording and write.
+
+    auto-run.ps1 queues one request file at a time; a dense trace_at list cannot
+    promise simultaneous completions. Include the declared disk/write stall for
+    each request, not just the last request's nominal timestamp.
+    """
+    if not gate.get("event") or "[trace] frame" not in gate["select"].replace("\\", ""):
+        return None
+    finish, completions = latency, []
+    for at in phase.get("trace_at", []):
+        finish = max(float(at), finish) + 2 / fps + stall
+        completions.append(finish)
+    end = float(phase.get("seconds", 0))
+    settled = latency + float(gate.get("settle_s", 0))
+    complete = sum(settled <= t < end for t in completions)
+    need = int(gate.get("min", 1))
+    eligible = [t for t in completions if t >= settled]
+    minimum = eligible[need - 1] if len(eligible) >= need else None
+    return dict(complete=complete, required=need, minimum_seconds_exclusive=minimum)
+
+
 def window_problems(job, plan):
     meta = job.get("live_flow", {})
     labels = [p.get("label") for p in plan]
@@ -290,6 +312,9 @@ def window_problems(job, plan):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
     phases = {p.get("label"): (p, s) for p, s in zip(plan, phase_states(job, plan))}
+    segment_meta = {p.get("label"): seg.get("live_flow", {})
+                    for seg in meta.get("segments", [])
+                    for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
     for g in job.get("expect_every", []):
         if not g.get("windows"):
             continue  # whole-run gates have no every-window promise
@@ -298,11 +323,25 @@ def window_problems(job, plan):
                 errors.append(f"windows: unknown gate window {label!r}")
                 continue
             p, state = phases[label]
+            window_meta = segment_meta.get(label, meta)
+            trace_stall = float(window_meta.get("trace_stall_s", 1))
+            if not math.isfinite(trace_stall) or trace_stall < 0:
+                errors.append(f"windows: {label}: trace stall budget must be finite and nonnegative")
+                continue
             need = int(g.get("min", 1))
             if need == 0:
                 continue
-            dt = period(g, state, fps)
             name = g.get("name", g["select"])
+            trace = trace_event_budget(g, p, fps, latency, trace_stall)
+            if trace is not None:
+                if "trace_stall_s" not in window_meta:
+                    errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
+                budgets.append(dict(window=label, gate=name, **trace))
+                if trace["complete"] < need:
+                    errors.append(f"windows: {label}: {name}: trace schedule guarantees {trace['complete']} complete events, need {need}; "
+                                  f"minimum > {trace['minimum_seconds_exclusive']} s including serialized trace stalls")
+                continue
+            dt = period(g, state, fps)
             if dt is None:
                 if not g.get("event"):
                     errors.append(f"windows: {label}: {name}: unknown cadence; declare period_frames or period_s")
@@ -310,7 +349,7 @@ def window_problems(job, plan):
             if dt <= 0 or not math.isfinite(dt):
                 errors.append(f"windows: {label}: {name}: invalid cadence {dt}")
                 continue
-            if p.get("trace_at") and "trace_stall_s" not in meta:
+            if p.get("trace_at") and "trace_stall_s" not in window_meta:
                 errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
             # Endpoint is exclusive. Worst alignment puts the first line one full
             # period after apply; one further line is consumed by the straddle rule.
