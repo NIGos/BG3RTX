@@ -91,6 +91,7 @@ static void module(const char* file,bool sharc,bool tileset,bool hair,bool casca
 
 int main(int argc,char** argv){
  check(set_count(false)==4 && set_count(true)==5 && kSetSharc==4,"set numbering (the SHaRC set stays 4)");
+ for(bool hair:{false,true})check(!push_enabled(*find_in(push,12),hair) && push_enabled(*find_in(push,50),hair),"stable Hair50/AO12 layout for both capability values");
  check(push_count(false)==32 && push_count(true)==32,"push set exactly the D-RF 32");
  check(find_in(push,30)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE && find_in(push,18)->type==VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,"D-RF hit distance and TLAS");
  check(!find_in(push,41) && !find_in(push,42) && !find_in(push,48),"no D-LS/SHaRC extras pushed");
