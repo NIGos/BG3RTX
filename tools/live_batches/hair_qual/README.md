@@ -46,3 +46,13 @@ Generate: python tools/live_batches/hair_qual/make_job.py
 Offline fake-queue check: powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/hair_qual/dryrun.ps1
 Dryrun uses TEMP outside checkouts; missing real expect lines must produce INVALID in its negative run.
 Jobs remain in this tools folder until explicit user steering authorizes a serial queue batch.
+
+Hair-cost3 repair: the mean scan now examines at most 64 primitives per draw;
+invalid/capped discovery uses full coverage. Probability and per-draw cap count
+must fit the owning allocation. Mean windows are retained for requalification.
+HQ4 uses hq_cost3_trim_plan.json: pool trim stays ON from load through every
+reference and restore phase, because Dialogue3 reached 2047 MB before warm-pool.
+HQ4 is no longer a trim OFF/ON comparison. HQ1-HQ3 retain that comparison.
+Live 10:18-10:32: all four runs lost the device after mean ON; no mean gate passed.
+Pool trim is proposed for default promotion separately; cheap gains were within
+noise, so drop cheap from the shipping proposal (diagnostic stays off).

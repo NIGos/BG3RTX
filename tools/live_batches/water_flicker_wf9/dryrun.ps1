@@ -16,7 +16,7 @@ foreach ($step in $plan) {
         if ($state[$key] -ne '0') { throw "reflection delta confounded by $key in $($step.label)" }
       }
     }
-    if ($step.kind -eq 'rotate' -and ($step.direction -ne 1 -or $step.frame_delta_pixels -ne 1 -or $step.frame_interval -ne 4)) { throw 'turn protocol drift' }
+    if ($step.kind -eq 'rotate' -and ($step.direction -ne 1 -or $step.turn_mode -ne 'keys')) { throw 'turn protocol drift' }
     $rawBpp += 8 * $(if ($state.rt_debug -eq '25') {9} else {5})
     $rawCount++
   }

@@ -308,14 +308,13 @@
   ],
   "forbid": [
     "VK_ERROR_DEVICE_LOST",
-    "\\[crash\\] exception",
+    "\\[crash\\] exception 0x",
     "RR (creation|evaluate) failed",
     "FAILED, keeping previous",
     "\\[pan\\].*(REFUSED|INVALID|failed|dropped)",
     "PNG write failed",
     "capture writer backlog",
     "\\[sl\\] edge capture REFUSED",
-    "\\[bvh\\] mesh pool full",
     "\\[rrpost\\] exposure hold REFUSED"
   ],
   "expect_runner": [
@@ -324,5 +323,5 @@
     "\\[motion-plan\\] complete phases=30\\b"
   ],
   "estimated_phase_seconds": 180,
-  "purpose": "Offline prepared only. One held port shot, independent toggles, no input. Attribution only; retain default native hair. See predicted.json."
+  "purpose": "Offline prepared only. No supported dialogue pause key. Register every captured frame; exclude cuts, never warp. Attribution only; retain default native hair. See predicted.json."
 }

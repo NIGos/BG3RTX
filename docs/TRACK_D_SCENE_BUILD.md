@@ -1045,6 +1045,15 @@ CPU regression covers all three slots, 240 empty samples per slot, first-return
 fit, smaller active-set shrink, interrupted observations and tighter budget caps.
 Layer restart required; live confirmation has not been run for this fix.
 
+### Elastic cascade turn peak (fixes4, 2026-11-03)
+
+The 10:00-10:17 analysis found a 256 MiB cascade buffer facing 271 MiB demand
+for one frame after the 24-sample window forgot a turn's peak. Cascade shrink now
+uses the same 120-sample window as primary RT capture. Zero demand still resets
+the observation and retains capacity; shrink needs 120 nonempty samples. CPU
+regressions cover the turn peak, every slot, inactivity and interrupted shrink.
+No shader/ABI/variant change or added GPU work; live overflow confirmation pending.
+
 ### CPU hit-material lists candidate (2026-11-02, codex-perf-hitmat)
 
 `perf_hitmat_lists=0` preserves the existing path. On: prepass writers use a

@@ -1,6 +1,6 @@
 # Release defaults review — 2026-11-02
 
-Original Stage 6 review, followed by the 2026-11-03 OMM promotion update below. Reviewed branch `codex-release-defaults`,
+Original Stage 6 review, followed by the 2026-11-03 OMM and box-shadow promotion updates below. Reviewed branch `codex-release-defaults`,
 HEAD `855c99d`. No INI, code, preset, Git metadata or shared asset was changed. No build,
 CMake, CTest, DXC, package operation or game was run. Shader request delta: **0**.
 
@@ -17,6 +17,12 @@ High/lower and base INIs remain unchanged; there is no rule extending this
 promotion to High. Hardware support and masks generated on the player's PC
 remain prerequisites. Combined Ultra smoke and memory qualification are separate
 checks, not implied by the camp speedup. Shader request delta: 0.
+
+## Box shadow promotion update (2026-11-03)
+
+User-approved fixed box shadows now use `ls_box=2` in Ultra only, retaining
+`ls_box_honour_shadow=1`. Valid ba1 S6 08:02 evidence and cost are recorded below.
+Combined Ultra smoke remains a separate check; shader request delta: 0.
 
 ## Recommendation and load order
 
@@ -60,6 +66,7 @@ Preset choices, sliders and `kPresetExtra` were included, not just explicit rele
 | `rt_omm_dyn` | 0 | 1 | 0 | Qualified dynamic mask bake; 256 MB cache cap. |
 | `rt_vt_alpha_masks` | 0 | 1 | 0 | Qualified locally generated cutout-mask source. |
 | `rt_alpha_fine_lod` | 0 | 1 | 0 | om3-qualified fine-LOD policy required by om4. |
+| `ls_box` | 0 | 2 | 0 | Fixed mode with `ls_box_honour_shadow=1`; user approved 2026-11-03 after valid ba1 S6 08:02. +0.13 ms (0.45 -> 0.58 ms). High and lower stay Off. |
 | `rt_cascade_casters` | 0 | 1 | 0 | Qualified roof casters in Ultra; base avoids its cost. Keep. |
 | `rt_rebuild_frames` | 60 | 600 | 60 | Ultra internal pacing for per-draw BLAS; static meshes are cached. Keep. |
 | `rt_hit_material` | 0 | 1 | 0 | Ultra's qualified hidden-surface material bundle. Keep base off. |
@@ -83,9 +90,12 @@ High and lower presets must retain their own choices. Ultra's smoke result is a 
 functional/quality receipt, not evidence of long-session VRAM safety: median rendered
 frame 16.65 ms versus 13.75 ms before emission and far field.
 
-`ls_box` is absent from the difference table because all three values are **0**.
-Keep Box light shadows Off in every preset until the user's S6 visual decision. Removing
-its release override does not grant promotion. Measured cost was +0.32 ms S6 / +0.20 ms S7.
+Box light shadows are qualified for Ultra by the user's 2026-11-03 visual decision:
+`ls_box=2`, default `ls_box_honour_shadow=1`. Valid ba1 S6 Grymforge 08:02: fixed
+versus OFF 8.6% pixels > 8 levels versus OFF/OFF 8.5%, mean signed difference 0.0;
+energy within noise. Unshadowed traces 0 (old mode 369M per 120 frames, -5.27% lit
+luminance). Local-light pass 0.45 ms off -> 0.58 ms fixed (+0.13 ms). Lower presets
+and repository/release base stay Off; legacy +0.32 ms S6 / +0.20 ms S7 is historical.
 Likewise `rf_hit_shade=0` and `rf_hit_gi=0` agree everywhere: + Reflections remains
 Experimental, with S8/S6/camp ratios 0.925/1.089/1.097 outside the accepted spread.
 

@@ -7,12 +7,12 @@ then the moving windows repeat 0/1/0/1 in the same run. Compose stays enabled th
 Other water image terms stay off at startup and in every compared window. The outer queue restores INI.
 The final phase clears the experimental shift and capture keys and releases exposure.
 
-The turn posts one pixel per four newly observed rendered-frame markers (fg_state_every=1),
-never accumulated wall-clock travel. Missed markers do not cause catch-up. The existing rotation
-state machine separates reset, press and release. `frame-drag` runner gates require actual input
-in each cost window. Check adjacent presented views/minimap for smooth motion before scoring;
-missing markers, camera jumps or water leaving view invalidate the moving comparison.
-Return windows are approximate: do not subtract pixels or compare energy across different turn poses.
+Turns hold E through each forward motion interval and Q on reverse returns.
+The runner's `rotation-input mode=keys` gates require an actual key press in each
+cost window. Check adjacent presented views/minimap before scoring; camera jumps
+or water leaving view invalidate the moving comparison. The 10:08 camera probe
+showed Q/E movement in 120/120 samples while posted mouse turns jumped.
+Return windows are approximate: compare static energy only at the unmoved camera.
 
 Four capture-free cost-turn windows collect compose stability, compose tiers, water reflection stats
 and compose GPU ms with expect_every. Read compose dispatch ms separately from the lighting copy.
@@ -50,5 +50,5 @@ Synthetic authorization receipts exist only in temporary .queue-fake-root direct
 Keep this folder outside every watched captures/queue/pending inbox.
 
 Camera probe preparation: energy-static-0..3 now last 14 s (motion_start/end 14).
-The inert `_comment_turn_mode` fields document the future mode/speed alternative;
-no winner is selected or active. See ../camera_probe/README.md before changing turns.
+Turns now hold E (Q on reverse returns) for the motion interval using `turn_mode=keys`.
+The 10:08 probe showed Q/E moving in 120/120 samples; posted mouse modes jumped tens of degrees.

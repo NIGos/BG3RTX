@@ -222,9 +222,16 @@ def cost2_job(name, save, kind):
                    step("shot-full-" + str(i), SHOT, True, **ON),
                    step("cost-full-" + str(i), 25, **ON)]
     phases += [step("restore", 5, qa_exposure_hold="0")]
+    # Dialogue3 filled the pool before warm-pool. Keep trimming on from load,
+    # including full-hair references; this scene no longer measures trim A/B.
+    if name.startswith("hq4-"):
+        for phase in phases:
+            phase["set"] = phase["set"].replace("rt_hair_pool_trim=0", "rt_hair_pool_trim=1")
     j = job(name, save, kind, False)
     j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hq_cost2_plan.json"
     j["set"] += "," + ",".join(key + "=0" for key in COST_KEYS) + ",rt_hair_gi_cull=0"
+    if name.startswith("hq4-"):
+        j["set"] = j["set"].replace("rt_hair_pool_trim=0", "rt_hair_pool_trim=1")
     j["estimated_phase_seconds"] = sum(p["seconds"] for p in phases)
     j["timeout"] = j["estimated_phase_seconds"] + 300
     windows = [p["label"] for p in phases if p["label"].startswith(("shot-", "cost-"))]
@@ -262,7 +269,9 @@ def cost2_job(name, save, kind):
     j["expect_runner"] += [rf"\[motion-trace\] phase={i} label={p['label']} repeat=0"
                            for i, p in enumerate(phases) if p.get("trace_at")]
     j["expect_runner"] += [rf"\[motion-plan\] complete phases={len(phases)}\b", "^Run ended: done"]
-    j["purpose"] = ("hair-cost2: hair-on full/pool/full/cheap/full/mean/full/visibility/full/combined/full, independent "
+    if name.startswith("hq4-"):
+        j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hq_cost3_trim_plan.json"
+    j["purpose"] = ("hair-cost3: hair-on full/pool/full/cheap/full/mean/full/visibility/full/combined/full, independent "
                     "rt passes and GI GPU cost with character float energy. Same-run cards baseline. "
                     "Zero pool-full or scene skips, including Dialogue3. No GI cull. "
                     "Visibility is the certified mapped static-draw subset; unknowns stay native. Zero eligible/cards is no qualification.")
@@ -278,7 +287,7 @@ def main():
     (out / "plans").mkdir(parents=True, exist_ok=True)
     for name, save, kind in SAVES:
         j, phases = cost2_job(name, save, kind)
-        (out / "plans" / "hq_cost2_plan.json").write_text(json.dumps(phases, indent=1) + "\n", encoding="utf-8")
+        (out / "plans" / ("hq_cost3_trim_plan.json" if name.startswith("hq4-") else "hq_cost2_plan.json")).write_text(json.dumps(phases, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
     print(f"{len(SAVES)} cost2 jobs; {len(phases)} phases/{sum(p['seconds'] for p in phases)} s per scene -> {out}")
 

@@ -570,3 +570,44 @@ energy equivalence is promised. Unit fixtures cover near, distant large,
 subpixel, invalid camera/unknown bounds and wind expansion. Live qualification
 must compare character energy against full hair within repeat noise and total
 native cost against the unchanged < 1 ms keep rule.
+
+## Mean precompute safety repair (2026-11-03, hair-cost3)
+
+All four 10:18-10:32 hair_qual runs lost the device about 2 s after mean ON;
+Streamline timed out about 1 s earlier. The hq2 dump's exception is in bg3.exe
+(offset 0x40e85cc, 0xc0000005), not evidence identifying the GPU cause.
+The old per-draw strand scan was unbounded. Discovery now has a 64-candidate
+budget (one workgroup width, matching the quadrature's 64 UV sites), independent
+of draw size. No live frame in that prefix leaves probability -1: full native
+coverage, never zero occlusion. The second tail word counts capped threads per
+draw (0/1, sum for the scene); it is device-local and uses no atomic/readback.
+Both tail words must fit the draw's allocation, carried at AlphaRec bytes 200/204
+(size/primitive count); byte 196 keeps the Pubes subtype. Allocation is now 8 B
+beyond active AABBs in mean mode. Reader and writer share overflow-safe ownership
+checks. Source/record/info ranges and alignment are checked before reads.
+CPU reference tests cover huge/empty/malformed draws, scan boundaries, writes
+against neighbour canaries and material quadrature; compile/spirv-val is required.
+Manifest delta 0; ABI and default keys unchanged. Repaired mean remains experimental;
+no live safety, energy or GPU cost qualification is inferred from offline checks.
+
+Dialogue3 now uses a dedicated plan with pool trim ON from load through restoration;
+its full references also use trim and cannot qualify trim's own A/B. Other scenes
+retain their trim A/B. The gi_mean windows remain for the repaired candidate.
+User's live pool MB: S8 261 -> 176 (-32.6%), Dialogue1 364 -> 210 (-42.3%),
+Dialogue2 137 -> 90 (-34.3%), Dialogue3 1669 -> 1483 (-11.1%); 2047 MB was
+reached before the old Dialogue3 trim window. No measurable trim GPU cost reported.
+Propose rt_hair_pool_trim=1 in a separate default-promotion commit after review;
+this repair does not change defaults. Trim also packs eligible ordinary holds
+88 -> 24 B/vertex, so it is more than stale-hair retirement. dyn_hold_test checks
+retirement fences, unaffected non-hair slot lifetimes, unchanged native layouts
+and bit-identical retained position/UV words. Lighting shaders have no trim key.
+Drop rt_hair_cheap from the shipping proposal: live gains were within noise and
+its coverage/AO approximations remain unqualified. Keep it off as a diagnostic
+until a separate removal change; the current batch retains it for reproducibility.
+
+Offline gates: 130/130 CTests, CPU reference 1242 checks, mean shader and the
+72 specialization-selected requests compile/spirv-val clean. Against main:
+152/152 frozen OFF and 608/608 literal-setting comparisons pass; no default
+lighting program difference. hair_qual fake-queue dryrun passes, including
+four INVALID negative runs and four valid structural runs. These gates do not
+establish live energy or stability. No defaults were promoted and no game ran.

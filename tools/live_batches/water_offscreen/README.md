@@ -2,8 +2,8 @@
 
 One Water Queens House launch, Ultra water, visible_unfocused_fg. Not queued.
 Static and smooth turn windows toggle rt_water_hit_shade 0/2/0/2 with
-rt_water_compose_shift=1. Turns reuse wf9 direction +1, one pixel per four
-rendered frames, and equal opposite returns. Cost windows have no diagnostics.
+rt_water_compose_shift=1. Turns use held E (direction +1) and held Q on equal opposite returns
+with `turn_mode=keys`, following the 120/120 moving samples in the 10:08 probe. Cost windows have no diagnostics.
 Every ON window requires hidden > 0 AND offscreen > 0 in BOTH extended water
 stats lines. Mode 2 queries sphere-culled nearest lights outside the grid.
 Only the current frame's froxel membership union certifies active point/spot
@@ -11,6 +11,7 @@ slots and their types. Raw unlisted slots are stale (docs/ASSET_DB.md).
 A hit may be off-screen even when its lights also illuminate the camera volume.
 Lights absent from all current froxels and world local-probe queries remain gaps.
 At most 32 local lights; truncation retains the probe and is counted in both logs.
+Warmup enables rt_water_hit_shade=2 so its pipelines compile before the first OFF shot.
 No gate or RF bias threshold was relaxed.
 Record compose GPU median/p90 and reflection GPU ms versus OFF; cost is unknown. Added median and p90 GPU budget: 1.0 ms.
 Hit shading accepts F or F-1 lighting only with the same TLAS and lighting list.

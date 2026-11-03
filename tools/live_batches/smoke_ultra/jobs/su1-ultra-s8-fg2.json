@@ -241,6 +241,6 @@
   "^Run ended: done"
  ],
  "stop_on_dump": true,
- "purpose": "Ultra smoke at S8 Water Queens House, inheriting the qualified OMM bundle from preset=ultra (rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod). Existing static/pan/rotation windows gate zero capture drops, within-budget VRAM, zero scene-wait timeouts, water traced/composed and finite, with RT/GI cost lines. Separate warm-up and same-ray OMM diagnostic windows require compared > 0, not compared 0 and violations 0; diagnostics stay off during cost windows. Final ab-off / ab-on exercise toggle latency. VRAM management uses automatic defaults and real driver budget.",
- "estimated_phase_seconds": 176
+ "purpose": "Ultra smoke at S8 Water Queens House, inheriting qualified box shadows (ls_box=2, default ls_box_honour_shadow=1) and the qualified OMM bundle from preset=ultra (rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod). Existing static/pan/rotation windows gate zero capture drops, within-budget VRAM, zero scene-wait timeouts, water traced/composed and finite, with RT/GI cost lines. Separate warm-up and same-ray OMM diagnostic windows require compared > 0, not compared 0 and violations 0; diagnostics stay off during cost windows. Final ab-off / ab-on exercise toggle latency. VRAM management uses automatic defaults and real driver budget.",
+ "estimated_phase_seconds": 211
 }
