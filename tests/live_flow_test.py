@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.live_batches import live_flow as f
 from tools.live_batches import combine as c
+from tools.live_batches import fps_windows as fw
 
 
 def phase(label, seconds=12, values="rr=0"):
@@ -478,6 +479,128 @@ class FlowTests(unittest.TestCase):
             run.write_text("\n".join(runner[:-2]))
             with self.assertRaises(ValueError):
                 c.extract(manifest, log, run, t / "incomplete")
+
+
+class WindowFpsTests(unittest.TestCase):
+    def setUp(self):
+        fw.configure([])
+
+    def tearDown(self):
+        fw.configure([])
+
+    @staticmethod
+    def job(save="camp", stats=1):
+        return dict(name="fixture", save=save, window_mode="visible_unfocused_fg",
+                    set=f"rt_stats={stats},rt_primary_check=0,rt_omm=0,rt_omm_reference=0",
+                    expect=[], expect_every=[])
+
+    @staticmethod
+    def entry(path="valid", save="camp", stats=1, frames=60):
+        return dict(path=path, save=save, job=WindowFpsTests.job(save, stats),
+                    runner="00:00:00.000 [pan-plan] window 0 set=rt_stats=" + str(stats) +
+                           "\n00:00:20.000 [motion-plan] complete",
+                    lines=["00:00:00.100 [cfg] settings read",
+                           "00:00:01.000 [sl] DLSS-G frame 100: displayed/rendered 3.00",
+                           f"00:00:11.000 [sl] DLSS-G frame {100+frames}: displayed/rendered 3.00"])
+
+    def test_same_save_diagnostic_state_uses_slow_p10_and_app_frames(self):
+        fw.configure([self.entry(frames=60), self.entry("fast", frames=180),
+                      self.entry("off", stats=0, frames=300),
+                      self.entry("other-save", save="s8", frames=10)])
+        slow = fw.expected(self.job(), f.settings(self.job()["set"]))
+        self.assertEqual(slow["fps"], 6)  # Never multiply by the displayed FG ratio.
+        self.assertEqual(slow["source"], "VALID p10")
+        off = self.job(stats=0)
+        self.assertEqual(fw.expected(off, f.settings(off["set"]))["fps"], 30)
+
+    def test_counter_pairs_do_not_cross_settings_boundary_or_read_latency(self):
+        entry = self.entry()
+        entry["runner"] = ("00:00:00.000 [pan-plan] window 0 set=rt_stats=0\n"
+                           "00:00:10.000 [pan-plan] window 1 set=rt_stats=1\n"
+                           "00:00:20.000 [motion-plan] complete")
+        entry["lines"] = ["00:00:09.000 [sl] input copy frame 100:",
+                          "00:00:10.100 [sl] input copy frame 200:",
+                          "00:00:11.000 [cfg] settings read",
+                          "00:00:12.000 [sl] input copy frame 210:"]
+        self.assertEqual(fw.window_samples(entry), [])
+
+    def test_timestamp_rollover_keeps_rendered_counter_rate(self):
+        entry = self.entry()
+        entry["runner"] = ("23:59:58.000 [pan-plan] window 0 set=rt_stats=1\n"
+                           "00:00:12.000 [motion-plan] complete")
+        entry["lines"] = ["23:59:58.100 [cfg] settings read",
+                          "23:59:59.000 [sl] input copy frame 100:",
+                          "00:00:09.000 [sl] input copy frame 200:"]
+        self.assertEqual(fw.window_samples(entry)[0][1], 10)
+
+    def test_missing_app_counter_never_learns_presented_frame_throughput(self):
+        entry = self.entry()
+        entry["lines"] = ["00:00:01.000 displayed frame 100", "00:00:11.000 displayed frame 1000"]
+        fw.configure([entry])
+        result = fw.expected(self.job(), f.settings(self.job()["set"]))
+        self.assertEqual(result["source"], "per-key cost fallback")
+        self.assertEqual(result["cost_ms"], 100)
+
+    def test_per_key_cost_fallback_adds_enabled_diagnostic_costs(self):
+        j = self.job()
+        j["args"] = ["validate_sync=true,gpuav_enable=true"]
+        state = f.settings(j["set"] + ",rt_primary_check=1,rt_omm=1,rt_omm_reference=1")
+        result = fw.expected(j, state)
+        self.assertEqual(result["cost_ms"], 100 + 3 * 80 + 200)
+        self.assertAlmostEqual(result["fps"], 1000 / (1000 / 30 + 540))
+
+    def test_retime_grows_short_window_without_weakening_gate(self):
+        fw.configure([self.entry()])
+        j = self.job()
+        gate = dict(select=r"\[hit material paks join\]", match="draws 1", windows=["observe"], min=1)
+        j["expect_every"] = [gate]
+        p = [phase("observe", 9.1, j["set"])]
+        self.assertTrue(f.window_problems(j, p)[0])
+        before_gate = deepcopy(gate)
+        result = f.tighten(j, p)
+        self.assertEqual(p[0]["seconds"], 41.1)  # Apply + skipped interval + complete interval; exclusive end.
+        self.assertGreater(result["after_seconds"], result["before_seconds"])
+        self.assertEqual(j["expect_every"], [before_gate])
+        self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_replay_reports_absent_expect_and_missing_same_state(self):
+        j = self.job()
+        j["expect"] = ["new producer"]
+        j["expect_every"] = [dict(select="stats", match="good", windows=["observe"])]
+        result = fw.replay(j, [phase("observe", 40, j["set"])], [self.entry(stats=0)])
+        self.assertTrue(any("expect missing" in problem for problem in result["problems"]))
+        self.assertTrue(any("no historical window" in problem for problem in result["problems"]))
+        self.assertIn("unproven", result["note"])
+
+    def test_guard_and_lint_use_persisted_same_state_fps(self):
+        from scripts.live_guard import evaluate_session, producer_period
+        j = self.job()
+        j["live_flow"] = dict(fps_windows=[dict(state=[1, 0, 0, 0, 0], fps=6)])
+        pattern = r"\[hit material paks join\].*draws 1"
+        j["expect"] = [pattern]
+        j["expect_every"] = [dict(select=r"\[hit material paks join\]", match=pattern, windows=["observe"])]
+        state = f.settings(j["set"])
+        _, windows = f.window_problems(j, [phase("observe", 41.1, j["set"])])
+        cadence = producer_period(pattern, state, fw.expected(j, state)["fps"], j)
+        self.assertEqual(windows[0]["period_s"], cadence)
+        self.assertIsNone(evaluate_session(j, "", cadence + 1.99))
+        self.assertIn("producer silent", evaluate_session(j, "", cadence + 2)["check"])
+
+    def test_replay_keeps_real_samples_and_does_not_borrow_after_state_change(self):
+        j = self.job()
+        j["expect_every"] = [dict(select="stats", match="good", windows=["observe"])]
+        entry = self.entry()
+        entry["runner"] = ("00:00:00.000 [pan-plan] window 0 set=rt_stats=1\n"
+                           "00:00:12.000 [pan-plan] window 1 set=rt_stats=0\n"
+                           "00:00:30.000 [motion-plan] complete")
+        # The new 41.1 s duration cannot borrow the second, now-OFF sample.
+        entry["lines"] += ["00:00:05.000 stats good", "00:00:15.000 stats good"]
+        result = fw.replay(j, [phase("observe", 41.1, j["set"])], [entry])
+        self.assertTrue(any("0 complete line" in problem for problem in result["problems"]), result)
+        fw.configure([])
+        entry["lines"][-1] = "00:00:10.000 stats bad"
+        result = fw.replay(j, [phase("observe", 41.1, j["set"])], [entry])
+        self.assertTrue(any("line(s) fail" in problem for problem in result["problems"]), result)
 
 
 if __name__ == "__main__":

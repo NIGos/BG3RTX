@@ -6,13 +6,31 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 900,
+  "timeout": 900.0,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
     "trace_stall_s": 1,
     "startup_only": [
       "rt_xfb_mb"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 25.684931506736675,
+        "windows": 76,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+        ]
+      }
     ]
   },
   "repeat": 1,
@@ -1184,7 +1202,7 @@
     "\\[motion-trace\\] phase=93 label=energy-on-11 repeat=0",
     "\\[motion-trace\\] phase=97 label=energy-off-11 repeat=0"
   ],
-  "estimated_phase_seconds": 338.9,
+  "estimated_phase_seconds": 351.7,
   "purpose": "READY_FOR_LIVE: 12 adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.",
   "max_minutes": 15
 }
