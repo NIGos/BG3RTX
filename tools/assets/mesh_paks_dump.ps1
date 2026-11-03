@@ -2,10 +2,11 @@
 # GR2P v2: mesh name, nv, ni, ng, COLOR_0 layout, position3/UV2 vertices,
 # optional COLOR_0 RGBA float32 vertices (native Float4 or decoded normalized Byte4),
 # native uint32 indices, groups (material index, first triangle, triangle count).
-param([Parameter(Mandatory)][string]$Lslib, [Parameter(Mandatory)][string]$Gr2, [Parameter(Mandatory)][string]$Out)
+param([Parameter(Mandatory)][string]$Lslib, [string]$Gr2, [string]$Out, [switch]$Server)
 $ErrorActionPreference = 'Stop'
 [System.Runtime.InteropServices.NativeLibrary]::Load((Join-Path $Lslib 'granny2.dll')) | Out-Null
 [Reflection.Assembly]::LoadFrom((Join-Path $Lslib 'LSLib.dll')) | Out-Null
+function Export-Mesh([string]$Gr2, [string]$Out) {
 $f = [IO.File]::OpenRead($Gr2)
 $reader = [LSLib.Granny.GR2.GR2Reader]::new($f)
 $root = [LSLib.Granny.Model.Root]::new()
@@ -47,3 +48,17 @@ try {
     }
   }
 } finally { $o.Dispose() }
+
+}
+if ($Server) {
+  Add-Type -IgnoreWarnings -WarningAction SilentlyContinue -Path (Join-Path $PSScriptRoot 'mesh_paks_dump.cs') -ReferencedAssemblies (Join-Path $Lslib 'LSLib.dll'), (Join-Path $Lslib 'OpenTK.Mathematics.dll'), 'System.Collections.dll'
+  while ($line = [Console]::ReadLine()) {
+    try {
+      $request = ConvertFrom-Json $line
+      [MeshPaksDump]::Export($request.source, $request.output)
+      [Console]::WriteLine('{"ok":true}')
+    } catch {
+      [Console]::WriteLine((@{ok=$false; error=$_.ToString()} | ConvertTo-Json -Compress))
+    }
+  }
+} else { Export-Mesh $Gr2 $Out }

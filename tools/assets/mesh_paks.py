@@ -20,6 +20,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import queue
+from collections import Counter
 
 import numpy as np
 
@@ -210,6 +212,48 @@ def dump(lslib, source, output, pwsh):
             raise RuntimeError('LSLib decode: ' + stdout.decode(errors='replace')[-500:])
 
 
+class Decoder:
+    """One native reader process per batch; same GR2P contract as one-shot dump."""
+    def __init__(self, lslib, pwsh):
+        self.proc = subprocess.Popen([str(pwsh), '-NoProfile', '-NonInteractive', '-File',
+            str(Path(__file__).with_name('mesh_paks_dump.ps1')), '-Lslib', str(lslib), '-Server'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8')
+        self.lines = queue.Queue()
+        def read():
+            for line in self.proc.stdout:
+                self.lines.put(line)
+            self.lines.put(None)
+        self.reader = threading.Thread(target=read, daemon=True)
+        self.reader.start()
+
+    def __call__(self, lslib, source, output, pwsh):
+        self.proc.stdin.write(json.dumps(dict(source=str(source), output=str(output))) + '\n')
+        self.proc.stdin.flush()
+        try:
+            line = self.lines.get(timeout=300)
+        except queue.Empty:
+            self.close()
+            raise RuntimeError('LSLib decode exceeded 300 s')
+        if line is None:
+            raise RuntimeError('LSLib reader exited unexpectedly')
+        try:
+            result = json.loads(line)
+        except ValueError as e:
+            raise RuntimeError('LSLib protocol: ' + line[-500:]) from e
+        if not result.get('ok'):
+            raise RuntimeError('LSLib decode: ' + result.get('error', 'unknown error'))
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.stdin.close()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill(); self.proc.wait()
+        self.reader.join(timeout=5)
+
+
 def binary_table(rows):
     # v3 retains native COLOR_0 in the same ordered-corner domain.
     data = bytearray(struct.pack('<8sII', b'B3PAKS1\0', 3, len(rows)))
@@ -267,7 +311,8 @@ def write_sharded_tables(rows, output, max_bytes=480 * 1024 * 1024):
     return [path.name for path in names]
 
 
-def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset', 'hlod'), start_source=0):
+def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset', 'hlod'), start_source=0, decoder=None):
+    decoder = decoder or dump
     cache = Path(cache); cache.mkdir(parents=True, exist_ok=True)
     groups = {}
     for row in select_rows(doc, match):
@@ -278,7 +323,8 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
     total_sources = len(sources)
     sources = sources[start_source:start_source+limit if limit else None]
     selected_sources = set(sources)
-    progress = dict(done=0, failures=0, hits=0, candidates=sum(len(groups[s]) for s in sources), decoded=0)
+    progress = dict(done=0, failures=0, hits=0, candidates=sum(len(groups[s]) for s in sources), decoded=0,
+                    native_decoded=0, rejected_rows=0, source_failed_rows=0)
     start = time.monotonic(); stop = threading.Event()
 
     def report():
@@ -299,6 +345,7 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
         dep = Path(lslib)/dependency
         if dep.is_file():
             decoder_identity += hashlib.sha256(dep.read_bytes()).digest()
+    decoder_identity += hashlib.sha256(Path(__file__).with_name('mesh_paks_dump.cs').read_bytes()).digest()
     try:
         for source in sources:
             try:
@@ -318,16 +365,20 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                     if saved is not None:
                         output.extend(saved['rows']); failures.extend(saved['failures'])
                         progress['failures'] += len(saved['failures']); progress['hits'] += 1; progress['decoded'] += len(saved['rows'])
+                        progress['native_decoded'] += saved.get('native_decoded', len(saved['rows']))
+                        progress['rejected_rows'] += len(saved['failures'])
                         continue
                 with tempfile.TemporaryDirectory(prefix='bg3-paks-') as tmp:
                     src, decoded = Path(tmp)/'input.gr2', Path(tmp)/'decoded.bin'
-                    src.write_bytes(raw); dump(lslib, src, decoded, pwsh)
+                    src.write_bytes(raw); decoder(lslib, src, decoded, pwsh)
                     meshes = read_dump(decoded)
                     built, rejected = [], []
+                    native_decoded = 0
                     for r in relevant:
                         try:
                             name, export_order = mesh_object(r['object_id'])
                             verts, idx, native_groups, colors = meshes[name]
+                            native_decoded += 1
                             # VisualBank rows address whole named meshes. Only
                             # a single full-range material group is supported;
                             # never mistake ExportOrder for a group ordinal.
@@ -359,11 +410,14 @@ def build(doc, ps, lslib, cache, pwsh='pwsh', limit=0, match=('lava', 'tileset',
                         except (KeyError, ValueError, IndexError) as e:
                             rejected.append(dict(source=source, object_id=r['object_id'], error=str(e)))
                     staging = record.with_suffix('.tmp')
-                    staging.write_text(json.dumps(dict(rows=built, failures=rejected), sort_keys=True), encoding='utf-8')
+                    staging.write_text(json.dumps(dict(rows=built, failures=rejected, native_decoded=native_decoded), sort_keys=True), encoding='utf-8')
                     staging.replace(record)
                     output.extend(built); failures.extend(rejected); progress['failures'] += len(rejected); progress['decoded'] += len(built)
+                    progress['native_decoded'] += native_decoded
+                    progress['rejected_rows'] += len(rejected)
             except (OSError, ValueError, RuntimeError, KeyError) as e:
                 failures.append(dict(source=source, error=str(e))); progress['failures'] += 1
+                progress['source_failed_rows'] += len(groups[source])
             finally:
                 progress['done'] += 1
                 snapshot = dict(format=FORMAT, status='PARTIAL_OFFLINE', counts=dict(progress),
@@ -395,11 +449,13 @@ def main():
     ap.add_argument('--shard-mb', type=int, default=480, help='stream tables below 512 MB loader cap; manifest published last')
     ap.add_argument('--start-source', type=int, default=0, help='offset in deterministic lava-first source order')
     ap.add_argument('--match', nargs='+', default=['lava', 'tileset', 'hlod'])
+    ap.add_argument('--batch-sources', type=int, default=0,
+                    help='bounded incremental batches; out is an offline summary, not a runtime manifest')
     args = ap.parse_args()
     if os.name == 'nt':
         import ctypes
         ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x4000)
-    if args.limit < 0 or args.start_source < 0 or not 1 <= args.shard_mb <= 480:
+    if args.limit < 0 or args.start_source < 0 or args.batch_sources < 0 or not 1 <= args.shard_mb <= 480:
         ap.error('source offset/limit must be nonnegative and shard-mb must be in [1,480]')
     if args.game:
         install = Path(args.game).resolve().parent
@@ -422,6 +478,8 @@ def main():
     if any(p.resolve().is_relative_to(install) for p in (args.out, args.cache, companion)):
         ap.error('outputs/cache must be outside game install')
     doc = json.loads(args.catalogue.read_text(encoding='utf-8'))
+    if args.batch_sources:
+        return batch_catalogue(args, doc)
     result = build(doc, PackageSet(args.game), args.lslib, args.cache, args.pwsh, args.limit, args.match, args.start_source)
     result['binary_shards'] = write_sharded_tables(result['rows'], args.out, args.shard_mb * 1024 * 1024)
     write_new(args.out, result)
@@ -429,6 +487,76 @@ def main():
         manifest.write('\n'.join(result['binary_shards']) + '\n')  # complete-set marker last
     say(f'[mesh paks] wrote {args.out}, {len(result["binary_shards"])} shards; {len(result["rows"])} candidates, {len(result["failures"])} failures')
     return 0 if result['rows'] else 1
+
+
+def batch_catalogue(args, doc):
+    """Keep only one source batch in RAM; publish immutable per-batch manifests.
+
+    A restart accepts only batches with a complete matching manifest and shards.
+    The summary is deliberately not a runtime manifest: the full catalogue may
+    exceed the runtime aggregate cap and does not prove any current resource join.
+    """
+    total = len({r['source'] for r in select_rows(doc, args.match)})
+    end = min(total, args.start_source + args.limit) if args.limit else total
+    ps = PackageSet(args.game)
+    counts = Counter(); errors = Counter(); batches = []; color_rows = 0
+    started = time.monotonic()
+    identity = hashlib.sha256(args.catalogue.read_bytes() + Path(__file__).read_bytes()
+        + Path(__file__).with_name('mesh_paks_dump.ps1').read_bytes()
+        + Path(__file__).with_name('mesh_paks_dump.cs').read_bytes()
+        + (Path(args.lslib)/'LSLib.dll').read_bytes() + (Path(args.lslib)/'granny2.dll').read_bytes()
+        + json.dumps(ps.fingerprint(), sort_keys=True).encode()).hexdigest()
+    for offset in range(args.start_source, end, args.batch_sources):
+        target = args.out.with_name(args.out.stem + f'_s{offset:06d}.json')
+        marker = target.with_suffix('.manifest')
+        size = min(args.batch_sources, end-offset)
+        if target.exists() and marker.exists():
+            result = json.loads(target.read_text(encoding='utf-8'))
+            if result.get('batch_identity') != identity or result['counts']['selected_sources'] != size:
+                raise ValueError('completed batch belongs to a different input/decoder contract')
+            names = marker.read_text().splitlines()
+            if names != result['binary_shards']:
+                raise ValueError('incomplete batch manifest')
+            for name in names:
+                path = target.parent/name
+                with path.open('rb') as stream:
+                    if stream.read(12) != struct.pack('<8sI', b'B3PAKS1\0', 3):
+                        raise ValueError('invalid completed batch shard')
+                if path.stat().st_size != result['shard_sizes'][name]:
+                    raise ValueError('completed batch shard size changed')
+            say(f'[mesh paks] resume completed batch {offset}/{total}')
+        else:
+            if target.exists() or marker.exists():
+                raise ValueError('incomplete publication: use a NEW out prefix; per-GR2 cache is reusable')
+            decoder = Decoder(args.lslib, args.pwsh)
+            try:
+                result = build(doc, ps, args.lslib, args.cache, args.pwsh, size,
+                               args.match, offset, decoder)
+            finally:
+                decoder.close()
+            result['batch_identity'] = identity
+            result['binary_shards'] = write_sharded_tables(result['rows'], target, args.shard_mb*1024*1024)
+            result['shard_sizes'] = {n: (target.parent/n).stat().st_size for n in result['binary_shards']}
+            write_new(target, result)
+            with marker.open('x', encoding='utf-8') as stream:
+                stream.write('\n'.join(result['binary_shards']) + '\n')
+        for key in ('done', 'decoded', 'failures', 'hits', 'candidates', 'native_decoded', 'rejected_rows', 'source_failed_rows'):
+            counts[key] += result['counts'][key]
+        color_rows += sum(r.get('color_layout') == 1 for r in result['rows'])
+        errors.update(f['error'] for f in result['failures'])
+        batches.append(target.name)
+        elapsed = time.monotonic()-started
+        say(f'[mesh paks] TOTAL {counts["done"]}/{end-args.start_source} GR2; decoded {counts["decoded"]}, '
+            f'failures {counts["failures"]}; elapsed {elapsed:.1f}s; immutable batch {target.name}')
+    plan = catalogue_plan(doc, args.match)
+    summary = dict(format=FORMAT, status='PARTIAL_OFFLINE', batch_identity=identity,
+        counts=dict(counts, joined=0, color_rows=color_rows, total_sources=total,
+                    unprocessed_sources=total-counts['done'], rejected_metadata=plan['counts']['rejected_metadata'],
+                    unprocessed=plan['counts']['eligible']-counts['candidates']),
+        failure_modes=dict(errors), batches=batches, generated_locally=True, redistributable=False,
+        qualification='decoded identity candidates only; no replay or runtime joins proved')
+    write_new(args.out, summary)
+    return 0 if counts['decoded'] else 1
 
 
 if __name__ == '__main__':

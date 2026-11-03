@@ -117,3 +117,34 @@ COLOR varying: it distorts UV through the animated flowmap before VT sampling.
 Its depth/WPO position and deferred UVs need their own per-draw pairing recipe;
 static pool geometry or FLUID's Z/W mapping cannot substitute. Local COLOR
 recovery retains all channels, but this shader family remains fail closed.
+
+## Bounded full-catalogue generation
+
+Add `--batch-sources 100` to the existing command to process every eligible source
+in deterministic lava-first order. Pass the Packed directory containing both
+LSLib.dll and granny2.dll (the Tools directory has Divine but no granny DLL).
+The reusable PowerShell server compiles mesh_paks_dump.cs once per batch and
+calls the same native GR2Reader as the retained one-shot PowerShell reference.
+The Python decoder still validates every resulting GR2P stream.
+
+Use a NEW `--out` prefix in the additive asset DB. Each batch writes bounded
+binary shards, then JSON and its complete-set manifest. Restart the same command
+after interruption to reuse completed batches and per-GR2 caches. An incomplete
+publication may require a NEW output prefix; existing shared files are never
+replaced. Input catalogue, game package fingerprint and decoder identities must
+match before a complete batch is reused. Keep the workspace cache: the JSON
+references its immutable geometry and colour streams.
+
+The top-level JSON is an offline summary of batches, never a whole-catalogue
+runtime manifest. A complete catalogue exceeds the runtime aggregate cap.
+`native_decoded` counts eligible rows whose named native mesh was recovered;
+`decoded` counts usable identity candidates after strict geometry/group checks.
+`rejected_rows` counts row-level failures, `source_failed_rows` counts eligible
+rows blocked by source failures, and `failures` counts error records (not rows).
+`joined` remains zero until current resources, cull, COLOR and basis are proved.
+
+The existing mesh_material_replay_audit.py accepts `--pak-summary` to compare
+ordered object-space pool positions and UV bits with candidates. SHA-256 only
+selects candidates; complete bytes must then match. Soup, missing UVs and sparse
+pool captures are excluded. Material ambiguity stays unknown. These geometry
+counts are neither hit-weighted coverage nor new qualified material joins.
