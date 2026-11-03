@@ -74,6 +74,22 @@ each swapped G-buffer draw, up to 64 per frame, averaged per 300 frames). VRAM: 
 (41.7 MB at 2560x1067) plus per point 8 B UV + 12 B previous position (LOD 0 ~19 MB, LOD 1/2 ~10 MB per character).
 Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
 
+## 5a. Cost per character and the crowd budget (increment 5, 2026-11-03, offline)
+`python -m tools.hair_groom.cost --crowd`: per groom file and LOD the mesh-pool arrays, the per-instance memory
+(points, primary UV and previous points, compacted BLAS at 70 B per segment), refit ms and trace ms per 100k hair
+rays, from the RTX 5090 bench constants (Shadowheart 2 mm: BLAS 60 MB, refit 0.10 ms per 857k segments; shadow
+rays 0.25 / 0.19 / 0.17 ns at LOD 0 / 1/2 / 1/4). 53 converted styles (batch in progress): LOD 0 segments median
+504k (93k-2.15M), instance memory median 53 MB (10-227 MB), static arrays median 13 MB, refit median 0.06 ms.
+Scenario (2 close, 4 mid, 8 far characters, median style, primary + shadow ray per hair pixel): 0.77 ms and
+320 MB at screen-size LODs. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+memory follow the segments: so the crowd budget is in segments.
+`rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
+groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
+first coarser one that fits; one that fits at none keeps its cards (the slot is kept: no rebuild when it fits
+again). `hair_groom::plan_crowd` (unit-tested); segment counts per LOD come from the files' LOD headers at index
+time. Log: `[hair groom] crowd plan: N instances, budget B k segments: LOD a/b/c, d keep their cards`. Live job:
+tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / crowd; READY_FOR_LIVE).
+
 ## 5b. Fail-safes (after the 2026-11-03 user trial: device lost twice, the player's hair gone)
 - Device lost (17:01, 17:04, main ac1380e5): the groom point update read the matched draw's card triangles at its
   `soup_off` also for a *held* draw, whose offset is a mesh-pool snapshot offset: a read at +1.97 GB of a 2 GB soup.

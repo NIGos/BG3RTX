@@ -1,0 +1,21 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). Cost = the 300-frame 'rt passes' / 'gi' / 'scene build GPU' lines and '[hair primary] strand G-buffer draws GPU' per cost window; cards = mean(cost-cards, cost-cards-b), |a - b| its noise. Styles = the '[hair groom] frame N: K groom instances' and 'unmatched hair draw' lines (every converted style in data/assetdb/hair_grooms).",
+ "_all": {
+  "coverage": {
+   "predicted": "with every style converted (batch over 1217 LOD0/LOD1 CHAR_Hair objects), most hair draws of the scene match: Dialogue1 >= 5 groom instances (hg-20261103e: 5 with 17 files), camp several companions; the remaining 'unmatched hair draw' lines name styles the batch rejected or did not see",
+   "invalid_if": "0 groom instances in cost-rt"
+  },
+  "cost-rt vs cost-cards": {
+   "predicted": "rt passes and gi lower by about the hg-20261103e amounts per matched character (rt -1.1..1.5 ms, gi -1.6..1.8 ms in Dialogue1), scene build GPU + 0.06 ms per character (median style, refit; tools.hair_groom.cost)"
+  },
+  "cost-strands vs cost-rt": {
+   "predicted": "strand G-buffer draws 0.2-0.6 ms per close character, rt passes and gi unchanged within noise"
+  },
+  "cost-crowd vs cost-strands": {
+   "predicted": "Dialogue1 (few large characters): the budget does not bind, equal within noise. Camp: the plan line shows coarser LODs for the far characters; scene build GPU and the groom VRAM lower, trace cost about equal (it scales with hair pixels, not segments)",
+   "kept_if": "no visible LOD pops on the shot pair at the camp"
+  }
+ },
+ "hc1-dialogue1-fg2": {"same_as": "_all"},
+ "hc2-campsite-fg2": {"same_as": "_all"}
+}
