@@ -20,8 +20,12 @@ _spec.loader.exec_module(hg)   # BASE, GROOM, step, FULL_RES, GROOM_START, the h
 BATCH = "hair_primary"
 LIVE = "hair-primary"
 SAVES = [("hp1-dialogue1-fg2", "Test Dialogue1")]   # Shadowheart's matched LOD1 hair (hg-20261103e: 5 instances)
+# rt_hair_groom_primary is latched at device creation (main 8df7978d: an INI reload cannot enable strands for users),
+# so it is on from startup in every phase; the live cards/strands A/B is rt_hair_groom (off: no groom anywhere, the
+# native cards; on: strands in RT and on screen). There is no live "strands in RT only" mode any more.
+PRIMARY_START = "rt_hair_groom_primary=1"
 ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0")
-OFF = dict(hg.GROOM, rt_hair_groom_primary="0", rt_hair_fibre="0")
+OFF = dict(hg.GROOM, rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0")
 FIBRE = dict(ON, rt_hair_fibre="1")   # rt_hair_fibre: the strands lit by the fibre BSDF (3b-2b)
 
 
@@ -52,7 +56,7 @@ plan = [
 labels = [p["label"] for p in plan]
 shots = [l for l in labels if l.startswith("shot-")]
 cost = [l for l in labels if l.startswith("cost-")]
-judged = ["warm-back"] + shots + cost
+judged = shots + cost   # warm-ups are never judged (hc1 2026-11-03: a build gate on warm-back stopped the run)
 traced = [p["label"] for p in plan if p.get("trace_at")]
 seconds = sum(p["seconds"] for p in plan)
 STRANDS = r"\[hair primary\] frame \d+: [1-9]\d* grooms published; last 300 frames: \d+ publishes, \d+ prepass, [1-9]\d* G-buffer and [1-9]\d* velocity strand draws, 0 pipelines refused"
@@ -131,7 +135,9 @@ def job(name, save):
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 300, "repeat": 1,
         "live_batch": LIVE,
-        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},{hg.GROOM_START}",
+        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},{hg.GROOM_START},"
+               f"{PRIMARY_START}",
+        "live_flow": {"startup_only": ["rt_hair_groom_primary"]},
         "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/hp_plan.json"],
         "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[pace\]", r"\[watch\]",
                      "rt passes: GPU cost", "gi: GPU cost", r"\[rt\] scene wait", r"\[rt\] scene build GPU",
@@ -140,8 +146,9 @@ def job(name, save):
                      "gi: background builds", "building in the background", "skipped: no variant for", r"\[bvh\]",
                      r"\[rrpost\] exposure (held|hold|probe)", r"\[core\] guard:"],
         "expect": expect, "forbid": forbid, "expect_runner": runner, "stop_on_dump": True,
-        "purpose": ("rt_hair_groom_primary A/B (docs/RTX_HAIR_PRIMARY.md): native hair and the strand groom in secondary "
-                    "rays on throughout; visible strands off/on/off/on/off full-resolution PNG shots for the user and "
+        "purpose": ("Strand hair A/B (docs/RTX_HAIR_PRIMARY.md): rt_hair_groom_primary latched on at startup, rt_hair_groom "
+                    "toggled live (off: native cards everywhere; on: strands in RT and on screen); "
+                    "off/on/off/on/off full-resolution PNG shots for the user and "
                     "the character float energy, cost cards/strands/cards (rt passes, gi, scene build GPU ms, strand "
                     "G-buffer draw ms). Gated: strand G-buffer and velocity draws > 0 while on."),
         "estimated_phase_seconds": seconds,

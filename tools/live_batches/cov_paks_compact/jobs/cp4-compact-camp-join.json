@@ -47,7 +47,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "cp4-compact-camp-join",
   "live_batch": "cov-paks-compact",
-  "timeout": 980,
+  "timeout": 970,
   "args": [
     "-RealPresent",
     "-Move",
@@ -57,13 +57,14 @@
   "expect": [
     "\\[auto\\] scene ready",
     "\\[hit material paks\\] loaded 40983 candidates",
-    "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+    "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
   ],
   "expect_every": [
     {
       "name": "draw attempts and rejection reasons in each ON observation",
+      "period_s": 9,
       "select": "\\[hit material paks join\\]",
-      "match": "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*",
+      "match": "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*",
       "windows": [
         "observe-on",
         "observe-on-repeat"
@@ -77,7 +78,7 @@
     "\\[motion-plan\\] complete phases=7\\b"
   ],
   "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-  "estimated_phase_seconds": 55.5,
+  "estimated_phase_seconds": 75.5,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
