@@ -117,6 +117,38 @@ def test_convert():
     check("layered cards detected", g2.strands == 2 and lay["strands_mostly_duplicated"] == 2, lay)
 
 
+def test_quality_options():
+    h, w = 256, 64
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y: 32.0], 4)
+    m[..., 1] = 255
+    card = card_mesh()
+    # 4 px of 64 across 2 cm = 1.25 mm; a 0.18 mm limit gives 7 fibres of 1.25/7 mm side by side.
+    g, rep = convert.convert(card, m, tile_grid=(1, 1), step=16, max_fibre_diameter=0.00018)
+    check("split fibre count", g.strands == 7 and rep["split_strands"] == 1 and rep["fibres_from_splits"] == 7, (g.strands, rep))
+    check("split fibre width", np.allclose(g.radii * 2, 0.00125 / 7, rtol=0.02), g.radii[:2])
+    xs = np.sort(g.points[g.offsets[:-1], 0])
+    check("split fibres span the painted width", np.allclose(np.diff(xs), 0.00125 / 7, rtol=0.02) and abs(xs.mean()) < 1e-6, xs)
+    emb = np.einsum("pk,pkd->pd", g.bary, card.positions[card.tris[g.triangle]])
+    check("split embedding exact", np.allclose(emb, g.points, atol=1e-6))
+    # Depth channel at 1.0 with a 1 mm offset: points move 1 mm toward the head (+z here).
+    g, _ = convert.convert(card, m, tile_grid=(1, 1), step=16, depth_offset=0.001, head_centre=np.array([0, -0.1, 0.05]))
+    check("depth offset toward head", np.allclose(g.points[:, 2], 0.001) and np.allclose(g.normal_offset, 0.001), g.points[:2])
+    # Two stacked identical cards: dedupe keeps one strand.
+    two = card_mesh()
+    two.positions = np.concatenate([two.positions, two.positions + [0, 0, 1e-4]]).astype(np.float32)
+    for key in ("uv", "joints", "weights"):
+        setattr(two, key, np.concatenate([getattr(two, key)] * 2))
+    two.tris = np.concatenate([two.tris, two.tris + 10])
+    g2, _ = convert.convert(two, m, tile_grid=(1, 1), step=16)
+    d, dropped = convert.dedupe(g2)
+    check("dedupe drops the stacked copy", dropped == 1 and d.strands == 1 and d.card.tolist() == [0], (dropped, d.card))
+    # Far apart (5 mm): both kept.
+    two.positions[10:, 2] = 0.005
+    g3, _ = convert.convert(two, m, tile_grid=(1, 1), step=16)
+    check("dedupe keeps separate strands", convert.dedupe(g3)[1] == 0)
+
+
 def test_locate_overlap():
     uv = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], np.float32)
     tris = np.array([[0, 1, 2], [0, 1, 2]])  # the same UV triangle twice: an overlap
@@ -200,7 +232,7 @@ def test_bench_data():
     check("bench file size", len(raw) == end, (len(raw), end))
 
 
-for t in (test_bench_data, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_bench_data, test_quality_options, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

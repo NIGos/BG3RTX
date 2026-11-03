@@ -55,19 +55,26 @@ def main():
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--step", type=int, default=16, help="mask rows per strand segment")
     ap.add_argument("--pixel", type=float, default=0.0005, help="render pixel size in metres")
+    ap.add_argument("--dedupe", action="store_true", help="drop strands repeated by stacked cards")
+    ap.add_argument("--max-fibre-diameter", type=float, help="split painted clumps into fibres (metres)")
+    ap.add_argument("--depth-offset", type=float,
+                    help="metres per unit of the mask depth channel (CHAR_Hair PixelDepthOffset; Shadowheart 0.001)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=False)
     t0 = time.monotonic()
     hair = mesh.load(args.gltf, args.mesh)
     mask = load_mask(args.mask)
-    groom, report = convert.convert(hair, mask, step=args.step)
-    print(f"[groom] converted in {time.monotonic() - t0:.1f}s: {groom.strands} strands, {groom.segments} segments", flush=True)
     head_centre = (hair.joint_positions[hair.joint_names.index("Head_M")]
                    + hair.joint_positions[hair.joint_names.index("HeadEnd_M_endBone")]) / 2
+    groom, report = convert.convert(hair, mask, step=args.step, max_fibre_diameter=args.max_fibre_diameter,
+                                    depth_offset=args.depth_offset, head_centre=head_centre)
+    if args.dedupe:
+        groom, report["dedupe_dropped_strands"] = convert.dedupe(groom)
+    print(f"[groom] converted in {time.monotonic() - t0:.1f}s: {groom.strands} strands, {groom.segments} segments", flush=True)
     report.update(analysis.summary(groom, hair, mask, head_centre))
     np.savez_compressed(args.out / "groom.npz", points=groom.points, radii=groom.radii, joints=groom.joints,
                         weights=groom.weights, offsets=groom.offsets, card=groom.card, root=groom.root_param,
-                        triangle=groom.triangle, bary=groom.bary)
+                        triangle=groom.triangle, bary=groom.bary, normal_offset=groom.normal_offset)
 
     def cards_build(v):
         return render.card_fragments(hair.positions, hair.uv, hair.tris, mask, v)

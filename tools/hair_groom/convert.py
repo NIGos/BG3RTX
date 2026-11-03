@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
+from scipy.spatial import cKDTree
 
 from . import strands2d
 
@@ -30,6 +31,7 @@ class Groom:
     root_param: np.ndarray  # (P,) mask root channel 0..1 (0 = root)
     triangle: np.ndarray  # (P,) card triangle each point is embedded in
     bary: np.ndarray      # (P, 3) its barycentrics: points = bary . deformed triangle vertices
+    normal_offset: np.ndarray  # (P,) metres along the triangle normal (0 unless depth_offset is used)
 
     @property
     def strands(self):
@@ -99,7 +101,8 @@ def blend_weights(joints, weights, tri_vertices, bary):
 
 
 def tile_strands(mask, tile_grid, step, threshold=128):
-    """{(tx, ty): [(u, v, width_px, slope, root)]} sampled strands of each mask tile, atlas UV."""
+    """{(tx, ty): [(u, v, width, slope, root, depth)]} sampled strands of each mask tile: atlas UV,
+    width in UV u units, slope in pixels per row, root and depth channels 0..1."""
     h, w = mask.shape[:2]
     tw, th = w // tile_grid[0], h // tile_grid[1]
     out, stats = {}, {}
@@ -117,19 +120,28 @@ def tile_strands(mask, tile_grid, step, threshold=128):
                 slope = np.gradient(x, y) if len(x) > 1 else np.zeros_like(x)
                 xi, yi = np.clip(np.rint(x).astype(int), 0, tw - 1), y.astype(int)
                 rows.append(((tx * tw + x + 0.5) / w, (ty * th + y + 0.5) / h, wd / w, slope,
-                             tile[yi, xi, 2] / 255.0))
+                             tile[yi, xi, 2] / 255.0, tile[yi, xi, 1] / 255.0))
             out[(tx, ty)] = rows
     return out, stats
 
 
-def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128):
-    """Groom + report of one hair mesh with its ID_Depth_Root_Alpha mask (H, W, 4 uint8)."""
+def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128, max_fibre_diameter=None,
+            depth_offset=None, head_centre=None):
+    """Groom + report of one hair mesh with its ID_Depth_Root_Alpha mask (H, W, 4 uint8).
+
+    max_fibre_diameter: a painted strand wider than this (metres, at its widest sample on the card)
+      becomes k = ceil(width / max) parallel fibres of width / k side by side across the painted
+      width: coverage is kept and no fibre is thicker than a real hair.
+    depth_offset: metres per unit of the mask's depth channel (the material's PixelDepthOffset);
+      each point moves that far along the card normal toward head_centre. Off when None.
+    """
     count, card_of = cards(mesh.tris, len(mesh.positions))
     per_tile, tile_stats = tile_strands(mask, tile_grid, step, threshold)
-    pts, rad, jnt, wgt, root, offsets, card_ids, emb_t, emb_b = [], [], [], [], [], [0], [], [], []
+    H, W = mask.shape[:2]
+    pts, rad, jnt, wgt, root, offsets, card_ids, emb_t, emb_b, emb_n = [], [], [], [], [], [0], [], [], [], []
     report = {"cards": int(count), "triangles": int(len(mesh.tris)), "tiles": {f"{k[0]},{k[1]}": v for k, v in tile_stats.items()},
               "cards_spanning_tiles": 0, "uv_overlap_samples": 0, "samples": 0, "unmapped_samples": 0,
-              "mixed_winding_cards": 0}
+              "mixed_winding_cards": 0, "split_strands": 0, "fibres_from_splits": 0}
     for c in range(count):
         tri_ids = np.flatnonzero(card_of == c)
         tris = mesh.tris[tri_ids]
@@ -146,19 +158,49 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128):
         rows = per_tile.get(tile, [])
         if not rows:
             continue
-        u, v, wd, slope, rp = (np.concatenate([r[k] for r in rows]) for k in range(5))
+        u, v, wd, slope, rp, dp = (np.concatenate([r[k] for r in rows]) for k in range(6))
         sid = np.repeat(np.arange(len(rows)), [len(r[0]) for r in rows])
         hit, bary, inside = locate(uv, tris, np.stack([u, v], 1))
         report["samples"] += len(u)
         report["unmapped_samples"] += int((hit < 0).sum())
         report["uv_overlap_samples"] += int((inside > 1).sum())
-        tv = tris[np.maximum(hit, 0)]
-        p = np.einsum("nk,nkd->nd", bary, mesh.positions[tv])
         # World width: the texture-space cross-section (width * cos(slope), along u)
         # pushed through the triangle's UV -> position Jacobian.
-        width = wd / np.sqrt(1 + slope ** 2) * np.linalg.norm(jacobian_u(mesh, tv), axis=1)
+        cos = 1 / np.sqrt(1 + slope ** 2)
+        width = wd * cos * np.linalg.norm(jacobian_u(mesh, tris[np.maximum(hit, 0)]), axis=1)
+        if max_fibre_diameter:
+            widest = np.zeros(len(rows))
+            np.maximum.at(widest, sid, np.where(hit >= 0, width, 0))
+            per_strand = np.maximum(1, np.ceil(widest / max_fibre_diameter - 1e-9)).astype(int)
+            report["split_strands"] += int((per_strand > 1).sum())
+            report["fibres_from_splits"] += int(per_strand[per_strand > 1].sum())
+            k = per_strand[sid]
+            # Fibre i of k sits (i - (k-1)/2) * width/k across the painted strand, perpendicular
+            # to it in texture pixels; the copies are located again, so the embedding stays exact.
+            rep = np.repeat(np.arange(len(u)), k)
+            i = np.arange(len(rep)) - np.repeat(np.cumsum(k) - k, k)
+            across = (i - (k[rep] - 1) / 2) * wd[rep] * W * cos[rep] / k[rep]
+            fibre = sid[rep] * int(per_strand.max()) + i
+            order = np.lexsort((rep, fibre))
+            rep, across, sid = rep[order], across[order], fibre[order]
+            u = u[rep] + across * cos[rep] / W
+            v = v[rep] - across * slope[rep] * cos[rep] / H
+            width = (width / k)[rep]
+            rp, dp = rp[rep], dp[rep]
+            hit, bary, _ = locate(uv, tris, np.stack([u, v], 1))
+        tv = tris[np.maximum(hit, 0)]
+        p = np.einsum("nk,nkd->nd", bary, mesh.positions[tv])
+        normal_offset = np.zeros(len(u))
+        if depth_offset and head_centre is not None:
+            pos = mesh.positions[tv].astype(np.float64)
+            n = np.cross(pos[:, 1] - pos[:, 0], pos[:, 2] - pos[:, 0])
+            n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+            inward = np.sign(np.einsum("nd,nd->n", n, head_centre - p))
+            n *= np.where(inward == 0, 1, inward)[:, None]
+            normal_offset = dp * depth_offset
+            p = p + n * normal_offset[:, None]
         j, w = blend_weights(mesh.joints, mesh.weights, tv, bary)
-        # Runs of consecutive mapped samples of one painted strand become groom strands.
+        # Runs of consecutive mapped samples of one painted strand (or fibre) become groom strands.
         ok = (hit >= 0).astype(np.int8)
         brk = np.r_[True, sid[1:] != sid[:-1]]
         starts = np.flatnonzero(ok.astype(bool) & (brk | np.r_[True, ok[:-1] == 0]))
@@ -170,12 +212,43 @@ def convert(mesh, mask, tile_grid=(8, 2), step=16, threshold=128):
                 continue
             pts.append(p[a0:b0]); rad.append(width[a0:b0] / 2); jnt.append(j[a0:b0]); wgt.append(w[a0:b0])
             root.append(rp[a0:b0]); offsets.append(offsets[-1] + b0 - a0); card_ids.append(c)
-            emb_t.append(tri_ids[hit[a0:b0]]); emb_b.append(bary[a0:b0])
+            emb_t.append(tri_ids[hit[a0:b0]]); emb_b.append(bary[a0:b0]); emb_n.append(normal_offset[a0:b0])
     groom = Groom(np.concatenate(pts).astype(np.float32), np.concatenate(rad).astype(np.float32),
                   np.concatenate(jnt), np.concatenate(wgt), np.array(offsets), np.array(card_ids),
                   np.concatenate(root).astype(np.float32), np.concatenate(emb_t),
-                  np.concatenate(emb_b).astype(np.float32))
+                  np.concatenate(emb_b).astype(np.float32), np.concatenate(emb_n).astype(np.float32))
     return groom, report
+
+
+def select(groom, keep):
+    """The groom restricted to the strands where keep (S,) is True."""
+    lengths = np.diff(groom.offsets)
+    point_keep = np.repeat(keep, lengths)
+    return Groom(groom.points[point_keep], groom.radii[point_keep], groom.joints[point_keep],
+                 groom.weights[point_keep], np.r_[0, np.cumsum(lengths[keep])], groom.card[keep],
+                 groom.root_param[point_keep], groom.triangle[point_keep], groom.bary[point_keep],
+                 groom.normal_offset[point_keep])
+
+
+def dedupe(groom, distance=0.0005, share=0.8):
+    """Drop strands that repeat a strand of another (stacked) card: more than `share` of their points
+    lie within `distance` of one single other-card strand that is kept. Stacked cards tiled with the
+    same painted strands put the same fibre twice in one place; the lower strand index is kept.
+    Returns (groom, dropped strand count)."""
+    strand_of = np.repeat(np.arange(groom.strands), np.diff(groom.offsets))
+    pairs = cKDTree(groom.points).query_pairs(distance, output_type="ndarray")
+    pairs = np.concatenate([pairs, pairs[:, ::-1]])
+    a, b = strand_of[pairs[:, 0]], strand_of[pairs[:, 1]]
+    other_card = groom.card[a] != groom.card[b]
+    # Each point counts once per neighbouring strand.
+    key = np.unique(np.stack([pairs[other_card, 0], b[other_card]], 1), axis=0)
+    pair_key, counts = np.unique(np.stack([strand_of[key[:, 0]], key[:, 1]], 1), axis=0, return_counts=True)
+    dup = counts > share * np.diff(groom.offsets)[pair_key[:, 0]]
+    keep = np.ones(groom.strands, bool)
+    for s, other in sorted(map(tuple, pair_key[dup].tolist())):
+        if keep[s] and keep[other] and other < s:
+            keep[s] = False
+    return select(groom, keep), int((~keep).sum())
 
 
 def jacobian_u(mesh, tv):

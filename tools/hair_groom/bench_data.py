@@ -1,6 +1,7 @@
 """Write the input file of tools/hair_lss_bench.cpp: cards, mask and grooms at several segment lengths.
 
 python -m tools.hair_groom.bench_data --gltf <LSLib export> --out <new .bin> [--mask <dds>] [--steps 16 32 64]
+    [--dedupe] [--max-fibre-diameter 0.00018] [--depth-offset 0.001]
 
 Layout (little endian; all counts uint32):
   header  'HLSB', version 1, card_vertices V, card_triangles T, mask_w, mask_h, groom_sets G, 0
@@ -55,12 +56,21 @@ def main():
     ap.add_argument("--mask", type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--steps", type=int, nargs="+", default=[16, 32, 64])
+    ap.add_argument("--dedupe", action="store_true", help="drop strands repeated by stacked cards")
+    ap.add_argument("--max-fibre-diameter", type=float, help="split painted clumps into fibres (metres)")
+    ap.add_argument("--depth-offset", type=float, help="metres per unit of the mask depth channel")
     args = ap.parse_args()
     hair = mesh.load(args.gltf, args.mesh)
     mask = load_mask(args.mask)
     grooms = []
     for step in args.steps:
-        g, _ = convert.convert(hair, mask, step=step)
+        head = (hair.joint_positions[hair.joint_names.index("Head_M")]
+                + hair.joint_positions[hair.joint_names.index("HeadEnd_M_endBone")]) / 2
+        g, _ = convert.convert(hair, mask, step=step, max_fibre_diameter=args.max_fibre_diameter,
+                               depth_offset=args.depth_offset, head_centre=head)
+        if args.dedupe:
+            g, dropped = convert.dedupe(g)
+            print(f"[bench data] step {step}: dedupe dropped {dropped} strands", flush=True)
         print(f"[bench data] step {step}: {g.strands} strands, {g.segments} segments", flush=True)
         grooms.append((step, g))
     write(args.out, hair, mask, grooms)

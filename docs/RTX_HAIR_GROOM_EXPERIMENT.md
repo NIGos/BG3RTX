@@ -68,6 +68,19 @@ Same camera, light, opacity shadow map, fibre shading, ellipsoid head; cards: ma
 - Same partings, bangs, braid and bun; continuous fibres instead of texel steps; the card-gap dashes
   (side view) stay, as they are in the asset; no strands between sheets; fragment tips add some frizz.
 
+## Quality options (converter flags; same render and bench as above)
+- `--dedupe`: true copies (>80% of a strand within 0.5 mm of one strand of a stacked card) are only
+  529 strands (0.6%); the 4.5% above are sheets touching many strands, not copies. Removing the 529
+  changes no view (coverage and IoU equal to 3 decimals) and no cost. Kept on.
+- Volume between sheets: the asset's only depth data is G x PixelDepthOffset (1 mm; G mean 0.30 on
+  91% of strands), a raster depth trick, not geometry. As an inward offset (`--depth-offset 0.001`)
+  it moves strands 0.3 mm, fills no gap and costs 2 IoU points (strands sink into the head proxy).
+  Off; no volume is invented.
+- `--max-fibre-diameter 0.00018` (largest human hair, 0.18 mm): painted clumps split into side-by-side
+  fibres of the same total width. 2.44M segments at 2 mm; hit share -2%; trace 1.36/1.06/1.89 ms
+  (+50%), refit 0.48 ms, BLAS 208 MB per character. Not worth it at game resolution (a fibre is
+  sub-pixel either way): off, painted clumps stay as RT proxies (radius p50 0.125 mm).
+
 ## Production path
 Integration design: docs/RTX_HAIR_INTEGRATION.md.
 
