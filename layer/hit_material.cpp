@@ -1,4 +1,6 @@
 #include "hit_material.h"
+#include "assetdb.h"
+#include "../common/mesh_paks.h"
 #include "omm_sampler.h"
 #include "../common/native_hit_capability.h"
 #include "../common/native_hit_join.h"
@@ -22,6 +24,8 @@
 #include <cmath>
 #include <memory>
 #include <set>
+#include <fstream>
+#include <filesystem>
 namespace bg3 {bool geo_native_tileset_enabled();bool geo_native_tileset_material_inputs(VkPipeline,native_hit::TilesetInputs*);}
 namespace bg3::native_hit {
 namespace {
@@ -122,12 +126,59 @@ std::atomic<bool> pool_mask_on{false};
 // patches the generated instanced G-buffer VSs (the XFB frame outputs), then the live key (read once per frame in
 // pool_rollover) turns the generated pool and instanced rows on and off. Off at startup: every lookup is the audited one.
 bool generated_on{};
+bool paks_on{};
+std::atomic<bool> paks_key{false};
+bool paks_rows(){return paks_on&&paks_key.load(std::memory_order_relaxed);}
+const native_vt::Recipe* paks_recipe(uint64_t vs,uint64_t fs){
+ if(vs!=0x2d2ac3c38992b7f0ull||fs!=0xb0ecc292e8661561ull)return nullptr;
+ const auto* r=generated::row(vs,fs);return r?&r->recipe:nullptr;
+}
 std::atomic<bool> generated_key{true};
 bool generated_rows(){return generated_on && generated_key.load(std::memory_order_relaxed);}
 bool generated_recipe(const native_vt::Recipe* r){return r && generated::row_of(r)!=nullptr;}
 const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
  const auto* r=pool::pool_recipe(vs,fs,generated_rows());
+ if(!r&&paks_rows())r=paks_recipe(vs,fs);
  return r && r->layout==native_vt::LayoutMask && !pool_mask_on.load(std::memory_order_relaxed)?nullptr:r;
+}
+std::vector<mesh_paks::Row> pak_meshes;
+std::atomic<uint64_t> pak_attempts{0},pak_matches{0};
+void paks_load(){
+ pak_meshes.clear();if(!paks_on)return;
+ const auto dir=std::filesystem::path(assetdb_file()).parent_path();std::error_code ec;
+ for(std::filesystem::directory_iterator it(dir,ec),end;!ec&&it!=end;it.increment(ec)){
+  const auto path=it->path();const auto name=path.filename().string();
+  if(name!="mesh_paks_cov_paks.bin")continue;
+  const auto size=it->file_size(ec);if(ec||size>512ull*1024*1024){ec.clear();continue;}
+  std::ifstream file(path,std::ios::binary);std::vector<uint8_t> bytes(static_cast<size_t>(size));
+  if(!file.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))continue;
+  std::vector<mesh_paks::Row> rows;
+  if(!mesh_paks::parse(bytes,rows)){log("[hit material paks] rejected malformed table %s",path.string().c_str());continue;}
+  for(auto& row:rows)pak_meshes.push_back(std::move(row));
+ }
+ log("[hit material paks] loaded %llu candidates; only full geometry/UV verified HLOD draws can supply current resources and checked basis",(unsigned long long)pak_meshes.size());
+}
+const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
+ if(!paks_rows()||!ip.ok||!ip.pos_float3||!ip.uv_ok||ip.pos_binding>=CmdState::kMaxVertexBindings||ip.uv_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
+ const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
+ const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
+ std::shared_lock lock(tracker().mu);
+ auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
+  const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
+  const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
+  if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
+  return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
+ };
+ if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
+ mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
+ in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
+ if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
+ in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
+ mesh_content::Sample sample;if(!mesh_content::sample(in,sample))return nullptr;
+ auto match=mesh_paks::lookup(pak_meshes,args.count,&sample,nullptr);
+ if(match.status!=mesh_paks::Match::Unique||!match.row||!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided))return nullptr;
+ const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
+ return mesh_paks::full_match(*match.row,in,uv,ip.uv_stride?ip.uv_stride:uint32_t(ub.stride))?match.row:nullptr;
 }
 // The VS inputs of an instanced draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
 // at record: frame 0:0 word 0, camera 0:2 _m2/_m6; wind: scene 0:1 wind words, material 1:1 _m0.._m3;
@@ -544,6 +595,7 @@ void publish_word(Query& query,uint32_t value){
 struct PoolMaterial {
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
  const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
+ bool pak{},pak_two_sided{}; // full verified HLOD fallback, current captured resources
  View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{}; // LayoutDetail only
  bool detail_layout() const {return recipe && recipe->layout==native_vt::LayoutDetail;}
  std::array<View,5> plain{};uint32_t plain_floats[6]{}; // LayoutIridescent only (sampler 0:7 in `sampler`)
@@ -586,6 +638,8 @@ PoolObserved& pool_observed(uint64_t frame){
  return pool_obs[0];
 }
 void pool_log(uint64_t frame){
+ if(paks_on){uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
+  log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; unsupported COLOR remains unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
  for(size_t i=0;i<size_t(pool::Status::Count);++i){draws+=c.draws[i];instances+=c.instances[i];}
  const PoolObserved empty{};
@@ -652,6 +706,7 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  pool_mask_on.store(cfg_int("rt_hit_material_mask",0)!=0,std::memory_order_relaxed);
  ip_grass_key.store(cfg_int("rt_hit_material_ip_grass",0)!=0,std::memory_order_relaxed);
  generated_key.store(cfg_int("rt_hit_material_generated",0)!=0,std::memory_order_relaxed);
+ paks_key.store(cfg_int("rt_hit_material_paks",0)!=0,std::memory_order_relaxed);
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
@@ -684,10 +739,11 @@ void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return
  wind_rgb_on=instanced_on && cfg_int("rt_hit_material_wind_rgb",0)!=0;
  ip_grass_on=instanced_on && cfg_int("rt_hit_material_ip_grass",0)!=0;
  generated_on=on && cfg_int("rt_hit_material_generated",0)!=0;
+ paks_on=on && instanced_on && cfg_int("rt_hit_material_paks",0)!=0;paks_key.store(paks_on,std::memory_order_relaxed);paks_load();
  capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
  capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),ip_grass_on);
  {bool pool_2s=false;for(uint32_t i=0;i<generated::kRowCount;++i)pool_2s=pool_2s||(generated::kRows[i].recipe.capture==native_vt::CapturePool && generated::kRows[i].recipe.two_sided);
-  capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),instanced_on && generated_on && pool_2s);}
+  capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),paks_on || (instanced_on && generated_on && pool_2s));}
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
 void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
@@ -1032,7 +1088,17 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return false;const auto frame=frame_index();CpuTimer timer(CpuMaterial);
  uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
  const auto* recipe=pool_recipe_on(state->vs,state->fs);
+ const bool pak_fallback=recipe && !pool::pool_recipe(state->vs,state->fs,generated_rows());
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
+ // Revalidate full raw bytes before the refresh throttle. A same-handle host
+ // write must not retain a previously witnessed pak material assignment.
+ if(pak_fallback){
+  ++pak_attempts;
+  const auto* pak=paks_match(*state,args,inst);
+  if(!pak)recipe=nullptr;
+  else{++pak_matches;payload.pak=true;payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
+   for(char c:pak->material)o.identity=pool::mix(o.identity,uint8_t(c));}
+ }
  bool due=false,throttled=false;
  if(keyed && recipe && poolPipeline){
   Bg3Binding tilesets{};const bool table=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,12,0,&tilesets,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) && tilesets.buffer;
@@ -1100,7 +1166,7 @@ PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const
  auto& m=r->payload;
  if(const uint32_t old=pool::basis_rebind(m.basis,mesh.gen);old<nh_pool_rows)pool_slots.release(old);
  m.mesh=mesh;
- if(status!=pool::Status::Qualified || (m.mask_layout() && !pool_mask_on.load(std::memory_order_relaxed)) || (generated_recipe(m.recipe) && !generated_rows()))return use;
+ if(status!=pool::Status::Qualified || (m.mask_layout() && !pool_mask_on.load(std::memory_order_relaxed)) || (m.pak?!paks_rows():(generated_recipe(m.recipe) && !generated_rows())))return use;
  use.wants_basis=!mesh.basis_bytes;
  if(m.basis.state==pool::Basis::Ready){
   if(m.basis.slot>=nh_pool_rows)m.basis.slot=pool_slots.acquire();
@@ -1360,11 +1426,11 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(m.detail_layout()){x.layout=native_vt::LayoutDetail;x.detail_normal=m.detail_normal;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;
     std::memcpy(x.detail,m.detail,16);}
    if(m.plain_layout()){x.layout=native_vt::LayoutIridescent;x.plain=m.plain;std::memcpy(x.plain_floats,m.plain_floats,24);}
-   if(generated_recipe(recipe) && !generated_rows())return; // rt_hit_material_generated off: its records stay, no rows
+   if(m.pak?!paks_rows():(generated_recipe(recipe) && !generated_rows()))return;
    if(m.mask_layout()){if(!pool_mask_on.load(std::memory_order_relaxed))return;
     x.layout=native_vt::LayoutMask;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;std::memcpy(x.colours,m.colours,36);}
    x.row.valid=m.basis.slot+1;x.row.triangles=mesh.tris;x.row.pre=uint32_t(mesh.pool_off);x.row.deferred=uint32_t(mesh.basis_off);
-   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=recipe->two_sided?5:3; // 5: a generated two-sided pool row (RT_HIT_POOL_2S consumers only)
+   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=(m.pak?m.pak_two_sided:recipe->two_sided)?5:3;
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
    // Row word 220: reflectance mode (rt_hit_material_pool: 2 mixes the normal layer's x).
    std::memcpy(&x.row.parameters[3],&recipe->reflectance,4);

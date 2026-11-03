@@ -687,6 +687,9 @@ struct InstPipe {
   uint32_t pos_offset = 0;
   uint32_t pos_stride = 0; // zero: dynamic binding stride
   bool pos_float3 = false; // content identity supports raw float3 only
+  uint8_t uv_binding = 0xff; // paks: audited copy of a raw per-vertex float2 input
+  uint32_t uv_offset = 0, uv_stride = 0;
+  bool paks_cull_known = false, paks_two_sided = false;
 };
 void bvh_device_created(DeviceData* dd);
 void bvh_device_destroyed(DeviceData* dd);

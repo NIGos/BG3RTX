@@ -15,12 +15,12 @@ pan), RTX 5090, 2560x1067.
 ### 10.1 The game's specular ambient (D-EN4)
 
 BG3 has no SSR: its only reflections are cube-map probes, applied inside the tiled lighting
-`f469db78` (FRAME_MAP "Specular ambient"). The term in b11 is `S · k · SO`:
-- `S` (`_1684`): the global probe b35 (and b37) at `R = reflect(−V, N)`, mip `a·8 + _m30 − 8`,
-  times the split-sum env BRDF `E = F0·DFG.x + DFG.y` (LUT b38 at `(max(N·V, 1/512), a)`); then
+`f469db78` (FRAME_MAP "Specular ambient"). The term in b11 is `S Â· k Â· SO`:
+- `S` (`_1684`): the global probe b35 (and b37) at `R = reflect(âˆ’V, N)`, mip `aÂ·8 + _m30 âˆ’ 8`,
+  times the split-sum env BRDF `E = F0Â·DFG.x + DFG.y` (LUT b38 at `(max(NÂ·V, 1/512), a)`); then
   every local probe listed in the pixel's froxel (b23 `y >> 24`, records b33, cubes in the
   bindless array b45: box/sphere parallax, edge fade, its own roughness and DFG) lerped over it;
-- `k = b13[0] · 100`;
+- `k = b13[0] Â· 100`;
 - `SO`: Lagarde's specular occlusion from the AO target;
 - then the aerial-perspective transmittance (1 indoors; not replicated).
 
@@ -36,7 +36,7 @@ push binding 30 (31 push descriptors).
 **Validation** (`rf_validate=1`, `rf_stats=1`): the D-LS prep pass sets the AO to 1 (so
 `SO = 1`) and the sun mask to 0 before the lighting, and D-LS is skipped. b11 then holds only
 the local lights (recomputed with the game's own atlas shadows, as D-LS does), projector
-lights and `S·k`. Over the pixels without projector lights:
+lights and `SÂ·k`. Over the pixels without projector lights:
 
 | Foundry, gameplay (same result in two runs) | Value |
 |---|---|
@@ -60,23 +60,23 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
 
 1. The surface exactly as `f469db78` sets it up (shared with D-LS): `P`, `N` (not
    renormalised), `V`, F0, roughness `a` with the game's specular AA, the shading model.
-2. `Tp = S·k·SO` (10.1) and the pixel's `E`.
-3. One ray (`rt_closest`, alpha-tested TLAS) from `P + N·dist·rt_bias`, up to `rf_tmax` (100):
-   - with RR (`rf_rr=-1` follows `rr`): GGX **bounded VNDF** (Eto & Tokuyoshi 2023), α = a²,
+2. `Tp = SÂ·kÂ·SO` (10.1) and the pixel's `E`.
+3. One ray (`rt_closest`, alpha-tested TLAS) from `P + NÂ·distÂ·rt_bias`, up to `rf_tmax` (100):
+   - with RR (`rf_rr=-1` follows `rr`): GGX **bounded VNDF** (Eto & Tokuyoshi 2023), Î± = aÂ²,
      white noise from `pcg3d(pixel, frame)` on its own stream; a mirror ray for
      `a < rf_mirror_rough` (0.1);
    - without RR: mirror rays only, up to `rf_max_rough_norr` (0.3). There is no denoiser for
      GGX noise there, so the fallback is deterministic and nothing of ours filters (R2).
 4. Tiers:
-   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_k` × the derived depth_tol; was `rf_depth_tol`
+   - **(a)** the hit projects on screen, the depth there is the hit itself (`rf_depth_k` Ã— the derived depth_tol; was `rf_depth_tol`
      3%) and that surface faces the ray: `L = prev_radiance_at(hit pixel)` (last frame's lit
      diffuse + specular, reprojected with the MVs, QUALITY Q1), weight `w = 1`, faded within
-     `rf_edge` of the screen border and between 0.75 and 1 × `rf_max_rough` (0.6);
+     `rf_edge` of the screen border and between 0.75 and 1 Ã— `rf_max_rough` (0.6);
    - **(c)** a miss, a hit hidden on screen or off screen, or a sample below the horizon:
      `w = 0`, the game's own probe term stays exactly as it was. A TLAS miss is never sky
      (QUALITY R3; roofs are cut away).
    - Tier (b), shading off-screen hits, needs the hit material (D-EN2) and is not done.
-5. The exact delta `b11 += w·(L·E − Tp)`, clamped at 0 only against the transmittance it does
+5. The exact delta `b11 += wÂ·(LÂ·E âˆ’ Tp)`, clamped at 0 only against the transmittance it does
    not replicate. The game's `SO` is not applied to traced hits: the ray found the
    occluder and returns its radiance; applying `SO` as well would double-occlude. (`rf_so`:
    removed 2026-10-31, see CONSOLIDATION.md C1.)
@@ -84,7 +84,7 @@ frame's lit radiance, reflections included, as next frame's `prevRadiance`), SSS
    (the probe behaves as an environment at infinity). Non-finite guard on every write (R5).
 
 Per pixel the estimate is stochastic between (a) and (c); in expectation it is
-`P(a)·L·E + (1 − P(a))·Tp`, and RR denoises it (R2: no history or filter of ours).
+`P(a)Â·LÂ·E + (1 âˆ’ P(a))Â·Tp`, and RR denoises it (R2: no history or filter of ours).
 
 ### 10.3 RR guides: the specular hit distance
 
@@ -101,9 +101,9 @@ Foundry, one run, live toggle (`auto-run.ps1 -Traces 4` with `scripts/live_phase
 `dump_png_width=3840`; `scripts/ab_compare.py`):
 
 - [rf_foundry_off.png](img/rf_foundry_off.png) / [rf_foundry_on.png](img/rf_foundry_on.png) /
-  [rf_foundry_diff.png](img/rf_foundry_diff.png) (×4): the presented frames, downscaled.
+  [rf_foundry_diff.png](img/rf_foundry_diff.png) (Ã—4): the presented frames, downscaled.
 - [rf_foundry_crops.png](img/rf_foundry_crops.png): three 1:1 crops of the 3840x1600 output,
-  off | on | diff ×4. Top: the metal pipes along the walkway. With the probe they and the wall
+  off | on | diff Ã—4. Top: the metal pipes along the walkway. With the probe they and the wall
   behind them carry a uniform sheen; with D-RF they reflect the dark wall and walkway they
   face, and the sheen is gone. Middle and bottom: the chimney pipes and the curved beam,
   rough; almost no change (the moving NPC is most of the diff).
@@ -121,7 +121,7 @@ Foundry, one run, live toggle (`auto-run.ps1 -Traces 4` with `scripts/live_phase
 | below the horizon | 2.7% | 85.0% (G-buffer under the forward-rendered water) |
 | local probes per pixel | 1.29 | 0.01 |
 | mean luminance: game specular / probe term / probe term after D-RF | 0.01425 / 0.01093 / 0.01098 | 0.03700 / 0.01714 / 0.01717 |
-| presented frame, mean luminance | −0.78%; 10.5% of pixels change by > 2/255 | water animation dominates the diff |
+| presented frame, mean luminance | âˆ’0.78%; 10.5% of pixels change by > 2/255 | water animation dominates the diff |
 | non-finite values (every dump of every trace, all runs) | **0** | **0** |
 
 The probe term is 77% of the foundry's specular, yet its mean moves by +0.5% only: the
@@ -143,8 +143,8 @@ FLIP against a reference.
 | Configuration | Foundry | Docks |
 |---|---|---|
 | **Default (RR, GGX VNDF, 1 ray per px below a = 0.6)** | **0.33 ms** (p10 0.31, p90 0.36) | 0.13 ms |
-| `-Validation` | 0.31 ms | — |
-| `rf_stats=1` (wave-reduced atomics; measurement only) | 4.1-4.4 ms | — |
+| `-Validation` | 0.31 ms | â€” |
+| `rf_stats=1` (wave-reduced atomics; measurement only) | 4.1-4.4 ms | â€” |
 
 `rr=0` (mirror rays up to a = 0.3, 2% of pixels traced) was only timed with `rf_stats=1` on,
 so it has no clean number; the probe recompute runs on every pixel either way. The default is
@@ -182,7 +182,7 @@ D-LS 0.35 ms, D-RF 0.33 ms, about 0.95 ms of the 2.5 ms.
 
 Settings (`bg3rtx.ini`, all live): `rt_reflections`, `rf_max_rough`, `rf_max_rough_norr`,
 `rf_mirror_rough`, `rf_rr`, `rf_tmax`, `rf_depth_k` (was `rf_depth_tol`), `rf_edge`, `rf_strength`,
-`rf_models`, `rf_debug` (1 tiers, 2 change ×4, 3 probe term, 4 probe term after D-RF,
+`rf_models`, `rf_debug` (1 tiers, 2 change Ã—4, 3 probe term, 4 probe term after D-RF,
 5 validation residual, 6 hit distance), `rf_stats`, `rf_validate`, `rr_spec_hit_distance`.
 The log reports `rf: first frame ...` (the lighting's set and its layout),
 `rf: reflection pass GPU median ...`, `[ngx] RR gets the specular hit distance` and, with
@@ -653,9 +653,9 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
 
 ### Pak mesh materials: identity audit and remaining runtime work (cov-mesh-material, 2026-11-03)
 
-Status: offline catalogue plus sampled host identity; runtime fallback is **not implemented or READY_FOR_LIVE**.
-`rt_hit_material_paks` is the proposed off-by-default key, not a registered working feature.
-No qualified row, descriptor, shader or ABI changes accompany this work.
+Historical step 1 status: offline catalogue plus sampled host identity only.
+The cov-paks increment below registers `rt_hit_material_paks=0` and adds a
+restricted HLOD fallback. It is not a coverage qualification or live approval.
 
 Step 1 runtime increment (mesh-identity, 2026-11-03): `rt_mesh_content_id=0` gates
 a host-only v1 candidate fingerprint on class-A mesh captures and audits. It reads
@@ -668,8 +668,9 @@ the candidate on captured pool meshes and logs `[mesh id] content ids: N meshes,
 M collisions, K stable across 2 captures`; collisions here mean observed differing
 samples with the same hash. Unsampled mutations can alias: this ID never qualifies
 a row. Full canonical equality in prerequisite 1 below remains unimplemented.
-LSLib is absent and the catalogue cannot decode GR2 buffers; the byte contract and
-exact decoder prerequisite are recorded in `tools/assets/mesh_content_id.md`.
+At step 1, LSLib was not discovered and the catalogue did not decode GR2.
+The cov-paks increment now reuses the groom pipeline's LSLib v1.20.4 native reader;
+the contract is recorded in `tools/assets/mesh_content_id.md`.
 Unit tests and CPU cost are recorded in `docs/progress/cov-mesh-material.md`.
 
 The existing mesh key is not a resource ID or vertex/index content hash. `common/native_hit_pool.h`
@@ -712,6 +713,36 @@ stale writes; exact 256 B row equality for matched captured fixtures; identical 
 and pre-post colour on replay with the key off and for previously qualified hits with the key on.
 Existing packs lack raw mesh resource identity, so they can freeze the old-row baseline but cannot
 establish a new pak join or predict its qualified-share gain. No GPU cost or energy improvement is claimed.
+
+### Pak join increment (cov-paks, 2026-11-03; not qualified)
+
+`tools.assets.mesh_paks` generates local-only JSON and binary join candidates
+from catalogue GR2s, initially lava / Tileset / HLOD. It preserves native ordering,
+uses the shared content ID and 32 UV samples, and retains all ordered position/UV
+corners. It caches by source/tool/material/decoder identity and prints progress
+at least every 25 s, including while LSLib decodes. Outputs use exclusive creation.
+Local initial batch: 30 GR2, 74 candidates (40 HLOD / 13 lava / 21 Tileset),
+0 decode failures; 10 audited HLOD_GM rows. Tileset repeat: 10/10 cache hits.
+ObjectID suffix is ExportOrder, not a material group. Only unique native names with
+one full-range MaterialIndex 0 group are supported; global source/name conflicts
+and multigroup objects fail closed. Native ExportOrder/LOD checks remain unavailable.
+
+`rt_hit_material_paks=0` is registered in settings and Experimental GUI; enable
+at startup with hit-material instanced capture, then toggle live for A/B. Existing
+qualified recipes take precedence. The first safe runtime subset is the audited
+Engine_Default_HLOD_GM_VT shader pair: exact full positions, all UVs within 1e-3,
+matching static cull state, current captured views/VT transforms/overrides and the
+existing position-checked XFB basis are required. Its pak two-sided flag enters
+the existing pool row. No guessed UUID-to-view mapping or basis-ready shortcut.
+Lava/Tileset candidates retain texture and vertex-colour intent, but their colour
+recipes remain unsupported and unqualified. Device-local unmapped inputs stay unknown.
+No shader request or ABI delta; default paths and presets remain unchanged.
+
+Draft batch `tools/live_batches/cov_paks`: S6 forge lava, camp and S8, static
+OFF/ON/OFF within each run; missing-record/attempted share, qualified share,
+float pre-post energy and GI GPU medians, with participation/capacity gates.
+Dryrun uses fake temporary queues only. No game launch, coverage gain, energy
+or GPU-cost result is claimed. See `docs/progress/cov-paks.md` for deciding checks.
 
 ### Recipe-row branch progress details (verbatim)
 

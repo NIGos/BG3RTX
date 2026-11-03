@@ -1972,6 +1972,13 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   const auto* ua = vi.uv_input_location >= 0 ? attr(vi.uv_input_location) : nullptr;
   const auto* ub = ua ? binding(ua->binding) : nullptr;
   ip.uv_ok = ub && ub->inputRate == VK_VERTEX_INPUT_RATE_VERTEX;
+  ip.paks_cull_known=ci.pRasterizationState && !ci.pRasterizationState->pNext;
+  if(ci.pDynamicState)for(uint32_t d=0;d<ci.pDynamicState->dynamicStateCount;++d)
+    if(ci.pDynamicState->pDynamicStates[d]==VK_DYNAMIC_STATE_CULL_MODE)ip.paks_cull_known=false;
+  ip.paks_two_sided=ip.paks_cull_known && ci.pRasterizationState->cullMode==VK_CULL_MODE_NONE;
+  if(ip.uv_ok && ua->format==VK_FORMAT_R32G32_SFLOAT && ua->binding<CmdState::kMaxVertexBindings){
+    ip.uv_binding=uint8_t(ua->binding);ip.uv_offset=ua->offset;ip.uv_stride=dyn_stride?0:ub->stride;
+  }
   ip.ok = true;
   return ip;
 }

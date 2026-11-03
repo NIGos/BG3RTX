@@ -412,6 +412,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, false, {}, true},
 
+  {"exp_hit_paks", "Pak material coverage",
+   "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
+   Kind::Choice, Apply::Restart, "restart to enable; off is live", false,
+   {{"off", "Off", 0, {{"rt_hit_material_paks", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hit_material_paks", "1"}}, {{"exp_hidden_surface",1}}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"},{"rt_hit_material_instanced","1","Instanced material startup"}}, false},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -657,6 +664,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
     {"rt_hit_material_generated", "0"},
+    {"rt_hit_material_paks", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "0"},
     {"rt_omm_reference", "0"},
@@ -878,6 +886,7 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   if (key == "rt_hair_groom") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
   if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
+  if (key == "rt_hit_material_paks") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
                                          "sharc_device", "rt_bvh_split", "rt_native_hair", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
                                          "rt_hit_material_wind_rgb"};
