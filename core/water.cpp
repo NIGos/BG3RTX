@@ -1639,10 +1639,11 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
     host->pan_capture(cmd,"water_game",&pan_target);
     bg3::water::ComposeBuffer records{};
     if (bg3::water::read_buffer(static_cast<const bg3::water::ComposeBuffer*>(host->persist(bg3::water::kComposeKey,sizeof records)),records) &&
-        bg3::water::stride_of(records)==32 && uint64_t(p->width)*p->height<=records.capacity) {
+        uint64_t(p->width)*p->height<=records.capacity &&
+        bg3::water::buffer_bytes(records.capacity,bg3::water::stride_of(records))<=records.bytes) {
       Bg3Binding coverage{};
       coverage.buffer=VkBuffer(records.buffer); coverage.offset=bg3::water::kHeaderBytes;
-      coverage.range=uint64_t(p->width)*p->height*32;
+      coverage.range=uint64_t(p->width)*p->height*bg3::water::stride_of(records);
       coverage.width=p->width; coverage.height=p->height; coverage.format=VK_FORMAT_R8_UINT;
       host->pan_capture(cmd,"water_coverage",&coverage);
       if (!comp) {
@@ -1651,7 +1652,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
         host->vk->CmdFillBuffer(cmd,coverage.buffer,bg3::water::kHeaderBytes,records.bytes-bg3::water::kHeaderBytes,0);
         memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,kAll);
       }
-    } else host->log("[pan] water capture REFUSED: coverage requires 32 B records covering the render target");
+    } else host->log("[pan] water capture REFUSED: coverage requires complete records covering the render target");
   }
   const bool composed = comp && compose_at_pass_end(cmd, p, lights, lights_ok, &copy, copy_ok);
   if (pan_water && composed && view==25) host->pan_capture(cmd,"water_compose_debug",&pan_target);

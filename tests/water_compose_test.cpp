@@ -158,6 +158,17 @@ static uint64_t fnv(const void* p, size_t n) {
 }
 
 int main(int argc, char** argv) {
+  // Coverage must use the shared marker word at every supported record stride,
+  // including the optional game-shadow tail. Roughness alone is not coverage.
+  for (uint32_t stride : {32u, 40u, 48u, 96u, 104u, 112u}) {
+    std::vector<uint32_t> records(3 * stride / 4, 0x12345678u);
+    records[7] = 0xffffu;
+    records[stride / 4 + 7] = 0xabcd0000u;
+    records[2 * stride / 4 + 7] = 0xabcdffffu;
+    CHECK(bg3::water::coverage_at(records.data(), 0, stride) == 1);
+    CHECK(bg3::water::coverage_at(records.data(), 1, stride) == 0);
+    CHECK(bg3::water::coverage_at(records.data(), 2, stride) == 1);
+  }
   {
     // Reproduce the GPU ring publication + compose copies from one capture.
     // Float4 13 means different things in these two camera buffer layouts.

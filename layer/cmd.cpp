@@ -232,6 +232,12 @@ static void end_pass(VkCommandBuffer cmd) {
   rrpost_pass_end(cmd, s->pass, s->color_layouts);
   sl_note_pass_end(cmd, s);
   core_on_pass_end(cmd, &s->pass);
+  // Water compose runs in the core after the ordinary end dump. Capture its exact
+  // target here: later passes may sample/copy it without ever attaching it again.
+  if (s->tracing && water_is_pass(s->pass, s->pass.width, s->pass.height)) {
+    const std::string dumps = trace_dump_pass(cmd, s, false, true);
+    trace_event(s, "{\"op\":\"post_core\",\"dumps\":[" + dumps + "]}");
+  }
   pan_pass_end(cmd, s);
 }
 

@@ -38,6 +38,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 
 namespace bg3::water {
 
@@ -141,6 +142,11 @@ inline int record_mb(int mb, uint32_t record_bytes) {
 // M5.4c: whether the records carry the game-shadow words (a sun form only), and the record stride.
 inline bool gsh_of(const ComposeBuffer& b) { return (b.flags & kBufGsh) != 0 && record_bytes_of(b) >= kRecordBytesSun; }
 inline uint32_t stride_of(const ComposeBuffer& b) { return record_bytes_of(b) + (gsh_of(b) ? kGshBytes : 0u); }
+
+// All record layouts keep the FS written marker in word 7.
+inline uint8_t coverage_at(const uint32_t* records, std::size_t pixel, uint32_t stride) {
+  return (records[pixel * (stride / 4) + 7] & 0xffffu) != 0u ? 1 : 0;
+}
 
 inline void publish_buffer(ComposeBuffer* dst, uint64_t buffer, uint64_t bytes, uint32_t capacity,
                            uint32_t record_bytes = kRecordBytes, uint32_t flags = 0) {

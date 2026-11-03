@@ -327,7 +327,7 @@ std::string image_ref(VkImage image);
 std::string view_ref(VkImageView view);
 // Records copies of the pass's attachments into readback buffers; returns
 // the dump ids as a JSON array fragment for the pass's "end" event.
-std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview = false);
+std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview = false, bool post_core = false);
 // Terrain packet dump (terrain_packet_dump.inl, diagnostic only).
 struct TerrainSubmission {std::vector<uint64_t> packets;uint64_t frame{};};
 #if BG3RTX_DIAGNOSTICS

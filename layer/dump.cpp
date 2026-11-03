@@ -6,6 +6,7 @@
 // screenshot or a graphics debugger.
 #include "host.h"
 #include "../common/pan_epoch.h"
+#include "../common/water_compose.h"
 #include "omm_sampler.h"
 
 #include <wincodec.h>
@@ -143,8 +144,8 @@ static bool record_copy(VkCommandBuffer cmd, DeviceData* dd, VkImage image, VkIm
   return true;
 }
 
-std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview) {
-  terrain_capture_pass(cmd,s);
+std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview, bool post_core) {
+  if (!post_core) terrain_capture_pass(cmd,s);
   if (!trace_recording() || (!post_preview && !cfg_int("dump_images", 1))) return {};
   DeviceData* dd = device_of(cmd);
   const VkDeviceSize budget = VkDeviceSize(cfg_int("dump_max_mb", 6144)) << 20;
@@ -154,6 +155,7 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview)
   std::string ids;
   auto one = [&](VkImage image, VkImageLayout layout, uint32_t slot, bool depth) {
     if (!image || layout == VK_IMAGE_LAYOUT_UNDEFINED) return;
+    if (post_core && (depth || slot != 0)) return;
     if (post_preview && (depth || (slot != 1 && slot != 2 && slot != 6))) return;
     ImageRec rec;
     {
@@ -659,7 +661,11 @@ bool pan_capture(VkCommandBuffer cmd, const char* name, const Bg3Binding* r) {
   bool copied=false;
   if(p.coverage) {
     DeviceData* dd=device_of(cmd);
-    Dump& d=p.dump; d.w=r->width; d.h=r->height; d.size=bytes; d.texel=32;
+    const uint64_t pixels=uint64_t(r->width)*r->height;
+    if (!pixels || bytes%pixels || bytes/pixels<32 || (bytes/pixels)%4) {
+      pan_invalid=true; return false;
+    }
+    Dump& d=p.dump; d.w=r->width; d.h=r->height; d.size=bytes; d.texel=uint32_t(bytes/pixels);
     VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     ci.size=bytes; ci.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     copied=dd->vk.CreateBuffer(dd->device,&ci,nullptr,&d.buffer)==VK_SUCCESS;
@@ -805,7 +811,7 @@ void pan_on_present(VkQueue queue) {
         // Exact FS written marker before the compose consumes it, packed to R8_UINT.
         std::vector<uint8_t> cls(size_t(d.w)*d.h);
         const auto* values=static_cast<const uint32_t*>(ptr);
-        for(size_t i=0;i<cls.size();++i)cls[i]=(values[8*i+7]&0xffffu)!=0u ? 1 : 0;
+        for(size_t i=0;i<cls.size();++i)cls[i]=water::coverage_at(values,i,d.texel);
         write_file(pan_dir + "\\" + file,cls.data(),cls.size());
         d.format=VK_FORMAT_R8_UINT;
       } else write_file(pan_dir + "\\" + file, ptr, size_t(d.size));

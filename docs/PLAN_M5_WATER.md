@@ -299,6 +299,12 @@ M5.3c water energy audit (2026-11-02, offline on the kept S8 traces of m5w3 1216
   reflections compose -0.12% (121606), -0.19% (m5p1 step; 093518 -0.61% within its 1.5% OFF spread); its own log
   says -0.65% of the water's C over 8% of the frame: -0.085%. Sun shadows -9.7%, local-light shadows -2.0%,
   refraction -0.7% (m5p1 steps).
+- Capture correction (2026-11-03, water-capture-fix): later passes need not attach the scene image again.
+  Trace `post_core` events now name a slot-0 readback immediately after the pass-end core hook on water-signature
+  passes. The energy lookup prefers this same-pass, same-image delta; old traces still require their following
+  same-image dump. All 36 wo1/wf9 traces from combined 185612 lack that data and remain invalid.
+  Raw coverage uses the published record stride (32/40/48/96/104/112 B), always word 7's low half, packed to
+  R8_UINT. Decoder/transport remain strict; the four old 99100-99103 bursts have zero coverage samples.
 - Reflections: physically right, no bug found. Composed pixels are only tier 1 (10-15% of the rays; 77-89% miss
   to the sky and keep the probe). A L / B: 56.6% below 0.5, 34.5% in 0.5..2, 8.9% above 2, ratio of the means 0.78:
   a spread, not one factor (a unit error in E, k = _3799 or the pre-exposure would move every pixel by the same
