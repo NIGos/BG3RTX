@@ -9,6 +9,7 @@
 // Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; the key is a live A/B.
 #include "host.h"
 
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -42,10 +43,26 @@ enum class Pass : uint8_t { Prepass, Gbuffer, Velocity };
 std::unordered_map<VkPipeline, Pass> g_pass_of;               // variant -> its pass
 // Index ranges of the grooms in the last two published TLASes: a draw is swapped only when its groom is in both, so
 // the prepass (recorded before this frame's build) and the G-buffer (after it) agree on a draw that just appeared.
-std::unordered_set<uint64_t> g_keys, g_keys_prev;
+hair_primary::SwapGate g_gate;   // which draws are swapped (common/hair_primary.h SwapGate)
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
 struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0; } g_st;
 uint64_t g_logged_pipes = 0;
+// Fail-safe feedback (SwapGate::feedback): strand pixels per groom of the last frame's pixel record, counted on the GPU
+// (rt/hair_primary_count.hlsl) at the next publish, copied to a host-visible ring and read kCountSlots - 1 publishes
+// later. With them the keys and whether each one's G-buffer variant ran in the counted frame.
+constexpr uint32_t kCountSlots = 4;
+struct CountSlot { uint64_t frame = 0; bool valid = false; uint64_t keys[hair_primary::kMaxGrooms] = {};
+                   bool drew[hair_primary::kMaxGrooms] = {}; VkBuffer rb = VK_NULL_HANDLE; VkDeviceMemory rb_mem = VK_NULL_HANDLE;
+                   const uint32_t* map = nullptr; };
+CountSlot g_cnt[kCountSlots];
+uint32_t g_cnt_next = 0;
+HpBuf g_counts;                          // device local: 64 uints
+VkDescriptorSetLayout g_cnt_dsl = VK_NULL_HANDLE;
+VkPipelineLayout g_cnt_pl = VK_NULL_HANDLE;
+VkPipeline g_cnt_pipe = VK_NULL_HANDLE;
+uint64_t g_cnt_gen = 0;
+uint32_t g_last_tag = 0, g_last_n = 0;   // the previous publish: its tag, pixel count and keys per groom k
+uint64_t g_last_keys[hair_primary::kMaxGrooms] = {};
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
 // after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
 constexpr uint32_t kTimed = 64, kTimeSlots = 4;
@@ -80,6 +97,138 @@ bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* w
   out.addr = rt_buffer_address(out.b);
   fault_track(what, out.addr, size);
   return out.addr != 0;
+}
+
+// Host-visible, mapped (the feedback readback; transfer destination only).
+bool make_readback(CountSlot& s) {
+  DeviceData* dd = g_dd;
+  VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bci.size = hair_primary::kMaxGrooms * 4;
+  bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  if (dd->vk.CreateBuffer(dd->device, &bci, nullptr, &s.rb) != VK_SUCCESS) return false;
+  VkMemoryRequirements req;
+  dd->vk.GetBufferMemoryRequirements(dd->device, s.rb, &req);
+  VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  mai.allocationSize = req.size;
+  mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void* p = nullptr;
+  if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &s.rb_mem) != VK_SUCCESS ||
+      dd->vk.BindBufferMemory(dd->device, s.rb, s.rb_mem, 0) != VK_SUCCESS ||
+      dd->vk.MapMemory(dd->device, s.rb_mem, 0, VK_WHOLE_SIZE, 0, &p) != VK_SUCCESS) {
+    if (s.rb_mem) dd->vk.FreeMemory(dd->device, s.rb_mem, nullptr);
+    dd->vk.DestroyBuffer(dd->device, s.rb, nullptr);
+    s.rb = VK_NULL_HANDLE;
+    s.rb_mem = VK_NULL_HANDLE;
+    return false;
+  }
+  s.map = static_cast<const uint32_t*>(p);
+  return true;
+}
+
+// g_mu held. The counting pipeline (push descriptors: the pixel record, the counts; push: tag, pixel count).
+bool count_pipeline() {
+  Bg3ShaderBlob blob{};
+  if (!shader_get("rt/hair_primary_count.hlsl", "main", "cs_6_6", &blob)) return false;
+  if (g_cnt_pipe && g_cnt_gen == blob.generation) return true;
+  auto& vk = g_dd->vk;
+  if (!g_cnt_dsl) {
+    VkDescriptorSetLayoutBinding bd[2];
+    for (uint32_t i = 0; i < 2; ++i) bd[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    ci.bindingCount = 2;
+    ci.pBindings = bd;
+    if (vk.CreateDescriptorSetLayout(g_dd->device, &ci, nullptr, &g_cnt_dsl) != VK_SUCCESS) return false;
+    VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
+    VkPipelineLayoutCreateInfo pc{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pc.setLayoutCount = 1;
+    pc.pSetLayouts = &g_cnt_dsl;
+    pc.pushConstantRangeCount = 1;
+    pc.pPushConstantRanges = &range;
+    if (vk.CreatePipelineLayout(g_dd->device, &pc, nullptr, &g_cnt_pl) != VK_SUCCESS) return false;
+  }
+  VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  mi.codeSize = blob.size_bytes;
+  mi.pCode = blob.code;
+  VkShaderModule module{};
+  if (vk.CreateShaderModule(g_dd->device, &mi, nullptr, &module) != VK_SUCCESS) return false;
+  VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main"};
+  ci.layout = g_cnt_pl;
+  VkPipeline pipe{};
+  const VkResult r = vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &pipe);
+  vk.DestroyShaderModule(g_dd->device, module, nullptr);
+  if (r != VK_SUCCESS) return false;
+  if (g_cnt_pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_cnt_pipe));
+  g_cnt_pipe = pipe;
+  g_cnt_gen = blob.generation;
+  return true;
+}
+
+// g_mu held, outside a render pass, before this publish's header update and SwapGate::publish. Reads the oldest
+// slot's counts into the gate, then counts the previous frame's pixel record into it. False: no feedback possible
+// (the caller then stops every swap: fail safe).
+bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
+  DeviceData* dd = g_dd;
+  CountSlot& s = g_cnt[g_cnt_next];
+  if (s.valid) {
+    if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
+    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
+      if (s.keys[k] && g_gate.feedback(s.keys[k], s.drew[k], s.map[k]))
+        log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards stay for this session",
+            (unsigned long long)s.keys[k], hair_primary::kStrikes);
+    s.valid = false;
+  }
+  if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
+  if (!s.rb && !make_readback(s)) return false;
+  if (!g_counts.b && !make(g_counts, hair_primary::kMaxGrooms * 4,
+                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                           "hair primary counts"))
+    return false;
+  if (!count_pipeline()) return false;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                            0, 1, &mb, 0, nullptr, 0, nullptr);
+  dd->vk.CmdFillBuffer(cmd, g_counts.b, 0, VK_WHOLE_SIZE, 0u);
+  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  const VkDescriptorBufferInfo bi[2] = {{g_pixels.b, 0, VK_WHOLE_SIZE}, {g_counts.b, 0, VK_WHOLE_SIZE}};
+  VkWriteDescriptorSet wr[2];
+  for (uint32_t i = 0; i < 2; ++i) {
+    wr[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wr[i].dstBinding = i;
+    wr[i].descriptorCount = 1;
+    wr[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    wr[i].pBufferInfo = bi + i;
+  }
+  dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pipe);
+  dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pl, 0, 2, wr);
+  const uint32_t push[4] = {g_last_tag, g_last_n, 0u, 0u};
+  dd->vk.CmdPushConstants(cmd, g_cnt_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
+  dd->vk.CmdDispatch(cmd, (g_last_n + 255) / 256, 1, 1);
+  mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr, 0,
+                            nullptr);
+  const VkBufferCopy c{0, 0, hair_primary::kMaxGrooms * 4};
+  dd->vk.CmdCopyBuffer(cmd, g_counts.b, s.rb, 1, &c);
+  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
+    s.keys[k] = g_last_keys[k];
+    s.drew[k] = g_last_keys[k] && g_gate.gbuffer_now.count(g_last_keys[k]) != 0;   // the counted frame's G-buffer
+  }
+  s.frame = now;
+  s.valid = true;
+  g_cnt_next = (g_cnt_next + 1) % kCountSlots;
+  // The compute shader's pixel reads before this frame's G-buffer writes them.
+  mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  mb.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr,
+                            0, nullptr);
+  return true;
 }
 
 void release(HpBuf& b) {
@@ -155,6 +304,21 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_variant.clear();
   g_pass_of.clear();
   g_mods.clear();
+  for (CountSlot& s : g_cnt) {
+    if (s.rb) dd->vk.DestroyBuffer(dd->device, s.rb, nullptr);
+    if (s.rb_mem) dd->vk.FreeMemory(dd->device, s.rb_mem, nullptr);
+    s = CountSlot{};
+  }
+  if (g_counts.b) dd->vk.DestroyBuffer(dd->device, g_counts.b, nullptr);
+  if (g_counts.m) dd->vk.FreeMemory(dd->device, g_counts.m, nullptr);
+  g_counts = HpBuf{};
+  if (g_cnt_pipe) dd->vk.DestroyPipeline(dd->device, g_cnt_pipe, nullptr);
+  if (g_cnt_pl) dd->vk.DestroyPipelineLayout(dd->device, g_cnt_pl, nullptr);
+  if (g_cnt_dsl) dd->vk.DestroyDescriptorSetLayout(dd->device, g_cnt_dsl, nullptr);
+  g_cnt_pipe = VK_NULL_HANDLE;
+  g_cnt_pl = VK_NULL_HANDLE;
+  g_cnt_dsl = VK_NULL_HANDLE;
+  g_last_tag = 0;
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   g_qp = VK_NULL_HANDLE;
   for (HpBuf* b : {&g_header, &g_pixels}) {
@@ -276,9 +440,12 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Only the main camera's passes (portraits and other small passes keep their cards: the record is the main view's).
   if (s->pass.width != g_px_w || s->pass.height != g_px_h) return false;
   const uint64_t key = hair_primary_draw_key(s, args);
-  if (!g_keys.count(key) || !g_keys_prev.count(key)) return false;
-  g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   const Pass pass = g_pass_of[it->second];
+  if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
+                                                                                    : g_gate.allow_prepass(key)))
+    return false;
+  if (pass == Pass::Gbuffer) g_gate.gbuffer_drew(key);
+  g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
   s->hp_query = UINT32_MAX;
   const uint64_t now = frame_index();
@@ -306,8 +473,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
   if (!dd) return;
   const uint64_t now = frame_index();
   if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
-    g_keys.clear();
-    g_keys_prev.clear();
+    g_gate.clear();
     return;
   }
   if (width != g_px_w || height != g_px_h || !g_pixels.b) {
@@ -316,8 +482,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
     if (!make(g_pixels, hair_primary::pixel_bytes(width, height),
               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, "hair primary pixels")) {
       log("[hair primary] pixel record %ux%u could not be allocated: hair keeps its cards", width, height);
-      g_keys.clear();
-      g_keys_prev.clear();
+      g_gate.clear();
       return;
     }
     g_px_w = width;
@@ -353,6 +518,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
     g_timed[slot] = 0;
     g_slot_frame[slot] = now + 1;
   }
+  if (!count_feedback(cmd, now)) {
+    if (g_st.refused++ < 8) log("[hair primary] strand feedback unavailable: hair keeps its cards");
+    g_gate.clear();
+    return;
+  }
   if (g_pixels_fresh) {   // tag 0 is never a frame tag
     dd->vk.CmdFillBuffer(cmd, g_pixels.b, 0, VK_WHOLE_SIZE, 0u);
     g_pixels_fresh = false;
@@ -381,10 +551,10 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, con
                             VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
-  g_keys_prev.swap(g_keys);
-  g_keys.clear();
-  for (uint32_t i = 0; i < count && i < hair_primary::kMaxGrooms; ++i)
-    if (keys[i]) g_keys.insert(keys[i]);
+  g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms));
+  g_last_tag = h.tag;
+  g_last_n = width * height;
+  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) g_last_keys[k] = k < count ? keys[k] : 0;
   g_published = now + 1;
   ++g_st.publishes;
   if (now % 300 == 0)

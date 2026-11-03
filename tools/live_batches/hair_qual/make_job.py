@@ -5,6 +5,10 @@
 import argparse
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tools.live_batches.live_flow import repair_known_forbids
 
 HERE = Path(__file__).resolve().parent
 BATCH = "hair_qual"
@@ -212,7 +216,10 @@ def cost2_job(name, save, kind):
               ("combined", {key: "1" for key in COST_KEYS})]
     phases = [step("warmup", 25, qa_exposure_hold="0", **ON)]
     phases += [step("warm-" + label, 25, **dict(ON, **keys)) for label, keys in states if "rt_hair_gi_mean" not in keys]
-    phases += [step("settle-cam", 10, **ON), step("shot-cards", SHOT, True),
+    # hq1 13:32: cards/origin-off first selected during shot-cards. Prebuild
+    # that exact state, then warm full hair again before any judged shot.
+    phases += [step("warm-cards", 25), step("warm-full", 25, **ON),
+               step("settle-cam", 10, **ON), step("shot-cards", SHOT, True),
                step("cost-cards", 25), step("shot-full-0", SHOT, True, **ON),
                step("cost-full-0", 25, **ON)]
     # Shared full-hair repeats bracket each individual ON for both observables.
@@ -291,6 +298,7 @@ def main():
     (out / "plans").mkdir(parents=True, exist_ok=True)
     for name, save, kind in SAVES:
         j, phases = cost2_job(name, save, kind)
+        repair_known_forbids(j, phases)
         (out / "plans" / ("hq_cost3_trim_plan.json" if name.startswith("hq4-") else "hq_cost2_plan.json")).write_text(json.dumps(phases, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(j, indent=1) + "\n", encoding="utf-8")
     print(f"{len(SAVES)} cost2 jobs; {len(phases)} phases/{sum(p['seconds'] for p in phases)} s per scene -> {out}")

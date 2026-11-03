@@ -1,7 +1,7 @@
 # wf9: S8 compose camera shift
 
 Prepared offline. Never queued. No game launch or live authorization. `predicted.json` precedes the job.
-One Water Queens House launch, visible_unfocused_fg, 23 phases / 297 s plus load.
+One Water Queens House launch, visible_unfocused_fg, 24 phases / 302 s plus load.
 The static energy calibration toggles rt_water_compose_shift 0/1/0/1 at one unmoved camera;
 then the moving windows repeat 0/1/0/1 in the same run. Compose stays enabled throughout.
 Other water image terms stay off at startup and in every compared window. The outer queue restores INI.
@@ -54,3 +54,8 @@ Keep this folder outside every watched captures/queue/pending inbox.
 Camera probe preparation: energy-static-0..3 now last 14 s (motion_start/end 14).
 Turns now hold E (Q on reverse returns) for the motion interval using `turn_mode=keys`.
 The 10:08 probe showed Q/E moving in 120/120 samples; posted mouse modes jumped tens of degrees.
+
+Prewarm shift 1 for 5 s before the first measured window (shift 0 warms at startup).
+Lint assumptions: 30 rendered FPS, 1 s settings latency, 1 s per trace stall.
+Load-time roof overflow is rejected with zero tolerance in measured windows.
+Held Q/E turns and selective capture counts are unchanged. No generator exists.

@@ -1,0 +1,89 @@
+{
+  "save": "Campsite - 27h",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "repeat": 1,
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0",
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "rt applied",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[geo\\] transform feedback",
+    "\\[geo\\] \\d+ vertex shader modules",
+    "gi: GPU cost",
+    "gi: trace pass",
+    "GI hit direct",
+    "hit material",
+    "rt stats",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "\\[hit material pool pairs\\]",
+    "\\[hit material instanced\\]",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material paks\\]",
+    "\\[hit material paks join\\]",
+    "\\[mesh content"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed"
+  ],
+  "window_mode": "visible_unfocused_fg",
+  "name": "cp4-compact-camp-join",
+  "live_batch": "cov-paks-compact",
+  "timeout": 370,
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/cov_paks_compact/plans/compact_camp.json"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hit material paks\\] loaded 40983 candidates",
+    "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+  ],
+  "expect_every": [
+    {
+      "name": "draw attempts and rejection reasons in each ON observation",
+      "select": "\\[hit material paks join\\]",
+      "match": "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*",
+      "windows": [
+        "observe-on",
+        "observe-on-repeat"
+      ],
+      "min": 1
+    }
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-plan\\] complete phases=5\\b"
+  ],
+  "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
+  "estimated_phase_seconds": 75,
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_xfb_mb"
+    ]
+  }
+}

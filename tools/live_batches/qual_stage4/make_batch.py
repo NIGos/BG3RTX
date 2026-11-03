@@ -1,5 +1,4 @@
 """Prepare only; never stages a live queue or launches a process other than git reads."""
-import copy
 import json
 from pathlib import Path
 import subprocess
@@ -35,6 +34,9 @@ def gate(name, select, match, windows, **extra):
 
 
 def finish(job, plan, stem):
+    # Warm the generated-row and native VT states before the first diagnostic.
+    plan[:0] = [phase('warm-generated-off', 5, 'rt_stats=0,rt_hit_material_generated=0,rt_vt_alpha_masks=0'),
+                phase('warm-generated-on', 5, 'rt_stats=0,rt_hit_material_generated=1,rt_vt_alpha_masks=1')]
     job.update(name='qs4-' + stem, live_batch='qual-stage4', window_mode='visible_unfocused_fg',
                session=False, hold=120, timeout=sum(p['seconds'] + p.get('wait_log_timeout', 0) for p in plan) + 240,
                estimated_phase_seconds=sum(p['seconds'] for p in plan), stop_on_dump=False)
@@ -78,20 +80,15 @@ def main():
     prediction = dict(status='PREPARED_SCREENING_ONLY_NOT_AUTHORIZED', queued=False,
         limits=dict(seconds_per_save=300, disk_mb=2048),
         blockers=[
-            'Submit gate requires four 90 s windows: 360 s before warmup. Lean CPU job is screening only.',
-            'CPU camp repetition, exact per-key steady-frame/sample minima and reference checks remain required.',
             'Original GI transient gate needs five K16 full float bursts (~11 GiB). PNG Q/E pairs cannot pass it.',
             'No promotion from a dryrun or from screening. No live permission inherited.'],
-        cpu={}, generated=json.loads((HERE.parent / 'm4_generated/predicted.json').read_text()),
+        cpu_verdicts=dict(perf_hook_state='REJECTED', perf_hitmat_lists='NO_GAIN', perf_submit_batch='WITHIN_NOISE'), generated=json.loads((HERE.parent / 'm4_generated/predicted.json').read_text()),
         guards=json.loads(git('show', 'gi-reproj-guards:tools/live_batches/gi_reproj_guards/predicted.json')),
         common=dict(energy='Static pre-post float scene mean in dumps.json, within same-run OFF-repeat noise; never PNG/bloom mean.',
                     costs='CPU ms normalized by presents/draws/builds; frame time recorded but not judged unfocused. GPU pass ms within OFF repeat uncertainty.',
                     restoration='All experimental CPU/GI/generated keys 0; qa_exposure_hold and diagnostics 0; runner restores original INI on all exit paths.'))
-    for b in branches[:3]:
-        prediction['cpu'][b] = json.loads((ROOT / 'docs/progress' / b / 'predicted.json').read_text())
     write(HERE / 'predicted.json', prediction)
 
-    templates = []
     for idx, scene in enumerate(('camp', 'inn'), 1):
         old = HERE.parent / 'm4_generated'
         job = json.loads(next((old / 'jobs').glob(f'hgn{idx}-*.json')).read_text())
@@ -111,7 +108,6 @@ def main():
             r'\[hit material generated\] frame \d+ key 1',
             r'captured [1-9]\d*, mapped [1-9]\d* rows [1-9]\d* triangles',
             ['diag-vt-masks-off'], event=True, settle_s=1.0))
-        templates.append(copy.deepcopy(job))
         if scene == 'camp':
             for label, mv, prev in [('off-a', 0, 0), ('mv', 1, 0), ('prev', 0, 1), ('off-b', 0, 0)]:
                 settings = f'rt_stats=0,rt_hit_material_generated=0,qa_exposure_hold=1,gi_temporal_mv_sample={mv},gi_prev_radiance_guard={prev}'
@@ -132,46 +128,6 @@ def main():
             plan.append(phase('restore-guards', 5, 'gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=0'))
             job['purpose'] += ' GI static float-energy / Q/E PNG screening only; original temporal gate remains pending.'
         finish(job, plan, f'{idx:02d}-{scene}')
-
-    # Individual-key CPU screening; no ensemble attribution or hidden qualification claim.
-    job = templates[0]
-    job['save'] = 'Water Queens House - 92h 14m'
-    s8 = json.loads((HERE.parent / 'spec_cascade/jobs/scc1-spec-cascade-s8-fg2.json').read_text())
-    job['save'] = s8['save']
-    job['set'] += ',rt_hit_material_generated=0,cpu_timing=1,watchdog_s=1'
-    job['expect'] = [r'\[auto\] scene ready', r'\[cpu\] hit material', r'\[cpu\] capture hooks',
-                     r'\[cpu\] submit-time instance matrix copies',
-                     r'\[watch\].*submit CPU [0-9.]+ ms.*descriptor tracker CPU [0-9.]+ ms',
-                     r'\[pace\] rendered frame time over 600 frames']
-    job['patterns'] += [r'\[cpu\]', r'\[watch\]', r'\[mem\]']
-    plan = [phase('warmup', 20, 'rt_stats=0,qa_exposure_hold=0')]
-    keys = ['perf_hitmat_lists', 'perf_hook_state', 'perf_submit_batch']
-    names = []
-    for short, key in zip(('hitmat', 'hooks', 'submit'), keys):
-        for state in ('off-a', 'on-a', 'off-b', 'on-b'):
-            label = f'cost-{short}-{state}'
-            settings = ','.join(f'{k}={int(k == key and state.startswith("on"))}' for k in keys)
-            plan.append(phase(label, 35 if short in ('hooks', 'submit') else 20, settings))
-            names.append(label)
-    plan.append(phase('restore', 5, ','.join(f'{k}=0' for k in keys) + ',cpu_timing=0,watchdog_s=0,qa_exposure_hold=0'))
-    # Reuse existing per-window current-frame/capacity gates, applying to ALL cost windows.
-    job['expect_every'] = [copy.deepcopy(g) for g in job['expect_every']
-                           if g['name'].startswith(('scene wait:', 'capacity:', 'gi trace'))]
-    for g in job['expect_every']:
-        g['windows'] = names
-    for short, key, select in [('hitmat', keys[0], r'\[cpu\] hit material'),
-                              ('hooks', keys[1], r'\[cpu\] capture hooks')]:
-        for state in ('off-a', 'on-a', 'off-b', 'on-b'):
-            job['expect_every'].append(gate(f'{short} tagged CPU sample {state}', select,
-                key + (' 1' if state.startswith('on') else ' 0'), [f'cost-{short}-{state}']))
-    for state in ('off-a', 'on-a', 'off-b', 'on-b'):
-        job['expect_every'].append(gate('submit and descriptor tracker CPU ' + state,
-            r'\[watch\]', r'submit CPU [0-9.]+ ms.*descriptor tracker CPU [0-9.]+ ms', ['cost-submit-' + state]))
-        job['expect_every'].append(gate('matrix samples ' + state,
-            r'\[cpu\] submit-time instance matrix copies',
-            'perf_hook_state ' + ('1' if state.startswith('on') else '0'), ['cost-hooks-' + state]))
-    job['purpose'] = 'CPU SCREENING ONLY: individual-key OFF/ON/OFF/ON. Existing qualification minima in predicted.json are mandatory and exceed this lean schedule; no qualification or promotion permitted.'
-    finish(job, plan, '03-s8')
 
 
 if __name__ == '__main__':

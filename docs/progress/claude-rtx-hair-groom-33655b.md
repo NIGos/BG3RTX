@@ -20,3 +20,6 @@
   (sun + unshadow-mapped local lights). Identity 236/237, CTests, GPU twin 6.7e-6. Not run live.
 - Live job READY_FOR_LIVE: tools/live_batches/hair_primary (Dialogue1, cards/strands shots at full resolution,
   cost cards/strands/cards; gated on G-buffer and velocity strand draws > 0). Dryrun pass, not run.
+- Fix after the user trial (device lost x2, player bald): no groom update for held/uncaptured draws (pool offset read
+  as soup offset), every soup read bounded; card hiding gated on the G-buffer variant having run and on GPU-counted
+  strand pixels (2 empty frames: cards back for the session). Tests in hair_groom_asset_test. Not run live.

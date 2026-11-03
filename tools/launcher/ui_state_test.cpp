@@ -28,5 +28,17 @@ int main() {
   check(ui::restart_count(start,start)==0); // Saving a revert clears it.
   check(ui::restart_banner(3)=="Restart BG3 to apply 3 changes");
   check(ui::restart_banner(1)=="Restart BG3 to apply 1 change");check(ui::restart_banner(0).empty());
+  for(const char* initial:{"0","1"}){
+    st::Map startup{{"rt_native_tileset",initial}},candidate=startup;
+    candidate["rt_native_tileset"]=initial[0]=='0'?"1":"0";
+    candidate["rt_native_hair"]="1";
+    check(ui::restart_count(startup,candidate)==1);
+    auto disk=candidate;st::retain_startup_tilesets(candidate,startup);
+    check(candidate["rt_native_tileset"]==initial);
+    check(candidate["rt_native_hair"]=="1");
+    // Repeated reloads retain the process baseline; the next process takes disk.
+    st::retain_startup_tilesets(candidate,startup);check(candidate["rt_native_tileset"]==initial);
+    st::retain_startup_tilesets(candidate,disk);check(candidate["rt_native_tileset"]==disk["rt_native_tileset"]);
+  }
   std::printf("%d checks, %d failed\n",checks,failed);return failed?1:0;
 }

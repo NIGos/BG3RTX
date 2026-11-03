@@ -105,8 +105,8 @@ inline uint64_t source_stream_bytes(uint64_t need,uint64_t granule,uint64_t cap)
 // fixed caps overflowed 119-134 deferred rows (126.6 MB in 4/4 chunks), source 117/128 MB, basis 234/256 MB.
 inline constexpr uint64_t kSourceFloor=128ull<<20,kQueryFloor=256ull<<20;inline constexpr uint32_t kDeferredChunksFloor=4;
 inline constexpr unsigned kStreamCapturePct=capture_budget::kAlphaFloorPctWide;
-// A scene slot's source copy is read only by the queries of the slot's own frame (layer register_use rejects a
-// query unless slot.frame == the current frame): once the frame moved on and every owner (the scene recording and
+// A scene slot's source copy is read only when creating queries in the slot's own frame (F-1 borrowing reuses
+// existing query storage): once the frame moved on and every owner (the scene recording and
 // its queries) retired on the GPU, the copy goes back to the recycle pool. Before, all 8 slots kept theirs (hig1
 // 2026-11-02 10:27: source 2144 MB in 8 slots with IP grass on, 512 MB off, while at most 2 queries were alive).
 inline bool source_releasable(bool has_buffer,uint64_t slot_frame,uint64_t frame,bool owners_retired){

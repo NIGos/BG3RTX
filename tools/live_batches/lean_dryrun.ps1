@@ -22,6 +22,22 @@ if (-not (Test-Path $here)) { throw "no batch folder $here" }
 if (-not $Out) { $Out = Join-Path $env:TEMP "bg3rtx-$Batch-dryrun\$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $scripts = Join-Path $repo 'scripts'
+. (Join-Path $scripts 'low-priority.ps1')
+# Always run before reuse: new VALID logs can expose a false-positive forbid in
+# an otherwise unchanged batch. This helper only reads evidence and writes cache.
+# The queue gate subprocess also invokes py. Supply one scratch-only adapter when
+# this machine has Python but no Windows launcher; child PowerShell inherits PATH.
+if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
+  [void](Get-Command python -ErrorAction Stop)
+  $pythonShim = Join-Path $Out 'python-shim'
+  New-Item -ItemType Directory -Force $pythonShim | Out-Null
+  Set-Content -LiteralPath (Join-Path $pythonShim 'py.ps1') '& python @($args | Where-Object { $_ -ne ''-3'' })'
+  $env:PATH = "$pythonShim;$env:PATH"
+}
+$flowPython = 'py'
+$flowArgs = @(); if ($flowPython -eq 'py') { $flowArgs += '-3' }
+& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here
+if ($LASTEXITCODE -ne 0) { throw 'live-flow design lint failed; fix before fake queue dryrun' }
 . (Join-Path $scripts 'camera-plan.ps1')
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
@@ -62,6 +78,7 @@ foreach ($job in $jobs) {
   $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
     $step = $plan[$i]
+    try { Assert-CameraPlanFields $step } catch { $ok=$false; Say "FAIL ${n}: phase $i $($_.Exception.Message)" }
     if (-not (Apply-Set $state $step.set)) { $ok = $false }
     try { foreach ($t in 0, 1, ($step.seconds / 2), ($step.seconds - 0.5)) { [void](Get-CameraPlanSample $step $t 2560 1067) } } catch { $sampled = $false }
     # -MaxBursts N: a flicker analysis that needs K16 float bursts (scripts/qa/pan_artifacts.py) may take up to N
@@ -117,14 +134,14 @@ foreach ($job in $jobs) {
   else { Check "${n}: stop-on-failure dependency" ($n -eq $first -or @($job.requires_success_of) -contains $first) }
 }
 # Shared job lint: every lean job gates "[rt] scene wait" with 0 timeouts in its traced cost windows.
-$eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-$lint = @(& py -3 (Join-Path $scripts 'queue_gates.py') --lint-scene-wait $here 2>&1 | ForEach-Object { "$_" }); $lintExit = $LASTEXITCODE
+$eap = $ErrorActionPreference; $ErrorActionPreference = 'Stop'
+$lint = @(& $flowPython @flowArgs (Join-Path $scripts 'queue_gates.py') --lint-scene-wait $here 2>&1 | ForEach-Object { "$_" }); $lintExit = $LASTEXITCODE
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "scene-wait gate lint (queue_gates.py --lint-scene-wait): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
 # And the capacity gates: RT capture drops 0 and (with rt_cascade_casters=1) cascade buffer full 0 per cost window.
-$eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-$lint = @(& py -3 (Join-Path $scripts 'queue_gates.py') --lint-capacity $here 2>&1 | ForEach-Object { "$_" }); $lintExit = $LASTEXITCODE
+$eap = $ErrorActionPreference; $ErrorActionPreference = 'Stop'
+$lint = @(& $flowPython @flowArgs (Join-Path $scripts 'queue_gates.py') --lint-capacity $here 2>&1 | ForEach-Object { "$_" }); $lintExit = $LASTEXITCODE
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)

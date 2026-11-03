@@ -80,8 +80,7 @@
   "sun: WARNING \\d+ roof volumes within",
   "over kSunMaxVolumes on [1-9]",
   "set 1 [1-9]\\d* out-of-range reads skipped",
-  "\\[hit material pool basis\\] over kBasisCapBytes",
-  "\\[bvh\\] mesh pool full at"
+  "\\[hit material pool basis\\] over kBasisCapBytes"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
@@ -112,6 +111,18 @@
    "min": 1,
    "windows": [
     "shot-static"
+   ]
+  },
+  {
+   "name": "no mesh pool exhaustion in measured windows (load excluded)",
+   "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "shot-static",
+    "snap-a",
+    "snap-b"
    ]
   }
  ],

@@ -614,7 +614,7 @@ function Send-UiKey([int]$vk, [int]$scan) {
 $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertFrom-Json) } else { @() }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
-$phaseTraceIndex=0
+$phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
 . (Join-Path $PSScriptRoot 'queue-reload.ps1')
 $hairReload = $null
 $wheelSent = 0; $wheelNext = [datetime]::MinValue   # step.wheel: mouse-wheel notches posted at the phase start
@@ -681,7 +681,7 @@ while ((Get-Date) -lt $deadline) {
     if ($panIndex -ge 0) {
       $step = $panPlan[$panIndex]
       $elapsed = ($planClock.Elapsed.TotalMilliseconds-$phaseStartMs)/1000.0
-      if ($elapsed -ge $step.seconds) {
+      if ($elapsed -ge $step.seconds -and (-not $step.wait_log -or $phaseReady)) {
         if ($moving) { Send-MoveKey $false; $moving = $false }
         Release-Rotation
         $panIndex++
@@ -691,7 +691,7 @@ while ((Get-Date) -lt $deadline) {
           $result = 'done'; break
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0
+        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
         $wheelSent = 0; $wheelNext = [datetime]::MinValue
         $hairReload = $null
       }
@@ -745,6 +745,37 @@ while ((Get-Date) -lt $deadline) {
           $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
           if (-not $hairReload.done) { Start-Sleep -Milliseconds 100;continue }
         }
+      }
+      # A cached specialization may already be ready from an earlier phase. Read
+      # this run's log independently with sharing; never consume Read-NewLog's cursor.
+      if ($step.wait_log -and -not $phaseReady) {
+        # Apply the phase's settings at capture_at before awaiting their pipelines.
+        if (-not $panCaptureSent) { Start-Sleep -Milliseconds 100; continue }
+        if ($null -eq $phaseWaitAt) { $phaseWaitAt=$planClock.Elapsed.TotalSeconds }
+        $readyText=''
+        if (Test-Path -LiteralPath $log) {
+          $readyStream=[IO.File]::Open($log,'Open','Read','ReadWrite,Delete')
+          try { $readyReader=New-Object IO.StreamReader($readyStream); $readyText=$readyReader.ReadToEnd() }
+          finally { $readyStream.Dispose() }
+        }
+        $phaseReady=Test-CameraPlanReady $step $readyText
+        if (-not $phaseReady) {
+          if ($planClock.Elapsed.TotalSeconds-$phaseWaitAt -ge $step.wait_log_timeout) {
+            $result="pipeline readiness timed out: $($step.label)"; break
+          }
+          $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
+          Start-Sleep -Milliseconds 100
+          continue
+        }
+        $phaseStartMs=$planClock.Elapsed.TotalMilliseconds; $elapsed=0
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
+      }
+      if ($step.recenter -and -not $phaseRecentered) {
+        $h=Get-GameWindow; $rect=New-Object BG3RTX.Win2+RECT
+        [void][BG3RTX.Win2]::GetClientRect($h, [ref]$rect)
+        Send-PlanMouse 0x0200 0 ([int](($rect.Right-$rect.Left)/2)) ([int](($rect.Bottom-$rect.Top)/2))
+        $phaseRecentered=$true
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-recenter] phase=$panIndex label=$($step.label)"
       }
       # Optional static-view diagnostics use the existing trace path, never a
       # second game launch. Requests and resulting capture paths retain clocks.

@@ -76,6 +76,9 @@ ATOMIC_TARGETS = {
     "shaders/rt/hair_groom_update.hlsl:Pool": [
         ("layer/bvhsplit.cpp", "VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |",
          D, "g_pool (the mesh pool; rt_hair_groom bounds, group-reduced, copied to the groom readback)")],
+    "shaders/rt/hair_primary_count.hlsl:Counts": [
+        ("layer/hair_primary.cpp", "VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,",
+         D, "g_counts (make: DEVICE_LOCAL memory type; rt_hair_groom_primary strand pixels per groom, group-reduced, copied to the host-visible readback ring)")],
     "shaders/rt/mesh_extract.hlsl:Status": [
         ("layer/bvhsplit.cpp", 'VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, "split status");',
          H, "g_status (DEVICE_LOCAL|HOST_VISIBLE tried first)")],
@@ -169,6 +172,7 @@ HOST_MEMORY_FILES = {
     "layer/alphatest.cpp", "layer/bvhsplit.cpp", "layer/dump.cpp", "layer/emissive.cpp", "layer/geocapture.cpp",
     "layer/hit_material.cpp", "layer/hotreload.cpp", "layer/omm_bake.cpp", "layer/omm_content.cpp",
     "layer/replay.cpp", "layer/streamline.cpp", "layer/water.cpp",
+    "layer/hair_primary.cpp",   # make_readback: the strand feedback ring, TRANSFER_DST only (no storage)
 }
 # Allocation helpers: (file, name) -> (usage argument index, host argument index or None = always host).
 HELPERS = {

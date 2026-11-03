@@ -1,59 +1,37 @@
-# Stage 4 lean draft: screening, not a qualification pass
+# Stage 4: generated rows and GI guard screening
 
-No game launch, permission, queue submission, merge or commit. Predictions are written
-first by `python tools/live_batches/qual_stage4/make_batch.py`. This does not refresh Git metadata.
-The immutable main hash, branch tips and `main..<branch>` results are in merge_audit.json.
-Main can advance independently; HEAD is recorded separately. Variants delta: 0.
+Prepared offline only. No game launch, queue submission, permission, merge or commit.
+`python tools/live_batches/qual_stage4/make_batch.py` regenerates the two jobs/plans
+and predictions using read-only Git queries. Historical audit: merge_audit.json.
 
-One job/launch per save: camp 300 s, inn 199 s, S8 385 s, plus loading.
-All jobs use visible_unfocused_fg. Q/E are held for equal four-second outward/return
-intervals; no mouse turns. Check camera return registration before interpreting pairs.
-Cost windows have no traces or expensive diagnostics. Keep the PC free of compiles/builds
-during costs. All qualified Ultra settings, including OMM and box shadows, are retained.
-Generated rows are enabled at startup to latch capture; live comparisons toggle rows.
+One job per save: camp 310 s phases, inn 209 s. S8 CPU screening is removed:
+perf_hook_state was rejected, perf_hitmat_lists had no gain, perf_submit_batch
+was within noise. All three keys remain off. Variants delta: 0.
 
-The requirements conflict. Four submit CPU windows of at least 90 s already require
-360 s before warmup. The existing GI transient gate requires five full K16 float bursts,
-about 11 GiB, beyond the 2 GB batch budget. This draft therefore preserves the original
-predictions/gates in predicted.json but is explicitly SCREENING ONLY for CPU/GI.
-It cannot promote either candidate. CPU camp repetition and dedicated coverage/reference
-and static energy comparisons also remain outstanding. M4 retains its earlier every-window
-gates and has same-run float scene captures, but numerical energy/share/cost decisions
-must still be read and recorded; matching regexes alone never qualifies it.
+Camp/inn retain every m4_generated gate, Ultra settings, and masks-off native
+source diagnostics. Generated rows start enabled to latch capture, then toggle
+inside one run. Compare share, clip checks, capacity, float energy and GPU ms
+against same-run OFF repeats; matching regexes alone do not qualify the feature.
+The speculative generated 2S capture restores recording-order independence;
+expect historical deferred-stream allocation 57 -> 93 MB, with live cost pending.
 
-CPU: discard straddling intervals and first timing line after toggles. Require >=600
-steady frames (hitmat/submit), >=900 (hooks), two complete hook samples and >=300 matrix
-submits per state. Submit additionally requires >=90 s/state. Normalize watch totals by
-presents, hooks by captured draws, matrices by builds. Derive uncertainty from OFF repeats.
-Judge CPU ms, not frame time. Qualifying OMM coalescing also needs eligible tickets >0
-and extension/Submit2 fallback checks; zero is not coverage. The lean windows cannot meet
-the full qualification contract. Missing samples invalidate even screening observations.
-
-GI: guard-shot-off-a/mv/prev/off-b provide pre-post scene means from dumps.json with
-exposure held; never use PNG means. Q/E PNG pairs show visible motion behavior but do
-not supply gi_luma transient rates. Original gate: prev edge rate below both OFF repeats
-by more than OFF spread; MV edge/inner at most OFF max; static energy and inner rates
-within OFF spread; GPU cost within OFF noise. Do not claim this gate from PNGs.
+Camp guard shots wait up to 60 s each for exact pipeline-ready regexes. Search
+all of this run's log, including earlier cached records; use the latest matching
+line for each regex. Waiting pauses phase time and fails closed at timeout.
+OFF shots post pointer centre with WM_MOUSEMOVE, without a Home key or camera
+movement; verify camera return registration. Q/E traces at 3 s are during motion.
+GI remains screening only: PNG pairs cannot satisfy the original K16 transient
+gate (~11 GiB). Preserve the original contracts in predicted.json. No promotion.
 
 Dryrun: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/qual_stage4/dryrun.ps1`.
-It uses the existing synthetic runner only, in TEMP, with no authority to run live.
-The estimate includes 120 s loading/save and up to 240 s pipeline readiness waits
-(24.7 min total upper estimate), 18 traces, 1,110 MB.
-Loading is separate from the 2ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“5 minute phase target; no hard upper bound on load time is claimed.
-Before any later authorized run: refresh/build from the recorded intended main, stage plans
-only then, record explicit permission using existing queue tools, and keep one launch/save.
-Queue runner restores the original INI on exit/failure; final phases also reset experimental
-keys, exposure and CPU diagnostics. Do not modify saves or copy this draft into pending now.
+It uses synthetic runners in TEMP with no live authority; unknown phase fields fail.
+PASS: 2/2 INVALID without evidence, 2/2 structurally valid, scene-wait/capacity lints.
+Estimate: 499 s phases + <=240 s readiness waits + 2 x 120 s loads = 16.3 min;
+18 traces, 1,100 MB. Cost windows have no traces or expensive diagnostics.
 
-Plan repair (vt-alpha-hitmat): hooks/submit windows last 35 s, allowing three
-CPU lines at 30 fps; discard the first straddling 300-frame interval.
-Guard shots wait up to 60 s for all exact temporal/RT-trace/reflection specialization
-ready records from this run; cached OFF slots reuse their earlier ready records.
-The wait stops the capture clock, fails closed on timeout, and counts in job timeouts.
-Home re-centres the selected character before both OFF guard shots; verify camera
-registration before comparing energy. Q/E traces at 3 s fall inside held motion.
-Camp/inn add diag-vt-masks-off (20 s): generated rows on, masks off, with positive
-2S-prepass/capture/mapping gates. Compare the logged 2S count against mask-on windows;
-historical native targets are about 71 at camp and 61 at inn, not fixed thresholds.
-Masks restore to 1 before the following phases. S8's 385 s screening is an explicit
-exception to the five-minute scene target, and remains below the original CPU contract.
+Before a later live batch, obtain explicit user steering and use the existing
+serial queue. Keep builds/compiles out of cost windows. Do not copy jobs into
+pending now. The runner restores the original INI on exit/failure; final phases
+also reset experimental keys and diagnostics. Never modify saves.
+
+2026-11-03 offline repair: explicitly warm generated rows OFF and masks OFF before the first diagnostic. The original rejected S8 CPU screen remains historical and absent; all CPU keys stay off.

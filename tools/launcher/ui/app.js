@@ -23,8 +23,8 @@ function measured(text) {return !!text && !/unknown|not measured|unavailable/i.t
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function showDialog(d) {if(!d.open)d.showModal();}
 function card(s) {
- const c=el('article','card'),r=el('div','row');r.append(el('h3','',s.title||s.label));c.append(r);
- c.append(el('p','description',s.description||s.summary||''));
+ const c=el('article','card');c.id='card-'+s.id;const r=el('div','row');r.append(el('h3','',s.title||s.label));c.append(r);
+ c.append(el('p','description',(s.description||s.summary||'')+' GPU cost: '+(s.cost||'Not measured.')));
  const control=el('div','control row');
  const choices=s.choices||[];
  if(s.custom)control.append(el('span','help-copy','Custom value preserved. Select a level only to replace it.')); 
@@ -32,11 +32,16 @@ function card(s) {
   const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=[choices[i.checked?0:1].apply,choices[i.checked?0:1].reason].filter(Boolean).join('; ');i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','help-copy',i.checked?'On':'Off'));
  } else if(choices.length) {
   const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);
-  choices.forEach(ch=>{const b=el('button',ch.value===s.value?'on':'',ch.label);b.disabled=ch.enabled===false;b.title=[ch.apply,ch.reason].filter(Boolean).join('; ');b.setAttribute('aria-pressed',ch.value===s.value?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});control.append(seg);
+  choices.forEach(ch=>{const b=el('button',ch.value===s.value?'on':'',ch.label);b.disabled=ch.enabled===false;b.title=[ch.apply,ch.reason].filter(Boolean).join('; ');b.setAttribute('aria-label',ch.label+'; '+ch.apply);b.setAttribute('aria-pressed',ch.value===s.value?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});control.append(seg);
  } else if(s.min!==undefined) {
   if(s.hasOff){const off=el('button','btn'+(s.value===0?' on':''),'Off');off.onclick=()=>send('set',{id:s.id,value:0});control.append(off);}
   const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=s.value;i.setAttribute('aria-label',s.title||s.label);const out=el('span','help-copy',s.value+' '+(s.unit||''));i.oninput=()=>out.textContent=i.value+' '+(s.unit||'');i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.append(i,out);
  } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
+ // Keep requirements readable by keyboard and assistive technology, including disabled choices.
+ const requirements=el('p','detail-copy');requirements.id='needs-'+s.id;
+ requirements.textContent=choices.filter(ch=>ch.reason||ch.requirements).map(ch=>ch.label+': '+[ch.requirements,ch.reason].filter(Boolean).join('; ')).join('\n');
+ requirements.hidden=!requirements.textContent;c.append(requirements);
+ [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',requirements.id);});
  c.append(control);
  const badges=el('div','row');if(measured(s.cost))badges.append(pill(s.cost,'cost'));if(measured(s.vram))badges.append(pill(s.vram,'vram'));
  badges.append(pill(s.apply,/restart/i.test(s.apply)?'restart':''));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));c.append(badges);
@@ -59,13 +64,13 @@ function renderSettings() {
   const actions=el('div','row');const browse=el('button','btn','Choose game folder...');browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.onclick=()=>send('recheck');actions.append(browse,recheck);setup.append(actions);
   if((state.compatibility?.adapters||[]).length>1){const label=el('label','help-copy','Graphics adapter '),select=el('select','btn');select.setAttribute('aria-label','Graphics adapter');const unknown=el('option','','Choose adapter');unknown.value='-1';select.append(unknown);state.compatibility.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===state.compatibility.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});label.append(select);setup.append(label);}root.append(setup);return;
  }
- const all=(state.settings||[]).filter(s=>section==='Developer'?s.developer:s.category===section&&!s.developer);
+ const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
  const isExperimental=s=>s.experimental===true||(s.experimental===undefined&&s.maturity==='experimental');
  const regular=all.filter(s=>!isExperimental(s)),experimental=all.filter(isExperimental);
  const grid=el('div','grid');regular.forEach(s=>grid.append(card(s)));root.append(grid);
  // One disclosure authorizes experimental choices; policy remains in the bridge.
  if(experimental.length||section==='Advanced') {
-  const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
+  const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.id='experimental-summary';summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
  }
 }
 function renderSummary() {
@@ -74,11 +79,14 @@ function renderSummary() {
  stats.forEach(([k,v,n])=>{const s=el('div','stat');s.append(el('div','k',k));const val=el('div','v',v);val.append(el('small','',n));s.append(val);root.append(s);});
 }
 function render(next) {
- state=next;$('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
- const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const b=el('button',!state.custom&&state.preset===index?'on':'',name);b.setAttribute('aria-pressed',!state.custom&&state.preset===index?'true':'false');b.title=index===state.recommendedPreset?'Recommended hardware estimate; not a quality qualification':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
+ const focused=document.activeElement?.id;
+ state=next;if(state.experimental!==undefined)experimentalOpen=state.experimental;
+ if(section==='Developer'&&!state.developer)section='Lighting';
+ $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
+ const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const b=el('button',!state.custom&&state.preset===index?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',!state.custom&&state.preset===index?'true':'false');b.title=index===state.recommendedPreset?'Recommended hardware estimate; not a quality qualification':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
  $('gpu-name').textContent=state.compatibility?.gpu||'Graphics unknown';$('gpu-info').textContent=[state.compatibility?.vram,state.compatibility?.driver].filter(Boolean).join(' · ')||'Compatibility not confirmed';
- const nav=$('navigation');nav.replaceChildren();const list=[...sections];if((state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,['Developer','M4 4h16v16H4z']);
- list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.setAttribute('aria-current',id===section?'page':'false');const glyph=el('img','glyph');glyph.alt='';glyph.src=(localFiles?assetBase+'branding/':'https://branding.bg3rtx.local/')+'ornaments/glyph-'+({Lighting:'light',Surfaces:'water',Performance:'performance',Memory:'memory',Advanced:'performance',Developer:'memory',Support:'help'}[id])+'.svg';b.append(glyph);b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');foot.append(el('div','','BG3RTX · independent fan mod'),el('div','','Not affiliated with the game’s developers.'));if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
+ const nav=$('navigation');nav.replaceChildren();const list=[...sections];if(state.developer&&(state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,['Developer','M4 4h16v16H4z']);
+ list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.id='nav-'+id;b.setAttribute('aria-current',id===section?'page':'false');const glyph=el('img','glyph');glyph.alt='';glyph.src=(localFiles?assetBase+'branding/':'https://branding.bg3rtx.local/')+'ornaments/glyph-'+({Lighting:'light',Surfaces:'water',Performance:'performance',Memory:'memory',Advanced:'performance',Developer:'memory',Support:'help'}[id])+'.svg';b.append(glyph);b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');foot.append(el('div','','BG3RTX · independent fan mod'),el('div','','Not affiliated with the game’s developers.'));if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
  $('hero-version').textContent=state.version||'Version unavailable';
  $('hero-preset').textContent=(state.custom?'Custom':state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom')+(state.unsavedCount?' (unsaved changes)':'');
  $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' / ')||'Not detected';
@@ -86,6 +94,7 @@ function render(next) {
  renderSummary();const warnings=$('warnings');warnings.replaceChildren();(state.compatibility?.warnings||[]).filter(Boolean).forEach(w=>warnings.append(el('div','notice',w)));if(state.error)warnings.append(el('div','notice error',state.error));
  const count=state.unsavedCount??state.dirty??0;let status=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved for next launch');const banner=$('restart-banner');banner.hidden=!state.restartNeeded;banner.textContent=state.restartBanner||'';$('status').textContent=status;$('discard').disabled=!count;$('save').disabled=!count;$('play').disabled=!state.canPlay;
  renderSettings();renderPreview();renderReport();
+ if(focused&&!$('confirmation').open&&!$('report-dialog').open)$(focused)?.focus({preventScroll:true});
 }
 function renderPreview() {
  const p=state.preview,d=$('confirmation');if(!p?.kind){if(d.open)d.close();return;}const root=$('confirmation-copy');root.replaceChildren();$('confirmation-title').textContent=p.kind==='preset'?'Review preset changes':'Review required settings';const ul=el('ul','help-copy');(p.changes||[]).forEach(c=>ul.append(el('li','',c)));root.append(ul);(p.blocked||[]).forEach(c=>root.append(el('p','notice',c)));$('confirm-preview').disabled=!!p.blocked?.length;showDialog(d);
