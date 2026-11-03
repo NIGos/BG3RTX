@@ -1,0 +1,173 @@
+{
+  "name": "hv4-gpuav",
+  "save": "Test Dialogue1",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 470,
+  "repeat": 1,
+  "live_batch": "hair-validation",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_gi_cull=0,rt_hair_groom=1",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "captures/live_batches/hair_validation/plans/hv4-gpuav.json",
+    "-Validation",
+    "-VSet",
+    "validate_sync=true,gpuav_enable=true"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "gi: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "failed",
+    "\\[cascade\\] casters",
+    "\\[geo\\]",
+    "\\[alpha hair\\]",
+    "\\[alpha scalp\\]",
+    "\\[hair groom\\]",
+    "\\[hair primary\\]",
+    "\\[hair fibre\\]",
+    "gi: background builds",
+    "building in the background",
+    "skipped: no variant for",
+    "\\[bvh\\]",
+    "\\[rrpost\\] exposure (held|hold|probe)",
+    "\\[core\\] guard:",
+    "\\[fault\\]",
+    "\\[mem\\]",
+    "pool full",
+    "DEVICE_LOST",
+    "\\[pan\\]",
+    "\\[sl\\] present capture",
+    "\\[sl\\] DLSS-G frame"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[cfg\\] settings read",
+    "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused"
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "skipped: no variant for",
+    "pipeline creation failed",
+    "shader module creation failed",
+    "\\[hair primary\\] UNAVAILABLE",
+    "\\[hair primary\\] .*could not be allocated",
+    "\\[hair primary\\] strand fragment shader unavailable",
+    "\\[hair groom\\] device WITHOUT",
+    "\\[hair groom\\] .*malformed",
+    "\\[geo\\] rt_native_hair rejected",
+    "\\[bvh\\] mesh pool full at",
+    "\\[cascade\\] could not allocate",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hair primary\\].*\\b[1-9]\\d* pipelines refused",
+    "(?i)device (?:was )?lost",
+    "\\[fault\\]\\s+(read|write|execute) invalid",
+    "pool full",
+    "invalid/missing native state [1-9]\\d*",
+    "retired bounds-invalid primitives [1-9]\\d*"
+  ],
+  "expect_runner": [
+    "window-mode.*visible_unfocused",
+    "\\[motion-plan\\] complete phases=3\\b",
+    "^Run ended: done"
+  ],
+  "stop_on_dump": true,
+  "purpose": "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence.",
+  "estimated_phase_seconds": 50,
+  "expect_every": [
+    {
+      "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every judged window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "opaque cutouts 0: no alpha-tested draw made opaque (region full 0.00) in every judged window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full in every judged window",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "no background build in any measured window (0 waiting, 0 pending, 0 started in every status line)",
+      "select": "gi: background builds \\(\\d+ frames\\):",
+      "match": ": 0 frames waiting, 0 pending, 0 started",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "no 'building in the background' line in any measured window (a pass skipped there)",
+      "select": "building in the background",
+      "match": "(?!)",
+      "min": 0,
+      "event": true,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "hair guards zero in every judged window",
+      "select": "\\[alpha hair\\] native coverage records",
+      "match": "invalid/missing native state 0;.*retired bounds-invalid primitives 0;",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    },
+    {
+      "name": "strands participate in each ON cost window",
+      "select": "\\[hair primary\\] frame \\d+:",
+      "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+      "min": 1,
+      "windows": [
+        "validation-strands"
+      ]
+    }
+  ],
+  "window_mode": "visible_unfocused_fg"
+}
