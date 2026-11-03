@@ -18,3 +18,10 @@
   kRtUnknown, as local lights). Shader identity: 258/262 byte-identical; only hair_fibre (3) and
   hair_primary_gbuffer differ (key-on shaders). Open: strand ownership per card draw (overlapping grooms) needs a
   per-draw channel to the fragment shader; not a small fix.
+- Strand ownership per card (overlapping grooms): the G-buffer and velocity variants keep a hit only when it lies in
+  the band of the fragment's own card along its ray (hp_on_card: (10 mm radius bound + segment length / 2) / |cos| +
+  pixel spread; strand points lie on their card triangles). The pixel cache is unchanged (closest strand of all
+  grooms); the owning card's fragment writes it. Pixel entries sealed (word 3 = hp_seal(tag, words 0..2)): a torn
+  entry never pairs this frame's tag with an older key. Python twin + two-groom overlap fixture in hair_groom_test.
+  Identity: 256/262 byte-identical; only the key-on hair_fibre (3), hair_primary_gbuffer, _velocity, _count differ.
+  Cost: one 4x4 inverse per strand fragment (was per pixel miss); not measured live.

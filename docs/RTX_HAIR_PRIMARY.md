@@ -95,6 +95,11 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   verdicts, UV joins and UV readbacks in flight at the same boundary (their identities are built from handles).
   Live bisect: hair_validation hv5 (one F8 per stage: native + scalp, + physical origin, + groom, + primary, 60 s
   each); hv4 repeats the reload under GPU-AV.
+- Overlapping grooms (review of f5b339eb): the pixel's closest strand of all grooms is cached once per pixel; a card
+  fragment writes it only when it lies on its own card (`hp_on_card`: strand points lie on their card triangles, so
+  within (radius bound 10 mm + segment length / 2) / |cos| of the card surface along the ray, plus the pixel's spread).
+  The velocity variant applies the same test. Entries are sealed (`hp_seal`: word 3 mixes the tag with the other
+  words), so a torn 16-byte store never pairs this frame's tag with an older key.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
