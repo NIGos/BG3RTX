@@ -6,12 +6,13 @@ Earlier history: [morning archive](archive/PROGRESS_20261102_morning.md), [11-01
 Branches write `docs/progress/<branch>.md`; fold only after verifying ancestry against main.
 Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 
-## Report 2026-11-03 night (main b76e3cc + bundle 2 pending) - stages 2-3 closed, 4 in progress
+## Report 2026-11-03 morning (main e8984b6, blackout ~06:20: ds2/ds3, ba1, om4 re-run) - stages 2-3 closed, 4 in progress
 - Stage 2 done: spec-constant migration on main; live scc1 valid (0 DXC on every converted toggle, rt 1.86 ms, gi 5.0 ms S8). Variants 2946 -> 147.
 - Dialogue moving shadow (port): fixed by default. Second fix (cascade identity without per-draw allocations) now matches 16-18 duplicates/frame at the port (was 0); no band in any motion pair (block change at RT-sun-off noise). rt_cascade_static_only must stay OFF: it drops every cascade caster (same as casters off).
 - AO / hair at camp confirmed: gi_ao=0 brightens faces +10..22%; native hair +4..14%.
 - Water on/off reflections while turning: cause in our compose (tier 1 25% -> 1% on camera-jump frames). Compose shift (rt_water_compose_shift) did not remove it; test confounded by jumpy turn input (45-90 deg per frame). Smooth turn modes + camera probe job prepared (bundle 2).
-- Native hair: costs +2.3 ms rt / +3.2 ms GI at S8 (keep rule < 1 ms): stays off. rt_hair_gi_cull (GI rays skip hair) prepared to cut the GI part.
+- Native hair: +2.3..4.5 ms rt / +3.4..6.9 ms GI (S8, camp dialogues): stays off. rt_hair_gi_cull saves 1.2-2.3 ms but brightens characters +9..20% (not equivalent). Bug: Dialogue3 with hair fills the mesh pool (2047 MB), scene then skipped. Branch hair-cost2: pool fix, cheaper coverage, near-only hair.
+- Characters dark in dialogues: RT AO self-occlusion (50% of character pixels -39%, 99% self-hits under 5 cm). Branch ao-self-occlusion: derived ray start for characters.
 - Box lights: honour the game's shadow flag (88 Grymforge box lights have it off): fixed mode is closer to OFF energy, +0.13 ms. Still off (your visual check, question below).
 - OMM om4: check window confounded by scene-wait timeouts; gate fixed, rerun pending. rt passes -0.4..0.5 ms with OMM.
 - Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa (147 -> 135 variants). rf_edge / rr_hitdist kept (old metric invalid).
