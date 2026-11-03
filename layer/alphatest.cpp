@@ -120,6 +120,10 @@ struct FadeCount { uint64_t seen = 0, seen_tris = 0, enabled = 0, enabled_tris =
 FadeCount g_fade_now, g_fade_window;   // this capture; the log window (300 captures)
 
 VkDescriptorSetLayout g_dsl = VK_NULL_HANDLE;
+VkDescriptorSetLayout g_hair_mean_empty = VK_NULL_HANDLE;
+VkPipelineLayout g_hair_mean_layout = VK_NULL_HANDLE;
+VkPipeline g_hair_mean_pipeline = VK_NULL_HANDLE;
+uint64_t g_hair_mean_generation = 0;
 VkDescriptorPool g_pool = VK_NULL_HANDLE;
 VkDescriptorSet g_sets[kRing] = {};
 VkSampler g_wrap = VK_NULL_HANDLE, g_clamp = VK_NULL_HANDLE;
@@ -176,6 +180,7 @@ uint32_t g_fail[6] = {};
 uint64_t g_frames = 0, g_draws = 0, g_tris = 0;
 std::atomic<uint32_t> g_scalp_hard{0}, g_scalp_dither{0}, g_scalp_invalid{0};
 std::atomic<uint32_t> g_hair_records{0}, g_hair_invalid{0};
+std::atomic<uint32_t> g_hair_visibility[3]{};
 std::atomic<uint32_t> g_hair_attributes{0};
 std::atomic<uint32_t> g_hair_bounds_invalid{0};
 
@@ -705,6 +710,10 @@ void alpha_device_destroyed(DeviceData* dd) {
   if (g_vt_staging) vk.DestroyBuffer(dd->device, g_vt_staging, nullptr);
   if (g_vt_staging_mem) vk.FreeMemory(dd->device, g_vt_staging_mem, nullptr);
   g_vt_staging = VK_NULL_HANDLE; g_vt_staging_mem = VK_NULL_HANDLE;
+  if(g_hair_mean_pipeline)vk.DestroyPipeline(dd->device,g_hair_mean_pipeline,nullptr);
+  if(g_hair_mean_layout)vk.DestroyPipelineLayout(dd->device,g_hair_mean_layout,nullptr);
+  if(g_hair_mean_empty)vk.DestroyDescriptorSetLayout(dd->device,g_hair_mean_empty,nullptr);
+  g_hair_mean_pipeline=VK_NULL_HANDLE;g_hair_mean_layout=VK_NULL_HANDLE;g_hair_mean_empty=VK_NULL_HANDLE;g_hair_mean_generation=0;
   if(g_sun_dsl) vk.DestroyDescriptorSetLayout(dd->device,g_sun_dsl,nullptr);
   g_sun_dsl=VK_NULL_HANDLE;
   if (g_pool) vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
@@ -829,6 +838,20 @@ bool alpha_lookup(uint64_t fs, AlphaFs* out) {
 
 void alpha_tileset_incomplete(){std::lock_guard lock(g_mu);g_tileset_incomplete=true;}
 
+bool alpha_native_hair_wind_bounded(VkCommandBuffer cmd,VkFormat format){
+  if(!unit_mask_format(format))return false;
+  omm::BoundSampler binding;
+  if(!omm::bound_sampler(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,7,0,binding) || !omm::ordinary_sampler_current(binding))return false;
+  const auto& sampler=binding.sampler;const auto& info=sampler.info;
+  // Weighted UNORM filtering stays within [0,1]. Unknown extension/custom
+  // border/reduction/compare semantics are not a normalized-noise certificate.
+  return sampler.complete && !info.flags && !info.compareEnable && !info.unnormalizedCoordinates &&
+    sampler.reduction==VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE &&
+    info.addressModeU!=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER &&
+    info.addressModeV!=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER &&
+    info.addressModeW!=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+}
+void alpha_native_hair_visibility_note(uint32_t decision){if(decision<3)++g_hair_visibility[decision];}
 bool alpha_native_hair_record(uint32_t index,AlphaRec* out) {
   std::lock_guard<std::mutex> lock(g_mu);
   if(index>=g_recs.size() || g_recs[index].kind!=4)return false;
@@ -1160,6 +1183,49 @@ uint32_t alpha_restore(const AlphaSnapshot& saved) {
   return index;
 }
 
+// Called with alpha's lock held, after this scene's descriptors/records are
+// published. A failed empirical-coverage build rejects the scene, never reads a
+// stale probability from a recycled mesh-pool range.
+static bool hair_mean_commit(VkCommandBuffer cmd,const AlphaBindings& ab,uint32_t slot) {
+  if(!geo_native_hair_enabled() || !cfg_int("rt_hair_gi_mean",0) || !ab.info_bytes)return true;
+  auto& vk=g_dd->vk;
+  Bg3ShaderBlob blob{};
+  if(!shader_get("rt/hair_mean.hlsl","main","cs_6_6",&blob))return false;
+  if(!g_hair_mean_layout) {
+    VkDescriptorSetLayoutCreateInfo empty{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    if(vk.CreateDescriptorSetLayout(g_dd->device,&empty,nullptr,&g_hair_mean_empty)!=VK_SUCCESS)return false;
+    const VkDescriptorSetLayout layouts[]={g_hair_mean_empty,g_dsl};
+    VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,16};
+    VkPipelineLayoutCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    ci.setLayoutCount=2;ci.pSetLayouts=layouts;ci.pushConstantRangeCount=1;ci.pPushConstantRanges=&range;
+    if(vk.CreatePipelineLayout(g_dd->device,&ci,nullptr,&g_hair_mean_layout)!=VK_SUCCESS)return false;
+  }
+  if(!g_hair_mean_pipeline || g_hair_mean_generation!=blob.generation) {
+    VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};mi.codeSize=blob.size_bytes;mi.pCode=blob.code;
+    VkShaderModule module{};if(vk.CreateShaderModule(g_dd->device,&mi,nullptr,&module)!=VK_SUCCESS)return false;
+    VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    ci.stage={VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_COMPUTE_BIT,module,"main"};
+    ci.layout=g_hair_mean_layout;VkPipeline pipeline{};
+    const auto result=vk.CreateComputePipelines(g_dd->device,VK_NULL_HANDLE,1,&ci,nullptr,&pipeline);
+    vk.DestroyShaderModule(g_dd->device,module,nullptr);if(result!=VK_SUCCESS)return false;
+    defer_destroy(BG3_DEFER_PIPELINE,uint64_t(g_hair_mean_pipeline));
+    g_hair_mean_pipeline=pipeline;g_hair_mean_generation=blob.generation;
+    log("[hair mean] empirical coverage pipeline built; 64 UV x 8 directions per hair draw");
+  }
+  VkMemoryBarrier memory{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  memory.srcAccessMask=VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_MEMORY_READ_BIT;
+  memory.dstAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;
+  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memory,0,nullptr,0,nullptr);
+  vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hair_mean_pipeline);
+  vk.CmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,g_hair_mean_layout,1,1,&g_sets[slot],0,nullptr);
+  const uint32_t push[]={uint32_t(ab.info_bytes/16u),0,0,0};
+  vk.CmdPushConstants(cmd,g_hair_mean_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(push),push);
+  vk.CmdDispatch(cmd,(push[0]+63u)/64u,1,1);
+  memory.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;memory.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memory,0,nullptr,0,nullptr);
+  return true;
+}
+
 VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint32_t slot) {
   if (!g_on || slot >= kRing) return VK_NULL_HANDLE;
   const VkBuffer soup = ab.soup;
@@ -1211,7 +1277,8 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                           (cfg_hot(CfgHot::rt_alpha_unknown) ? 4u : 0u) |
                           (geo_native_hair_enabled() && !cfg_hot(CfgHot::rt_alpha_test) ? 8u : 0u);
   g_set_records[slot]=uint32_t(g_recs.size());
-  uint32_t header[4] = {uint32_t(g_recs.size()), (geo_native_hair_enabled() || g_tileset_layout) ? stride : (soup && opaque_bytes ? stride : 0u), policy, g_tileset_incomplete?native_tileset_coverage::NtcCaptureIncompleteBit:0u};
+  uint32_t header[4] = {uint32_t(g_recs.size()), (geo_native_hair_enabled() || g_tileset_layout) ? stride : (soup && opaque_bytes ? stride : 0u), policy, (g_tileset_incomplete?native_tileset_coverage::NtcCaptureIncompleteBit:0u) |
+      ((geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0)) ? 0x80000000u : 0u)};
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1361,6 +1428,8 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   g_current = int(slot);
   if(native_hit::enabled() && !native_hit::attach(cmd,slot,g_sets[slot],g_dummy_buf,g_dummy_arr.view,g_clamp,g_stamp_gen))return VK_NULL_HANDLE;
 
+  if(!hair_mean_commit(cmd,ab,slot))return VK_NULL_HANDLE;
+
   ++g_frames;
   vt_miss_frame(frame_index());
   g_draws += g_recs.size();
@@ -1392,6 +1461,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
         "88-byte strand capture; procedural camera depth and physical Shadow ribbons",
         g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load(),g_hair_bounds_invalid.exchange(0));
+    if(geo_native_hair_enabled() && cfg_int("rt_hair_visibility",0)) {
+      const auto selected=g_hair_visibility[0].exchange(0),cards=g_hair_visibility[1].exchange(0),unknown=g_hair_visibility[2].exchange(0);
+      log("[alpha hair] visibility evaluated %u; eligible %u; selected %u; cards %u; unknown %u",selected+cards+unknown,selected+cards,selected,cards,unknown);
+    }
     // The alpha-tested fragment shaders of this frame by triangles, with their
     // cut-offs (identifies the families on screen: grass, foliage, chains).
     std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> per;

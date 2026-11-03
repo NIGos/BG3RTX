@@ -6,7 +6,7 @@ from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.spec_cascade_check import (phi_order, block_order, lower_priority, old_requests_waterhair,
-                                     old_requests_hairgi, check_baseline)
+                                     old_requests_hairgi, old_requests_haircost, check_baseline)
 
 
 class BaselineWorkerTest(unittest.TestCase):
@@ -26,6 +26,26 @@ class BaselineWorkerTest(unittest.TestCase):
             check_baseline(None, "scratch", "plain", "new", "old", assign, False)
             optimize.assert_not_called()
             self.assertEqual(compare.call_args.args[-2], "old")
+
+
+class HairCostRequestsTest(unittest.TestCase):
+    def test_all_approximations_cross_hair_presence(self):
+        pairs = old_requests_haircost("gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1")
+        self.assertEqual([(a[1010], a[1018], a[1019]) for a, _ in pairs],
+                         [(h, c, m) for h in (0, 1) for c, m in ((0, 0), (1, 0), (0, 1), (1, 1))])
+        for assign, reference in pairs:
+            self.assertEqual(assign[1008], 0)
+            self.assertEqual(assign[1009], 0)
+            self.assertIn(f"RT_HAIR_CHEAP_REFERENCE={assign[1018]}", reference)
+            self.assertIn(f"RT_HAIR_GI_MEAN_REFERENCE={assign[1019]}", reference)
+            self.assertEqual("RT_NATIVE_HAIR=1" in reference, bool(assign[1010]))
+
+    def test_baseline_reference_does_not_set_new_ids(self):
+        assign = {1010: 1, 1018: 0, 1019: 0}
+        with patch("tools.spec_cascade_check.opt", side_effect=lambda tool, src, dst, *args: dst) as optimize, \
+                patch("tools.spec_cascade_check.check_one", return_value=0):
+            self.assertEqual(check_baseline(None, "scratch", "haircost", "new", "old", assign, True), 0)
+            self.assertEqual(optimize.call_args.args[3], "--set-spec-const-default-value=1010:1")
 
 
 class HairGiRequestsTest(unittest.TestCase):
