@@ -4,7 +4,9 @@ import json
 import struct
 import sys
 import tempfile
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -624,6 +626,85 @@ def test_dual():
     check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
 
 
+def test_batch_cache():
+    from PIL import Image
+
+    key = batch.groom_key(b"gr2", b"mask", "hair")
+    check("groom cache key is stable SHA-256", len(key) == 64 and key == batch.groom_key(b"gr2", b"mask", "hair"))
+    check("groom cache key frames input boundaries", batch.groom_key(b"a", b"bc", "hair") != batch.groom_key(b"ab", b"c", "hair"))
+    check("groom cache key includes each input", all(key != batch.groom_key(*args) for args in
+          ((b"other", b"mask", "hair"), (b"gr2", b"other", "hair"), (b"gr2", b"mask", "other"))))
+    with patch.object(batch, "VERSION", "validation-only"):
+        check("validation version leaves groom key unchanged", batch.groom_key(b"gr2", b"mask", "hair") == key)
+    with patch.object(batch, "CONVERTER_VERSION", "new-converter"):
+        check("converter version invalidates groom key", batch.groom_key(b"gr2", b"mask", "hair") != key)
+
+    hair = card_mesh()
+    mask = np.zeros((32, 16, 4), np.uint8)
+    mask[..., 3] = strand_mask(32, 16, [lambda y: 8.0], 2)
+    mask[..., 2] = np.linspace(0, 255, 32).astype(np.uint8)[:, None]
+    groom, rep = convert.convert(hair, mask, tile_grid=(1, 1), step=8)
+    groom, dropped = convert.dedupe(groom)
+    head, corr = batch.head_proxy(hair), [0.5, 0.75]
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        buf = BytesIO()
+        Image.fromarray(mask).save(buf, format="PNG")
+        raw = buf.getvalue()
+        path = d / "cache" / "groom" / (batch.groom_key(b"gr2", raw, "hair") + ".npz")
+        batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), 0.75, corr, head)
+        got = batch.load_groom_cache(path)
+        check("groom cache round trip loads", got is not None)
+        check("groom cache every dataclass field equal including dtype", all(
+            np.array_equal(getattr(groom, f.name), getattr(got[0], f.name)) and
+            getattr(groom, f.name).dtype == getattr(got[0], f.name).dtype for f in dataclasses.fields(groom)))
+        check("groom cache retains original cards", all(np.array_equal(getattr(hair, f.name), getattr(got[1], f.name))
+              for f in dataclasses.fields(hair)))
+        check("groom cache retains report and validation inputs", got[2:7] == (rep, dropped, (1, 1), 0.75, corr)
+              and np.array_equal(got[7], head))
+        check("missing groom cache is a miss", batch.load_groom_cache(d / "missing.npz") is None)
+
+        style = dict(name="synthetic", gr2="hair.gr2", mask="mask.dds", mesh="hair")
+        class Pak(dict):
+            read = dict.__getitem__
+
+        # A cache hit must reach validation without invoking any part of the conversion pipeline.
+        with patch("tools.assets.lspk.PackageSet", return_value=Pak({"hair.gr2": b"gr2", "mask.dds": raw})), \
+             patch.object(batch, "gr2_dump", side_effect=AssertionError("dump called")), \
+             patch.object(convert, "convert", side_effect=AssertionError("convert called")), \
+             patch.object(convert, "dedupe", side_effect=AssertionError("dedupe called")), \
+             patch.object(batch, "bbox_views", return_value={"test": (None, None)}), \
+             patch.object(render, "render", return_value=(np.zeros((2, 2, 3)), np.zeros((2, 2)))):
+            rec = batch.process(style, None, None, d / "out", d, False)
+            check("cached process reaches validation without conversion", rec.get("iou") == [0.0], rec)
+            path.write_bytes(b"corrupt npz")
+            check("corrupt groom cache is a miss", batch.load_groom_cache(path) is None)
+            check("revalidate cache miss does not convert or replace state", batch.process(style, None, None, d / "out", d, False, True) is None)
+            dump_path = d / "cache" / "gr2" / (batch.hashlib.sha256(b"gr2").hexdigest() + ".bin")
+
+            def read_dump(p, name):
+                if p.read_bytes() != b"dump":
+                    raise ValueError("corrupt dump")
+                return hair
+
+            with patch.object(batch, "gr2_dump", side_effect=lambda lib, src, dst: dst.write_bytes(b"dump")) as dump, \
+                 patch.object(mesh, "load_gr2_dump", side_effect=read_dump), \
+                 patch.object(convert, "convert", return_value=(groom, rep)) as conversion, \
+                 patch.object(convert, "dedupe", return_value=(groom, dropped)):
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("corrupt groom silently rebuilds", rec.get("iou") == [0.0] and conversion.call_count == 1
+                      and batch.load_groom_cache(path) is not None, rec)
+                check("successful dump is cached by GR2 content", dump_path.read_bytes() == b"dump" and dump.call_count == 1)
+                path.unlink()
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("GR2 cache skips LSLib on groom miss", rec.get("iou") == [0.0] and dump.call_count == 1, rec)
+                path.unlink()
+                dump_path.write_bytes(b"corrupt dump")
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("corrupt GR2 dump silently rebuilds", rec.get("iou") == [0.0] and dump.call_count == 2
+                      and dump_path.read_bytes() == b"dump", rec)
+
+
 def test_cost():
     h, w = 256, 64
     m = np.zeros((h, w, 4), np.uint8)
@@ -645,7 +726,7 @@ def test_cost():
     check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
 
 
-for t in (test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+for t in (test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
