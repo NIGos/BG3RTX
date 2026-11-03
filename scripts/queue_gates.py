@@ -87,13 +87,16 @@ def _sec(stamp):
 class _Clock:
     """Turns HH:MM:SS.fff into monotonic seconds across a midnight rollover."""
 
-    def __init__(self):
+    def __init__(self, origin=None):
+        self.origin = origin
         self.last = None
         self.offset = 0.0
 
     def __call__(self, t):
         if t is None:
             return None
+        if self.last is None and self.origin is not None:
+            self.offset = round((self.origin - t) / 86400) * 86400
         if self.last is not None and t + self.offset < self.last - 43200:
             self.offset += 86400
         self.last = t + self.offset
@@ -113,17 +116,18 @@ def stamped_lines(text):
 
 def windows(runner_text, plan, game_lines):
     """[{label, index, start, applied, end, set}] from the runner's [pan-plan] lines."""
-    clock = _Clock()
+    clock = _Clock(game_lines[0][0] if game_lines else None)
     starts, complete = [], None
     for line in runner_text.splitlines():
+        timestamp = clock(_sec(line))
         m = _WINDOW.search(line)
         if m:
             sm = _SET.search(line)
-            starts.append((clock(_sec(m.group(1))), int(m.group(2)), sm.group(1) if sm else None))
+            starts.append((timestamp, int(m.group(2)), sm.group(1) if sm else None))
             continue
         m = _COMPLETE.search(line)
         if m:
-            complete = clock(_sec(m.group(1)))
+            complete = timestamp
     out = []
     for k, (start, index, applied_set) in enumerate(starts):
         end = starts[k + 1][0] if k + 1 < len(starts) else (complete if complete is not None else float("inf"))

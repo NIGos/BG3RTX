@@ -17,7 +17,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.queue_gates import phase_states
+from scripts.queue_gates import phase_states, _apply
 
 
 def read(path):
@@ -331,7 +331,8 @@ def window_problems(job, plan):
 # pipeline variants. All rendering keys (including fg/rr) still require warming.
 CONTROL = {"qa_exposure_hold", "fg_snap", "pan_capture", "pan_prepare", "pan_post", "pan_edge", "pan_water",
            "rt_stats", "rt_primary_check", "rt_primary_identity", "rt_primary_epoch", "ls_stats", "ls_check",
-           "rf_stats", "rt_debug", "ls_debug", "gi_debug", "rf_debug", "rt_occ_stats", "rr_show"}
+           "rf_stats", "rt_debug", "ls_debug", "gi_debug", "rf_debug", "rt_occ_stats", "rr_show",
+           "fg_snap_any", "replay_pack", "rt_mesh_audit_frames", "rt_mesh_audits"}
 
 
 def warmup_problems(job, plan):
@@ -348,14 +349,17 @@ def warmup_problems(job, plan):
     states = phase_states(job, plan)
     keys = set().union(*(s.keys() for s in states))
     startup = set(job.get("live_flow", {}).get("startup_only", []))
+    initial = {}
+    _apply(initial, job.get("set", ""))
     out = []
-    for key in sorted(keys - CONTROL):
+    for key in sorted(keys):
         values = {s.get(key) for p, s in zip(plan[first:], states[first:])
                   if p.get("label") in labels and s.get(key) is not None}
-        if len(values) < 2:
-            continue
         if key in startup:
-            out.append(f"warmup: startup-only key {key} changes after the first measured window")
+            if values - {initial.get(key)}:
+                out.append(f"warmup: startup-only key {key} differs from its startup value")
+            continue
+        if key in CONTROL:
             continue
         warmed = {s.get(key) for p, s in zip(plan[:first], states[:first])
                   if float(p.get("seconds", 0)) > 0 and not p.get("trace_at") and not p.get("serial")}
@@ -388,10 +392,17 @@ def repair_known_forbids(job, plan):
     return job
 
 
+def plan_field_problems(plan):
+    registry = read(ROOT / "scripts/camera-plan-fields.json")
+    allowed = set(registry["runner"]) | set(registry["analysis_only"])
+    return [f"Unknown camera plan field: {key} (phase {i})"
+            for i, step in enumerate(plan) for key in sorted(set(step) - allowed)]
+
+
 def lint(job, plan, evidence, memo=None):
     regex, coverage = regex_problems(job, evidence, memo)
     windows, budgets = window_problems(job, plan)
-    return dict(problems=regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
+    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan), regex_coverage=coverage, windows=budgets)
 
 
 def markdown_report(report):
