@@ -14,7 +14,8 @@ inline bool capability(uint32_t* state,bool requested) {
  value.compare_exchange_strong(expected,requested?2u:1u,std::memory_order_acq_rel);
  return value.load(std::memory_order_acquire)==2u;
 }
-inline bool binding_enabled(bool capability,unsigned mask,unsigned binding){return !(capability&&mask==8u&&binding==12u);}
+// S3: reserve Hair50 and omit the unused reflection AO12 for both capability values.
+inline bool binding_enabled(bool /*capability*/,unsigned mask,unsigned binding){return !(mask==8u&&binding==12u);}
 inline bool alternate_entry(const char* file) {
  const char* names[]={"gi/rt_origin.hlsl","gi/rt_shadow.hlsl","gi/gi_trace_rt.hlsl","gi/gi_trace_rt_sharc.hlsl","gi/gi_trace_rt_hit_direct.hlsl","gi/gi_trace_rt_sharc_hit_direct.hlsl",
  "gi/rt_reflections.hlsl","gi/rt_reflections_sharc.hlsl","gi/rt_reflections_hit_shade.hlsl","gi/rt_reflections_sharc_hit_shade.hlsl",

@@ -14,7 +14,7 @@
 // pc.bounce_spec (unused by every other pass) carries this pass's flags: bit 0 the sun pass traced
 // this frame (rtVis valid), bit 1 the RT GI trace ran (giRaw valid).
 #define RT_OCC_STATS 1
-// With rt_cascade_casters (RT_CASCADE_MASKS from the variant): the sun replica sees the cascade copy
+// With rt_cascade_casters (constant 1000): the sun replica sees the cascade copy
 // (g_rt_cascade_ray, as the sun pass's RT_CASCADE_SUN), the AO rays trace 0x01 as the GI trace.
 #define RT_CASCADE_SUN_HIT 1
 #include "gi_common.hlsli"
@@ -51,11 +51,11 @@ void occ_sun(uint2 fp) {
     dir = normalize(L + (t * cos(phi) + b * sin(phi)) * r);
   }
   const float3 o = rt_ray_origin(fp, P, N, dist * pa, dir);
-#ifdef RT_CASCADE_MASKS
+#if defined(RT_CASCADE_MASKS) || defined(RT_SPEC_CASCADE)
   g_rt_cascade_ray = true;
 #endif
   const uint vs = rt_visibility(o, dir, pc.rt_tmax, cone);
-#ifdef RT_CASCADE_MASKS
+#if defined(RT_CASCADE_MASKS) || defined(RT_SPEC_CASCADE)
   g_rt_cascade_ray = false;
 #endif
   // The real pass: traced r (the mask itself when its ray was unknown), the game's mask g.

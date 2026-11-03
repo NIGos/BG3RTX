@@ -246,22 +246,23 @@ at its pixel), per kind `rays % [near %] dark %`, and the occluder distance hist
   skinned, wind-animated opaque), cutout-static (pool + alpha record), cutout-moving (soup + alpha record: wind foliage),
   scalp (alpha kind 3), hair (alpha kind 4 or native procedural), held (rt_dyn_hold copy: InstInfo meta bit 31,
   layer/bvhsplit.cpp kInfoHeld; layer change, restart, no ABI change). "near" = t <= 0.5 m (self-shadow proxy).
-- Under RT_OCC_STATS the shadow rays find the CLOSEST occluder (no accept-first; same visibility).
+- With diagnostic constant 1011 on, shadow rays find the CLOSEST occluder (no accept-first; same visibility).
 - Sun and AO: gi/rt_occ_stats.hlsl, its own pass after the timed RT region (so no rt_shadow/GI variant doubles). Sun:
   the darkening is the real pass's (rtVis g x (1 - r)), the kind from a replica of rt_shadow's ray (same seed, disc
   sample, origin; mismatches counted); not valid with rt_sun_cascade_current=1. AO: the darkening is the real
   1 - giRaw.a, the kinds from replica rays (same seed, directions, origin, gi_rt_radius fade; after the first ray the
   hit-material passes draw other random numbers, so same distribution, not the same rays; gi_far not replicated).
-- Local/box: the every-mode box pass with RT_OCC_STATS (variant flag kOccStats, its own Pipe g_ls_full_box_occ);
+- Local/box: the every-mode box pass with RT_SPEC_OCC_STATS (SpecId 1011, its own Pipe g_ls_full_box_occ);
   ls_box=0 gives no local numbers. Per ray darkening = removed light / the pixel's lit diffuse + specular.
 - Counters: device-local g_occ_buf at set 4 binding 1 (the box statistics set), groupshared reduce, one atomic per
   counter and group, copied into a host ring after the D-LS pass; read 7 frames later (host atomics lint classified).
-- Key off: the ordinary requests are byte-identical (tools/shader_identity.py --baseline); 36 new requests.
+- Migration: set 4 binding 1 is always bound. RT_OCC_STATS is retained as the checker reference and in the
+  standalone sun/AO diagnostic; the full-box production request uses constant 1011 for both values.
+  Key-off equivalence is checked after specialization, freezing and optimization (spec_cascade_check --key occ).
 - Found while wiring it: the box D-LS variants (rt_local_shadows*_box*.hlsl) are not in shader_variant.h
   cascade_entry, so with rt_cascade_casters=1 they trace 0xFF and the F-1/F-2 cascade copy shadows local and box
   lights (rt_visibility g_rt_class 1: its unknown alpha is solid). FIXED 2026-11-02: the five box files are cascade
-  entries (RT_CASCADE_MASKS: trace 0x01). Only new requests (72, box files + RT_CASCADE_MASKS); every existing request
-  byte-identical. Live A/B: ls_box_cascade_old=1 restores the old 0xFF box passes (diag-occ-boxold, shot-boxold-on);
+  entries (constant 1000: trace 0x01). Both mask values share the migrated module. Live A/B: ls_box_cascade_old=1 restores the old 0xFF box passes (diag-occ-boxold, shot-boxold-on);
   the 'cascade' kind under local/box must be > 0 there and 0 in diag-occ-base.
 - Float energy of the character mask per shot: dump_preview_f32=1 (layer/dump.cpp) writes the 5c3fdabc scene colour
   as float32 at the preview grid (~10 MB per trace); tools/live_batches/dialogue_shadows/char_energy.py takes its mean

@@ -20,6 +20,9 @@
 // textures, one for tile caches, the captured UV soup, and two samplers.
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
+#include "perf_submit.h"
+#include <optional>
+#include "../common/submit_batch.h"
 #include "hit_material.h"
 #include "../common/native_hit_capability.h"
 #include "../common/mapped_copy.h"
@@ -64,6 +67,11 @@ DeviceData* g_dd = nullptr;
 bool g_on = false;
 bool g_omm_layout = false;
 bool g_tileset_layout = false;
+// Variant migration S3 (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): set 1 b19 (kNativeSamplers samplers)
+// is in every alpha layout whenever the device has the sampler budget, with g_wrap in every slot while the native
+// tileset is off, so one shader module (RT_NATIVE_TILESET as a constant) fits both. g_tileset_layout stays "the
+// feature is on" (capability, records, coverage); g_tileset_binding is only "b19 exists".
+bool g_tileset_binding = false;
 bool g_tileset_incomplete = false;
 constexpr uint32_t kNativeSamplers=16;
 std::mutex g_native_sampler_mu;
@@ -573,10 +581,11 @@ void alpha_device_created(DeviceData* dd) {
   if (g_dd || !cfg_int("rt", 1)) return;
   g_dd = dd;
   g_tileset_layout=geo_native_tileset_enabled();
-  if(g_tileset_layout){
+  {
     VkPhysicalDeviceProperties props{};dd->inst->GetPhysicalDeviceProperties(dd->physical,&props);
     const uint32_t total=2u+(native_hit::enabled()?native_hit::sampler_slots:0u)+kNativeSamplers;
-    if(props.limits.maxPerStageDescriptorSamplers<total || props.limits.maxDescriptorSetSamplers<total){
+    g_tileset_binding=props.limits.maxPerStageDescriptorSamplers>=total && props.limits.maxDescriptorSetSamplers>=total;
+    if(g_tileset_layout && !g_tileset_binding){
       log("[alpha tileset] rejected native sampler layout: device limit below %u",total);g_tileset_layout=false;geo_native_tileset_disable();
     }
 
@@ -611,7 +620,7 @@ void alpha_device_created(DeviceData* dd) {
   std::vector<VkDescriptorSetLayoutBinding> bindings(b,b+10);
   if(g_omm_layout)bindings.insert(bindings.end(),b+10,b+12);
   if(native_hit::enabled())bindings.insert(bindings.end(),b+12,b+16);
-  if(g_tileset_layout)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+  if(g_tileset_binding)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = uint32_t(bindings.size());
   dci.pBindings = bindings.data();
@@ -619,7 +628,7 @@ void alpha_device_created(DeviceData* dd) {
   if (ok) replay_note_alpha_layout(g_dsl, g_wrap, g_clamp);   // replay packs record this layout's sets
   VkDescriptorPoolSize ps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ((g_omm_layout?7u:6u)+(native_hit::enabled()?2u:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, (kTextures + kCaches+(native_hit::enabled()?native_hit::cache_slots:0u)) * kRing},
-                                {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)+(g_tileset_layout?kNativeSamplers:0u)) * kRing},
+                                {VK_DESCRIPTOR_TYPE_SAMPLER, (2+(native_hit::enabled()?native_hit::sampler_slots:0u)+(g_tileset_binding?kNativeSamplers:0u)) * kRing},
                                 {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,kRing}};
   VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   pci.maxSets = kRing;
@@ -1308,8 +1317,8 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   w[2].descriptorCount = ntex, w[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[2].pImageInfo = tex.data();
   w[3].descriptorCount = ncache, w[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, w[3].pImageInfo = cache.data();
   vk.UpdateDescriptorSets(g_dd->device, 8, w, 0, nullptr);
-  if(g_tileset_layout){
-    if(cfg_hot(CfgHot::rt_stats) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
+  if(g_tileset_binding){   // the native samplers, or g_wrap in every slot with the tileset off
+    if(g_tileset_layout && cfg_hot(CfgHot::rt_stats) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
       for(const auto& record:g_recs)if(record.kind==5)(record.p0[1]==0.0f?complete:unknown)++;
       log("[alpha tileset] records complete %u unknown %u native samplers %zu capture-incomplete %u stride %u",complete,unknown,g_native_samplers.size(),unsigned(g_tileset_incomplete),stride);
     }
@@ -1414,6 +1423,12 @@ void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
 // The set layout is fixed for the device's lifetime; the set is the one of the
 // latest scene build (VK_NULL_HANDLE before the first), from the same scene
 // slot as rt_scene's TLAS (rt_scene_set returns both as one pair).
+static void clone_descriptor_update(uint32_t wc,const VkWriteDescriptorSet* writes,uint32_t cc,const VkCopyDescriptorSet* copies) {
+  SubmitCpuTimer timer(DIAG_ALPHA_DESC_US);
+  diag(DIAG_ALPHA_DESC_CALLS);
+  g_dd->vk.UpdateDescriptorSets(g_dd->device,wc,writes,cc,copies);
+}
+
 bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescriptorSet* set,std::span<const VkDescriptorImageInfo> tables,uint32_t* firstTable) {
   if(!native_hit::enabled() || !g_dd || !g_dsl || !source || !pool || !set)return false;
   uint32_t first=0;
@@ -1425,7 +1440,7 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
   if(!*pool){
     VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,g_omm_layout?9u:8u},
       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches+native_hit::cache_slots},
-      {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots+(g_tileset_layout?kNativeSamplers:0u)},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
+      {VK_DESCRIPTOR_TYPE_SAMPLER,2+native_hit::sampler_slots+(g_tileset_binding?kNativeSamplers:0u)},{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
     VkDescriptorPoolCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};info.maxSets=1;
     info.poolSizeCount=g_omm_layout?4u:3u;info.pPoolSizes=sizes;
     if(vk.CreateDescriptorPool(g_dd->device,&info,nullptr,pool)!=VK_SUCCESS)return false;
@@ -1438,14 +1453,26 @@ bool alpha_clone_hit_set(VkDescriptorSet source,VkDescriptorPool* pool,VkDescrip
   // nonexistent optional OMM bindings, or uninitialized material bindings.
   VkCopyDescriptorSet copies[11]{};uint32_t count=0;
   for(uint32_t binding:{0u,1u,2u,3u,6u,7u,8u,9u,10u,11u,19u}){
-    if(binding==19 && !g_tileset_layout)continue;
+    if(binding==19 && !g_tileset_binding)continue;
     if((binding==10 || binding==11) && !g_omm_layout)continue;
     auto& copy=copies[count++];copy={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
     copy.srcSet=source;copy.dstSet=*set;copy.srcBinding=copy.dstBinding=binding;
     copy.descriptorCount=binding==19?kNativeSamplers:binding==2?kTextures:binding==3?kCaches:1u;
   }
-  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,count,copies);
-  if(!tables.empty()){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);}
+  VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  write.dstSet=*set;write.dstBinding=2;write.dstArrayElement=first;
+  write.descriptorCount=uint32_t(tables.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;write.pImageInfo=tables.data();
+  if(cfg_int("perf_submit_batch",0) && !tables.empty()) {
+    std::vector<VkCopyDescriptorSet> compatible;
+    for(uint32_t i=0;i<count;++i) {
+      if(copies[i].dstBinding==2) submit_batch::copy_except(compatible,copies[i],first,uint32_t(tables.size()));
+      else compatible.push_back(copies[i]);
+    }
+    clone_descriptor_update(1,&write,uint32_t(compatible.size()),compatible.data());
+  } else {
+    clone_descriptor_update(0,nullptr,count,copies);
+    if(!tables.empty()) clone_descriptor_update(1,&write,0,nullptr);
+  }
   if(firstTable)*firstTable=first;return true;
 }
 
@@ -1515,7 +1542,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
       {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
       {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
     VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    if(g_tileset_layout)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
+    if(g_tileset_binding)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
     ci.bindingCount=uint32_t(bindings.size());ci.pBindings=bindings.data();
     if(vk.CreateDescriptorSetLayout(g_dd->device,&ci,nullptr,&g_sun_dsl)!=VK_SUCCESS) return false;
   }
@@ -1583,7 +1610,7 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
      !ensure(s.parameters,s.parameters_memory,s.parameter_bytes,1232)) return false;
   if (!s.pool) {
     VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,13},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2+(g_tileset_layout?kNativeSamplers:0u)},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2+(g_tileset_binding?kNativeSamplers:0u)},
       {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
     VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pi.maxSets=1;pi.poolSizeCount=4;pi.pPoolSizes=sizes;
@@ -1614,13 +1641,17 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
     copies[i].descriptorCount=bindings[i]==2?kTextures:bindings[i]==3?kCaches:1u;
   }
   // Copy first: Vulkan applies descriptor copies AFTER writes in one call.
-  vk.UpdateDescriptorSets(g_dd->device,0,nullptr,6,copies);
-  if(g_tileset_layout){
+  clone_descriptor_update(0,nullptr,6,copies);
+  const bool batch=cfg_int("perf_submit_batch",0)!=0;
+  std::optional<submit_batch::DescriptorWrites> pending;
+  if(batch) pending.emplace();
+  if(g_tileset_binding){
     s.native_samplers=native_samplers;VkDescriptorImageInfo samplers[kNativeSamplers]{};
     for(uint32_t i=0;i<kNativeSamplers;++i)samplers[i].sampler=i && i<=native_samplers.size()?native_samplers[i-1]->handle:g_wrap;
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=19;
     write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.descriptorCount=kNativeSamplers;write.pImageInfo=samplers;
-    vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+    if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
+    else clone_descriptor_update(1,&write,0,nullptr);
   }
   VkDescriptorBufferInfo buffers[9]={{s.stamp,0,kStampStride},{s.records,0,record_bytes},{s.dispatch,0,dispatch.size()*4ull}};
   for(unsigned layer=0;layer<4;++layer) {
@@ -1634,16 +1665,19 @@ bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet
     writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=s.set;writes[i].dstBinding=bindings_out[i];
     writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];
   }
-  vk.UpdateDescriptorSets(g_dd->device,9,writes,0,nullptr);
+  if(batch) pending->writes.insert(pending->writes.end(),writes,writes+9);
+  else clone_descriptor_update(9,writes,0,nullptr);
   auto images=[&](uint32_t binding,uint32_t base,const auto& views) {
     std::vector<VkDescriptorImageInfo> info;
     for(auto [view,layout]:views) info.push_back({VK_NULL_HANDLE,view,layout});
     if(info.empty()) return;
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=binding;
     write.dstArrayElement=base+1;write.descriptorCount=uint32_t(info.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    write.pImageInfo=info.data();vk.UpdateDescriptorSets(g_dd->device,1,&write,0,nullptr);
+    write.pImageInfo=info.data();if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
+    else clone_descriptor_update(1,&write,0,nullptr);
   };
   images(2,g_set_tex[slot],textures);images(3,g_set_cache[slot],caches);
+  if(batch) clone_descriptor_update(uint32_t(pending->writes.size()),pending->writes.data(),0,nullptr);
   VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT;
   barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;

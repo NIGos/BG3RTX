@@ -17,58 +17,73 @@ int main(int argc, char** argv) {
   const std::filesystem::path root = argv[1];
   const bool write = argc >= 3 && std::string(argv[2]) == "--write";
 
-  // Fixed spellings: the ordinary path is untouched, defines keep the old wrapper order.
-  CHECK(request("gi/rt_shadow.hlsl", 0) == "gi/rt_shadow.hlsl");
+  // Fixed spellings: migrated keys share one request; the remaining defines keep their order.
+  CHECK(request("gi/rt_shadow.hlsl", 0) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");  // spec only
   CHECK(request("probe.hlsl", kTileset | kOmm) == "probe.hlsl");
-  CHECK(request("gi/gi_ao_apply.hlsl", kCascade | kHairOrigin | kSunCurrent) == "gi/gi_ao_apply.hlsl");
-  CHECK(request("gi/rt_origin.hlsl", kHairOrigin) == "gi/rt_origin.hlsl");  // Hair origin needs the scalp
-  CHECK(request("gi/rt_shadow.hlsl", kCascade) == "gi/rt_shadow.hlsl?RT_CASCADE_MASKS=1;RT_CASCADE_SUN=1");
+  CHECK(request("gi/gi_ao_apply.hlsl", kCascade | kHairOrigin | kSunCurrent) == "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1");
+  CHECK(request("gi/rt_origin.hlsl", kHairOrigin) == "gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1");  // Hair origin needs the scalp
+  CHECK(request("gi/rt_shadow.hlsl", kCascade) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
   CHECK(request("gi/rt_shadow.hlsl", kSunCurrent | kCascade) ==
-        "gi/rt_shadow.hlsl?RT_SUN_CURRENT=1;RT_CASCADE_SUN=1;RT_CASCADE_MASKS=1;RT_CASCADE_TMIN=0.0;RT_CASCADE_TMIN_REL=0.0");
+        "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SUN_CURRENT=1;RT_CASCADE_SUN=1;RT_CASCADE_MASKS=1;RT_CASCADE_TMIN=0.0;RT_CASCADE_TMIN_REL=0.0");
   CHECK(request("gi/gi_trace_rt.hlsl", kTileset | kHairOrigin | kOmm | kScalp | kCascade) ==
-        "gi/gi_trace_rt.hlsl?RT_NATIVE_TILESET=1;RT_HAIR_PHYSICAL_ORIGIN=1;RT_OMM_SCENE=1;RT_NATIVE_SCALP=1;"
-        "RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1");
+        "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
   CHECK(!cascade_entry("gi/rt_sun_resolve.hlsl") && !cascade_entry("gi/rt_hit_two_bounce.hlsl"));
   // rt_hit_material_instanced: only the hit-material consumers, last but cascade; never the ordinary files.
-  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");
   CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kHitInstanced | kCascade | kTileset) ==
-        "gi/gi_trace_rt_hit_direct.hlsl?RT_NATIVE_TILESET=1;RT_HIT_INSTANCED=1;RT_CASCADE_MASKS=1");
-  CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl");
-  CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl");
+        "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt.hlsl", kHitInstanced) == "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/rt_shadow.hlsl", kHitInstanced) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
   // gi_far: the gi_hit_sun files only, last; never the direct-only or ordinary files.
-  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kGiFar | kCascade) == "gi/gi_trace_rt_hit_sun.hlsl?RT_CASCADE_MASKS=1;RT_GI_FAR=1");
-  CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_GI_FAR=1");
-  CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl");
-  CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl");
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kGiFar | kCascade) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt_sharc_hit_sun_em.hlsl", kGiFar) == "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt_hit_direct.hlsl", kGiFar) == "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt.hlsl", kGiFar) == "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/rt_reflections_hit_shade.hlsl", 0) == request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi));
   // rf_hit_gi: the four rf_hit_shade files only, last; never the ordinary D-RF or the GI files.
   CHECK(request("gi/rt_reflections_hit_shade.hlsl", kRfHitGi | kCascade) ==
-        "gi/rt_reflections_hit_shade.hlsl?RT_CASCADE_MASKS=1;RF_HIT_GI=1");
+        "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1;GI_SPEC_GUARDS=1");
   CHECK(request("gi/rt_reflections_sharc_hit_shade_em.hlsl", kRfHitGi | kHitInstanced) ==
-        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_HIT_INSTANCED=1;RF_HIT_GI=1");
-  CHECK(request("gi/rt_reflections.hlsl", kRfHitGi) == "gi/rt_reflections.hlsl");
-  CHECK(request("gi/rt_hit_material.hlsl", kHitWindRgb) == "gi/rt_hit_material.hlsl");   // needs the instanced key
-  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1");
-  CHECK(request("gi/rt_shadow.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_shadow.hlsl");
-  CHECK(request("gi/rt_hit_material.hlsl", kHitIpGrass) == "gi/rt_hit_material.hlsl");   // needs the instanced key
+        "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/rt_reflections.hlsl", kRfHitGi) == "gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");   // needs the instanced key
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/rt_shadow.hlsl", kHitInstanced | kHitWindRgb) == request("gi/rt_shadow.hlsl", 0));
+  CHECK(request("gi/rt_hit_material.hlsl", kHitIpGrass) == "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");   // needs the instanced key
   CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitWindRgb | kHitIpGrass) ==
-        "gi/rt_hit_material.hlsl?RT_HIT_INSTANCED=1;RT_HIT_WIND_RGB=1;RT_HIT_IP_GRASS=1");
-  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl");
-  // The box passes trace 0x01 under rt_cascade_casters like the other D-LS passes (the cascade copy is the sun's only).
+        "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/gi_trace_rt_hit_sun.hlsl", kRfHitGi) == "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1;GI_SPEC_GUARDS=1");
+  // rt_spec_cascade, the only cascade path: one request for both cascade values; the constant carries kCascade.
+  CHECK(request("gi/gi_trace_rt.hlsl", 0) == "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_ao_apply.hlsl", 0) == "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1");   // not a cascade pass: unchanged
+  CHECK(request("gi/gi_trace_rt.hlsl", kSpecCascade | kCascade) == "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;GI_SPEC_GUARDS=1");
+  CHECK(request("gi/gi_trace_rt.hlsl", kSpecCascade) == request("gi/gi_trace_rt.hlsl", kSpecCascade | kCascade));
+  CHECK(request("gi/rt_shadow.hlsl", kSpecCascade | kCascade) == "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1");
+  CHECK(request("gi/rt_shadow.hlsl", kSpecCascade | kCascade | kSunCurrent).find("RT_SPEC_CASCADE") == std::string::npos);
+  CHECK(request("gi/gi_ao_apply.hlsl", kSpecCascade) == "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1");   // not a cascade pass
+  CHECK(spec_cascade_value("gi/gi_trace_rt.hlsl", kCascade) == 1 && spec_cascade_value("gi/gi_trace_rt.hlsl", 0) == 0);
+  CHECK(spec_cascade_value("gi/gi_ao_apply.hlsl", kCascade) == 0);
+  // Main's generated two-sided pool path retains its define and configuration restrictions.
+  const auto pool = kHitInstanced | kHitWindRgb | kHitPool2s;
+  CHECK(request("gi/rt_hit_material.hlsl", pool) ==
+        "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_HIT_POOL_2S=1;RT_SPEC_CASCADE=1");
+  CHECK(request("gi/rt_hit_material.hlsl", kHitInstanced | kHitPool2s) == request("gi/rt_hit_material.hlsl", kHitInstanced));
+  for (unsigned excluded : {kHitIpGrass, kOmm, kTileset, kScalp})
+    CHECK(request("gi/rt_hit_material.hlsl", pool | excluded) == request("gi/rt_hit_material.hlsl", (pool & ~kHitPool2s) | excluded));
+  CHECK(request("gi/rt_shadow.hlsl", pool) == request("gi/rt_shadow.hlsl", 0));
+
+  // Box cascade coverage and diagnostic values share their migrated modules.
   for (const char* f : {"gi/rt_local_shadows_box.hlsl", "gi/rt_local_shadows_full_box.hlsl", "gi/rt_local_shadows_box_k.hlsl",
-                        "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl"}) {
+                        "gi/rt_local_shadows_full_box_k.hlsl", "gi/rt_local_shadows_native_full_box.hlsl", "gi/rt_occ_stats.hlsl"}) {
     CHECK(cascade_entry(f));
-    CHECK(request(f, kCascade) == std::string(f) + "?RT_CASCADE_MASKS=1");
-    CHECK(request(f, 0) == f);
+    CHECK(request(f, 0) == request(f, kCascade));
+    CHECK(spec_cascade_value(f, kCascade) == 1);
   }
-  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kCascade | kOccStats) ==
-        "gi/rt_local_shadows_full_box.hlsl?RT_CASCADE_MASKS=1;RT_OCC_STATS=1");
-  // rt_occ_stats: the every-mode box pass only, last; never the ordinary or other D-LS files.
-  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats) == "gi/rt_local_shadows_full_box.hlsl?RT_OCC_STATS=1");
-  CHECK(request("gi/rt_local_shadows_full_box.hlsl", kOccStats | kScalp) ==
-        "gi/rt_local_shadows_full_box.hlsl?RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_OCC_STATS=1");
-  CHECK(request("gi/rt_local_shadows_box.hlsl", kOccStats) == "gi/rt_local_shadows_box.hlsl");
-  CHECK(request("gi/rt_shadow.hlsl", kOccStats) == "gi/rt_shadow.hlsl");
-  CHECK(request("gi/rt_occ_stats.hlsl", kCascade) == "gi/rt_occ_stats.hlsl?RT_CASCADE_MASKS=1");
+  CHECK(kOccStats != kHitPool2s);
+  CHECK(kSpecIdOccStats == 1011);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0).find("RT_SPEC_OCC_STATS=1") != std::string::npos);
+  CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0) == request("gi/rt_local_shadows_full_box.hlsl", kOccStats));
+  CHECK(request("gi/rt_shadow.hlsl", kOccStats) == request("gi/rt_shadow.hlsl", 0));
 
   std::set<std::string> want;
   size_t bases = 0;
@@ -77,8 +92,9 @@ int main(int argc, char** argv) {
     const std::string file = "gi/" + e.path().filename().string();
     ++bases;
     const unsigned a = allowed(file.c_str());
-    for (unsigned m = 0; m < 8192; ++m)
-      if ((m & a) == m && m) {
+    if (request(file.c_str(), 0) != file) want.insert(request(file.c_str(), 0));   // e.g. GI_SPEC_GUARDS on every request
+    for (unsigned m = a; m; m = (m - 1) & a)   // every non-empty subset of the allowed flags
+      {
         const std::string r = request(file.c_str(), m);
         if (r != file) want.insert(r);
       }
@@ -95,15 +111,22 @@ int main(int argc, char** argv) {
   CHECK(water_request("rt/water_reflect.hlsl", true) == "rt/water_reflect.hlsl?RT_CASCADE_MASKS=1");
   CHECK(water_request("rt/water_compose.hlsl?WATER_SHADOWS=1", true) ==
         "rt/water_compose.hlsl?WATER_SHADOWS=1;RT_CASCADE_MASKS=1;RT_CASCADE_SUN_HIT=1");
-  // rt_water_rf_edge: every compose request the core makes has its WATER_RF_EDGE twin in kFixedRequests.
-  CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl");
-  CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_RF_EDGE=1");
+  // rt_water_rf_edge: both values use the same module, including every record layout.
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", false) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
+  CHECK(water_rf_edge_request("rt/water_compose.hlsl", true) == "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1");
   for (const char* r : kFixedRequests) {
-    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_RF_EDGE")) continue;
+    if (std::strncmp(r, "rt/water_compose.hlsl", 21) != 0 || std::strstr(r, "WATER_GLINT_AA"))
+      continue;
     const std::string e = water_rf_edge_request(r, true);
     bool listed = false;
     for (const char* q : kFixedRequests) listed = listed || e == q;
     CHECK(listed);
+    // rt_water_glint_aa: the sun forms have their WATER_GLINT_AA twin (the plain form has no sun records).
+    const std::string g = water_glint_request(r, true);
+    bool glisted = g == r, plisted = g == r;
+    for (const char* q : kFixedRequests) glisted = glisted || g == q, plisted = plisted || water_glint_prepass(g) == q;
+    CHECK(glisted);
+    CHECK(plisted);
   }
   for (const char* b : kWaterBases) {
     CHECK(std::filesystem::exists(root / "shaders" / b));
@@ -112,8 +135,7 @@ int main(int argc, char** argv) {
   const std::filesystem::path manifest = root / "shaders" / "variants.txt";
   if (write) {
     std::ofstream o(manifest, std::ios::binary);
-    o << "# Generated by tests/shader_variant_test.cpp <root> --write: every GI variant request the core can\n"
-         "# make (common/shader_variant.h). tools/compile_shaders.py compiles each one.\n";
+    o << "# Generated by tests/shader_variant_test.cpp <root> --write: every GI variant request the core can\n# make (common/shader_variant.h). tools/compile_shaders.py compiles each one.\n";
     for (const auto& r : want) o << r << "\n";
     std::printf("wrote %zu variants of %zu bases\n", want.size(), bases);
     return 0;

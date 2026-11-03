@@ -50,9 +50,10 @@ void watchdog_start() {
         uint64_t d[DIAG_COUNT];
         for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
         log("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
-            "submits %llu | draws %llu",
+            "submits %llu | draws %llu | submit CPU %.3f ms | descriptor tracker CPU %.3f ms | alpha descriptors %.3f ms / %llu calls | auxiliary signals coalesced %llu",
             d[DIAG_PRESENT], d[DIAG_DISPLAYED], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
-            d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW]);
+            d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW], d[DIAG_SUBMIT_US]/1000.0,
+            d[DIAG_DESCRIPTOR_US]/1000.0, d[DIAG_ALPHA_DESC_US]/1000.0, d[DIAG_ALPHA_DESC_CALLS], d[DIAG_AUX_COALESCED]);
       }
     }).detach();
   });

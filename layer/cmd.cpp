@@ -12,8 +12,8 @@ namespace bg3 {
 // cpu_timing=1: CPU time our geometry-capture hooks add while recording (P3 base frame rate).
 // Slots: pass begin, pre-draw, the driver's draw call itself on captured draws, post-draw, pass end.
 std::atomic<bool> g_cpu_timing{false};
-std::atomic<uint64_t> g_cpu_ticks[6], g_cpu_draws{0};
-static const char* const kCpuSlot[6] = {"pass before/begun", "pre-draw", "driver draw (XFB)", "post-draw", "pass ending", "pass after"};
+std::atomic<uint64_t> g_cpu_ticks[7], g_cpu_draws{0};
+static const char* const kCpuSlot[7] = {"pass before/begun", "pre-draw", "driver draw (XFB)", "post-draw", "pass ending", "pass after", "draw bookkeeping"};
 struct CpuTimer {
   int slot; LARGE_INTEGER t0;
   explicit CpuTimer(int s) : slot(s) { if (g_cpu_timing.load(std::memory_order_relaxed)) QueryPerformanceCounter(&t0); else slot = -1; }
@@ -26,16 +26,22 @@ static void count_cpu_draw() {
 void cmd_cpu_report(uint64_t frames) {
   g_cpu_timing.store(cfg_int("cpu_timing", 0) != 0, std::memory_order_relaxed);
   static uint64_t last = 0;
+  static int mode = -1;
+  const int current = cfg_hot(CfgHot::perf_hook_state);
+  if (!g_cpu_timing.load() || mode != current || !last) {
+    for (auto& ticks : g_cpu_ticks) ticks.exchange(0);
+    g_cpu_draws.exchange(0); last = frames; mode = current; return;
+  }
   if (!g_cpu_timing.load() || frames - last < 300) return;
   const uint64_t n = frames - last; last = frames;
   LARGE_INTEGER f; QueryPerformanceFrequency(&f);
   std::string o; double total = 0; char b[96];
-  for (int i = 0; i < 6; ++i) {
+  for (int i = 0; i < 7; ++i) {
     const double ms = double(g_cpu_ticks[i].exchange(0)) * 1000.0 / double(f.QuadPart) / double(n);
     total += ms; snprintf(b, sizeof b, "%s%s %.3f", i ? ", " : "", kCpuSlot[i], ms); o += b;
   }
-  log("[cpu] capture hooks over %llu frames, ms/frame (all threads): total %.3f; %s; captured draws %.1f/frame",
-      (unsigned long long)n, total, o.c_str(), double(g_cpu_draws.exchange(0)) / double(n));
+  log("[cpu] capture hooks over %llu frames, ms/frame (all threads): total %.3f; %s; captured draws %.1f/frame; perf_hook_state %d",
+      (unsigned long long)n, total, o.c_str(), double(g_cpu_draws.exchange(0)) / double(n), current);
 }
 #else
 // Diagnostics compiled out: no timers, cpu_timing has no effect on these hooks.
@@ -229,9 +235,10 @@ static void end_pass(VkCommandBuffer cmd) {
   pan_pass_end(cmd, s);
 }
 
-static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra = nullptr) {
+static void note_draw(VkCommandBuffer cmd, const char* kind, const char* extra = nullptr, CmdState* resolved = nullptr) {
+  CpuTimer timer(6);
   diag(DIAG_DRAW);
-  CmdState* s = cmd_state(cmd);
+  CmdState* s = resolved ? resolved : cmd_state(cmd);
   if (!s) return;
   sun_note_native_draw(cmd,s);
   assetdb_note_draw(s->vs, s->fs);
@@ -258,8 +265,13 @@ static void after_dispatch(VkCommandBuffer cmd, CmdState* s, bool indirect, uint
 // applied) or push descriptors.
 bool query_binding(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
                    Bg3Binding* out) {
+  return query_binding_resolved(cmd, bp, set, binding, element, out, nullptr);
+}
+
+bool query_binding_resolved(VkCommandBuffer cmd, VkPipelineBindPoint bp, uint32_t set, uint32_t binding, uint32_t element,
+                            Bg3Binding* out, const CmdState* resolved) {
   if (bp != VK_PIPELINE_BIND_POINT_GRAPHICS && bp != VK_PIPELINE_BIND_POINT_COMPUTE) return false;
-  CmdState* s = cmd_state(cmd);
+  CmdState* s = resolved ? const_cast<CmdState*>(resolved) : cmd_state(cmd);
   if (!s || set >= 8) return false;
   int b = bp_index(bp);
   DescEntry e{};
@@ -677,7 +689,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer cmd, uint32_t vc, uint
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{0, vc, ic, fv, 0, fi}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDraw(cmd, vc, ic, fv, fi); } else vk(cmd).CmdDraw(cmd, vc, ic, fv, fi);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw");
+  note_draw(cmd, "draw", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n, uint32_t ic, uint32_t fi, int32_t vo,
@@ -687,7 +699,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin); } else vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw");
+  note_draw(cmd, "draw", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 // ---- vertex/index buffer bindings and buffer writes (Track D BVH split) ----
@@ -768,7 +780,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer 
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{2, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndirect(cmd, b, o, n, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw_indirect");
+  note_draw(cmd, "draw_indirect", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, uint32_t n,
@@ -778,7 +790,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, Vk
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{3, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st); } else vk(cmd).CmdDrawIndexedIndirect(cmd, b, o, n, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw_indirect");
+  note_draw(cmd, "draw_indirect", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o, VkBuffer cb,
@@ -788,7 +800,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirectCount(VkCommandBuffer cmd, VkBu
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{4, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw_indirect");
+  note_draw(cmd, "draw_indirect", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cmd, VkBuffer b, VkDeviceSize o,
@@ -798,7 +810,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirectCount(VkCommandBuffer cm
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{5, 0, 0, 0, 0, 0}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st); } else vk(cmd).CmdDrawIndexedIndirectCount(cmd, b, o, cb, co, mx, st);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  note_draw(cmd, "draw_indirect");
+  note_draw(cmd, "draw_indirect", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer cmd, uint32_t x, uint32_t y, uint32_t z) {

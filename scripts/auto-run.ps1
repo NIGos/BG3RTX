@@ -615,6 +615,7 @@ $panPlan = if ($MovePlan) { @(Get-Content -LiteralPath $MovePlan -Raw | ConvertF
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
 $phaseTraceIndex=0
+$wheelSent = 0; $wheelNext = [datetime]::MinValue   # step.wheel: mouse-wheel notches posted at the phase start
 $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
 $rotationInput = @{stage="released";at=[double]::NegativeInfinity;segment=-1;x=0;y=0}
@@ -685,6 +686,7 @@ while ((Get-Date) -lt $deadline) {
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
         $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0
+        $wheelSent = 0; $wheelNext = [datetime]::MinValue
       }
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
@@ -720,6 +722,14 @@ while ((Get-Date) -lt $deadline) {
       } elseif (-not $step.shift_hold -and $shiftHeld) { Send-ShiftKey $false; $shiftHeld = $false }
       $h = Get-GameWindow; $rect = New-Object BG3RTX.Win2+RECT
       if ($h -ne [IntPtr]::Zero) { [void][BG3RTX.Win2]::GetClientRect($h,[ref]$rect) }
+      # step.wheel: N mouse-wheel notches (+ = wheel up, the game zooms in and lowers the camera; - = out), one every
+      # step.wheel_ms (default 150) from the phase start, posted to the owned HWND like every other plan input.
+      if ($step.wheel -and $wheelSent -lt [Math]::Abs([int]$step.wheel) -and (Get-Date) -ge $wheelNext) {
+        $delta = if ([int]$step.wheel -gt 0) { 120 } else { -120 }
+        Send-PlanMouse 0x020A ((($delta -band 0xffff) -shl 16)) ([int](($rect.Right-$rect.Left)/2)) ([int](($rect.Bottom-$rect.Top)/2))
+        $wheelSent++; $wheelNext = (Get-Date).AddMilliseconds($(if ($step.wheel_ms) { [int]$step.wheel_ms } else { 150 }))
+        if ($wheelSent -eq [Math]::Abs([int]$step.wheel)) { Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [wheel-input] phase=$panIndex notches=$($step.wheel)" }
+      }
       # Explicit hover targets stay in the owned HWND; never move the desktop pointer.
       if ($null -ne $step.hover_x -and $null -ne $step.hover_y -and (Get-Date) -ge $planHoverNext) {
         Send-PlanMouse 0x0200 0 ([int]($step.hover_x*($rect.Right-$rect.Left))) ([int]($step.hover_y*($rect.Bottom-$rect.Top)))

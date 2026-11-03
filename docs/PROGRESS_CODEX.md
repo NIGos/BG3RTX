@@ -1,11 +1,20 @@
-# BG3RTX progress - 2026-11-02 morning (main fe8f75d, ABI 25)
+# BG3RTX progress - 2026-11-02 evening (ABI 26)
 
-One current summary per area, no history. Everything older, verbatim: [archive/PROGRESS_20261102_morning.md](archive/PROGRESS_20261102_morning.md)
-(the 19 folded fragments of 11-01 / 11-02 and the summary before this rewrite), [archive/PROGRESS_20261101_evening.md](archive/PROGRESS_20261101_evening.md),
-[archive/PROGRESS_20261101.md](archive/PROGRESS_20261101.md), [archive/PROGRESS_CODEX_2026-11-01.md](archive/PROGRESS_CODEX_2026-11-01.md),
-[archive/PROGRESS_CODEX_2026-10-31.md](archive/PROGRESS_CODEX_2026-10-31.md).
-Branches write `docs/progress/<branch>.md`; `py -3 scripts/fold_progress.py` folds them here. Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md).
-Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
+Current summaries below. Full folded text, verbatim: [evening archive](archive/PROGRESS_20261102_evening.md).
+Earlier history: [morning archive](archive/PROGRESS_20261102_morning.md), [11-01 evening](archive/PROGRESS_20261101_evening.md),
+[11-01](archive/PROGRESS_20261101.md), [11-01 Codex](archive/PROGRESS_CODEX_2026-11-01.md), [10-31 Codex](archive/PROGRESS_CODEX_2026-10-31.md).
+Branches write `docs/progress/<branch>.md`; fold only after verifying ancestry against main.
+Resume: [HANDOFF_SESSION.md](HANDOFF_SESSION.md). Stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
+
+## Report 2026-11-02 19:30 (main 7929040, ABI 26) - consolidation paused, PC freed for the user
+- Merged: stream caps + source trim (-0.4 GB VRAM), NaN GI history fix, OMM option B + VT alpha masks (game-wide catalogue 1,677 materials, generated on the user's PC), recipe rows from the asset DB, water RR/FG motion vectors, preprocessed-text shader cache (header-only edit: 2892 compiles to 0, 35 s), AGENTS.md compile rules. All new keys off.
+- Rejected / stays off: IP grass (+1.9 ms, +1.5 GB, +3 points share), generated recipe rows (+2.3 points camp), every water flicker key. rf_hit_gi off (hit AO matches the screen offline; gap is in instanced hits, needs a pack with instanced rows).
+- Water flicker at the port: closed, it is the game's own water (wf3-wf7: our compose, RR, sun-shadow ray, glints and FG all excluded; with RT the water is calmer, 0.54 vs 0.77-0.86).
+- Dialogue shadows: RT AO darkens characters most (AO off +18..42%); at the port opaque hair cards add to it (native hair +27%). Hair cards are not alpha-tested in RT at all (no CHAR_Hair shader in alpha_fs.txt).
+- OMM: live upper bound camp ~5.7-6.3 ms (forced opaque). Masks cover ~97% of camp alpha candidates. Dynamic micromap bake built (rt_omm_dyn, worktree-agent-a53f0b584fa39317b), not yet run: om4 waits.
+- In progress (user rule: finish the build improvement before more big compiles): spec-constant migration on `variant-migration` (G guards + S2a done; 2986 requests on main to ~980; target ~100-180). Then one merge-green, live scc1, then rebase and run: occ diagnostic + dialogue batch, native hair (async compile, water hair) + hair_qual, om4, m4_generated rerun.
+- Try in game: S8 port courtyard pool is darker with RT (our sun shadow removes glints in shade): say if you prefer a softer water shadow edge. Native hair at the port dialogue should brighten characters (first enable still compiles until the hair branch lands).
+- Questions: see below (ls_box=2 visual check, GUI_AUDIT_20261102 five yes/no, project licence, NVIDIA notification).
 
 ## Report 2026-11-02 04:10 (main fe8f75d)
 - Done: stage 1 live (smoke_ultra valid with every Ultra key; scene wait 0 timeouts in gated windows; water 120/120 composed; shader cache 2nd launch 44 read 0 compiled; FG letterbox 2560x1440 in 3840x1600 swapchain FG 2.00 -> fg_letterbox automatic). Stage 2 GUI: Experimental 28 -> 5 entries, levels for water/materials.
@@ -21,6 +30,11 @@ Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
 ## User questions and decisions
 
 - Open: **ls_box=2 in Ultra?** (question above). Until you answer, Box light shadows stay Off in every preset.
+- Open: **GUI_AUDIT_20261102** five yes/no decisions; **project licence**; **NVIDIA notification** (Streamline/NGX).
+- Open (look): water sun-shadow edge: soften (more rays / temporal visibility) or keep game glint in shade?
+- Decided 11-02: OMM path delegated (option B); assetdb and VT masks generated on the user's PC, not shipped;
+  gi_reproj guards live approved (now as spec constants); dropped Codex refs may be deleted; packaging paused;
+  no compile time on work a planned build improvement makes unnecessary.
 - Open (not blocking): **`rt_hit_emission` 1 or 2** (1 = hidden hits only, 2 = also screen hits). Ultra uses 1;
   2 is developer only.
 - Decided: **`rf_hit_shade` stays Experimental until its bias is within the game's own spread** (tier (a)
@@ -31,119 +45,82 @@ Goal and stage order: [GOAL_NEXT.md](GOAL_NEXT.md).
   GPU info, crash dump) with a save the user picks, copied read-only; it never reads saves on its own.
 - Decided: disk: keep what a test or comparison still reads; delete superseded packs and analysed raw dumps.
 
-## Ultra preset now (common/settings.h kKnobs, presets {Low, Medium, High, Ultra})
+## Ultra preset and GUI (stages 1-3 done)
 
-- RT water "+ Refraction" (all 7 water keys; restart to raise). Water chain 0.53-0.67 ms, up to 520 MB records.
-- Hidden-surface shading "+ Bounce" (rt_hit_material, _instanced, _wind_rgb, gi_hit_direct, gi_hit_sun).
-- Emission at ray hits "Hidden hits" (rt_hit_emission=1, rt_emissive=1): +0.08 ms GI trace (m4p5 021511).
-- Far-field sun bounce 6 m (gi_far=1, gi_far_m=6): +3.2 ms S8, +3.7 ms GI trace camp.
-- Not in Ultra: Box light shadows (question), + Reflections (rf_hit_shade), Native coverage, hair origins, OMM, cutout spill.
-- smoke_ultra with everything above: valid in every window, median frame 16.65 ms (13.75 before gi_far and emission).
-- Automatic (default 1, no GUI entry, keys kept for A/B): rt_hit_material_recycle, _capture_unlocked, _lean_hooks,
-  rt_scene_wait, fg_letterbox, rt_hit_material_pool_alpha.
+- Ultra: RT water "+ Refraction", hidden-surface shading "+ Bounce", emission "Hidden hits", far-field bounce 6 m.
+- Costs: water chain 0.53-0.67 ms; hit emission +0.08 ms; gi_far +3.2 ms S8 / +3.7 ms camp GI trace.
+- smoke_ultra: every-window gates pass, water 120/120 composed, scene wait 0 timeouts; median frame 16.65 ms.
+- Automatic: hit-material recycle, unlocked capture, lean hooks, scene wait, FG letterbox and pool alpha rows.
+- GUI: Experimental 28 -> 5 entries; water, shading, emission and far-field use levels. Old user INIs migrate.
+- Box shadows, + Reflections, native coverage, hair origins, OMM and cutout spill remain outside Ultra.
 
-## Stage 1: live check of the bugfix round (done)
+## Hit-material coverage and memory (stage 4)
 
-- smoke_ultra (su1, S8): every-window gates ok; capacity 0 ([geo] drops, cascade buffer full, mesh pool full, guard 0);
-  scene wait 0 timeouts in every plan window. Traced frames wait up to 4x rt_scene_wait_ms (48 ms).
-- Scene wait with hit materials (sw3 22:13): lean_hooks 1 gave 0 timeouts in every pan and rotation (0: 1-7 per
-  120 frames); hit-material hooks ~2 ms instead of 5-6. Remaining mutex waits 0.6-0.7 ms/frame (leaf `pending_mutex`).
-- Water stability: 120/120 composed, "[water] compose stability" uncomposed 0, non-finite terms 0 (fail-closed compose).
-- Shader cache (`%LOCALAPPDATA%\BG3RTX\shader_cache`, `BG3RTX_SHADER_CACHE=none` disables): second launch 44 read,
-  0 compiled; background prefetch of the last 5 sessions' requests. Log `[shaders] cache: N hits, M compiled ...`,
-  `[ab] toggle cost: longest gap between presents X ms`.
-- FG letterbox: game 2560x1440 in a 3840x1600 swapchain, FG displayed/rendered 2.00 -> `fg_letterbox` default 1
-  (a no-op when the sizes are equal). Log `[sl] game output ... backbuffer subrect`.
+- Traced frames now retain hit-material capture. Earlier traced energies measured these features off.
+- Pool alpha rows are automatic: S6 qualified 14.8% -> 52.1%, energy +1.06% / -0.38%, GI trace +0.46 ms.
+- Wind RGB S8: bit-exact, rejected 0%; qualified 45.0% -> 63.5% with all three instanced families;
+  energy -0.00% (band 1.30%), trace +0.67 ms. Kept in Ultra.
+- Mask rows: S8 +0.65 points qualified, energy +0.04%, trace +0.006 ms. Inn re-gated valid: +12.1 points
+  (above predicted 0.5-6), energy -0.80% (band 1.20%), trace +0.92 ms. No promotion recorded.
+- Stream caps follow capture size: Ultra source 384 MB, deferred 13 x 32 MB, query basis 768 MB; allocated by use.
+- Retired source copies return to the pool; consolidation report records about 0.4 GB saved.
+- IP grass stays off: +3 points qualified, energy +0.19% (band 2.19%), +1.9 ms and about +1.5 GB after trim.
+- Generated recipe rows stay off (+2.3 points camp); bush pairing / two-sided rerun pending in the unmerged lane.
+- Inn capture split now follows alpha/opaque demand when reserves do not fit: 541 / 483 MB in the failing case.
+- Missing recipes: animated lava flowmap, Tileset vertex COLOR, HeightGradient world height; see PLAN_M4_REFLECTIONS_GI.md.
 
-## Stage 2: GUI (done)
+## Reflection shading and GI history
 
-- Experimental 28 -> 5 entries: Native coverage, Physical hair ray origins, Opacity micromaps, Preserve cutout
-  capture, and the levels above Ultra's. RT water, Hidden-surface shading, Emission, Far-field are level knobs in Advanced.
-- Developer only (dev=1): lighting reference, exact-k (`ls_k`), current cascade sun, `rt_hit_emission=2`.
-- Old user inis migrate (`kKnobAliases`, `Choice::mark`; settings_test `test_user_ini_migration`, fixture
-  tests/fixtures/settings/user_ini_20261101.ini). settings_test 934 checks pass.
+- rf_hit_shade stays Experimental: bias above the game's spread, +1.4-1.8 ms. rf_hit_gi remains off.
+- Offline S6 light visibility did not change with alpha footprint x1/x16/x256 (55.8% lit); no visibility fix justified.
+- Reflection replay is unavailable. Prepared rf_hit_gi_ab measures S6/S8 ratios, energy and cost in one run per scene.
+- GI history NaN/Inf fix selects the fresh sample directly; non-finite reprojection is rejected before integer conversion.
+- NGX motion-vector scales update only when both are finite. Finite inputs retain the same behavior; layer needs restart.
+- Motion at the depth sample and off-screen previous-radiance rejection were not recovered; they need gated A/B work.
 
-## Stage 3: M5 water (done, in Ultra)
+## Water and dialogue shadows
 
-- Plan: [PLAN_M5_WATER.md](PLAN_M5_WATER.md). m5_promotion passed at S8, Flymm, camp (energy gate fixed for the
-  double-counted sun term: S8 shot-on -10.78% vs -11.21%, tolerance 2.2%).
-- Costs: reflections 0.113 ms, compose 0.098 ms, refraction 0.24 ms (69.6% composed, energy +0.07%), ls shadows 0.18 ms.
-- Flicker fix: compose keeps the lighting's own scene pair (common/water_compose.h pick_scene) instead of refusing.
-- Open: M5.5 steps 2-4 only if measurable; debris families not mapped.
+- Water flicker attribution is closed by the top report. Every experimental water flicker key stays off.
+- rt_water_rr_hitdist was null in the corrected same-direction test; rt_water_rf_edge worsened water flicker by 42%.
+- wf3 VALID: compose off 3.53% transient rate, between OFF repeats 3.38% / 3.61%; compose cost 0.41 ms, 0 when off.
+- Water energy uses the pre-water scene plus the in-frame compose delta; the earlier dump preceded compose.
+- Dialogue AO and opaque hair findings are in the top report. Native hair async compilation and water variants await their lane.
+- In game: S8 pool columns reflect and the bed shifts with the view; S3 pond has tree shadows. Compare via Ctrl+Shift+F9.
 
-## Stage 4: M4 hidden-surface shading (in progress)
+## Local lights
 
-- Plan: [PLAN_M4_REFLECTIONS_GI.md](PLAN_M4_REFLECTIONS_GI.md). Bundle "+ Bounce" in Ultra (m4_promotion without rf_hit_shade).
-- Trace fix (385efd1, layer): traced frames now keep the hit-material capture; before, every traced energy of
-  gi_hit_* / gi_far / rf_hit_shade / hit emission measured the key off. All quoted energies are after the fix.
-- S6 diagnostic: GI hit shading adds light (+1.6% pack invariant), no darkening. The earlier S6 darkening was the
-  animated lava (54.5% of luminance) and shots right after a DXC compile.
-- `rt_hit_material_pool_alpha` (default 1, automatic with rt_hit_material): rows for alpha-tested pool meshes.
-  m4s6 035213: S6 qualified 14.8% -> 52.1% (predicted +23 points), energy +1.06% / -0.38% (predicted +0.57%, band 2.84%), +0.46 ms GI trace.
-- `rt_hit_material_mask` (off, ini only): Base_MSK_VT rows. Live `m4_hit_mask` (S8 + inn) READY_FOR_LIVE, predicted S8 +1.1 points.
-- `rf_hit_shade` (+ Reflections, Experimental): bias above the spread, +1.4 to +1.8 ms. `rf_hit_gi` adds the GI term
-  and the game's BRDF at hits (hd_game_scatter, box_light_test section 8). Expected S8 0.925 -> 1.0-1.03,
-  S6 1.090 -> 1.12-1.22; the remaining S6 excess points at visibility (lit 71% of rf light rays vs 56% in the GI).
-- Coverage blockers (tools/hit_material_blockers.py): S6 lava discs FLUID_Lava_Plane_Flowmap (46.2% pool without a
-  row, animated flowmap: a new recipe); camp soup alpha foliage IP_Wind_GrassFlowers (row reason 60%); S8 Tileset needs
-  vertex COLOR in the pool basis, HeightGradient needs world height. Not started.
-- Check in game: Ultra, S3 camp: bounce never darker; S6 lava light in reflections and bounce.
+- ls_box=2 stays off pending the user's S6 visual check. S6/S7 cost +0.32 / +0.20 ms; energy within each repeat band.
+- S6: 5.45% of lit luminance removed, 18.0% of 369M rays occluded. Look at the lower-right walkway and central pillar.
+- ls_k stays off. em_forge sliced check max 0.026 ms (<1 ms); a rerun would supply a formal receipt only.
 
-## Local lights (D-LS)
+## Far field, SHaRC and ray count (stage 5)
 
-- `ls_box=2` (Box light shadows "All", off in every preset): shadows the 3,329 unshadowed box lights.
-  Live bx1 S6 / bx2 S7: cost +0.32 / +0.20 ms (ls pass), energy -0.54 / -1.35% (S6 band 2.00%), +0.10 / -0.13% (S7).
-  S6 removes 5.45% of the lit luminance (18.0% of 369M rays occluded). Visual check: the question above.
-- `ls_k`: off (user decision). D-EM projected check `rt_em_check_slices=16`: em_forge check-sliced max 0.026 ms per run
-  (< 1 ms: pass from the log; a formal rerun only for a valid receipt).
+- No global ambient correction: native/PT ratios S8 1.44, camp 0.84, inn 0.78 are inconsistent.
+- gi_far 6 m stays in Ultra: S8 -2.01% vs predicted -2.0%; camp -2.42%. gi_debug=2 saturates; do not use for energy.
+- SHaRC sh1 failed: energy -0.86% vs predicted +1.5%; 23.8% found, 10.1% occluded-cell hits, about +0.75 ms total.
+- SHaRC stays off: cache radiance undercuts qualified hidden hits. Offline single-frame packs lack its history.
+- One GI ray: energy +0.11% (band 1.47%), trace 4.32 -> 2.02 ms. Flicker comparison INVALID: OFF/OFF null failed.
+- sh2 rerun prepared with six traces per state. Keep two rays in Ultra until the null and excess-noise gates pass.
 
-## M6 PT reference and far field
+## OMM and game data
 
-- Ambient ratio E_native x AO / (k x PT far + PT env): S8 1.44, camp 0.84 (k 0.75), inn 0.78 (k 0.25). Not
-  consistent: no global correction. S8 is the outlier: next question is what S8 has that the others lack.
-- `gi_far` 6 m in Ultra: gf2 S8 031330 -2.01% vs committed -2.0% (band 1.32%), view vis ON/OFF 0.9471 (predicted
-  0.947); camp 033251 -2.42% (band 2.29%). The earlier -0.1% gap was the trace bug above.
-- Packs kept: replay-20261102-013545-2 (camp), replay-20261102-013914-3 (inn), S8 142819-1. Next: SHaRC (stage 5).
-- `gi_debug=2` (view bounce) is not usable for energy: R11G11B10 saturates (max R 65024).
+- VT masks: 65 masks / 79.2 MB added for camp; 99.4% VT triangles, about 97% shadow / 98% visibility candidates covered.
+- Offline alpha agreement 99.05%; two sub-tile textures (13,092 triangles) retain the page cache.
+- va1 VALID: masks alone neutral, energy +0.24% (band 1.95%), unchanged GPU cost; coarser-page share did not fall.
+- Catalogue: 1,677 materials, 125 templates, 1,174 textures; 1.3-1.7 GB generated on the user's PC, not shipped.
+- rt_vt_alpha_miss_log ranks missing masks. First-install design: P4_OMM.md 11.2h.
+- OMM stays off. Guard checks moved out of per-ray host atomics; dynamic bake om4 still pending, as reported above.
+- GAME_DATA_AUDIT.md ranks exact-data gaps: masks, generated rows, caster roofs, vertex COLOR and class 4 transmission.
 
-## Release check (stage 6 input)
+## Gates, tooling and release (stage 6)
 
-- Default path vs f6b6636: every differing request is behind an off key. data/release.ini pins 21 diagnostics off.
-- Open: release.ini forces rt_emissive=0 (players cannot enable Emission at ray hits); ls_box/rt_emissive in
-  release.ini to revisit now that emission is in Ultra. Details: docs/RELEASE_CHECK_20261101.md.
-- Still to do: long sessions, acts 2-3, installer, README, licences, the diagnostic package.
-
-## Caps and gates (watch)
-
-- Roof volumes 512 (largest level 398); mesh pool max 2047 MB; hit-material basis cap 768 MB; alpha floor 40% at wide
-  strides (not yet confirmed live); cascade casters grow to demand + 25%.
-- smoke_ultra forbids variant skips, roof WARNING, nonzero guard, `over kBasisCapBytes`, `mesh pool full at`.
-- Every lean job: capacity, scene-wait and exposure-hold lints; `expect_every` per window (`when_present` for cascade).
-- Tables: docs/GATE_AUDIT_20261101.md. rtStats: rf_hit_gi 419..426, wind RGB 427..434, kStatsCounters 435.
-
-## Tooling
-
-- `tools/shader_identity.py` (cached; merge-green shader step ~1-5 min); `frame_replay --push`; `tools/longrun.py`;
-  host-atomics lint; `tools/m4_promotion_gate.py`, `tools/m5_promotion_gate.py` (colour images only);
-  lean_dryrun fails motion-trace expects in phases without trace_at; auto-run `-Borderless`, `-GameResolution`.
-
-## How to test in game
-
-Settings window, preset Ultra. "Restart" = raise the level, quit, start again; lowering is live. Ctrl+Shift+F9
-switches every RT effect off and on (now immediate with the shader cache).
-- **RT water** (S8 Water Queens House pool, on in Ultra): columns and temple reflected; far half of the pool in
-  shadow, no specks; the pool bed shifts with the view; camp pond (S3) tree shadows. No blinking while panning.
-- **Hidden-surface shading + Bounce** (on in Ultra): S3 camp, never darker; Q/E rotation keeps shadows on their casters.
-- **Emission at ray hits** (on in Ultra): S6 Adamantine Forge, lava light in bounce and reflections.
-- **Far-field sun bounce** (on in Ultra): S8 and camp, Off / 6 m: rooms slightly darker under roofs and foliage where
-  the game's ambient was brighter; no light leaks under roofs.
-- **Box light shadows All** (Advanced, off): S6 lower-right walkway and central pillar darken slightly; S7 inn: no
-  light into the next room.
-- **+ Reflections** (Experimental level): S8 polished stone; rf_debug=8 shows L_a red / L_b green.
-
-## Live batches ready (READY_FOR_LIVE, need your go)
-
-1. `m4_hit_mask` (S8 + inn, ~9 min, 0.4 GB): Base_MSK_VT rows, predicted S8 +1.1 points.
-2. `em_forge ef1` rerun (S6): formal receipt only; the gate already passes from the log.
-3. rf_hit_gi tier (a) ratio at S8 / S6 (m4_promotion m4p3/m4p4 jobs) before any change to + Reflections.
-4. smoke_ultra again if ls_box=2 goes into Ultra.
+- Snapshot gates are events with 1 s settle; layer stats print on the first completed query per 120-frame window.
+- Every ON window must pass. smoke_ultra forbids variant skips, roof warnings, guards, basis overflow and pool-full lines.
+- Long-session read: VRAM flat from cycle 13 (18.2-18.7 GB); records 411-417; no unbounded leak observed.
+- AS chunks retain 4.2 GB for 0.25-1.4 GB live AS: fragmentation remains open. Trend baseline now uses cycles 12-14.
+- Preprocessed cache: header comment edit 2892 compiles -> 0 in 35 s; self-check 4/4 identical. Prune cap follows protected size.
+- Settings generation omits the conflicting key-count comment; tables unchanged. No shader request changes in this fold.
+- A/B latency logs toggle to present of frame F+2; ab_off exposes the same toggle to queue jobs.
+- Release still needs long-session qualification, acts 2-3, installer checks, README, licences and diagnostic packaging.
+- release.ini forces rt_emissive=0; revisit with ls_box now that emission is in Ultra. DXC licence text remains missing.
+- Pending lives need explicit batch steering after their dependent offline checks. Nothing here grants live permission.

@@ -1,21 +1,31 @@
-## rt_occ_stats occluder-kind diagnostic + character-mask float energy (branch worktree-agent-a0c9be1ab336eae1a, READY_FOR_LIVE, 2026-11-02)
+## Occluder diagnostic + main migration (branch worktree-agent-a0c9be1ab336eae1a, READY_FOR_LIVE, 2026-11-03)
 
-- Key `rt_occ_stats` (0, live, diag windows only): "occ stats (N frames)" every 60 frames. Per source (RT sun,
-  D-LS point/spot, D-LS box, RT AO) on character px (class skin/hair): darkened %, mean darkening %, occluded rays by
-  kind (cascade, static, moving, cutout-static, cutout-moving = wind foliage, scalp, hair, held) with the near
-  (<= 0.5 m) share and the dark share, occluder distance histogram, on-screen hair/skin share. Design and limits:
-  docs/DIALOGUE_SHADOWS.md "Occluder-kind diagnostic".
-- Sun/AO: own pass gi/rt_occ_stats.hlsl after the timed RT region (darkening from rtVis / giRaw, kinds from replica
-  rays; sun replica mismatches counted). Local/box: RT_OCC_STATS twin of the every-mode box pass. Held: InstInfo
-  meta bit 31 (layer, restart). Counters device-local (set 4 b1), group-reduced, host ring after D-LS.
-- Key off: 2961/2961 requests byte-identical to 41bd576 (tools/shader_identity.py --baseline, 133 min uncached);
-  the 36 new requests compile. Build + 98 CTests pass (new: occ_stats_test, char_energy_test; shader_identity_test
-  failed once while the identity run held every DXC slot, passed on rerun).
-- dump_preview_f32=1: the 5c3fdabc scene colour as float32 at the preview grid (~10 MB/trace);
-  char_energy.py gives the character-mask float mean per shot vs its OFF neighbours.
-- dialogue_shadows jobs: diag-occ-base/-nohold/-nocascade/-hair windows, shot-nogi-on, ds0 warms the occ variants;
-  predicted.json "occ" per save (ds1/ds2 camp WLD_Main_A, ds3 port CTY_Main_A) committed before any run.
-- Fixed: the box D-LS variants were not cascade entries, so with rt_cascade_casters=1 local/box rays hit the F-1/F-2
-  cascade copy (traced 0xFF). Now cascade entries (0x01): 72 new requests, 2997/2997 existing byte-identical, 98
-  CTests pass. Live A/B key ls_box_cascade_old=1 (old behaviour): diag-occ-boxold window and shot-boxold-on.
-- Not measured: GPU ms of the occ pass (diag only). Live batch not run (needs user steering).
+- Resolved main into the branch files only. No Git metadata write, staging, commit, merge command or game launch.
+- Preserved main migration, generated pool rows, launcher/VRAM tests, box cascade-entry fix and dialogue jobs.
+- rt_occ_stats stays 0 by default. Full-box diagnostic uses reserved SpecId 1011 (RT_SPEC_OCC_STATS marker).
+  Set 4 binding 1 is always bound to the existing device-local counter buffer; declarations remain unconditional.
+  Ordinary and diagnostic Pipes specialize the same module to 0/1 and include that value in the slot key.
+- Diagnostic flag uses bit 13, separate from main's two-sided pool flag at bit 12. No ABI change.
+- ls_box_cascade_old uses existing cascade constant 1000 to restore the old box mask for A/B.
+- Standalone sun/AO diagnostic retains its fixed RT_OCC_STATS implementation (only dispatched when enabled).
+  The checker retains the define reference; no new layout-changing on/off define was introduced.
+- Rebuilt shader_variant_test and regenerated variants.txt: 165 -> 167 variants, 53 -> 54 GI bases.
+  Validator: 284 assertions. Settings generator reports up to date; C++ build passed.
+- CTests: 119/119 passed (275.04 s), including occ_stats, char_energy, settings and host atomics lint.
+- pp-diff main f0b0ccbb2733: 241/241 = 57 identical inputs + 184 pp-same; 0 compiles required.
+- First cascade check rejected (49/50): sun replica only set g_rt_cascade_ray under the old define.
+  Fixed its guard to include RT_SPEC_CASCADE; checker comparison rules unchanged. Final regression passed.
+- Final sample 8, requests: cascade 50/50, guards 26/26, hitfam 23/23, gifar 12/12,
+  hitinst 23/23, native 62/62, rfgi 12/12, wateredge 9/9. All assignments matched.
+  Controls in that order: 1 / 436 / 17,633 / 98,934 / 52,940 / 54,005 / 129,638 / 7,302 lines.
+- New occ key, sample 16: 2/2 requests (all 4 assignments), control 64,139 lines; both values match define references.
+- Key off: all 251/251 merge-parent requests byte-identical, including 10 replaced box requests.
+  New full-box modules off are equivalent after specialization/freezing/optimization (occ + cascade gates).
+- Main moved during checks to 6e69f90 (new water migration, 145 variants): symbolic-main identity was confounded
+  (209/231); reran against recorded MERGE_HEAD f0b0ccbb2733 (165 variants), 251/251. Newer main is outside this merge.
+- Logs: merge-build.log, merge-ctest.log, merge-pp-diff.log, merge-spec-*.log, merge-identity.log.
+- rt_occ_stats reports character sun/local/box/AO occluder kinds, nearest distance and darkening per window.
+  Held tagging requires the layer rebuild/restart. dump_preview_f32 supplies character-mask float energy.
+- Live evidence/GPU ms remain unmeasured. Dialogue1/2 camp and Dialogue3 port jobs are preserved outside inboxes.
+  Check diagnostic cascade share with ls_box_cascade_old=1 versus 0 in the prepared dialogue_shadows batch.
+  No quality pass or preset promotion; next live batch requires explicit user steering.

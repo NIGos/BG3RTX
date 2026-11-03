@@ -138,7 +138,7 @@ static const uint kBxGame = 16u, kBxRec = 18u, kBxBox = 20u, kBxExcess = 22u, kB
 #ifndef LS_K
 #define LS_K 0
 #endif
-#ifdef RT_OCC_STATS
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
 // rt_occ_stats (common/occ_stats.h, core/gi.cpp): the occluder kinds of the point/spot and box rays
 // from character pixels. Only in the every-mode box variant (its group barrier; set 4 is the box
 // statistics set, binding 1 the occluder counters).
@@ -216,11 +216,18 @@ uint trace_light(float3 P, float3 N, float4 org, float3 lpos, uint2 fp, uint key
   }
   float3 o = RT_SECONDARY_ORIGIN(fp,org, P, N, cone.f0, dir);
   float tmax = length(lpos - o) - max(R, pc.ls_clear);
+#ifdef RT_SPEC_HAIR_ORIGIN
+  if(physical_receiver){
+    HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,pc.ls_soft!=0?R:0.0,pc.ls_soft!=0?pc.ls_clear:max(R,pc.ls_clear));
+    if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
+  }
+#else
 #ifdef RT_HAIR_PHYSICAL_ORIGIN
   if(physical_receiver){
     HairLightSegment segment=hpo_light_segment(receiver,o,lpos,dir,pc.ls_soft!=0?R:0.0,pc.ls_soft!=0?pc.ls_clear:max(R,pc.ls_clear));
     if(!segment.valid)return kRtUnknown;dir=segment.direction;tmax=segment.tmax;
   }
+#endif
 #endif
   if (tmax <= 0.0) return kRtLit;
   return rt_visibility(o, dir, tmax, cone);
@@ -749,7 +756,7 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
 
   uint3 cl = bg3_cluster(fp, d);
   uint end_p = cl.x + cl.y, end_s = end_p + cl.z;
-#ifdef RT_OCC_STATS
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
   // A ray's darkening: the light it removes, unscaled by the AO-on-direct factor, over the pixel's
   // lit diffuse + specular before this pass.
   const float occ_den = max(lum(gDiffuse[fp] + gSpecular[fp]), 1e-8);
@@ -838,8 +845,8 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
         t = 0.0;
         dd -= ct;
       }
-#ifdef RT_OCC_STATS
-      if (occ_character(cls) && !qa) {
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+      if (RT_OCC_ON && occ_character(cls) && !qa) {
         occ_ray(kOccLocal, vs, max(lum(cd * (s - t)) + lum(cs * (s - t)), 0.0) / occ_den);
         ++occ_nl;
       }
@@ -921,8 +928,8 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       cd_all += cd;
       cs_all += cs;
       const bool occ = vs == kRtOccluded && !qa;
-#ifdef RT_OCC_STATS
-      if (occ_character(cls) && !qa) {
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+      if (RT_OCC_ON && occ_character(cls) && !qa) {
         occ_ray(kOccBox, vs, max(lum(cd * (sh - t)) + lum(cs * (sh - t)), 0.0) / occ_den);
         ++occ_nb;
       }
@@ -1256,10 +1263,10 @@ bool ls_main(uint2 fp, inout float3 o_d, inout float3 o_s) {
       rtStats.Store((70 * 64) * 4, asuint((pc.mat_classes & 8u) != 0u ? gFrame.b.x : -1.0));   // set0/b0 _m4
     }
   }
-#ifdef RT_OCC_STATS
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
   // The pixel's darkening per source: the light the traced shadows remove as the pass applies it
   // (ls_debug=2's term), the box lights' share from their own delta, over the lit buffers before.
-  if (occ_character(cls) && !validate) {
+  if (RT_OCC_ON && occ_character(cls) && !validate) {
     const float k = saturate(pc.ls_strength);
     const float all_rem = lum(max(-(dd * fdif + ds * fspec) * k, 0.0)), box_rem = lum(max(-(bdd * fdif + bds * fspec) * k, 0.0));
     if (occ_nl != 0u) occ_pixel(kOccLocal, max(all_rem - box_rem, 0.0) / occ_den);
@@ -1408,12 +1415,12 @@ bool ls_main_k(uint2 fp, inout float3 o_d, inout float3 o_s) {
 #if LS_BOX && LS_FULL
 void main(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex, uint3 gid : SV_GroupID) {
   if (gi < kBxN) gsBx[gi] = 0u;
-#ifdef RT_OCC_STATS
-  occ_clear(gi);
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) occ_clear(gi);
 #endif
   GroupMemoryBarrierWithGroupSync();
-#ifdef RT_OCC_STATS
-  if (all(tid.xy == 0u)) occ_add(kOccPassLs, 1u);
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON && all(tid.xy == 0u)) occ_add(kOccPassLs, 1u);
 #endif
 #else
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -1434,8 +1441,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
 #if LS_BOX && LS_FULL
   GroupMemoryBarrierWithGroupSync();
   if (pc.ls_stats != 0u) bx_flush(gi, gid.xy);
-#ifdef RT_OCC_STATS
-  occ_flush(gi, gid.xy);
+#if defined(RT_OCC_STATS) || defined(RT_SPEC_OCC_STATS)
+  if (RT_OCC_ON) occ_flush(gi, gid.xy);
 #endif
 #endif
 }

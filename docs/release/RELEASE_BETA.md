@@ -1,112 +1,92 @@
-# Nexus beta: release check, package, licences, what remains (stage 6 first pass, 2026-11-02)
+# Nexus beta checklist
 
-Developer document (not shipped). Player documents: [README.md](README.md) and [THIRD_PARTY.md](THIRD_PARTY.md)
-(both go into the package). Earlier check: [../RELEASE_CHECK_20261101.md](../RELEASE_CHECK_20261101.md).
+Developer checklist. Player instructions: [README.md](README.md).
+This is not release approval. Packaging remains paused until the open decisions and gates are resolved.
 
-## 1. Release defaults audit
+## Defaults and memory
 
-Method: every `cfg_*("key", literal)` in `layer/` and `core/` (565 call sites), its effective value in a
-player package (`data/release.ini` > `bg3rtx.ini` > literal), filtered on diagnostic names, then read at the
-call site. Player package = repository `bg3rtx.ini` + `data/release.ini` + the lean layer (`BG3RTX_DIAGNOSTICS=OFF`).
+- [ ] Reconcile the final merged settings and spec-constant migration before packaging.
+  Read `docs/release/RELEASE_DEFAULTS_REVIEW.md` on `codex-release-defaults` if it is not merged.
+- [ ] Keep diagnostics, crash dumps and unqualified features off. Keep developer controls hidden.
+  Do not promote native hair, OMM, generated rows or GI guards from partial evidence.
+- [ ] Remove the five rejected or null water experiments. Keep the qualified RT water chain.
+- [ ] Resolve the redundant `ls_box` and `rt_emissive` release pins with the defaults owner.
+  Ultra's emission control must enable its prerequisites together.
+- [ ] Verify README preset descriptions against the final package. Avoid GPU model guarantees.
+- [ ] Qualify VRAM across scene transitions and long sessions. The launcher's suggestion uses GPU
+  model, not available memory. The reported 32 GB port case reached 31.7 GB against a 30.6 GB budget.
+  No capacity or preset has a complete memory qualification receipt.
+- [ ] Test 12 GB and 16 GB cards starting with Low. Test RTX 30 and RTX 40 hardware.
+  Do not advertise Ultra as safe on 12-24 GB cards or guaranteed on 32 GB cards.
 
-**Already off in the package:** `dev=0` (trace hotkey, developer GUI entries), `dump_shaders=0`, every debug view,
-stats, check and capture key (45 keys in `release.ini`), `crash_dump=0`, `aftermath` (0, DLL not shipped),
-`sl_verbose` (0), the `sl_dev` DLLs (not shipped). Keys only in code (`auto_trace`, `fg_snap`, `assetdb_join`,
-`dev_fault_bindings`) default to 0 and act only when set.
+## Installer review and offline check
 
-**Fixed:** `rt_hit_reference=0` pinned in `release.ini` (developer-only debug reference; 0 in `bg3rtx.ini`
-already, so nothing a player sees changes). Packaging bugs in the old `package.ps1`: it shipped no `common/`
-headers, which 21 shader files include (`gi_trace_rt`, `rt_local_shadows`, `rt_reflections`, ...), so the default
-RT path could not compile in a player package; and no asset database. Both fixed (section 2).
+The launcher enables a Vulkan layer only for the game process. Installation is a per-user copy,
+not a game-folder mod. No registry entry or administrator rights are needed.
 
-**Kept on (deliberate):**
+- [x] Review `scripts/release/install.ps1` and `uninstall.ps1` for game/profile protection.
+  Both accept optional `-GameDir <root containing bin\bg3.exe>` as a safety check.
+  The launcher discovers Steam installs; Browse selects other installs. The scripts do not search saves.
+- [x] Add `tests/release_install_test.py` to the single CMake Python test list.
+  Run it directly with `python tests/release_install_test.py`; no build or CMake is needed.
+  It uses fake package and game folders. Process discovery is mocked only in its child shell,
+  so an open user game does not block disposable filesystem tests.
+- [x] Direct test: 7 tests passed in 17.702 s. Details: `docs/progress/codex-release-docs.md`.
+- [ ] Review package completeness after the diagnostics branch lands. Include Diagnostics.cmd
+  and diagnostics.ps1 in files.txt. A README reference is not proof that they ship.
+- [ ] Fresh-PC acceptance, separately authorized: unzip, install without elevation, start through
+  the launcher and Steam, update, uninstall, and confirm original files and unrelated files survive.
+  Test a PC without VULKAN_SDK. Runtime DXC must come from bin.
+- [ ] Test shortcut creation and removal from a standard Windows account. The temporary test
+  uses NoShortcut and does not change the user's Start menu or real shader cache.
+- [ ] Test interruption recovery and locked-file errors on disposable installs.
 
-| Key / behaviour | Shipped | Why kept |
-|---|---|---|
-| `ab_hotkey=1` | on | documented player A/B (Ctrl+Shift+F9) |
-| `rt_mesh_audits=2`, `rt_em_calib=1`, `rt_em_check_*` | on | correctness: stale-mesh eviction, emissive calibration (sliced, cheap) |
-| `dev_fault=1` (code literal) | on | `VK_EXT_device_fault` details in the log after a device lost: the most useful line of a crash report |
-| `watchdog_s=5` (literal), `fg_state_every=60` | on | one log line per 5 s; shows where a hang happened |
-| `bg3rtx.log` | always | ~3 KB/s (~11 MB/hour); capped at 64 MB, then moved to `bg3rtx.prev.log` (also the previous session); common/log_rotate.h |
-| `sl_logs\` | always | Streamline at its default level; needed for FG reports |
-| core hot reload | on | `bin\hot\` copy + mtime poll; also isolates a core fault (core disabled, game keeps running) |
-| `trace.request` file | honoured | a trace only when the user creates that file on request; no hotkey with `dev=0` |
-| Experimental GUI entries (4) | visible | intended: off in every preset below Ultra; labelled |
+Updates keep bg3rtx_user.ini. Original file collisions are copied once to `.bg3rtx_backup`.
+Later updates keep those originals. Retired package files stay in the ownership manifest so
+uninstall can restore their originals too. A missing or unsafe manifest fails before deletion.
+Do not delete the backup folder before uninstall. Portable use does not need installation.
+`-WhatIf` is available on both scripts. It validates paths and lists the intended action without writes.
 
-**Doubtful (not changed, user decision):**
-1. `ls_box=0` and `rt_emissive=0` in `release.ini`: same values as `bg3rtx.ini`, and the GUI layer overrides
-   them (Ultra writes `rt_emissive=1` through Emission at ray hits). They are quality keys in a list of developer
-   keys; removing them changes nothing for players. Remove (cleaner) or keep (harmless)?
-2. Developer-only knobs `ls_k`, `rt_sun_cascade_current`, `rt_hit_emission=2`: hidden with `dev=0` but honoured
-   when typed into `bg3rtx_user.ini`. Not pinned: they are quality keys, parked by user decision.
-3. `crash_dump=0`: kept off (decision of 11-01); the diagnostic package (section 5) is the planned path.
-4. Log size: capped (64 MB x 2 files, common/log_rotate.h, unit test log_rotate_test). A queue job longer than ~6 h of default logging would lose its early lines to `bg3rtx.prev.log`.
+## Live quality and compatibility (not run by this review)
 
-## 2. Package and install
+- [ ] Run smoke_ultra with every qualified release key enabled. Read every-window gates.
+- [ ] Run 2-4 hour sessions with level transitions. Check VRAM growth, scene capacity,
+  log rotation, shader-cache reuse and frame generation stability.
+- [ ] Cover Act 2 and more Act 3 locations. Record save, preset, driver and game version.
+- [ ] Confirm the first-enable native hair compile behaviour in the final merged implementation.
+  The README currently warns of shader compilation and a pause or stutter.
+- [ ] Keep the port water limitation: the observed flicker is present in the game's own water.
+- [ ] Confirm the tested driver and game versions in README against the final release logs.
+  The recorded driver 621.01 is not a measured minimum. Do not infer support for older drivers.
+- [ ] Check overlays, GOG Browse launch, HDR and other graphics mods before claiming compatibility.
 
-`scripts/package.ps1 [-Version 0.1.0-beta1] [-NoBuild] [-NoZip] [-WithSharc] [-Diagnostics]`: refuses while
-bg3.exe runs, runs `build.ps1 -Test` (BelowNormal), builds the lean layer in `build-nodiag\`, assembles
-`dist\BG3RTX-<version>\` from an explicit list, writes `files.txt` and `VERSION.txt`, zips it, and zips the PDBs
-into `dist\BG3RTX-<version>-symbols.zip` (keep it; do not upload). Contents: see the script header. The
-`common\` headers are found by following the shaders' `#include`s.
+Live runs require fresh explicit user steering. This checklist does not authorize them.
 
-Install model (found in `tools/launcher/launch.cpp`): **no implicit layer and no registry**. `BG3RTX.exe` starts
-`bin\bg3.exe` with `VK_ADD_LAYER_PATH=<install>\bin` and `VK_INSTANCE_LAYERS=VK_LAYER_BG3RTX_host` for that
-process only; everything else lives next to the launcher (`root_dir()` = parent of `bin\`). So:
-- `install.ps1`: copies `files.txt` to `%LOCALAPPDATA%\Programs\BG3RTX` (or `-Destination`), refuses a game
-  folder or Larian's profile folder, removes files an older version had, keeps `bg3rtx_user.ini`, writes
-  `install_manifest.txt` + `.bg3rtx_install`, adds a Start menu shortcut, prints the Steam launch option.
-- `uninstall.ps1` (`Uninstall.cmd` runs a temp copy): removes the manifest's files, what BG3RTX writes
-  (`bg3rtx*.log`, `bg3rtx_user.ini` unless `-KeepSettings`, `bg3rtx_launcher.ini`, `bin\hot`, `sl_logs`,
-  `captures`), the shortcut, `%LOCALAPPDATA%\BG3RTX\shader_cache`, then empty folders. Never follows links,
-  refuses any path in `Larian Studios` or a game folder. `-WhatIf` lists without deleting. It cannot clear a
-  Steam launch option (Steam's own config); it tells the user to.
+## Diagnostics and privacy
 
-## 3. Licences (inventory: THIRD_PARTY.md)
+Implementation reference: `git show codex-diag-package:scripts/release/Diagnostics.cmd`
+and the companion diagnostics.ps1 on that branch. Do not describe a planned launcher report button
+or automatic upload as shipped behaviour.
 
-Shipped: DLSS SR/RR (`nvngx_dlss`, `nvngx_dlssd`), DLSS-G (`nvngx_dlssg`, `sl.dlss_g`), Streamline (MIT),
-Reflex runtime, DXC (`dxcompiler.dll`, NCSA), Vulkan headers (compiled in), the asset DB. Not shipped: SHaRC
-headers, Aftermath, OMM SDK, `sl_dev`, Nsight Perf. Licence texts copied: `DLSS\LICENSE.txt`,
-`streamline\license.txt`, `3rd-party-licenses.md`. **Nothing found forbids redistributing what ships.** Obligations
-and flags:
-- NVIDIA RTX SDKs License: object-code distribution inside an application with material added functionality
-  (met); terms at least as protective (licence text shipped); NVIDIA marks in credits (README); no endorsement
-  claim (README). **Notify NVIDIA before a commercial release** (supplement 4): a free beta is arguably not
-  commercial; notifying at developer.nvidia.com/sw-notification is cheap. User decision.
-- **SHaRC (flag):** runtime HLSL needs its headers as source; the RTX licence grants object-code distribution only.
-  Not shipped (`sharc=0` everywhere, no GUI entry). Before SHaRC ships: precompiled SPIR-V or NVIDIA's permission.
-- **DXC and Vulkan-Headers texts missing on disk (flag):** save them as `external\licences\DirectXShaderCompiler-LICENSE.txt`
-  and `Vulkan-Headers-LICENSE.txt` (from their GitHub repos); `package.ps1` warns until then.
-- **Asset DB (flag):** numbers extracted from Larian's `.pak` files (no textures or meshes). Check Larian's mod
-  terms; the alternative (build on the player's PC with Python 3.14) is heavy.
-- **Our own licence (flag):** the repository has none. It must not put the NVIDIA parts under an open-source
-  licence (RTX licence 4e).
-- OMM SDK: no licence file on disk; not shipped, fetch it before `omm-lib.dll` is ever needed at run time.
+- [ ] Merge and independently verify the diagnostics implementation and its tests.
+- [ ] Confirm Diagnostics.cmd creates a local ZIP, prints its path and contents, and uploads nothing.
+- [ ] Confirm the report contains logs, settings, VERSION.txt, effective config, GPU/OS information
+  and existing crash dumps. It must not enable crash dumps or change settings.
+- [ ] Confirm saves are absent by default. IncludeSave must require explicit selection and
+  confirmation, read only the selected .lsv, and leave the original unchanged.
+- [ ] Verify text redaction and CONTENTS.txt. Warn that binary saves and dumps are not redacted.
+- [ ] Verify the manual-report fallback in README when Diagnostics.cmd is unavailable.
 
-## 4. What remains before a public beta
+## Licences and package sign-off
 
-- **Long sessions:** a 2-4 hour run per preset (memory: mesh pool, hit-material pool, shader cache; log size;
-  FG stability; VRAM growth across level loads). Needs live steering.
-- **Acts 2-3:** Act 2 (Shadow-Cursed Lands, Moonrise, Gauntlet of Shar) has no live coverage; its saves need the
-  mod-warning handling (TEST_SCENES). Act 3 has S7/S8/S14 only.
-- **Non-5090 GPUs:** presets below Ultra are estimates; at least one RTX 40 and one RTX 30 run.
-- **Fresh-PC install test:** unzip, Install.cmd, launch via window and via Steam, uninstall, check nothing is
-  left (no VULKAN_SDK on that PC: DXC must come from `bin\`).
-- Done: `docs/USER_SETTINGS.md` now lists the Ultra levels (RT water, Hidden-surface
-  shading, Emission and Far-field moved to the main list and into Ultra.
-- Game-version check: log `bg3.exe` ProductVersion and warn on an unknown one.
-- SE bridge (`mods/BG3RTX_Bridge`): not packaged; optional, needs the Script Extender.
+Inventory and unresolved terms: [THIRD_PARTY.md](THIRD_PARTY.md).
+This checklist does not resolve redistribution permission.
 
-## 5. Diagnostic package mode (design only, not built)
-
-`BG3RTX.exe --report` (and a "Create bug report" button) builds `BG3RTX-report-<stamp>.zip` on the Desktop:
-- `bg3rtx.log` and `bg3rtx.prev.log` (the previous session, or the earlier part of a long one;
-  common/log_rotate.h), `sl_logs\`, `VERSION.txt`, `bg3rtx_user.ini` and the effective `[cfg] keys` line of the last log;
-- GPU info: `--detect` output, driver version, OS build, display modes (no serials, no user names: paths are
-  rewritten to `%LOCALAPPDATA%`);
-- a crash dump only if one exists: `crash_dump` stays 0; the report offers "turn crash dumps on for the next
-  session" (writes `crash_dump=1` to `bg3rtx_user.ini`, the next report takes `captures\crash\*.dmp` and turns it off);
-- **a save only when the user picks one** in a file dialog started in `Savegames\Story`: the folder is copied
-  with read-only opens (`FILE_SHARE_READ`, no write handle, never moved, renamed or touched; Steam Cloud syncs that
-  folder), size shown first, and the user confirms. BG3RTX never lists or reads saves on its own;
-- a `manifest.txt` listing every file in the zip, shown to the user before saving. Nothing is uploaded.
+- [ ] Choose the project's licence and resolve the NVIDIA notification decision.
+- [ ] Verify the required NVIDIA, Streamline, DXC and Vulkan licence texts are present in LICENSES.
+- [ ] Resolve asset DB redistribution under Larian's terms.
+- [ ] Keep SHaRC source headers out unless redistribution is resolved. Keep sharc off.
+  Keep Aftermath, OMM SDK, development Streamline DLLs and developer tools out of the player archive.
+- [ ] After approval to resume packaging, use the existing package script and inspect files.txt.
+  Keep the symbols ZIP private. No package command was run for this review.
+- [ ] Upload only after review of the final archive, README, known issues and release evidence.

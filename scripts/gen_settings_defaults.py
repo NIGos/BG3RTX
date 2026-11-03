@@ -48,7 +48,9 @@ def c_str(s: str) -> str:
 
 
 def table(name: str, kvs: list[tuple[str, str]], source: str) -> str:
-    lines = [f"// {len(kvs)} keys of {source}, in file order.", f"inline constexpr KV {name}[] = {{"]
+    # No key count here: it changed with every added key on one line all branches touch (a merge conflict on
+    # every branch that adds a key, 2026-11-02). sizeof(table) / sizeof(KV) gives it where needed.
+    lines = [f"// The keys of {source}, in file order.", f"inline constexpr KV {name}[] = {{"]
     for k, v in kvs:
         lines.append(f"    {{{c_str(k)}, {c_str(v)}}},")
     lines.append("};")

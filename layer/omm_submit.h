@@ -3,6 +3,7 @@
 #include <span>
 #include <cstdint>
 #include <vector>
+#include <mutex>
 namespace bg3 {struct DeviceData;}
 namespace bg3::omm {
 bool submit_device_created(DeviceData*);
@@ -27,10 +28,21 @@ void feedback_before_end(VkCommandBuffer,bool outsideRenderPass);
 void command_end(VkCommandBuffer,bool success);
 void command_execute(VkCommandBuffer,std::span<const VkCommandBuffer>);
 struct PreparedSubmit {std::vector<uint64_t> tickets;bool valid=true;};
+// Serial lock spans the driver call so another queue cannot reserve the same
+// timeline value. Only the private signal is appended; no game entry is fused.
+struct CompletionBatch {
+  std::unique_lock<std::mutex> lock;
+  VkSemaphore semaphore{};
+  uint64_t value{};
+  bool attached=false;
+};
+CompletionBatch prepare_completion(DeviceData*,VkQueue,const PreparedSubmit&);
+void finish_completion(const PreparedSubmit&,CompletionBatch&,bool success);
 // Capture/pin before the driver call: a completed app fence can permit CB reset
 // on another thread before that call returns. Both functions require queue lock.
 PreparedSubmit before_submit(DeviceData*,std::span<const VkCommandBuffer>);
-// Success signals a private timeline via the real queue function. Failure only
-// unpins; it never claims GPU completion or emits a signal.
-void after_submit(DeviceData*,VkQueue,const PreparedSubmit&,bool success);
+// Success signals a private timeline via the real queue function unless the
+// driver already accepted an attached signal. Failure unpins without claiming
+// completion; a failed attached signal also poisons retirement conservatively.
+void after_submit(DeviceData*,VkQueue,const PreparedSubmit&,bool success,bool completionAttached=false);
 }

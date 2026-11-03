@@ -18,8 +18,8 @@ int main(){
  uint32_t off=0,on=0;
  CHECK(!capability(&off,false));CHECK(!capability(&off,true)); // hot enable/core reload cannot invent resources
  CHECK(capability(&on,true));CHECK(capability(&on,false));CHECK(capability(&on,true)); // resources survive live A/B
- CHECK(!binding_enabled(true,8,12));CHECK(binding_enabled(false,8,12));CHECK(binding_enabled(true,4,12));
- for(bool enabled:{false,true}){unsigned count=1+unsigned(enabled);for(unsigned i=0;i<31;i++)count+=binding_enabled(enabled,8,i);CHECK(count==32);}
+ CHECK(!binding_enabled(true,8,12));CHECK(!binding_enabled(false,8,12));CHECK(binding_enabled(true,4,12));
+ for(bool enabled:{false,true}){unsigned count=2;for(unsigned i=0;i<31;i++)count+=binding_enabled(enabled,8,i);CHECK(count==32);}
  CHECK(hpo_unit_normal({0,0,1}));CHECK(!hpo_unit_normal({0,0,.8f}));
  CHECK(alternate_entry("gi/gi_trace_rt_hit_direct.hlsl"));CHECK(alternate_entry("gi/gi_trace_rt_sharc_hit_direct.hlsl"));
  CHECK(alternate_entry("gi/rt_origin.hlsl"));CHECK(alternate_entry("gi/rt_reflections_sharc.hlsl"));

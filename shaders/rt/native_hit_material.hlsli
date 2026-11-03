@@ -1,4 +1,28 @@
 #ifndef BG3_NATIVE_HIT_MATERIAL_HLSLI
+#if defined(RT_SPEC_HIT_INST)
+// Variant migration step S2c: RT_HIT_INSTANCED as specialization constant 1003 (rt_hit_material_instanced); the
+// instanced code is compiled in and selected by the constant, with the S2a family constants inside it.
+#if defined(RT_HIT_INSTANCED)
+#error RT_SPEC_HIT_INST replaces RT_HIT_INSTANCED
+#endif
+[[vk::constant_id(1003)]] const uint kSpecHitInst = 0u;
+#define RT_HIT_INST_ON (kSpecHitInst != 0u)
+#ifndef RT_SPEC_HIT_FAMILY
+#define RT_SPEC_HIT_FAMILY 1
+#endif
+#else
+#define RT_HIT_INST_ON true
+#endif
+#if defined(RT_SPEC_HIT_FAMILY)
+// Variant migration step S2a (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): one module for the instanced
+// hit-material families, constants 1004 (rt_hit_material_wind_rgb) and 1005 (rt_hit_material_ip_grass) set by
+// core/gi.cpp refresh() from the layer's capability words.
+#if defined(RT_HIT_WIND_RGB) || defined(RT_HIT_IP_GRASS) || !(defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+#error RT_SPEC_HIT_FAMILY replaces RT_HIT_WIND_RGB / RT_HIT_IP_GRASS and needs RT_HIT_INSTANCED or RT_SPEC_HIT_INST
+#endif
+[[vk::constant_id(1004)]] const uint kSpecWindRgb = 0u;
+[[vk::constant_id(1005)]] const uint kSpecIpGrass = 0u;
+#endif
 #define BG3_NATIVE_HIT_MATERIAL_HLSLI
 #include "../../common/native_opaque_transport.h"
 #include "../../common/native_vt_fields.h"
@@ -100,7 +124,14 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  uint4 header=gHitRecords.Load4(0);
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
+#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+ // rt_hit_material_generated two-sided pool rows (common/native_hit_generated.h, e.g. Base_2S_VT 2d815e2a = 923131c7):
+ // h2.w = 5, the FS scales the N column by (gl_FrontFacing ? 1 : -1); every consumer without this define rejects them.
+ const bool two_sided=RT_HIT_INST_ON && h2.w==5u;
+ if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || (h2.w!=3u && !two_sided))return hit_material_unknown(3);
+#else
  if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || h2.w!=3u)return hit_material_unknown(3);
+#endif
  if(h0.y>(0xffffffffu-nh_pool_basis_header)/(3u*nh_pool_basis_vertex) || h0.w>pbytes || nh_pool_basis_header+h0.y*3u*nh_pool_basis_vertex>pbytes-h0.w)return result;
  uint4 bh=gMeshPool.Load4(h0.w);
  if(bh.x!=nh_pool_basis_magic || bh.y!=gHitRecords.Load(row+216u) || bh.z!=h0.y || bh.w!=1u)return hit_material_unknown(4);
@@ -120,6 +151,10 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
   [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
   basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
  }
+#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+ // The facing is the geometry's, as the per-draw two-sided rows: world triangle, interpolated world N, the ray.
+ if(two_sided)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
+#endif
  const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
  NvFields fields;
  if(detail.x==2u){
@@ -184,7 +219,7 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
 #endif
  result.status=(result.parameters.status==NtOk && result.scattering.status==NtOk)?0:9;return result;
 }
-#ifdef RT_HIT_INSTANCED
+#if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
 // The clip check of the last rt_hit_material lookup on an instanced row (0: none): family (bits 0..1),
 // outcome (bits 2..4: 1 bit-exact, 2 within the derived tolerance, 3 UV differs, 4/5/6 beyond it by at
 // most 16x / 256x / more), bit 5 rigid offset (the three vertices moved by one clip vector: another
@@ -213,7 +248,7 @@ uint hm_clip_instanced(uint row,uint4 h0,uint stride,InstInfo ii,uint prim,bool 
 }
 #endif
 NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
-#ifdef RT_HIT_INSTANCED
+#if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
  g_hm_clip=0u;
 #endif
  if(!hit_material_publication_ready())return hit_material_unknown(1);
@@ -225,8 +260,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if((ii.meta&(kInfoLegacy|kInfoPool))!=0 || hit.prim>=ii.tris)return result;
  if(opaque){if((ii.meta&kInfoAlpha)!=0 || ii.rec<nh_alpha_rows || ii.rec>=nh_material_rows)return result;}
  else if((ii.meta&kInfoAlpha)==0 || !rec_in_range(ii.rec) || (ii.rec-16u)%208u!=0)return result;
+#ifdef RT_SPEC_NATIVE
+  if (RT_HAIR_ON) {
+ if((ii.meta&kInfoHairProcedural)!=0)return result;
+  }
+#else
 #ifdef RT_NATIVE_HAIR
  if((ii.meta&kInfoHairProcedural)!=0)return result;
+#endif
 #endif
  uint record=opaque?ii.rec:(ii.rec-16u)/208u,bytes;gHitRecords.GetDimensions(bytes);
  if(record>=nh_material_rows || bytes<16u+256u || record>=(bytes-16u)/256u)return result;
@@ -234,16 +275,23 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint row=16u+record*256u;uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
  if(h0.x!=record+1u || hit.prim>=h0.y || h1.w!=pc.frame || h1.x<64 || h1.x!=(ii.meta&255u))return hit_material_unknown(3);
+#ifdef RT_SPEC_NATIVE
+ bool tileset=RT_TILESET_ON && h2.w==2u;if(tileset && h1.x<NtsMinimumStride)return result;
+#else
  #ifdef RT_NATIVE_TILESET
  bool tileset=h2.w==2u;if(tileset && h1.x<NtsMinimumStride)return result;
+#endif
 #endif
  uint bbytes;gHitBasis.GetDimensions(bbytes);uint size=h0.y*3u*h1.x;
  if(h0.y>0xffffffffu/(3u*h1.x) || h0.z>bbytes || size>bbytes-h0.z || h0.w>bbytes || size>bbytes-h0.w)return result;
  // Actual native positions and UVs, not a mesh/hash-only proof. Exact comparison
  // intentionally declines even harmless arithmetic differences in this slice.
-#ifdef RT_HIT_INSTANCED
+#if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
  // Instanced rows (word 220 bits 8..9 = family): hm_clip_instanced, the wind rows within their derived tolerance.
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+ // Migration step S2a: RT_HIT_IP_GRASS as specialization constant 1005 (the 3-bit family field when set).
+ const uint hm_flags=RT_HIT_INST_ON?gHitRecords.Load(row+220u):0u,hm_family=(hm_flags>>8)&(kSpecIpGrass!=0u?7u:3u);
+#elif defined(RT_HIT_IP_GRASS)
  // rt_hit_material_ip_grass at startup: the family field is bits 8..10 (IP grass = 4); g_hm_clip then packs the family in
  // bits 0..2, the outcome in 3..5 and the rigid flag in bit 6. Without the define bits 8..9 only: an IP grass row reads
  // family 0 and gets the plain per-draw bit-exact check below (fail closed, uncounted).
@@ -253,7 +301,10 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
 #endif
  if(hm_family!=0u){
   const uint outcome=hm_clip_instanced(row,h0,h1.x,ii,hit.prim,(hm_flags&2u)!=0u);
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+  if(kSpecIpGrass!=0u)g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
+  else g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
+#elif defined(RT_HIT_IP_GRASS)
   g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
 #else
   g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
@@ -264,8 +315,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  [unroll]for(uint v=0;v<3;++v){
   uint pre=h0.z+(hit.prim*3u+v)*h1.x,def=h0.w+(hit.prim*3u+v)*h1.x;
   if(any(gHitBasis.Load4(pre)!=gHitBasis.Load4(def)) || any(gHitBasis.Load2(pre+16)!=gHitBasis.Load2(def+16)))return hit_material_unknown(4);
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(tileset && any(gHitBasis.Load4(pre+NtsColorOffset)!=gHitBasis.Load4(def+NtsColorOffset)))return hit_material_unknown(4);
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(tileset && any(gHitBasis.Load4(pre+NtsColorOffset)!=gHitBasis.Load4(def+NtsColorOffset)))return hit_material_unknown(4);
+#endif
 #endif
  }
  float2 uv[3];float3 position[3];float3 basis[3];
@@ -300,8 +357,14 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  if(fields.status!=0)return hit_material_unknown(7);
  [unroll]for(uint component=0;component<3;++component){
   uint start=h0.w+hit.prim*3u*h1.x+24u+12u*component;
+#ifdef RT_SPEC_NATIVE
+  if (RT_TILESET_ON) {
+  if(tileset)start=h0.w+hit.prim*3u*h1.x+NtsBasisOffset+12u*component;
+  }
+#else
 #ifdef RT_NATIVE_TILESET
   if(tileset)start=h0.w+hit.prim*3u*h1.x+NtsBasisOffset+12u*component;
+#endif
 #endif
   float3 b0=asfloat(gHitBasis.Load3(start)),b1=asfloat(gHitBasis.Load3(start+h1.x)),b2=asfloat(gHitBasis.Load3(start+2u*h1.x));
   basis[component]=b0+(b1-b0)*hit.bary.x+(b2-b0)*hit.bary.y;
@@ -309,7 +372,9 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
  // Row word 220 bit 0 (rt_hit_material_instanced, RT_HIT_INSTANCED variants, common/native_hit_instanced.h): two-sided FS
  // (Base_AlphaTest_2s_VT 923131c7) scales the N column by (gl_FrontFacing ? 1 : -1); at a hit the
  // facing is the geometry's: nv_two_sided_sign of the captured triangle, its interpolated N and the ray.
-#ifdef RT_HIT_INSTANCED
+#if defined(RT_SPEC_HIT_INST)
+ if(kSpecHitInst!=0u && (gHitRecords.Load(row+220u)&1u)!=0u)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
+#elif defined(RT_HIT_INSTANCED)
  if((gHitRecords.Load(row+220u)&1u)!=0u)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
 #endif
  // Native FS mat3(T,N,B) with original interpolated VS outputs (loc3/1/2).
@@ -343,11 +408,33 @@ void hit_material_count(RtHit hit,uint status,uint bin){
  if(hit.t>=0 && !hit.aborted && hit.inst<1024u){const uint k=status==0u?0u:uncovered?1u:status==3u?2u:3u;
   rtStats.InterlockedAdd((448u*64u+hit.inst*4u+k)*4u,1u);}
 #endif
-#ifdef RT_HIT_INSTANCED
+#if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
  // The clip check per instanced family (core/gi.cpp kHitClipFirst 356: wind 356.., 2S 364..; kHitClip3First:
  // wind RGB 2S 427..): checked, bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256,
  // over x256, rigid offset.
-#ifdef RT_HIT_IP_GRASS
+#if defined(RT_SPEC_HIT_FAMILY)
+ // Migration step S2a: RT_HIT_WIND_RGB (1004) and RT_HIT_IP_GRASS (1005) as specialization constants.
+ if(!RT_HIT_INST_ON){
+ }else if(kSpecIpGrass!=0u){
+ const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
+ [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&64u)!=0u,bin);}
+ }else if(kSpecWindRgb!=0u){
+ const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+ [unroll]for(uint f=1;f<4;++f){const uint base=f<3u?356u+(f-1u)*8u:427u;const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
+ }else{
+ const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
+ [unroll]for(uint f=1;f<3;++f){const uint base=356u+(f-1u)*8u;const bool mine=family==f;
+  stat_add(base,mine,bin);
+  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
+  stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
+ }
+#elif defined(RT_HIT_IP_GRASS)
  // rt_hit_material_ip_grass at startup: families 1..4 (wind RGB 427.., IP grass 435..), the 3-bit packing above.
  const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
  [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;
