@@ -411,6 +411,12 @@ static void test_gui_levels() {
     for (const std::string& key : knob_keys(k)) {
       if (!code_default(key)) CHECK_EQ(std::string(k.id) + " writes unknown key " + key, "");
     }
+    // The launcher only has these pages (tools/launcher/ui/app.js `sections`, plus Developer):
+    // a knob in any other category would be in the schema but never shown.
+    if (!k.dev_only) {
+      const std::string c = k.category;
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Memory" || c == "Advanced");
+    }
     // Off in every preset for experimental knobs.
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
