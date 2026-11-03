@@ -653,9 +653,24 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
 
 ### Pak mesh materials: identity audit and remaining runtime work (cov-mesh-material, 2026-11-03)
 
-Status: offline catalogue only; runtime fallback is **not implemented or READY_FOR_LIVE**.
+Status: offline catalogue plus sampled host identity; runtime fallback is **not implemented or READY_FOR_LIVE**.
 `rt_hit_material_paks` is the proposed off-by-default key, not a registered working feature.
-No qualified row, descriptor, shader, setting or ABI changes accompany this audit.
+No qualified row, descriptor, shader or ABI changes accompany this work.
+
+Step 1 runtime increment (mesh-identity, 2026-11-03): `rt_mesh_content_id=0` gates
+a host-only v1 candidate fingerprint on class-A mesh captures and audits. It reads
+existing mapped raw float3 positions and uint8/16/32 indices, never XFB positions
+or extra GPU readbacks. It hashes the referenced vertex span, index count and 32
+ordered index/position samples; indexed draws scan indices to derive the span.
+Handles, offsets, padding, index width and instance transforms are excluded.
+Missing mappings/layouts stay unknown. Key off computes no IDs. The host stores
+the candidate on captured pool meshes and logs `[mesh id] content ids: N meshes,
+M collisions, K stable across 2 captures`; collisions here mean observed differing
+samples with the same hash. Unsampled mutations can alias: this ID never qualifies
+a row. Full canonical equality in prerequisite 1 below remains unimplemented.
+LSLib is absent and the catalogue cannot decode GR2 buffers; the byte contract and
+exact decoder prerequisite are recorded in `tools/assets/mesh_content_id.md`.
+Unit tests and CPU cost are recorded in `docs/progress/cov-mesh-material.md`.
 
 The existing mesh key is not a resource ID or vertex/index content hash. `common/native_hit_pool.h`
 `Geometry`, `geometry_key` and `position_key` hash Vulkan buffer handles, draw ranges and offsets.

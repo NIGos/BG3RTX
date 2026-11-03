@@ -958,6 +958,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory 
   if (r == VK_SUCCESS && data && *data) {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped[m] = static_cast<uint8_t*>(*data) - o;
+    tracker().mapped_ranges[m] = {o, size == VK_WHOLE_SIZE ? UINT64_MAX : o + size};
   }
   return r;
 }
@@ -966,6 +967,7 @@ static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m)
   {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
+    tracker().mapped_ranges.erase(m);
   }
   device_of(device)->vk.UnmapMemory(device, m);
 }
@@ -975,6 +977,7 @@ static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, 
   {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped.erase(m);
+    tracker().mapped_ranges.erase(m);
   }
   device_of(device)->vk.FreeMemory(device, m, a);
 }

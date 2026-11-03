@@ -405,6 +405,8 @@ add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
 add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
 add_test(NAME native_hit_pool_test COMMAND native_hit_pool_test)
+add_executable(mesh_content_id_test tests/mesh_content_id_test.cpp)
+add_test(NAME mesh_content_id_test COMMAND mesh_content_id_test)
 add_executable(native_vt_recipes_test tests/native_vt_recipes_test.cpp)
 add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 # rt_hit_material_instanced (common/native_hit_instanced.h): per-draw rows of instanced wind / 2S draws.

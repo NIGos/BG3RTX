@@ -1,28 +1,35 @@
-## Pak mesh material catalogue (branch cov-mesh-material, BLOCKED_OFFLINE, 2026-11-03)
-- Added `tools/assets/mesh_materials.py`: exact VisualBank UUID / ObjectID / LOD ->
-  material UUID, native overrides, texture resources and template bindings / defaults.
-  Outputs are exclusive-create only; existing shared asset DB files are never changed.
-- Generated locally: `data/assetdb/mesh_materials_cov_mesh_material_v2.json`,
-  223,381,989 bytes; 38.1 s, 0 parse failures. 165,802 submesh / LOD rows,
-  32,696 materials, 24,006 textures, 1,063 templates. Four conflicting IDs,
-  58 ambiguous rows, 3 unresolved rows and 4 missing templates remain explicit.
-  Initial v1 retained because this task permits only additions in the shared DB.
-- Runtime fallback is NOT implemented. `rt_hit_material_paks` is proposed only.
-  Existing mesh keys hash Vulkan handles / ranges, not resource IDs or content.
-  Never-drawn pool meshes also lack G-buffer-derived UV / tangent basis; the
-  descriptor cache has no texture UUID -> current image-view bridge. LSLib absent.
-  Exact prerequisites and fail-closed integration design: TRACK_D_REFLECTIONS 14.
-- Replay packs lack pool resource IDs / per-instance shader-family attribution.
-  S8 25% and S6 49% missing-record shares are audit evidence, not a family ranking.
-  Read-only inventory freezes 659 active rows across five packs; existing blocker
-  counters are absent / zero. This is a baseline, not evaluated-energy proof.
-  No new-row share, evaluated energy or GPU cost improvement is claimed.
-- No runtime / shader / ABI / preset changes; shader request delta 0.
-  Existing qualified-row execution remains unchanged; no new-row energy gate passed.
-- Draft S8 / S6 / inn / camp single-launch OFF / ON / OFF jobs and predicted.json:
-  `tools/live_batches/cov_mesh_material`. BLOCKED_OFFLINE, unqueued, unauthorized.
-  Finish identity, basis, descriptors and replay equality before any live request.
-- Validation: catalogue tests 3 / 3; preservation tests 7 / 7; CTests 2 / 2.
-  Draft dryrun passed static checks and fake runs 4 / 4; temporary Python-launcher
-  shim required (`py` absent). Estimate 19.6 min / 760 MB including scene loads.
-  No game launch, commit, merge, push or source replay-pack write.
+## Pak mesh catalogue and content identity (branch mesh-identity, BLOCKED_OFFLINE, 2026-11-03)
+- Step 1 delivers host-side sampled content candidate IDs, behind
+  rt_mesh_content_id=0. Off computes no IDs; existing material joins are unchanged.
+- Class-A captured meshes and audits use existing mapped raw float3 positions
+  and uint8/16/32 indices. Device-local or unsupported inputs stay unknown.
+  No GPU readbacks, shader changes, ABI bump or preset promotion. Request delta 0.
+- Canonical v1 hashes referenced vertex span, index count and 32 ordered
+  index/position samples. An index scan derives the span, not allocation size.
+  Handles, offsets, padding, index widths and instance transforms are excluded.
+  Re-captures read current bytes, so buffer reuse cannot reuse a cached ID.
+- Pool meshes retain the host-only ID. Two adjacent capture sets count equal
+  sampled IDs and observed hash collisions; no handle identity enters that check.
+  Log: [mesh id] content ids: N meshes, M collisions, K stable across 2 captures.
+  Prints after two sets, every 120 sets and when disabling the key.
+- Tests: moved buffers/layouts/index widths match; sampled position/index changes
+  differ; invalid ranges/formats/NaN reject; forced hash collisions are counted.
+  Synthetic sampled mutations: 100,000 meshes, 0 hash collisions.
+  Unsampled mutations can alias. This is not exact mesh equality or a pak join.
+- CPU cost: 8.318 us per captured mesh for span scan, 32 samples, hash and
+  capture registry (4,096 vertices / 12,288 indices, cached CPU RAM).
+  This excludes Vulkan mapping lookup/locks and uncached host-memory costs.
+- Offline counterpart blocked: lslib_tools() returns empty; LSLib.dll / GR2
+  conversion tools are absent. mesh_materials.py reads LSF metadata only.
+  Need exact ObjectID / LOD / submesh raw positions and ordered indices.
+  Contract and remaining decoder inputs: tools/assets/mesh_content_id.md.
+- Existing v2 catalogue retained: 165,802 rows, 32,696 materials, 24,006 textures,
+  1,063 templates; 4 conflicting IDs, 58 ambiguous rows, 3 unresolved rows.
+- Left: full canonical equality and collision rejection, UV/tangent basis,
+  texture UUID-to-view bridge, replay row equality, then authorized live gates.
+  No qualified-share, evaluated-energy or GPU cost improvement is claimed.
+- Live check (not run): enable rt_mesh_content_id with rt_mesh_capture for two
+  capture sets in one scene and inspect the log; unmapped meshes remain unknown.
+- Validation: C++ build passed; all 121 CTests passed; git diff --check passed.
+  Progress is 35 lines, UTF-8 without BOM. No game launch,
+  commit, merge, push, shared catalogue write or source replay-pack write.

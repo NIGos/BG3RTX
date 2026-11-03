@@ -1,6 +1,7 @@
 #include "../common/perf_hook_state.h"
 #include "../common/native_hit_records.h"
 #include "../common/native_hit_pool.h"
+#include "mesh_content_id.h"
 // Track D: the static/dynamic BVH split (docs/TRACK_D_RT.md section 11,
 // docs/archive/AUDIT_SOTA.md rank 2). rt_bvh_split=1 (live); 0 is the old single soup BLAS.
 //
@@ -373,6 +374,7 @@ struct NativeOmmVariant {
   omm::AttachedBlas blas{};
 };
 struct Mesh {
+  uint64_t content_id = 0; // diagnostic candidate, never a material join
   uint32_t tris = 0;
   bool alpha = false;
   MeshState state = kBuilt;
@@ -446,6 +448,8 @@ uint64_t g_hold_why[7] = {};
 
 // ---- this capture's draws ----
 struct FrameDraw {
+  uint64_t content_id = 0;
+  std::shared_ptr<mesh_content::Sample> content_sample;
   uint64_t mesh_key = 0;      // 0: not instanceable
   uint64_t dyn_key = 0;
   const uint8_t* rows[3] = {};   // instance 0's matrix rows in the game's mapped memory
@@ -466,6 +470,46 @@ struct FrameDraw {
   std::vector<Range> ranges;
 };
 std::vector<FrameDraw> g_draws;
+bool g_content_on = false;
+uint64_t g_content_captures = 0;
+mesh_content::Captures g_content_ids;
+
+// Only existing host mappings. Never stage a GPU copy or hash XFB/world-space
+// positions. Hold the tracker lock through reads so unmap cannot race them.
+void content_sample(const BvhDraw& d, FrameDraw& fd) {
+  const auto& ip = *d.inst;
+  if (!ip.pos_float3 || ip.pos_binding >= CmdState::kMaxVertexBindings) return;
+  const auto& vb = d.s->vb[ip.pos_binding];
+  const uint64_t vsize = geo_buffer_size(vb.buffer);
+  const uint64_t isize = d.args.kind == 1 ? geo_buffer_size(d.s->ib) : 0;
+  std::shared_lock lock(tracker().mu);
+  auto bytes = [&](VkBuffer b, uint64_t size, uint64_t offset) -> mesh_content::Bytes {
+    const auto bm = tracker().buffer_mem.find(b);
+    if (bm == tracker().buffer_mem.end() || offset >= size || bm->second.second > UINT64_MAX - offset) return {};
+    const auto mp = tracker().mapped.find(bm->second.first);
+    const auto range = tracker().mapped_ranges.find(bm->second.first);
+    const auto start = bm->second.second + offset;
+    if (mp == tracker().mapped.end() || range == tracker().mapped_ranges.end() ||
+        start < range->second.first || start >= range->second.second) return {};
+    return {mp->second + start, (std::min)(size - offset, range->second.second - start)};
+  };
+  if (vb.offset > UINT64_MAX - ip.pos_offset) return;
+  mesh_content::Input in{};
+  in.positions = bytes(vb.buffer, vsize, vb.offset + ip.pos_offset);
+  in.stride = ip.pos_stride ? ip.pos_stride : uint32_t(vb.stride);
+  in.count = d.args.count;
+  in.vertex_offset = d.args.kind == 1 ? int64_t(d.args.vertex_offset) : int64_t(d.args.first);
+  if (d.args.kind == 1) {
+    in.index_bytes = d.s->ib_type == VK_INDEX_TYPE_UINT32 ? 4 :
+        d.s->ib_type == VK_INDEX_TYPE_UINT16 ? 2 : d.s->ib_type == VK_INDEX_TYPE_UINT8_EXT ? 1 : 0;
+    if (!in.index_bytes || d.s->ib_offset > UINT64_MAX - uint64_t(d.args.first) * in.index_bytes) return;
+    in.indices = bytes(d.s->ib, isize, d.s->ib_offset + uint64_t(d.args.first) * in.index_bytes);
+  } else if (d.args.kind != 0) return;
+  mesh_content::Sample sample;
+  if (!mesh_content::sample(in, sample)) return;
+  fd.content_id = mesh_content::hash(sample);
+  fd.content_sample = std::make_shared<mesh_content::Sample>(sample);
+}
 std::unordered_map<uint64_t, uint32_t> g_dyn_seen;   // dyn key -> occurrences this capture
 uint32_t g_audits_this_frame = 0;
 bool g_capture_all_meshes = false;
@@ -1146,6 +1190,7 @@ void bvh_device_created(DeviceData* dd) {
 void bvh_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  g_content_ids.clear(); g_content_on = false; g_content_captures = 0;
   if(g_omm_clone.pipeline || g_omm_validate.pipeline)dd->vk.DeviceWaitIdle(dd->device);
   for(auto* p:{&g_omm_clone,&g_omm_validate}) {
     if(p->pipeline)dd->vk.DestroyPipeline(dd->device,p->pipeline,nullptr);
@@ -1251,6 +1296,17 @@ bool bvh_split_wanted() { return g_on && !g_failed && cfg_hot(CfgHot::rt_bvh_spl
 
 void bvh_begin_capture(VkCommandBuffer) {
   std::lock_guard<std::mutex> lock(g_mu);
+  const bool content_on = cfg_int("rt_mesh_content_id", 0) != 0;
+  if (g_content_on) {
+    if (g_content_captures == 2 || g_content_captures % 120 == 0 || !content_on)
+      log("[mesh id] content ids: %llu meshes, %llu collisions, %llu stable across 2 captures",
+          (unsigned long long)g_content_ids.current.size(), (unsigned long long)g_content_ids.collisions,
+          (unsigned long long)g_content_ids.stable);
+    g_content_ids.next();
+  }
+  if (!content_on && g_content_on) { g_content_ids.clear(); g_content_captures = 0; }
+  g_content_on = content_on;
+  if (content_on) ++g_content_captures;
   g_draws.clear();
   g_dyn_seen.clear();
   g_audits_this_frame = 0;
@@ -1342,17 +1398,21 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
       fd.omm_material=std::make_shared<omm::NativePlainCapture>(std::move(captured));++g_st.omm_captured;
     }
   }
-  if (g_capture_all_meshes) return BVH_CAPTURE;
+  auto capture = [&](BvhVerdict verdict) {
+    if (g_content_on) content_sample(d, fd);
+    return verdict;
+  };
+  if (g_capture_all_meshes) return capture(BVH_CAPTURE);
   auto it = g_meshes.find(mk);
   if (it == g_meshes.end()) {
     auto rj = g_rejected.find(mk);
     if (rj == g_rejected.end() || frame_index() >= rj->second.until) fd.extract = true;
-    return BVH_CAPTURE;
+    return capture(BVH_CAPTURE);
   }
   Mesh& m = it->second;
-  if (m.tris != fd.tris_per_instance) return BVH_CAPTURE;   // cannot happen for one key; be safe
+  if (m.tris != fd.tris_per_instance) return capture(BVH_CAPTURE);   // cannot happen for one key; be safe
   if (m.state == kNeedCheck && !m.check_pending) fd.check = true;
-  if (m.state != kReady) return BVH_CAPTURE;
+  if (m.state != kReady) return capture(BVH_CAPTURE);
   fd.cached = true;
   *mesh_tris = m.tris;
   // A periodic audit: the cached draw is captured once more and compared.
@@ -1362,7 +1422,7 @@ BvhVerdict bvh_classify(VkCommandBuffer cmd, const BvhDraw& d, uint32_t* token, 
     ++g_audits_this_frame;
     m.last_audit = frame_index();
     fd.audit = true;
-    return BVH_CACHED_AUDIT;
+    return capture(BVH_CACHED_AUDIT);
   }
   return BVH_CACHED;
 }
@@ -1386,6 +1446,7 @@ void bvh_captured(uint32_t token, VkDeviceSize offset, uint32_t prims, bool alph
   if (token >= g_draws.size()) return;
   FrameDraw& fd = g_draws[token];
   fd.captured = true;
+  if (g_content_on && fd.content_sample) g_content_ids.add(fd.content_id, *fd.content_sample);
   fd.soup_off = offset;
   fd.prims = prims;
   fd.cap_alpha = alpha;
@@ -1531,6 +1592,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       }
       // A new mesh: its storage, its extraction from instance 0, checked against the last instance.
       Mesh m;
+      m.content_id = fd.content_id;
       m.gen = ++g_mesh_gen;
       m.tris = fd.tris_per_instance;
       m.alpha = fd.alpha;
