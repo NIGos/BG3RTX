@@ -120,7 +120,11 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         # Gate windows identify when an ON-only producer is actually requested.
         # Do not demand its full expect line while warming its OFF value.
         producer_windows = {label for g in related for label in g["windows"]}
+        # Only judged windows: warm-ups may legitimately show a producer before its values settle
+        # (DLSS-G reports 1.00 until frame generation has run a full window).
+        judged = flow.judged_labels(job, plan)
         eligible = [w for w in wins if w["index"] >= first and 0 <= w["index"] < len(states)
+                    and (not judged or plan[w["index"]].get("label") in judged)
                     and (not producer_windows or w["label"] in producer_windows)
                     and (not plan[w["index"]].get("wait_log") or w["index"] in readiness)
                     and all(states[w["index"]].get(k) == v for k, v in requirements.items())]
