@@ -62,6 +62,7 @@ foreach ($job in $jobs) {
   $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
     $step = $plan[$i]
+    try { Assert-CameraPlanFields $step } catch { $ok=$false; Say "FAIL ${n}: phase $i $($_.Exception.Message)" }
     if (-not (Apply-Set $state $step.set)) { $ok = $false }
     try { foreach ($t in 0, 1, ($step.seconds / 2), ($step.seconds - 0.5)) { [void](Get-CameraPlanSample $step $t 2560 1067) } } catch { $sampled = $false }
     # -MaxBursts N: a flicker analysis that needs K16 float bursts (scripts/qa/pan_artifacts.py) may take up to N

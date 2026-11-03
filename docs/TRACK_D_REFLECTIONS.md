@@ -782,6 +782,16 @@ establish a new pak join or predict its qualified-share gain. No GPU cost or ene
 - No build, CMake, CTest, DXC, shader tool or live run executed. A future authorized camp A/B must confirm
   fewer captured unmapped draws / deferred bytes without losing mapped alpha rows; GPU cost is unmeasured.
 
+## Generated 2S recording-order fix (branch genrows-gate, READY_FOR_LIVE, 2026-11-03)
+- Item 3's source hint raced parallel depth/G-buffer recording: camp 163 captures declined, 0 mapped;
+  inn 86 declined, 0 mapped. Generated AlphaTest2s now captures without a source while retaining no_source.
+- Final scene pairing still rejects missing/duplicate depth keys and unpairable IP_Base_VT captures;
+  clip/UV checks remain mandatory. IP grass and other generated families retain their source gate.
+- Regression records G-buffer first, then depth: mapping succeeds only after a unique depth record arrives.
+- This restores speculative stream allocation: historical camp deferred bytes 57 -> 93 MB.
+  New GPU cost and numerical mapping recovery require live evidence; generated rows remain off.
+- qual_stage4 keeps camp/inn M4 + GI guards; S8 CPU jobs are dropped after rejection/no gain/noise.
+
 ## Item 4: HLOD two-sided audit (branch hm-recipe-rows, unverified: build pending, 2026-11-02)
 - Read-only DB audit: `Engine_Default_HLOD_TwoSided_VT` = 2d2ac3c38992b7f0 / 3b346b4241d44152;
   engine offsets 0/32/36, LayoutBase bindings 1:3/4/5/6, material CB 16 B, no Reflectance role.
