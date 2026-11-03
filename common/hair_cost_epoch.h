@@ -6,9 +6,9 @@
 template<class Read>
 inline uint32_t hair_cost_mask(Read read) {
   constexpr const char* keys[] = {"rt_native_hair", "rt_native_scalp", "rt_hair_physical_origin",
-    "rt_hair_gi_cull", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean", "rt_hair_visibility"};
+    "rt_hair_pool_trim"};
   uint32_t mask = 0;
-  for (uint32_t i=0;i<8;++i) if (read(keys[i],0)!=0) mask |= 1u<<i;
+  for (uint32_t i=0;i<4;++i) if (read(keys[i],i==3 ? 1 : 0)!=0) mask |= 1u<<i;
   return mask;
 }
 struct HairCostEpoch {

@@ -17,7 +17,7 @@ def stamp(seconds):
 
 def main():
     here = Path(__file__).resolve().parent
-    if f.main([str(here)]):
+    if f.main([str(here), "--preflight"]):
         return 1
     manifests = sorted(here.glob("*.manifest.json"))
     assert len(manifests) == 3, "expected exactly three saves"

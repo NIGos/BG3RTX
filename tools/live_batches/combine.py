@@ -296,7 +296,8 @@ def main(argv=None):
     if any(names.intersection(j.get("requires_success_of", []))
            for sources in groups.values() for _, j, _ in sources):
         raise ValueError("cannot combine batches that depend on each other")
-    index = flow.corpus(a.results, ROOT / "captures/.cache/live_flow_corpus.json")
+    index = flow.corpus(a.results, ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+    flow.fps_windows.configure(index["entries"])
     bad = False
     memo = {}
     for save, sources in groups.items():
@@ -313,6 +314,7 @@ def main(argv=None):
             problems += [f"{path}: {p}" for p in flow.lint(src, phases, index["entries"], memo)["problems"]]
         problems += flow.window_problems(job, plan)[0]
         problems += flow.regex_problems(job, index["entries"], memo)[0]
+        problems += flow.launch_problems(job, flow.duration_budget(job, plan))
         if not index["entries"]:
             problems.append("no VALID corpus evidence")
         flow.write(plan_path, plan)

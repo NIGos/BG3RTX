@@ -701,7 +701,8 @@ void water_device_destroyed(DeviceData* dd) {
   const VkDeviceFuncs& vk = dd->vk;
   for (Slot& s : g_slot) {
     if (s.fence) {
-      if (s.used) vk.WaitForFences(dd->device, 1, &s.fence, VK_TRUE, 1000000000ull);
+      if (s.used) fault_on_result(dd, vk.WaitForFences(dd->device, 1, &s.fence, VK_TRUE, 1000000000ull),
+                                  "water teardown fence wait");
       vk.DestroyFence(dd->device, s.fence, nullptr);
     }
     release_slot_as(s);
@@ -896,7 +897,9 @@ void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkComma
   if (draws.empty() || !water_wanted()) return;
   const uint32_t i = g_next % kOwn;
   Slot& s = g_slot[i];
-  if (s.used && dd->vk.WaitForFences(dd->device, 1, &s.fence, VK_TRUE, 0) != VK_SUCCESS) {
+  const VkResult ready = s.used ? dd->vk.WaitForFences(dd->device, 1, &s.fence, VK_TRUE, 0) : VK_SUCCESS;
+  fault_on_result(dd, ready, "water build fence poll");
+  if (ready != VK_SUCCESS) {
     ++g_win.busy;
     return;
   }
@@ -954,6 +957,7 @@ void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkComma
   si.commandBufferCount = 1;
   si.pCommandBuffers = &s.cb;
   const VkResult r = dd->vk.QueueSubmit(queue, 1, &si, s.fence);   // the caller holds the queue lock
+  fault_on_result(dd, r, "water build submission");
   s.used = r == VK_SUCCESS;
   s.harvest = s.used && built;
   if (r != VK_SUCCESS) log("[water] build submission failed (%d)", r);
@@ -990,7 +994,11 @@ void water_on_present() {
   if (!g_ready) return;
   for (uint32_t i = 0; i < kOwn; ++i) {
     Slot& s = g_slot[i];
-    if (s.harvest && g_dd->vk.WaitForFences(g_dd->device, 1, &s.fence, VK_TRUE, 0) == VK_SUCCESS) harvest(i);
+    if (s.harvest) {
+      const VkResult ready = g_dd->vk.WaitForFences(g_dd->device, 1, &s.fence, VK_TRUE, 0);
+      fault_on_result(g_dd, ready, "water harvest fence poll");
+      if (ready == VK_SUCCESS) harvest(i);
+    }
   }
   if (g_pending.size() > 256) g_pending.clear();   // command buffers the game never submitted
   const bool on = cfg_hot(CfgHot::rt_water_geometry) != 0;

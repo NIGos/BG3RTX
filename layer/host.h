@@ -696,6 +696,9 @@ struct InstPipe {
   bool pos_float3 = false; // content identity supports raw float3 only
   uint8_t uv_binding = 0xff; // paks: audited copy of a raw per-vertex float2 input
   uint32_t uv_offset = 0, uv_stride = 0;
+  uint8_t paks_uv_binding = 0xff; // audited raw UV copy, including packed half2
+  uint32_t paks_uv_offset = 0, paks_uv_stride = 0;
+  bool paks_uv_half = false;
   bool paks_cull_known = false, paks_two_sided = false;
 };
 void bvh_device_created(DeviceData* dd);
@@ -973,10 +976,8 @@ struct AlphaRec {
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
-bool alpha_native_hair_wind_bounded(VkCommandBuffer cmd,VkFormat format);
-void alpha_native_hair_visibility_note(uint32_t decision);
 bool alpha_native_hair_record(uint32_t index,AlphaRec* out);
-bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset,uint32_t allocation,uint32_t tris);
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset);
 bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset);
 // Captured material plus actual views; descriptor indices are local to a frame.
 struct NativeTilesetSampler;

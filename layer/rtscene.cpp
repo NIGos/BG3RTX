@@ -1163,7 +1163,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.groom_first = res.groom_first;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
-    if(geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0))timestamp(cmd,slot,3);
     restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();

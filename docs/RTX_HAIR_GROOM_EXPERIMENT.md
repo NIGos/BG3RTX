@@ -106,6 +106,26 @@ User rule 2026-11-03: hair may cost more than 1 ms, but must be as cheap as poss
   Worst case per near character (every ray of three full-screen batches from its hair): 2.9 ms
   trace + 0.12 ms refit, against 6.6 ms for the card stand-in (the in-game card path costs more).
 
+## CPU converter optimisation (2026-11-03)
+
+The numpy-only converter now batches mapped runs and their exact medians, UV search bounds and
+triangle Jacobians. Dedupe uses scalar pair keys, filters same-card pairs early and looks up occupied
+neighbour cells once. Pair order, radii, defaults, thresholds and the groom format are preserved.
+
+`tools/hair_groom/speed_check.py <inputs dir>` compares every Groom field and the dropped count with
+the saved real-style references. All three styles are bit-identical (max absolute/relative diff 0):
+
+| Style | Convert seconds, old -> new | Dedupe seconds, old -> new | Total speedup |
+|---|---:|---:|---:|
+| Shadowheart | 8.4 -> 3.253 | 5.9 -> 1.431 | 3.05x |
+| Gale beard | 4.8 -> 2.824 | 4.0 -> 0.898 | 2.36x |
+| Halsin | 12.6 -> 4.475 | 12.5 -> 2.834 | 3.43x |
+
+Old timings are the supplied baseline measurements. New timings ran at BelowNormal priority;
+`python.exe` replaced the unavailable `py -3` launcher. The independent final
+`tests/hair_groom_test.py` run exits 0 and prints `all passed` in 5.06 s;
+the identity/timing checker exits 0, including the Halsin >= 3x gate. No game or GPU tools were run.
+
 ## Production path
 Integration design: docs/RTX_HAIR_INTEGRATION.md.
 

@@ -20,7 +20,7 @@
     "wait_log": [
       "gi: trace pass .*GPU median"
     ],
-    "wait_log_timeout": 9.0
+    "wait_log_timeout": 14.680000000000291
   },
   {
     "label": "warmup-scaled",
@@ -31,24 +31,24 @@
       "gi: gi/rt_reflections\\.hlsl\\?[^ ]*RT_TRACE_HALF=1[^ ]* generation ",
       "gi: gi/rf_resolve\\.hlsl\\?[^ ]* generation "
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "settle-off-a",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 3.6,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
   },
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {
     "label": "shot-off-a",
     "kind": "static",
-    "seconds": 15.1,
+    "seconds": 15.2,
     "trace_at": [
       1,
       6,
@@ -59,19 +59,19 @@
   {
     "label": "settle-on",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 3.6,
     "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
   },
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {
     "label": "shot-on",
     "kind": "static",
-    "seconds": 15.1,
+    "seconds": 15.2,
     "trace_at": [
       1,
       6,
@@ -82,19 +82,19 @@
   {
     "label": "settle-off-b",
     "kind": "static",
-    "seconds": 2.1,
+    "seconds": 3.6,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
   },
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {
     "label": "shot-off-b",
     "kind": "static",
-    "seconds": 15.1,
+    "seconds": 15.2,
     "trace_at": [
       1,
       6,

@@ -91,6 +91,18 @@ if gsrc:
 else:
     print("no dump of 06e66a6f: its Vg derivation is not exercised")
 
+# Check diagnostic source lineage against the real pool module: raw = flow * edge.
+psrc = wa.find_dump(dumps, 0xc4e92ccdb08dd777)
+if psrc:
+    ptext = subprocess.run([dis, "--raw-id", str(psrc)], check=True, capture_output=True, text=True).stdout
+    defs, _, _, _ = wa.parse_dis(ptext)
+    for raw, flow, edge in ((742,724,741), (809,791,808), (873,855,872)):
+        op, args = defs[raw]
+        check(f"pool foam %{raw} exact flow %{flow} * edge %{edge}",
+              op == "OpFMul" and args[1:] == [f"%{flow}", f"%{edge}"])
+else:
+    check("pool diagnostic lineage dump exists", False)
+
 if len(sys.argv) > 1:
     out = Path(sys.argv[1])
     for fs in ids:

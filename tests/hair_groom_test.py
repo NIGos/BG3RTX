@@ -4,13 +4,17 @@ import json
 import struct
 import sys
 import tempfile
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, strands2d  # noqa: E402
+from tools.low_priority import lower_priority
+lower_priority()
+from tools.hair_groom import analysis, asset, batch, bench_data, bsdf, convert, cost, dual, geom, mesh, primary, render, sample, strands2d  # noqa: E402
 
 FAILS = []
 INDEX_ID_FIXTURE = 0xce53baad8d797436
@@ -31,6 +35,43 @@ def strand_mask(h, w, centres, width):
             lo = int(np.floor(x - width / 2 + 0.5))
             a[y, max(0, lo):lo + width] = 255
     return a
+
+
+def test_reorient():
+    points = np.array([[.3, 0, 0], [.2, 0, 0], [.05, 0, 0],
+                       [.21, -.05, 0], [.205, 0, 0], [.2, .05, 0],
+                       [.05, 0, 0], [.15, 0, 0], [.3, 0, 0],
+                       [.1, 0, 0], [.1, 0, 0], [.1, 0, 0]], np.float32)
+    n = len(points)
+    offset = np.arange(n, dtype=np.float32) * .0001
+    triangles = np.repeat(points[:, None, :], 3, axis=1)
+    triangles[:, :, 2] -= offset[:, None]
+    triangles[:, 1, 0] += .01
+    triangles[:, 2, 1] += .01
+    g = convert.Groom(points, np.arange(n, dtype=np.float32) * .00001,
+                      np.arange(n * 4).reshape(n, 4), np.arange(n * 4, dtype=np.float32).reshape(n, 4) / 100,
+                      np.arange(0, n + 1, 3), np.arange(4), np.full(n, .7, np.float32),
+                      np.arange(n), np.tile([1., 0., 0.], (n, 1)), offset)
+    original = {f.name: getattr(g, f.name).copy() for f in dataclasses.fields(g)}
+    out, count = analysis.reorient(g, np.zeros(3))
+    check("tangential strand with a nearer tip remains undecided", analysis.orientation(g, np.zeros(3))["strands_reversed"] == 2)
+    permutation = np.r_[2, 1, 0, np.arange(3, n)]
+    check("reorient flips only the inward radial strand", count == 1 and
+          np.array_equal(out.points, points[permutation]))
+    check("reorient reverses all per-point arrays consistently", all(
+        np.array_equal(getattr(out, name), original[name][permutation]) for name in
+        ("points", "radii", "joints", "weights", "triangle", "bary", "normal_offset")))
+    embedded = np.einsum("pk,pkd->pd", out.bary, triangles[out.triangle])
+    embedded[:, 2] += out.normal_offset
+    check("reoriented embedding still reproduces points including normal offsets", np.allclose(embedded, out.points, atol=1e-7))
+    check("reorient root parameter follows arc length, including unchanged strands", np.allclose(
+        out.root_param, [0, .6, 1, 0, .5, 1, 0, .4, 1, 0, .5, 1]))
+    check("reorient preserves converter arrays and strand metadata", all(
+        np.array_equal(getattr(g, name), value) for name, value in original.items()) and
+        np.array_equal(out.offsets, g.offsets) and np.array_equal(out.card, g.card))
+    again, count = analysis.reorient(out, np.zeros(3))
+    check("reorient is idempotent", count == 0 and all(np.array_equal(getattr(again, f.name), getattr(out, f.name))
+          for f in dataclasses.fields(out)))
 
 
 def test_trace():
@@ -108,6 +149,9 @@ def test_convert():
     check("orientation: root nearer the head", o["strands_reversed"] == 0 and o["strands_decided"] == 1, o)
     o = analysis.orientation(groom, np.array([0.0, -0.3, 0.0]))
     check("orientation: reversed card detected", o["strands_reversed"] == 1 and o["cards_mostly_reversed"] == 1, o)
+    # A strand running along the scalp (the head beside its middle): root and tip equally far, so it decides nothing.
+    o = analysis.orientation(groom, np.array([0.1, -0.1, 0.0]))
+    check("orientation: a tangential strand is not decided", o["strands_decided"] == 0 and o["cards_mostly_reversed"] == 0, o)
     # Mirrored UVs: the same card with u reflected (every UV triangle's winding flips) places the same strand,
     # reflected across the card, exactly embedded: the embedding does not depend on the UV orientation.
     mir = card_mesh()
@@ -166,6 +210,43 @@ def test_quality_options():
     two.positions[10:, 2] = 0.005
     g3, _ = convert.convert(two, m, tile_grid=(1, 1), step=16)
     check("dedupe keeps separate strands", convert.dedupe(g3)[1] == 0)
+
+
+def test_run_radii():
+    # Compare against the original per-run definition, including holes and collapsed triangles.
+    rng = np.random.default_rng(15)
+    lengths = rng.integers(1, 12, 300)
+    sid = np.repeat(np.arange(len(lengths)), lengths)
+    hit = np.where(rng.random(len(sid)) < 0.25, -1, 0)
+    width = rng.uniform(1e-6, 0.02, len(sid))
+    width[rng.random(len(sid)) < 0.2] = 0
+    width[rng.random(len(sid)) < 0.1] = np.nan
+    width[rng.random(len(sid)) < 0.1] = np.inf
+    # Odd/even measured counts, 3x median cap, MAX_RADIUS, all-invalid and singleton runs.
+    sid = np.r_[np.repeat(np.arange(300, 306), [5, 4, 4, 2, 1, 4]), sid]
+    hit = np.r_[np.zeros(20, int), hit]
+    width = np.r_[[0.0002, 0.0004, 0.0006, 0, np.nan, 0.0002, 0.0004, 0, np.inf,
+                   0.0001, 0.0001, 0.0001, 0.1, 0, np.inf, 0.1, 0.01, 0.02, 0.03, 0.04], width]
+    want_i, want_n, want_r, dropped = [], [], [], 0
+    a = 0
+    while a < len(sid):
+        b = a + 1
+        while b < len(sid) and sid[b] == sid[a] and (hit[b] >= 0) == (hit[a] >= 0):
+            b += 1
+        if hit[a] >= 0 and b - a >= 2:
+            r = width[a:b] / 2
+            ok = np.isfinite(r) & (r > 0)
+            if ok.any():
+                r = np.where(ok, r, np.median(r[ok]))
+                r = np.minimum(np.minimum(r, 3 * np.median(r)), convert.MAX_RADIUS)
+                want_i.extend(range(a, b)); want_n.append(b - a); want_r.extend(r)
+            else:
+                dropped += 1
+        a = b
+    idx, n, radii, got_dropped = convert.run_radii(hit, sid, width)
+    check("run radii: exact original indices, lengths, medians and caps",
+          np.array_equal(idx, want_i) and np.array_equal(n, want_n) and np.array_equal(radii, want_r)
+          and got_dropped == dropped, (got_dropped, dropped))
 
 
 def test_thin():
@@ -244,6 +325,15 @@ def test_geom():
     d = np.linalg.norm(pts[:, None] - pts[None], axis=2)
     want = {(i, j) for i, j in zip(*np.nonzero(d < 0.001)) if i < j}
     check("pairs within distance = brute force", got == want and len(want) > 10, (len(got), len(want)))
+    # Include exact cell/distance boundaries and duplicate positions, not just uniform noise.
+    pts = np.r_[rng.integers(-4, 5, (80, 3)).astype(float), np.zeros((4, 3))]
+    for distance in (0.5, 1.0, 1.5, 3.0):
+        pairs = geom.pairs_within(pts, distance)
+        got = {tuple(sorted(x)) for x in pairs.tolist()}
+        delta = pts[:, None] - pts[None]
+        d2 = np.einsum("ijk,ijk->ij", delta, delta)
+        want = {(i, j) for i, j in zip(*np.nonzero(d2 < distance * distance)) if i < j}
+        check(f"pairs grid boundaries and duplicates, distance {distance}", got == want and len(pairs) == len(got))
 
 
 def test_batch_catalogue():
@@ -276,6 +366,27 @@ def test_locate_overlap():
     check("locate hit and miss", list(hit) == [0, -1], hit)
     check("locate counts overlap", list(inside) == [2, 0], inside)
     check("locate barycentrics", np.allclose(bary[0], [0.6, 0.2, 0.2]), bary[0])
+    rng = np.random.default_rng(7)
+    for dtype in (np.float32, np.float64):
+        uv = rng.random((40, 2)).astype(dtype)
+        tris = np.r_[rng.integers(0, len(uv), (30, 3)), [[0, 1, 2], [2, 1, 0], [0, 0, 1]]]
+        points = np.r_[rng.random((200, 2)), uv].astype(dtype)
+        hit = np.full(len(points), -1)
+        bary = np.zeros((len(points), 3))
+        inside = np.zeros(len(points), int)
+        order = np.argsort(points[:, 1])
+        for t, tri in enumerate(tris):
+            v = uv[tri, 1]
+            lo, hi = np.searchsorted(points[order, 1], [v.min() - convert.EPS, v.max() + convert.EPS])
+            idx = order[lo:hi]
+            b = convert.barycentric(uv[tri], points[idx])
+            inside[idx] += np.all(b > convert.EPS, 1)
+            keep = np.all(b >= -convert.EPS, 1) & (hit[idx] < 0)
+            hit[idx[keep]] = t
+            bary[idx[keep]] = b[keep]
+        got = convert.locate(uv, tris, points)
+        check(f"locate batched exact first hits, counts and barycentrics {dtype.__name__}",
+              all(np.array_equal(a, b) for a, b in zip(got, (hit, bary, inside))))
 
 
 def test_render():
@@ -291,6 +402,114 @@ def test_render():
     cov = np.zeros(16)
     np.add.at(cov, f.pixel, f.alpha)
     check("strand coverage = 2r / pixel", np.allclose(cov[4:8], 0.2, atol=1e-6), cov.reshape(4, 4))
+    # Tilted cards (the batch's strand reference, fibres=True): a card turned 60 deg about its strand axis shows half its
+    # area while its fibres keep their width: the plain card halves the coverage, the fibre reference keeps the strands'.
+    # Fibres far thinner than a pixel (the batch: 2 mm pixels, 0.1-0.3 mm strands): 0.23 mm strands every 1 mm.
+    h, w = 512, 256
+    m = np.zeros((h, w, 4), np.uint8)
+    m[..., 3] = strand_mask(h, w, [lambda y, c=c: c for c in np.arange(4, 252, 4.0)], 1)
+    m[..., 2] = np.linspace(0, 255, h)[:, None].astype(np.uint8)
+    flat = card_mesh(length=0.12, width=0.06)
+    groom, _ = convert.convert(flat, m, tile_grid=(1, 1), step=16)
+    far = (np.array([0.0, 1e4, 0.0]), np.array([1e-3, 1e-3, 1e-3]))
+
+    def sums(deg, axis):
+        a = np.radians(deg)
+        rot = np.eye(3)
+        i, j = [(0, 2), (1, 2)][axis == 0]
+        rot[i, i], rot[i, j], rot[j, i], rot[j, j] = np.cos(a), -np.sin(a), np.sin(a), np.cos(a)
+        card = card_mesh(length=0.12, width=0.06)
+        card.positions = (card.positions @ rot.T).astype(np.float32)
+        pts = (groom.points @ rot.T).astype(np.float32)
+        view = render.View(card.positions.mean(0).astype(float), np.array([0, 0, 1.0]), np.array([0, 1.0, 0]), 0.002, (50, 80))
+        light = np.array([0, 0, -1.0])
+        _, plain = render.render(lambda v: render.card_fragments(card.positions, card.uv, card.tris, m, v), view, light, far)
+        _, fib = render.render(lambda v: render.card_fragments(card.positions, card.uv, card.tris, m, v, fibres=True), view, light, far)
+        _, st = render.render(lambda v: render.strand_fragments(pts, groom.radii, groom.offsets, groom.root_param, v), view, light, far)
+        return st.sum(), plain.sum(), fib.sum()
+    # The card raster and the strand raster differ a little face on (texel point sampling vs the fibre area): the
+    # tilted ratios are judged against that face-on ratio.
+    s0, p0, _ = sums(0.0, 1)
+    flat_ratio = p0 / s0
+    for axis, name in ((1, "about its strand axis"), (0, "about the across axis")):
+        s, p, fb = sums(60.0, axis)
+        check(f"fibre card reference tilted {name}: card/strand ratio within 10% of face on", abs(fb / s / flat_ratio - 1) < 0.1,
+              (fb / s, flat_ratio))
+        if axis == 1:
+            check("plain card reference halves the tilted fibres' coverage", abs(p / s / flat_ratio - 0.5) < 0.1, (p / s, flat_ratio))
+
+
+def test_render_equivalence():
+    rng = np.random.default_rng(583)
+    pix = rng.integers(0, 31, 4000)
+    depth = rng.normal(size=len(pix))
+    # Several distinct float64 depths in the same float32 bucket, adjacent buckets,
+    # signed zeros, underflow and overflow: buckets must never change exact ordering.
+    depth[:600] = 1 + rng.integers(-20, 20, 600) * 1e-10
+    depth[600:610] = [0.0, -0.0, 1e-310, -1e-310, 1e100, -1e100, 2, 2, -2, -2]
+    order = np.lexsort((depth, pix))
+    check("fragment radix order exactly matches stable lexsort including collisions",
+          np.array_equal(render._fragment_order(pix, depth), order))
+    for special_pix, special_depth in ((np.array([2 ** 33, 2 ** 33, 0]), np.array([1., -1., 0.])),
+                                       (np.array([0, 0, 0]), np.array([np.nan, np.inf, -np.inf]))):
+        check("fragment order fallback matches lexsort",
+              np.array_equal(render._fragment_order(special_pix, special_depth), np.lexsort((special_depth, special_pix))))
+    alpha, colour = rng.uniform(0, 1, len(pix)), rng.uniform(0, 2, (len(pix), 3))
+    pp, aa, cc = pix[order], np.minimum(alpha[order], 0.999), colour[order]
+    tau = -np.log1p(-aa)
+    cum = np.cumsum(tau)
+    first = np.maximum.accumulate(np.where(np.r_[True, pp[1:] != pp[:-1]], np.arange(len(pp)), 0))
+    before = np.exp(-(cum - tau - (cum[first] - tau[first])))
+    expected, total = np.zeros((32, 3)), np.zeros(32)
+    np.add.at(expected, pp, (before * aa)[:, None] * cc)
+    np.add.at(total, pp, tau)
+    image, trans = render.composite(pix, depth, alpha, colour, 32)
+    check("composite matches original add.at arithmetic exactly", np.array_equal(image, expected)
+          and np.array_equal(trans, np.exp(-total)))
+    empty = render.Fragments.concat([])
+    image, trans = render.composite(empty.pixel, empty.depth, empty.alpha, empty.tangent, 4)
+    check("empty composite leaves background untouched", not image.any() and np.all(trans == 1))
+
+    card = card_mesh(length=0.06, width=0.04, rows=3)
+    card.positions[:, 2] = card.positions[:, 0] * 0.8
+    mask = rng.integers(0, 256, (64, 64, 4), dtype=np.uint8)
+    mask[::3, :, 3] = 0
+    # A small viewport exercises clipping as well as raster chunk boundaries.
+    view = render.View(np.array([0.0, -0.03, 0]), np.array([0., 0, 1]), np.array([0., 1, 0]), 0.002, (13, 19))
+    both = render.card_fragments_both(card.positions, card.uv, card.tris, mask, view, chunk=1)
+    for i, fibres in enumerate((True, False)):
+        single = render.card_fragments(card.positions, card.uv, card.tris, mask, view, fibres=fibres)
+        check(f"paired cards equal independent raster, fibres={fibres}", all(
+            np.array_equal(getattr(single, field), getattr(both[i], field)) for field in render.Fragments.FIELDS))
+    builders = render.card_fragment_builders(card.positions, card.uv, card.tris, mask)
+    equivalent = dataclasses.replace(view)
+    with patch.object(render, "card_fragments_both", wraps=render.card_fragments_both) as raster:
+        builders[0](view)
+        builders[1](equivalent)
+        check("paired builders rasterise an equivalent view only once", raster.call_count == 1)
+    # Compare all light/head shadow queries against the original add.at map.
+    light = both[1]
+    slabs = 7
+    lo, hi = np.percentile(light.depth, [0, 100])
+    span = max(hi - lo, 1e-6)
+    bins = np.clip(((light.depth - lo) / span * slabs).astype(np.int64), 0, slabs - 1)
+    tau = np.zeros((view.size[0] * view.size[1], slabs + 1))
+    np.add.at(tau, (light.pixel, bins + 1), -np.log1p(-np.minimum(light.alpha, 0.999)))
+    check("shadow bins match original add.at exactly", np.array_equal(render._shadow_map(light, view, slabs)[2], np.cumsum(tau, 1)))
+    query = view.project(light.world.astype(float))
+    shared = render._shadow_map(light, view, 64)
+    check("shared shadow lookup equals standalone lookup", np.array_equal(
+        render.shadow_transmittance(light, query, view), render.shadow_transmittance(light, query, view, shadow_map=shared)))
+
+    # More than one chunk; a strand boundary falls inside a chunk, not just at its edge.
+    points = rng.uniform(-0.004, 0.004, (33010, 3)).astype(np.float32)
+    offsets = np.array([0, 13, 33010])
+    radii, root = np.full(len(points), 0.0001, np.float32), rng.random(len(points)).astype(np.float32)
+    seg = np.flatnonzero(~np.isin(np.arange(len(points)), offsets[:-1]))
+    reference = render._strand_chunk(points, radii, root, view, 0.5, seg)
+    chunked = render.strand_fragments(points, radii, offsets, root, view)
+    check("strand chunking preserves every fragment and sample order", all(
+        np.array_equal(getattr(reference, field), getattr(chunked, field)) for field in render.Fragments.FIELDS))
 
 
 def test_mesh_loader():
@@ -538,6 +757,110 @@ def test_dual():
     check("table model within 5% of the Monte Carlo averages (CHAR_Hair colour)", np.all(np.abs(a / b_ - 1) < 0.05), a / b_)
 
 
+def test_batch_cache():
+    from PIL import Image
+
+    key = batch.groom_key(b"gr2", b"mask", "hair")
+    check("groom cache key is stable SHA-256", len(key) == 64 and key == batch.groom_key(b"gr2", b"mask", "hair"))
+    check("groom cache key frames input boundaries", batch.groom_key(b"a", b"bc", "hair") != batch.groom_key(b"ab", b"c", "hair"))
+    check("groom cache key includes each input", all(key != batch.groom_key(*args) for args in
+          ((b"other", b"mask", "hair"), (b"gr2", b"other", "hair"), (b"gr2", b"mask", "other"))))
+    with patch.object(batch, "VERSION", "validation-only"):
+        check("validation version leaves groom key unchanged", batch.groom_key(b"gr2", b"mask", "hair") == key)
+    with patch.object(batch, "CONVERTER_VERSION", "new-converter"):
+        check("converter version invalidates groom key", batch.groom_key(b"gr2", b"mask", "hair") != key)
+
+    hair = card_mesh()
+    mask = np.zeros((32, 16, 4), np.uint8)
+    mask[..., 3] = strand_mask(32, 16, [lambda y: 8.0], 2)
+    mask[..., 2] = np.linspace(0, 255, 32).astype(np.uint8)[:, None]
+    groom, rep = convert.convert(hair, mask, tile_grid=(1, 1), step=8)
+    groom, dropped = convert.dedupe(groom)
+    head, corr = batch.head_proxy(hair), [0.5, 0.75]
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        buf = BytesIO()
+        Image.fromarray(mask).save(buf, format="PNG")
+        raw = buf.getvalue()
+        path = d / "cache" / "groom" / (batch.groom_key(b"gr2", raw, "hair") + ".npz")
+        batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), 0.75, corr, head)
+        got = batch.load_groom_cache(path)
+        check("groom cache round trip loads", got is not None)
+        check("groom cache every dataclass field equal including dtype", all(
+            np.array_equal(getattr(groom, f.name), getattr(got[0], f.name)) and
+            getattr(groom, f.name).dtype == getattr(got[0], f.name).dtype for f in dataclasses.fields(groom)))
+        check("groom cache retains original cards", all(np.array_equal(getattr(hair, f.name), getattr(got[1], f.name))
+              for f in dataclasses.fields(hair)))
+        check("groom cache retains report and validation inputs", got[2:7] == (rep, dropped, (1, 1), 0.75, corr)
+              and np.array_equal(got[7], head))
+        check("missing groom cache is a miss", batch.load_groom_cache(d / "missing.npz") is None)
+
+        style = dict(name="synthetic", gr2="hair.gr2", mask="mask.dds", mesh="hair")
+        class Pak(dict):
+            read = dict.__getitem__
+
+        # A cache hit must reach validation without invoking any part of the conversion pipeline.
+        with patch("tools.assets.lspk.PackageSet", return_value=Pak({"hair.gr2": b"gr2", "mask.dds": raw})), \
+             patch.object(batch, "gr2_dump", side_effect=AssertionError("dump called")), \
+             patch.object(convert, "convert", side_effect=AssertionError("convert called")), \
+             patch.object(convert, "dedupe", side_effect=AssertionError("dedupe called")), \
+             patch.object(batch, "bbox_views", return_value={"test": (None, None)}), \
+             patch.object(render, "render", return_value=(np.zeros((2, 2, 3)), np.zeros((2, 2)))):
+            rec = batch.process(style, None, None, d / "out", d, False)
+            check("cached process reaches validation without conversion", rec.get("iou") == [0.0], rec)
+            with patch.object(render, "render", return_value=(np.ones((2, 2, 3)), np.ones((2, 2)))), \
+                 patch.object(asset, "write") as write_asset, \
+                 patch.object(analysis, "reorient", wraps=analysis.reorient) as reorient:
+                geometry_head = (np.array([0., -.3, 0.]), np.array([.066, .089, .083]))
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], geometry_head)
+                cache_bytes = path.read_bytes()
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("bad mask roots with a head proxy pass via geometry", rec.get("verdict") == "pass" and
+                      rec.get("root_source") == "geometry" and rec.get("root_reversed_strands") == groom.strands, rec)
+                written = write_asset.call_args.args[3][0][1]
+                check("asset receives root-first geometry without rewriting converter cache", reorient.call_count == 1 and
+                      written.points[0, 1] < written.points[-1, 1] and path.read_bytes() == cache_bytes)
+                tangent_head = (np.array([.1, -.1, 0.]), geometry_head[1])
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], tangent_head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("undecided geometry roots retain a review reason", rec.get("verdict") == "needs-review" and
+                      any(s.startswith("root from geometry (") for s in rec.get("reasons", [])), rec)
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, [.1], head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("bad mask roots without a head proxy still reject", rec.get("verdict") == "reject" and
+                      any(s.startswith("root channel does not") for s in rec.get("reasons", [])), rec)
+                reorient.reset_mock()
+                batch.save_groom_cache(path, groom, hair, rep, dropped, (1, 1), .75, corr, geometry_head)
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("good mask root path never reorients", reorient.call_count == 0 and "root_source" not in rec, rec)
+            path.write_bytes(b"corrupt npz")
+            check("corrupt groom cache is a miss", batch.load_groom_cache(path) is None)
+            check("revalidate cache miss does not convert or replace state", batch.process(style, None, None, d / "out", d, False, True) is None)
+            dump_path = d / "cache" / "gr2" / (batch.hashlib.sha256(b"gr2").hexdigest() + ".bin")
+
+            def read_dump(p, name):
+                if p.read_bytes() != b"dump":
+                    raise ValueError("corrupt dump")
+                return hair
+
+            with patch.object(batch, "gr2_dump", side_effect=lambda lib, src, dst: dst.write_bytes(b"dump")) as dump, \
+                 patch.object(mesh, "load_gr2_dump", side_effect=read_dump), \
+                 patch.object(convert, "convert", return_value=(groom, rep)) as conversion, \
+                 patch.object(convert, "dedupe", return_value=(groom, dropped)):
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("corrupt groom silently rebuilds", rec.get("iou") == [0.0] and conversion.call_count == 1
+                      and batch.load_groom_cache(path) is not None, rec)
+                check("successful dump is cached by GR2 content", dump_path.read_bytes() == b"dump" and dump.call_count == 1)
+                path.unlink()
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("GR2 cache skips LSLib on groom miss", rec.get("iou") == [0.0] and dump.call_count == 1, rec)
+                path.unlink()
+                dump_path.write_bytes(b"corrupt dump")
+                rec = batch.process(style, None, None, d / "out", d, False)
+                check("corrupt GR2 dump silently rebuilds", rec.get("iou") == [0.0] and dump.call_count == 2
+                      and dump_path.read_bytes() == b"dump", rec)
+
+
 def test_cost():
     h, w = 256, 64
     m = np.zeros((h, w, 4), np.uint8)
@@ -559,7 +882,62 @@ def test_cost():
     check("cost: coarser LODs trace cheaper per ray", cost.NS_PER_RAY[0] > cost.NS_PER_RAY[1] > cost.NS_PER_RAY[2])
 
 
-for t in (test_tips_dither, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_mesh_loader):
+def test_sample():
+    state, rows = {}, []
+
+    def add(name, reason=None, lod=0, category="player", **extra):
+        state[name] = dict(gr2=name + ".gr2", lod=lod, reasons=[reason] if reason else [], **extra)
+        rows.append(dict(name=name, category=category))
+
+    for name in "abcde":
+        add("coverage_" + name, "coverage differs by +0.10")
+    add("coverage_0_lod1", "coverage differs by +0.10", lod=1)
+    add("coverage_unused", "coverage differs by +0.10", category="unused")
+    add("coverage_cv", "coverage differs by +0.10", category="CV only")
+    for name, reason in (("silhouette", "silhouette IoU 0.50"), ("radiance", "mean radiance differs by +20%"),
+                         ("roots away", "2 cards with the root away from the head"),
+                         ("root channel", "root channel does not run along the rows"),
+                         ("mirrored UV", "3 cards with mirrored UV triangles"), ("error", "ValueError: no mesh")):
+        add(name, reason, lod=1)
+    state["silhouette"]["reasons"].append("coverage differs by -0.30")
+    for name in ("draw_a", "draw_b"):
+        add(name, triangles=10)
+    add("uv_join", triangles=20)
+    add("uploaded", asset="ABCDEF0123456789.hgrm")
+    add("catalogue_only", triangles=30, asset="0000000000000001.hgrm")
+    add("companion_category", category="companion")
+    for name in sample.COMPANIONS:
+        add("hair_" + name.upper(), category="unused")
+    add("draw_lod1", lod=1)
+    state["draw_lod1"]["gr2"] = state["draw_a"]["gr2"]
+    add("draw_lod2", lod=2)
+    state["draw_lod2"]["gr2"] = state["draw_a"]["gr2"]
+    log = ("[hair groom] unmatched hair draw: 30 indices (10 triangles): no groom\n"
+           "[hair groom] UV join 60 indices: matched; uv0 ...\n"
+           "[hair groom] abcdef0123456789 LOD 1 uploaded: 10 strands\n"
+           "[hair groom] indexed 0000000000000001.hgrm: index id 0000000000000001, 90 indices\n"
+           "[other] unmatched hair draw: 90 indices\n"
+           "[hair groom] unmatched hair draw: 30 indices (10 triangles): repeated\n")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "live.log"
+        path.write_text(log, encoding="utf-8")
+        with path.open(encoding="utf-8") as f:
+            indices, ids = sample.log_draws(f)
+    check("sample parses draw counts and upload IDs, ignores catalogue", indices == {30, 60} and ids == {"abcdef0123456789"})
+    reach = {"rows": rows}
+    names, sources, classes = sample.select(state, reach, indices, ids)
+    check("sample maps all count collisions and upload IDs", sources["logs"] == {"draw_a", "draw_b", "uv_join", "uploaded"})
+    check("sample coverage evenly spaced, LOD0 preferred, reachable only", classes["coverage"] == {"coverage_a", "coverage_c", "coverage_e"}, classes)
+    check("sample first reason determines class, LOD1 fills missing LOD0", all(classes[k] == {k} for k in sample.CLASSES if k != "coverage"))
+    check("sample includes category and case-insensitive companion names", len(sources["companions"]) == 11)
+    check("sample adds LOD siblings by GR2", sources["LOD siblings added"] == {"draw_lod1"} and "draw_lod2" not in names)
+    check("sample deterministic regardless of input order", sample.select(dict(reversed(list(state.items()))), {"rows": rows[::-1]}, indices, ids)[0] == names == sorted(set(names)))
+    check("sample configurable quota", sample.pick_classes(state, reach, 1)["coverage"] == {"coverage_c"} and
+          not any(sample.pick_classes(state, reach, 0).values()))
+    check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
+
+
+for t in (test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
