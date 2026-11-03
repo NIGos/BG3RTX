@@ -291,6 +291,10 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
   if (g_snaps_left == 0 || info->swapchainCount != 1 || !g_sc_extent.width) return false;
   if (g_snaps_left < 0) {
     int n = requested;
+    if (cfg_int("pan_edge",0) && (n>16 || g_sc_extent.width>3840 || g_sc_extent.height>1600)) {
+      log("[sl] edge capture REFUSED: presented extent/count budget");
+      g_snaps_left=0; return false;
+    }
     // fg_snap_delay=N: start N rendered frames after the request (a plan step sets fg_snap at its start; the
     // capture then lands inside the camera turn that starts later in the step).
     // fg_snap_delay_ms=N (when > 0, instead): N wall-clock ms, so launches at different frame rates (rt=1 / rt=0)
@@ -312,6 +316,7 @@ bool snap_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info, V
     g_snap_dir = root_dir() + "\\captures\\fg_" + capture_stamp();
     make_dirs(g_snap_dir);
     log("[sl] capturing %d presented frames to %s", n, g_snap_dir.c_str());
+    if(cfg_int("pan_edge",0)) log("[sl] edge capture format %d, extent %ux%u",int(g_sc_format),g_sc_extent.width,g_sc_extent.height);
   }
   uint32_t family = dd->graphics_family;
   {

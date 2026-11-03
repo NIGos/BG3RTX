@@ -37,6 +37,17 @@ int main() {
   WaterPanSamples game{100,8,false};
   for(uint64_t frame=101;frame<=108;++frame)for(auto name:{"water_game","water_coverage"})game.add(frame,name,frame);
   if(!check(game.complete()))return 1;
+  EdgePanSamples edge{100};
+  for(uint64_t f=101;f<=108;++f)for(auto name:{"depth","final","material","albedo"})
+    if(EdgePanSamples::wanted(name,f-100))edge.add(f,name,f);
+  if(!check(edge.complete() && !edge.retained(100) && !edge.retained(109)))return 1;
+  auto edge_missing=edge;edge_missing.masks[7]&=~4;
+  if(!check(!edge_missing.complete()))return 1;
+  auto edge_dup=edge;edge_dup.add(104,"final",104);
+  if(!check(!edge_dup.complete()))return 1;
+  auto edge_mixed=edge;edge_mixed.masks[0]&=~4;edge_mixed.add(101,"material",999);
+  if(!check(!edge_mixed.complete()))return 1;
+  if(!check(!EdgePanSamples::wanted("gi",1) && !EdgePanSamples::wanted("albedo",2)))return 1;
   std::puts("pan epoch and explicit warmup/K16 completeness checks passed");
   return 0;
 }
