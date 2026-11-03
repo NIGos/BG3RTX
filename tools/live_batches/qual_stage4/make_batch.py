@@ -34,6 +34,9 @@ def gate(name, select, match, windows, **extra):
 
 
 def finish(job, plan, stem):
+    # Warm the generated-row and native VT states before the first diagnostic.
+    plan[:0] = [phase('warm-generated-off', 5, 'rt_stats=0,rt_hit_material_generated=0,rt_vt_alpha_masks=0'),
+                phase('warm-generated-on', 5, 'rt_stats=0,rt_hit_material_generated=1,rt_vt_alpha_masks=1')]
     job.update(name='qs4-' + stem, live_batch='qual-stage4', window_mode='visible_unfocused_fg',
                session=False, hold=120, timeout=sum(p['seconds'] + p.get('wait_log_timeout', 0) for p in plan) + 240,
                estimated_phase_seconds=sum(p['seconds'] for p in plan), stop_on_dump=False)

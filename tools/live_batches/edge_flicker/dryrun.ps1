@@ -27,5 +27,5 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
     Set-Content -LiteralPath (Join-Path $shim 'py.ps1') '& python @($args | Where-Object { $_ -ne ''-3'' })'
     $env:PATH = "$shim;$env:PATH"
 }
-& (Join-Path $PSScriptRoot '../lean_dryrun.ps1') -Batch edge_flicker -Out $Out -MaxMinutes 5 -MaxMB 2000 -Independent -Unfocused -MaxBursts 9 -BurstMB 165 -LoadSec 120
+& (Join-Path $PSScriptRoot '../lean_dryrun.ps1') -Batch edge_flicker -Out $Out -MaxMinutes 6 -MaxMB 2000 -Independent -Unfocused -MaxBursts 9 -BurstMB 165 -LoadSec 120
 exit $LASTEXITCODE

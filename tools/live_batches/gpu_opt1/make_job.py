@@ -16,7 +16,7 @@ def main():
     states=[('off-a',()),('compact',(KEYS[0],)),('off-b',()),('alpha',(KEYS[1],)),('off-c',()),('water',(KEYS[2],)),('off-d',())]
     plan=[phase('warmup',24,KEYS)]+[phase('warm-'+key,10,(key,)) for key in KEYS]+[phase('warm-off',10,())]
     for label,state in states:
-        plan += [phase('shot-'+label,8,state,True),phase('cost-'+label,25,state)]
+        plan += [phase('shot-'+label,11,state,True),phase('cost-'+label,25,state)]
     plan[0]['set'] = plan[0]['set'].replace('qa_exposure_hold=1','qa_exposure_hold=0')
     plan += [phase('restore',5,())]; plan[-1]['set']+=',qa_exposure_hold=0'
     (HERE/'plans/gpu_opt1.json').write_text(json.dumps(plan,indent=1)+'\n',encoding='utf-8')
@@ -25,6 +25,7 @@ def main():
     for n,save,source in [('go1-camp','Campsite - 27h','m5p3-camp-fg2.json'),('go2-s8','Water Queens House','m5p1-s8-fg2.json')]:
         j=json.loads((HERE.parent/'m5_promotion/jobs'/source).read_text())
         j.update(name=n,save=save,live_batch='gpu-opt1',window_mode='visible_unfocused_fg',timeout=sum(p['seconds'] for p in plan)+300,
+                 live_flow=dict(expected_fps=30,settings_latency_s=1,trace_stall_s=1),
                  estimated_phase_seconds=sum(p['seconds'] for p in plan),set=j['set']+',dump_shaders=0,dump_preview_f32=1,'+','.join(k+'=0' for k in KEYS),
                  args=['-RealPresent','-Move','-MovePlan','captures/live_batches/gpu_opt1/plans/gpu_opt1.json'])
         j['expect']=[r'\[auto\] scene ready',r'gi: trace pass .*GPU median',r'gi: GPU cost .*average of 300 frames',r'\[trace\] frame \d+ written',r'\[rrpost\] exposure held \(qa_exposure_hold=1\) at EV [-0-9.]+',r'\[rrpost\] exposure hold released after [1-9]\d* writes']
@@ -39,7 +40,7 @@ def main():
                   dict(name='complete GI timer every cost state',select='gi: GPU cost',match=r'average of 300 frames',min=1,windows=costs)]
         for prefix in ('rf: reflection pass','ls: local-light shadow pass'):
             gates.append(dict(name=prefix+' complete timer per cost state',select=prefix,
-                              match=r'GPU median [0-9.]+ ms, .*\(300 frames;',min=1,windows=costs))
+                              match=r'GPU median [0-9.]+ ms, .*\(300 frames;',period_frames=300,min=1,windows=costs))
         gates += [dict(name='enclosing RT cost complete timer',select='rt passes: GPU cost',
                        match=r'average of 300 frames',min=1,windows=costs),
                   dict(name='water compose GPU timer present',select=r'\[water\] compose GPU',
@@ -48,6 +49,11 @@ def main():
                        match=r'\([1-9]\d* timed;',min=1,windows=costs)]
         j['expect_every']=gates
         j['expect_runner']=[r'\[window-mode\].*visible_unfocused']+[rf"\[motion-trace\] phase={i} label={p['label']} repeat=0" for i,p in enumerate(plan) if p.get('trace_at')]+[rf'\[motion-plan\] complete phases={len(plan)}\b','^Run ended: done']
+        startup_state=dict(v.split('=',1) for v in j['set'].split(','))
+        for key in ['rt_water_fg_mv', 'rt_water_glint_aa', 'rt_water_rr_mv']: startup_state.pop(key,None)
+        for key,value in {'dump_png_width': 1280, 'fg_log_presents': 6, 'fg_snap': 0, 'fg_snap_any': 0, 'fg_snap_delay': 0, 'fg_snap_delay_ms': 0, 'fg_state_every': 60, 'rt_xfb_mb': 1024}.items(): startup_state.setdefault(key,str(value))
+        j['set']=','.join(k+'='+v for k,v in startup_state.items())
+        j['live_flow']['startup_only']=['rt_xfb_mb']
         j['purpose']='Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.'
         (HERE/'jobs'/f'{n}.json').write_text(json.dumps(j,indent=1)+'\n',encoding='utf-8')
     predicted={'status':'READY_FOR_LIVE_DRAFT','no_game_launched':True,'keys':{

@@ -55,7 +55,7 @@ python tools/live_batches/combine.py <job.json> <job.json> --out captures/offlin
 
 The tool groups by save, writes one job/plan/manifest per save, and immediately
 runs the shared offline design checks. It rejects incompatible trees, window
-modes, runner args, startup presets, declared startup keys and timing assumptions.
+modes, runner args, declared startup keys and timing assumptions.
 Only single MovePlan jobs are supported. It never writes a pending inbox.
 
 A reset before each later batch sets every key used by any batch to the next
@@ -64,6 +64,10 @@ explicit baselines in every input are rejected. Each source batch keeps its own
 warmup requirements. Labels, trace phase numbers, every-window and trend gates
 are prefixed/rebased; patterns and expectations are merged. Only common forbids
 apply globally; each batch's full forbid list is checked again on its own slice.
+
+Different presets are supported: each reset restores the next batch's preset and
+all settings that differ between the shipped presets, including keys untouched
+by either plan. An explicitly declared startup-only preset still cannot change.
 
 The combined job's gated post command extracts each batch automatically. To
 extract offline, use `--extract <manifest> --log <log> --runner <runner> --out <dir>`;

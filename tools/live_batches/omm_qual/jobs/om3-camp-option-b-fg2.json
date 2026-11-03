@@ -4,7 +4,7 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 423,
+ "timeout": 433,
  "repeat": 1,
  "live_batch": "omm-qual",
  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_vt_alpha_masks=1,rt_alpha_fine_lod=0,rt_omm_dyn=0,rt_omm_reference=0",
@@ -63,21 +63,20 @@
   "RR creation failed",
   "RR evaluate failed",
   "\\[cascade\\] could not allocate",
-  "\\[vt alpha\\] .* invalid: skipped",
   "\\[vt alpha\\] no index",
   "held records dropped \\(view destroyed/reused\\) [1-9]"
  ],
  "expect_runner": [
   "\\[motion-plan\\] pointer centred in owned foreground game",
-  "\\[motion-trace\\] phase=4 label=shot-off-a repeat=0",
-  "\\[motion-trace\\] phase=6 label=shot-on repeat=0",
-  "\\[motion-trace\\] phase=8 label=shot-off-b repeat=0",
-  "\\[motion-plan\\] complete phases=10\\b",
+  "\\[motion-trace\\] phase=6 label=shot-off-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-on repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-off-b repeat=0",
+  "\\[motion-plan\\] complete phases=12\\b",
   "^Run ended: done"
  ],
  "stop_on_dump": true,
  "purpose": "Option B (rt_alpha_fine_lod, live) OFF/ON/OFF at S3 camp with rt_vt_alpha_masks=1 throughout: the image and energy cost of B alone (masked grass reads mip 0 with the hard cut for every ray), before micromaps. diag-on/diag-off (rt_stats): the alpha-candidate lines ('stochastic' share drops to ~0 for the masked records). Cost OFF/ON/OFF diag-off, one PNG per state, exposure held from cost-off-a. Smoke-ultra startup.",
- "estimated_phase_seconds": 123,
+ "estimated_phase_seconds": 133,
  "expect_every": [
   {
    "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
@@ -121,6 +120,28 @@
     "cost-on"
    ],
    "min": 1
+  },
+  {
+   "name": "no invalid VT alpha assets during measured windows",
+   "select": "\\[vt alpha\\] .* invalid: skipped",
+   "match": "(?!)",
+   "event": true,
+   "min": 0,
+   "windows": [
+    "diag-on",
+    "diag-off",
+    "cost-off-a",
+    "shot-off-a",
+    "cost-on",
+    "shot-on",
+    "cost-off-b",
+    "shot-off-b"
+   ]
   }
- ]
+ ],
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 1
+ }
 }

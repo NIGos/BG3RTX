@@ -15,6 +15,36 @@
   "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=0"
  },
  {
+  "label": "warmup-diagnostic-settings",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 5,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 5,
+  "motion_end": 5,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "qa_exposure_hold=0,rt_stats=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60"
+ },
+ {
+  "label": "warmup-cost-settings",
+  "kind": "static",
+  "speed": "static",
+  "seconds": 5,
+  "repeat_ms": 0,
+  "scan": 16,
+  "capture_at": 0,
+  "serial": 0,
+  "motion_start": 5,
+  "motion_end": 5,
+  "pixels_per_second": 0,
+  "direction": 0,
+  "set": "rt_scene_wait_ms=12,rt_scene_wait_log_frames=120"
+ },
+ {
   "label": "static-a",
   "kind": "static",
   "speed": "static",

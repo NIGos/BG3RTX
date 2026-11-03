@@ -23,10 +23,14 @@ def make():
         plan.append(dict(label=label, kind='static', speed='static', seconds=seconds,
                          repeat_ms=0, scan=16, capture_at=0, serial=0,
                          motion_start=seconds, motion_end=seconds, pixels_per_second=0,
-                         direction=0, registration_policy='per-frame-exclude-unregistered', set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
+                         direction=0, set=','.join(f'{k}={v}' for k, v in keys.items()), **extra))
 
     step('warmup', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
     step('warmup-camera', 20, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
+    # Exercise every attribution state before the first captured baseline.
+    for label, change in WINDOWS[1:-1]:
+        step('warm-' + label, 5, dict(BASE, **change, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
+    step('warm-base-return', 5, dict(BASE, fg_snap=0, pan_capture=0, qa_exposure_hold=0))
     every = []
     for i, (label, change) in enumerate(WINDOWS):
         state = dict(BASE, **change, fg_snap=0, pan_capture=0, qa_exposure_hold=1)
@@ -58,10 +62,12 @@ def make():
                    pan_capture=0, pan_delay_ms=0, fg_snap=0, fg_snap_any=1,
                    fg_snap_delay_ms=1000, fg_state_every=30, fg_letterbox=1,
                    dump_images=0, dump_raw=0, dump_shaders=0, rt_timing_frames=120,
+                   dump_png_width=1280, fg_log_presents=6, fg_snap_delay=0, rt_xfb_mb=1024,
                    **BASE)
     job = dict(name='ef1-dialogue3-attribution', save='Test Dialogue3', session=False,
                live_batch='edge-flicker', window_mode='visible_unfocused_fg', traces=0,
-               hold=90, timeout=420, repeat=1, stop_on_dump=False,
+               hold=90, timeout=480,
+               live_flow=dict(expected_fps=30, settings_latency_s=1, trace_stall_s=1, startup_only=['rt_xfb_mb']), repeat=1, stop_on_dump=False,
                set=','.join(f'{k}={v}' for k, v in startup.items()),
                args=['-RealPresent', '-Move', '-MovePlan',
                      'captures/live_batches/edge_flicker/plans/ef1.json'],

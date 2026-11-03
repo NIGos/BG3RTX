@@ -4,7 +4,7 @@ Prepared offline only. No game launch, queue submission, permission, merge or co
 `python tools/live_batches/qual_stage4/make_batch.py` regenerates the two jobs/plans
 and predictions using read-only Git queries. Historical audit: merge_audit.json.
 
-One job per save: camp 300 s phases, inn 199 s. S8 CPU screening is removed:
+One job per save: camp 310 s phases, inn 209 s. S8 CPU screening is removed:
 perf_hook_state was rejected, perf_hitmat_lists had no gain, perf_submit_batch
 was within noise. All three keys remain off. Variants delta: 0.
 
@@ -33,3 +33,5 @@ Before a later live batch, obtain explicit user steering and use the existing
 serial queue. Keep builds/compiles out of cost windows. Do not copy jobs into
 pending now. The runner restores the original INI on exit/failure; final phases
 also reset experimental keys and diagnostics. Never modify saves.
+
+2026-11-03 offline repair: explicitly warm generated rows OFF and masks OFF before the first diagnostic. The original rejected S8 CPU screen remains historical and absent; all CPU keys stay off.

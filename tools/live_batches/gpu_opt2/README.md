@@ -10,3 +10,5 @@ No GPU savings or real-scene quality qualification is claimed by this draft.
 Coordinator analysis: `python tools/m4_promotion_gate.py --batch gpu_opt2 --pool run`.
 Keep predicted.json before running; this task forbids commits, so the coordinator must preserve
 its pre-run provenance when promoting the batch. Do not claim a committed prediction here.
+
+Offline lint assumptions: 30 rendered FPS, 1 s settings latency and 1 s per trace stall. Reflection and local-light timers use 300 frames from core/gi.cpp rf_timing_collect / ls_timing_collect. All toggled render states run before measurement.

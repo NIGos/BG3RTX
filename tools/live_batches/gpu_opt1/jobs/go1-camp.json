@@ -4,10 +4,10 @@
  "session": false,
  "traces": 0,
  "hold": 120,
- "timeout": 600,
+ "timeout": 621,
  "repeat": 1,
  "live_batch": "gpu-opt1",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=1,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_shaders=0,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
  "args": [
   "-RealPresent",
   "-Move",
@@ -207,6 +207,7 @@
    "name": "rf: reflection pass complete timer per cost state",
    "select": "rf: reflection pass",
    "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+   "period_frames": 300,
    "min": 1,
    "windows": [
     "cost-off-a",
@@ -222,6 +223,7 @@
    "name": "ls: local-light shadow pass complete timer per cost state",
    "select": "ls: local-light shadow pass",
    "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+   "period_frames": 300,
    "min": 1,
    "windows": [
     "cost-off-a",
@@ -314,6 +316,14 @@
  ],
  "stop_on_dump": true,
  "purpose": "Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.",
- "estimated_phase_seconds": 300,
- "window_mode": "visible_unfocused_fg"
+ "estimated_phase_seconds": 321,
+ "window_mode": "visible_unfocused_fg",
+ "live_flow": {
+  "expected_fps": 30,
+  "settings_latency_s": 1,
+  "trace_stall_s": 1,
+  "startup_only": [
+   "rt_xfb_mb"
+  ]
+ }
 }
