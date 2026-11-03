@@ -878,9 +878,9 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;if(counts)++counts->pipeline;if(gen)++gen->pipeline;return false;}
  if(!keyed)draw=key(cmd,*state,args); // unreachable when lean (declined above); kept exact
  // A generated pair can also be used by opaque IP_Base_VT draws, which never
- // map: no alpha depth record exists. Decline before bindings, staging or XFB
- // allocation. Accept only an already noted source in this frame (deferred-first
- // recording conservatively skips these experimental rows).
+ // map: no alpha depth record exists. Generated 2S packets can record before
+ // depth, so a missing source is counted but cannot veto their capture. The
+ // final scene join drops unpairable captures, including opaque IP_Base_VT.
  if(irecipe && !instanced::capture_source_ok(family,gen!=nullptr,nullptr,draw)){
   bool source=false;
   for(const auto& s:slots)if(s.prepared && s.frame==p.frame && s.camera==p.camera && s.camera_offset==p.camera_offset &&
@@ -896,7 +896,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
        instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
        std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
   }
-  if(!source){if(counts)++counts->no_source;if(gen)++gen->no_source;return false;}
+  if(!source){if(counts)++counts->no_source;if(gen)++gen->no_source;
+   if(!instanced::capture_without_source_ok(family,gen!=nullptr))return false;}
  }
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;

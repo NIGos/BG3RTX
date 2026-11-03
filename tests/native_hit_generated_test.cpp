@@ -57,6 +57,23 @@ int main() {
   CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
   source.begin(1, 3); // another recording cannot reuse the previous alpha key
   CHECK(!instanced::capture_source_ok(instanced::AlphaTest2s, true, &source, alpha));
+  // G-buffer first: no source yet, but the generated 2S capture must survive
+  // until the independent depth packet supplies the exact source record.
+  DrawJoin deferred;deferred.begin(3, 4);
+  CHECK(instanced::capture_without_source_ok(instanced::AlphaTest2s, true));
+  CHECK(!instanced::capture_without_source_ok(instanced::AlphaTest2s, false));
+  CHECK(!instanced::capture_without_source_ok(instanced::IpGrass, false));
+  CHECK(!instanced::capture_without_source_ok(instanced::WindRgb, true));
+  CHECK(deferred.note(3, 4, alpha, UINT32_MAX));
+  uint32_t row=UINT32_MAX, record=UINT32_MAX;
+  CHECK(deferred.claim(3, 4, alpha, row));
+  CHECK(deferred.assign(3, 4, alpha, 0));
+  CHECK(!join_packets(source, deferred, alpha, 0, record));
+  CHECK(source.note(1, 3, alpha, 7));
+  CHECK(join_packets(source, deferred, alpha, 0, record) && record==7);
+  CHECK(!join_packets(source, deferred, opaque, 0, record));
+  CHECK(!source.note(1, 3, alpha, 8));
+  CHECK(!join_packets(source, deferred, alpha, 0, record));
   // 1. Key off and on agree on every audited pair and VS (the generated FSs are never audited ones).
   for (const auto& r : vt::recipes) {
     CHECK(generated::row(r.vs, r.fs) == nullptr);
