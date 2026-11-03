@@ -3237,6 +3237,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   VkDeviceAddress groom_tlas_address = 0;   // rt_hair_groom: this slot's groom TLAS (0: none)
   hair_primary::Row hp_rows[hair_primary::kMaxGrooms] = {};   // rt_hair_groom_primary: groom k's pool offsets
   uint64_t hp_keys[hair_primary::kMaxGrooms] = {};            // and its draw's index-range key
+  uint8_t hp_lods[hair_primary::kMaxGrooms] = {};             // and its LOD (diagnostics)
   uint32_t groom_count = 0;
   // BLAS builds: new meshes (object space, from the pool) and the per-draw BLAS (from the soup).
   {
@@ -3469,6 +3470,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
                                   w.g->prev_frames > 1 ? uint32_t(w.g->prev_off) : 0u};
           hp_keys[groom_count] = w.g->uv_off ? w.hp_key : 0;   // no UVs yet: its draw keeps the card
+          hp_lods[groom_count] = uint8_t(w.g->lod < 0 ? 0 : w.g->lod);
         }
         ++groom_count;
       }
@@ -3502,7 +3504,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
           float viewport[4];
           geo_render_size(&w, &h);
           geo_gbuffer_viewport(viewport);
-          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, groom_count, w, h, viewport);
+          hair_primary_publish(cmd, groom_tlas_address, g_pool.addr, g_pool.size, hp_rows, hp_keys, hp_lods, groom_count, w, h, viewport);
         }
       } else {
         groom_count = 0;

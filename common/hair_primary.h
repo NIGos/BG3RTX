@@ -25,16 +25,17 @@ constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
 constexpr uint32_t kRowBytes = 16;
 constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 1088, one vkCmdUpdateBuffer
+// Counts buffer of the fail-safe (rt/hair_primary_count.hlsl): strand pixels per groom k, then per groom the strand
+// pixels whose segment fails the readers' pool bound (hp_segment discards them; counted so the bound is never silent).
+// Then (C2) per groom float4 (a_f rgb, 1 when measured) from its strand colour sample.
+constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kTransmitOffset = kRefusedOffset + kMaxGrooms * 4;
+constexpr uint32_t kCountBytes = kTransmitOffset + kMaxGrooms * 16;
 // Strand colour samples (C2 shadow transmittance), after the header in the same buffer, never written by the layer's
 // update: per groom k 32 bytes, float4 (albedo rgb, fibre roughness) then the frame tag that wrote it. The strand
 // G-buffer variant stores one fragment's values per 8 x 8 pixel block (last writer wins: a sample of the groom's
 // colour); rt/hair_primary_count.hlsl turns the entries of the counted frame into a_f at the next publish.
 constexpr uint32_t kColourOffset = kHeaderBytes, kColourBytes = 32;
 constexpr uint32_t kHeaderAlloc = kColourOffset + kMaxGrooms * kColourBytes;   // 3136
-// Counts buffer: strand pixels per groom (kMaxGrooms uints), then per groom float4 (a_f rgb, 1 when measured).
-// Then per groom the strand pixels whose segment fails the pool bound (hp_segment: the readers discard them).
-constexpr uint32_t kTransmitOffset = kMaxGrooms * 4, kRefusedOffset = kTransmitOffset + kMaxGrooms * 16;
-constexpr uint32_t kCountBytes = kRefusedOffset + kMaxGrooms * 4;
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;
