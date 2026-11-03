@@ -234,6 +234,18 @@
        {"id": "before", "label": "Before post (default)", "apply": "live", "caps": [], "keys": {"rr_post": "1"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "after", "label": "After post", "apply": "live", "caps": ["dlss"], "keys": {"rr_post": "0"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
+    {"id": "rr_post_temporal", "label": "Temporal depth of field and bloom",
+     "description": "Smooths depth of field and bloom around fine edges. Experimental; quality and GPU cost await a live comparison.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": false,
+     "category": "Lighting", "summary": "Smooths depth of field and bloom around fine edges. Experimental; quality and GPU cost await a live comparison.",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rr_post": "1"},
+     "required_from_choice": {"rr_post": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_post_temporal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_temporal": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
+     ]},
     {"id": "exp_water_compose_shift", "label": "Water camera correction",
      "description": "Corrects water reflection coordinates while turning. S8 pool: turn with Q/E; compare reflection dropouts. Cost: unmeasured.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
