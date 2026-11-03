@@ -3,9 +3,10 @@
 One job, `su1-ultra-s8-fg2`, S8 Water Queens House, one launch, 11 phases, 211 s
 (about 5.5 min with load). The 45 s initial warmup allows new-build shader prefetch. No game is launched by the offline dryrun.
 
-- `preset=ultra` supplies OMM (`rt_omm=1`, `rt_omm_dyn=1`, `rt_vt_alpha_masks=1`,
+- `preset=ultra` supplies qualified box shadows (`ls_box=2`, default
+  `ls_box_honour_shadow=1`; ba1 S6 user approval 2026-11-03, +0.13 ms) and OMM (`rt_omm=1`, `rt_omm_dyn=1`, `rt_vt_alpha_masks=1`,
   `rt_alpha_fine_lod=1`, reference off), water and the capture budgets. Box shadows
-  use the preset; no test override enables the unqualified option.
+  use the preset and retain the default art-intent correction.
 - Static, pan Q/E and rotation windows retain zero opaque/cascade capture drops,
   scene-wait timeouts 0, water traced and composed every frame, no non-finite
   compose terms and VRAM within the real driver budget. RT and GI cost lines are required.
