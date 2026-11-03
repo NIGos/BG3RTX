@@ -110,10 +110,19 @@ Live job: tools/live_batches/hair_primary (READY_FOR_LIVE).
   relative error max 1.4e-5 (9000 samples, 0-6 fibres in front); table model vs per-colour Monte Carlo averages
   0.967/0.972/0.981 (CHAR_Hair colour). Found on the way: a `static const float x[8][3][6]` table read shifted
   fields on the GPU (DXC SPIR-V); the table is flat now.
-  **3b-2b (next):** for strand pixels (class 5 and a current pixel entry), our sun and local-light passes add
-  (hb_eval_pixel - the game's class-5 term, bg3_materials/bg3_sun) x radiance x our visibility, behind its own
-  key; Hair_Color from the strand's RT1 (the native material output). Open: single-scatter Chiang is pale
-  (RTX_HAIR_INTEGRATION 4), so 3b needs the dual-scattering term (Zinke 2008: forward transmittance and
-  spread from the strand count along the shadow ray) before it can be judged; until then the game's class-5
-  lighting with the exact strand tangent stays the default. **4:** DoF/RR post check
+  **3b-2b (next, design):** where: D-LS (`shaders/gi/rt_local_shadows.hlsl`) already runs after the tiled
+  lighting at full resolution, re-evaluates every local light's exact game term c_i (bg3_light_eval_mat, class
+  5 = the game's Marschner) and the sun's (`ls_sun`, bg3_sun_eval_mat), and adds deltas into the game's
+  diffuse/specular buffers. For strand pixels (class 5 and a pixel entry with this frame's tag in the hair
+  primary record; header address published by the layer under a persist key, no ABI change) a new
+  specialization constant adds, per traced light and for the sun:
+      delta = E_i * hd_shade(T, V, L_i, 0, n_i, RT1 colour, RT2 roughness) * v_i  -  c_i * s_i
+  (T, V from the pixel entry and camera; hb offsets averaged as hb_eval_pixel; n_i = strands crossed by the
+  shadow ray to the light: a groom query that counts up to 8 opaque hits by advancing tmin, replacing the
+  current any-hit test for these pixels). Energy rule: on a static camera the mean of key-on vs key-off is
+  NOT expected equal (the model is physically brighter: CHAR_Hair colour single scattering 0.21-0.40 of the
+  path-traced hair; the game's term is in between): the gate is the path-traced expectation, measured on the
+  pre-post scene colour of the hair ROI, and the visible hue. Key-off: byte-identical D-LS modules (spec
+  constant default 0), checked with shader_identity. Cost: +1 counting query per traced light on strand pixels
+  (bench: LSS 0.25 ns per ray) + hd_shade (~200 ALU): estimate +0.1-0.3 ms at a close-up.
   with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per character, VRAM.
