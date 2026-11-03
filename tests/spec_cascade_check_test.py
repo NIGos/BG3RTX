@@ -6,7 +6,15 @@ from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.spec_cascade_check import (phi_order, block_order, lower_priority, old_requests_waterhair,
-                                     old_requests_hairgi, old_requests_haircost, check_baseline)
+                                     old_requests_hairgi, old_requests_haircost, check_baseline, gpu_opt_requests)
+
+
+class GpuOptRequestsTest(unittest.TestCase):
+    def test_off_reference_preserves_every_existing_define(self):
+        for request in ("gi/gi_trace_rt.hlsl", "rt/water_compose.hlsl?WATER_LS=1;WATER_SPEC_CASCADE=1"):
+            [(assign, reference)] = gpu_opt_requests(request)
+            self.assertEqual(assign, {1024: 0, 1022: 0, 1023: 0})
+            self.assertEqual(reference, request + (";" if "?" in request else "?") + "BG3RTX_GPU_OPT_LEGACY=1")
 
 
 class BaselineWorkerTest(unittest.TestCase):

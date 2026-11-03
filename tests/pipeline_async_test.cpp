@@ -18,10 +18,21 @@ static int checks = 0;
 int main() {
   // Prewarming uses the visible live settings, excludes restart tilesets and developer controls.
   pa::PipelineSpecs warm;
-  warm.add(1008, 0); warm.add(1010, 0); warm.add(1015, 0); warm.add(1016, 0);
+  using namespace bg3::shader_variant;
+  warm.add(kSpecIdTileset, 0); warm.add(kSpecIdScalpHair, 0);
+  warm.add(kSpecIdWaterComposeShift, 0); warm.add(kSpecWaterHitShade, 0);
+  warm.add(kSpecIdCompactHitState, 0); warm.add(kSpecIdAlphaMetadataCache, 0);
+  warm.add(kSpecIdWaterEmptyTiles, 0);
   const auto alternatives = pa::experimental_specs(warm, false);
-  CHECK(alternatives.size() == 4); // hair, compose shift, hit shading 1 and 2
-  for (const auto& alt : alternatives) CHECK(alt.data[0] == 0);
+  CHECK(alternatives.size() == 6); // hair, hit shading 1/2 and three exact GPU candidates
+  std::set<uint32_t> gpu_choices;
+  for (const auto& alt : alternatives) {
+    CHECK(alt.data[0] == 0); // tilesets require restart
+    CHECK(alt.data[2] == 0); // compose shift is developer-only
+    for (uint32_t i = 4; i < alt.count; ++i)
+      if (alt.data[i]) gpu_choices.insert(alt.entries[i].constantID);
+  }
+  CHECK(gpu_choices == (std::set<uint32_t>{kSpecIdCompactHitState, kSpecIdAlphaMetadataCache, kSpecIdWaterEmptyTiles}));
   {
     pa::Builds builds(1, {});
     CHECK(builds.prewarm("warm", 1, [] { return pa::Result{42, 3, true}; }));

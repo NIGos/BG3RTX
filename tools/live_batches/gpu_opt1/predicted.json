@@ -1,0 +1,38 @@
+{
+ "status": "READY_FOR_LIVE_DRAFT",
+ "no_game_launched": true,
+ "keys": {
+  "rt_compact_hit_state": {
+   "camp_trace_ms_baseline": 6.9,
+   "planned_fraction_saved": [
+    0.05,
+    0.1
+   ],
+   "exactness": "same arithmetic, hit normal and light metadata; offline gate first"
+  },
+  "rt_alpha_metadata_cache": {
+   "alpha_ceiling_ms": 5.7,
+   "planned_fraction_saved": [
+    0.02,
+    0.05
+   ],
+   "exactness": "same metadata bits; ray LOD and thresholds unchanged"
+  },
+  "rt_water_empty_tiles": {
+   "WI_compose_ms_baseline": 0.313,
+   "planned_empty_saved_ms": [
+    0.08,
+    0.16
+   ],
+   "populated_s8_saved_ms": [
+    0,
+    0.1
+   ],
+   "exactness": "no native target writes on groups with no validity records"
+  }
+ },
+ "guaranteed_saved_ms": 0,
+ "identity": "Compare pre-post float scene energy and static image OFF repeats against ON within one run; OFF-OFF noise derives tolerance. Exact deterministic replay is mandatory separately.",
+ "cost_contract": "25s at >=24 app fps yields >=600 frames, allowing a full 300-frame timer after toggle. Require one wholly-contained 300-frame line after queue_gates discards the first straddling timer line, otherwise INVALID. no background build in shots/cost. No heavy offline work during cost.",
+ "missing_observable": "Actual GPU cost and image identity; WI empty scene requires follow-up job if camp/S8 have records."
+}

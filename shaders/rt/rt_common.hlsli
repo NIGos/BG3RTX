@@ -11,6 +11,13 @@
 // (below) says where each instance's vertices and alpha record are.
 #pragma once
 #include "spec_native.hlsli"
+// gpu-opt1: no new define product. The legacy guard exists only for offline identity.
+#ifdef BG3RTX_GPU_OPT_LEGACY
+#define RT_COMPACT_HIT_STATE_ON false
+#else
+[[vk::constant_id(1024)]] const uint kSpecCompactHitState = 0u;
+#define RT_COMPACT_HIT_STATE_ON (kSpecCompactHitState != 0u)
+#endif
 
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_tileset_coverage.h"
@@ -98,6 +105,7 @@ void rt_count_unknown(uint bin) {
 // Per-draw records: 16-byte header (uint count), then 208 bytes per draw,
 // sorted by first_tri (layer/host.h AlphaRec).
 [[vk::binding(0, 1)]] ByteAddressBuffer gAlphaRec;
+#include "alpha_metadata_cache.hlsli"
 // Geometry 1's vertices, 24 bytes each: camera-relative position (float4), UV.
 [[vk::binding(1, 1)]] ByteAddressBuffer gAlphaSoup;
 // Sizes: layer/alphatest.cpp kTextures / kCaches.
@@ -292,7 +300,7 @@ uint rec_addr(uint i) { return 16 + i * kRecBytes; }
 // Record at byte address `a` lies inside gAlphaRec (overflow-safe).
 bool rec_in_range(uint a) {
   uint rbytes;
-  gAlphaRec.GetDimensions(rbytes);
+  rbytes = alpha_record_bytes();
   return a >= 16u && rbytes >= kRecBytes && a <= rbytes - kRecBytes;
 }
 // Triangle `prim` (3 vertices of `stride` bytes from byte `base`) lies inside a
@@ -318,7 +326,7 @@ float vt_t(uint a, uint m, uint c, uint r) { return asfloat(gAlphaRec.Load(a + 8
 //                     (no record or UV, a non-resident tile set) lets visibility rays
 //                     (GI, AO, reflections) through; shadow rays still treat it as solid.
 static const uint kAlphaCutEff = 1u, kAlphaStochastic = 2u, kAlphaUnknownClear = 4u;
-uint alpha_flags() { return gAlphaRec.Load(8); }
+uint alpha_flags() { return alpha_record_policy(); }
 
 // Class of the running ray query, for the counters and the unknown-case policy:
 // 0 visibility (closest hit: GI, AO, reflections, origins, debug), 1 shadow (any hit).
@@ -351,7 +359,7 @@ float alpha_hash(float2 uv, uint prim) {
 // texels per texel: the mip, or the level of the coarser page that stood in), and
 // whether it could be read at all.
 #ifdef RT_NATIVE_TILESET
-bool tileset_scene_complete(){uint bytes;gAlphaRec.GetDimensions(bytes);return bytes>=16u && (gAlphaRec.Load(NtcHeaderControlOffset)&NtcCaptureIncompleteBit)==0u;}
+bool tileset_scene_complete(){uint bytes=alpha_record_bytes();return bytes>=16u && (gAlphaRec.Load(NtcHeaderControlOffset)&NtcCaptureIncompleteBit)==0u;}
 #endif
 struct AlphaRead { float a; float lvl; bool ok; bool coarser; };
 
@@ -614,8 +622,8 @@ void hair_inputs(uint base,uint meta,uint prim,float2 bary,float3 ray,bool legac
 // triangle index; 0 if none).
 uint find_rec(uint prim) {
   uint rbytes;
-  gAlphaRec.GetDimensions(rbytes);
-  uint n = min(gAlphaRec.Load(0), rbytes >= 16u ? (rbytes - 16u) / kRecBytes : 0u);
+  rbytes = alpha_record_bytes();
+  uint n = min(alpha_record_count(), rbytes >= 16u ? (rbytes - 16u) / kRecBytes : 0u);
   if (n == 0) return 0;
   uint lo = 0, hi = n;   // last record with first_tri <= prim
   while (hi - lo > 1) {
@@ -934,10 +942,10 @@ bool alpha_pass(uint prim, float2 bary, float footprint) {
     return alpha_unknown(alpha_flags());
   }
 #ifdef RT_SPEC_NATIVE
-  uint stride=(RT_HAIR_ON || RT_TILESET_ON)?gAlphaRec.Load(4):24u,vb=prim*3u*stride,sbytes;
+  uint stride=(RT_HAIR_ON || RT_TILESET_ON)?alpha_record_stride():24u,vb=prim*3u*stride,sbytes;
 #else
 #if defined(RT_NATIVE_HAIR) || defined(RT_NATIVE_TILESET)
-  uint stride=gAlphaRec.Load(4),vb=prim*3u*stride,sbytes;
+  uint stride=alpha_record_stride(),vb=prim*3u*stride,sbytes;
 #else
   uint vb = prim * 72, sbytes;
 #endif
@@ -1834,7 +1842,8 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
   h.inst = hit ? q.CommittedInstanceIndex() : 0u;
-  h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+  if (!RT_COMPACT_HIT_STATE_ON)
+    h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
 #ifdef RT_SPEC_NATIVE
   bool groom_hit = false;
   if (RT_GROOM_ON && !camera_primary && !aborted) {
@@ -1858,6 +1867,19 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   h.dir=d;
 #endif
 #endif
+  if (RT_COMPACT_HIT_STATE_ON) {
+    // Only pooled geometry consumes the instance transform. Keep it out of the
+    // query/groom/barycentric work above; soup/legacy consumers use world vertices.
+    // A malformed instance retains the original transform (and consumer guards).
+    uint info_bytes; gInstInfo.GetDimensions(info_bytes);
+    bool need_transform = hit;
+    if (hit && h.inst < info_bytes / 16u)
+      need_transform = (gInstInfo.Load(h.inst * 16u + 4u) & kInfoPool) != 0u;
+#ifdef RT_SPEC_NATIVE
+    if (groom_hit) need_transform = false;
+#endif
+    h.o2w = need_transform ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+  }
 #ifdef RT_SCENE_REBASE
   // Ray t is translation-invariant. Return transforms in lighting space so
   // callers reconstruct lighting-relative hit positions as before.
@@ -1911,7 +1933,7 @@ float3 rt_tri_normal(uint geom, uint prim) {
   // only guards against a scene and a set from different builds).
   uint bytes;
   if (geom == 0u) {
-    uint stride = gAlphaRec.Load(4);
+    uint stride = alpha_record_stride();
     gOpaqueSoup.GetDimensions(bytes);
 #ifdef RT_SPEC_NATIVE
   if (RT_HAIR_ON) {
@@ -1934,7 +1956,7 @@ float3 rt_tri_normal(uint geom, uint prim) {
     gAlphaSoup.GetDimensions(bytes);
 #ifdef RT_SPEC_NATIVE
   if (RT_HAIR_ON) {
-    uint stride=gAlphaRec.Load(4);
+    uint stride=alpha_record_stride();
     if(!tri_in_range(0,prim,stride,bytes))return 0.0.xxx;
     uint vb=prim*3u*stride;
     p0=asfloat(gAlphaSoup.Load3(vb));p1=asfloat(gAlphaSoup.Load3(vb+stride));p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));
@@ -1947,7 +1969,7 @@ float3 rt_tri_normal(uint geom, uint prim) {
   }
 #else
 #ifdef RT_NATIVE_HAIR
-    uint stride=gAlphaRec.Load(4);
+    uint stride=alpha_record_stride();
     if(!tri_in_range(0,prim,stride,bytes))return 0.0.xxx;
     uint vb=prim*3u*stride;
     p0=asfloat(gAlphaSoup.Load3(vb));p1=asfloat(gAlphaSoup.Load3(vb+stride));p2=asfloat(gAlphaSoup.Load3(vb+2u*stride));

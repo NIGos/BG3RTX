@@ -149,6 +149,21 @@ float3 native_hit_position(RtHit hit,float3 ray_point){
 #endif
 // Unlike bg3_cluster_raw's renderer fallback, missing/overflowed sources cannot
 // certify a zero direct term. Native frustum/froxel membership is required.
+#if RT_HIT_GI_DIRECT
+// These read-only descriptor ranges and b13[0] cannot change during one dispatch.
+// Lazy per-invocation storage also reuses them across Ultra's two GI samples.
+static bool g_hd_metadata_ready=false;
+static uint g_hd_cluster_bytes=0u,g_hd_index_bytes=0u,g_hd_light_bytes=0u,g_hd_scale_bytes=0u;
+static float g_hd_global_scale=0.0;
+void hd_prepare_metadata(){
+ if(RT_COMPACT_HIT_STATE_ON && !g_hd_metadata_ready){
+  lClusters.GetDimensions(g_hd_cluster_bytes);lIndex.GetDimensions(g_hd_index_bytes);
+  lLights.GetDimensions(g_hd_light_bytes);lScale.GetDimensions(g_hd_scale_bytes);
+  if(g_hd_scale_bytes>=4u)g_hd_global_scale=asfloat(lScale.Load(0));
+  g_hd_metadata_ready=true;
+ }
+}
+#endif
 bool native_hit_cluster(float3 surface_position,out uint4 cluster){
  cluster=0;float2 uv;float depth;
  if(!all(isfinite(surface_position)) || !project(frustum_inverse(),surface_position,uv,depth) ||
@@ -162,11 +177,19 @@ bool native_hit_cluster(float3 surface_position,out uint4 cluster){
  uint2 tile=uint2(uv*float2(lFlags.res))/tile_size;
  if(any(float2(tile)>=float2(columns,rows)))return false;
  float index=(floor(z)*rows+float(tile.y))*columns+float(tile.x);
- uint bytes;lClusters.GetDimensions(bytes);
+ uint bytes;
+#if RT_HIT_GI_DIRECT
+ if(RT_COMPACT_HIT_STATE_ON){hd_prepare_metadata();bytes=g_hd_cluster_bytes;}else
+#endif
+ lClusters.GetDimensions(bytes);
  if(!isfinite(index) || index<0 || index>=float(bytes/16u))return false;
  cluster=lClusters.Load4(uint(index)*16u);
  uint points=cluster.y&4095u,spots=(cluster.y>>12)&4095u,count=points+spots;
- uint indices;lIndex.GetDimensions(indices);
+ uint indices;
+#if RT_HIT_GI_DIRECT
+ if(RT_COMPACT_HIT_STATE_ON)indices=g_hd_index_bytes;else
+#endif
+ lIndex.GetDimensions(indices);
  if(count>kMaxFroxelLights || cluster.x>indices/4u || count>indices/4u-cluster.x)return false;
  return true;
 }
@@ -188,13 +211,24 @@ NativeHitDirect native_hit_direct_eval(NativeHitMaterial material,float3 surface
  uint points=cluster.y&4095u,count=points+((cluster.y>>12)&4095u);
 #else
  uint points=cluster.y&4095u,count=points+((cluster.y>>12)&4095u),projectors=cluster.z&1023u;
- {uint indices;lIndex.GetDimensions(indices);if(projectors>indices/4u-cluster.x-count)return result;}   // list past b24: source
+ {uint indices;
+#if RT_HIT_GI_DIRECT
+ if(RT_COMPACT_HIT_STATE_ON)indices=g_hd_index_bytes;else
+#endif
+ lIndex.GetDimensions(indices);if(projectors>indices/4u-cluster.x-count)return result;}   // list past b24: source
 #endif
  hd_stat(5u,count==0u);
- uint scale_bytes;lScale.GetDimensions(scale_bytes);if(scale_bytes<4)return result;
- float global_scale=asfloat(lScale.Load(0));
+ uint scale_bytes;float global_scale;
+#if RT_HIT_GI_DIRECT
+ if(RT_COMPACT_HIT_STATE_ON){scale_bytes=g_hd_scale_bytes;if(scale_bytes<4)return result;global_scale=g_hd_global_scale;}else
+#endif
+ {lScale.GetDimensions(scale_bytes);if(scale_bytes<4)return result;global_scale=asfloat(lScale.Load(0));}
  [loop]for(uint item=0;item<count;++item){
-  uint index=lIndex.Load((cluster.x+item)*4u),bytes;lLights.GetDimensions(bytes);
+  uint index=lIndex.Load((cluster.x+item)*4u),bytes;
+#if RT_HIT_GI_DIRECT
+  if(RT_COMPACT_HIT_STATE_ON)bytes=g_hd_light_bytes;else
+#endif
+  lLights.GetDimensions(bytes);
   if(index>=bytes/80u)return result;
   Bg3Light light=load_light(index);
   HdLight source;source.position=light.pos;source.color=light.col;source.direction=light.dir;

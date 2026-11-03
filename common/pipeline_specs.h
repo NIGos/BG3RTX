@@ -8,11 +8,11 @@
 #include "shader_variant.h"
 namespace bg3::pipe_async {
 struct PipelineSpecs {
-  uint32_t data[12]{};
-  VkSpecializationMapEntry entries[12]{};
+  uint32_t data[16]{};
+  VkSpecializationMapEntry entries[16]{};
   uint32_t count = 0;
   void add(uint32_t id, uint32_t value) {
-    assert(count < 12);
+    assert(count < 16);
     entries[count] = {id, count * uint32_t(sizeof(uint32_t)), sizeof(uint32_t)};
     data[count++] = value;
   }
@@ -32,7 +32,9 @@ inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, 
       {"rt_native_tileset", kSpecIdTileset}, {"rt_water_compose_shift", kSpecIdWaterComposeShift},
       {"rt_water_hit_shade", kSpecWaterHitShade}, {"rt_hair_gi_cull", kSpecIdHairGiCull},
       {"rt_hair_groom", kSpecIdHairGroom}, {"rt_hair_cheap", kSpecIdHairCheap},
-      {"rt_hair_gi_mean", kSpecIdHairGiMean}};
+      {"rt_hair_gi_mean", kSpecIdHairGiMean},
+      {"rt_compact_hit_state", kSpecIdCompactHitState}, {"rt_alpha_metadata_cache", kSpecIdAlphaMetadataCache},
+      {"rt_water_empty_tiles", kSpecIdWaterEmptyTiles}};
   std::vector<PipelineSpecs> out;
   for (const auto& knob : settings::kKnobs) {
     if (!knob.experimental || !settings::knob_visible(knob, dev)) continue;
