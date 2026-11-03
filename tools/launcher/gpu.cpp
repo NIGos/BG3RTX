@@ -7,10 +7,41 @@
 #include <cstring>
 #include <cstdio>
 #include <mutex>
+#include <filesystem>
+#include "../../common/hair_groom_asset.h"
 
 namespace launcher {
 
 namespace st = bg3::settings;
+
+// Read only the same index headers as the renderer; an empty/corrupt directory
+// is not local groom availability. The caller supplies the resolved database folder.
+bool local_grooms_available(const std::wstring& directory) {
+  WIN32_FIND_DATAW entry{};
+  HANDLE search = FindFirstFileW((directory + L"\\hair_grooms\\*.hgrm").c_str(), &entry);
+  if (search == INVALID_HANDLE_VALUE) return false;
+  bool available = false;
+  do {
+    if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+    FILE* file = nullptr;
+    auto path = directory + L"\\hair_grooms\\" + entry.cFileName;
+    if (_wfopen_s(&file, path.c_str(), L"rb") || !file) continue;
+    uint8_t header[40 + bg3::hair_groom::kSamples * 8]{};
+    const size_t bytes = fread(header, 1, sizeof header, file);
+    bg3::hair_groom::Asset asset;
+    uint64_t at = 0;
+    bool valid = bg3::hair_groom::parse_header(header, bytes, asset, &at);
+    for (uint32_t lod = 0; valid && lod < asset.lod_count; ++lod) {
+      uint8_t h16[16]; uint32_t points = 0, segments = 0;
+      valid = _fseeki64(file, int64_t(at), SEEK_SET) == 0 && fread(h16, 1, 16, file) == 16 &&
+              bg3::hair_groom::lod_header(h16, at, &points, &segments, &at);
+    }
+    fclose(file);
+    available = valid;
+  } while (!available && FindNextFileW(search, &entry));
+  FindClose(search);
+  return available;
+}
 
 GraphicsInspection inspect_graphics() {
   static std::mutex probe_mutex;
@@ -70,6 +101,15 @@ GraphicsInspection inspect_graphics() {
     if (vkDestroyInstance) vkDestroyInstance(inst, nullptr);
     return fail(L"Vulkan inspection functions unavailable. Recheck the driver.");
   }
+  wchar_t location[32768]{};
+  std::filesystem::path database_directory;
+  DWORD length = GetEnvironmentVariableW(L"BG3RTX_ASSETDB", location, DWORD(std::size(location)));
+  if (length && length < std::size(location)) database_directory = std::filesystem::path(location).parent_path();
+  else {
+    GetModuleFileNameW(nullptr, location, DWORD(std::size(location)));
+    database_directory = std::filesystem::path(location).parent_path().parent_path() / L"data" / L"assetdb";
+  }
+  const bool grooms = local_grooms_available(database_directory.wstring());
   uint32_t n = 0;
   if (vkEnumeratePhysicalDevices(inst, &n, nullptr) != VK_SUCCESS || n > 64) {
     vkDestroyInstance(inst, nullptr); return fail(L"Could not enumerate Vulkan adapters.");
@@ -91,8 +131,10 @@ GraphicsInspection inspect_graphics() {
       vkDestroyInstance(inst, nullptr); return fail(L"Extension list changed. Retry inspection.");
     }
     ext.resize(ne);
-    bool rq = false, as = false, omm = false, budget = false, bda = false;
+    bool rq = false, as = false, omm = false, budget = false, bda = false, lss = false, pipeline = false;
     for (auto& e : ext) {
+      if (!strcmp(e.extensionName, VK_NV_RAY_TRACING_LINEAR_SWEPT_SPHERES_EXTENSION_NAME)) lss = true;
+      if (!strcmp(e.extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) pipeline = true;
       if (!strcmp(e.extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME)) rq = true;
       if (!strcmp(e.extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) as = true;
       if (!strcmp(e.extensionName, VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME)) omm = true;
@@ -103,6 +145,14 @@ GraphicsInspection inspect_graphics() {
     g.vendor = p.vendorID;
     g.device = p.deviceID;
     g.name = p.deviceName;
+    g.hair_grooms = grooms;
+    VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV spheres{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV};
+    VkPhysicalDeviceFeatures2 basics{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    if (lss && pipeline) basics.pNext = &spheres;
+    vkGetPhysicalDeviceFeatures2(d, &basics);
+    g.linear_swept_spheres = lss && pipeline && spheres.linearSweptSpheres;
+    g.shader_int64 = basics.features.shaderInt64 != VK_FALSE;
+    g.fragment_stores = basics.features.fragmentStoresAndAtomics != VK_FALSE;
     if (rq && as && (bda || p.apiVersion >= VK_API_VERSION_1_2)) {
       VkPhysicalDeviceBufferDeviceAddressFeatures address{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES};
       VkPhysicalDeviceRayQueryFeaturesKHR ray{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, &address};

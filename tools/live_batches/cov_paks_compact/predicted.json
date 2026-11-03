@@ -3,17 +3,35 @@
   "game_launched": false,
   "catalogue_rows": 40983,
   "catalogue_binary_bytes": 41956440,
-  "hypothesis": "Ordered UV0 at byte 16 survives native XFB position transformation in 64/88 byte captures. UV is only a candidate; full ordered SHA-256 gates publication.",
+  "hypothesis": "Unique sampled UV candidates trigger bounded full raw object-space position/UV readback. CPU decoding and the catalogue ordered SHA-256 witness authorize the unchanged recipe/cull/resource/basis path.",
   "predicted": {
     "loader_rows": 40983,
-    "uv_attempts": null,
-    "uv_unique": null,
-    "exact_material_matches": null,
-    "rejections": "missing/ambiguous/invalid/witness/recipe_cull/inputs_pending logged",
+    "uv_attempts": ">0 in each ON window after decoded XFB readbacks retire",
+    "uv_unique": "expected >0 but a minority; retained replay had 58/471, not a live ratio gate",
+    "uv_missing": "expected majority; attempts = unique + missing + ambiguous + invalid",
+    "uv_ambiguous": "may be nonzero; disputed UV signatures must stay rejected",
+    "uv_invalid": "expected 0 for finite retired XFB samples",
+    "exact_material_matches": ">0 in each camp ON window; candidate frequency does not predict a distinct mesh count",
+    "rejections": "Existing missing/ambiguous/invalid/witness/recipe_cull/inputs_pending remain; full witness mismatch is explicit",
     "id_equal": null,
     "id_different": null,
     "gpu_cost_ms": null,
-    "draw_attempts": ">0 in each ON window"
+    "draw_attempts": ">0 in each ON window",
+    "witness_ok": ">0 cumulative in each ON window after successful-submit retirement",
+    "witness_mismatch": ">=0; nonmatching raw geometry must never publish",
+    "budget_deferred": ">=0; budget pressure defers work without waiting on the GPU",
+    "published_records": ">0 in each ON window",
+    "basis_ready": ">0 in each ON window, after existing basis verification"
   },
-  "result_rule": "A missing loaded/draw-attempts/rejection line is INVALID. Zero UV candidates or full matches is a valid diagnosis, not a quality pass. No shader/ABI changes; no promotion or visual claim."
+  "result_rule": "Every ON window requires UV attempts >0, witness_ok >0, published_records >0 and pak records/basis ready >0. Any zero fails this publication hypothesis; UV-only candidates never qualify. No promotion or visual/energy/GPU-cost claim.",
+  "window_bound": "120-frame producer with rt_stats; cp4 observed 240 frames in 16.020 s, or 8.010 s per line. Rounded 9 s period plus 1 s settings latency and one straddling line requires >19 s; both ON windows are 19.1 s.",
+  "offline_status": "Host build and 7/7 focused CTests pass; production ring replay covers match, mismatch, budgets, chunks, discarded submissions and reuse. live_flow preflight passes (1 job, 0 failures). Historical publish-audit.json remains the sampled-only baseline.",
+  "readback_budget": {
+    "bytes_per_frame": 4194304,
+    "jobs_in_flight": 16,
+    "bytes_in_flight": 16777216,
+    "oversize": "Explicitly unsupported above the bounded raw job capacity; no GPU wait. Larger-than-frame ranges progress in chunks.",
+    "raw_retirements_per_frame": 2,
+    "source_policy": "Raw float3 positions and half2/float2 UVs; mapped mutable buffers remain unknown. Source writes/reuse invalidate per-witness proof and dependent records."
+  }
 }

@@ -1,0 +1,409 @@
+{
+ "name": "l2b-campsite-fg2",
+ "save": "Campsite - 27h",
+ "session": false,
+ "traces": 0,
+ "hold": 90,
+ "timeout": 882,
+ "repeat": 1,
+ "live_batch": "hair-l2",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=0,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1",
+ "live_flow": {
+  "settings_latency_s": 1,
+  "trace_stall_s": 1,
+  "startup_only": [
+   "rt_hair_groom_primary"
+  ],
+  "fps_windows": [
+   {
+    "state": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "fps": 12.39669421487566,
+    "windows": 115,
+    "logs": [
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+    ]
+   },
+   {
+    "state": [
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "fps": 7.562389715155868,
+    "windows": 14,
+    "logs": [
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+    ]
+   },
+   {
+    "state": [
+     1,
+     1,
+     0,
+     0,
+     0
+    ],
+    "fps": 6.949270326617158,
+    "windows": 3,
+    "logs": [
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+     "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+    ]
+   }
+  ]
+ },
+ "args": [
+  "-RealPresent",
+  "-Move",
+  "-MovePlan",
+  "captures/live_batches/hair_l2/plans/l2b-campsite-fg2.json"
+ ],
+ "patterns": [
+  "\\[hot\\]",
+  "\\[ngx\\] RR create",
+  "\\[sl\\] DLSS-G frame",
+  "\\[pace\\]",
+  "\\[watch\\]",
+  "rt passes: GPU cost",
+  "gi: GPU cost",
+  "\\[rt\\] scene wait",
+  "\\[rt\\] scene build GPU",
+  "\\[trace\\]",
+  "\\[shaders\\].*\\?",
+  "\\[crash\\]",
+  "FAILED",
+  "failed",
+  "\\[cascade\\] casters",
+  "\\[geo\\]",
+  "\\[alpha hair\\]",
+  "\\[alpha scalp\\]",
+  "\\[hair groom\\]",
+  "\\[hair primary\\]",
+  "\\[hair fibre\\]",
+  "gi: background builds",
+  "building in the background",
+  "skipped: no variant for",
+  "\\[bvh\\]",
+  "\\[rrpost\\] exposure (held|hold|probe)",
+  "\\[core\\] guard:",
+  "pool full"
+ ],
+ "expect": [
+  "\\[auto\\] scene ready",
+  "\\[hot\\] core generation \\d+ loaded",
+  "\\[ngx\\] RR create .*: Success",
+  "\\[cfg\\] settings read",
+  "\\[trace\\] frame \\d+ written",
+  "\\[hair groom\\] device with linear swept spheres",
+  "\\[hair groom\\] [0-9a-f]{16} LOD \\d uploaded: [0-9.]+ MB in the mesh pool",
+  "\\[hair primary\\] header at 0x[0-9a-f]+: static hair pipelines get strand variants",
+  "\\[hair primary\\] G-buffer hair pipeline: native depth test \\d write \\d compare \\d+",
+  "\\[hair primary\\] velocity hair pipeline: native depth test \\d write \\d compare \\d+",
+  "\\[hair primary\\] pixel record \\d+x\\d+: [0-9.]+ MB",
+  "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+  "\\[hair primary\\] strand G-buffer draws GPU [0-9.]+ ms/frame",
+  "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
+  "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
+  "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+  "\\[hair primary\\] shadow transmittance: [1-9]\\d* draws measured, a_f mean [0-9.]+ [0-9.]+ [0-9.]+ \\(per draw [0-9.]+\\.\\.[0-9.]+\\); last 300 frames: [1-9]\\d* groom rows with a_f"
+ ],
+ "forbid": [
+  "\\[crash\\] exception 0x",
+  "VK_ERROR_DEVICE_LOST",
+  "\\[hot\\] core (rejected|faulted)",
+  "FAILED, keeping previous",
+  "compile call failed",
+  "RR creation failed",
+  "RR evaluate failed",
+  "skipped: no variant for",
+  "pipeline creation failed",
+  "shader module creation failed",
+  "\\[hair primary\\] UNAVAILABLE",
+  "\\[hair primary\\] .*could not be allocated",
+  "\\[hair primary\\] strand fragment shader unavailable",
+  "\\[hair groom\\] device WITHOUT",
+  "\\[hair groom\\] .*malformed",
+  "\\[geo\\] rt_native_hair rejected",
+  "\\[cascade\\] could not allocate",
+  "set 1 [1-9]\\d* out-of-range reads skipped",
+  "\\[hair primary\\].*\\b[1-9]\\d* pipelines refused",
+  "(?i)device (?:was )?lost"
+ ],
+ "expect_runner": [
+  "window-mode.*visible_unfocused",
+  "\\[motion-trace\\] phase=7 label=shot-base-a repeat=0",
+  "\\[motion-trace\\] phase=8 label=shot-shadow-a repeat=0",
+  "\\[motion-trace\\] phase=9 label=shot-base-b repeat=0",
+  "\\[motion-trace\\] phase=10 label=shot-tips-a repeat=0",
+  "\\[motion-trace\\] phase=11 label=shot-base-c repeat=0",
+  "\\[motion-trace\\] phase=12 label=shot-both-a repeat=0",
+  "\\[motion-plan\\] complete phases=19\\b",
+  "^Run ended: done"
+ ],
+ "stop_on_dump": true,
+ "purpose": "Live L2 (docs/RTX_HAIR_COMPLETE_PLAN.md M2 + M3): strands on screen throughout; strand shadow transmittance (rt_hair_groom_shadow_t) and dithered strand tips (rt_hair_groom_tips) toggled live against the strands-only baseline. Full-resolution shots base/shadow/base/tips/base/both for the user (skin and neck under hair, tip fade), float energy of the pre-post scene colour, cost per mode (rt passes, gi, scene build GPU, strand G-buffer draws). Gated: a_f measured while on.",
+ "estimated_phase_seconds": 342.7,
+ "expect_every": [
+  {
+   "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",
+   "select": "\\[rt\\] scene wait: \\d+ frames",
+   "match": "got this frame's scene, 0 timeouts",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every judged window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "opaque cutouts 0: no alpha-tested draw made opaque (region full 0.00) in every judged window",
+   "select": "\\[geo\\] RT capture, last \\d+ frames:",
+   "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "capacity: the cascade casters buffer is never full in every judged window",
+   "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+   "match": ", buffer full 0\\.0, added ",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ],
+   "when_present": true
+  },
+  {
+   "name": "no background build in any measured window (0 waiting, 0 pending, 0 started in every status line)",
+   "select": "gi: background builds \\(\\d+ frames\\):",
+   "match": ": 0 frames waiting, 0 pending, 0 started",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "no 'building in the background' line in any measured window (a pass skipped there)",
+   "select": "building in the background",
+   "match": "(?!)",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "no freeze: every build burst inside the plan < 1000 ms",
+   "select": "gi: background builds done: ",
+   "match": "longest present interval \\d{1,3} ms",
+   "min": 0,
+   "event": true,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "hair: invalid/missing native state 0 and retired bounds-invalid 0 in every judged window",
+   "select": "\\[alpha hair\\] native coverage records \\d+;",
+   "match": "; invalid/missing native state 0; unsupported native interfaces total \\d+; retired bounds-invalid primitives 0;",
+   "min": 1,
+   "windows": [
+    "shot-base-a",
+    "shot-shadow-a",
+    "shot-base-b",
+    "shot-tips-a",
+    "shot-base-c",
+    "shot-both-a",
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "strand participation: G-buffer and velocity strand draws > 0 in the strands-on cost window",
+   "select": "\\[hair primary\\] frame \\d+: \\d+ grooms published",
+   "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ],
+   "period_frames": 300
+  },
+  {
+   "name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
+   "select": "\\[hair primary\\] strand G-buffer draws GPU",
+   "match": "GPU [0-9.]+ ms/frame \\(average of \\d+ frames",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ],
+   "period_frames": 300
+  },
+  {
+   "name": "groom participation in every cost window",
+   "select": "\\[hair groom\\] frame \\d+: \\d+ groom instances; last 300 frames: at most",
+   "match": "last 300 frames: at most [1-9]\\d* groom instances",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ],
+   "period_frames": 300
+  },
+  {
+   "name": "rt passes GPU cost: a complete diagnostic-free sample in every cost window",
+   "select": "rt passes: GPU cost",
+   "match": "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "gi GPU cost: a complete diagnostic-free sample in every cost window",
+   "select": "gi: GPU cost",
+   "match": "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "scene build GPU: a sample in every cost window",
+   "select": "\\[rt\\] scene build GPU",
+   "match": "\\[rt\\] scene build GPU",
+   "min": 1,
+   "windows": [
+    "cost-base-a",
+    "cost-shadow",
+    "cost-tips",
+    "cost-base-b"
+   ]
+  },
+  {
+   "name": "shadow transmittance: draws measured and groom rows with a_f in the transmittance cost window",
+   "select": "\\[hair primary\\] shadow transmittance:",
+   "match": "\\[hair primary\\] shadow transmittance: [1-9]\\d* draws measured, a_f mean [0-9.]+ [0-9.]+ [0-9.]+ \\(per draw [0-9.]+\\.\\.[0-9.]+\\); last 300 frames: [1-9]\\d* groom rows with a_f",
+   "min": 1,
+   "windows": [
+    "cost-shadow"
+   ],
+   "period_frames": 300
+  }
+ ],
+ "window_mode": "visible_unfocused_fg"
+}

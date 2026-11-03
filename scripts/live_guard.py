@@ -108,7 +108,7 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         requested = plan[phase].get("wait_log", [])
         requested = [requested] if isinstance(requested, str) else requested
         for pattern in requested:
-            dt = producer_period(pattern, states[phase], fps, job)
+            dt = producer_period(pattern, states[phase], flow.fps_windows.expected(job, states[phase])["fps"], job)
             if window and dt is not None and not re.search(pattern, local, re.I | re.M):
                 deadline = window["applied"] + dt + margin + float(source.get("live_flow", {}).get("settings_latency_s", 1))
                 if now >= deadline:
@@ -120,14 +120,18 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         # Gate windows identify when an ON-only producer is actually requested.
         # Do not demand its full expect line while warming its OFF value.
         producer_windows = {label for g in related for label in g["windows"]}
+        # Only judged windows: warm-ups may legitimately show a producer before its values settle
+        # (DLSS-G reports 1.00 until frame generation has run a full window).
+        judged = flow.judged_labels(job, plan)
         eligible = [w for w in wins if w["index"] >= first and 0 <= w["index"] < len(states)
+                    and (not judged or plan[w["index"]].get("label") in judged)
                     and (not producer_windows or w["label"] in producer_windows)
                     and (not plan[w["index"]].get("wait_log") or w["index"] in readiness)
                     and all(states[w["index"]].get(k) == v for k, v in requirements.items())]
         if not eligible or re.search(pattern, local, re.I | re.M):
             continue
         state = states[eligible[0]["index"]]
-        dt = producer_period(pattern, state, fps, job)
+        dt = producer_period(pattern, state, flow.fps_windows.expected(job, state)["fps"], job)
         if dt is None:
             continue  # events and startup announcements have no periodic promise
         # The first complete period plus settings latency and settling margin.
@@ -149,7 +153,7 @@ def evaluate_session(job, game, elapsed):
     margin = float(job.get("live_flow", {}).get("settling_margin_s", 1))
     latency = float(job.get("live_flow", {}).get("settings_latency_s", 1))
     for pattern in job.get("expect", []):
-        dt = producer_period(pattern, state, fps, job)
+        dt = producer_period(pattern, state, flow.fps_windows.expected(job, state)["fps"], job)
         if dt is None or re.search(pattern, game, re.I | re.M):
             continue
         if not all(state.get(k) == v for k, v in flow.producer_requirements(pattern).items()):

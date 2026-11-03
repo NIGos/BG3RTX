@@ -696,6 +696,9 @@ struct InstPipe {
   bool pos_float3 = false; // content identity supports raw float3 only
   uint8_t uv_binding = 0xff; // paks: audited copy of a raw per-vertex float2 input
   uint32_t uv_offset = 0, uv_stride = 0;
+  uint8_t paks_uv_binding = 0xff; // audited raw UV copy, including packed half2
+  uint32_t paks_uv_offset = 0, paks_uv_stride = 0;
+  bool paks_uv_half = false;
   bool paks_cull_known = false, paks_two_sided = false;
 };
 void bvh_device_created(DeviceData* dd);
@@ -928,9 +931,15 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
 // rt_hair_groom_shadow_t (docs/RTX_HAIR_PRIMARY.md C2): the draw's packed strand transmittance for its groom InstInfo
 // row (hair_primary::pack_transmit; 0: key off or not measured yet, the strands block as before).
 uint32_t hair_primary_transmit(uint64_t key);
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
-                          const uint64_t* keys, const uint8_t* lods, uint32_t count, uint32_t width, uint32_t height,
-                          const float* viewport);
+// rec: the scene build's record (bvhsplit), so an ordered publish (rt_hair_groom_primary_order) knows when it is submitted.
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
+                          const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,
+                          uint32_t width, uint32_t height, const float* viewport);
+// rt_hair_groom_primary_order: before a render pass begins (outside it); applies the groom header in the main G-buffer
+// pass's own command buffer.
+void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p);
+// bvhsplit: a build record whose command buffer was submitted.
+bool bvh_rec_submitted(uint64_t id);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.
 void geo_render_size(uint32_t* width, uint32_t* height);
 void geo_gbuffer_viewport(float out[4]);
@@ -970,10 +979,8 @@ struct AlphaRec {
   float t[32];                           // vt: the SSBO entry, two row-major mat4
 };
 static_assert(sizeof(AlphaRec) == 208, "AlphaRec must match rt_common.hlsli");
-bool alpha_native_hair_wind_bounded(VkCommandBuffer cmd,VkFormat format);
-void alpha_native_hair_visibility_note(uint32_t decision);
 bool alpha_native_hair_record(uint32_t index,AlphaRec* out);
-bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset,uint32_t allocation,uint32_t tris);
+bool alpha_native_hair_bounds(uint32_t index,uint32_t pool_offset);
 bool alpha_hair_build_status(uint32_t slot,VkBuffer* buffer,VkDeviceSize* offset);
 // Captured material plus actual views; descriptor indices are local to a frame.
 struct NativeTilesetSampler;

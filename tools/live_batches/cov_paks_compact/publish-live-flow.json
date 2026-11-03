@@ -1,0 +1,352 @@
+{
+  "corpus": {
+    "logs": [
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log",
+          1230626,
+          1793736661863820500
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hv5-reload-bisect.1.203817.log",
+          65955060,
+          1793735295388205200
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log",
+          4408524,
+          1793715756368743400
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+          4435931,
+          1793708181947950400
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+          1265195,
+          1793707581471822200
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+          1420563,
+          1793704466495143800
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+          4346432,
+          1793703775531275100
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ba1-box-art-s6-fg2.1.080219.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ba1-box-art-s6-fg2.1.080219.log",
+          1114755,
+          1793689637675808900
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds1-dialogue1-fg2.1.061453.log",
+          5651946,
+          1793683422283785200
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ds0-warm-dialogue1-fg2.1.060525.log",
+          3047675,
+          1793682891238940300
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq3-dialogue2-fg2.1.055348.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq3-dialogue2-fg2.1.055348.log",
+          2964750,
+          1793681936809879900
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
+          1386688,
+          1793627942364178200
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log",
+          1109676,
+          1793624927293747500
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+          1133136,
+          1793623090782055300
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+          1597319,
+          1793611962239165100
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr3-box-s6-fg2.1.044651.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr3-box-s6-fg2.1.044651.log",
+          1636090,
+          1793591428604946800
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log",
+          1711851,
+          1793591209483341300
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4s6-all-fg2.1.035213.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4s6-all-fg2.1.035213.log",
+          5128383,
+          1793588605594831000
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p2-inn-fg2.1.032112.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p2-inn-fg2.1.032112.log",
+          1472255,
+          1793586287137627900
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4i-instanced-s14-fg2.1.093913.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4i-instanced-s14-fg2.1.093913.log",
+          759048,
+          1793522569848105100
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4i-instanced-s14-fg2.1.074646.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4i-instanced-s14-fg2.1.074646.log",
+          841075,
+          1793515819686268900
+        ]
+      ],
+      [
+        "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w1-water-geometry-s1-fg2.1.031558.log",
+        [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w1-water-geometry-s1-fg2.1.031558.log",
+          939593,
+          1793499585028537000
+        ]
+      ]
+    ],
+    "saves": {
+      "Test Dialogue3": 3,
+      "Test Dialogue1": 3,
+      "Water Queens House": 3,
+      "Adamantine Forge": 3,
+      "Test Dialogue2": 1,
+      "The Blushing Mermaid - 96h 39m": 3,
+      "Campsite - 27h": 3,
+      "Lower City - 91h": 2,
+      "QuickSave_3784": 1
+    },
+    "warnings": [
+      "32 VALID rows have no resolvable save"
+    ]
+  },
+  "jobs": {
+    "tools\\live_batches\\cov_paks_compact\\jobs\\cp4-compact-camp-join.json": {
+      "problems": [],
+      "regex_coverage": {
+        "forbid: \\[crash\\] exception 0x": 0,
+        "forbid: VK_ERROR_DEVICE_LOST": 0,
+        "forbid: \\[hot\\] core (rejected|faulted)": 0,
+        "forbid: FAILED, keeping previous": 0,
+        "forbid: compile call failed": 0,
+        "forbid: RR creation failed": 0,
+        "forbid: RR evaluate failed": 0,
+        "expect: \\[auto\\] scene ready": 22,
+        "expect: \\[hit material paks\\] loaded 40983 candidates": 0,
+        "expect: \\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*": 0
+      },
+      "windows": [
+        {
+          "window": "observe-on",
+          "gate": "draw attempts and rejection reasons in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        },
+        {
+          "window": "observe-on-repeat",
+          "gate": "draw attempts and rejection reasons in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        },
+        {
+          "window": "observe-on",
+          "gate": "full witness succeeds in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        },
+        {
+          "window": "observe-on-repeat",
+          "gate": "full witness succeeds in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        },
+        {
+          "window": "observe-on",
+          "gate": "published pak basis ready in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        },
+        {
+          "window": "observe-on-repeat",
+          "gate": "published pak basis ready in each ON observation",
+          "complete": 1,
+          "required": 1,
+          "period_s": 9.0,
+          "minimum_seconds_exclusive": 19.0
+        }
+      ],
+      "duration": {
+        "seconds": 75.5,
+        "minimum_seconds": 75.5,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "warmup-off",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          }
+        ],
+        "readiness_timeout_seconds": 794.0,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 29.0,
+            "minimum_seconds": 29.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 600.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 14.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "warmup-off",
+            "seconds": 5.0,
+            "minimum_seconds": 5.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "observe-on",
+            "seconds": 19.1,
+            "minimum_seconds": 19.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "observe-off",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "observe-on-repeat",
+            "seconds": 19.1,
+            "minimum_seconds": 19.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      }
+    }
+  }
+}

@@ -2,8 +2,10 @@
 
 2026-11-03. Roadmap step 6 (docs/RTX_HAIR_ROADMAP.md), started on the user's decision after the trial build:
 "i capelli mi sembrano sempre card based", so the strand groom in secondary rays alone is not enough.
-Key `rt_hair_groom_primary` (proposed, off, live toggle, needs `rt_hair_groom=1`). Matched styles only; scalp,
+Key `rt_hair_groom_primary` (experimental, off, restart required, needs `rt_hair_groom=1`). Matched styles only; scalp,
 accessories and unmatched styles keep the game's draws. Status: design + offline increment 1a.
+
+Activation is latched at device creation after a reported hot-enable device loss; INI reloads and A/B cannot enable it. The safety gate does not qualify the pending crash fix.
 
 ## 1. Where the strands enter the frame (decision)
 The game draws CHAR_Hair cards in four camera passes (FRAME_MAP, NATIVE_HAIR "Native source"):
@@ -126,7 +128,19 @@ reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 6
   LOD1 cards merge several LOD0 cards (63 of 205).
 - Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
   cannot follow them (needs a 2-D curve tracer).
-- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only.
+- Companions and orientation (2026-11-03, user: companions first). Companion hair through their templates and the
+  origin presets: Shadowheart, Astarion, Lae'zel, Gale, Karlach, Jaheira, Minthara and the generic origin pass;
+  Halsin was reviewed only for "roots away from the head" (369 of 842 cards) with images within 1-3% of the cards:
+  strands lying along the scalp (radial share 0.20) decided it. The orientation test now counts only strands more
+  radial than tangential (|d_tip - d_root| > chord cos 45, tested); rerun of the 109 reachable styles with that
+  reason: 26 now pass (Halsin LOD0 and LOD1 among them), 63 still have radial reversed cards (hat hair, buns).
+  Gale's beard stays in review (LOD0: coverage +0.11, IoU 0.76; LOD1 reject IoU 0.55): unchanged under six atlas
+  grids (IoU 0.755-0.759), the alpha-weighted width and the texel-size mip. Short beards share it (26 player, 13
+  named NPC): a systematic card/strand difference the reference does not explain; to pass: a card reference that
+  averages the game's dithered alpha test (C5), or an explicit visual review (batch --accept-review).
+  Now: 745 pass, 346 review, 126 reject (reachable: 718 / 244 / 98). Player 354 / 49 / 29, companion 4 / 1 / 1
+  (Gale's beard), named NPC 153 / 32 / 26, generic NPC 8 / 7 / 10, hat variant 167 / 138 / 32, item 32 / 17 / 0. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
@@ -161,6 +175,16 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   within (radius bound 10 mm + segment length / 2) / |cos| of the card surface along the ray, plus the pixel's spread).
   The velocity variant applies the same test. Entries are sealed (`hp_seal`: word 3 mixes the tag with the other
   words), so a torn 16-byte store never pairs this frame's tag with an older key.
+
+- Strike rule (hv5 2026-11-03: every groom of a counted frame struck at once, then every draw kept its cards for the
+  session): a counted frame whose strand pixels carry an adjacent frame's tag is no evidence (the G-buffer ran against
+  another publish: the build is recorded with the prepass, the game may submit the G-buffer in another order); draws
+  sharing an index-range key are summed; a strike retires the draw for 600 frames (doubling to 9600), not the session.
+- `rt_hair_groom_primary_order` (off, live): the header is written in the G-buffer pass's own command buffer (cmd.cpp
+  pass_ready, before the game's begin) from the newest staged publish whose build is recorded earlier in that command
+  buffer or already submitted (`hair_primary::pick_publish`); none: no strand swap that frame, and the next prepass
+  keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
+  the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is

@@ -426,8 +426,8 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget remain.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_gi_cull", "exp_hair_visibility", "exp_hair_gi_mean", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_groom_shadow_t", "exp_hair_primary_order", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
@@ -542,8 +542,8 @@ static void test_gui_levels() {
   const auto* water_fresnel = find_knob("water_surface_fresnel");
   CHECK(water_fresnel != nullptr);
   if (water_fresnel) {
-    CHECK_EQ(water_fresnel->category, "Surfaces");
-    CHECK(!water_fresnel->dev_only && !water_fresnel->experimental);
+    CHECK_EQ(water_fresnel->category, "Advanced");
+    CHECK(!water_fresnel->dev_only && water_fresnel->experimental);
     CHECK(knob_visible(*water_fresnel, false));
     CHECK(knob_apply(*water_fresnel, 0) == Apply::Live);
     CHECK(knob_apply(*water_fresnel, 1) == Apply::Restart);
@@ -954,6 +954,47 @@ static void test_product_policy() {
   CHECK(schema_json().find("\"maturity\": \"experimental\"") != std::string::npos);
 }
 
+static void test_gui_review_safety() {
+  const auto& primary=*find_knob("exp_hair_groom_primary");
+  CHECK(primary.experimental && primary.apply==Apply::Restart);
+  CHECK(key_change_needs_restart("rt_hair_groom_primary","0","1"));
+  CHECK(key_change_needs_restart("rt_hair_groom_primary","1","0"));
+  CHECK(unmet_key_need(primary,1,parse_ini("rt=1\nsharc_device=0\n")).find("64-bit")!=std::string::npos);
+  const unsigned hair=kCapRayQuery|kCapLinearSweptSpheres|kCapShaderInt64|kCapFragmentStores|kCapHairGrooms;
+  CHECK(choice_supported(primary,1,hair));
+  for (unsigned bit : {unsigned(kCapRayQuery),unsigned(kCapLinearSweptSpheres),unsigned(kCapShaderInt64),unsigned(kCapFragmentStores),unsigned(kCapHairGrooms)})
+    CHECK(!choice_supported(primary,1,hair & ~bit));
+  Gpu gpu; gpu.ray_query=true;gpu.linear_swept_spheres=true;gpu.shader_int64=true;gpu.fragment_stores=true;gpu.hair_grooms=true;
+  CHECK((gpu_caps(gpu)&hair)==hair);
+  const auto& fg=*find_knob("frame_generation");
+  for(int from=0;from<4;++from)for(int to=0;to<4;++to)
+    CHECK(transition_apply(fg,from,to)==((from==0)!=(to==0)?Apply::Restart:Apply::Live));
+  for(const auto& k:kKnobs)if(k.experimental&&!k.dev_only)CHECK_EQ(k.category,"Advanced");
+  const auto& fresnel=*find_knob("water_surface_fresnel");
+  CHECK(!choice_available(fresnel,1,false,false,~0u));
+  CHECK(choice_available(fresnel,1,false,true,~0u));
+  const auto& cost=*find_knob("exp_water_hit_cost");
+  CHECK(choice_count(cost)==5);
+  CHECK_EQ(get(on_map(cost,4),"rt_water_hit_cost"),"7");
+  CHECK(knob_value(cost,parse_ini("rt_water_hit_cost=7\n"))==4);
+  auto values=preset_values(kUltra);
+  values[knob_index("exp_water_hit_shade")]=0;
+  for(int c=1;c<choice_count(cost);++c) {
+    CHECK(!unmet_need(cost,c,values).empty());
+    values[knob_index("exp_water_hit_shade")]=1;
+    CHECK(unmet_need(cost,c,values).empty());
+    values[knob_index("exp_water_hit_shade")]=0;
+  }
+  CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[1].label,"3.5 million segments");
+  CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[2].label,"1.8 million segments");
+  CHECK(std::string(find_knob("exp_hair_groom")->cost.gpu).find("ms")!=std::string::npos);
+  // Device-startup latch, not a hot INI poll: a saved On cannot activate the current device.
+  const auto source=read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
+  CHECK(source.find("g_startup_enabled = cfg_int(\"rt_hair_groom_primary\", 0) != 0")!=std::string::npos);
+  CHECK(source.find("return g_startup_enabled &&")!=std::string::npos);
+  CHECK(source.find("cfg_hot(CfgHot::rt_hair_groom_primary)")==std::string::npos);
+}
+
 static void test_apply_modes() {
   for(const auto& k:kKnobs) {
     CHECK(k.apply!=Apply::Unspecified);
@@ -970,10 +1011,10 @@ static void test_apply_modes() {
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
-  for (const auto* key : {"rt_hair_visibility", "rt_hair_pool_trim", "rt_hair_cheap", "rt_hair_gi_mean"}) {
+  for (const auto* key : {"rt_hair_pool_trim"}) {
     const auto& knob = *find_knob(std::string("exp_") + (key + 3));
     CHECK(knob.experimental == (std::string(key) != "rt_hair_pool_trim"));
-    CHECK(knob.dev_only == (std::string(key)=="rt_hair_visibility" || std::string(key)=="rt_hair_gi_mean"));
+    CHECK(!knob.dev_only);
     CHECK_EQ(code_default(key), "0");
     CHECK(!key_change_needs_restart(key, "0", "1"));
     for(int preset=0;preset<kPresetCount;++preset)CHECK(knob.preset[preset]==(std::string(key)=="rt_hair_pool_trim" && preset==3 ? 1 : 0));
@@ -983,7 +1024,7 @@ static void test_apply_modes() {
   // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
   CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
   for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_hit_shade",
-                         "exp_hair_groom", "exp_hair_cheap"}) {
+                         "exp_hair_groom"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
     CHECK(k.choices[0].apply==Apply::Live || k.choices[0].apply==Apply::Hitch);
@@ -997,13 +1038,6 @@ static void test_apply_modes() {
     CHECK(!key_change_needs_restart(key,"1","0"));
   }
   CHECK(find_knob("exp_native_coverage")->choices[2].dev);
-  const auto& hair_gi_cull = *find_knob("exp_hair_gi_cull");
-  CHECK(hair_gi_cull.dev_only && hair_gi_cull.experimental);
-  CHECK_EQ(code_default("rt_hair_gi_cull"), "0");
-  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "0", "1"));
-  CHECK(!key_change_needs_restart("rt_hair_gi_cull", "1", "0"));
-  for (int preset = 0; preset < kPresetCount; ++preset) CHECK(hair_gi_cull.preset[preset] == 0);
-  for (int choice = 0; choice < 2; ++choice) CHECK(knob_apply(hair_gi_cull, choice) == Apply::Live);
   CHECK(key_change_needs_restart("rt_bvh_split","0","1"));
   CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
   for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);
@@ -1021,6 +1055,36 @@ static void test_apply_modes() {
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }
 
+static void test_retired_hair_ini() {
+  const char* keys[] = {"rt_hair_gi_cull", "rt_hair_visibility", "rt_hair_cheap", "rt_hair_gi_mean"};
+  const Map defaults = code_defaults();
+  const std::string schema = schema_json();
+  for (const char* key : keys) {
+    CHECK(code_default(key) == nullptr);
+    CHECK(find_knob(std::string("exp_") + (key + 3)) == nullptr);
+    CHECK(schema.find(key) == std::string::npos);
+  }
+  // Legacy overrides, even enabled ones, are inert unknown keys in every preset.
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (const char* value : {"0", "1"}) {
+      const std::string clean = std::string("preset=") + kPresetId[p] + "\ngi_strength=0.63\n";
+      std::string legacy = clean;
+      for (const char* key : keys) legacy += std::string(key) + "=" + value + "\n";
+      Map old = parse_ini(legacy), current = parse_ini(clean);
+      std::vector<std::string> notes;
+      Map loaded = merge_layers({&defaults, &old}, &notes);
+      const Map expected = merge_layers({&defaults, &current});
+      CHECK(notes.empty());
+      CHECK(knob_values(loaded) == knob_values(expected));
+      for (const char* key : keys) {
+        CHECK_EQ(get(loaded, key), value);
+        loaded.erase(key);
+      }
+      CHECK(loaded == expected);
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1028,6 +1092,8 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_retired_hair_ini();
+  test_gui_review_safety();
   test_apply_modes();
   test_product_policy();
   test_parse();

@@ -3,7 +3,6 @@
 #include "../common/vram_guard.h"
 #include "../common/omm_native_plain_recipes.h"
 #include "../common/sun_raster_domain.h"
-#include "../common/native_hair_visibility.h"
 // Track D phase 1: capture the opaque scene geometry of BG3's G-buffer pass in
 // camera-relative world space (docs/TRACK_D_RT.md).
 //
@@ -154,8 +153,6 @@ struct PipeInfo {
   uint8_t uv_vs_comps = 0;   // components the VS writes there
   bool restart = true;       // primitive restart enabled, or dynamic (unknown)
   InstPipe inst;             // instancing layout (Track D BVH split)
-  struct HairInput { uint32_t binding=0,offset=0,stride=0; } hair_input[4];
-  bool hair_visibility_layout=false;
   bool discard = false;      // its fragment shader can discard (rt_cascade_casters skips it: no alpha test)
   bool always_discard = false;
   bool fragment_depth = false;
@@ -347,6 +344,7 @@ struct Capture {
   uint64_t c_legacy_sig=1469598103934665603ull;
   capture_budget::CascadeElasticWindow elastic;
   capture_budget::RtElasticWindow rt_elastic;
+  capture_budget::CaptureHeadroom headroom;
   uint64_t elastic_target=0;
   Buf elastic_old;
   uint64_t elastic_detached=0;
@@ -449,6 +447,10 @@ VKAPI_ATTR void VKAPI_CALL CmdSetScissor(VkCommandBuffer cmd,uint32_t first,uint
 
 VKAPI_ATTR VkResult VKAPI_CALL CreateBuffer(VkDevice device, const VkBufferCreateInfo* ci,
                                             const VkAllocationCallbacks* alloc, VkBuffer* out) {
+  VkBufferCreateInfo patched=*ci;
+  if(cfg_int("rt_hit_material_paks",0) && (ci->usage&(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT))) {
+    patched.usage|=VK_BUFFER_USAGE_TRANSFER_SRC_BIT;ci=&patched;
+  }
   VkResult r = device_of(device)->vk.CreateBuffer(device, ci, alloc, out);
   if (r == VK_SUCCESS) {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -486,7 +488,7 @@ void elastic_resize(Capture& c,uint64_t wanted,bool cascade){
   }
   // Never lower a sampled target below its live need after a budget change.
   // Shrinks already obey the sampled cap; a new cap only restricts growth.
-  if(wanted>c.xfb.size)wanted=(std::min)(wanted,elastic_cap(cascade));
+  if(wanted>c.xfb.size)wanted=(std::max)(c.xfb.size,(std::min)(wanted,elastic_cap(cascade)));
   if(wanted==c.xfb.size)return;
   if(wanted>c.xfb.size && !vram_allow(cascade?vram_guard::kCascade:vram_guard::kRtCapture,wanted,
                      cascade?"elastic cascade capture":"elastic RT capture")){
@@ -1595,12 +1597,16 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
   st.demand_max = (std::max)(st.demand_max, uint64_t(c->cursor) + c->c_over);
   if(cfg_int("rt_capture_elastic",0) && !cfg_hot(CfgHot::rt_sun_cascade_current) && c->xfb.b){
     const uint64_t cap=elastic_cap(true);
-    const uint64_t wanted=capture_budget::elastic_capacity(c->cursor+c->c_over,g_storage_range,cap);
+    const uint64_t demand=c->cursor+c->c_over;
+    // Ignore inactive captures, just as the shrink window does. Preserve the
+    // learned movement reserve across inactivity and allocation replacement.
+    const uint64_t wanted=demand?c->headroom.capacity(demand,g_storage_range,cap,3,
+        uint64_t(cascade_mb())<<20,c->xfb.size):c->xfb.size;
     const uint64_t target=c->elastic.observe(c->xfb.size,wanted,c->cursor+c->c_over);
     if(target!=c->elastic_target && target!=c->xfb.size)
       log("[cascade] capture capacity demand %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
           double(c->cursor+c->c_over)/1048576.0,(unsigned long long)(target>>20),
-          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::ElasticWindow::samples);
+          (unsigned long long)(c->xfb.size>>20),c->elastic.count,capture_budget::CascadeElasticWindow::samples);
     c->elastic_target=target;
   }
   if ((!cfg_int("rt_capture_elastic",0) || cfg_hot(CfgHot::rt_sun_cascade_current)) && c->c_full && c->xfb.b) {   // grow the next buffers to this frame's demand (cascade_bytes)
@@ -2002,6 +2008,11 @@ static InstPipe make_inst_pipe(const VkGraphicsPipelineCreateInfo& ci, const Mod
   if(ip.uv_ok && ua->format==VK_FORMAT_R32G32_SFLOAT && ua->binding<CmdState::kMaxVertexBindings){
     ip.uv_binding=uint8_t(ua->binding);ip.uv_offset=ua->offset;ip.uv_stride=dyn_stride?0:ub->stride;
   }
+  if(ip.uv_ok && ua->binding<CmdState::kMaxVertexBindings &&
+     (ua->format==VK_FORMAT_R32G32_SFLOAT || ua->format==VK_FORMAT_R16G16_SFLOAT)){
+    ip.paks_uv_binding=uint8_t(ua->binding);ip.paks_uv_offset=ua->offset;
+    ip.paks_uv_stride=dyn_stride?0:ub->stride;ip.paks_uv_half=ua->format==VK_FORMAT_R16G16_SFLOAT;
+  }
   ip.ok = true;
   return ip;
 }
@@ -2054,24 +2065,6 @@ void geo_note_pipelines(uint32_t n, const VkGraphicsPipelineCreateInfo* cis, con
     }
     pi.xfb = vs_patched && !other;
     pi.no_storage_writes=all_no_writes;
-    if(vio && vio->hash==0xbf72b58803efe34dull && cis[i].pVertexInputState) {
-      const auto& input=*cis[i].pVertexInputState;
-      bool valid=input.pNext==nullptr,dynamic_stride=false;
-      if(cis[i].pDynamicState)for(uint32_t d=0;d<cis[i].pDynamicState->dynamicStateCount;++d) {
-        const auto state=cis[i].pDynamicState->pDynamicStates[d];
-        if(state==VK_DYNAMIC_STATE_VERTEX_INPUT_EXT)valid=false;
-        if(state==VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE)dynamic_stride=true;
-      }
-      const VkFormat formats[4]={VK_FORMAT_R32G32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT,VK_FORMAT_R32G32B32_SFLOAT,VK_FORMAT_R32G32B32A32_SFLOAT};
-      for(uint32_t loc=0;loc<4;++loc) {
-        const VkVertexInputAttributeDescription* a=nullptr;const VkVertexInputBindingDescription* b=nullptr;
-        for(uint32_t k=0;k<input.vertexAttributeDescriptionCount;++k)if(input.pVertexAttributeDescriptions[k].location==loc)a=input.pVertexAttributeDescriptions+k;
-        if(a)for(uint32_t k=0;k<input.vertexBindingDescriptionCount;++k)if(input.pVertexBindingDescriptions[k].binding==a->binding)b=input.pVertexBindingDescriptions+k;
-        if(!a || !b || a->format!=formats[loc] || b->inputRate!=VK_VERTEX_INPUT_RATE_VERTEX || a->binding>=CmdState::kMaxVertexBindings)valid=false;
-        else pi.hair_input[loc]={a->binding,a->offset,dynamic_stride?0u:b->stride};
-      }
-      pi.hair_visibility_layout=valid;
-    }
     if(native_hit::enabled())pi.material_inputs=native_hit::static_inputs(cis[i]);
     if(native_hit::enabled() && g_tileset_capture && vio && fio){
       pi.tileset_family=native_hit::tileset_depth(vio->hash,fio->hash)?1u:native_hit::tileset_deferred(vio->hash,fio->hash)?2u:0u;
@@ -2331,11 +2324,12 @@ void rt_capture_stats(const Capture& c) {
         floor,cfg_int("rt_alpha_mb",64)==64 && g_stride>24,cfg_int("rt_alpha_max_pct",60),
         c.xfb.size-c.alpha_base,c.cursor+c.opaque_overflow_bytes):
         uint64_t(c.cursor+c.opaque_overflow_bytes);
-    const uint64_t wanted=capture_budget::elastic_rt_capacity(demand,g_storage_range,
-        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+    const uint64_t predicted=g_scratch.headroom.capacity(demand,g_storage_range,elastic_cap(false),1,
+        uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size);
+    const uint64_t wanted=(std::max)(predicted,capture_budget::elastic_rt_capacity(demand,g_storage_range,
+        elastic_cap(false),uint64_t((std::max)(xfb_mb(),16))<<20,c.xfb.size));
     // rt_capture_stats runs only for the main (non-minor) scene capture.
-    // Restore reserve before the next frame reaches capacity. Unlike cascade
-    // overflow recovery, primary capture must not wait for a dropped draw.
+    // Both streams restore reserve before the next frame reaches capacity.
     const uint64_t target=g_scratch.rt_elastic.observe(c.xfb.size,wanted,demand,true);
     if(target!=g_scratch.elastic_target && target!=c.xfb.size)
       log("[geo] RT capture capacity demand opaque %.1f MB alpha %.1f MB, target %llu MB of %llu MB (elastic, %u/%u low samples; pending producer boundary)",
@@ -2468,78 +2462,6 @@ static void em_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) 
   p_begin_xfb(cmd, 0, 0, nullptr, nullptr);
   e->xfb_active = true;
   e->ranges.push_back({off, prims});
-}
-
-// Fail-open CPU subset of the exact static camera Hair recipe. Never stage
-// GPU copies or borrow stale bounds. GPU-writable sources retain native hair.
-static hair_visibility::Decision hair_visibility_draw(VkCommandBuffer cmd,const CmdState* state,const DrawArgs& args,const PipeInfo& pi) {
-  using namespace hair_visibility;
-  if(state->vs!=0xbf72b58803efe34dull || !pi.hair_visibility_layout || args.kind>1 || args.instances!=1 || !args.count || !state->has_viewport)return Decision::Unknown;
-  auto readable=[&](VkBuffer buffer) {
-    const auto usage=geo_buffer_usage(buffer);
-    return usage && !(usage&(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT));
-  };
-  auto read=[&](VkBuffer buffer,uint64_t offset,void* dst,size_t bytes) {
-    if(!readable(buffer))return false;
-    const auto size=geo_buffer_size(buffer);
-    if(offset>size || bytes>size-offset)return false;
-    std::shared_lock lock(tracker().mu);
-    const auto memory=tracker().buffer_mem.find(buffer);
-    if(memory==tracker().buffer_mem.end() || memory->second.second>UINT64_MAX-offset)return false;
-    const auto mapped=tracker().mapped.find(memory->second.first);
-    const auto range=tracker().mapped_ranges.find(memory->second.first);
-    const uint64_t at=memory->second.second+offset;
-    if(mapped==tracker().mapped.end() || !mapped->second || range==tracker().mapped_ranges.end() ||
-       at<range->second.first || at>range->second.second || bytes>range->second.second-at)return false;
-    std::memcpy(dst,mapped->second+at,bytes);return true;
-  };
-  auto uniform=[&](unsigned set,unsigned binding,unsigned off,void* dst,size_t bytes) {
-    Bg3Binding source{};
-    return query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,binding,0,&source,state) && source.buffer && readable(source.buffer) &&
-      (source.range==VK_WHOLE_SIZE || (off<=source.range && bytes<=source.range-off)) && source.offset<=UINT64_MAX-off &&
-      read(source.buffer,source.offset+off,dst,bytes);
-  };
-  float model[16]{},vp[16]{},weather[12]{},material[2]{},time=0;uint32_t pull=0;
-  if(!uniform(1,0,0,model,sizeof model)||!uniform(1,0,64,&pull,4)||pull ||
-     !uniform(0,2,128,vp,sizeof vp)||!uniform(0,1,0,weather,sizeof weather)||!uniform(1,1,0,material,sizeof material)||!uniform(0,0,0,&time,4))return Decision::Unknown;
-  const double arithmetic_limit=std::sqrt(std::sqrt(double(std::numeric_limits<float>::max())))/1024.0;
-  if(!std::isfinite(time)||std::abs(double(time))>arithmetic_limit)return Decision::Unknown;
-  for(float v:weather)if(!std::isfinite(v)||std::abs(double(v))>arithmetic_limit)return Decision::Unknown;
-  for(float v:material)if(!std::isfinite(v)||std::abs(double(v))>arithmetic_limit)return Decision::Unknown;
-  Bg3Binding noise{};
-  if(!query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,1,2,0,&noise,state)||!noise.view||!alpha_native_hair_wind_bounded(cmd,noise.format))return Decision::Unknown;
-  // Bound the smallest singular value so native normal normalization cannot
-  // underflow its float dot product, including uniformly tiny model scales.
-  if(!model_valid(model))return Decision::Unknown;
-  for(float value:model)if(std::abs(double(value))>arithmetic_limit)return Decision::Unknown;
-  if(args.kind==1 && !readable(state->ib))return Decision::Unknown;
-  Bounds box;
-  for(uint32_t i=0;i<args.count;++i) {
-    int64_t vertex=int64_t(args.first)+i;
-    if(args.kind==1) {
-      uint32_t index=0;const uint32_t size=state->ib_type==VK_INDEX_TYPE_UINT32?4u:state->ib_type==VK_INDEX_TYPE_UINT16?2u:state->ib_type==VK_INDEX_TYPE_UINT8_EXT?1u:0u;
-      const uint64_t at=uint64_t(args.first)+i;
-      if(!size || at>(UINT64_MAX-state->ib_offset)/size || !read(state->ib,state->ib_offset+at*size,&index,size))return Decision::Unknown;
-      vertex=int64_t(index)+args.vertex_offset;
-    }
-    if(vertex<0)return Decision::Unknown;
-    float values[4][4]{};const uint32_t components[4]={2,4,3,4};
-    for(uint32_t loc=0;loc<4;++loc) {
-      const auto& input=pi.hair_input[loc];const auto& vb=state->vb[input.binding];
-      const uint64_t stride=input.stride?input.stride:vb.stride;
-      if(!stride || !readable(vb.buffer) || vb.offset>UINT64_MAX-input.offset)return Decision::Unknown;
-      const uint64_t base=vb.offset+input.offset;
-      if(uint64_t(vertex)>(UINT64_MAX-base)/stride || !read(vb.buffer,base+uint64_t(vertex)*stride,values[loc],components[loc]*4u))return Decision::Unknown;
-      for(uint32_t k=0;k<components[loc];++k)if(!std::isfinite(values[loc][k]) || std::abs(double(values[loc][k]))>arithmetic_limit)return Decision::Unknown;
-    }
-    double q2=0;for(float v:values[3])q2+=double(v)*v;
-    if(q2<4.0*std::numeric_limits<float>::min() || q2>std::numeric_limits<float>::max()/4.0)return Decision::Unknown;
-    if(!add(box,values[2],model))return Decision::Unknown;
-  }
-  if(!expand(box,wind(weather[11],weather[3],weather[7],material[1])))return Decision::Unknown;
-  double near_m=cfg_float("gi_rt_radius",1.0f);
-  if(cfg_int("gi_far",0))near_m=(std::max)(near_m,double(cfg_float("gi_far_m",6.0f)));
-  return select(box,vp,std::abs(double(state->viewport.width)),std::abs(double(state->viewport.height)),near_m);
 }
 
 void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
@@ -2680,11 +2602,6 @@ void geo_pre_draw(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   bool alpha_fs = capturable && g_alpha_mode && alpha_lookup(s->fs, &a) && (a.kind==5 || (a.uv == pi.uv && pi.uv >= 0)) &&
                         (a.kind != 4 || (pi.hair_outputs & (a.channel ? 3u : 1u)) == (a.channel ? 3u : 1u)) &&
                         cfg_hot(CfgHot::rt_alpha_capture);
-  if(alpha_fs && a.kind==4 && cfg_int("rt_hair_visibility",0)) {
-    const auto decision=hair_visibility_draw(cmd,s,args,pi);
-    alpha_native_hair_visibility_note(uint32_t(decision));
-    if(decision==hair_visibility::Decision::Cards)alpha_fs=false;
-  }
   if(a.kind==4 && (pi.hair_outputs & (a.channel?3u:1u)) != (a.channel?3u:1u))
     alpha_native_hair_missing_attributes(s->fs,s->vs,pi.hair_outputs);
   // Track D BVH split: a draw of a cached instanced mesh is not captured; its

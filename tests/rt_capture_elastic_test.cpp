@@ -87,6 +87,47 @@ int main(){
   check(turn_capacity>=271*mib);
  }
  check(cascade.observe(turn_capacity,elastic_capacity(271*mib,cap,cap),271*mib)>=271*mib);
+ // su1 summary-envelope trace, not a per-frame reconstruction: reserve from
+ // the 427 MiB preset must cover the first 206.18 -> 301.71 MiB turn BEFORE
+ // feedback. Thereafter retain the measured positive step over quiet windows.
+ CaptureHeadroom ch;
+ cascade.reset();
+ uint64_t size_c=427*mib;
+ for(unsigned i=0;i<120;++i)
+  size_c=cascade.observe(size_c,ch.capacity(mb(206.18),cap,cap,3,427*mib),mb(206.18));
+ check(size_c==320*mib && size_c>=mb(301.71));
+ size_c=cascade.observe(size_c,ch.capacity(mb(301.71),cap,cap,3,427*mib),mb(301.71));
+ check(size_c==592*mib); // 301.71 + 3 * (301.71 - 206.18), rounded to 16.
+ const uint64_t learned=ch.step;
+ for(unsigned i=0;i<240;++i){
+  const uint64_t d=mb(i%2?301.71:206.18);
+  check(d<=size_c); // Test admission BEFORE computing next producer's target.
+  size_c=cascade.observe(size_c,ch.capacity(d,cap,cap,3,427*mib),d);
+ }
+ const uint64_t busy=size_c;
+ for(unsigned i=1;i<120;++i){
+  size_c=cascade.observe(size_c,ch.capacity(20*mib,cap,cap,3,427*mib),20*mib);
+  check(size_c==busy);
+ }
+ size_c=cascade.observe(size_c,ch.capacity(20*mib,cap,cap,3,427*mib),20*mib);
+ check(size_c==320*mib && size_c<427*mib && ch.step==learned);
+ check(ch.capacity(UINT64_MAX,cap,cap,3,427*mib)==cap);
+ check(ch.capacity(100*mib,128*mib,cap,3,427*mib)==128*mib);
+ check(ch.capacity(100*mib,cap,128*mib,3,427*mib,592*mib)==592*mib);
+ // Primary producer: five frame increments cover retirement + next boundary.
+ // Repeated steps fit while a replacement remains fence-blocked for 4 frames.
+ CaptureHeadroom rh;
+ uint64_t rt_size=1024*mib;
+ rh.capacity(600*mib,cap,cap,1,1024*mib);
+ uint64_t pending=rh.capacity(680*mib,cap,cap,1,1024*mib);
+ for(unsigned i=1;i<=4;++i){
+  const uint64_t d=(680+80*i)*mib;
+  check(d<=rt_size);
+  pending=rh.capacity(d,cap,cap,1,1024*mib);
+ }
+ rt_size=pending;
+ check(rt_size==1408*mib); // 1000 + 5 * 80, beyond either quarter reserve.
+ check(rh.capacity(1080*mib,cap,cap,1,1024*mib)>rt_size);
  // Retired producers only; late submission and F+2 cascade consumers covered.
  check(!elastic_retired(10,11,false));check(elastic_retired(10,12,false));
  check(!elastic_retired(10,13,true));check(elastic_retired(10,14,true));

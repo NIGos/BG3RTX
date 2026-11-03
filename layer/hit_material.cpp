@@ -150,6 +150,13 @@ std::vector<mesh_paks::Row> pak_meshes;
 std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
 // Candidate counts and publication rejections are separate: UV is not proof.
 std::atomic<uint64_t> pak_uv_attempts{0},pak_uv_unique{0},pak_missing{0},pak_ambiguous{0},pak_invalid{0},pak_witness{0},pak_recipe{0},pak_inputs{0},pak_id_equal{0},pak_id_different{0};
+std::atomic<uint64_t> pak_missing_count{0},pak_missing_uv{0};
+std::atomic<uint64_t> pak_witness_ok{0},pak_witness_mismatch{0},pak_budget_deferred{0};
+// A count absent from the immutable catalogue is terminal, not an input wait.
+bool paks_count_missing(uint32_t count){
+ if(mesh_paks::has_candidates(pak_meshes,count))return false;
+ ++pak_uv_attempts;++pak_missing;++pak_missing_count;return true;
+}
 struct PakInputAttempt {bool candidate{};~PakInputAttempt(){if(!candidate)++pak_inputs;}};
 mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
  ++pak_uv_attempts;
@@ -157,7 +164,7 @@ mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
  const auto last=std::upper_bound(first,pak_meshes.end(),count,[](uint32_t n,const auto& row){return n<row.index_count;});
  auto r=mesh_paks::lookup(std::span<const mesh_paks::Row>(first,last),count,nullptr,uv);
  switch(r.status){case mesh_paks::Match::Unique:++pak_uv_unique;break;
- case mesh_paks::Match::Missing:++pak_missing;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
+ case mesh_paks::Match::Missing:++pak_missing;++pak_missing_uv;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
  case mesh_paks::Match::Invalid:++pak_invalid;break;}return r;
 }
 void paks_load(){
@@ -188,43 +195,50 @@ void paks_load(){
 }
 
 bool pak_uv_get(const CmdState&,const DrawArgs&,const InstPipe&,std::array<float,64>&);
+bool pak_witness_get(const CmdState&,const DrawArgs&,const InstPipe&,const mesh_paks::Row*,std::shared_ptr<std::atomic<bool>>*);
 void pak_uv_live_owners(std::set<uint64_t>&);
-const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip){
+const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip,std::shared_ptr<std::atomic<bool>>* proof=nullptr){
  PakInputAttempt attempt;
- if(!paks_rows()||!ip.ok||!ip.pos_float3||!ip.uv_ok||ip.pos_binding>=CmdState::kMaxVertexBindings||ip.uv_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
- const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
- const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
- std::shared_lock lock(tracker().mu);
- auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
-  const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
-  const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
-  if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
-  return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
- };
- if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
- mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
- in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
- if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
- in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
- const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
- mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
- if(sampled && uv.data){
-  std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
-  if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
-  attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
-  if(match.status!=mesh_paks::Match::Unique)return nullptr;
-  if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
-  if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
-  if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
-  return match.row;
+ if(!paks_rows()||!ip.ok||ip.pos_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
+ if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
+ // Raw layout restrictions apply only to CPU sampling, not to decoded XFB.
+ if(ip.pos_float3 && ip.uv_ok && ip.uv_binding<CmdState::kMaxVertexBindings){
+  const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
+  const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
+  std::shared_lock lock(tracker().mu);
+  auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
+   const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
+   const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
+   if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
+   return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
+  };
+  if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
+  mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
+  in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
+  if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
+  in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
+  const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
+  mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
+  if(sampled && uv.data){
+   std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
+   if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
+   attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
+   if(match.status!=mesh_paks::Match::Unique)return nullptr;
+   if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
+   if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+   if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
+   return match.row;
+  }
  }
- // Device-local inputs use the same 32-corner UV join as native hair. A UV
- // candidate cannot authorize publication without the full geometry witness.
- lock.unlock();std::array<float,64> got{};
+ // Unmapped or packed inputs use decoded XFB UVs. A UV candidate cannot
+ // authorize publication without the full geometry witness.
+ std::array<float,64> got{};
  if(pak_uv_get(state,args,ip,got)){
   attempt.candidate=true;const auto candidate=paks_candidate(args.count,got.data());
   if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
-  ++pak_witness; // device-local UV candidate has no full ordered witness
+  if(!mesh_paks::hlod_compatible(*candidate.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+  if(pak_witness_get(state,args,ip,candidate.row,proof))return candidate.row;
+  ++pak_witness;
  }
  return nullptr;
 }
@@ -513,6 +527,7 @@ bool material_current(const Material& m){
 const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& args){
  PakInputAttempt attempt;
  if(!paks_rows() || !tileset_deferred(state.vs,state.fs) || args.kind!=1)return nullptr;
+ if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
  TilesetInputs inputs{};if(!geo_native_tileset_material_inputs(state.pipe[0],&inputs)||!inputs.valid)return nullptr;
  const auto& pa=inputs.attributes[0];const auto& ca=inputs.attributes[4];const auto& ua=inputs.attributes[5];
  if(pa.format!=VK_FORMAT_R32G32B32_SFLOAT || ua.format!=VK_FORMAT_R32G32_SFLOAT)return nullptr;
@@ -676,6 +691,10 @@ void collect(bool force=false){
  for(auto i=owners.begin();i!=owners.end();)if(!live.contains(i->first) && retired(i->first)){submitted_queues.erase(i->first);i=owners.erase(i);}else ++i;
  for(auto i=marked.begin();i!=marked.end();)if(!owners.contains(i->second))i=marked.erase(i);else ++i;
 }
+bool pak_raw_mutable(VkBuffer b){
+ std::shared_lock lock(tracker().mu);const auto i=tracker().buffer_mem.find(b);
+ return i!=tracker().buffer_mem.end() && tracker().mapped.contains(i->second.first);
+}
 #include "pak_uv_readback.inl"
 std::shared_ptr<Deferred> packet_for(const Slot& slot){
  std::shared_ptr<Deferred> found;
@@ -691,6 +710,7 @@ void publish_word(Query& query,uint32_t value){
 // the BVH build lock (pool_lookup, pool_evicted) and never held while calling out, except the
 // tracker/sampler currency checks (their own leaf locks).
 struct PoolMaterial {
+ std::shared_ptr<std::atomic<bool>> pak_valid;
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
  const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
  bool pak{},pak_two_sided{}; // full verified HLOD fallback, current captured resources
@@ -737,8 +757,9 @@ PoolObserved& pool_observed(uint64_t frame){
 }
 void pool_log(uint64_t frame){
  if(paks_on){
-  log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load());
-  uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
+  uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak && (!r.payload.pak_valid || r.payload.pak_valid->load(std::memory_order_relaxed))){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
+  log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu witness_ok %llu witness_mismatch %llu budget_deferred %llu published_records %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load(),(unsigned long long)pak_witness_ok.load(),(unsigned long long)pak_witness_mismatch.load(),(unsigned long long)pak_budget_deferred.load(),(unsigned long long)records);
+  log("[hit material paks reasons] cumulative draw observations: missing_count %llu missing_uv %llu witness_rejected %llu inputs_unavailable %llu; inputs_pending is not queue depth",(unsigned long long)pak_missing_count.load(),(unsigned long long)pak_missing_uv.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_inputs.load());
   log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
   log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
@@ -811,6 +832,7 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
+ if(m.pak && m.pak_valid && !m.pak_valid->load(std::memory_order_relaxed))return false;
  if(m.checked!=frame){m.checked=frame;
   if(m.plain_layout()){m.current=omm::ordinary_sampler_current(m.sampler);for(const auto& v:m.plain)m.current=m.current&&current(v);return m.current;}
   m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler)&&
@@ -1146,12 +1168,9 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
 void pak_uv_forget_buffer(VkBuffer b){
+ if(!paks_on)return;
  std::lock_guard lock(mutex);
- for(auto it=pak_uv_cache.begin();it!=pak_uv_cache.end();){
-  const auto& key=it->first;auto& e=it->second;
-  if(key[0]!=uint64_t(b) && key[6]!=uint64_t(b) && key[8]!=uint64_t(b)){++it;continue;}
-  if(e.xfb.b){e.invalid=true;++it;}else it=pak_uv_cache.erase(it);
- }
+ pak_uv_forget_cached_buffer(b);
 }
 bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
  *geometry=*position=0;if(!inst.ok || args.kind>1)return false;
@@ -1216,9 +1235,9 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  const bool pak_readback=pak_probe && recipe && recipe->capture==native_vt::CapturePool;
  if(pak_probe){
   ++pak_attempts;
-  const auto* pak=paks_match(*state,args,inst);
+  std::shared_ptr<std::atomic<bool>> proof;const auto* pak=paks_match(*state,args,inst,&proof);
   if(pak_fallback && !pak)recipe=nullptr;
-  else if(pak_fallback){++pak_matches;payload.pak=true;payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
+  else if(pak_fallback){++pak_matches;payload.pak=true;payload.pak_valid=std::move(proof);payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
    for(char c:pak->material)o.identity=pool::mix(o.identity,uint8_t(c));}
  }
  bool due=false,throttled=false;

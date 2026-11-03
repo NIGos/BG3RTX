@@ -4,7 +4,16 @@
 #include <cstdlib>
 using namespace bg3::mesh_paks;
 #define CHECK(x) do{if(!(x)){std::printf("FAIL %d: %s\n",__LINE__,#x);std::exit(1);}}while(0)
+#include "pak_uv_readback_fixture.h"
+#include "pak_witness_fixture.h"
 int main(){
+  witness_fixture::decoders_and_budget();
+  readback_fixture::replay();
+  readback_fixture::publication_replay(false);
+  readback_fixture::publication_replay(true);
+  readback_fixture::chunk_replay(false);
+  readback_fixture::chunk_replay(true);
+  readback_fixture::chunk_replay(false,true);
   std::array<uint64_t,32> off{};
   CHECK(!uv_join::offsets(0,24,0,off));CHECK(!uv_join::offsets(4,24,96,off));
   CHECK(!uv_join::offsets(3,23,69,off));CHECK(!uv_join::offsets(3,24,71,off));
@@ -29,5 +38,5 @@ int main(){
   CHECK(lookup(rows,3,nullptr,uv.data()).status==Match::Unique);
   rows.push_back(r);rows[1].corners={1};
   CHECK(lookup(rows,3,nullptr,uv.data()).status==Match::Ambiguous);
-  std::puts("pak_uv_join: ordered copies, one-time retirement, reset, finite samples and ambiguous UV keys passed");
+  std::puts("pak_uv_join: production ring, 88-byte discovery, raw SHA witness, publication/hit lookup, mismatch, budget/chunks and reuse invalidation passed");
 }

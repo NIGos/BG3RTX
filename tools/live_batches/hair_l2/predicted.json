@@ -1,0 +1,24 @@
+{
+ "_rule": "Written and committed BEFORE the run (AGENTS.md). Strands on screen throughout. Cost = 300-frame 'rt passes' / 'gi' / 'scene build GPU' / '[hair primary] strand G-buffer draws GPU' lines of cost-shadow and cost-tips minus mean(cost-base-a, cost-base-b), |a - b| its noise. Energy = float mean of the pre-post scene colour, character ROI by tools/live_batches/dialogue_shadows/char_energy.py; spread = relative std of shot-base-a/b/c.",
+ "_all": {
+  "participation": {
+   "predicted": "in cost-shadow '[hair primary] shadow transmittance: N draws measured, a_f mean r g b ...; last 300 frames: R groom rows with a_f' with N, R > 0 (a_f per channel 0.3-0.8 for brown and black CHAR_Hair colours: tools/hair_groom/dual.py)",
+   "invalid_if": "no transmittance line with N > 0 in cost-shadow, or no strand draws in a cost window"
+  },
+  "shadow (rt_hair_groom_shadow_t, shot-shadow-a vs shot-base-a/b)": {
+   "predicted": "skin, neck and shoulders under the hair brighter: shadow rays through n fibres pass with d_f a_f^n instead of 0 (PT reference on the bench within noise, C2b); no change on surfaces whose shadow rays cross no strand. Character ROI float mean up by 0-5%, environment ROI unchanged within spread. The game's shadow-map card shadows stay (docs/RTX_HAIR_SHADOW_MAPS.md, M2.2): where the game's sun term is kept the ribbon shadow remains",
+   "cost": "rt passes +0.0-0.2 ms (one non-opaque groom query per shadow ray already ran; transmittance adds the per-crossing product), gi within noise, strand G-buffer +0.0-0.05 ms (colour samples per 8 x 8 block)",
+   "kept_if": "the user accepts the look and environment energy stays within spread"
+  },
+  "tips (rt_hair_groom_tips, shot-tips-a vs shot-base-b/c)": {
+   "predicted": "strand tips fade where the painted alpha fades (kept share = mask alpha within the 4 x 5 pattern quantisation); after RR/TAA no visible dither; character ROI float mean within spread (coverage moves from tips to background, a few tenths of a percent)",
+   "cost": "strand G-buffer draws -0.0 to +0.05 ms (one mask sample per fragment, fewer depth writes)",
+   "kept_if": "no edge flicker on the hair in the shots and energy within spread"
+  },
+  "both (shot-both-a)": {
+   "predicted": "the two effects add without interaction (transmittance reads the pixel record, tips only discard on-screen fragments)"
+  }
+ },
+ "l2a-dialogue1-fg2": {"same_as": "_all"},
+ "l2b-campsite-fg2": {"same_as": "_all"}
+}

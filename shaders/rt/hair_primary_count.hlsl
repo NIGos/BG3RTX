@@ -1,7 +1,8 @@
 // rt_hair_groom_primary fail-safe (layer/hair_primary.cpp): strand pixels per groom instance in the pixel record of the
 // last frame (entries with that frame's tag). A matched draw whose strands drew no pixel gets its cards back.
 // Also the entries whose segment fails the strand readers' pool bound (hp_segment), per groom, at byte 256: the
-// readers discard those pixels, the layer logs the count (the header still holds the counted frame's rows).
+// readers discard those pixels, the layer logs the count (the header still holds the counted frame's rows). At byte
+// 512 the strand entries sealed with an adjacent frame's tag: a misaligned counted frame is no evidence for a strike.
 #include "hair_primary.hlsli"
 #include "hair_dual.hlsli"
 [[vk::binding(0, 0)]] ByteAddressBuffer Pixels;     // hair primary pixel record (16 B entries)
@@ -11,10 +12,11 @@ struct Push { uint tag, n, header_lo, header_hi; };   // header: the record's ad
 
 groupshared uint gsCount[64];
 groupshared uint gsRefused[64];
+groupshared uint gsOther[64];
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
-  if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u;
+  if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u, gsOther[gi] = 0u;
   GroupMemoryBarrierWithGroupSync();
   const uint64_t rec = (uint64_t(pc.header_hi) << 32) | uint64_t(pc.header_lo);
   if (id.x < pc.n) {
@@ -30,17 +32,22 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
           InterlockedAdd(gsRefused[k], 1u);
       }
     }
+    // An adjacent frame's tag (byte 512): the G-buffer of the counted frame ran against another publish.
+    else if ((e.w == hp_seal(e.xyz, pc.tag - 1u) || e.w == hp_seal(e.xyz, pc.tag + 1u)) && e.x != 0xFFFFFFFFu &&
+             (e.x >> 24) < 64u)
+      InterlockedAdd(gsOther[e.x >> 24], 1u);
   }
   GroupMemoryBarrierWithGroupSync();
   if (gi < 64u && gsCount[gi] != 0u) Counts.InterlockedAdd(gi * 4u, gsCount[gi]);
   if (gi < 64u && gsRefused[gi] != 0u) Counts.InterlockedAdd(256u + gi * 4u, gsRefused[gi]);
+  if (gi < 64u && gsOther[gi] != 0u) Counts.InterlockedAdd(512u + gi * 4u, gsOther[gi]);
   // C2: the strand colour sample of each groom written in the counted frame -> its forward-scattered fraction a_f
-  // (the fibre pass's own table, hair_dual.hlsli), at counts byte 512 + 16 k (w = 1: measured).
+  // (the fibre pass's own table, hair_dual.hlsli), at counts byte 768 + 16 k (w = 1: measured).
   if (id.x < 64u && rec != 0u) {
     const uint64_t at = rec + hair_primary_colour_offset + id.x * 32u;
     const float4 s = asfloat(vk::RawBufferLoad<uint4>(at, 16));
     const bool ok = vk::RawBufferLoad<uint>(at + 16u, 4) == pc.tag && all(isfinite(s));
     const float3 a_f = ok ? hd_lookup3(saturate(s.rgb), max(0.09, s.w), 0u) : 0.0.xxx;
-    Counts.Store4(512u + id.x * 16u, asuint(float4(a_f, ok ? 1.0 : 0.0)));
+    Counts.Store4(768u + id.x * 16u, asuint(float4(a_f, ok ? 1.0 : 0.0)));
   }
 }

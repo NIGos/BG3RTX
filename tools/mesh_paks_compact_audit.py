@@ -3,10 +3,37 @@ import argparse
 import hashlib
 import json
 import struct
+import re
+from collections import Counter
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+
+
+def audit_log(text, index):
+    """Only infer facts present in the log; repeated draws are not pixel weights."""
+    readbacks = Counter()
+    missing_counts = Counter()
+    for count, status in re.findall(r'\[hit material paks UV\] (\d+) corners: (unique|missing|ambiguous) candidate', text):
+        readbacks[status] += 1
+        if status == 'missing':
+            missing_counts['count_present' if int(count) in index else 'count_absent'] += 1
+    windows = []
+    pattern = (r'\[hit material paks\] frame (\d+) enabled ([01]): exact (\d+)/(\d+) attempts; '
+               r'records (\d+) basis ready (\d+)')
+    for values in re.findall(pattern, text):
+        windows.append(dict(zip(('frame', 'enabled', 'exact', 'draws', 'records', 'basis_ready'), map(int, values))))
+    joins = re.findall(r'\[hit material paks join\] ([^\r\n]+)', text)
+    last = dict((k, int(v)) for k, v in re.findall(r'(\w+) (\d+)', joins[-1])) if joins else {}
+    return dict(scope='logged readback completions and cumulative draw observations; not unique meshes or pixels',
+                readbacks=dict(readbacks), missing_readbacks=dict(missing_counts), windows=windows,
+                last_join=last,
+                missing_attempt_percent=100*last['missing']/last['attempts'] if last.get('attempts') else None,
+                missing_draw_percent=100*last['missing']/last['draws'] if last.get('draws') else None,
+                screen_share=None, missing_family_shares=None,
+                limits='No missing-draw VS/FS, UV values, resource IDs, per-draw counts or pixel weights in this log. '
+                       'Count present plus missing UV does not prove mesh absence: UV decode/order/submesh differences remain possible.')
 
 
 def candidates(path):
@@ -100,13 +127,21 @@ def audit(pack, index):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--catalogue', required=True, type=Path)
-    parser.add_argument('--pack', action='append', required=True, type=Path)
+    parser.add_argument('--pack', action='append', default=[], type=Path)
+    parser.add_argument('--log', type=Path)
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
+    if not args.pack and not args.log:
+        parser.error('provide --pack or --log')
     index = candidates(args.catalogue)
     reports = []
     for pack in args.pack:
         reports.append(audit(pack, index))
         print(json.dumps(reports[-1]), flush=True)
     with args.out.open('x') as dst:
-        json.dump(dict(status='OFFLINE_CANDIDATES_ONLY', packs=reports), dst, indent=2)
+        result = dict(status='OFFLINE_CANDIDATES_ONLY', packs=reports)
+        if args.log:
+            result['log'] = audit_log(args.log.read_text(errors='replace'), index)
+            result['catalogue'] = dict(rows=sum(map(len,index.values())), counts=len(index),
+                flag_histogram=dict(Counter(row['flags'] for rows in index.values() for row in rows)))
+        json.dump(result, dst, indent=2)

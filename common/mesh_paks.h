@@ -120,6 +120,48 @@ inline bool parse(std::span<const uint8_t> bytes,std::vector<Row>& rows) {
 // v2/3 use full equality (UV tolerance 1e-3); v4 SHA-256 is stricter: UV bits
 // must also agree. Hash failure/missing callback declines publication.
 using Digest = std::string (*)(const void*,size_t);
+struct WitnessLayout {
+ uint32_t count{},index_bytes{};int64_t vertex_offset{};uint32_t pos_stride{},uv_stride{};bool uv_half{};
+};
+inline bool witness_span(const WitnessLayout& l,mesh_content::Bytes indices,uint32_t& first,uint32_t& last){
+ if(!l.count || l.count%3 || (l.index_bytes!=1&&l.index_bytes!=2&&l.index_bytes!=4) ||
+    !indices.data || uint64_t(l.count)*l.index_bytes>indices.size)return false;
+ first=UINT32_MAX;last=0;
+ for(uint32_t c=0;c<l.count;++c){uint32_t i=0;std::memcpy(&i,indices.data+uint64_t(c)*l.index_bytes,l.index_bytes);
+  if(l.vertex_offset>INT64_MAX-i)return false;const auto v=l.vertex_offset+i;
+  if(v<0 || uint64_t(v)>UINT32_MAX)return false;first=(std::min)(first,uint32_t(v));last=(std::max)(last,uint32_t(v));}
+ return true;
+}
+inline float witness_half(uint16_t h){
+ const uint32_t sign=uint32_t(h&0x8000)<<16;uint32_t e=(h>>10)&31,m=h&1023,bits;
+ if(e==0){if(!m)bits=sign;else{int shift=0;while(!(m&1024)){m<<=1;++shift;}bits=sign|uint32_t(127-14-shift)<<23|(m&1023)<<13;}}
+ else bits=sign|(e==31?255u:e+112u)<<23|m<<13;
+ float f;std::memcpy(&f,&bits,4);return f;
+}
+// Raw float3 object positions; UV inputs are the audited float2 or half2 copy.
+// first is the rebasing origin of the bounded raw vertex range, not XFB position.
+inline bool decode_witness(const WitnessLayout& l,mesh_content::Bytes indices,mesh_content::Bytes positions,
+ mesh_content::Bytes uv,uint32_t first,std::vector<float>& corners){
+ corners.clear();uint32_t lo,hi;if(!witness_span(l,indices,lo,hi)||lo!=first||l.pos_stride<12||l.uv_stride<(l.uv_half?4u:8u)||!positions.data||!uv.data)return false;
+ const uint64_t span=uint64_t(hi)-lo;
+ if(span*l.pos_stride>positions.size||positions.size-span*l.pos_stride<12 || span*l.uv_stride>uv.size||uv.size-span*l.uv_stride<(l.uv_half?4u:8u))return false;
+ corners.resize(size_t(l.count)*5);
+ for(uint32_t c=0;c<l.count;++c){uint32_t ix=0;std::memcpy(&ix,indices.data+uint64_t(c)*l.index_bytes,l.index_bytes);
+  const uint64_t v=uint64_t(l.vertex_offset+ix)-first;auto* dst=corners.data()+size_t(c)*5;
+  std::memcpy(dst,positions.data+v*l.pos_stride,12);
+  if(l.uv_half){uint16_t h[2];std::memcpy(h,uv.data+v*l.uv_stride,4);dst[3]=witness_half(h[0]);dst[4]=witness_half(h[1]);}
+  else std::memcpy(dst+3,uv.data+v*l.uv_stride,8);
+  for(unsigned k=0;k<5;++k)if(!std::isfinite(dst[k])){corners.clear();return false;}
+ }return true;
+}
+inline bool witness_match(const Row& row,std::span<const float> corners,Digest digest=nullptr){
+ if(corners.size()!=size_t(row.index_count)*5)return false;
+ for(float f:corners)if(!std::isfinite(f))return false;
+ if(row.compact)return digest && digest(corners.data(),corners.size_bytes())==row.geometry_digest;
+ if(row.corners.size()!=corners.size())return false;
+ for(size_t c=0;c<corners.size();++c)if(c%5<3 ? std::memcmp(&corners[c],&row.corners[c],4)!=0 : std::abs(corners[c]-row.corners[c])>1e-3f)return false;
+ return true;
+}
 inline bool full_match(const Row& row,const mesh_content::Input& in,mesh_content::Bytes uv,uint32_t uv_stride,Digest digest=nullptr) {
   mesh_content::Sample s;
   if(!mesh_content::sample(in,s)||(!row.compact&&!(s==row.sample))||in.count!=row.index_count||(!row.compact&&row.corners.size()!=size_t(in.count)*5)||!uv.data||uv_stride<8)return false;

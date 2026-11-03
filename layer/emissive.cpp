@@ -1148,7 +1148,8 @@ void em_device_destroyed(DeviceData* dd) {
   const VkDeviceFuncs& vk = dd->vk;
   for (Own& o : g_own)
     if (o.fence) {
-      if (o.used) vk.WaitForFences(dd->device, 1, &o.fence, VK_TRUE, 1000000000ull);
+      if (o.used) fault_on_result(dd, vk.WaitForFences(dd->device, 1, &o.fence, VK_TRUE, 1000000000ull),
+                                  "emissive teardown fence wait");
       vk.DestroyFence(dd->device, o.fence, nullptr);
       o = Own{};
     }
@@ -1407,7 +1408,9 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
   }
   if (!fx || !em_wanted()) return;
   Own& o = g_own[g_own_next % kOwn];
-  if (o.used && dd->vk.WaitForFences(dd->device, 1, &o.fence, VK_TRUE, 0) != VK_SUCCESS) {
+  const VkResult ready = o.used ? dd->vk.WaitForFences(dd->device, 1, &o.fence, VK_TRUE, 0) : VK_SUCCESS;
+  fault_on_result(dd, ready, "emissive build fence poll");
+  if (ready != VK_SUCCESS) {
     ++g_busy;
     return;
   }
@@ -1459,6 +1462,7 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
   si.commandBufferCount = 1;
   si.pCommandBuffers = &o.cb;
   VkResult r = dd->vk.QueueSubmit(queue, 1, &si, o.fence);   // the caller holds the queue lock
+  fault_on_result(dd, r, "emissive build submission");
   o.used = r == VK_SUCCESS;
   if (r != VK_SUCCESS) log("[em] build submission failed (%d)", r);
 }

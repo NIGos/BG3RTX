@@ -87,8 +87,8 @@ int main() {
   // OFF->ON->OFF still rejects an old OFF result (mask equality alone fails).
   if (!epoch.update(0) || epoch.accepts(queued_off)) return 23;
   const uint32_t mask=hair_cost_mask([](const char* key,int) {
-    return std::strcmp(key,"rt_hair_pool_trim")==0 || std::strcmp(key,"rt_hair_gi_mean")==0;
+    return std::strcmp(key,"rt_hair_pool_trim")==0;
   });
-  if (mask!=((1u<<4)|(1u<<6))) return 24;
+  if (mask!=(1u<<3)) return 24;
   return 0;
 }

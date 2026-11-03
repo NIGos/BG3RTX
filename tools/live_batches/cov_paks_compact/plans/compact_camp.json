@@ -20,7 +20,7 @@
       "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
       "\\[auto\\] scene ready"
     ],
-    "wait_log_timeout": 600
+    "wait_log_timeout": 600.0
   },
   {
     "label": "producer-sanity-warmup",
@@ -30,9 +30,9 @@
     "serial": 0,
     "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
     "wait_log": [
-      "\\[hit material paks join\\] attempts \\d+ unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+      "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
     ],
-    "wait_log_timeout": 9.0
+    "wait_log_timeout": 20.86799999998766
   },
   {
     "label": "warmup-off",
@@ -52,19 +52,19 @@
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "observe-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 9.1,
+    "seconds": 32.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 9.1,
-    "motion_end": 9.1,
+    "motion_start": 32.8,
+    "motion_end": 32.8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
@@ -88,13 +88,13 @@
     "label": "observe-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 9.1,
+    "seconds": 32.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 9.1,
-    "motion_end": 9.1,
+    "motion_start": 32.8,
+    "motion_end": 32.8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"

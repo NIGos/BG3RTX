@@ -1,6 +1,8 @@
 // Disposable local fixtures only. No launcher/game/installer execution.
 #include "../tools/launcher/diagnostics.h"
 #include "../tools/launcher/compatibility.h"
+#include "../tools/launcher/launcher.h"
+#include <cstring>
 #include <windows.h>
 #include <filesystem>
 #include <fstream>
@@ -20,6 +22,18 @@ int wmain(int argc, wchar_t** argv) {
     if (argc != 2) throw std::runtime_error("pass fresh disposable fixture root");
     fs::path root = fs::absolute(argv[1]);
     if (!fs::create_directory(root)) throw std::runtime_error("fixture root must not exist");
+    fs::create_directory(root / L"hair_grooms");
+    check(!launcher::local_grooms_available(root.wstring()), "no local grooms in empty folder");
+    write(root / L"hair_grooms" / L"bad.hgrm", "corrupt");
+    check(!launcher::local_grooms_available(root.wstring()), "corrupt groom is unavailable");
+    std::string groom(40+16+2*17+4, '\0');
+    auto word=[&](size_t offset,uint32_t value){std::memcpy(groom.data()+offset,&value,4);};
+    std::memcpy(groom.data(),"HGRM",4);word(4,1);word(16,1);word(24,3);word(28,3);word(32,1);
+    float keep=1;std::memcpy(groom.data()+40,&keep,4);word(44,2);word(48,1);
+    write(root / L"hair_grooms" / L"valid.hgrm", groom);
+    check(launcher::local_grooms_available(root.wstring()), "valid indexed local groom available");
+    write(root / L"hair_grooms" / L"valid.hgrm", groom.substr(0,40));
+    check(!launcher::local_grooms_available(root.wstring()), "missing LOD headers unavailable");
     fs::create_directory(root / L"sl_logs");
     write(root / L"bg3rtx.log", "[cfg] knobs: preset=low\n[device] GPU\nC:\\Users\\OtherPerson\\secret.txt\npassword=secret-value\n");
     write(root / L"bg3rtx.prev.log", "old session");

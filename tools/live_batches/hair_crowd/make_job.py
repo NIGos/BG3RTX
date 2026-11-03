@@ -21,9 +21,9 @@ hg = hp.hg
 BATCH = "hair_crowd"
 LIVE = "hair-crowd"
 SAVES = [("hc1-dialogue1-fg2", "Test Dialogue1"), ("hc2-campsite-fg2", "Campsite - 27h")]
-CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="0", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0")
-RT = dict(CARDS, rt_hair_groom="1")
-SCREEN = dict(RT, rt_hair_groom_primary="1")
+# rt_hair_groom_primary is latched on at startup (hair_primary make_job PRIMARY_START); the live A/B is rt_hair_groom.
+CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0")
+SCREEN = dict(CARDS, rt_hair_groom="1")
 CROWD = dict(SCREEN, rt_hair_groom_crowd_ksegments="1800")   # the GUI's "2 close characters"
 
 
@@ -33,38 +33,37 @@ def step(label, seconds, trace=False, **keys):
 
 SHOT = 8
 plan = [
-    step("warmup", 25, qa_exposure_hold="0", **RT),        # startup: hair + groom (every converted style), variants
-    step("settle-cam", 10, qa_exposure_hold="0", **RT),
+    step("warmup", 25, qa_exposure_hold="0", **SCREEN),    # startup: hair + groom (every converted style), variants
+    step("settle-cam", 10, qa_exposure_hold="0", **CARDS),
     step("warm-strands", 20, qa_exposure_hold="0", **SCREEN),
     step("warm-crowd", 15, qa_exposure_hold="0", **CROWD),
     step("warm-cards", 10, qa_exposure_hold="0", **CARDS),   # every judged key value runs once before warm-back
-    step("warm-back", 10, qa_exposure_hold="0", **RT),
+    step("warm-back", 10, qa_exposure_hold="0", **CARDS),
     step("shot-cards", SHOT, True, **CARDS),
     step("shot-strands", SHOT, True, **SCREEN),
     step("shot-crowd", SHOT, True, **CROWD),
     step("shot-cards-b", SHOT, True, **CARDS),
-    step("settle", 5, **RT),
+    step("settle", 5, **CARDS),
     step("cost-cards", 25, **CARDS),
-    step("cost-rt", 25, **RT),
     step("cost-strands", 25, **SCREEN),
     step("cost-crowd", 25, **CROWD),
     step("cost-cards-b", 25, **CARDS),
-    step("restore", 5, qa_exposure_hold="0", **RT),
+    step("restore", 5, qa_exposure_hold="0", **CARDS),
 ]
 # hair_primary's job and gates read these module globals: this batch's plan.
 hp.BATCH, hp.LIVE, hp.plan = BATCH, LIVE, plan
 hp.labels = [p["label"] for p in plan]
 hp.shots = [l for l in hp.labels if l.startswith("shot-")]
 hp.cost = [l for l in hp.labels if l.startswith("cost-")]
-hp.judged = ["warm-back"] + hp.shots + hp.cost
+hp.judged = hp.shots + hp.cost   # warm-ups are never judged
 hp.traced = [p["label"] for p in plan if p.get("trace_at")]
 hp.seconds = sum(p["seconds"] for p in plan)
-GROOM_ON = ["cost-rt", "cost-strands", "cost-crowd"]
+GROOM_ON = ["cost-strands", "cost-crowd"]
 
 
 def job(name, save):
     j = hp.job(name, save)
-    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hc_plan.json"
+    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/" + ("hc_plan.json" if name == SAVES[0][0] else name + ".json")
     # The user may be at the PC: the game never takes focus (AGENTS.md). A full pool is a measured outcome here
     # (the crowd budget's point), not a failure; refusals are counted by the strand gates.
     j["window_mode"] = "visible_unfocused_fg"
@@ -95,7 +94,7 @@ def job(name, save):
         if x["name"].startswith(("strand ", "groom ", "crowd ")):
             g[i] = dict(x, period_frames=300)
     j["expect_every"] = g
-    j["live_flow"] = dict(settings_latency_s=1, trace_stall_s=1)
+    j["live_flow"] = dict(settings_latency_s=1, trace_stall_s=1, startup_only=["rt_hair_groom_primary"])
     j["purpose"] = ("Every converted hairstyle and the crowd budget (docs/RTX_HAIR_PRIMARY.md increment 5): cards / strands "
                     "in RT / strands on screen / strands with rt_hair_groom_crowd_ksegments=1800 in one launch; groom "
                     "instances and matched styles per scene, cost per mode (rt passes, gi, scene build GPU, strand G-buffer "
@@ -110,9 +109,12 @@ def main():
     out = Path(a.out)
     (out / "jobs").mkdir(parents=True, exist_ok=True)
     (out / "plans").mkdir(parents=True, exist_ok=True)
-    (out / "plans" / "hc_plan.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
     for name, save in SAVES:
+        filename = "hc_plan.json" if name == SAVES[0][0] else name + ".json"
+        (out / "plans" / filename).write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(job(name, save), indent=1) + "\n", encoding="utf-8")
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(out)
     print(f"{len(SAVES)} jobs; hc_plan {len(plan)} phases/{hp.seconds} s -> {out}")
 
 

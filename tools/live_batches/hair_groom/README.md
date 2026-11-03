@@ -12,7 +12,7 @@ Job (one foreground launch, `py -3 make_job.py`, plan `plans/hg_plan.json`, 255 
 (`Test Dialogue1`: the only save where the 11:03 rerun saw Shadowheart's hair, LOD1, 6009 indices). The camp job
 was dropped: no Shadowheart hair draw there.
 
-Config: hair_qual's Ultra keys and hair startup latches, `rt_hair_gi_cull=0`, `rt_hair_groom=1` at startup (the
+Config: hair_qual's Ultra keys and hair startup latches, `rt_hair_groom=1` at startup (the
 device feature is negotiated there; later 0/1 is live).
 
 Phases: `warmup` 25 s and `settle-cam` 10 s (groom on: startup builds, groom upload); `toggle-off-a` 20 s /

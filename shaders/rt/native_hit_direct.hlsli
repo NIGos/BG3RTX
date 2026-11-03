@@ -418,13 +418,7 @@ float native_hit_ao(float3 position,float3 geometric_normal,float footprint,uint
  [loop]for(uint i=0;i<rays;++i){
   float3 dir=cosine_hemisphere(n,rand01(seed),rand01(seed));
   bool aborted;
-#ifdef RT_NATIVE_HAIR
-  gHairAoQuery=true;
-#endif
   float t=rt_closest(o,dir,R,cone,aborted);
-#ifdef RT_NATIVE_HAIR
-  gHairAoQuery=false;
-#endif
   const float u=aborted?(t>=0.0?saturate(t/R):1.0):0.0;
   const float k=saturate(t/R);
   occ+=aborted?1.0-u*u/3.0:(t>=0.0?1.0-k*k:0.0);

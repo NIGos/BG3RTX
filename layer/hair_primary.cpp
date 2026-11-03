@@ -6,7 +6,7 @@
 // matched draw (its index range is in the groom set of the latest build) is drawn with the variant. The strand
 // shader reads the frame record (common/hair_primary.h) through the header address baked as specialization
 // constants 1100/1101; bvhsplit publishes the header after the groom TLAS build (hair_primary_publish).
-// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; the key is a live A/B.
+// Variants exist only with linear swept spheres, shaderInt64 and fragmentStoresAndAtomics; activation is latched at device creation until hot activation is qualified.
 #include "host.h"
 
 #include <algorithm>
@@ -31,6 +31,7 @@ struct HpBuf {
 };
 
 DeviceData* g_dd = nullptr;
+bool g_startup_enabled = false;        // Restart safety gate; INI reload cannot enable strands.
 bool g_frag_stores = false;            // fragmentStoresAndAtomics enabled by the game
 std::mutex g_mu;
 HpBuf g_header, g_pixels;              // header: fixed (its address is in every variant); pixels: render size
@@ -73,7 +74,27 @@ struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] =
 CountSeen g_seen;
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
 std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
+uint64_t g_transmit_rows = 0;   // groom rows given a measured transmittance since the last 300-frame line
 uint64_t g_refused_total = 0;
+uint64_t g_misaligned_logged = 0;   // counted frames whose strand pixels all carried an adjacent frame's tag
+uint64_t g_adjacent_window = 0, g_adjacent_total = 0;   // counted frames with any adjacent-tag strand pixel
+// rt_hair_groom_primary_order (common/hair_primary.h pick_publish): the publishes waiting for their G-buffer pass,
+// and what was applied. The header bytes of one publish and the per-groom keys/LODs the count of its frame needs.
+struct StagedHeader {
+  hair_primary::Staged pick;
+  uint32_t n = 0, pixels = 0;
+  uint8_t bytes[hair_primary::kHeaderBytes] = {};
+  uint64_t keys[hair_primary::kMaxGrooms] = {};
+  uint8_t lods[hair_primary::kMaxGrooms] = {};
+};
+constexpr int kStaged = 3;
+StagedHeader g_staged[kStaged];
+int g_staged_next = 0;
+bool g_order = false;                       // the last publish was staged (the key on)
+uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
+std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
+uint64_t g_order_none = 0;                  // G-buffer passes with no publish ordered before them (no swap)
+void apply_header(VkCommandBuffer cmd, const StagedHeader& st);
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
 // after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
 constexpr uint32_t kTimed = 64, kTimeSlots = 4;
@@ -184,33 +205,46 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
   CountSlot& s = g_cnt[g_cnt_next];
   if (s.valid) {
     if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
-    uint32_t total = 0;
+    uint32_t total = 0, other_total = 0, other[hair_primary::kMaxGrooms];
     g_seen.frame = s.frame;
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
       g_seen.keys[k] = s.keys[k];
       g_seen.lods[k] = s.lods[k];
       g_seen.pixels[k] = s.map[k];
       g_seen.refused[k] = s.map[hair_primary::kRefusedOffset / 4 + k];
+      other[k] = s.map[hair_primary::kOtherOffset / 4 + k];
       g_refused_total += g_seen.refused[k];
       total += s.map[k];
       float t[4];
       std::memcpy(t, s.map + hair_primary::kTransmitOffset / 4 + k * 4, sizeof t);
       if (s.keys[k] && t[3] == 1.0f) g_transmit[s.keys[k]].add(t);
+      other_total += other[k];
     }
-    for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
-      if (s.keys[k] && g_gate.feedback(s.keys[k], s.drew[k], s.map[k])) {
-        // The reason, with what every groom of the counted frame got: a groom with 0 next to one holding the same
-        // strands under another draw key, every groom 0 (no ray found a strand), or refusals (the pool bound).
-        char per[512];
-        int at = 0;
-        for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 470; ++j)
-          if (s.keys[j]) at += std::snprintf(per + at, sizeof per - at, " %u:%u/LOD%u%s", j, s.map[j], unsigned(s.lods[j]),
-                                             j == k ? "*" : "");
-        log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards stay for this session "
-            "(groom %u, LOD %u, counted frame %llu: %u strand pixels in all, %u refused; per groom:%s)",
-            (unsigned long long)s.keys[k], hair_primary::kStrikes, k, unsigned(s.lods[k]), (unsigned long long)s.frame,
-            total, g_seen.refused[k], at ? per : " none");
-      }
+    // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
+    // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
+    if (other_total) ++g_adjacent_window;   // counted frames with adjacent-tag strand pixels (the 300-frame line)
+    if (!total && other_total && g_misaligned_logged++ % 300 == 0)
+      log("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
+          "against another publish): no strike (%llu such frames)", (unsigned long long)s.frame, other_total,
+          (unsigned long long)g_misaligned_logged);
+    for (uint64_t key : g_gate.feedback_frame(s.keys, s.drew, s.map, other, hair_primary::kMaxGrooms)) {
+      // The reason, with what every groom of the counted frame got: 0 everywhere (no ray found a strand), refusals
+      // (the pool bound), or 0 next to grooms with pixels (off screen or behind another groom: retried later).
+      char per[512];
+      int at = 0;
+      uint32_t refused = 0, lod = 0;
+      for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 470; ++j)
+        if (s.keys[j]) {
+          at += std::snprintf(per + at, sizeof per - at, " %u:%u+%u/LOD%u%s", j, s.map[j], other[j], unsigned(s.lods[j]),
+                              s.keys[j] == key ? "*" : "");
+          if (s.keys[j] == key) refused += g_seen.refused[j], lod = s.lods[j];
+        }
+      const auto& r = g_gate.failed[key];
+      log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards come back for %llu frames "
+          "(LOD %u, counted frame %llu: %u strand pixels in all, %u refused; per groom (counted+adjacent tag):%s)",
+          (unsigned long long)key, hair_primary::kStrikes, (unsigned long long)r.wait, lod, (unsigned long long)s.frame,
+          total, refused, at ? per : " none");
+    }
     s.valid = false;
   }
   if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
@@ -306,6 +340,32 @@ const VkPipelineDepthStencilStateCreateInfo* depth_state(const VkGraphicsPipelin
   return ci.pDepthStencilState;
 }
 
+// g_mu held, outside a render pass: writes the header of `st` into `cmd` and makes it the one the counts pair with.
+// Earlier fragment reads of the header/pixels before the write; the TLAS build, pool writes and header update (also
+// in command buffers submitted earlier on this queue) before the G-buffer pass's fragment shaders.
+void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
+  DeviceData* dd = g_dd;
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
+                            0, nullptr);
+  dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+  dd->vk.CmdPipelineBarrier(cmd,
+                            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+  g_last_tag = st.pick.tag;
+  g_last_n = st.pixels;
+  std::memcpy(g_last_keys, st.keys, sizeof g_last_keys);
+  std::memcpy(g_last_lods, st.lods, sizeof g_last_lods);
+  g_live_keys.clear();
+  for (uint64_t k : st.keys)
+    if (k) g_live_keys.insert(k);
+}
+
 }  // namespace
 
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args) {
@@ -322,6 +382,7 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_dd) return;
   g_dd = dd;
+  g_startup_enabled = cfg_int("rt_hair_groom_primary", 0) != 0;
   bool stores = ci->pEnabledFeatures && ci->pEnabledFeatures->fragmentStoresAndAtomics;
   for (auto p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext)
     if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
@@ -362,6 +423,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
     *b = HpBuf{};
   }
   g_dd = nullptr;
+  g_startup_enabled = false;
   g_header_tried = false;
 }
 
@@ -472,11 +534,36 @@ uint32_t hair_primary_transmit(uint64_t key) {
   if (!key || cfg_int("rt_hair_groom_shadow_t", 0) == 0) return 0u;
   std::lock_guard<std::mutex> lock(g_mu);
   const auto it = g_transmit.find(key);
-  return it == g_transmit.end() ? 0u : it->second.packed();
+  const uint32_t w = it == g_transmit.end() ? 0u : it->second.packed();
+  if (w) ++g_transmit_rows;
+  return w;
 }
 
 bool hair_primary_wanted() {
-  return cfg_hot(CfgHot::rt_hair_groom_primary) != 0 && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
+  return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
+}
+
+void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  if (!g_order || !hair_primary_wanted()) return;
+  // The main G-buffer pass: its colour targets and the G-buffer depth image (the prepass writes the same image without
+  // colour targets), at the pixel record's size.
+  if (p.color_count < 4 || !p.depth_image || uint64_t(p.depth_image) != geo_gbuffer_depth_image()) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd || p.width != g_px_w || p.height != g_px_h) return;
+  const uint64_t frame = frame_index() + 1;
+  if (g_applied_frame == frame) return;   // once per frame: every G-buffer pass of the frame reads one header
+  g_applied_frame = frame;
+  hair_primary::Staged picks[kStaged];
+  for (int i = 0; i < kStaged; ++i) picks[i] = g_staged[i].pick;
+  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  if (i < 0) {
+    g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
+    if (g_order_none++ % 300 == 0)
+      log("[hair primary] G-buffer pass with no groom publish ordered before it: cards this frame (%llu such passes)",
+          (unsigned long long)g_order_none);
+    return;
+  }
+  apply_header(cmd, g_staged[i]);   // a staged publish may serve again (no newer one ordered before)
 }
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
@@ -492,6 +579,12 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
                                                                                     : g_gate.allow_prepass(key)))
     return false;
+  // Order mode: the G-buffer and velocity strands read the header their pass applied; its groom set must hold the draw
+  // (none applied this frame, or an older publish without it: the cards stay).
+  if (g_order && pass != Pass::Prepass && (g_applied_frame != frame_index() + 1 || !g_live_keys.count(key))) return false;
+  // Its prepass card depth goes only when the last G-buffer pass applied a header holding it (this frame's G-buffer
+  // then finds an equal or newer publish ordered before it).
+  if (g_order && pass == Pass::Prepass && (g_applied_frame != frame_index() || !g_live_keys.count(key))) return false;
   if (pass == Pass::Gbuffer) g_gate.gbuffer_drew(key);
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
@@ -513,9 +606,9 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s) {
   if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
 }
 
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uint64_t pool_bytes, const hair_primary::Row* rows,
-                          const uint64_t* keys, const uint8_t* lods, uint32_t count, uint32_t width, uint32_t height,
-                          const float* viewport) {
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
+                          const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,
+                          uint32_t width, uint32_t height, const float* viewport) {
   if (!hair_primary_wanted()) return;
   std::lock_guard<std::mutex> lock(g_mu);
   DeviceData* dd = g_dd;
@@ -596,27 +689,22 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
   h.pool_bytes = uint32_t((std::min)(pool_bytes, uint64_t(UINT32_MAX)));
   h.pixels = g_pixels.addr;
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
-  uint8_t bytes[hair_primary::kHeaderBytes] = {};
-  const uint32_t n = hair_primary::pack(h, rows, count, bytes);
-  // Earlier frames' fragment reads of the header/pixels before this frame's writes, then this frame's TLAS build,
-  // pool writes and header update before the G-buffer pass's fragment shaders.
-  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
-                            0, nullptr);
-  dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, n, bytes);
-  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
-  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-  dd->vk.CmdPipelineBarrier(cmd,
-                            VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
-                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
-  g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms));
-  g_last_tag = h.tag;
-  g_last_n = width * height;
-  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) g_last_keys[k] = k < count ? keys[k] : 0;
-  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) g_last_lods[k] = k < count ? lods[k] : 0;
+  StagedHeader st;
+  st.pick = {h.tag, rec, uint64_t(cmd)};
+  st.n = hair_primary::pack(h, rows, count, st.bytes);
+  st.pixels = width * height;
+  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) st.keys[k] = k < count ? keys[k] : 0;
+  for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) st.lods[k] = k < count ? lods[k] : 0;
+  if (cfg_int("rt_hair_groom_primary_order", 0) != 0) {
+    // Applied in the G-buffer's own command buffer (hair_primary_before_pass); kept in the ring until then.
+    g_staged[g_staged_next] = st;
+    g_staged_next = (g_staged_next + 1) % kStaged;
+    g_order = true;
+  } else {
+    g_order = false;
+    apply_header(cmd, st);
+  }
+  g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   g_published = now + 1;
   ++g_st.publishes;
   if (now % 300 == 0 && g_seen.frame) {
@@ -629,14 +717,33 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t tlas, uint64_t pool, uin
         at += std::snprintf(per + at, sizeof per - at, " %u:%u/LOD%u(%04llx)", k, g_seen.pixels[k], unsigned(g_seen.lods[k]),
                             (unsigned long long)(g_seen.keys[k] >> 48));
     }
+    g_adjacent_total += g_adjacent_window;
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
-        "(session %llu)", (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total);
+        "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
+        (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total,
+        (unsigned long long)g_adjacent_window, (unsigned long long)g_adjacent_total, g_order ? "G-buffer" : "prepass");
+    g_adjacent_window = 0;
   }
   if (now % 300 == 0)
     log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused);
+  if (now % 300 == 0 && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
+    // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
+    float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
+    for (const auto& [key, t] : g_transmit) {
+      const float m = (t.a[0] + t.a[1] + t.a[2]) / 3.0f;
+      lo = (std::min)(lo, m), hi = (std::max)(hi, m);
+      for (int c = 0; c < 3; ++c) sum[c] += t.a[c];
+    }
+    const float n = g_transmit.empty() ? 1.0f : float(g_transmit.size());
+    log("[hair primary] shadow transmittance: %zu draws measured, a_f mean %.3f %.3f %.3f (per draw %.3f..%.3f); "
+        "last 300 frames: %llu groom rows with a_f",
+        g_transmit.size(), sum[0] / n, sum[1] / n, sum[2] / n, g_transmit.empty() ? 0.0f : lo, hi,
+        (unsigned long long)g_transmit_rows);
+    g_transmit_rows = 0;
+  }
   if (now % 300 == 0 && g_ms_frames)
     log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);
