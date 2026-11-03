@@ -6,13 +6,24 @@ No live authorization is requested or implied. No game or shader tools were run 
 One module per file **and remaining layout define set**; specialization constants are always used.
 There is no `rt_spec_cascade` setting. Cache-read lines are allowed: only `compiled in` is a DXC compile.
 The job rejects any DXC compile after warmup, across all shader directories, including water.
-It requires pipeline events on both directions of each converted-key toggle: cascade casters,
-GI motion/previous-radiance guards, instanced/wind/IP-grass hit families, gi_far,
-native hair/scalp/tileset, physical hair origin, rf_hit_gi and water RF edge.
+It requires pipeline events on both directions of each live converted-key toggle: cascade casters,
+GI motion/previous-radiance guards, rf_hit_gi and water RF edge; gi_far on (gi_far off reuses its
+startup variant slot, core/gi.cpp refresh, and logs nothing: zero-DXC gate only).
 The original c1/c0 window labels are retained for comparison with historical evidence;
 `off-a`, `on`, `off-b` now mean identical functional settings (the old switch is removed).
 The extra toggle windows are compile/pipeline checks, not energy-neutrality comparisons.
-The plan is 41 phases / 413 s, plus load; offline dryrun budget 12 min.
+The plan is 27 phases / 325 s, plus load; offline dryrun budget 12 min. The gi_prev_radiance_guard-1,
+gi_far-1 and rf_hit_gi-1 windows are 16 s: their hit-shade/hit-sun pipelines took 7.9-11.4 s to create
+in the 02:36 run, and the event line is printed when creation ends.
+
+## Revision after the 02:36 run (INVALID)
+
+That run set rt_native_hair, rt_native_tileset and rt_hair_physical_origin to 1. Water has no variant for
+them (shader_variant::kWaterNoVariant; core/water.cpp water_rf logs "skipped: no variant for" and returns):
+no water trace, no compose stability line, no water pipeline for rt_water_rf_edge. All native keys are now 0
+(the Ultra preset value). The hit-family and native/origin toggle windows were removed: their constants follow
+startup or sticky capability words, so INI toggles never change a pipeline (0 events in that run, as designed).
+They need startup fixtures. Zero-DXC passed: the 10 compiles were all startup prefetch (02:36:23-30).
 
 Same-state migration prediction: zero energy and GPU ms delta, bounded by the same-run
 OFF-a/OFF-b spread. Use dumps.json pre-post scene-colour float means and per-pass GPU medians.
