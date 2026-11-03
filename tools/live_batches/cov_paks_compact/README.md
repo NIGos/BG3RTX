@@ -1,6 +1,6 @@
 # Compact catalogue join diagnostic
 
-Unqueued camp job; 80 s static plan plus one load (~3.3 min), no captures,
+Unqueued camp job; 75.5 s static plan plus readiness waits and one load, no captures,
 RT statistics only in dedicated observe windows, estimated logs 10 MB. Requires explicit live batch
 authorization; this folder grants none. Never launch the game for offline checks.
 Warmup waits for prefetch completion and baseline GI/water pipelines (up to 600 s).
@@ -10,8 +10,9 @@ Two ON observations surround OFF; restore disables paks. Existing queue settings
 restoration still applies. Uses visible_unfocused_fg and never requests focus.
 
 Predict loader=40,983 candidates. Positive eligible draw attempts and all rejection
-counters must be logged in each ON observation. UV candidates and published rows
-may be zero; that is a diagnosis, not an invalid run or a quality pass. Read the
+counters must be logged in each ON observation, with UV attempts > 0. Both ON
+windows last 19.1 s for the observed diagnostic cadence. Unique candidates and
+published rows may be zero; that is a diagnosis, not a quality pass. Read the
 existing paks line for full matches, records and ready basis. Resource, COLOR,
 cull, shader recipe and full witness checks remain mandatory. No image-energy
 or GPU-cost claim is made; this job cannot promote the key.

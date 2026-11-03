@@ -728,6 +728,16 @@ has 58 unique UV candidates out of 471 entries and zero full geometry witnesses.
 Enable the existing key at startup (layer restart); mesh content IDs do not gate
 the join. No catalogue regeneration, ABI change or shader request is required.
 
+Pak pending follow-up (pakjoin-pending): cp4 UV inputs are R16G16_SFLOAT
+(format 83), leaving the raw float2 binding unset. Raw layout gates must apply
+only to CPU witnesses; decoded XFB discovery uses all per-vertex bindings in its
+retained key and buffer invalidation. The production readback fixture covers
+enqueue, copy, successful-submit retirement and later-recording candidate lookup.
+Both cp4 ON windows grow from 9.1 to 19.1 s (9 s conservative observed log bound,
+settings latency and straddle); every ON requires attempts > 0. Expect unique
+minority/missing majority, possible ambiguity and no publication without witnesses.
+No live result or GPU cost is claimed; the key remains off by default.
+
 `tools.assets.mesh_paks` generates local-only JSON and binary join candidates
 from catalogue GR2s, initially lava / Tileset / HLOD. It preserves native ordering,
 uses the shared content ID and 32 UV samples, and retains all ordered position/UV

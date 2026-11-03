@@ -6,8 +6,11 @@
   "hypothesis": "Ordered UV0 at byte 16 survives native XFB position transformation in 64/88 byte captures. UV is only a candidate; full ordered SHA-256 gates publication.",
   "predicted": {
     "loader_rows": 40983,
-    "uv_attempts": null,
-    "uv_unique": null,
+    "uv_attempts": ">0 in each ON window after decoded XFB readbacks retire",
+    "uv_unique": "expected >0 but a minority; retained replay had 58/471, not a live ratio gate",
+    "uv_missing": "expected majority; attempts = unique + missing + ambiguous + invalid",
+    "uv_ambiguous": "may be nonzero; disputed UV signatures must stay rejected",
+    "uv_invalid": "expected 0 for finite retired XFB samples",
     "exact_material_matches": null,
     "rejections": "missing/ambiguous/invalid/witness/recipe_cull/inputs_pending logged",
     "id_equal": null,
@@ -15,5 +18,7 @@
     "gpu_cost_ms": null,
     "draw_attempts": ">0 in each ON window"
   },
-  "result_rule": "A missing loaded/draw-attempts/rejection line is INVALID. Zero UV candidates or full matches is a valid diagnosis, not a quality pass. No shader/ABI changes; no promotion or visual claim."
+  "result_rule": "Missing loader/join lines or zero UV attempts in an ON window fail participation. Unique/missing/ambiguous split is diagnostic; full matches may remain zero because UV alone cannot publish. No shader/ABI changes; no promotion or visual claim.",
+  "pending_fix": "cp4 logs raw UV format 83 (R16G16_SFLOAT), leaving InstPipe.uv_binding=0xff. Raw float2 requirements blocked both enqueue and retrieval. Decoded XFB uses all per-vertex bindings as its cache key; raw CPU witness restrictions remain.",
+  "window_bound": "120-frame producer with rt_stats; cp4 observed 240 frames in 16.020 s, or 8.010 s per line. Rounded 9 s period plus 1 s settings latency and one straddling line requires >19 s; both ON windows are 19.1 s."
 }

@@ -49,10 +49,39 @@ inline uint64_t elastic_capacity(uint64_t demand,uint64_t storage_limit,uint64_t
  demand=(std::min)(demand,kMeshPoolHardCap);
  return (std::min)((std::max)(step,(demand+demand/4+step-1)/step*step),cap);
 }
+// Producer-boundary replacement can be blocked by the previous detached soup
+// for four fence-covered frames. Include the next producer interval as well:
+// RT observes each frame (5 steps); a cascade slot each third frame (3 steps).
+// Keep the largest observed positive step across quiet windows: a returning
+// pan must not have to overflow again to relearn its reserve. First observation
+// is not a step from zero (loading is not a measured camera movement).
+struct CaptureHeadroom {
+ uint64_t previous=0,step=0;
+ bool initialized=false;
+ uint64_t capacity(uint64_t demand,uint64_t storage_limit,uint64_t card_cap,unsigned interval,
+                   uint64_t preset_capacity=0,uint64_t current=0){
+  demand=(std::min)(demand,kMeshPoolHardCap);
+  if(initialized && demand>previous)step=(std::max)(step,demand-previous);
+  previous=demand;initialized=true;
+  const uint64_t steps=(4+interval+interval-1)/interval;
+  // Bootstrap from the preset's existing quarter-capacity reserve, rather
+  // than learning the first pan only after a small static-scene shrink.
+  const uint64_t reserve=(std::max)((std::max)(demand/4,preset_capacity/4),
+                                  (std::min)(step,kMeshPoolHardCap/steps)*steps);
+  const uint64_t quantum=16*mib;
+  uint64_t cap=(std::min)(kMeshPoolHardCap,card_cap);
+  if(storage_limit)cap=(std::min)(cap,storage_limit);
+  const uint64_t required=(std::min)(kMeshPoolHardCap,
+      (std::max)(quantum,(demand+reserve+quantum-1)/quantum*quantum));
+  const uint64_t target=(std::min)(required,cap);
+  // A reduced budget may refuse growth; it cannot remove reserve already held.
+  return target<current && target<required?current:target;
+ }
+};
 // 24 samples cover three complete eight-slot scene rings for RT, nine for
 // a cascade slot sampled once per three builds, rather than a loading frame.
-// Retain a rolling peak even across replacement. Grow for live need, not just
-// to restore the 25% reserve; shrink only when another 25% step still fits.
+// Retain a rolling peak even across replacement. Production cascade and RT
+// windows restore reserve proactively; shrink only when another 25% step fits.
 template<unsigned Samples> struct CaptureWindow {
  static constexpr unsigned samples=Samples;
  unsigned count=0;
@@ -83,7 +112,7 @@ using ElasticWindow=CaptureWindow<24>;
 struct CascadeElasticWindow : CaptureWindow<120> {
  uint64_t observe(uint64_t current,uint64_t wanted,uint64_t demand){
   if(!demand){reset();return current;}
-  return CaptureWindow<120>::observe(current,wanted,demand);
+  return CaptureWindow<120>::observe(current,wanted,demand,true);
  }
 };
 // The primary capture runs every frame: retain a whole smoke_ultra statistics
