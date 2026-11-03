@@ -305,6 +305,25 @@ M5.3c water energy audit (2026-11-02, offline on the kept S8 traces of m5w3 1216
   the removed glints (dump max 904 -> 222). Not yet checked: the traced visibility against the game's cascade on the
   opaque pixels next to the water (the M5.4c comparison).
 
+M5.3d reflection-specific flicker attribution (wf8, 2026-11-03, prepared offline; no live run):
+- The user's repeated report is reflections switching on/off while turning. wf2-wf7 whole-water transient and
+  presented residual rates include native sun glints and do not establish a reflection-specific cause or exclusion.
+- Existing rt_debug 25 encodes signed relative delta (composed minus probe-only divided by C luminance) and tier 1
+  versus unresolved. Disable water sun/local shadows, refraction, game shadows and glint AA from startup: d includes
+  every water change, so leaving those enabled would confound the reflection delta again. Same-frame record markers
+  distinguish covered tier-1 zero delta from untouched black. No new shader requests or DXC work.
+- wf8 captures three 8-frame diagnostic bursts (static calibration, two same-direction turns), two 8-frame native
+  compose-off bursts, and five 16-present beauty windows in one S8 launch; tools/live_batches/water_flicker_wf8.
+  The metric derives the threshold from native encoding plus static adjacent-frame noise and counts contribution
+  on/off events, including tier 1 -> unresolved and unresolved -> tier 1. Tiers 2-6 are grouped by the existing view;
+  water_reflect's different tier decision must not substitute for the compose decision.
+- Beauty comparisons use the diagnostic reflection-support union mask, not the whole-water mask. Native compose-off
+  water-output switching is a proxy: SSR is not isolated from probes, animated normals, refraction and glints. RR-off
+  is attribution only. No result has been measured; old aggregate nulls cannot close these candidates.
+- No qualified cheap stabilizer exists. Temporal tier hysteresis would need reprojected tier and radiance history,
+  disocclusion/age validation and an off-by-default specialization constant. It is described, not implemented while
+  shader compiles are busy. See predicted.json for candidate outcomes and README for budget and exact commands.
+
 ### M5.4 Water shadows: `rt_water_shadows=0` (sun and local visibility on the water receiver).
 
 #### Design (2026-11-01, from the three S8/S1 FS dumps, spirv-dis --raw-id)

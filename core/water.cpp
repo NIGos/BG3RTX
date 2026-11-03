@@ -996,7 +996,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
 // The pass is most often recorded before this frame's lighting is flushed (core/gi.cpp: run_post
 // at the end of the lighting's command buffer): it binds what the GPU makes current, not this
 // frame's stash (common/water_compose.h lighting_use).
-void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Binding* lights, bool lights_ok,
+bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Binding* lights, bool lights_ok,
                          const Bg3Binding* copy, bool copy_ok) {
   using namespace bg3::water;
   const VkDeviceFuncs& vk = *host->vk;
@@ -1007,9 +1007,9 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     const LightingRefusal r = lighting_refusal(g_st.frame, now);
     ++(r == LightingRefusal::kCleared ? g_cwin.nl_cleared : r == LightingRefusal::kOld ? g_cwin.nl_old : g_cwin.nl_ahead);
     g_ccont.note(now, false);
-    return;
+    return false;
   }
-  if (p->width != g_st.w || p->height != g_st.h || !g_compose.p || !g_rad.view || !g_dep.view) return;
+  if (p->width != g_st.w || p->height != g_st.h || !g_compose.p || !g_rad.view || !g_dep.view) return false;
   // The scene pair (common/water_compose.h pick_scene). The stash's was handed out (stamped) for the
   // frame the lighting recorded in; a pass of a later frame stamps the pair it binds, or the slot
   // could be rebuilt before this command buffer runs. rt_scene never waits; rt_scene_set waits only
@@ -1050,7 +1050,7 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
     g_ccont.note(now, false);
-    return;
+    return false;
   }
   g_ccont.note(now, true);
   ++(use == LightingUse::kThisFrame ? g_cwin.this_frame : g_cwin.earlier);
@@ -1159,6 +1159,7 @@ void compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   if (g_csun) ++g_cwin.sun_passes;
   if (from != G) image_barrier(cmd, p->color_images[0], G, from, kCS, kAll);
   host->restore_bindings(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
+  return true;
 }
 
 void release_compose() {
@@ -1505,7 +1506,8 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   const bool views = view >= 21 && view <= 24 && water_rf_wanted();
   // M5.3, or M5.4 / M5.4b alone on a buffer with their words (else compose_at_lighting stashed nothing).
   const bool comp = compose_wanted() || (shadows_wanted() && g_csun) || (ls_wanted() && g_cls) || (refr_wanted() && g_crr);
-  if (!views && !comp) return;
+  const bool pan_water = host->pan_capture && host->cfg_int("pan_water", 0) && host->cfg_int("pan_capture", 0) > 0;
+  if (!views && !comp && !pan_water) return;
   if (p->color_count != 1 || p->color_formats[0] != VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
       p->depth_format != VK_FORMAT_D24_UNORM_S8_UINT || !p->color_views[0] || !p->color_images[0])
     return;
@@ -1514,7 +1516,31 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   for (const auto& a : kAudited) ends |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
   if (!ends && !drawn) return;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (comp) compose_at_pass_end(cmd, p, lights, lights_ok, &copy, copy_ok);   // M5.3 / M5.4 / M5.4b / M5.5, before the views
+  // Raw diagnostic capture, before post/RR. No dispatch or shader changes.
+  Bg3Binding pan_target{};
+  if (pan_water) {
+    pan_target.image=p->color_images[0]; pan_target.view=p->color_views[0];
+    pan_target.format=p->color_formats[0]; pan_target.width=p->width; pan_target.height=p->height;
+    pan_target.layout=p->color_layouts[0]==VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : p->color_layouts[0];
+    host->pan_capture(cmd,"water_game",&pan_target);
+    bg3::water::ComposeBuffer records{};
+    if (bg3::water::read_buffer(static_cast<const bg3::water::ComposeBuffer*>(host->persist(bg3::water::kComposeKey,sizeof records)),records) &&
+        bg3::water::stride_of(records)==32 && uint64_t(p->width)*p->height<=records.capacity) {
+      Bg3Binding coverage{};
+      coverage.buffer=VkBuffer(records.buffer); coverage.offset=bg3::water::kHeaderBytes;
+      coverage.range=uint64_t(p->width)*p->height*32;
+      coverage.width=p->width; coverage.height=p->height; coverage.format=VK_FORMAT_R8_UINT;
+      host->pan_capture(cmd,"water_coverage",&coverage);
+      if (!comp) {
+        // Consume after copying even with composition disabled. Preserve the header/pitch.
+        memory_barrier(cmd,kAll,VK_PIPELINE_STAGE_TRANSFER_BIT);
+        host->vk->CmdFillBuffer(cmd,coverage.buffer,bg3::water::kHeaderBytes,records.bytes-bg3::water::kHeaderBytes,0);
+        memory_barrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,kAll);
+      }
+    } else host->log("[pan] water capture REFUSED: coverage requires 32 B records covering the render target");
+  }
+  const bool composed = comp && compose_at_pass_end(cmd, p, lights, lights_ok, &copy, copy_ok);
+  if (pan_water && composed && view==25) host->pan_capture(cmd,"water_compose_debug",&pan_target);
   if (!views) return;
   ++g_win.view_passes;
   if (!ends) ++g_win.view_passes_inner;

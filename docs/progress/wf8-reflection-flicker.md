@@ -1,0 +1,19 @@
+## Reflection-specific flicker preparation (branch wf8-reflection-flicker, PREPARED_OFFLINE, 2026-11-03)
+- Reopened reflection attribution: wf2-wf7 whole-water rates were dominated by native glints and did not isolate reflections.
+- Existing rt_debug 25 exposes signed relative compose delta and tier 1 / unresolved; no shader edit or DXC run.
+- Selective rendered capture saves same-frame record coverage, native water and debug output; 8 frames per burst.
+- Metric counts above-derived-threshold consecutive on/off events, including 1 -> unresolved and unresolved -> 1.
+- Tiers 2-6 remain grouped. water_reflect tiers are a different calculation and cannot fill the missing subtypes.
+- Native water-output counts are a proxy; SSR cannot be separated from glints/probes/normals without another observable.
+- wf8: S8 Water Queens House, one visible_unfocused_fg launch, 24 phases / 185 s plus load, wf7 time-based turns.
+- Reflection compose ON / OFF repeats / ON, RR-off attribution; static calibration at the matching central turn pose.
+- All other water image terms OFF at startup and throughout compared windows; compose alone toggles, exposure held.
+- Five 8-frame raw bursts, five 16-present beauty sequences, one mask trace: <=1,663,815,040 B under documented limits.
+- Render pixel count is guarded at 3,686,400; display must be <=3840x2160 for the presented bound.
+- Reflection-support masks score every beauty window; whole-water mask is secondary. No cross-turn pixel subtraction.
+- predicted.json written before jobs: named outcomes for compose-tier, native-output and RR candidates, with limits.
+- No stabilizer implemented: validated tier/radiance history needs a shader change; existing experimental keys stay off.
+- GPU effect cost unchanged; capture-free ON/OFF windows collect existing compose GPU-ms. No live cost measured.
+- Fake queue dryrun and scene-wait/capacity lints pass; metric unit tests are reported with the implementation.
+- No game launched, no authorization requested, no commit or git metadata write. Shader request delta 0.
+- Remaining: separately authorized live batch; unresolved-tier subtypes and isolated native SSR remain unavailable.
