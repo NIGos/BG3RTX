@@ -13,11 +13,25 @@ sys.path.insert(0, str(ROOT))
 from tools.live_batches import live_flow as flow, lint_snapshot
 from tools.live_batches.combine import settings
 from tools.live_batches.release_qual.analyze_final import energy
+from tools.live_batches import pipeline_readiness
 
 HERE = ROOT / 'tools/live_batches/release_qual'
 
 
 class FinalReleaseTests(unittest.TestCase):
+    def test_preset_reset_uses_resolved_values_and_target_pipelines(self):
+        job, plan, _ = flow.load_job(HERE/'final/jobs/final-s8-ultra-high.json')
+        reset = next(p for p in plan if p['label'].endswith('settings-reset'))
+        state = settings(reset['set'])
+        self.assertEqual(state['rt_build'], '1')
+        self.assertEqual(state['ls_box'], '0')
+        self.assertFalse(any('rt_local_shadows_box' in rx or 'water_compose' in rx
+                             for rx in reset['wait_log']))
+        wanted = pipeline_readiness.requirements(job, plan)[plan.index(reset)]
+        for key in ('ls_box', 'ls_k', 'rr_post_temporal', 'rt_water_compose', 'rt_water_reflections'):
+            self.assertEqual(wanted[key], [pipeline_readiness.QUIET], key)
+        self.assertTrue(any('rt_local_shadows' in rx for rx in reset['wait_log']))
+
     def test_frozen_cli_never_reads_or_writes_raw_corpus(self):
         self.addCleanup(flow.readiness_budget.configure, [])
         self.addCleanup(flow.fps_windows.configure, [])

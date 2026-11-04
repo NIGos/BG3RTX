@@ -90,6 +90,15 @@ def requirements(job, plan):
             # Disabled post temporal bypasses its pass and needs no temporal pipeline.
             if key == "rr_post_temporal" and str(value) == "0":
                 patterns = []
+            # These families are never requested when disabled (core/gi.cpp).
+            # A preset switch must reconcile builds for the target, not wait
+            # for a completion that only the previous preset could produce.
+            if key in ("ls_box", "ls_k") and str(value) == "0":
+                patterns = []
+            if WATER_COMPOSE in patterns and str(state.get("rt_water_compose", "1")) == "0":
+                patterns = []
+            if key == "rt_water_reflections" and str(value) == "0":
+                patterns = []
             wanted[key] = patterns + [QUIET]
         out.append(wanted)
     return out

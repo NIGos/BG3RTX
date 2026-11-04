@@ -1051,7 +1051,7 @@
       "load_allowance_seconds": 120,
       "expected_minutes": 3.32,
       "scheduled_seconds": 79.1,
-      "readiness_seconds": 0,
+      "readiness_seconds": 0.015,
       "captures": 1,
       "disk_estimate_mb": 70,
       "expect": [
@@ -1234,7 +1234,7 @@
       "hard_timeout_seconds": 300,
       "load_allowance_seconds": 120,
       "expected_minutes": 3.72,
-      "scheduled_seconds": 94.448,
+      "scheduled_seconds": 94.55799999999999,
       "readiness_seconds": 8.708,
       "captures": 2,
       "disk_estimate_mb": 130,
@@ -1653,7 +1653,7 @@
       "load_allowance_seconds": 120,
       "expected_minutes": 3.32,
       "scheduled_seconds": 79.1,
-      "readiness_seconds": 0,
+      "readiness_seconds": 0.015,
       "captures": 1,
       "disk_estimate_mb": 70,
       "expect": [
