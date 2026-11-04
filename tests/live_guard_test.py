@@ -37,6 +37,42 @@ class LiveGuardTest(unittest.TestCase):
         missing = self.runner + stamp(11, "[motion-plan] complete phases=1")
         self.assertIn("missing motion-ready", check(self.job["expect_every"], game, missing, self.plan)[0])
 
+    def test_burst_gate_keeps_motion_ready_cutoff(self):
+        from scripts.queue_gates import check
+        self.plan[0].update(wait_log=['ready'], wait_log_timeout=30)
+        gate = dict(select=r'burst 98603 completed', match='completed', event=True, windows=['diag'])
+        runner = self.runner + stamp(8, '[motion-ready] phase=0') + stamp(11, '[motion-plan] complete')
+        game = stamp(2, '[cfg] settings read') + stamp(7.863, 'burst 98603 completed')
+        self.assertTrue(check([gate], game, runner, self.plan))
+        self.assertEqual(check([gate], game+stamp(8.1, 'burst 98603 completed'), runner, self.plan), [])
+
+    def test_first_only_and_shared_item_semantics(self):
+        from scripts.queue_gates import check
+        gate = dict(select=r"strand draws", match=r"0 strand draws", first_only=True)
+        self.job['expect_every'] = [gate]
+        game = stamp(2, "0 strand draws") + stamp(3, "12 strand draws")
+        self.assertEqual(check([gate], game), [])
+        self.assertIsNone(self.run_guard(game))
+        bad = stamp(2, "12 strand draws") + stamp(3, "0 strand draws")
+        self.assertIsNotNone(self.run_guard(bad))
+        self.job['expect_every'] = [dict(select='coverage', match='coverage',
+            items=dict(pattern=r'active=(?P<active>\d+) value=(?P<value>\d+)', bound=r'bound=(\d+)'))]
+        self.assertIsNotNone(self.run_guard(stamp(2, 'coverage bound=5 active=1 value=4')))
+        self.assertIsNone(self.run_guard(stamp(2, 'coverage bound=5 active=1 value=5')))
+
+    def test_generated_hv6_startup_gate(self):
+        from tools.live_batches.hair_validation.make_job import make_diagnostic, diagnostic_job
+        from scripts.queue_gates import check
+        plan = make_diagnostic()
+        generated = diagnostic_job('hv6-strand-diagnostic', 'Test Dialogue1', plan)
+        gate = next(g for g in generated['expect_every'] if g.get('first_only'))
+        self.job['expect_every'] = [gate]
+        game = (stamp(2, '[hair primary] frame 1: 0 G-buffer and 0 velocity strand draws') +
+                stamp(3, '[hair primary] frame 2: 15 G-buffer and 15 velocity strand draws'))
+        self.assertEqual(check([gate], game), [])
+        self.assertIsNone(self.run_guard(game))
+        self.assertIsNotNone(self.run_guard(game.splitlines()[1]+'\n'))
+
     def test_forbid_and_optout(self):
         r = self.run_guard(stamp(2, "BROKEN"))
         self.assertEqual(r, dict(check="forbidden log pattern: BROKEN", phase=0, slice=-1, next_phase=-1))

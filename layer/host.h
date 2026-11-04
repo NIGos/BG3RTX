@@ -945,6 +945,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
 void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p);
 struct HairPrimarySubmit {
   std::array<uint64_t, hair_primary::kCoverageLatency> queries{};
+  std::array<uint64_t, hair_primary::kCoverageLatency> gb_queries{};   // G-buffer recordings with strand queries
   std::array<uint64_t, 3> headers{}; // the three staged groom publishes
 };
 HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds);

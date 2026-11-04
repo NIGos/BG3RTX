@@ -58,6 +58,11 @@
     "order_0": "probed ratios as in order 1 (the probe uses the staged ring in both orders); swapped 0 (fail closed)"
    },
    "invalid_if": "publishes without a build camera > 0 in a strands-on window, or 'older publish' > 30 per 300 frames"
+  },
+  "probe_variant_20261104": {
+   "fix": "claude/hair-probe-variant: strand samples from the masked strand G-buffer variant in the G-buffer pass (order mode), card samples from the prepass",
+   "predicted": "order 1: draws probed 4-5, strand/card 0.9-1.1 on the Dialogue1 close-up (the 102163-sample draw: about 90k-110k strand samples), swapped frames > 0 once fresh; order 0: draws probed 0 (no strand query without order mode), swapped 0",
+   "invalid_if": "order 1 windows with draws probed 0 while 'no publish of the frame' and 'older publish' stay ~0"
   }
  }
 }

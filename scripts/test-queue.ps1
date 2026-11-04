@@ -133,19 +133,37 @@ function Get-Dumps($tree, [datetime]$since) {
 }
 
 function Get-QueueCrashOutcome($r) {
+  $status = $null
+  $runner = ''
+  if ($r.status -and (Test-Path -LiteralPath $r.status)) {
+    $status = Get-Content -LiteralPath $r.status -Raw | ConvertFrom-Json
+  }
+  if ($r.runner_log -and (Test-Path -LiteralPath $r.runner_log)) {
+    $runner = Get-Content -LiteralPath $r.runner_log -Raw
+  }
+  $phase = $r.failed_phase
+  if ($null -ne $status.last_phase) { $phase = $status.last_phase }
+  $code = $status.observed_exit_code
+  $exitText = "$runner`n$($r.outcome)`n$($status.result)"
+  if ($exitText -match '(?:\[exit\] process=\d+|game exited) code=(?<code>-?\d+)(?: hex=(?<hex>0x[0-9A-Fa-f]+))?') {
+    $code = $Matches.code
+    if ($Matches.hex) { $code = "$code hex=$($Matches.hex)" }
+  }
+  if ($null -eq $status.last_phase -and $runner -match '(?m)^\[exit\] process=.*? phase=(-?\d+)/') { $phase = $Matches[1] }
+  $closeRequested = $status.script_close_requested -or $runner -match '\[exit\] script requests CloseMainWindow:'
+  $unexpectedExit = $null -ne $code -and -not $closeRequested
   $hits = @(if ($r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) {
     Select-String -LiteralPath $r.keptLog -Pattern 'VK_ERROR_DEVICE_LOST|\[aftermath\] device lost: waiting|\[crash\] exception 0x|\[crash\] first-chance fatal minidump.*\.dmp' | ForEach-Object Line
   })
-  if (-not $hits -and -not $r.dumps) { return $null }
+  if (-not $unexpectedExit -and -not $hits -and -not $r.dumps) { return $null }
+  $tail = @(if ($r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) { Get-Content -LiteralPath $r.keptLog -Tail 3 })
+  $detail = "; last log: $(if ($tail) { $tail -join ' | ' } else { '(unavailable)' })"
+  if ($null -eq $phase) { $phase = 'unknown' }
+  if ($unexpectedExit) { return "CRASH: game exited $code at phase $phase$detail$(if ($r.dumps) { '; dump ' + ($r.dumps -join ', ') })$(if ($hits) { '; ' + ($hits -join ' | ') })" }
   $kind = if ($hits -match 'VK_ERROR_DEVICE_LOST|device lost: waiting') { 'device lost' } else { 'game crash' }
-  $at = 'unknown time'; $phase = $r.failed_phase
+  $at = 'unknown time'
   if ($hits -and $hits[0] -match '\b\d{2}:\d{2}:\d{2}\b') { $at = $Matches[0] }
-  if ($r.status -and (Test-Path -LiteralPath $r.status)) {
-    $status = Get-Content -LiteralPath $r.status -Raw | ConvertFrom-Json
-    if ($null -ne $status.last_phase) { $phase = $status.last_phase }
-  }
-  if ($null -eq $phase -or $phase -lt 0) { $phase = 'unknown' }
-  "CRASH: $kind at $at (phase $phase)$(if ($r.dumps) { ', dump ' + ($r.dumps -join ', ') })$(if ($hits) { '; ' + ($hits -join ' | ') })"
+  "CRASH: $kind at $at (phase $phase)$(if ($r.dumps) { ', dump ' + ($r.dumps -join ', ') })$(if ($hits) { '; ' + ($hits -join ' | ') })$detail"
 }
 
 # Jobs without a "tree" run on the test tree (scripts/test-tree.ps1: a checkout of main kept
@@ -421,6 +439,9 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
 
 # One run of its own: auto-run.ps1 (or the job's command) launches and closes the game.
 function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeout) {
+  # The readiness median is an estimate, never the runtime safety bound.
+  $capSeconds=if ($null -ne $job.max_minutes) { [double]$job.max_minutes*60 } else { 900.0 }
+  $timeout=[Math]::Min($timeout, [Math]::Floor($capSeconds))
   $t0 = Get-Date
   $lines = @()
   Assert-QueueRuntime

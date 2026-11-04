@@ -33,7 +33,7 @@ class DiagnosticTests(unittest.TestCase):
         plan=[dict(label='order-gbuffer-1')]
         gate=jobs.diagnostic_job('test','Test Dialogue1',jobs.make_diagnostic())['expect_every'][1]
         gate=dict(gate,windows=['order-gbuffer-1'])
-        prefix='[hair primary] coverage (last 300 frames): 2 draws probed, 1 swapped; per draw (key prefix: strand/card samples = ratio, swapped frames): '
+        prefix='[hair primary] coverage (last 300 frames): 2 draws probed, 1 swapped; per draw (key prefix: newest strand/card samples = ratio, swapped frames of the period): '
         good=prefix+'abcd:10/100=0.100,0 ef01:90/100=0.900,30; ratio min 0.100, bound 0.800, draws below bound 1'
         bad=good.replace('0.100,0','0.100,1')
         self.assertTrue(queue_gates.line_matches(gate,good))

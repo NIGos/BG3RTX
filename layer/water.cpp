@@ -133,6 +133,7 @@ struct PCmd {
   Census census;
   float cam[3] = {};     // absolute camera of the first converted pass (M5.2 scene shift)
   bool cam_ok = false;
+  int surface_ts = -1;  // this pass's reserved timestamp range, reset before the render pass
 };
 std::unordered_map<VkCommandBuffer, PCmd> g_pending;
 
@@ -175,6 +176,70 @@ struct Window {
   std::map<std::pair<uint64_t, uint32_t>, uint64_t> other;   // (fs, class) of counted draws
 };
 Window g_win;
+
+// Queries stay owned by the recorded command buffer until it is reset, even after
+// readback: an executable game command buffer may be submitted again. A trailing
+// fence prevents a reused query's old availability bit from masquerading as new data.
+constexpr uint32_t kSurfaceSlots = 64, kSurfaceDraws = 256;
+struct SurfaceTs : water::SurfaceTimerState<VkCommandBuffer> {
+  VkQueryPool qp = VK_NULL_HANDLE;
+  VkFence fence = VK_NULL_HANDLE;
+};
+SurfaceTs g_surface_ts[kSurfaceSlots];
+std::map<uint64_t, double> g_surface_ms;
+uint64_t g_surface_timed_draws = 0, g_surface_timed_passes = 0, g_surface_dropped = 0;
+
+void surface_harvest() {
+  for (auto& t : g_surface_ts) {
+    if (!t.submitted || t.collected ||
+        g_dd->vk.WaitForFences(g_dd->device, 1, &t.fence, VK_TRUE, 0) != VK_SUCCESS) continue;
+    bool complete = true, invalid = false;
+    for (const auto& other : g_surface_ts) {
+      if (!other.submitted || other.frame != t.frame) continue;
+      invalid |= other.overflow;
+      if (!other.collected &&
+          g_dd->vk.WaitForFences(g_dd->device, 1, &other.fence, VK_TRUE, 0) != VK_SUCCESS) complete = false;
+    }
+    if (!complete) continue; // never publish a partial multi-pass frame at a log boundary
+    uint64_t q[kSurfaceDraws * 4] = {};
+    water::ComposeMs ms;
+    if (cfg_int("rt_water_surface_fresnel", 0) && t.draws && !invalid &&
+        g_dd->vk.GetQueryPoolResults(g_dd->device, t.qp, 0, t.draws * 2, sizeof q, q, 16,
+            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS &&
+        water::compose_ms(q, t.draws, g_ts_period * 1e-6, ms)) {
+      // Aggregate all completed passes from this submission into its frame total.
+      g_surface_ms[t.frame] += ms.copy + ms.compose;
+      g_surface_timed_draws += t.draws;
+      ++g_surface_timed_passes;
+    } else if (cfg_int("rt_water_surface_fresnel", 0)) ++g_surface_dropped;
+    t.collected = true;
+  }
+}
+
+void surface_begin(VkCommandBuffer cmd) {
+  if (!cfg_int("rt_water_surface_fresnel", 0)) return;
+  for (uint32_t i = 0; i < kSurfaceSlots; ++i) {
+    auto& t = g_surface_ts[i];
+    if (!t.reusable()) continue;
+    if (!t.qp) {
+      VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+      qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+      qi.queryCount = kSurfaceDraws * 2;
+      if (g_dd->vk.CreateQueryPool(g_dd->device, &qi, nullptr, &t.qp) != VK_SUCCESS) break;
+      VkFenceCreateInfo fi{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+      if (g_dd->vk.CreateFence(g_dd->device, &fi, nullptr, &t.fence) != VK_SUCCESS) {
+        g_dd->vk.DestroyQueryPool(g_dd->device, t.qp, nullptr);
+        t.qp = VK_NULL_HANDLE;
+        break;
+      }
+    }
+    t.reserve(cmd);
+    g_dd->vk.CmdResetQueryPool(cmd, t.qp, 0, kSurfaceDraws * 2);
+    g_pending[cmd].surface_ts = int(i);
+    return;
+  }
+  ++g_surface_dropped;
+}
 
 bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) {
   DeviceData* dd = g_dd;
@@ -688,6 +753,17 @@ void water_forget_pipeline(VkPipeline p) {
 }
 
 void water_unswap(VkCommandBuffer cmd, const CmdState* s) {
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    const auto p = g_pending.find(cmd);
+    if (p != g_pending.end() && p->second.surface_ts >= 0) {
+      auto& t = g_surface_ts[p->second.surface_ts];
+      if (t.active) {
+        g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, t.qp, t.draws * 2 + 1);
+        t.end_draw();
+      }
+    }
+  }
   if (g_dd && s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
 }
 
@@ -713,6 +789,15 @@ void water_device_destroyed(DeviceData* dd) {
   g_pool = VK_NULL_HANDLE;
   if (g_qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(g_qp));
   g_qp = VK_NULL_HANDLE;
+  for (auto& t : g_surface_ts) {
+    if (t.submitted && !t.collected)
+      fault_on_result(dd, vk.WaitForFences(dd->device, 1, &t.fence, VK_TRUE, 1000000000ull), "water surface teardown");
+    if (t.qp) defer_destroy(BG3_DEFER_QUERY_POOL, uint64_t(t.qp));
+    if (t.fence) vk.DestroyFence(dd->device, t.fence, nullptr);
+    t = SurfaceTs{};
+  }
+  g_surface_ms.clear();
+  g_surface_timed_draws = g_surface_timed_passes = g_surface_dropped = 0;
   free_buf(g_soup);
   {
     std::lock_guard<std::mutex> cl(g_cmp_mu);
@@ -741,6 +826,8 @@ bool water_pass_begin(VkCommandBuffer cmd) {
   {
     std::lock_guard<std::mutex> lock(g_mu);
     if (!ensure_ready()) return false;
+    g_pending[cmd].surface_ts = -1;
+    surface_begin(cmd);
   }
   // Earlier builds read the soup ranges this pass may overwrite.
   barrier(cmd, kAS | kXfer, VK_ACCESS_MEMORY_READ_BIT, kXFB, VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT);
@@ -783,6 +870,12 @@ int water_draw(VkCommandBuffer cmd, const CmdState* s, const DrawArgs& a, const 
         if (surface != g_cmp.surface_variant.end()) {
           v = surface->second;
           g_surface_swaps.fetch_add(1, std::memory_order_relaxed);
+          if (P.surface_ts >= 0) {
+            auto& t = g_surface_ts[P.surface_ts];
+            if (t.begin_draw(kSurfaceDraws)) {
+              g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, t.qp, t.draws * 2);
+            }
+          }
         } else {
           g_surface_missing.fetch_add(1, std::memory_order_relaxed);
         }
@@ -873,12 +966,25 @@ void water_pass_done(VkCommandBuffer cmd, VkBuffer ubo, VkDeviceSize ubo_off, ui
 void water_forget_cmd(VkCommandBuffer cmd) {
   if (!g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  surface_harvest();
+  for (auto& t : g_surface_ts) if (t.owner == cmd) t.owner = VK_NULL_HANDLE;
   g_pending.erase(cmd);
 }
 
 void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandBuffer>& cmds) {
   if (dd != g_dd || !g_ready) return;
   std::lock_guard<std::mutex> lock(g_mu);
+  for (auto& t : g_surface_ts) {
+    if (!t.owner || t.submitted || !t.draws ||
+        std::find(cmds.begin(), cmds.end(), t.owner) == cmds.end()) continue;
+    dd->vk.ResetFences(dd->device, 1, &t.fence);
+    VkSubmitInfo marker{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    const VkResult result = dd->vk.QueueSubmit(queue, 1, &marker, t.fence); // caller holds queue lock
+    fault_on_result(dd, result, "water surface timestamp marker");
+    t.submitted = result == VK_SUCCESS;
+    t.frame = frame_index();
+    if (!t.submitted) ++g_surface_dropped;
+  }
   if (g_pending.empty()) return;
   std::vector<PCmd> taken;
   for (VkCommandBuffer c : cmds) {
@@ -992,6 +1098,7 @@ void water_on_present() {
   if (!g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_ready) return;
+  surface_harvest();
   for (uint32_t i = 0; i < kOwn; ++i) {
     Slot& s = g_slot[i];
     if (s.harvest) {
@@ -1070,6 +1177,18 @@ void water_on_present() {
     log("[water] surface Fresnel (%llu frames): enabled %d, draws %llu, missing %llu",
         (unsigned long long)w.frames, cfg_int("rt_water_surface_fresnel", 0) != 0,
         (unsigned long long)surface_draws, (unsigned long long)surface_missing);
+  if (cfg_int("rt_water_surface_fresnel", 0) && (!g_surface_ms.empty() || g_surface_dropped)) {
+    std::vector<double> ms;
+    for (const auto& [frame, value] : g_surface_ms) ms.push_back(value);
+    std::sort(ms.begin(), ms.end());
+    log("[water] surface FS GPU %.3f ms median, p90 %.3f (%zu timed frames, %llu passes, %llu draws, dropped %llu; "
+        "patched forward draws only, includes vertex/fixed-function work; native OFF untimed)",
+        ms.empty() ? 0.0 : ms[ms.size() / 2], ms.empty() ? 0.0 : ms[ms.size() * 9 / 10], ms.size(),
+        (unsigned long long)g_surface_timed_passes, (unsigned long long)g_surface_timed_draws,
+        (unsigned long long)g_surface_dropped);
+  }
+  g_surface_ms.clear();
+  g_surface_timed_draws = g_surface_timed_passes = g_surface_dropped = 0;
   const uint64_t swaps = g_swaps.exchange(0), novar = g_no_variant.exchange(0);
   if (cfg_hot(CfgHot::rt_water_compose) || cfg_hot(CfgHot::rt_water_shadows) || cfg_hot(CfgHot::rt_water_ls_shadows) ||
       cfg_hot(CfgHot::rt_water_refraction) || swaps) {

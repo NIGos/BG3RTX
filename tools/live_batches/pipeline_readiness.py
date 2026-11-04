@@ -136,3 +136,9 @@ def conditional(pattern):
     """Keep aligned with Test-CameraPlanBuildPattern (legacy plan encoding)."""
     return bool(re.search(
         r'generation |pipeline built|: built|surface Fresnel|read from the cache|cache: prefetched |pipelines 0', pattern))
+
+
+def reconciled(pattern):
+    """Only tracked GI/water completions and replaced quiet/cache records."""
+    return conditional(pattern) and bool(re.search(
+        r'^gi: |water.*: built|shaders|watch|read from the cache|cache: prefetched |pipelines 0', pattern))

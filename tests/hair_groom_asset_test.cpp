@@ -249,7 +249,8 @@ int main() {
     CHECK(hair_primary::pick_publish(empty, 2, 0, upto101) == -1);
   }
   {   // rebase (hp_rebase): the strand passes of frame N trace frame N-1's camera-relative groom from frame N's camera
-    CHECK(hair_primary::kFlagCamera != hair_primary::kFlagTips && hair_primary::kCameraOffset + 16 == hair_primary::kHeaderTotal);
+    CHECK(hair_primary::kFlagCamera != hair_primary::kFlagTips && hair_primary::kFlagPrevCamera != hair_primary::kFlagCamera &&
+          hair_primary::kPrevCameraOffset == hair_primary::kCameraOffset + 16 && hair_primary::kCameraOffset + 32 == hair_primary::kHeaderTotal);
     CHECK(hair_primary::kCameraOffset >= hair_primary::kColourOffset + hair_primary::kMaxGrooms * hair_primary::kColourBytes);
     const double world[3] = {-640.25, 3.5, -190.75}, build[3] = {-642.4, 1.8, -195.3}, now[3] = {-642.1, 1.8, -194.9};
     double org[3], dir[3], len = 0;
