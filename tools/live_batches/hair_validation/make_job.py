@@ -1,5 +1,6 @@
 """Generate only; no inbox staging or game launches. predicted.json precedes jobs."""
 import importlib.util
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -267,19 +268,73 @@ def diagnostic_job(name, save, plan):
     return j
 
 
+PASS_WINDOWS = ["passes-1-gbuffer", "passes-3-gbuffer-velocity", "passes-7-all"]
+
+
+def make_pass_bisect():
+    def step(label, mask, order="0", seconds=5):
+        return stage_phase(label, seconds, dict(hp.ON, rt_hair_primary_passes=mask,
+                           rt_hair_groom_primary_order=order, rt_hair_groom_tips="0",
+                           qa_exposure_hold="0"))
+    # As in hv6, order 0 keeps cards. Warm the masks without allowing a swap;
+    # mask 0 then warms order 1 with cards still retained. The first real swap
+    # must belong to the labelled G-buffer-only window, never to warmup.
+    plan = [step("warmup", "1", seconds=25), step("warm-velocity", "3"),
+            step("warm-all", "7"), step("warm-order-cards", "0", "1")]
+    plan += [step(label, mask, "1", COST_FRAMES / UNFOCUSED_FPS)
+             for label, mask in zip(PASS_WINDOWS, ("1", "3", "7"))]
+    plan.append(stage_phase("restore", 5, dict(hp.OFF, rt_hair_primary_passes="7",
+                             rt_hair_groom_primary_order="0", rt_hair_groom_tips="0",
+                             qa_exposure_hold="0")))
+    return plan
+
+
+def pass_bisect_job(name, save, plan):
+    j = diagnostic_job(name, save, plan)
+    j.update(max_minutes=6, purpose="First-swap pass bisect: G-buffer (1), + velocity (3), + prepass (7); first device-loss phase identifies the failing pass set.")
+    j["set"] += ",rt_hair_primary_passes=1"
+    # Retain hv6's first-load safety and global fault forbids, without its
+    # capture/order comparison gates. This diagnostic records no image bursts.
+    j["expect"] = [rx for rx in j["expect"] if "exposure held" not in rx]
+    samples = (r"coverage \(last 300 frames\): [1-9]\d* draws probed, \d+ swapped; per draw [^:]*:.*"
+               r"\b[0-9a-fA-F]{4}:[1-9]\d*/[1-9]\d*=")
+    j["expect_every"] = [j["expect_every"][0],
+        dict(name="job has nonzero card and strand samples", select=samples, match=samples, min=1),
+        dict(name="card and strand samples in every pass window", select=COVERAGE,
+             match=samples, min=2, period_frames=300, windows=PASS_WINDOWS),
+        dict(name="swapped frames in every pass window", select=COVERAGE,
+             match=SWAPPED, min=2, period_frames=300, windows=PASS_WINDOWS)]
+    for label, mask in zip(PASS_WINDOWS, (1, 3, 7)):
+        # Velocity is deliberately absent in mask 1; prepass only in mask 7.
+        prepass = r"[1-9]\d*" if mask & 4 else "0"
+        velocity = r"[1-9]\d*" if mask & 2 else "0"
+        j["expect_every"].append(dict(name="strand participation " + label,
+            select=r"\[hair primary\] frame \d+:",
+            match=(r"[1-9]\d* grooms published; last 300 frames: \d+ publishes, " + prepass +
+                   r" prepass, [1-9]\d* G-buffer and " + velocity + r" velocity strand draws, 0 pipelines refused"),
+            required_if=dict(select=COVERAGE, match=SWAPPED), min=1, period_frames=300, windows=[label]))
+    return j
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect")
+    names = parser.parse_args().job_names.split(",")
     assert (HERE / "predicted.json").exists()
     for folder in ("jobs", "plans"):
         (HERE/folder).mkdir(exist_ok=True)
     for name, builder, factory in [("hv5-reload-bisect", make_bisect, bisect_job),
-                                   ("hv6-strand-diagnostic", make_diagnostic, diagnostic_job)]:
+                                   ("hv6-strand-diagnostic", make_diagnostic, diagnostic_job),
+                                   ("hv7-pass-bisect", make_pass_bisect, pass_bisect_job)]:
+        if name not in names:
+            continue
         plan = builder()
         for folder, value in (("plans", plan), ("jobs", factory(name, "Test Dialogue1", plan))):
             (HERE/folder/f"{name}.json").write_text(json.dumps(value, indent=2)+"\n", encoding="utf-8")
-    print("hv5 and hv6 generated; historical hv1-hv4 retained; no queue staging")
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(HERE, job_names=names)
+    print(f"Generated {', '.join(names)}; no queue staging")
 
 
 if __name__ == "__main__":
     main()
-    from tools.live_batches.live_flow import tighten_files
-    tighten_files(HERE, job_names=["hv5-reload-bisect", "hv6-strand-diagnostic"])

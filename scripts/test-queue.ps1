@@ -159,6 +159,7 @@ function Get-QueueCrashOutcome($r) {
   $tail = @(if ($r.keptLog -and (Test-Path -LiteralPath $r.keptLog)) { Get-Content -LiteralPath $r.keptLog -Tail 3 })
   $detail = "; last log: $(if ($tail) { $tail -join ' | ' } else { '(unavailable)' })"
   if ($null -eq $phase) { $phase = 'unknown' }
+  if ($status.last_phase_label) { $phase = "$phase [$($status.last_phase_label)]" }
   if ($unexpectedExit) { return "CRASH: game exited $code at phase $phase$detail$(if ($r.dumps) { '; dump ' + ($r.dumps -join ', ') })$(if ($hits) { '; ' + ($hits -join ' | ') })" }
   $kind = if ($hits -match 'VK_ERROR_DEVICE_LOST|device lost: waiting') { 'device lost' } else { 'game crash' }
   $at = 'unknown time'
