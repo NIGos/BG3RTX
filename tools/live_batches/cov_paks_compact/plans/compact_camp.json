@@ -76,6 +76,9 @@
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ],
     "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
@@ -83,9 +86,6 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_stats": [
-      "\\[hit material paks join\\]"
     ]
   },
   {
@@ -128,6 +128,9 @@
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ],
     "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
@@ -135,9 +138,6 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_stats": [
-      "\\[hit material paks join\\]"
     ]
   },
   {

@@ -114,7 +114,7 @@
     "observable": "scripts.qa.pan_artifacts gi_luma edge/interior pixel-frame rates and mean, same-run OFF repeat spread; gi trace and temporal GPU ms",
     "original_promotion_gate": "prev: edge below min(OFF) by more than OFF spread, interior/mean within OFF spread; mv: edge/interior no greater than max(OFF), mean within OFF spread; fresh current-sample fallback preserves energy. All five K16 complete and valid; FG active on all frames, registration and calibrated detector pass.",
     "reject": "Any energy/detail regression, no edge benefit beyond OFF spread, or no useful effect rejects that bit for release. Missing evidence is INVALID.",
-    "tool": "python -m scripts.qa.pan_artifacts <five-K16-burst-directories> --out <analysis-dir> (original transient gate only; PNG screen cannot run this gate)",
+    "tool": "python -m scripts.qa.pan_artifacts --log <same-run-log> --out <analysis-dir>",
     "disk_mb": 600
   }
 }

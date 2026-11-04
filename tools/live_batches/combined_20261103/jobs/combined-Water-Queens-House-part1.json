@@ -894,9 +894,9 @@
           "seconds": 2.61315,
           "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 370,
+          "samples": 365,
           "maximum": 2.90531,
-          "logs": 59
+          "logs": 58
         }
       }
     },
@@ -1285,9 +1285,9 @@
           "seconds": 2.61315,
           "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 370,
+          "samples": 365,
           "maximum": 2.90531,
-          "logs": 59
+          "logs": 58
         }
       }
     }
@@ -1406,18 +1406,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.2930000000014843,
+      "seconds": 0.29200000000128057,
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 365,
       "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
       "seconds": 2.61315,
       "source": "wf7a-s8-fg2.1.164300.log",
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 365,
       "maximum": 2.90531,
-      "logs": 59
+      "logs": 58
     },
     "segments": [
       {
@@ -1546,9 +1546,9 @@
             "seconds": 2.61315,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 365,
             "maximum": 2.90531,
-            "logs": 59
+            "logs": 58
           }
         }
       },
@@ -1678,9 +1678,9 @@
             "seconds": 2.61315,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 365,
             "maximum": 2.90531,
-            "logs": 59
+            "logs": 58
           }
         }
       }

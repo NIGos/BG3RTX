@@ -167,9 +167,9 @@
             "seconds": 2.61315,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 365,
             "maximum": 2.90531,
-            "logs": 59
+            "logs": 58
           }
         }
       },
@@ -745,9 +745,9 @@
             "seconds": 2.61315,
             "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 365,
             "maximum": 2.90531,
-            "logs": 59
+            "logs": 58
           }
         }
       },

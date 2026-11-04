@@ -74,28 +74,37 @@
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 24.6,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 24.6,
-    "motion_end": 24.6,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0"
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-rays-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.5,
+    "seconds": 14.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.5,
-    "motion_end": 19.5,
+    "motion_start": 17,
+    "motion_end": 17,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
@@ -103,7 +112,15 @@
       1,
       6,
       11
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "pan-off-a",
@@ -142,36 +159,44 @@
     "label": "cost-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 23.6,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 23.6,
-    "motion_end": 23.6,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 2.0
+    ]
   },
   {
     "label": "shot-rays-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.5,
+    "seconds": 14.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.5,
-    "motion_end": 19.5,
+    "motion_start": 17,
+    "motion_end": 17,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
@@ -179,7 +204,15 @@
       1,
       6,
       11
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "pan-on-a",
@@ -218,36 +251,44 @@
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 23.6,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 23.6,
-    "motion_end": 23.6,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 2.0
+    ]
   },
   {
     "label": "shot-rays-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.5,
+    "seconds": 14.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.5,
-    "motion_end": 19.5,
+    "motion_start": 17,
+    "motion_end": 17,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
@@ -255,7 +296,15 @@
       1,
       6,
       11
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "pan-off-b",
@@ -294,36 +343,44 @@
     "label": "cost-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 23.6,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 23.6,
-    "motion_end": 23.6,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 2.0
+    ]
   },
   {
     "label": "shot-rays-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.5,
+    "seconds": 14.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.5,
-    "motion_end": 19.5,
+    "motion_start": 17,
+    "motion_end": 17,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
@@ -331,7 +388,15 @@
       1,
       6,
       11
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "pan-on-b",

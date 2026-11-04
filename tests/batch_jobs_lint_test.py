@@ -14,7 +14,7 @@ from tools.live_batches import live_flow as flow
 
 class BatchJobsLintTests(unittest.TestCase):
     def test_active_combined_chunks_cover_each_source_once(self):
-        from tools.live_batches.combined_20261103.make_jobs import SOURCES
+        from tools.live_batches.combined_20261103.make_jobs import PARTITIONS
         from tools.live_batches.regenerate_active import active_paths
         sources = []
         for path in active_paths():
@@ -28,7 +28,7 @@ class BatchJobsLintTests(unittest.TestCase):
                 original, plan, _ = flow.load_job(source)
                 self.assertEqual(segment['job']['expect_every'], original['expect_every'])
                 self.assertEqual(segment['plan'], plan)
-        self.assertCountEqual(sources, SOURCES)
+        self.assertCountEqual(sources, [source for group in PARTITIONS.values() for source in group])
 
     @patch.object(flow, 'corpus', side_effect=AssertionError('CTest must not read live corpus'))
     @patch.object(flow, 'default_results', side_effect=AssertionError('CTest must not find live results'))

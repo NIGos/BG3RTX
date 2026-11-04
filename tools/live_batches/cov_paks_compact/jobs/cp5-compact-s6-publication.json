@@ -49,7 +49,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "cp5-compact-s6-publication",
   "live_batch": "cov-paks-compact",
-  "timeout": 850,
+  "timeout": 1297.0,
   "args": [
     "-RealPresent",
     "-Move",

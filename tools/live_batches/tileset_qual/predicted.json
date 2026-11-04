@@ -12,8 +12,8 @@
   "energy_rule": "No matched Dialogue3 PT reference found. Report float pre-post scene colour and exposure per launch; independent load/camera/exposure can confound differences. Never a quality PASS from cross-run comparison.",
   "budget": "Two separate launches, each hard-capped at 4.9 minutes including load; fallback exceeds the original one-launch budget. 120 s load allowance each. Two static traces total, one PNG per state, no raw dumps or bursts; below 2 GB.",
   "input_sha256": {
-    "common/settings.h": "e6994e11682ed54946c4219ac1e10ef426f074644428c0e924fdb964b20d327f",
+    "common/settings.h": "ad046106e3ecaf7eb6a3738a9fe6c2e11d3d6fed4fd4975a5b4edc99bbbcaa41",
     "data/release.ini": "50fb46a36bab41bfa39fb71ee98416392726c8e702d82eb93fe7f4db3df98e50",
-    "bg3rtx.ini": "8d16aefadd63cf89492eb1856c3856bec2b0424183a6b5fa341db35efde6e40f"
+    "bg3rtx.ini": "97888c84b7e81a7ec79b3ff07651885c1d8102f105008c888ebeb3d73f67d59f"
   }
 }

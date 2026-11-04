@@ -4,10 +4,10 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 719,
+  "timeout": 611,
   "repeat": 1,
   "live_batch": "gi-1ray-qual",
-  "set": "preset=ultra,fg=2,rr=1,headless=0,fps_cap=0,rt_stats=0,rt_primary_check=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,crash_dump=0,rt_timing_frames=120,rt_scene_wait=1,rt_scene_wait_log_frames=120,gi_rr_rays=2,qa_exposure_hold=0,dump_images=1,dump_raw=0,dump_shaders=0,dump_png_width=1280,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0",
+  "set": "preset=ultra,fg=2,rr=1,headless=0,fps_cap=0,rt_stats=0,rt_primary_check=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,crash_dump=0,rt_timing_frames=120,rt_scene_wait=1,rt_scene_wait_log_frames=120,gi_rr_rays=2,qa_exposure_hold=0,dump_images=1,dump_raw=0,dump_shaders=0,dump_png_width=1280,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,rt_stats_period_frames=60",
   "args": [
     "-RealPresent",
     "-Move",
@@ -78,7 +78,7 @@
   ],
   "stop_on_dump": false,
   "purpose": "One-ray GI release qualification. Ultra 2/1/2/1, static and held Q/E. Prepared only; no preset changes.",
-  "estimated_phase_seconds": 228.3,
+  "estimated_phase_seconds": 120.9,
   "expect_every": [
     {
       "name": "K8 off-a",
@@ -383,18 +383,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.2930000000014843,
+      "seconds": 0.29200000000128057,
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 365,
       "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
       "seconds": 2.61315,
       "source": "wf7a-s8-fg2.1.164300.log",
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 365,
       "maximum": 2.90531,
-      "logs": 59
+      "logs": 58
     }
   },
   "post": "py -3 -m tools.live_batches.gi_1ray_qual.analyze \"{log}\"",
