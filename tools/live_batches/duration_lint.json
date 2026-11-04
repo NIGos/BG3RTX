@@ -63082,7 +63082,7 @@
       }
     ],
     "duration": {
-      "seconds": 127.8,
+      "seconds": 128.2,
       "minimum_seconds": 127.8,
       "unresolved": [
         {
@@ -63159,8 +63159,8 @@
           ]
         }
       ],
-      "expected_readiness_seconds": 0.0,
-      "readiness_timeout_seconds": 1989.4479999999967,
+      "expected_readiness_seconds": 70.928,
+      "readiness_timeout_seconds": 601.0479999999807,
       "windows": [
         {
           "window": "warmup",
@@ -63172,7 +63172,7 @@
           ],
           "readiness_timeout_seconds": 180.0,
           "expected_readiness_seconds": 0.0,
-          "readiness_samples": 28,
+          "readiness_samples": 30,
           "readiness_source": "VALID same-save/key median",
           "minimum_readiness_wait_seconds": 0
         },
@@ -63184,11 +63184,11 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 9.447999999996682,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 9.464000000007218,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "prefetch-interface-on",
@@ -63200,66 +63200,66 @@
             "scene/pipeline settle bound retained; not a producer cadence"
           ],
           "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "partition-static-0",
-          "seconds": 11.9,
+          "seconds": 12.0,
           "minimum_seconds": 11.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.1,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "partition-static-1",
-          "seconds": 11.9,
+          "seconds": 12.0,
           "minimum_seconds": 11.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.1,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "partition-static-2",
-          "seconds": 11.9,
+          "seconds": 12.0,
           "minimum_seconds": 11.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.1,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "partition-static-3",
-          "seconds": 11.9,
+          "seconds": 12.0,
           "minimum_seconds": 11.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.1,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "cost-turn-0",
@@ -63270,10 +63270,10 @@
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
           "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "cost-turn-1",
@@ -63283,11 +63283,11 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "cost-turn-2",
@@ -63297,11 +63297,11 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "cost-turn-3",
@@ -63311,11 +63311,11 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         },
         {
           "window": "restore",
@@ -63325,11 +63325,11 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 180.0,
-          "expected_readiness_seconds": 0,
+          "readiness_timeout_seconds": 6.447999999996682,
+          "expected_readiness_seconds": 6.447999999996682,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
-          "minimum_readiness_wait_seconds": 0
+          "minimum_readiness_wait_seconds": 6.447999999996682
         }
       ],
       "findings": []

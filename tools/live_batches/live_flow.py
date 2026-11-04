@@ -516,6 +516,7 @@ def duration_budget(job, plan):
         changed = {k: v for k, v in state.items() if previous.get(k) != v and k not in CONTROL}
         previous = state
         expected_wait = readiness_budget.estimate(job, phase, changed, first=index == 0)
+        wait_floor = readiness_budget.minimum_wait(job, phase, state)
         fps = fps_windows.expected(job, state)["fps"]
         current = float(phase.get("seconds", 0))
         label = phase.get("label", "")
@@ -572,9 +573,9 @@ def duration_budget(job, plan):
         windows.append(dict(window=label, seconds=current, minimum_seconds=round(minimum, 3),
                             savings_seconds=round(max(0, current-minimum), 3), unresolved=unresolved,
                             readiness_timeout_seconds=float(phase.get("wait_log_timeout", 0)),
-                            expected_readiness_seconds=expected_wait["seconds"],
+                            expected_readiness_seconds=max(expected_wait["seconds"], wait_floor),
                             readiness_samples=expected_wait["samples"], readiness_source=expected_wait["source"],
-                            minimum_readiness_wait_seconds=0))
+                            minimum_readiness_wait_seconds=wait_floor))
     total = sum(w["seconds"] for w in windows)
     minimum = sum(w["minimum_seconds"] for w in windows)
     findings = [f"duration: {w['window']}: {w['seconds']:g} s > 1.5x minimum {w['minimum_seconds']:g} s; save {w['savings_seconds']:g} s"

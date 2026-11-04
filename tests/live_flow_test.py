@@ -753,9 +753,33 @@ class ReadinessBudgetTests(unittest.TestCase):
         cold = ack+['12:00:11.000 [rrpost] rr_post.hlsl:temporal pipeline creation failed (-2)']
         self.assertEqual(estimate(rr, cold)['samples'], 0)
         fresnel = [r'surface Fresnel.*enabled 1']
+        self.assertEqual(estimate(fresnel, ack[:1]+['12:00:10.100 surface Fresnel enabled 1']+ack[1:])['samples'], 0)
         self.assertEqual(estimate(fresnel, ack)['samples'], 0)
         self.assertEqual(estimate(fresnel, ['12:00:01.000 surface Fresnel enabled 1']+ack)['samples'], 0)
         self.assertEqual(estimate(fresnel, ack+['12:00:13.000 surface Fresnel enabled 1'])['seconds'], 3)
+
+    def test_periodic_readiness_floor_in_runtime_and_preflight(self):
+        j, _ = fixture()
+        j['live_flow'] = dict(expected_fps=10, settings_latency_s=1.5, settling_margin_s=.75)
+        p = [phase('periodic', values='rt_timing_frames=120')]
+        rx = r'\[water\] surface Fresnel.*enabled 0,'
+        p[0].update(wait_log=[rx, f.pipeline_readiness.QUIET],
+                    wait_log_fresh=[rx, f.pipeline_readiness.QUIET], wait_log_timeout=2)
+        # Fresnel uses rt_timing_frames (120 in wsf1), like measured-window lint.
+        for samples in (0, 3):
+            with patch.object(f.readiness_budget, 'estimate', return_value=dict(seconds=.4, samples=samples, source='test')):
+                self.assertEqual(f.readiness_budget.timeouts(j, p), [14.25])
+                budget = f.duration_budget(j, p)['windows'][0]
+                self.assertEqual(budget['minimum_readiness_wait_seconds'], 14.25)
+                self.assertEqual(budget['expected_readiness_seconds'], 14.25)
+        self.assertEqual(f.readiness_budget.minimum_wait(j, p[0], {'rt_timing_frames': '300'}), 32.25)
+        # A slow actual build remains bounded by its learned delay plus margin.
+        p[0]['wait_log_timeout'] = 180
+        with patch.object(f.readiness_budget, 'estimate', return_value=dict(seconds=30, samples=3, source='test')):
+            self.assertEqual(f.readiness_budget.timeouts(j, p), [30.75])
+        # Reconciled quiet witnesses alone need no periodic announcement.
+        p[0]['wait_log'] = p[0]['wait_log_fresh'] = [f.pipeline_readiness.QUIET]
+        self.assertEqual(f.readiness_budget.minimum_wait(j, p[0], {}), 0)
 
     def test_retime_bounds_pipeline_timeout_by_median_plus_margin(self):
         j, p = fixture()
