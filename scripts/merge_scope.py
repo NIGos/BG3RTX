@@ -23,9 +23,9 @@ def tooling_tests(root, paths):
     selected = set(TOOL_TESTS)
     tokens = {Path(p).stem.replace('-', '_') for p in paths}
     for name in registry:
-        # This registered test invokes DXC. Tooling-only edits lint its source;
-        # shader edits execute it through the shader CTest scope.
-        if name == 'water_surface_shader':
+        # These registered tests need DXC or the MSVC build environment. Tooling-only
+        # edits lint their source; the shader and full scopes run them through CTest.
+        if name in ('water_surface_shader', 'core_resource_init', 'layer_init_failure'):
             continue
         path = root / f'tests/{name}_test.py'
         text = path.read_text(encoding='utf-8-sig')
