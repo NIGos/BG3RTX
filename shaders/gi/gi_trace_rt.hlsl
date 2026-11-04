@@ -293,8 +293,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
           screen_roof_blocked = t > RB && !gi_far_roof_clear(o, dir, t);
         if (!screen_roof_blocked) {
 #endif
-        float3 L = prev_bounce_at(qp);
-        if (all(isfinite(L))) {
+        float3 L;
+        if (prev_bounce_at(qp, L)) {
           bounce += L * w;
           seen += L;
           nseen += 1.0;

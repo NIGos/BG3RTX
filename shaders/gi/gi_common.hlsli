@@ -160,19 +160,33 @@ bool project(float3x3 inv, float3 P, out float2 uv, out float d) {
 // motion vector back to where that surface was a frame ago.
 // rgb: diffuse + specular, what the camera saw (reflections need it); a: the diffuse's
 // share of its luminance (gi_composite.hlsl).
-int2 prev_radiance_px(int2 qp) {
-  if (pc.has_mv == 0) return qp;
+bool prev_radiance_px(int2 qp, out int2 pq) {
+  pq = qp;
+  if (pc.has_mv == 0) return true;
   float2 mv = gVelocity.Load(int3(qp, 0)) * pc.mv_scale;
-  int2 pq = int2(floor(float2(qp) + 0.5 + mv));
-  return any(pq < 0) || any(pq >= int2(pc.full)) ? qp : pq;
+  float2 prev = float2(qp) + 0.5 + mv;
+  // Validate in float space: even a finite vector can exceed the int range.
+  if (!all(isfinite(prev)) || any(prev < 0.0) || any(prev >= float2(pc.full))) return false;
+  pq = int2(floor(prev));
+  return true;
 }
-float3 prev_radiance_at(int2 qp) { return prevRadiance[prev_radiance_px(qp)].rgb; }
+bool prev_radiance_at(int2 qp, out float3 L) {
+  L = 0;
+  int2 pq;
+  if (!prev_radiance_px(qp, pq)) return false;
+  L = prevRadiance[pq].rgb;
+  return all(isfinite(L));
+}
 // The GI's bounce source: view-independent radiance (QUALITY R3), i.e. the diffuse part.
 // The specular is what the surface sends towards the camera, not towards the GI's
 // shading point; its sun glints are the sparsest, brightest values on screen.
-float3 prev_bounce_at(int2 qp) {
-  float4 v = prevRadiance[prev_radiance_px(qp)];
-  return v.rgb * saturate(v.a);
+bool prev_bounce_at(int2 qp, out float3 L) {
+  L = 0;
+  int2 pq;
+  if (!prev_radiance_px(qp, pq)) return false;
+  float4 v = prevRadiance[pq];
+  L = v.rgb * saturate(v.a);
+  return all(isfinite(L));
 }
 
 // pcg3d (Jarzynski & Olano 2020): decorrelated across pixels and frames,

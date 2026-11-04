@@ -40,7 +40,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float2 mv = gVelocity.Load(int3(int2(fpix), 0)) * pc.mv_scale;
     float2 prev = (fpix + mv) / scale;
     // A non-finite motion vector is no position: float-to-int of NaN/Inf is undefined.
-    hp = all(isfinite(prev)) ? int2(floor(prev)) : int2(-1, -1);
+    hp = all(isfinite(prev)) && all(prev >= 0.0) && all(prev < float2(pc.half))
+       ? int2(floor(prev)) : int2(-1, -1);
     prev_px = cur_px + mv;
   }
   bool inside = all(hp >= 0) && all(hp < int2(pc.half));

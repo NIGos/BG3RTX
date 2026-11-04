@@ -53,12 +53,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
       float3 Q = P + dir * t;
       float2 quv;
       float qd;
-      if (!project(inv, Q, quv, qd) || any(quv < 0.0) || any(quv > 1.0)) break;
+      if (!project(inv, Q, quv, qd) || any(quv < 0.0) || any(quv >= 1.0)) break;
       int2 qp = int2(quv * float2(pc.full));
       float sd = gDepth.Load(int3(qp, 0));
       if (sd > 0.0 && qd > sd * 1.0015 && qd < sd * (1.0 + pc.thickness)) {
-        bounce += prev_bounce_at(qp);
-        hits += 1.0;
+        float3 L;
+        // No previous observation: keep the native ambient rather than occlude it
+        // with an unavailable (black) bounce.
+        if (prev_bounce_at(qp, L)) {
+          bounce += L;
+          hits += 1.0;
+        }
         break;
       }
     }

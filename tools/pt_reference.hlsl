@@ -291,8 +291,8 @@ PtPath pt_trace(uint2 fp, float3 P, float3 N, float4 org, float dist, float pa, 
         const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
         const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
         if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.gi_rt_tol)) {
-          float3 L = prev_bounce_at(qp);
-          if (all(isfinite(L))) { r.cls = 1; r.screen = L; }
+          float3 L;
+          if (prev_bounce_at(qp, L)) { r.cls = 1; r.screen = L; }
         }
       }
     }

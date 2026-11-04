@@ -341,7 +341,8 @@ void water_copy(uint3 tid : SV_DispatchThreadID) {
   if (any(fp >= pc.full)) return;
   const float3 L = gDiffuse[fp] + gSpecular[fp];
   const uint cls = uint(gMaterial.Load(int3(fp, 0)).a * 255.0 + 0.5) & 7u;
-  wRad[fp] = float4(all(isfinite(L)) ? max(L, 0.0) : 0.0.xxx, float(cls));
+  // Narrow to rgba16f only after limiting the sum to its finite range.
+  wRad[fp] = float4(all(isfinite(L)) ? clamp(L, 0.0, 65504.0) : 0.0.xxx, float(cls));
   wDepOut[fp] = gDepth.Load(int3(fp, 0));
 }
 

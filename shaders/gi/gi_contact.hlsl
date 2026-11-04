@@ -29,7 +29,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float t = len * (float(s) - jitter) / float(pc.cs_steps);
     float2 quv;
     float qd;
-    if (!project(inv, P + L * t, quv, qd) || any(quv < 0.0) || any(quv > 1.0)) break;
+    if (!project(inv, P + L * t, quv, qd) || any(quv < 0.0) || any(quv >= 1.0)) break;
     float sd = gDepth.Load(int3(int2(quv * float2(pc.full)), 0));
     // Thin-object test: the surface in front must be close behind the ray.
     if (sd > 0.0 && qd > sd * 1.001 && qd < sd * 1.02) {

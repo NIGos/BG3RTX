@@ -1,6 +1,8 @@
 """Water surface arithmetic OFF identity and capability SPIR-V validation.
 
-The compile-time REFERENCE=0 form proves dormant arithmetic matches the baseline
+The baseline receives only the exact, fixture-tested F03 half-range clamp and F06
+mip-coordinate ordering corrections before comparison; unknown forms fail closed.
+The compile-time REFERENCE=0 form proves dormant arithmetic matches that baseline
 for every compose request. This is separate from raw ordinary request identity:
 capability modules gain a specialization branch and therefore change raw bytes.
 Raw differences must pass selective retired-feature equivalence for that same
@@ -14,11 +16,84 @@ import json
 from pathlib import Path
 import sys
 import struct
+import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.shader_identity import compile_requests, default_baseline, gate_setup, identical, identity, split_request, unchanged_since  # noqa: E402
+from tools.shader_identity import SourceTree, compile_requests, default_baseline, gate_setup, git_blob_id, identical, identity, split_request, unchanged_since  # noqa: E402
 from tools.hair_retirement_check import retirement_fallback  # noqa: E402
+
+
+# Correct only these independently fixture-tested defects in the old source.
+# All other historical water/alpha code still goes through the identity proof.
+_WATER_OLD = b"  wRad[fp] = float4(all(isfinite(L)) ? max(L, 0.0) : 0.0.xxx, float(cls));"
+_WATER_FIXED = _WATER_OLD.replace(b"max(L, 0.0)", b"clamp(L, 0.0, 65504.0)")
+_MIP_OLD = b"""  float2 ip = floor(u * dims * pow(0.5, mip));
+  // Stay inside the indirection texture (constants from another tile set, or a
+  // mip it does not have, would fetch out of bounds).
+  uint iw, ih, ilevels;
+  gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, iw, ih, ilevels);
+  mip = min(mip, float(max(ilevels, 1u) - 1u));"""
+_MIP_FIXED = _MIP_OLD.split(b"\n", 1)[1] + b"\n" + _MIP_OLD.split(b"\n", 1)[0]
+_BASELINE_CORRECTIONS = (("F03", "shaders/rt/water_compose.hlsl", _WATER_OLD, _WATER_FIXED),
+                         ("F06", "shaders/rt/rt_common.hlsli", _MIP_OLD, _MIP_FIXED))
+
+
+def corrected_baseline(base):
+    """Exact source overlay, never a working-tree replacement or SPIR-V waiver."""
+    replacements = {}
+    for finding, path, before, after in _BASELINE_CORRECTIONS:
+        data = base.read(path)
+        if b"\r\n" in data:
+            before, after = (part.replace(b"\n", b"\r\n") for part in (before, after))
+        if data.count(before) + data.count(after) != 1:
+            raise ValueError(f"{finding}: unrecognized or duplicated baseline correction in {path}")
+        replacements[path] = data.replace(before, after)
+    ids = dict(base.ids)
+    ids.update({path: git_blob_id(data) for path, data in replacements.items()})
+    tree = SourceTree(base.label + " + exact F03/F06 corrections", ids,
+                      lambda path: replacements[path] if path in replacements else base.read(path))
+    tree.sharc_dir = base.sharc_dir
+    return tree
+
+
+class BaselineCorrectionTest(unittest.TestCase):
+    def baseline(self, fixed=False):
+        files = {path: b"// retained prefix\n" + (after if fixed else before) + b"\n// retained suffix\n"
+                 for _, path, before, after in _BASELINE_CORRECTIONS}
+        files["shaders/unrelated.hlsl"] = b"unrelated code must remain byte-identical"
+        return SourceTree.memory(files)
+
+    def test_exact_changes_and_unrelated_bytes(self):
+        base = self.baseline()
+        fixed = corrected_baseline(base)
+        for _, path, before, after in _BASELINE_CORRECTIONS:
+            self.assertEqual(fixed.read(path), base.read(path).replace(before, after))
+            self.assertEqual(fixed.ids[path], git_blob_id(fixed.read(path)))
+        path = "shaders/unrelated.hlsl"
+        self.assertEqual(fixed.read(path), base.read(path))
+        self.assertEqual(fixed.ids[path], base.ids[path])
+        self.assertIsNone(fixed.disk)  # compilation materializes the patched bytes
+
+    def test_already_fixed_is_idempotent(self):
+        base = self.baseline(fixed=True)
+        self.assertEqual(corrected_baseline(base).ids, base.ids)
+
+    def test_unknown_and_duplicate_code_fail_closed(self):
+        for _, path, before, _ in _BASELINE_CORRECTIONS:
+            for replacement in (b"unknown code", before + b"\n" + before):
+                base = self.baseline()
+                base._data[path] = replacement
+                with self.assertRaises(ValueError):
+                    corrected_baseline(base)
+
+    def test_crlf_baseline(self):
+        base = self.baseline()
+        for path in base.ids:
+            base._data[path] = base.read(path).replace(b"\n", b"\r\n")
+        fixed = corrected_baseline(base)
+        for _, path, _, after in _BASELINE_CORRECTIONS:
+            self.assertIn(after.replace(b"\n", b"\r\n"), fixed.read(path))
 
 
 def reference_off(request):
@@ -72,8 +147,15 @@ def main():
     parser.add_argument("--sharc", default="auto")
     parser.add_argument("--spirv-val")
     parser.add_argument("--json")
+    parser.add_argument("--test-baseline-overlay", action="store_true",
+                        help="run the source-overlay fixtures without compiling shaders")
     args = parser.parse_args()
+    fixtures = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(BaselineCorrectionTest))
+    if not fixtures.wasSuccessful() or args.test_baseline_overlay:
+        return int(not fixtures.wasSuccessful())
     tool, cache, base, new = gate_setup(args.baseline, args.dxc, args.sharc, args.spirv_val)
+    historical_base = base
+    base = corrected_baseline(historical_base)
     old = [r for r in base.requests() if split_request(r)[0] == "rt/water_compose.hlsl"
            and "WATER_HIT_SHADE_LAYOUT=1" not in split_request(r)[1]]
     current = set(new.requests())
@@ -93,6 +175,7 @@ def main():
         unchanged_since(new)
     finally:
         base.cleanup()
+        historical_base.cleanup()
         new.cleanup()
     failed_off = [p for p in off_proofs if p['path'] == 'failed']
     failed_on = [r for r in on.values() if not r.ok or not r.valid]
@@ -112,6 +195,7 @@ def main():
     for r in failed_on:
         print(f"FAIL capability {r.request}: {r.log}")
     report = {"baseline": args.baseline, "compose_requests": len(requests),
+              "baseline_source_corrections": ["F03: clamp wRad to finite half range", "F06: clamp mip before indirection coordinates"],
               "missing": missing, "arithmetic_off_identical": sum(identical(s) for _, s, _ in results),
               "arithmetic_off_accepted": len(results) - len(failed_off),
               "arithmetic_off_paths": off_proofs, "raw_ordinary_paths": raw_proofs,

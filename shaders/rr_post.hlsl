@@ -133,6 +133,14 @@ uint2 tap(uint2 p, int dx, int dy) {
   uint2 q = uint2(int2(p) + int2(dx, dy));  // wraps below 0 like the game's uint math
   return clamp(q, pc.bmin, pc.bmax);
 }
+// Preserve the original product/root rounding where representable. A parallel
+// log sum recovers the mean when the intermediate product over/underflows.
+float3 resolve_mean(float4 product, float3 log_sum, bool3 has_zero) {
+  float3 ordinary = pow(abs(product.rgb), 1.0 / product.w);
+  float3 stable = exp2(log_sum / product.w);
+  return select(has_zero, 0.0.xxx,
+                select(isfinite(product.rgb) & (product.rgb != 0.0), ordinary, stable));
+}
 [numthreads(16, 16, 1)]
 void resolve(uint3 id : SV_DispatchThreadID) {
   uint2 p = id.xy + pc.bmin;
@@ -147,6 +155,8 @@ void resolve(uint3 id : SV_DispatchThreadID) {
   uint n0 = 0u, n5 = 0u;
   float4 acc0 = float4(1.0, 1.0, 1.0, 0.0);   // stencil bit 5 clear
   float4 acc1 = float4(1.0, 1.0, 1.0, 0.0);   // stencil bit 5 set
+  float3 log0 = 0.0, log1 = 0.0;
+  bool3 zero0 = false, zero1 = false;
   [unroll] for (int i = 0; i < 4; ++i) {
     [unroll] for (int j = 0; j < 4; ++j) {
       uint2 q = tap(p, i - 1, j - 1);
@@ -156,14 +166,23 @@ void resolve(uint3 id : SV_DispatchThreadID) {
       n5 += b5;
       if ((i != 3 && j != 3) || acc1.w == 0.0 || acc0.w == 0.0) {
         float3 col = In1.Load(int3(q, 0)).rgb;
-        if (b5 != 0u) acc1 = float4(acc1.rgb * col, acc1.w + 1.0);
-        else acc0 = float4(acc0.rgb * col, acc0.w + 1.0);
+        // abs matches the original root of abs(product); zeros stay exactly zero.
+        float3 logs = log2(select(col == 0.0, 1.0.xxx, abs(col)));
+        if (b5 != 0u) {
+          acc1 = float4(acc1.rgb * col, acc1.w + 1.0);
+          log1 += logs;
+          zero1 |= col == 0.0;
+        } else {
+          acc0 = float4(acc0.rgb * col, acc0.w + 1.0);
+          log0 += logs;
+          zero0 |= col == 0.0;
+        }
       }
     }
   }
   if (acc1.w == 0.0 || acc0.w == 0.0) { OutR11[p] = xc; return; }
-  float3 g1 = pow(abs(acc1.rgb), 1.0 / acc1.w);
-  float3 g0 = pow(abs(acc0.rgb), 1.0 / acc0.w);
+  float3 g1 = resolve_mean(acc1, log1, zero1);
+  float3 g0 = resolve_mean(acc0, log0, zero0);
   float r = float(n5) / float(n0);
   float3 a1, a0;
   if (((sc >> 5u) & 1u) == 1u) { a1 = lerp(g1, xc, r); a0 = g0; }

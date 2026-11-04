@@ -300,8 +300,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
           const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
           const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
           if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.rf_depth_tol) && dot(nq, dir) < 0.2) {
-            float3 L = prev_radiance_at(qp);
-            if (all(isfinite(L))) {
+            float3 L;
+            if (prev_radiance_at(qp, L)) {
               float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
               w = rough_w * saturate(min(e.x, e.y)) * saturate(pc.rf_strength);
               Lrt = max(L, 0.0);
@@ -357,7 +357,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_box = hs.box;
               const int2 qq = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
               hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
-              hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
+              int2 prev_qq;
+              if (prev_radiance_px(qq, prev_qq)) hs_La_share = saturate(prevRadiance[prev_qq].a);
 #if RF_HIT_GI
   if(RF_GI_ON) {
               hg_gi = lum(hs.gi);

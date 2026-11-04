@@ -328,12 +328,12 @@ AlphaRead vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
   float aniso = min(0.5 * l - 0.5 * log2(max(min(d1, d2), 1e-30)), vt_t(a, 0, 1, 0));
   float mip = floor(min(max(0.5 * l - aniso - 0.5, 0.0), P1.x) + 0.5);
   float2 dims = float2(vt_t(a, 0, 0, 3), vt_t(a, 0, 0, 3) * vt_t(a, 0, 1, 3));
-  float2 ip = floor(u * dims * pow(0.5, mip));
   // Stay inside the indirection texture (constants from another tile set, or a
   // mip it does not have, would fetch out of bounds).
   uint iw, ih, ilevels;
   gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, iw, ih, ilevels);
   mip = min(mip, float(max(ilevels, 1u) - 1u));
+  float2 ip = floor(u * dims * pow(0.5, mip));
   int2 ipi = clamp(int2(ip), int2(0, 0), int2(max(iw >> uint(mip), 1u) - 1u, max(ih >> uint(mip), 1u) - 1u));
   uint e = asuint(gAlphaTex[NonUniformResourceIndex(tex)].Load(int3(ipi, int(mip))).x);
   float sc = pow(2.0, float(e & 15u));
