@@ -61,11 +61,15 @@ float hf_strands(float3 P, float3 L, float dist) {
   // the CPU count on every ray; successive closest hits counted 35% of the rays one or more strands too many).
   if (!rt_groom_live()) return 0.0;
   uint n = 0u;
+  const uint first = gSceneStamp.Load(60u);
   HpCrossings seen = hp_crossings_init();
   RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> q;
   q.TraceRayInline(rt_groom_scene(gSceneStamp.Load2(48u)), 0u, 0xFFu, r);
   while (q.Proceed()) {
-    if (hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex()) && ++n >= kMaxStrands) q.Abort();
+    const uint k = q.CandidateInstanceIndex(), prim = q.CandidatePrimitiveIndex();
+    bool lp, ln;
+    rt_groom_links(first, k, prim, lp, ln);
+    if (hp_crossing(seen, k, prim, lp, ln) && ++n >= kMaxStrands) q.Abort();
   }
   return float(n);
 #else
@@ -144,7 +148,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
       if (vs == kRtUnknown) continue;   // D-LS kept the game's term: so do we
       v = vs == kRtLit ? 1.0 : 0.0;
       n = v > 0.0 ? hf_strands(s.P, Ld, dist) : 0.0;
-      t = v > 0.0 && n == 0.0 ? 1.0 : 0.0;   // D-LS's visibility (the strands occlude there)
+      // D-LS's visibility of this light: blocked by the strands, or (rt_hair_groom_shadow_t) passed with their
+      // transmittance d_f lum(a_f^n) in expectation (rt_common.hlsli rt_groom_blocks; a_f of this pixel's groom colour:
+      // exact for its own strands, an approximation where another groom's strands lie on the ray).
+      t = v > 0.0 && n == 0.0 ? 1.0 : 0.0;
+#ifdef RT_SPEC_NATIVE
+      if (v > 0.0 && n > 0.0 && kRtGroomShadowT != 0u)
+        t = 0.7 * dot(pow(hd_lookup3(colour, max(0.09, beta), 0u), n.xxx), float3(0.2126, 0.7152, 0.0722));
+#endif
     }
     add += E * hd_shade_pixel(T, sf.V, Ld, n, colour, beta) * v;
     sub_d += cd * t;
