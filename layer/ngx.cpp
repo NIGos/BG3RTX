@@ -957,7 +957,7 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
 // ---------------------------------------------------------------------------
 
 static void ts_init(DeviceData* dd) {
-  if (g_qpool || !dd->vk.CreateQueryPool) return;
+  if (!logging::stats_enabled(cfg_int) || g_qpool || !dd->vk.CreateQueryPool) return;
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
   qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
   qi.queryCount = kTsSlots * 3;
@@ -969,6 +969,7 @@ static void ts_init(DeviceData* dd) {
 
 // Harvests a finished slot, then resets it for this evaluate. Returns the slot.
 static uint32_t ts_begin(DeviceData* dd, VkCommandBuffer cmd, int mode) {
+  if (!logging::stats_enabled(cfg_int)) return UINT32_MAX;
   uint32_t slot = g_ts_next++ % kTsSlots;
   if (g_ts_pending[slot]) {
     uint64_t r[6] = {};
@@ -989,7 +990,7 @@ static uint32_t ts_begin(DeviceData* dd, VkCommandBuffer cmd, int mode) {
 }
 
 static void ts_mark(DeviceData* dd, VkCommandBuffer cmd, uint32_t slot, uint32_t i) {
-  dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qpool, slot * 3 + i);
+  if (slot != UINT32_MAX) dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qpool, slot * 3 + i);
 }
 
 void ngx_on_present() {
@@ -1012,7 +1013,7 @@ void ngx_on_present() {
   static const char* names[2] = {"SR", "RR"};
   for (int m = 0; m < 2; ++m) {
     if (!g_acc_n[m]) continue;
-    log("[ngx] gpu %s: guides %.3f ms + evaluate %.3f ms = %.3f ms (avg of %u)", names[m], g_acc_guides[m] / g_acc_n[m],
+    log_stats("[ngx] gpu %s: guides %.3f ms + evaluate %.3f ms = %.3f ms (avg of %u)", names[m], g_acc_guides[m] / g_acc_n[m],
         g_acc_eval[m] / g_acc_n[m], (g_acc_guides[m] + g_acc_eval[m]) / g_acc_n[m], g_acc_n[m]);
     g_acc_guides[m] = g_acc_eval[m] = 0;
     g_acc_n[m] = 0;
@@ -1616,7 +1617,7 @@ static NVSDK_NGX_Result Detour_Eval(VkCommandBuffer cmd, const NVSDK_NGX_Handle*
   if (want) done = rr_evaluate(dd, cmd, *f, p, cb, mode, slot, r);
   if (!done) {
     mode = 0;  // the game's own SR evaluate (RR off, declined or failed)
-    if (g_qpool) {
+    if (g_qpool && slot != UINT32_MAX) {
       g_ts_mode[slot] = 0;
       ts_mark(dd, cmd, slot, 1);
     }

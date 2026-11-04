@@ -206,7 +206,7 @@
   "stop_on_dump": false,
   "energy_fs": "water-compose",
   "purpose": "M5.6 coverage-layer S8 static 0/1/0/1 and short held Q/E A/B in real Ultra; post-water float colour, coverage and energy partition. Prepared only, lives paused.",
-  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,dump_images=1,dump_raw=0,dump_png_width=1280,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_surface_fresnel=1,fg_snap=0,dump_preview_f32=0,rt_stats_period_frames=60",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,dump_images=1,dump_raw=0,dump_png_width=1280,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_scene_wait=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,rt_water_surface_fresnel=1,fg_snap=0,dump_preview_f32=0,rt_stats_period_frames=60,detailed_logging=1",
   "args": [
     "-RealPresent",
     "-Move",

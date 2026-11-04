@@ -369,7 +369,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns)
+  foreach(py_test cons_reprojection cons_rr_math cons_shader_bounds core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint release_qual water_surface_shader water_surface_gate assets_discovery qa_evidence build_config test_registration qa_detectors fg_log_audit fg_motion_gate fg_static_effects m1_coverage_log pan_artifacts pan_fg_evidence rebase_gate rotation_preflight hair_prefetch hair_patterns gpu_logging_gate)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     set_tests_properties(${py_test}_test PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}")
@@ -408,6 +408,8 @@ add_test(NAME fg_extent_test COMMAND fg_extent_test)
 # bg3rtx.log size cap (common/log_rotate.h, docs/release/RELEASE_BETA.md).
 add_executable(log_rotate_test tests/log_rotate_test.cpp)
 add_test(NAME log_rotate_test COMMAND log_rotate_test)
+add_executable(log_stats_test tests/log_stats_test.cpp)
+add_test(NAME log_stats_test COMMAND log_stats_test)
 add_executable(async_capture_queue_test tests/async_capture_queue_test.cpp)
 add_test(NAME async_capture_queue_test COMMAND async_capture_queue_test)
 # rt_cascade_casters (common/cascade_casters.h, docs/TRACK_D_RT.md 6.7 item 2).

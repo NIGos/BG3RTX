@@ -54,6 +54,7 @@ assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shif
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Video memory'));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Compatibility'));
 assert(ids.get('support-report')&&ids.get('support-browse')&&ids.get('support-recheck'));
+assert(ids.get('card-detailed_logging')&&ids.get('control-detailed_logging-0').type==='checkbox');
 const notices=all(ids.get('section-content')).find(e=>e.tagName==='a');
 assert(notices&&notices.textContent==='Fonts and third-party notices');
 notices.onclick({preventDefault(){}});assert.strictEqual(sent.at(-1).type,'notices');
@@ -78,7 +79,9 @@ render({...fixture,settings:[{...slider,value:58}]});const range=ids.get('card-t
 assert(!range.disabled);assert.strictEqual(range.attributes['aria-valuetext'],'58 fps');range.value=60;range.oninput();assert.strictEqual(range.attributes['aria-valuetext'],'60 fps');
 // Diagnostic preview nodes remain intact on unchanged snapshots, including dialog focus.
 const report={visible:true,files:[{name:'graphics.txt',size:12,text:'Sanitized text'}],bytes:12};
-const reportState={...fixture,report,status:'Package preview ready'};render(reportState);
+const reportState={...fixture,report:{...report,loggingHint:'Turn on Detailed logging, reproduce the problem, then create the report.'},status:'Package preview ready'};render(reportState);
+assert(!ids.get('logging-hint').hidden&&ids.get('logging-hint').textContent.includes('Detailed logging'));
+
 const reportSummary=ids.get('report-summary-graphics.txt'),fileDetails=ids.get('report-file-graphics.txt');fileDetails.open=true;reportSummary.focus();
 render(reportState);assert.strictEqual(ids.get('report-summary-graphics.txt'),reportSummary,'unchanged report rebuilt');assert.strictEqual(document.activeElement,reportSummary);assert(fileDetails.open);
 render({...reportState,report:{...report,files:[{...report.files[0],text:'Updated sanitized text'}]}});

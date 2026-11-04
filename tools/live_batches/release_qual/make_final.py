@@ -188,6 +188,7 @@ def main():
     hair, hp, _ = flow.load_job(HERE / 'jobs/rel3-stock-hair-dialogue1.json')
     hair['args'][-1] = 'tools/live_batches/release_qual/final/plans/final-stock-hair-dialogue1.json'
     hair['name'] = 'final-stock-hair-dialogue1'
+    hair['set'] += ',detailed_logging=1'
     hair['post'] = ('py -3 tools/live_batches/release_qual/analyze_final.py '
         '--job tools/live_batches/release_qual/final/jobs/final-stock-hair-dialogue1.json '
         '--log "{log}" --runner "{runner}" --out "{log}.final.json"')

@@ -331,7 +331,7 @@ void fault_track(const char* what, VkDeviceAddress addr, VkDeviceSize size) {
   r.lo = addr;
   r.hi = addr + size;
   r.created = frame_index();
-  log("[fault] range of ours: %s [0x%llx, +%llu)", what, (unsigned long long)addr, (unsigned long long)size);
+  log_stats("[fault] range of ours: %s [0x%llx, +%llu)", what, (unsigned long long)addr, (unsigned long long)size);
   g_live.push_back(std::move(r));
 }
 

@@ -235,7 +235,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
     const char* why = roofs ? "" : !want_roofs ? " (rt_sun_roofs=0)"
                     : level < 0 ? " (level unknown: nothing trusted)"
                     : !have_cam2 ? " (no camera set: nothing trusted)" : " (no camera yet: nothing trusted)";
-    host->log("sun stats (%u frames, replace %d, %zu roof volumes%s, scene top %.1f): traced %.1f%% of px, lit %.1f%%; "
+    log_stats("sun stats (%u frames, replace %d, %zu roof volumes%s, scene top %.1f): traced %.1f%% of px, lit %.1f%%; "
               "game dark & RT lit %.2f%% of traced px: replaced (lit) %.1f%%, partly %.1f%%, kept by roofs %.1f%%, "
               "kept off screen %.1f%%; px under roofs %.1f%%, off-screen ramp %.1f%%; game lit & RT shadowed %.2f%%; "
               "mean brightening %.4f per traced px; roof query %.0f m (farthest roof-tested px %.0f m), over "
@@ -249,7 +249,7 @@ bool sunt_begin(VkCommandBuffer cmd, SunTrustFrame* f, bool have_cam2) {
     // same pixel and frame, by at least one R8 code (1/255). "At the edge": the game's own
     // mask is partly lit there, or lit within half of rt_sun_near (a debug split only).
     const double all = double(g_sum[15] ? g_sum[15] : 1), br = double(g_sum[16] ? g_sum[16] : 1);
-    host->log("sun check (%u frames, replace %d): brightened by >= 1/255 against min(game, RT) on %.3f%% of px (%.0f "
+    log_stats("sun check (%u frames, replace %d): brightened by >= 1/255 against min(game, RT) on %.3f%% of px (%.0f "
               "per frame): at the game's shadow edge %.1f%%, farther %.1f%% (far: %.3f%% of px); darker than min "
               "%.4f%% of px; mean gain %.5f per px (%.1f%% of it at the edge)",
               g_sum_n, int(active), 100.0 * g_sum[16] / all, double(g_sum[16]) / g_sum_n, 100.0 * g_sum[17] / br,

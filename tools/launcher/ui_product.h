@@ -72,7 +72,7 @@ static void footer() {
   ShowWindow(control(g.wnd,ERROR_DETAILS),g.message.empty()?SW_HIDE:SW_SHOW);
   SetWindowTextW(control(g.wnd,STATUS),t.c_str());
   auto preset=st::preset_values_for(g.st.preset,g.st.caps);int custom=0;
-  for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev,opt_in()))custom+=g.st.values[i]!=preset[i];
+  for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev,opt_in())&&std::string(st::kKnobs[i].category)!="Support")custom+=g.st.values[i]!=preset[i];
   std::wstring note=!g.st.have_gpu?L"Compatibility not checked\nRecheck graphics in Help & support":custom?L"Custom: "+std::to_wstring(custom)+(custom==1?L" setting":L" settings"):L"Matches preset";
   std::wstring header=L"BG3RTX "+widen(BG3RTX_PRODUCT_VERSION)+L" | "+(custom?L"Custom":widen(st::kPresetLabel[g.st.preset]))+L" | "+(g.st.have_gpu?widen(g.st.gpu.name):L"GPU not detected")+L" | "+(file_exists(exe_dir()+L"\\VkLayer_bg3rtx.dll")&&file_exists(exe_dir()+L"\\bg3rtx_core.dll")?L"Mod files present":L"Mod files missing");
   SetWindowTextW(control(g.wnd,HEADER),header.c_str());
@@ -144,6 +144,14 @@ static void rebuild() {
     label(g.body,L"Local report",16,y,w,28,true);y+=36;
     label(g.body,L"Preview logs, settings and graphics details before saving a report on your PC. Nothing uploads automatically.",16,y,w,72);y+=80;
     button(g.body,REPORT,L"Report a problem",16,y,200);y+=48;
+    {const int i=st::knob_index("detailed_logging");const auto& k=st::kKnobs[i];
+      label(g.body,widen(k.label),16,y,w,28,true);y+=36;
+      label(g.body,widen(k.desc),16,y,w,64);y+=72;
+      HWND c=add(g.body,WC_COMBOBOXW,L"",WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST,KNOB+i);place(c,16,y,200,240);
+      for(int ch=0;ch<st::choice_count(k);++ch){int row=int(SendMessageW(c,CB_ADDSTRING,0,LPARAM(widen(k.choices[ch].label).c_str())));SendMessageW(c,CB_SETITEMDATA,row,ch);if(g.st.values[i]==ch)SendMessageW(c,CB_SETCURSEL,row,0);}
+      y+=40;label(g.body,L"Restart the game to apply",16,y,w,28);y+=40;
+    }
+
     label(g.body,L"Game and graphics",16,y,w,28,true);y+=36;
     label(g.body,L"Choose the game folder containing bin\\bg3.exe. Launches the Vulkan version.",16,y,w,48);y+=56;
     button(g.body,BROWSE,L"Choose game folder…",16,y,224);y+=48;
@@ -257,7 +265,7 @@ static bool save(bool) {
 static void select_preset(int p) {
   auto v=st::preset_values_for(p,g.st.caps);
   // Preset review replaces visible custom selections; hidden controls stay intact.
-  for(int i=0;i<st::kKnobCount;++i)if(!st::knob_visible(st::kKnobs[i],g.dev,opt_in()))v[i]=g.st.values[i];
+  for(int i=0;i<st::kKnobCount;++i)if(!st::knob_visible(st::kKnobs[i],g.dev,opt_in())||std::string(st::kKnobs[i].category)=="Support")v[i]=g.st.values[i];
   std::wstring t=L"Review preset: "+widen(st::kPresetLabel[p])+L"\n";
   for(int i=0;i<st::kKnobCount;++i)if(v[i]!=g.st.values[i])t+=L"\n"+widen(st::kKnobs[i].label)+L": "+(st::kKnobs[i].kind==st::Kind::Choice?choice_label(st::kKnobs[i],v[i]):std::to_wstring(v[i]));
   if(launcher::web::action_dialog(g.wnd,L"Review preset",t,{{IDOK,L"Apply changes"},{IDCANCEL,L"Cancel"}})==IDOK){g.st.preset=p;g.st.values=v;rebuild();}

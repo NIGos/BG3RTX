@@ -1,5 +1,6 @@
 // Internals shared by the host layer's translation units.
 #pragma once
+#include "../common/log_stats.h"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -38,6 +39,8 @@ namespace bg3 {
 
 // ---- logging / paths (util.cpp) ----
 void log(const char* fmt, ...);
+// Ordinary log() is always retained for startup, state changes and failures.
+template<class... Args> inline void log_stats(const char* fmt, Args... args);
 const std::string& root_dir();        // repository root (parent of bin/)
 const std::string& bin_dir();
 // %BG3RTX_RUN_TAG% (scripts/auto-run.ps1 -Tag): lets two games run from one checkout.
@@ -56,6 +59,9 @@ uint64_t hash64(const void* data, size_t size);   // FNV-1a 64
 // ---- config (util.cpp) ----
 void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
+template<class... Args> inline void log_stats(const char* fmt, Args... args) {
+  if (logging::stats_enabled(cfg_int)) log(fmt, args...);
+}
 inline unsigned stats_period(unsigned native) { return stats_window::period(cfg_int, native); }
 // rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
 // frames every 600 frames (P1 frame-lag diagnosis).

@@ -80,7 +80,7 @@ void note_motion(Motion& m, const SeSnapshot& prev, const SeSnapshot& cur) {
   m.last.swap(next);
   if (++m.exports < kMotionExports) return;
   if (m.samples)
-    log("[se] motion (%u exports): %u moving-light steps, fastest %.2f m/s (owner %u, %s), %u above %.1f m/s "
+    log_stats("[se] motion (%u exports): %u moving-light steps, fastest %.2f m/s (owner %u, %s), %u above %.1f m/s "
         "(a teleport or level change counts too); export interval max %.3f s",
         m.exports, m.samples, m.v_max, unsigned(m.owner), *m.name ? m.name : "-", m.over, kSeMoveSpeedMax,
         se_period_s());

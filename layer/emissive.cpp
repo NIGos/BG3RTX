@@ -487,7 +487,7 @@ void dummy_ready(VkCommandBuffer cmd) {
 }
 
 uint32_t ts_pair(VkCommandBuffer cmd, uint8_t kind, bool capture) {
-  if (!g_qp) return UINT32_MAX;
+  if (!logging::stats_enabled(cfg_int) || !g_qp) return UINT32_MAX;
   std::lock_guard<std::mutex> lock(g_ts_mu);
   uint32_t p = g_ts_next % kTsPairs;
   if (g_ts[p].frame) return UINT32_MAX;   // not read back yet: skip this sample
@@ -1514,8 +1514,8 @@ void log_list(const char* head, const std::vector<std::string>& items) {
     parts.back() += parts.back().empty() ? " " + it : "; " + it;
   }
   for (size_t i = 0; i < parts.size(); ++i) {
-    if (parts.size() > 1) log("%s (part %zu/%zu):%s", head, i + 1, parts.size(), parts[i].c_str());
-    else log("%s:%s", head, parts[i].c_str());
+    if (parts.size() > 1) log_stats("%s (part %zu/%zu):%s", head, i + 1, parts.size(), parts[i].c_str());
+    else log_stats("%s:%s", head, parts[i].c_str());
   }
 }
 
@@ -1524,7 +1524,7 @@ void em_on_present() {
   const uint64_t now = frame_index();
   static int reset_token = 0;
   const bool reset = stats_window::reset(cfg_int, reset_token);
-  if (g_qp) {
+  if (logging::stats_enabled(cfg_int) && g_qp) {
     std::lock_guard<std::mutex> lock(g_ts_mu);
     for (uint32_t p = 0; p < kTsPairs; ++p) {
       TsPair& t = g_ts[p];
@@ -1652,7 +1652,7 @@ void em_on_present() {
       return v[v.size() / 2];
     };
     if (!fx[0].empty() || !fx[1].empty())
-      log("[em] no builds in the last %d presents (rt_emissive=0 or no effects pass): effects passes per frame median "
+      log_stats("[em] no builds in the last %d presents (rt_emissive=0 or no effects pass): effects passes per frame median "
           "%.3f ms without capture (%zu frames), %.3f ms with (%zu frames)",
           every, med(fx[0]), fx[0].size(), med(fx[1]), fx[1].size());
     g_win = Window{};
@@ -1669,7 +1669,7 @@ void em_on_present() {
   std::vector<float> fx[2];
   for (int k = 0; k < 2; ++k)
     for (auto& [f, ms] : w.fx_frame_ms[k]) fx[k].push_back(float(ms));
-  log("[em] last %llu builds, per build: %.1f effects passes, %.1f draws in them (engine %.1f, unknown %.1f, decal %.1f, "
+  log_stats("[em] last %llu builds, per build: %.1f effects passes, %.1f draws in them (engine %.1f, unknown %.1f, decal %.1f, "
       "backdrop %.1f, other materials %.1f); emissive %.1f, captured %.1f; left out: no XFB %.2f, indirect %.2f, "
       "topology %.2f, soup full %.2f, records full %.2f, textures full %.2f; VT albedo missing %.2f, global scale "
       "conflicts %.2f; command buffers re-recorded unsubmitted %u, builds skipped (busy) %u",
@@ -1677,7 +1677,7 @@ void em_on_present() {
       c.kinds[kMatDecal] / nb, c.kinds[kMatBackdrop] / nb, c.kinds[kMatOther] / nb, c.kinds[kMatEmissive] / nb,
       c.captured / nb, c.skip_xfb / nb, c.skip_indirect / nb, c.skip_topo / nb, c.skip_full / nb, c.skip_recs / nb,
       c.skip_tex / nb, c.vt_missing / nb, c.global_conflicts / nb, g_stale, g_busy);
-  log("[em] soup %llu MB, %u draws dropped by a soup resize; forward-pass emissive draws %.1f per build; triangles per "
+  log_stats("[em] soup %llu MB, %u draws dropped by a soup resize; forward-pass emissive draws %.1f per build; triangles per "
       "light %u (last build); invalid soup triangles collapsed by the sanitize pass %.1f per build; material constants "
       "not host-readable %.2f per build; draws without a core (no record) %.2f per build; draws of excluded families "
       "(rt_em_fx_pulse=0: 304be1c7) %.2f per build",
@@ -1702,21 +1702,21 @@ void em_on_present() {
     }
     float src[4] = {};
     std::memcpy(src, g_globals.map + VkDeviceSize(kGlobSlots) * 4, 16);
-    log("[em] luminance scale copies: %u dispatched, %u owed but not recorded (pipeline missing); pulse time not "
+    log_stats("[em] luminance scale copies: %u dispatched, %u owed but not recorded (pipeline missing); pulse time not "
         "host-readable %.2f per build (its mean used); latest source offset %llu range %llu, words 0-3 %.6g %.6g "
         "%.6g %.6g;%s",
         g_copies_recorded.exchange(0), g_copies_skipped.exchange(0), c.pulse_no_time / nb,
         (unsigned long long)g_copy_src_off.load(), (unsigned long long)g_copy_src_range.load(), double(src[0]),
         double(src[1]), double(src[2]), double(src[3]), line.empty() ? " no luminance-emissive records" : line.c_str());
   }
-  log("[em] per build: %.1f TLAS instances, %.0f triangles, %.0f lights (%.0f left out by rt_em_max_lights), total power "
+  log_stats("[em] per build: %.1f TLAS instances, %.0f triangles, %.0f lights (%.0f left out by rt_em_max_lights), total power "
       "%.4g (effects-target units x m^2; last build %.4g, %u draws, %u lights), %llu non-finite power sums; GPU: build "
       "median %.3f ms (p99 %.3f, %zu samples), effects passes per frame median %.3f ms with capture (%zu frames), %.3f ms "
       "without (%zu frames)",
       w.instances / nb, w.tris / nb, w.lights / nb, w.overflow / nb, w.power / nb, w.last_power, w.last_draws,
       w.last_lights, (unsigned long long)w.nonfinite, pct(w.build_ms, 0.5), pct(w.build_ms, 0.99), w.build_ms.size(),
       pct(fx[1], 0.5), fx[1].size(), pct(fx[0], 0.5), fx[0].size());
-  log("[em] BLAS: %llu refits, %llu full builds since the last line (rt_em_refit, rt_em_rebuild); slot storage grown %llu "
+  log_stats("[em] BLAS: %llu refits, %llu full builds since the last line (rt_em_refit, rt_em_rebuild); slot storage grown %llu "
       "times in all",
       (unsigned long long)g_as_refits, (unsigned long long)g_as_builds, (unsigned long long)g_as_grown);
   g_as_refits = g_as_builds = 0;

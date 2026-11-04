@@ -751,6 +751,10 @@ def scope_scene_wait_gates(job, plan):
 def frame_windows(job, plan):
     """Set sample counts before estimating seconds; FPS never selects a count."""
     scope_scene_wait_gates(job, plan)
+    # Log-only GPU timers are latched at launch; preserve gate producers in release mode.
+    initial = settings(job.get("set", ""))
+    initial["detailed_logging"] = "1"
+    job["set"] = ",".join(k+"="+v for k,v in initial.items())
     for target in [job] + job.get("live_flow", {}).get("segments", []):
         values = settings(target.get("set", ""))
         if int(values.get("rt_stats_period_frames", 0)) <= 0:

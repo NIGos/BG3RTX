@@ -123,6 +123,8 @@ there is none, so it has no effect yet.
 
 ## Reporting a bug
 
+Turn on **Detailed logging** in **Help & support**, restart the game and reproduce the problem before creating a report.
+
 BG3RTX writes `bg3rtx.log` in its install folder (`%LOCALAPPDATA%\Programs\BG3RTX` by default). At the
 next game start it becomes `bg3rtx.prev.log`, so only two log files are kept. Long sessions also rotate logs.
 Collect a report immediately after the problem, before launching again.

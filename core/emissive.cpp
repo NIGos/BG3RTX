@@ -136,7 +136,7 @@ double median(std::vector<float> v) {
 void tick() {
   const uint64_t now = host->frame_index();
   const double period = host->cfg_float("gpu_timestamp_period_ns", 1.0f) * 1e-6;
-  for (uint32_t s = 0; s < kTsRing && g_qp; ++s) {
+  for (uint32_t s = 0; s < kTsRing && g_qp && bg3::logging::stats_enabled(host->cfg_int); ++s) {
     if (!g_ts_frame[s] || g_ts_frame[s] + 4 > now) continue;
     uint64_t t[6] = {};
     const VkResult r = host->vk->GetQueryPoolResults(host->device, g_qp, s * 3, 3, sizeof t, t, 16,
@@ -159,7 +159,7 @@ void tick() {
     for (float v : g_win.ms) sum += v, mx = (std::max)(mx, double(v));
     // ms/frame: the timed runs' mean x the runs per frame (every run, timed or not).
     const double per_frame = g_win.ms.empty() ? 0.0 : sum / double(g_win.ms.size()) * double(g_win.runs) / double(frames);
-    host->log("[em] check GPU cost (%llu frames): %u runs (%u views), %.3f ms per run median (check pass %.3f, max %.3f, "
+    log_stats("[em] check GPU cost (%llu frames): %u runs (%u views), %.3f ms per run median (check pass %.3f, max %.3f, "
               "%zu timed), %.3f ms/frame; %.0f pixels per run; schedule rt_em_check_frames %d, slice 1/%u every %u "
               "frames%s",
               (unsigned long long)frames, g_win.runs, g_win.views, median(g_win.ms), median(g_win.check_ms), mx,
@@ -340,7 +340,7 @@ void em_debug(VkCommandBuffer cmd, const Bg3Binding& cam, const Bg3Binding& vp, 
   // Timestamps: a free slot of the ring, else this run is not timed.
   const uint64_t now = host->frame_index();
   uint32_t ts = kTsRing;
-  for (uint32_t s = 0; s < kTsRing && g_qp && ts == kTsRing; ++s)
+  for (uint32_t s = 0; s < kTsRing && g_qp && bg3::logging::stats_enabled(host->cfg_int) && ts == kTsRing; ++s)
     if (!g_ts_frame[s]) ts = s;
   vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &rb, 0, nullptr, 0,
                         nullptr);
