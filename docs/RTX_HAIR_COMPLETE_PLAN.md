@@ -21,7 +21,7 @@ C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
 |---|---|---|---|
 | M0 stability (C1) | ready: strike rule, header order + A/B in hv5, strand-draw gates | 51956f86, f659b5ee, 4661e4bc (bundle12) | L1: hv5 + hair_crowd after bundle12 |
 | M1 conversion (C5) | done offline: converter 2.4-3.4x, renders 1.8x (bit-identical), caches, 80-style set, fibre reference, radial orientation, root from geometry; LOD1 transfer rejected by its gates; full rerun running | 068ff6e4 .. 71de9bc1 (claude/hair-batch-lod) | none (counts offline) |
-| M2 shadows (C2) | M2.1 transmittance done offline, needs a rebase on main; M2.2 shadow-map consistency, M2.3 AO not started | 048d60d5 (claude/hair-shadow-transmittance) | L2 |
+| M2 shadows (C2) | M2.1 transmittance done offline, needs a rebase on main; M2.2 audited: cascade fallback retains card shadows, safe replacement not implemented; M2.3 AO not started | 048d60d5 (claude/hair-shadow-transmittance); [M2.2 audit](progress/claude-hair-cascade.md) | L2; M2.2 not ready |
 | M3 image (C3) | M3.1 tips done offline (rt_hair_groom_tips); M3.2 sub-pixel, M3.3 RR guides, M3.4 post depth not started | 795f6008 (claude/hair-tips) | L2 |
 | M4 indirect (C4) | not started | | L3 |
 | M5 views (C6) | not started | | L3 |
@@ -72,6 +72,11 @@ Gate: the representative set first, then one full rerun with the counts per cate
    the game's, hair casts the cards' shadow. Either the strands' visibility replaces the hair term of the game's
    shadow on receivers, or the cards are kept out of the game's cascade when the groom is live. Read the existing
    shadow design (TRACK_D_RT 6.7, cascade casters) first.
+   Audit 2026-11-04: Ultra does not bypass the native mask on all character receivers. Roof volumes,
+   partial/off-screen trust and unknown rays keep it (`gi/rt_shadow.hlsl`, `gi/rt_sun_resolve.hlsl`).
+   A shared cascade draw cannot be removed using groom-live membership alone: fallback receivers would lose
+   its shadow. Receiver-side replacement needs caster attribution plus a complete visibility certificate;
+   the current `SunCascadeDraw` has no groom draw key. No rendering change or live-ready candidate yet.
 3. Ambient occlusion from strands on skin, with the same transmittance (today strands occlude AO opaquely or not
    at all, depending on the pass).
 Gate: skin and neck under hair not black and not unshadowed; key-on vs key-off energy within noise on a static

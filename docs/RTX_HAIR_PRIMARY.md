@@ -44,7 +44,9 @@ Options considered:
   them before writing the new ones; camera-relative to last frame's camera), projects it with set 0 b5 `m2`
   and writes the native form: fragment + jitter minus previous pixel + previous jitter, in pixels. No
   previous points yet: the current point moved with the camera only. Depth test GREATER_OR_EQUAL, no writes.
-- **Shadow cascades:** cards, unchanged (RT shadows already see strands with `rt_hair_groom`).
+- **Shadow cascades:** cards, unchanged. RT sees strands with `rt_hair_groom`, but replaces the native mask only
+  on trusted receivers. Roof/off-screen fallback still retains card shadows, including on skin and neck.
+  M2.2 remains open; see [the cascade audit](progress/claude-hair-cascade.md).
 
 Per-pixel record (render resolution, 16 B: groom k << 24 | segment, v, native depth, frame tag;
 common/hair_primary.h), written by the first G-buffer fragment of a pixel, read by the later ones and the
