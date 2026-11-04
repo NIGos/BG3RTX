@@ -1123,6 +1123,25 @@ static void test_release_migration() {
     }
   }
   CHECK(visible == expected);
+  // Release opt-in (experimental_options=1): listed unqualified knobs only, never rejected ones.
+  for (const char* id : kOptInKnobs) {
+    const Knob* k = find_knob(id);
+    CHECK(k && k->dev_only && !knob_visible(*k, false) && knob_visible(*k, false, true));
+    if (k) CHECK(choice_available(*k, 1, false, true, ~0u, true) && !choice_available(*k, 1, false, true, ~0u));
+  }
+  for (const char* id : {"exp_compact_hit_state", "exp_alpha_metadata_cache", "exp_water_empty_tiles", "rt_trace_scale",
+       "exp_omm", "exp_vt_alpha_masks", "rr_post", "exp_water_compose_shift", "exp_hair_pool_trim", "exp_ls_exact_k",
+       "exp_hit_reference", "exp_current_sun", "exp_hair_primary_passes", "exp_hair_primary_order"})
+    CHECK(find_knob(id) && !opt_in_knob(*find_knob(id)) && !knob_visible(*find_knob(id), false, true));
+  {
+    Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nrt_compact_hit_state=1\nperf_submit_batch=1\n");
+    Map m = code_defaults(); apply_layer(m, opt);
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
+    opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "1");
+    CHECK_EQ(get(m, "rt_compact_hit_state"), "0"); CHECK_EQ(get(m, "perf_submit_batch"), "0");
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+  }
   Map stale;
   // A realistic old user file: every hidden candidate selected, including diagnostics.
   for (const auto& k : kKnobs) if (k.dev_only) {

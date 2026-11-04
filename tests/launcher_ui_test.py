@@ -43,11 +43,20 @@ def main():
     assert 'g.tab=g_tab_ids[' in native and 'BS_AUTORADIOBUTTON|BS_PUSHLIKE' in native
     assert 'if(g.st.values[i]<0||!st::knob_visible' not in native
     assert '&&g.st.values[i]>=0)custom' not in native
-    assert '.seg button,nav button,.brand small {white-space:normal;}' in css
-    assert '@media(max-height:600px)' in css and 'main {overflow:visible;}' in css
+    # Choice labels never break inside a word; narrow cards switch to the dropdown instead.
+    seg = re.search(r'\.seg button \{([^}]*)\}', css).group(1)
+    assert 'white-space: nowrap' in seg and 'word-break: keep-all' in seg and 'flex: none' in seg
+    assert '.control.choices.compact .select-wrap { display: block;' in css
+    assert not re.search(r'\.seg button[^{]*\{[^}]*white-space:\s*normal', css)
+    assert '@media (max-height: 560px)' in css and 'main { overflow: visible; }' in css
+    assert '@media (max-width: 720px)' in css
     assert '@media (prefers-reduced-motion: reduce)' in css
-    assert ':is(button,input,select,textarea,summary,a):focus-visible {outline-color:Highlight;}' in css
-    assert '.hero-copy {width:100%;}' in css[css.rfind('@media(forced-colors:active)'):]
+    forced = css[css.rfind('@media (forced-colors: active)'):]
+    assert ':is(button,input,select,textarea,summary,a):focus-visible { outline-color: Highlight; }' in forced
+    js = (ROOT / 'tools/launcher/ui/app.js').read_text(encoding='utf-8')
+    assert 'function fitChoices()' in js and "addEventListener('resize',fitChoices)" in js
+    # Inline icons in one stroke style; no ornament glyph images.
+    assert 'ornaments/glyph-' not in js and "stroke-width: 1.75" in css
     node = shutil.which('node')
     assert node, 'Node.js required for the shipped renderer regression test'
     exe = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'bin/launcher_web_bridge_test.exe'

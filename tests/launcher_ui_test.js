@@ -30,8 +30,12 @@ for(const category of new Set(fixture.settings.map(s=>s.category))){
   const card=cards.find(c=>c.id==='card-'+s.id);
   assert(!all(card).some(e=>/GPU cost:|Not measured|VRAM: Unknown/.test(e.textContent)),s.id+' has unknown or duplicate cost');
   for(const control of card.querySelectorAll('button,input'))assert(control.id&&control.attributes['aria-describedby']);
-  const reasons=ids.get('needs-'+s.id).textContent;
-  for(const ch of s.choices){if(ch.reason)assert(reasons.includes(ch.reason));if(ch.requirements)assert(reasons.includes(ch.requirements));}
+  // Unmet requirements once per card; the full list lives in Details.
+  const needs=ids.get('needs-'+s.id),reasons=needs.children.map(c=>c.textContent||'').join('');
+  assert.strictEqual(needs.hidden,!s.choices.some(ch=>ch.reason),s.id+' needs visibility');
+  for(const ch of s.choices){if(ch.reason)assert(reasons.includes(ch.reason.replace(/^Needs /,'')),s.id+' reason');}
+  const detailText=all(card).filter(e=>e.className==='detail-copy').map(e=>e.textContent).join('\n');
+  for(const ch of s.choices)if(ch.requirements)assert(detailText.includes(ch.requirements),s.id+' requirements in Details');
   for(const e of card.querySelectorAll('button,input'))assert(ids.has(e.attributes['aria-describedby']));
  }
 }
@@ -79,4 +83,28 @@ const reportSummary=ids.get('report-summary-graphics.txt'),fileDetails=ids.get('
 render(reportState);assert.strictEqual(ids.get('report-summary-graphics.txt'),reportSummary,'unchanged report rebuilt');assert.strictEqual(document.activeElement,reportSummary);assert(fileDetails.open);
 render({...reportState,report:{...report,files:[{...report.files[0],text:'Updated sanitized text'}]}});
 assert.notStrictEqual(ids.get('report-summary-graphics.txt'),reportSummary);assert(ids.get('report-file-graphics.txt').open,'updated report disclosure collapsed');assert.strictEqual(document.activeElement,ids.get('report-summary-graphics.txt'),'updated report lost dialog focus');
+// Requirement copy: one deduplicated line per card naming only the choices affected.
+const needsCard={id:'test-needs',title:'Needs fixture',category:'Surfaces',value:0,apply:'Applies after saving',choices:[
+ {value:0,label:'Off',apply:'Applies after saving',reason:'',requirements:''},
+ {value:1,label:'Glossy',apply:'Applies after saving',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
+ {value:2,label:'Rough',apply:'Applies after saving',reason:'Needs Ray-tracing detail: Solid surfaces',requirements:'Hardware ray tracing; Ray-tracing detail: Solid surfaces'},
+ {value:3,label:'Water',apply:'Restart the game to apply',reason:'Needs Water lighting: Reflections',requirements:'Water lighting: Reflections'}]};
+render({...fixture,settings:[...fixture.settings,needsCard]});ids.get('nav-Surfaces').onclick();
+const needLine=ids.get('needs-test-needs').children[1].textContent;
+assert.strictEqual(needLine,'Glossy and Rough need Ray-tracing detail: Solid surfaces\nWater needs Water lighting: Reflections');
+const needDetails=all(ids.get('card-test-needs')).filter(e=>e.className==='detail-copy').map(e=>e.textContent).join('\n');
+assert(needDetails.includes('Glossy, Rough: Hardware ray tracing; Ray-tracing detail: Solid surfaces')&&needDetails.includes('Water: Water lighting: Reflections'));
+// Release opt-in: switch off by default, page and warning only while on, Off returns to a qualified page.
+render(fixture);assert(!ids.get('nav-Experimental')||!ids.get('navigation').children.includes(ids.get('nav-Experimental')));
+const sw=ids.get('experimental-switch');assert(sw&&sw.type==='checkbox'&&!sw.checked);sw.checked=true;sw.onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'experimental',value:true});
+const opt={...fixture.settings.find(s=>s.choices.length===2),id:'water_surface_fresnel',title:'Water interface Fresnel',category:'Experimental',description:'Experimental: adjusts reflections at the water surface.',experimental:true,developer:false};
+opt.choices=[{...opt.choices[0]},{...opt.choices[1],label:'On (unqualified)'}];
+render({...fixture,experimental:true,settings:[...fixture.settings,opt]});
+assert(ids.get('navigation').children.includes(ids.get('nav-Experimental')));ids.get('nav-Experimental').onclick();
+assert(all(ids.get('section-content')).some(e=>e.textContent==='Not fully tested. May change the image or cost performance.'));
+assert(all(ids.get('card-water_surface_fresnel')).some(e=>e.textContent==='Adjusts reflections at the water surface.'));
+assert.strictEqual(ids.get('control-water_surface_fresnel-0').type,'checkbox','unqualified marker hidden; Off/On is a switch');
+ids.get('experimental-switch').checked=false;ids.get('experimental-switch').onchange();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'experimental',value:false});
+render(fixture);assert(!all(ids.get('section-content')).some(e=>e.id==='card-water_surface_fresnel'));
+render({...fixture,developer:true});assert(!ids.get('navigation').children.some(e=>e.className==='nav-foot'&&e.children.some(c=>c.className==='switch-row')),'developer mode keeps its own disclosure');
 console.log('Renderer: category reachability, requirements, costs, focus, native controls, presets and developer authorization pass.');

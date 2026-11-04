@@ -349,7 +349,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "Applies after saving.", false,
    {{"off", "Off", 0, {{"rr_post_temporal", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {{"rr_post", "1", "Required startup setting"}}, false, "Surfaces", {"Measured", "About 0.15 ms", "250 MiB at 2560 × 1067", "250 MiB at 2560 × 1067 on RTX 5090 in dialogue."}, "Visual improvement varies by scene; paired tests did not establish an improvement."},
+   {}, {0, 0, 0, 1}, false, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "Surfaces", {"Measured", "About 0.15 ms", "250 MiB at 2560 × 1067", "250 MiB at 2560 × 1067 on RTX 5090 in dialogue."}, "Visual improvement varies by scene; paired tests did not establish an improvement."},
 
   {"exp_compact_hit_state", "Compact ray hit state",
    "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
@@ -584,6 +584,7 @@ inline constexpr KV kDefaults[] = {
     {"dev", "1"},
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
+    {"experimental_options", "0"},
     {"core", "1"},
     {"dump_shaders", "1"},
     {"shader_debug", "0"},
@@ -1028,6 +1029,24 @@ inline bool dev_mode(const std::string& dev_value) { return std::atoi(dev_value.
 // Whether the GUI shows a knob (developer-only ones need dev=1).
 inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 
+// Unqualified developer knobs a release player may opt into with experimental_options=1
+// (launcher: "Show experimental options", Experimental page). Rejected candidates
+// (compact hit state, alpha metadata cache, empty water tiles), perf_* keys, diagnostics and
+// knobs owned by an automatic release policy are not listed and stay developer only.
+inline constexpr const char* kOptInKnobs[] = {
+  "water_surface_fresnel", "exp_water_hit_shade", "exp_water_hit_cost",
+  "exp_hair_groom", "exp_hair_groom_primary", "exp_hair_fibre", "exp_hair_fibre_gi",
+  "exp_hair_groom_crowd", "exp_hair_groom_shadow_t", "exp_hair_groom_tips",
+  "exp_hair_physical_origin", "exp_alpha_spill", "exp_hit_paks"};
+inline bool opt_in_knob(const Knob& k) {
+  for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
+  return false;
+}
+// Release visibility with the experimental opt-in. dev=1 already shows everything.
+inline bool knob_visible(const Knob& k, bool dev, bool opt_in) {
+  return knob_visible(k, dev) || (opt_in && opt_in_knob(k));
+}
+
 inline int choice_count(const Knob& k) {
   int n = 0;
   while (n < 5 && k.choices[n].id) ++n;
@@ -1225,7 +1244,9 @@ inline void enforce_release_policy(Map& m) {
     KVList pairs; knob_kvs(*find_knob(id), value, pairs);
     for (const auto& kv : pairs) m[kv.first] = kv.second;
   };
-  for (const auto& k : kKnobs) if (k.dev_only) write(k.id, 0);
+  // experimental_options=1: the player opted into the unqualified kOptInKnobs; 0 restores them.
+  const bool opt_in = map_int(m, "experimental_options", 0) == 1;
+  for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rt_trace_scale"] = "1.0"; m["rr_post"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
        "rt_hit_material_generated", "gi_temporal_mv_sample", "gi_prev_radiance_guard", "sharc",
@@ -1339,8 +1360,8 @@ inline const char* choice_maturity(const Knob& k, int c) {
   return "qualified";
 }
 
-inline bool choice_visible(const Knob& k, int c, bool dev) {
-  return knob_visible(k, dev) && c >= 0 && c < choice_count(k) && (dev || !k.choices[c].dev);
+inline bool choice_visible(const Knob& k, int c, bool dev, bool opt_in = false) {
+  return knob_visible(k, dev, opt_in) && c >= 0 && c < choice_count(k) && (dev || !k.choices[c].dev);
 }
 
 inline bool choice_requires_experimental(const Knob& k, int c) {
@@ -1348,8 +1369,9 @@ inline bool choice_requires_experimental(const Knob& k, int c) {
     (k.choices[c].awaiting_qualification || k.choices[c].experimental || (k.experimental && c>0));
 }
 
-inline bool choice_available(const Knob& k, int c, bool dev, bool experimental, unsigned caps) {
-  return choice_visible(k, c, dev) && choice_supported(k, c, caps) &&
+inline bool choice_available(const Knob& k, int c, bool dev, bool experimental, unsigned caps,
+                             bool opt_in = false) {
+  return choice_visible(k, c, dev, opt_in) && choice_supported(k, c, caps) &&
          (experimental || !choice_requires_experimental(k,c));
 }
 
@@ -1373,7 +1395,8 @@ struct DependencyPreview {
 // enable_required=false lowers dependent choices; true enables their prerequisites.
 inline DependencyPreview preview_dependencies(const std::vector<int>& edited, const Map& effective,
                                                unsigned caps, bool enable_required,
-                                               bool dev = false, bool experimental = false) {
+                                               bool dev = false, bool experimental = false,
+                                               bool opt_in = false) {
   DependencyPreview out{edited, {}, {}, {}};
   if (edited.size() != kKnobCount) { out.blocked.push_back("Settings could not be read. Reopen the launcher."); return out; }
   if (!enable_required) enforce_needs(out.values);
@@ -1388,7 +1411,7 @@ inline DependencyPreview preview_dependencies(const std::vector<int>& edited, co
           if (!n.knob) continue;
           int j = knob_index(n.knob);
           if (j < 0 || out.values[j] >= n.min_choice) continue;
-          if (out.values[j] < 0 || !choice_available(kKnobs[j], n.min_choice, dev, experimental, caps)) {
+          if (out.values[j] < 0 || !choice_available(kKnobs[j], n.min_choice, dev, experimental, caps, opt_in)) {
             const std::string message = std::string(knob_visible(k,false)?"Check ":"Review required setting: ") + kKnobs[j].label;
             if (std::find(out.blocked.begin(), out.blocked.end(), message) == out.blocked.end())
               out.blocked.push_back(message);

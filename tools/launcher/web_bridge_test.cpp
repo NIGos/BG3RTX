@@ -4,9 +4,14 @@
 #include <cstdio>
 namespace st=bg3::settings;
 int main(int argc,char** argv){
-  if(argc==2&&std::string(argv[1])=="--json"){
+  // --json [experimental|needs]: renderer fixtures (release opt-in shown; unmet requirements).
+  if((argc==2||argc==3)&&std::string(argv[1])=="--json"){
+    const std::string view=argc==3?argv[2]:"";
     launcher::State sample;sample.values=st::preset_values(st::kHigh);sample.preset=st::kHigh;
+    if(view=="needs")sample.values[st::knob_index("rt_geometry")]=0;
     launcher::web::Bridge bridge(sample);bridge.set_status("Line\n\"quoted\"\tcontrol\r");
+    if(view=="experimental")bridge.handle("{\"type\":\"experimental\",\"value\":true}");
+    if(!view.empty())bridge.set_status("");
     std::printf("%s",bridge.state_json().c_str());return 0;
   }
   int checks=0,failed=0,saves=0,plays=0,prepares=0,exports=0;
@@ -77,7 +82,44 @@ int main(int argc,char** argv){
     }
   }
   check(visible==15);
-  bridge.handle("{\"type\":\"experimental\",\"value\":true}");check(!bridge.experimental);
+  // Release opt-in: the switch shows exactly settings::kOptInKnobs on their own page,
+  // is saved with the settings and Off restores the qualified Off values.
+  {
+    launcher::State os;os.caps=~0u;os.preset=st::kHigh;os.values=st::preset_values(st::kHigh);os.base={{"dev","0"}};
+    os.user_text="unmanaged=retained\nexperimental_options=0\n";std::string saved_text;int os_saves=0;
+    launcher::web::Hooks oh;oh.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++os_saves;saved_text=candidate.user_text;return true;};
+    launcher::web::Bridge ob(os,oh);check(!ob.experimental);
+    check(ob.state_json().find("\"id\":\"water_surface_fresnel\"")==std::string::npos);
+    ob.handle("{\"type\":\"set\",\"id\":\"exp_hair_fibre_gi\",\"value\":1}");check(os.values[st::knob_index("exp_hair_fibre_gi")]<=0);
+    ob.handle("{\"type\":\"experimental\",\"value\":true}");check(ob.experimental&&ob.dirty()==1);
+    auto shown=ob.state_json();
+    for(const auto& k:st::kKnobs){
+      bool listed=shown.find("\"id\":\""+std::string(k.id)+"\"")!=std::string::npos;
+      check(listed==(st::knob_visible(k,false)||st::opt_in_knob(k)));
+    }
+    auto fresnel=shown.substr(shown.find("\"id\":\"water_surface_fresnel\""));
+    check(fresnel.find("\"category\":\"Experimental\"")<fresnel.find("\"choices\"")&&fresnel.find("\"developer\":false")<fresnel.find("\"choices\""));
+    check(shown.find("exp_compact_hit_state")==std::string::npos&&shown.find("exp_alpha_metadata_cache")==std::string::npos&&shown.find("exp_water_empty_tiles")==std::string::npos);
+    os.values[st::knob_index("exp_water")]=1;
+    ob.handle("{\"type\":\"set\",\"id\":\"water_surface_fresnel\",\"value\":1}");check(os.values[st::knob_index("water_surface_fresnel")]==1);
+    ob.handle("{\"type\":\"save\",\"policy\":\"enable\"}");ob.handle("{\"type\":\"confirm\"}");
+    check(os_saves==1&&ob.dirty()==0&&saved_text.find("experimental_options=1\n")!=std::string::npos&&saved_text.find("experimental_options=0")==std::string::npos&&saved_text.find("unmanaged=retained")!=std::string::npos);
+    ob.handle("{\"type\":\"experimental\",\"value\":false}");check(!ob.experimental&&os.values[st::knob_index("water_surface_fresnel")]==0&&ob.dirty()==2);
+    check(ob.state_json().find("\"id\":\"water_surface_fresnel\"")==std::string::npos);
+    ob.handle("{\"type\":\"discard\"}");check(ob.experimental&&ob.dirty()==0);
+    ob.handle("{\"type\":\"experimental\",\"value\":false}");ob.handle("{\"type\":\"save\",\"policy\":\"enable\"}");ob.handle("{\"type\":\"confirm\"}");
+    check(os_saves==2&&saved_text.find("experimental_options")==std::string::npos&&ob.dirty()==0);
+    // A saved opt-in is restored on the next launch.
+    launcher::State again=os;again.user={{"experimental_options","1"}};again.values[st::knob_index("water_surface_fresnel")]=1;
+    launcher::web::Bridge ab2(again);check(ab2.experimental&&again.values[st::knob_index("water_surface_fresnel")]==1);
+    // Release requirement copy: short, unmet only, no duplicates, no met hardware.
+    launcher::State rq;rq.caps=~0u;rq.values=st::preset_values(st::kHigh);rq.values[st::knob_index("rt_geometry")]=0;
+    launcher::web::Bridge rb2(rq);auto copy=rb2.state_json();
+    check(copy.find("\"reason\":\"Needs Ray-tracing detail: Solid surfaces\"")!=std::string::npos);
+    check(copy.find("\"reason\":\"Requires")==std::string::npos&&copy.find("\"requirements\":\"Requires")==std::string::npos&&copy.find("Required startup setting")==std::string::npos&&copy.find("GPU requirement")==std::string::npos);
+    check(copy.find("Sets at startup: Ray-tracing support; Sets at startup: Ray-tracing support")==std::string::npos);
+    check(copy.find("\"reason\":\"Needs hardware")==std::string::npos);
+  }
   s.values[st::knob_index("exp_native_coverage")]=1;
   auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");
   check(pos!=std::string::npos);
@@ -104,7 +146,7 @@ int main(int argc,char** argv){
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==0);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
-  launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("GPU requirement:")!=std::string::npos);
+  launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("\"reason\":\"Needs an NVIDIA RTX GPU with DLSS\"")!=std::string::npos);
   bridge.set_restart_count(3);check(bridge.state_json().find("\"restartNeeded\":true")!=std::string::npos);
   check(bridge.state_json().find("Restart the game to apply 3 changes")!=std::string::npos);
   bridge.handle("{\"type\":\"discard\"}");check(bridge.state_json().find("Restart the game to apply 3 changes")!=std::string::npos);
@@ -224,7 +266,7 @@ int main(int argc,char** argv){
       auto start=text.find("\"id\":\""+std::string(k.id)+"\"");check(start!=std::string::npos);
       auto end=text.find("\"choices\":[",start);auto card=text.substr(start,end-start);
       check(card.find("\"apply\":\""+std::string(st::apply_label(st::transition_apply(k,c,c),!k.dev_only))+"\"")!=std::string::npos);
-      for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find(std::string(k.dev_only?"needs ":"Requires ")+st::kKnobs[st::knob_index(n.knob)].label)!=std::string::npos);
+      for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find(k.dev_only?"needs "+std::string(st::kKnobs[st::knob_index(n.knob)].label):std::string(st::kKnobs[st::knob_index(n.knob)].label)+": ")!=std::string::npos);
       for(auto& n:k.choices[c].need)if(n.knob){
         qs.values[st::knob_index(n.knob)]=0;
         int writes=0;launcher::web::Hooks hooks;hooks.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++writes;check(st::unmet_need(k,c,candidate.values).empty());return true;};

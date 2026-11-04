@@ -29,7 +29,12 @@ water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
 RT strength affects indirect light, local shadows and reflections. Frame limit counts rendered frames.
 Capability/dependency previews, startup prerequisites and existing hardware/local-mask fallback remain.
 
-Advanced has no release controls; omit its navigation and Experimental disclosure.
+Advanced has no release controls; omit its navigation and the developer Experimental disclosure.
+Release "Show experimental options" switch (off by default, saved as `experimental_options=1`) shows the
+`settings::kOptInKnobs` on their own Experimental page; Off resets them to Off. Never listed: rejected
+exp_compact_hit_state / exp_alpha_metadata_cache / exp_water_empty_tiles, perf_* keys, diagnostics and
+policy-owned knobs (rt_trace_scale, exp_omm, exp_vt_alpha_masks, rr_post, exp_water_compose_shift,
+exp_hair_pool_trim, exp_ls_exact_k, exp_hit_reference, exp_current_sun).
 Help & support owns setup, compatibility, memory, overlay/comparison help, notices and one local-report entry. Keep Ctrl+Shift+F9; omit experimental F10 instructions.
 Play saves settings first in both renderers; dependency reviews may be cancelled and failed saves keep edits and prevent launch.
 One compact header shows version, preset, GPU and mod-file presence. Installed files do not confirm runtime activity.

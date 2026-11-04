@@ -30,8 +30,12 @@ class Bridge {
   void set_game_path(std::string value) { game_path_ = std::move(value); }
   void set_mod_status(std::string value) { mod_status_ = std::move(value); }
   int dirty() const;
+  // dev=1: the developer Experimental disclosure. Release: the "Show experimental options" opt-in.
   bool dev = false, experimental = false;
  private:
+  bool opt_in() const { return !dev && experimental; }
+  bool shown(const bg3::settings::Knob& k) const;
+  bool saved_experimental_ = false;
   bg3::experimental_ab::Selection ab_selection_;
   bg3::settings::Map effective() const;
   bool save_preview(bool enable_required);
