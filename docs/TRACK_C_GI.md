@@ -358,10 +358,15 @@ the replay still needs the asset-DB roof volumes: `PT_ROOFS=1` for the PT, and f
 - Fix: the trace frame keeps the hit-material capture unless the trace takes the G-buffer pass itself (geo_capture=1).
   Rerun gf2 only; predicted: view vis 0.947, scene colour -2.0% (predicted.json).
 - Rerun gf2 031330: -2.01% (band 1.32%), view vis 0.9471: as predicted; camp 033251 -2.42%. 6 m joined Ultra.
-- **Open: roof-cut leak of far screen hits.** The roof rule (`gi_far_roof_clear`) applies to qualified hidden hits
-  only. A screen hit beyond 1 m takes the far fade without it, so a ray leaving a roofed room through the cut-away
-  roof (GI rays do not see mask 0x02) can take the radiance of on-screen exterior ground. S8 went darker as predicted,
-  so it is not dominant; a per-pixel check under roofs (or the same segment test for screen hits) is still owed.
+- **Roof-cut leak of far screen hits (roof-leak, 2026-11-04).** Confirmed: the screen path read `prevRadiance`
+  without the hidden path's segment test. A matched screen hit beyond the base radius now uses the same
+  `gi_far_roof_clear(o, dir, t)`: intersecting padded roof volumes or unknown roof data reject the entire ray.
+  Rejection retains native ambient (base fade is zero) and precedes emission, SHaRC and fallback shading.
+  No new key, binding or request; the guard is inside existing `gi_far` specialization 1007. Near hits and far-off
+  paths are unchanged. Offline fixtures cover roofed origins, canopy crossings, finite segments, rotated volumes,
+  camera-relative coordinates and unknown data; verification receipt is in `docs/progress/roof-leak.md`.
+  No game launch or GPU cost measurement. Future in-game confirmation: interior under a cut-away roof with
+  on-screen exterior ground (S8 roofed areas); check reduced exterior bounce without changing open-air bounce.
 - Cheaper option measured (replay, 2026-11-02): gi_rr_rays 1 keeps the mean (S8 giRaw.a 0.8321 vs 0.8320) at 1.73
   vs 4.31 ms (camp 3.90 vs 7.36 ms); its noise through RR is the live job sharc_far sh1 (second section).
 
