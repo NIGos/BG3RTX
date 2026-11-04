@@ -13,6 +13,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import tools.shader_identity as si  # noqa: E402
+original_run_dxc = si._run_dxc
+original_run_pp = si._run_pp
 
 checks = 0
 
@@ -132,6 +134,15 @@ cache.blob_path(sha).write_bytes(b"corrupt")
 with quiet:
     r2 = si.compile_requests(si.SourceTree.memory(FILES, "t0c"), ["d.hlsl"], tool=tool, cache=cache, jobs=1)
 check(calls == [("t0c", "d.hlsl", "main")] and r2["d.hlsl"].digest == r0["d.hlsl"].digest, "corrupt blob -> recompiled")
+check(r2["d.hlsl"].blob() == FILES["shaders/d.hlsl"].encode() + b"main",
+      "recompiled blob replaces corrupt stored bytes")
+reopened = si.Cache(cache.dir)
+with quiet:
+    repaired = si.compile_requests(si.SourceTree.memory(FILES, "repaired"), ["d.hlsl"], tool=tool,
+                                   cache=reopened, jobs=1)
+check(repaired["d.hlsl"].cached and repaired["d.hlsl"].blob() == r0["d.hlsl"].blob(),
+      "repaired blob verifies after reopening cache")
+reopened.db.close()
 # Failures are reported and never cached.
 calls.clear()
 si._run_dxc = lambda *a: (calls.append(a[3]), (None, "[main] error: boom"))[1]
@@ -380,4 +391,70 @@ with tempfile.TemporaryDirectory() as td:
          patch.object(hr, 'compare_retired', return_value='arithmetic differs'), quiet:
         proofs = hr.retirement_fallback(rows, SimpleNamespace(label='base'), SimpleNamespace(label='new'), None, None, 'test')
     check(proofs[1]['path'] == 'failed', 'failed retirement proof remains a gate failure')
+# Verification must fail if either side failed, rather than counting it as identical.
+for cached_ok, fresh_ok in ((False, True), (True, False), (False, False)):
+    sampled = [{(tp0.label, "d.hlsl"): SimpleNamespace(ok=ok, digest="same")}
+               for ok in (cached_ok, fresh_ok)]
+    with patch.object(si, "compile_many", side_effect=sampled), quiet:
+        failed = si.verify_pp(tp0, ["d.hlsl"], 1, tool, pc4)
+    check(failed == ["d.hlsl"], f"pp verification rejects compile failures ({cached_ok}, {fresh_ok})")
+
+# DXC and the preprocessor must read captured source AND SDK bytes after an edit.
+with tempfile.TemporaryDirectory() as td:
+    tmp = Path(td)
+    (tmp / "shaders").mkdir()
+    (tmp / "shaders/x.hlsl").write_bytes(b"old source")
+    (tmp / "sdk").mkdir()
+    (tmp / "sdk/h.h").write_bytes(b"old SDK")
+    snapshot = si.SourceTree.worktree(tmp).with_sharc(tmp / "sdk")
+    snapshot_tool = FakeTool()
+    snapshot_tool.sharc = tmp / "sdk"
+    (tmp / "shaders/x.hlsl").write_bytes(b"new source")
+    (tmp / "sdk/h.h").write_bytes(b"new SDK")
+
+    def snapshot_dxc(cmd, **kwargs):
+        source = Path(cmd[1])
+        include = Path(cmd[cmd.index("BG3RTX=1") + 2])
+        check(source.read_bytes() == b"old source", "compiler reads captured source bytes")
+        check((include / "h.h").read_bytes() == b"old SDK", "compiler reads captured SDK bytes")
+        output = Path(cmd[cmd.index("-Fi" if "-Fi" in cmd else "-Fo") + 1])
+        output.write_bytes(source.read_bytes())
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with patch.object(si.subprocess, "run", side_effect=snapshot_dxc), \
+         patch.object(si, "_DxcSlot", return_value=contextlib.nullcontext()):
+        check(original_run_dxc(snapshot_tool, snapshot, "x.hlsl", "main", tmp / "out.spv")[0] == b"old source",
+              "compile uses immutable snapshot")
+        check(original_run_pp(snapshot_tool, snapshot, "x.hlsl", tmp / "out.pp") == b"old source",
+              "preprocess uses immutable snapshot")
+    check(si.git_blob_id((snapshot.materialize() / "shaders/x.hlsl").read_bytes()) == snapshot.ids["shaders/x.hlsl"],
+          "compiled snapshot bytes match cache input id")
+    snapshot.cleanup()
+
+# Exercise the qualification CLI with successful fake compiles and absent checkers.
+import runpy
+for request in ("gi/gi_trace_rt_hit_direct.hlsl", "gi/gi_trace_rt_hit_direct_em.hlsl",
+                "gi/rt_reflections_hit_shade.hlsl"):
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "dxc.exe").touch()
+        (tmp / "module.spv").write_bytes(b"module")
+        cli_tool = SimpleNamespace(dxc=tmp / "dxc.exe", sharc=None)
+        cli_tree = SimpleNamespace(with_sharc=lambda sharc: cli_tree)
+        cli_module = SimpleNamespace(ok=True, log="", cached=False, path=lambda entry: tmp / "module.spv")
+        exists = Path.exists
+
+        def missing_checker(path):
+            return False if path.name in ("native_hit_gi_bindings_test.exe", "native_hit_rf_bindings_test.exe") else exists(path)
+
+        with patch.object(si, "Toolchain", return_value=cli_tool), \
+             patch.object(si.SourceTree, "worktree", return_value=cli_tree), \
+             patch.object(si, "compile_requests", return_value={request: cli_module}), \
+             patch.object(si, "lower_priority"), patch.object(Path, "exists", missing_checker), \
+             patch.object(sys, "argv", ["compile_shaders.py", "--no-cache", request]), quiet:
+            try:
+                runpy.run_path(str(ROOT / "tools/compile_shaders.py"), run_name="__main__")
+                check(False, "qualification must exit")
+            except SystemExit as exc:
+                check(exc.code == 1, f"missing checker fails qualification for {request}")
 print(f"shader_identity_test: {checks} checks passed")

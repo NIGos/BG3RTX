@@ -72,7 +72,7 @@
   "runtime_dependency": "Current layer logs periodic breadcrumbs with [hair primary], and [fault] only on device loss; the requested periodic [fault] producer must be supplied before live validation."
  },
  "hv9": {
-  "status": "OFFLINE_PREPARED; no live authorization",
+  "status": "READY_FOR_LIVE; section 9 rows closed offline or not hair; no live authorization",
   "save": "Test Dialogue1",
   "launches": 1,
   "stats_period_frames": 60,
@@ -89,10 +89,16 @@
    "rendered_K8_bursts": 2,
    "rendered_frames_per_burst": 8,
    "samples_per_burst": 20,
-   "measured_periods_per_window": 1
+   "measured_periods_per_window": 1,
+   "orphan_native_draws": 0,
+   "pipelines_refused": 0,
+   "hv9_fixture_publishes": 60,
+   "hv9_fixture_prepass_draws": 180,
+   "hv9_fixture_gbuffer_draws": 180,
+   "hv9_fixture_velocity_draws": 180
   },
   "expected_lines": [
-   "depth orphans ...: none in every strands window",
+   "[hair primary] depth orphans (last 60 frames, first 4; key prefix:prepass frame_index,draw frame_index,reason,pipeline): none",
    "prepass card depth dropped without its G-buffer swap 0 in every strands window",
    "0 pipelines refused in every strands window",
    "coverage with per-draw swapped frames > 0 in b, c, d-strands",
@@ -122,6 +128,8 @@
   "load_allowance_seconds": 120,
   "total_target_seconds": 183.8,
   "plan_phases": 10,
-  "readiness": "New-state timing medians unproven; bounded readiness may extend the target. No live qualification."
+  "readiness": "New-state timing medians unproven; bounded readiness may extend the target. No live qualification.",
+  "orphan_gate": "Per-window final verdict; fail_fast=false on both orphan gates retains PNGs. Refusal and every other gate still fail fast.",
+  "historical_limit": "180/180/180 with 0 fallbacks cannot exclude extra unlogged native sibling draws under the old no-variant/no-fallback path. Aggregate fixture is not a per-draw log replay."
  }
 }

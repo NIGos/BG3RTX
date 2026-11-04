@@ -12,6 +12,27 @@
 
 namespace hair_primary {
 
+// A frame fence alone does not prove that a particular recording executed.
+enum class ReadbackState { Wait, Drop, Ready };
+inline ReadbackState readback_state(uint64_t frame, uint64_t done, bool submitted) {
+  if (done <= frame || done - frame <= 1) return ReadbackState::Wait;
+  return submitted ? ReadbackState::Ready : ReadbackState::Drop;
+}
+struct PeriodFailures {
+  uint64_t refused = 0, feedback = 0;
+  void reset() { refused = feedback = 0; }
+};
+inline void count_marker_totals(const uint32_t* cards, const uint32_t* accepted,
+                               uint32_t* card_totals, uint32_t* accepted_totals) {
+  for (uint32_t j = 0; j < 4; ++j) {
+    card_totals[j] = accepted_totals[j] = 0;
+    for (uint32_t k = 0; k < 64; ++k) {
+      card_totals[j] += cards[j * 64 + k];
+      accepted_totals[j] += accepted[j * 64 + k];
+    }
+  }
+}
+
 // Specialization constants of the variant fragment shaders (ids next to the RT spec range, unused elsewhere).
 constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101, kSpecDrawSlot = 1102;
 // Header (the fixed buffer whose address is baked), little-endian uint32 words:
@@ -257,24 +278,40 @@ inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t t
   }
   return found;
 }
-// Per-prepass epoch depth obligation: refused strands must restore native card depth.
+// A prepass at p can feed G-buffer recording at p through p + 2. Membership
+// survives every sibling draw; absent draws and expired latches are not orphans.
 struct DepthLatch {
-  bool gbuffer_seen = true;
-  std::unordered_map<uint64_t, uint64_t> keys, previous; // key -> prepass frame_index
-  uint64_t begin() {
-    if (!gbuffer_seen) return 0;
-    const uint64_t orphan = previous.size();
-    previous.clear(); previous.swap(keys); gbuffer_seen = false; return orphan;
+  std::unordered_map<uint64_t, uint64_t> keys, uncovered;
+  void prune(uint64_t frame) {
+    for (auto it = keys.begin(); it != keys.end();)
+      if (frame > it->second && frame - it->second > 2) it = keys.erase(it); else ++it;
+    for (auto it = uncovered.begin(); it != uncovered.end();)
+      if (frame > it->second && frame - it->second > 300) it = uncovered.erase(it); else ++it;
   }
-  void gbuffer() { gbuffer_seen = true; }
-  void prepass(uint64_t key, uint64_t frame = 0) { keys.emplace(key, frame); }
-  bool needs_card_depth(uint64_t key, bool strands) const {
-    if (!keys.count(key) && !previous.count(key)) return false;
-    // Keep the obligation for sibling draws of this key throughout the epoch.
-    return !strands;
+  void observe_pipeline(uint64_t key, uint64_t frame, bool variant, bool fallback) {
+    if (key && !variant && !fallback) uncovered[key] = frame;
   }
-  void resolved(uint64_t key) { keys.erase(key); previous.erase(key); }
+  bool allow_prepass(uint64_t key, uint64_t frame) const {
+    const auto it = uncovered.find(key);
+    return it == uncovered.end() || (frame > it->second && frame - it->second > 300);
+  }
+  void prepass(uint64_t key, uint64_t frame) { keys[key] = frame; }
+  bool dropped(uint64_t key, uint64_t frame) const {
+    const auto it = keys.find(key);
+    return it != keys.end() && frame >= it->second && frame - it->second <= 2;
+  }
+  bool needs_card_depth(uint64_t key, uint64_t frame, bool strands) const {
+    return !strands && dropped(key, frame);
+  }
+  bool orphan(uint64_t key, uint64_t frame, bool strands, bool fallback) const {
+    return !fallback && needs_card_depth(key, frame, strands);
+  }
 };
+// G-buffer apply tags are frame_index + 1. Either recording order is valid.
+inline bool prepass_drop_allowed(uint64_t applied, uint64_t now, bool live,
+                                 bool depth_safe, bool sibling_safe) {
+  return applied >= now && applied - now <= 1 && live && depth_safe && sibling_safe;
+}
 struct CoverageGate {
   struct Evidence {
     uint64_t frame = 0, card = 0, strand = 0;

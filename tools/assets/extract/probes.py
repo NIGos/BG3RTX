@@ -105,12 +105,15 @@ def _flatten(node, prefix="", out=None):
 
 def extract_presets(ps: PackageSet, log=print) -> tuple[list[Preset], dict]:
     out: dict[str, Preset] = {}
+    failures = []
     for n in ps.index:
         if "/Content/" not in n or not n.endswith("_merged.lsf"):
             continue
         try:
             res = lsf.parse(ps.read(n))
-        except Exception:
+        except Exception as exc:
+            failures.append(n)
+            log(f"preset parse failure: {n}: {exc}")
             continue
         for bank, kind in (("LightingBank", "lighting"), ("AtmosphereBank", "atmosphere")):
             reg = res.region(bank)
@@ -136,4 +139,5 @@ def extract_presets(ps: PackageSet, log=print) -> tuple[list[Preset], dict]:
                     p.sky_intensity = float(sky.get("Intensity", 0.0) or 0.0)
                 out[pid] = p
     stats = Counter(p.kind for p in out.values())
+    stats["parse_failures"] = len(failures)
     return sorted(out.values(), key=lambda p: (p.kind, p.id)), dict(stats)

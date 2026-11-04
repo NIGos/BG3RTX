@@ -12,7 +12,7 @@ Layout (LSLib `Resources/LSF/LSFReader.cs`):
   name handle = bucket << 16 | index
   format 1 (keys and adjacency): node 16 B (name, parent, next sibling, first
             attribute), attribute 16 B (name, type | length << 6, next, value offset)
-  format 0: node 12 B (name, first attribute, parent), attribute 12 B
+  formats 0 and 2: node 12 B (name, first attribute, parent), attribute 12 B
             (name, type | length << 6, owning node); values are consecutive.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from __future__ import annotations
 import struct
 from typing import Any
 
-from .compress import decompress
+from .compress import decompress, DecompressError
 from .resource import Node, Resource, guid_from_lsf
 
 # LSLib AttributeType ids -> struct format of fixed-size values.
@@ -52,19 +52,25 @@ class LsfError(ValueError):
 def decode_value(t: int, d: bytes) -> Any:
     s = _FIXED_STRUCT.get(t)
     if s is not None:
+        if len(d) != s.size:
+            raise LsfError("invalid fixed attribute length")
         v = s.unpack_from(d, 0)
         return v[0] if len(v) == 1 else list(v)
     if t in _STRING_TYPES:
         return d.split(b"\0", 1)[0].decode("utf-8", "replace")
     if t == T_UUID:
+        if len(d) != 16:
+            raise LsfError("invalid UUID length")
         return guid_from_lsf(d)
     if t in T_TRANSLATED:
         # u16 version, u32 length, handle (TranslatedFSString adds arguments; ignored)
         if len(d) >= 6:
             ln = struct.unpack_from("<I", d, 2)[0]
+            if 6 + ln > len(d):
+                raise LsfError("truncated translated string")
             return {"handle": d[6:6 + ln].split(b"\0", 1)[0].decode("utf-8", "replace"),
                     "version": struct.unpack_from("<H", d, 0)[0]}
-        return {"handle": "", "version": 0}
+        raise LsfError("truncated translated string")
     return bytes(d)  # ScratchBuffer and unknown types stay raw
 
 
@@ -80,6 +86,8 @@ def _read_names(raw: bytes) -> list[list[str]]:
         for _ in range(cnt):
             (ln,) = struct.unpack_from("<H", raw, p)
             p += 2
+            if p + ln > len(raw):
+                raise LsfError("truncated name string")
             bucket.append(raw[p:p + ln].decode("utf-8", "replace"))
             p += ln
         names.append(bucket)
@@ -87,6 +95,13 @@ def _read_names(raw: bytes) -> list[list[str]]:
 
 
 def parse(data: bytes) -> Resource:
+    try:
+        return _parse(data)
+    except (struct.error, IndexError, DecompressError) as exc:
+        raise LsfError(f"truncated or invalid LSF: {exc}") from exc
+
+
+def _parse(data: bytes) -> Resource:
     if data[:4] != b"LSOF":
         raise LsfError(f"not an LSF file (magic {data[:4]!r})")
     (ver,) = struct.unpack_from("<I", data, 4)
@@ -100,14 +115,18 @@ def parse(data: bytes) -> Resource:
     cflags, _, _, fmt = struct.unpack_from("<BBHI", data, p)
     p += 8
     method = cflags & 0x0F
+    if fmt not in (0, 1, 2):
+        raise LsfError(f"unsupported LSF format {fmt}")
 
     def take(u: str, d: str, frame: bool) -> bytes:
         nonlocal p
         usize, dsize = md[u], md[d]
         size = dsize if dsize else usize
+        if p + size > len(data):
+            raise LsfError(f"section {u} exceeds file")
         raw = data[p:p + size]
         p += size
-        if dsize == 0 or usize == 0:
+        if dsize == 0:
             return raw
         return decompress(method, raw, usize, frame=frame)
 
@@ -115,6 +134,17 @@ def parse(data: bytes) -> Resource:
     nodes_raw = take("nu", "nd", True)
     attrs_raw = take("au", "ad", True)
     vals = take("vu", "vd", True)
+
+    if has_keys:
+        take("ku", "kd", True)
+    stride = 16 if fmt == 1 else 12
+    if len(nodes_raw) % stride or len(attrs_raw) % stride:
+        raise LsfError("incomplete node or attribute record")
+
+    def value(t, off, ln):
+        if off + ln > len(vals):
+            raise LsfError("attribute value exceeds section")
+        return decode_value(t, vals[off:off + ln])
 
     def nm(h: int) -> str:
         return names[h >> 16][h & 0xFFFF]
@@ -126,21 +156,29 @@ def parse(data: bytes) -> Resource:
         rec = struct.Struct("<Iiii")
         for i in range(len(nodes_raw) // 16):
             h, par, _sib, first = rec.unpack_from(nodes_raw, i * 16)
+            if _sib != -1 and not 0 <= _sib < len(nodes_raw) // 16:
+                raise LsfError("invalid next sibling index")
             nodes.append(Node(nm(h)))
             parents.append(par)
             firsts.append(first)
         arec = struct.Struct("<IIiI")
         attrs = [arec.unpack_from(attrs_raw, i * 16) for i in range(len(attrs_raw) // 16)]
         for n, a in zip(nodes, firsts):
-            while a >= 0:
+            seen = set()
+            while a != -1:
+                if a < 0 or a >= len(attrs) or a in seen:
+                    raise LsfError("invalid or cyclic attribute link")
+                seen.add(a)
                 h, tl, nxt, off = attrs[a]
                 t, ln = tl & 0x3F, tl >> 6
-                n.attrs[nm(h)] = decode_value(t, vals[off:off + ln])
+                n.attrs[nm(h)] = value(t, off, ln)
                 a = nxt
     else:
         rec = struct.Struct("<Iii")
         for i in range(len(nodes_raw) // 12):
             h, _first, par = rec.unpack_from(nodes_raw, i * 12)
+            if _first != -1 and not 0 <= _first < len(attrs_raw) // 12:
+                raise LsfError("invalid first attribute index")
             nodes.append(Node(nm(h)))
             parents.append(par)
         arec = struct.Struct("<IIi")
@@ -148,9 +186,18 @@ def parse(data: bytes) -> Resource:
         for i in range(len(attrs_raw) // 12):
             h, tl, ni = arec.unpack_from(attrs_raw, i * 12)
             t, ln = tl & 0x3F, tl >> 6
-            nodes[ni].attrs[nm(h)] = decode_value(t, vals[off:off + ln])
+            if not 0 <= ni < len(nodes):
+                raise LsfError("invalid attribute owning node")
+            nodes[ni].attrs[nm(h)] = value(t, off, ln)
             off += ln
 
+    for i, par in enumerate(parents):
+        seen = {i}
+        while par != -1:
+            if par < 0 or par >= len(nodes) or par in seen:
+                raise LsfError("invalid or cyclic parent link")
+            seen.add(par)
+            par = parents[par]
     roots = []
     for n, par in zip(nodes, parents):
         if par >= 0:

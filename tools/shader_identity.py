@@ -22,6 +22,8 @@ byte-identity gates) compiles through this module:
 - A baseline commit's sources come from `git ls-tree` + `git cat-file --batch` (raw blobs, the same
   ids as the working tree's files); they are written to a short temp tree only when some request
   misses the cache. A second run against the same baseline compiles nothing.
+  Working-tree sources and SHaRC headers likewise compile from their captured bytes, so concurrent
+  edits cannot publish a newer module under an older input key. Warm hits need no temp source tree.
 - Byte identity of two trees: requests whose input keys are equal are identical by construction
   (reported, not compiled); the others are compiled (or fetched) on both sides and their SPIR-V
   hashes compared.
@@ -150,7 +152,8 @@ class SourceTree:
                     logical = p.relative_to(root).as_posix()
                     data[logical] = p.read_bytes()
                     ids[logical] = git_blob_id(data[logical])
-        tree = SourceTree(f"tree {root.name}", ids, lambda p: (root / p).read_bytes(), disk=root)
+        # Compile exactly the bytes whose ids were captured, even if the checkout changes later.
+        tree = SourceTree(f"tree {root.name}", ids, data.__getitem__)
         tree._data.update(data)
         return tree
 
@@ -204,8 +207,6 @@ class SourceTree:
                 self._tmp = tempfile.TemporaryDirectory(prefix="b3s-", ignore_cleanup_errors=True)
                 base = Path(self._tmp.name)
                 for p in self.ids:
-                    if p.startswith(SHARC_LOGICAL + "/"):
-                        continue
                     dest = base / p
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(self.read(p))
@@ -295,11 +296,11 @@ class Toolchain:
             self._val_id = hashlib.sha256(json.dumps([_file_digest([self.spirv_val]), VAL_ARGS]).encode()).hexdigest()
         return self._val_id
 
-    def command(self, src, shaders, entry, defines, extra, out):
+    def command(self, src, shaders, entry, defines, extra, out, sharc=None):
         cmd = [str(self.dxc), str(src), "-spirv", "-fspv-target-env=vulkan1.3", "-HV", "2021", "-T", PROFILE,
                "-E", entry, "-I", str(shaders), "-D", "BG3RTX=1"]
         if self.sharc is not None:
-            cmd += ["-I", str(self.sharc), "-D", "BG3RTX_SHARC_SDK=1"]
+            cmd += ["-I", str(sharc if sharc is not None else self.sharc), "-D", "BG3RTX_SHARC_SDK=1"]
         for d in defines:
             cmd += ["-D", d]
         return cmd + list(extra) + ["-O3", "-Fo", str(out)]
@@ -388,7 +389,11 @@ class Cache:
     def put_blob(self, data):
         sha = hashlib.sha256(data).hexdigest()
         p = self.blob_path(sha)
-        if not p.exists():
+        try:
+            intact = hashlib.sha256(p.read_bytes()).hexdigest() == sha
+        except OSError:
+            intact = False
+        if not intact:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_name(f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_bytes(data)
@@ -397,6 +402,9 @@ class Cache:
             except OSError:
                 if tmp.exists():
                     tmp.unlink()
+                # A concurrent writer may have repaired it; never certify absent/corrupt bytes.
+                if hashlib.sha256(p.read_bytes()).hexdigest() != sha:
+                    raise
         self._verified.add(sha)
         return sha
 
@@ -681,7 +689,8 @@ def _run_dxc(tool, tree, request, entry, out):
     file, defines = split_request(request)
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
-    cmd = tool.command(src, Path(disk) / SHADERS, entry, defines, first_line_args(tree.read(SHADERS + "/" + file)), out)
+    cmd = tool.command(src, Path(disk) / SHADERS, entry, defines, first_line_args(tree.read(SHADERS + "/" + file)), out,
+                       sharc=Path(disk) / SHARC_LOGICAL)
     with _DxcSlot():
         r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
@@ -991,7 +1000,8 @@ def _run_pp(tool, tree, request, out):
     file, defines = split_request(request)
     disk = tree.materialize()
     src = Path(disk) / SHADERS / file
-    cmd = tool.command(src, Path(disk) / SHADERS, "main", defines, first_line_args(tree.read(SHADERS + "/" + file)), out)
+    cmd = tool.command(src, Path(disk) / SHADERS, "main", defines, first_line_args(tree.read(SHADERS + "/" + file)), out,
+                       sharc=Path(disk) / SHARC_LOGICAL)
     cmd = cmd[:-3] + ["-P", "-Fi", str(out)]   # drop "-O3 -Fo out"
     r = subprocess.run(cmd, capture_output=True, text=True, **_LOW)
     if r.returncode or not out.exists():
@@ -1041,7 +1051,7 @@ def pp_keys(tree, requests, tool, jobs=None, label="pp"):
 def verify_pp(tree, requests, n, tool, cache, jobs=None, seed=None, label="pp-verify"):
     """Soundness self-check of the preprocessed key: compile a random sample of `n` requests from scratch
     (closure keys only, a memory cache) and compare their SPIR-V with what `cache` gives (preprocessed hits
-    included). Returns the requests that differ (an empty list = sound)."""
+    included). Returns requests that differ or fail compilation (an empty list = sound)."""
     import random
     pick = random.Random(seed).sample(list(requests), min(n, len(requests)))
     if not pick:
@@ -1049,8 +1059,8 @@ def verify_pp(tree, requests, n, tool, cache, jobs=None, seed=None, label="pp-ve
     cached = compile_many([(tree, r) for r in pick], tool=tool, cache=cache, jobs=jobs, label=label + " cached")
     fresh = compile_many([(tree, r) for r in pick], tool=tool, cache=MemoryCache(), jobs=jobs, label=label + " fresh",
                          pp=False)
-    bad = [r for r in pick if cached[(tree.label, r)].ok and fresh[(tree.label, r)].ok
-           and cached[(tree.label, r)].digest != fresh[(tree.label, r)].digest]
+    bad = [r for r in pick if not cached[(tree.label, r)].ok or not fresh[(tree.label, r)].ok
+           or cached[(tree.label, r)].digest != fresh[(tree.label, r)].digest]
     print(f"[{label}] {len(pick) - len(bad)}/{len(pick)} sampled requests: cached SPIR-V identical to a fresh compile",
           flush=True)
     return bad

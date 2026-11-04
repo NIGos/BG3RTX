@@ -1,5 +1,6 @@
 ## hv9 visual (prepared only)
-Generate: `python tools/live_batches/hair_validation/make_job.py --job-names hv9-visual`.
+Generate gate-only changes with `python tools/live_batches/hair_validation/make_job.py --job-names hv9-visual --gates-only`.
+This preserves the verified timing/readiness plan and frozen lint corpus.
 Test Dialogue1, one visible_unfocused_fg launch; primary latched 1, groom 1, order 1.
 Plan 66.6 s after load; with a 120 s load allowance, about 186.6 s (3.1 min).
 Warm plus/base, then 60-frame reset windows: a cards (passes 0), b strands (15), c +tips/shadow_t.
@@ -8,6 +9,10 @@ d strands/cards repeat slow pulsed Q input (E return between), K8 pan_98900/9890
 Use edge_flicker burst/registered_run/masks/energy with a fixed Dialogue1 hair ROI and rigid control.
 Report both residuals, ungated: its full analyzer requires other windows/presented captures; reject ambiguous registration.
 Expected strands <= cards: unknown, first measurement. Require swaps, zero depth orphans/refusals per strand window.
+Both orphan gates set `fail_fast: false`: final per-window rejection keeps the PNG captures.
+Refusal and all other gates retain immediate rejection. `check_patterns.py --logs <main>/captures/queue/logs`
+audits historical patterns using queue_gates matching; positives absent from history must match rendered source emitter strings.
+`hair_patterns_test` checks those six regexes in CTest; this is syntax evidence, not live qualification.
 c also requires shadow transmittance participation and strand GPU ms. Final phase restores startup live keys; runner restores INI.
 M2.2 e-cascade PNG/mean window is reserved in make_visual, disabled by `HV9_CASCADE = False` until its branch merges.
 

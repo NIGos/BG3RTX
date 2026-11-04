@@ -609,12 +609,103 @@ def test_tips_dither():
                          primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int) + 4, samples[:, 3])))
 
 
+def test_strand_source_safety():
+    velocity = (ROOT / "shaders/rt/hair_primary_velocity.hlsl").read_text()
+    count = (ROOT / "shaders/rt/hair_primary_count.hlsl").read_text()
+    check("velocity uses accepted tag and key map ownership", "accepted >> 8u" in velocity and "(accepted & 255u)" in velocity and
+          "rec + 3248u + k * 4u" in velocity)
+    check("zero low-24-bit count tag excluded", "(tag & 0xFFFFFFu) != 0u" in count)
+
+    # Protect the exact cause from hv8: discard demotes, so a return must end
+    # each rejected lane before a subsequent buffer read. No shader edits here.
+    import re
+    for name in ('gbuffer', 'velocity'):
+        src = (ROOT / f'shaders/rt/hair_primary_{name}.hlsl').read_text()
+        code = re.sub(r'//[^\n]*|/\*.*?\*/', '', src, flags=re.S)
+        rejects = list(re.finditer(r'\bdiscard\s*;', code))
+        check(f'{name}: every demoted lane immediately returns', bool(rejects) and all(
+            re.match(r'\s*return\s+\w+\s*;', code[m.end():]) for m in rejects))
+    src = (ROOT / 'shaders/rt/hair_primary_gbuffer.hlsl').read_text()
+    check('transparent card marker uses native combined alpha and grazing before strand rejection',
+          'if (hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x))\n    vk::RawBufferStore<uint>(marker, packed_marker, 4);' in src
+          and src.index('const float4 card_M = max(sign(card_ma), sign(card_mb))') < src.index('hp_tips_keep(card_M.w')
+          < src.index('if (e.x == hair_primary_no_strand)'))
+
+
 def test_publish_lock():
     # hair_primary_publish runs inside the scene build, where rt_after_capture holds rtscene's g_mu: a locking camera
     # read there killed the game at the first publish (hv6 2026-11-04, exit 0xFFFF7001, no crash log).
     src = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
     check("hair_primary.cpp reads the build camera without the scene lock",
           "rt_this_build_camera(" in src and "rt_build_camera(" not in src)
+
+
+def test_groom_soup_bounds():
+    """F01: uint32 shader twins vs unbounded byte-address arithmetic."""
+    mask = (1 << 32) - 1
+
+    def old(tri, tris, stride, base, size):
+        need = ((3 * tri + 2) * stride + 24) & mask if tri < tris else mask
+        return (tri < tris < (1 << 24) and 24 <= stride <= 256 and
+                base <= size and need <= size - base)
+
+    def new(tri, tris, stride, base, size):
+        return (tri < tris < (1 << 24) and 24 <= stride <= 256 and
+                base <= size and size - base >= 24 and
+                3 * tri + 2 <= (size - base - 24) // stride)
+
+    cases = []
+    for tris in (1, 2, 5592406, (1 << 24) - 1):
+        for tri in (0, tris - 1):
+            for stride in (24, 256):
+                for base in (0, 64, mask - 24):
+                    enough = base + (3 * tri + 2) * stride + 24
+                    for size in (0, 23, 24, base - 1, enough - 1, enough, mask):
+                        if 0 <= size <= mask:
+                            cases.append((tri, tris, stride, base, size))
+    wrap = (5592405, 5592406, 256, 0, 280)
+    cases.append(wrap)
+    # Includes position bytes [0,12) and UV bytes [16,24) for all three vertices.
+    def inside(tri, tris, stride, base, size):
+        return all(0 <= base + (3 * tri + k) * stride + byte < size
+                   for k in range(3) for byte in (*range(12), *range(16, 24)))
+    check("F01 division bound equals every actual byte read in range",
+          all(new(*c) == inside(*c) for c in cases), len(cases))
+    check("F01 old uint32 bound accepts wrap (need=280), new bound rejects",
+          old(*wrap) and not new(*wrap) and not inside(*wrap))
+    check("F01 invalid triangle/stride rejected", all(not new(*c) for c in (
+        (1, 1, 24, 0, mask), (0, 1 << 24, 24, 0, mask),
+        (0, 1, 0, 0, mask), (0, 1, 23, 0, mask), (0, 1, 257, 0, mask))))
+    source = (ROOT / "shaders/rt/hair_groom_update.hlsl").read_text()
+    check("F01 shader uses division before load address multiplication",
+          "3u * tri + 2u <= (available - 24u) / pc.stride" in source and
+          "if (ok)" in source and "const uint need" not in source)
+
+
+def test_pixel_seal_tearing():
+    """F08: Python hp_seal twin; all 14 nontrivial word mixes, including halves."""
+    rng = np.random.default_rng(808)
+    passes = 0
+    count = 100000
+    for a, b, tag in zip(rng.integers(0, 1 << 32, (count, 3), dtype=np.uint32).tolist(),
+                         rng.integers(0, 1 << 32, (count, 3), dtype=np.uint32).tolist(),
+                         rng.integers(1, 1 << 32, count, dtype=np.uint32).tolist()):
+        a.append(primary.seal(*a, tag))
+        b.append(primary.seal(*b, tag))
+        # Identical writers pass even when different words/halves win the store.
+        other = a.copy()
+        same = a[:2] + other[2:]
+        if same[3] != primary.seal(*same[:3], tag):
+            raise AssertionError("identical halves rejected")
+        for mask in range(1, 15):
+            torn = [b[i] if mask & (1 << i) else a[i] for i in range(4)]
+            passes += torn[3] == primary.seal(*torn[:3], tag)
+    print(f"F08 seal: {count} identical pairs pass; {count * 14} torn mixes, {passes} passes")
+    check("F08 sampled different-entry tears fail seal", passes == 0, passes)
+    source = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    check("F08 cached ray uses fixed depth, independent of card layer",
+          "mul(float4(ndc, 1.0, 1.0), inv)" in source and
+          "const float3 dir = normalize(ray_h.xyz / ray_h.w);" in source)
 
 
 def test_ndc_ray():
@@ -1015,7 +1106,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

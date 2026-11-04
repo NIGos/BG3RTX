@@ -31,11 +31,15 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     float3 v[3];
     uint soup_bytes;
     Soup.GetDimensions(soup_bytes);
-    // The last byte this point reads: vertex 2 of its triangle, UV included (+24).
-    // (No 64-bit arithmetic: the groom pass also runs without shaderInt64; tri < soup_tris < 2^24 keeps it in range.)
-    const uint need = tri < pc.soup_tris ? (3u * tri + 2u) * pc.stride + 24u : 0xFFFFFFFFu;
+    // Bound vertex 2, UV included, before multiplying by stride (which could wrap).
+    // No shaderInt64: tri < soup_tris < 2^24 makes only 3 * tri + 2 safe in uint.
     bool ok = tri < pc.soup_tris && pc.soup_tris < (1u << 24) && pc.stride >= 24u && pc.stride <= 256u &&
-              pc.soup_base <= soup_bytes && need <= soup_bytes - pc.soup_base;
+              pc.soup_base <= soup_bytes;
+    if (ok) {
+      const uint available = soup_bytes - pc.soup_base;
+      ok = available >= 24u;
+      if (ok) ok = 3u * tri + 2u <= (available - 24u) / pc.stride;
+    }
     [unroll] for (uint k = 0; k < 3; ++k) {
       v[k] = ok ? asfloat(Soup.Load3(pc.soup_base + (3u * tri + k) * pc.stride)) : 0.0.xxx;
       ok = ok && all(abs(v[k]) < 1e30);

@@ -102,13 +102,16 @@ def parse_effect(name: str, data: bytes) -> list[EffectLight]:
 
 
 _PS = None
+_PS_KEY = None
 
 
 def _worker(args):
     data_dir, paks, names = args
-    global _PS
-    if _PS is None:
+    global _PS, _PS_KEY
+    key = (os.path.normcase(os.path.realpath(data_dir)), tuple(sorted(p.lower() for p in paks)))
+    if _PS is None or _PS_KEY != key:
         _PS = PackageSet(data_dir, only=paks)
+        _PS_KEY = key
     out, errors = [], 0
     for n in names:
         try:
