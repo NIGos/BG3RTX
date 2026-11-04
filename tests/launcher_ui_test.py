@@ -37,6 +37,10 @@ def main():
         for body in re.findall(re.escape(selector) + r'\s*\{([^{}]*)\}', css):
             assert not re.search(r'(?<![-\w])width\s*:\s*\d+px', body), (selector, body)
     native = (ROOT / 'tools/launcher/ui_product.h').read_text(encoding='utf-8')
+    assert 'if((entry.first==3||entry.first==5)&&!g.dev)continue;' in native
+    for label in ('Lighting', 'Surfaces', 'Performance', 'Help & support'):
+        assert 'L"' + label + '"' in native
+    assert 'g.tab=g_tab_ids[' in native and 'BS_AUTORADIOBUTTON|BS_PUSHLIKE' in native
     assert 'if(g.st.values[i]<0||!st::knob_visible' not in native
     assert '&&g.st.values[i]>=0)custom' not in native
     assert '.seg button,nav button,.brand small {white-space:normal;}' in css
