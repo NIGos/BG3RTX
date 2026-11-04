@@ -249,6 +249,8 @@ the light buffer is the game's (read-only to us), and the prep pass runs without
 
 ## 14. Tier (b): `rf_hit_shade` (M4.2, 2026-10-31; offline done, READY_FOR_LIVE, not qualified)
 
+2026-11-04: Additional native Tileset qualification is in progress; no promotion claimed.
+
 Key `rf_hit_shade=0` (live; GUI Experimental "Shaded hidden-surface reflections",
 `exp_rf_hit_shade`, needs `exp_hit_material` = startup `rt_hit_material=1`). Plan:
 PLAN_M4_REFLECTIONS_GI.md M4.2.
@@ -507,6 +509,8 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   - Offline: key off, the S8 replay is bit-identical (giRaw fnv1a a54c4dfd1cc9acb9, all 512 x 64 counters equal with
     HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
     rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
+2026-11-04: Generated rows REJECTED. hgn1 camp qualified share 23.455% -> 23.314%; hgn2 inn 23.671% -> 23.070%, within OFF spread; GI +0.299/+0.527 ms. Earlier +2.3 pp was not reproduced; this supersedes the earlier verdict below.
+
 - **Generated rows (2026-11-02; offline, READY_FOR_LIVE, not qualified; docs/GAME_DATA_AUDIT.md action 2).** Key
   `rt_hit_material_generated=0` (startup VS frame patch, then live; ini only). `py -3 -m tools.material_families.recipe_rows`
   writes `common/native_hit_generated.h` (`--check` in CTest `hit_material_generated_test`, about 8 s) from three sources
@@ -716,6 +720,8 @@ establish a new pak join or predict its qualified-share gain. No GPU cost or ene
 
 ### Pak join increment (cov-paks, 2026-11-03; not qualified)
 
+2026-11-04: `exp_hit_paks` REJECTED for release. Camp published 0% (22,686 unique HLOD_VT); S6 cp5 16:16: 185,373 attempts, 16,616 unique, 0 published, all rejected by shader_pair (HLOD), missing UV 146,875.
+
 Camp participation fix (pakjoin-zero, offline only): candidate discovery must run
 on ordinary class-A pool draws independently of the HLOD publication recipe.
 The old HLOD-only dispatch and readback prefilter left all join counters at zero
@@ -870,6 +876,7 @@ or GPU-cost result is claimed. See `docs/progress/cov-paks.md` for deciding chec
   until it merges with this.
 
 ## m4_generated live result: correct, small gain, stays off (branch hm-recipe-rows, measured, 2026-11-02)
+
 - hgn1 camp 145058 (INVALID only for the share gate's window length) / hgn2 inn 145500 (VALID), GPU ms only (two
   identity runs compiled during the batch). Qualified share OFF -> ON: camp 26.9% -> 29.2% (+2.3 points; predicted +12,
   range 3-25: below), inn 24.97% -> 25.09% (+0.12; predicted 1.5, range 0.3-4: below). Clip: every generated 2S row
@@ -947,6 +954,8 @@ or GPU-cost result is claimed. See `docs/progress/cov-paks.md` for deciding chec
 ```
 
 ## Off-screen reflection plan (branch rt-reflections-offscreen, 2026-11-03)
+
+2026-11-04: `exp_water_hit_shade` REJECTED for release; stays Experimental. wos1 16:08/17:01 compose refused every pass: light-binding 60/60, input-lifetime 57-60/60, first mismatch binding 21-22; diagnostic water_reflect shaded 2.37 M hidden hits/period. Fix `2f288a51` changed nothing.
 
 See [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md) for the current composition/tier map and staged
 water, directional-environment, world-provider and bias work. Candidate key
