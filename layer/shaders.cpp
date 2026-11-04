@@ -16,6 +16,7 @@
 
 #include <unknwn.h>
 #include <dxc/dxcapi.h>
+#include "dxc_thread.h"
 
 #include <condition_variable>
 #include <algorithm>
@@ -50,12 +51,6 @@ static ULONGLONG g_last_check = 0;
 static DxcCreateInstanceProc g_dxc_create = nullptr;
 static std::string g_dxc_path;
 static std::once_flag g_dxc_once;
-struct Dxc {
-  IDxcUtils* utils = nullptr;
-  IDxcCompiler3* compiler = nullptr;
-  IDxcIncludeHandler* include = nullptr;
-  bool tried = false;
-};
 static thread_local Dxc t_dxc;
 static thread_local bool t_prefetch = false;
 
@@ -112,7 +107,8 @@ static Dxc* dxc() {
         FAILED(g_dxc_create(CLSID_DxcCompiler, IID_PPV_ARGS(&d.compiler))) ||
         FAILED(d.utils->CreateDefaultIncludeHandler(&d.include))) {
       log("[shaders] DXC initialisation failed");
-      d.compiler = nullptr;
+      d.reset();
+      d.tried = true;
     } else {
       static std::once_flag ready;
       std::call_once(ready, [] { log("[shaders] DXC ready: %s", g_dxc_path.c_str()); });
@@ -122,11 +118,7 @@ static Dxc* dxc() {
 }
 
 static void dxc_release_thread() {
-  Dxc& d = t_dxc;
-  if (d.include) d.include->Release();
-  if (d.compiler) d.compiler->Release();
-  if (d.utils) d.utils->Release();
-  d = Dxc{};
+  t_dxc.reset();
 }
 
 // The SHaRC SDK headers (docs/DESIGN_SOTA_NEXT.md item 2): external/sharc-1.8.3/include of
@@ -397,7 +389,7 @@ static void manifest_write() {
   std::string text;
   for (const Request& r : g_manifest) text += std::to_string(r.unseen) + "\t" + r.file + "\t" + r.entry + "\t" + r.profile + "\n";
   const std::string path = dir + "\\requests.txt", tmp = path + "." + std::to_string(GetCurrentProcessId()) + ".tmp";
-  if (write_file(tmp, text.data(), text.size()) && !MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+  if (!write_file(tmp, text.data(), text.size()) || !MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
     DeleteFileA(tmp.c_str());
 }
 

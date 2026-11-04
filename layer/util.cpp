@@ -1,4 +1,5 @@
 #include "host.h"
+#include "checked_file.h"
 
 #include "../common/settings.h"
 #include "../common/experimental_ab.h"
@@ -82,9 +83,7 @@ void make_dirs(const std::string& path) {
 bool write_file(const std::string& path, const void* data, size_t size) {
   FILE* f = nullptr;
   if (fopen_s(&f, path.c_str(), "wb") != 0 || !f) return false;
-  fwrite(data, 1, size, f);
-  fclose(f);
-  return true;
+  return write_and_close(f, data, size);
 }
 
 uint64_t hash64(const void* data, size_t size) {

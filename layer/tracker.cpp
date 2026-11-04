@@ -9,6 +9,7 @@
 #include "omm_sampler.h"
 #include "native_light_validation.h"
 #include "../common/descriptor_epoch.h"
+#include "resource_retirement.h"
 
 #include <algorithm>
 #include <cstring>
@@ -35,6 +36,8 @@ Tracker& tracker() {
 // destroy hooks therefore wait for the fence of the present that followed the
 // object's last submission before letting the destroy through.
 // ---------------------------------------------------------------------------
+static void life_discard_pending();
+
 namespace {
 struct LifeRef {
   uint64_t frame;   // frame_index() at submit: covered by the fence of present frame + 1
@@ -52,6 +55,7 @@ std::unordered_map<uint64_t, LifeRef> g_life;   // handle -> its last submission
 std::deque<FrameFence> g_fences;                // presents not yet seen complete, in order
 std::vector<VkFence> g_free_fences;
 uint64_t g_life_done = 0;                       // presents <= this completed on the GPU
+std::unordered_map<VkQueue, uint64_t> g_queue_done;
 VkQueue g_present_queue = VK_NULL_HANDLE;       // the queue g_life_done is about
 std::atomic<uint64_t> g_submit_seq{0};
 std::atomic<uint64_t> g_idle_seq{0};
@@ -158,7 +162,9 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
     const VkResult fr = dd->vk.WaitForFences(dd->device, 1, &f.fence, VK_TRUE, 0);   // a status poll
     lost = lost || fr == VK_ERROR_DEVICE_LOST;
     if (fr != VK_SUCCESS) break;
-    g_life_done = (std::max)(g_life_done, f.frame);
+    auto& done = g_queue_done[f.queue];
+    done = (std::max)(done, f.frame);
+    g_life_done = done;
     g_present_queue = f.queue;
     if (f.waiters) break;
     if (dd->vk.ResetFences(dd->device, 1, &f.fence) == VK_SUCCESS) g_free_fences.push_back(f.fence);
@@ -189,7 +195,7 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
   if ((frame & 255) == 0) {
     const uint64_t idle = g_idle_seq.load();
     for (auto it = g_life.begin(); it != g_life.end();)
-      it = (it->second.frame + 1 <= g_life_done || it->second.seq <= idle) ? g_life.erase(it) : std::next(it);
+      it = (resource_retirement::complete(it->second.seq, idle, it->second.frame, g_queue_done[it->second.queue], true)) ? g_life.erase(it) : std::next(it);
   }
   static ULONGLONG last = 0, last_cost = 0;
   static uint64_t last_waits = 0, last_unfenced = 0, cost_frame = 0;
@@ -228,28 +234,34 @@ void life_device_destroyed(DeviceData* dd) {
   g_fences.clear();
   g_free_fences.clear();
   g_life.clear();
+  g_queue_done.clear();
+  g_present_queue = VK_NULL_HANDLE;
+  g_life_done = 0;
+  life_discard_pending();
 }
 
-void life_before_destroy(uint64_t h, const char* what) {
-  if (!h) return;
+bool life_before_destroy(uint64_t h, const char* what, bool wait) {
+  if (!h) return true;
   DeviceData* dd = main_device();
-  if (!dd) return;
+  if (!dd) return true;
   FrameFence* f = nullptr;
   LifeRef r{};
   {
     std::lock_guard<std::mutex> lock(g_life_mu);
     auto it = g_life.find(h);
-    if (it == g_life.end()) return;
+    if (it == g_life.end()) return true;
     r = it->second;
-    g_life.erase(it);
-    const bool idle = r.seq <= g_idle_seq.load(), done = r.queue == g_present_queue && r.frame + 1 <= g_life_done;
+    const bool idle = r.seq <= g_idle_seq.load(), done = r.frame < g_queue_done[r.queue];
     if (cfg_int("life_log", 0) && g_life_logged++ < 256)
       log("[life] destroy %s %p: last submitted in frame %llu (seq %llu, queue %p), now frame %llu, presents done %llu, "
           "idle seq %llu: %s",
           what, (void*)h, (unsigned long long)r.frame, (unsigned long long)r.seq, (void*)r.queue,
           (unsigned long long)frame_index(), (unsigned long long)g_life_done, (unsigned long long)g_idle_seq.load(),
           idle ? "complete (device idle since)" : done ? "complete (fence)" : "checking");
-    if (idle || done) return;
+    if (idle || done) {
+      g_life.erase(it);
+      return true;
+    }
     for (FrameFence& x : g_fences)
       if (x.frame >= r.frame + 1 && x.queue == r.queue) {
         f = &x;
@@ -261,9 +273,9 @@ void life_before_destroy(uint64_t h, const char* what) {
       ++g_life_unfenced;
       if (g_life_logged++ < 64)
         log("[life] the game destroys %s %p last used by our work in frame %llu (now %llu, queue %p): no fence covers "
-            "it yet, not waited",
+            "it yet, destruction deferred",
             what, (void*)h, (unsigned long long)r.frame, (unsigned long long)frame_index(), (void*)r.queue);
-      return;
+      return false;
     }
     ++f->waiters;
   }
@@ -271,18 +283,24 @@ void life_before_destroy(uint64_t h, const char* what) {
   QueryPerformanceCounter(&t0);
   VkResult st = dd->vk.WaitForFences(dd->device, 1, &f->fence, VK_TRUE, 0);   // a status poll
   VkResult res = st;
-  if (st == VK_TIMEOUT) res = dd->vk.WaitForFences(dd->device, 1, &f->fence, VK_TRUE, 2000000000ull);
+  if (wait && st == VK_TIMEOUT) res = dd->vk.WaitForFences(dd->device, 1, &f->fence, VK_TRUE, 2000000000ull);
   QueryPerformanceCounter(&t1);
   QueryPerformanceFrequency(&fq);
   const double ms = double(t1.QuadPart - t0.QuadPart) * 1000.0 / double(fq.QuadPart);
   std::unique_lock<std::mutex> lock(g_life_mu);
   const uint64_t fframe = f->frame;
   --f->waiters;
-  if (res == VK_SUCCESS && f->queue == g_present_queue) g_life_done = (std::max)(g_life_done, fframe);
+  if (res == VK_SUCCESS) {
+    auto& done = g_queue_done[f->queue];
+    done = (std::max)(done, fframe);
+    if (f->queue == g_present_queue) g_life_done = done;
+  }
   if (st == VK_SUCCESS) {
     ++g_life_noop;
-    return;
+    g_life.erase(h);
+    return true;
   }
+  if (!wait && res == VK_TIMEOUT) return false;
   ++g_life_waits;
   if (res == VK_TIMEOUT) ++g_life_timeouts;
   g_life_wait_ms += ms;
@@ -291,9 +309,15 @@ void life_before_destroy(uint64_t h, const char* what) {
     log("[life] the game destroys %s %p that our work of frame %llu may still use (now frame %llu): waited %.3f ms for "
         "present %llu's fence (%s)",
         what, (void*)h, (unsigned long long)r.frame, (unsigned long long)frame_index(), ms, (unsigned long long)fframe,
-        res == VK_SUCCESS ? "complete" : res == VK_TIMEOUT ? "TIMEOUT, destroyed anyway" : "error");
+        res == VK_SUCCESS ? "complete" : res == VK_TIMEOUT ? "TIMEOUT, destruction deferred" : "error");
   lock.unlock();   // fault reporting reads life_gpu_done under g_life_mu
   fault_on_result(dd, res, "resource lifetime fence wait");
+  if (res == VK_SUCCESS || res == VK_ERROR_DEVICE_LOST) {
+    std::lock_guard<std::mutex> done_lock(g_life_mu);
+    g_life.erase(h);
+    return true;
+  }
+  return false;
 }
 
 static bool is_image_type(VkDescriptorType t) {
@@ -670,10 +694,50 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
   return r;
 }
 
+namespace {
+enum class PendingKind { Image, View, Buffer, Memory };
+struct PendingDestroy {
+  PendingKind kind;
+  VkDevice device;
+  uint64_t handle;
+  VkAllocationCallbacks alloc{};
+  bool custom_alloc;
+};
+std::mutex g_pending_mu;
+std::deque<PendingDestroy> g_pending_destroy;
+size_t g_pending_active = 0, g_pending_objects = 0;
+thread_local bool g_destroy_poll = false;
+void pending_destroy(PendingKind kind, VkDevice device, uint64_t handle, const VkAllocationCallbacks* alloc) {
+  std::lock_guard<std::mutex> lock(g_pending_mu);
+  g_pending_destroy.push_back({kind, device, handle, alloc ? *alloc : VkAllocationCallbacks{}, alloc != nullptr});
+  if (kind != PendingKind::Memory) ++g_pending_objects;
+  const size_t n = g_pending_destroy.size();
+  static size_t logged_size = 0;
+  if (n > logged_size && (n == 1 || (n & (n - 1)) == 0)) {
+    logged_size = n;
+    log("[life] %zu object destructions deferred until GPU completion", n);
+  }
+}
+bool pending_objects() {
+  std::lock_guard<std::mutex> lock(g_pending_mu);
+  return !resource_retirement::can_free_memory(g_pending_active, g_pending_objects != 0);
+}
+}  // namespace
+
+static void life_discard_pending() {
+  std::lock_guard<std::mutex> lock(g_pending_mu);
+  // Vulkan destroys remaining child objects with their device. Never carry
+  // their handles or callback user data into a new device lifetime.
+  g_pending_destroy.clear();
+  g_pending_active = g_pending_objects = 0;
+}
+
 static VKAPI_ATTR void VKAPI_CALL DestroyImage(VkDevice device, VkImage img, const VkAllocationCallbacks* a) {
+  if (!life_before_destroy((uint64_t)img, "image", !g_destroy_poll) || !sl_note_image_destroyed(img, !g_destroy_poll)) {
+    pending_destroy(PendingKind::Image, device, uint64_t(img), a);
+    return;
+  }
   omm::content_image_destroyed(device_of(device),img);
-  life_before_destroy((uint64_t)img, "image");   // first: the hooks below release our views of it
-  sl_note_image_destroyed(img);
   ngx_on_destroy_image(img);  // our views of it go first
   rrpost_forget_image(img);
   device_of(device)->vk.DestroyImage(device, img, a);
@@ -696,9 +760,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImageView(VkDevice device, const VkI
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyImageView(VkDevice device, VkImageView v, const VkAllocationCallbacks* a) {
+  if (!life_before_destroy((uint64_t)v, "image view", !g_destroy_poll) || !sl_note_view_destroyed(v, !g_destroy_poll)) {
+    pending_destroy(PendingKind::View, device, uint64_t(v), a);
+    return;
+  }
   omm::content_view_destroyed(device_of(device),v);
-  life_before_destroy((uint64_t)v, "image view");
-  sl_note_view_destroyed(v);
   device_of(device)->vk.DestroyImageView(device, v, a);
   std::unique_lock<std::shared_mutex> lock(tracker().mu);
   tracker().views.erase(v);
@@ -952,7 +1018,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL BindBufferMemory2(VkDevice device, uint32_
 }
 
 static VKAPI_ATTR void VKAPI_CALL DestroyBuffer(VkDevice device, VkBuffer b, const VkAllocationCallbacks* a) {
-  life_before_destroy((uint64_t)b, "buffer");
+  if (!life_before_destroy((uint64_t)b, "buffer", !g_destroy_poll)) {
+    pending_destroy(PendingKind::Buffer, device, uint64_t(b), a);
+    return;
+  }
   // Our caches keyed by the buffer go first: the handle may be reused at once.
   bvh_forget_buffer(b);
   geo_forget_buffer(b);
@@ -987,6 +1056,12 @@ static VKAPI_ATTR void VKAPI_CALL UnmapMemory(VkDevice device, VkDeviceMemory m)
 }
 
 static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, const VkAllocationCallbacks* a) {
+  // A game allocation may back any retained image or buffer. Keep it until all
+  // pending object destroys have completed, rather than freeing its storage early.
+  if (pending_objects()) {
+    pending_destroy(PendingKind::Memory, device, uint64_t(m), a);
+    return;
+  }
   omm::content_memory_freed(device_of(device),m);
   {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
@@ -994,6 +1069,48 @@ static VKAPI_ATTR void VKAPI_CALL FreeMemory(VkDevice device, VkDeviceMemory m, 
     tracker().mapped_ranges.erase(m);
   }
   device_of(device)->vk.FreeMemory(device, m, a);
+}
+
+void life_defer_tick(bool flush_all) {
+  std::vector<PendingDestroy> pending;
+  {
+    std::lock_guard<std::mutex> lock(g_pending_mu);
+    const size_t count = resource_retirement::batch_size(g_pending_destroy.size());
+    pending.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      pending.push_back(g_pending_destroy.front());
+      g_pending_destroy.pop_front();
+      if (pending.back().kind != PendingKind::Memory) {
+        ++g_pending_active;
+        --g_pending_objects;
+      }
+    }
+  }
+  // Poll at most 128 entries once per tick. A timeout retains ownership; no retry
+  // loop and no additional blocking wait is introduced in the present path.
+  const bool old_poll = g_destroy_poll;
+  g_destroy_poll = true;
+  for (const auto& x : pending) {
+    if (x.kind == PendingKind::Memory) continue;
+    const auto* alloc = x.custom_alloc ? &x.alloc : nullptr;
+    switch (x.kind) {
+      case PendingKind::Image: DestroyImage(x.device, VkImage(x.handle), alloc); break;
+      case PendingKind::View: DestroyImageView(x.device, VkImageView(x.handle), alloc); break;
+      case PendingKind::Buffer: DestroyBuffer(x.device, VkBuffer(x.handle), alloc); break;
+      default: break;
+    }
+    std::lock_guard<std::mutex> lock(g_pending_mu);
+    --g_pending_active;
+  }
+  for (const auto& x : pending) {
+    if (x.kind != PendingKind::Memory) continue;
+    const auto* alloc = x.custom_alloc ? &x.alloc : nullptr;
+    if (pending_objects()) pending_destroy(x.kind, x.device, x.handle, alloc);
+    else FreeMemory(x.device, VkDeviceMemory(x.handle), alloc);
+  }
+  g_destroy_poll = old_poll;
+  if (flush_all && pending_objects())
+    log("[life] incomplete object destruction retained until device teardown");
 }
 
 void register_tracker_hooks(HookMap& m) {

@@ -26,6 +26,7 @@
 #include "host.h"
 #include "../common/fg_stability.h"
 #include "../common/fg_copy_lease.h"
+#include "recording_init.h"
 #include "../common/fg_extent.h"
 #include "../common/async_capture_queue.h"
 
@@ -692,7 +693,9 @@ struct MvCopySlot {
   VkDeviceMemory memory = VK_NULL_HANDLE;
   VkDeviceMemory depth_memory = VK_NULL_HANDLE;
   VkSemaphore fence = VK_NULL_HANDLE;
-  FgCopyLease lease;
+  FgCopyLease lease, previous_lease;
+  VkSemaphore previous_fence = VK_NULL_HANDLE;
+  VkCommandBuffer recording_cmd = VK_NULL_HANDLE;
   uint64_t submitted = UINT64_MAX;
 };
 std::mutex g_mv_copy_mu;
@@ -830,6 +833,7 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
     state->sl_depth_copy.image = slot.depth.image; state->sl_depth_copy.view = slot.depth.view;
     state->sl_depth_copy.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     state->sl_mvec_slot = index;
+    slot.previous_lease = slot.lease; slot.previous_fence = slot.fence; slot.recording_cmd = cmd;
     slot.lease.write(); slot.fence = VK_NULL_HANDLE; slot.submitted = UINT64_MAX;
     if (cfg_int("pan_inputs", 0)) pan_capture(cmd, "rr_mvec_copy", &state->sl_mvec_copy);
     if (cfg_int("pan_inputs", 0)) pan_capture(cmd, "rr_depth_copy", &state->sl_depth_copy);
@@ -2241,7 +2245,22 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s) {
   if (p.depth_image && s->depth_layout != VK_IMAGE_LAYOUT_UNDEFINED) sl_note_barrier(s, p.depth_image, s->depth_layout);
 }
 
+void sl_discard_recording(VkCommandBuffer cmd) {
+  std::lock_guard lock(g_mv_copy_mu);
+  for (auto& slot : g_mv_copies) {
+    if (slot.recording_cmd != cmd) continue;
+    if (cancel_recorded_copy(slot.submitted == UINT64_MAX, slot.lease, slot.previous_lease))
+      slot.fence = slot.previous_fence;
+    slot.recording_cmd = VK_NULL_HANDLE;
+  }
+}
+
 void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
+  {
+    std::lock_guard copy_lock(g_mv_copy_mu);
+    for (auto cmd : cmds) for (auto& slot : g_mv_copies)
+      if (slot.recording_cmd == cmd && slot.submitted == UINT64_MAX) slot.submitted = frame_index();
+  }
   if (!g_active) return;
   std::lock_guard<std::mutex> lock(g_mu);
   for (VkCommandBuffer c : cmds) {
@@ -2288,7 +2307,7 @@ void sl_note_submit(const std::vector<VkCommandBuffer>& cmds) {
 // Streamline does not keep tagged Vulkan images (or the views it was given)
 // alive: wait until DLSS-G has consumed the last presented frame's inputs (its
 // documented fence), so its queued work never touches a destroyed object.
-static void wait_inputs_consumed(const char* what, uint64_t handle) {
+static bool wait_inputs_consumed(const char* what, uint64_t handle, bool wait) {
   VkSemaphore fence;
   uint64_t value;
   {
@@ -2296,20 +2315,22 @@ static void wait_inputs_consumed(const char* what, uint64_t handle) {
     fence = g_inputs_fence;
     value = g_inputs_value;
   }
-  if (!g_fg_running || !fence || !value || !g_wait_semaphores || !g_dd || t_in_sl) return;
+  if (!fence || !value || !g_wait_semaphores || !g_dd || t_in_sl) return true;
   VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
   wi.semaphoreCount = 1;
   wi.pSemaphores = &fence;
   wi.pValues = &value;
-  VkResult r = g_wait_semaphores(g_dd->device, &wi, 1000000000ull);
-  log("[sl] tagged %s %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)", what,
+  VkResult r = g_wait_semaphores(g_dd->device, &wi, wait ? 1000000000ull : 0);
+  if (wait || r != VK_TIMEOUT) log("[sl] tagged %s %p destroyed while frame generation runs: waited for DLSS-G inputs fence value %llu (%d)", what,
       (void*)handle, (unsigned long long)value, r);
+  fault_on_result(g_dd, r, "DLSS-G inputs consumption wait");
+  return r == VK_SUCCESS || r == VK_ERROR_DEVICE_LOST;
 }
 
 // The game usually destroys a view before its image; the tag hands DLSS-G
 // that view, so the wait must happen here already.
-void sl_note_view_destroyed(VkImageView view) {
-  if (!g_active || !view) return;
+bool sl_note_view_destroyed(VkImageView view, bool wait) {
+  if (!g_active || !view) return true;
   bool current = false;
   {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2323,11 +2344,11 @@ void sl_note_view_destroyed(VkImageView view) {
   }
   // A rotated-out tag can still belong to the last presented GPU frame.
   // Ignoring its stability reset must never skip the consumption fence.
-  if (current || retired) wait_inputs_consumed("view", (uint64_t)view);
+  return !(current || retired) || wait_inputs_consumed("view", (uint64_t)view, wait);
 }
 
-void sl_note_image_destroyed(VkImage image) {
-  if (!g_active || !sl_watched(image)) return;
+bool sl_note_image_destroyed(VkImage image, bool wait) {
+  if (!g_active || !sl_watched(image)) return true;
   uint32_t current_roles = 0;
   {
     std::lock_guard<std::mutex> lock(g_mu);
@@ -2340,8 +2361,8 @@ void sl_note_image_destroyed(VkImage image) {
   // rotation of the same target does not invalidate its live replacement.
   const uint64_t frame = frame_index();
   const bool current_only = cfg_int("fg_current_destroy_only",1) != 0;
+  if ((current_roles || current_only) && !wait_inputs_consumed("image", (uint64_t)image, wait)) return false;
   const bool reset = g_fg_stability.destroyed(frame,current_roles,current_only);
-  if (current_roles || current_only) wait_inputs_consumed("image", (uint64_t)image);
   std::lock_guard<std::mutex> lock(g_mu);
   g_last_destroy_event = {frame,image,current_roles,reset};
   for (Img* i : {&g_depth, &g_mvec, &g_hudless, &g_ui})
@@ -2353,6 +2374,7 @@ void sl_note_image_destroyed(VkImage image) {
   log("[sl] a tagged image was destroyed; image %p frame %llu current roles 0x%x "
       "(depth=1 MV=2 hudless=4 UI=8), stability reset %u, current-only %u",
       (void*)image,(unsigned long long)frame,current_roles,unsigned(reset),unsigned(current_only));
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -2504,13 +2526,15 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     sl::Result r = g_sl.DLSSGSetOptions(0, o);
     log("[sl] slDLSSGSetOptions(mode %s, frames to generate %u, flags 0x%x): %s", want >= 2 ? "on" : "off",
         o.numFramesToGenerate, flags, res_str(r));
-    g_fg_applied = want;
-    g_flags_applied = flags;
-    if (want >= 2 && !g_fg_running) {
-      g_fg_on_frame = frame;
-      ++g_fg_enables;
+    if (r == sl::Result::eOk) {
+      g_fg_applied = want;
+      g_flags_applied = flags;
+      if (want >= 2 && !g_fg_running) {
+        g_fg_on_frame = frame;
+        ++g_fg_enables;
+      }
+      g_fg_running = want >= 2;
     }
-    g_fg_running = want >= 2;
   }
 
   if (g_token && g_sl.PCLSetMarker) {
