@@ -315,7 +315,8 @@ uint64_t life_idle_begin();
 void life_idle_end(uint64_t seq_before);
 // In the destroy hooks, before anything is released: waits (bounded) for the
 // last submission that referenced `handle`. `what` names it in the log.
-void life_before_destroy(uint64_t handle, const char* what);
+bool life_before_destroy(uint64_t handle, const char* what, bool wait = true);
+void life_defer_tick(bool flush_all);
 void life_device_destroyed(DeviceData* dd);
 
 // ---- tracer (tracer.cpp) ----
@@ -427,10 +428,13 @@ void sl_note_pass_end(VkCommandBuffer cmd, CmdState* s);
 void sl_note_barrier(CmdState* s, VkImage image, VkImageLayout layout);
 void sl_note_event_barrier(CmdState* s, VkImage image, VkImageLayout layout);
 void sl_note_submit(const std::vector<VkCommandBuffer>& cmds);
+void sl_discard_recording(VkCommandBuffer cmd);
+void alpha_discard_recording(uint64_t recording);
+void alpha_submit_recordings(const std::vector<VkCommandBuffer>& cmds);
 void sl_preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& motion, const Bg3Binding& depth);
 VkImageLayout sl_input_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout fallback);
-void sl_note_image_destroyed(VkImage image);
-void sl_note_view_destroyed(VkImageView view);   // a tag's view: DLSS-G may still read it
+bool sl_note_image_destroyed(VkImage image, bool wait = true);
+bool sl_note_view_destroyed(VkImageView view, bool wait = true);   // a tag's view: DLSS-G may still read it
 bool sl_watched(VkImage image);
 
 // ---- hot reload + shader compiler (hotreload.cpp, shaders.cpp) ----

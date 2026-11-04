@@ -18,7 +18,7 @@ static Bg3HostApi g_host{};
 static uint64_t g_loaded_mtime = 0, g_seen_mtime = 0;
 static ULONGLONG g_seen_tick = 0, g_last_check = 0;
 static uint32_t g_generation = 0;
-static bool g_faulted = false;
+static std::atomic<bool> g_faulted{false};
 
 static std::string core_path() { return bin_dir() + "\\bg3rtx_core.dll"; }
 
@@ -258,8 +258,7 @@ void core_poll(VkQueue present_queue) {
 }
 
 static void fault(const char* where) {
-  if (g_faulted) return;
-  g_faulted = true;
+  if (g_faulted.exchange(true)) return;
   log("[hot] core faulted in %s; disabled until the next build", where);
 }
 
@@ -418,7 +417,12 @@ bool alloc_image(uint32_t w, uint32_t h, VkFormat format, VkImageUsageFlags usag
   vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
   vci.format = format;
   vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  dd->vk.CreateImageView(dd->device, &vci, nullptr, &out->view);
+  if (dd->vk.CreateImageView(dd->device, &vci, nullptr, &out->view) != VK_SUCCESS) {
+    dd->vk.DestroyImage(dd->device, out->image, nullptr);
+    dd->vk.FreeMemory(dd->device, out->memory, nullptr);
+    *out = Bg3Image{};
+    return false;
+  }
   return true;
 }
 
@@ -439,6 +443,7 @@ void defer_destroy(Bg3DeferKind kind, uint64_t handle) {
 }
 
 void defer_tick(bool flush_all) {
+  life_defer_tick(flush_all);
   DeviceData* dd = main_device();
   if (!dd) return;
   std::vector<Deferred> due;
@@ -450,13 +455,13 @@ void defer_tick(bool flush_all) {
     // presents ahead of the GPU (loading, headless), and a freed acceleration
     // structure still read by a trace is a GPU page fault (device lost). Covered
     // by the present fence of frame + 2 (the RT passes use the previous frame's
-    // TLAS); 240 frames is a fallback if no present fence is being tracked.
+    // TLAS). Frame age never proves GPU completion.
     const uint64_t gpu_done = life_gpu_done();
     // One pass (the BVH split can retire thousands of objects at a level change).
     size_t w = 0;
     for (size_t i = 0; i < g_deferred.size(); ++i) {
       const uint64_t f = g_deferred[i].frame;
-      if (flush_all || (now >= f + 4 && (f + 2 <= gpu_done || now >= f + 240))) due.push_back(g_deferred[i]);
+      if (flush_all || (now >= f + 4 && f + 2 <= gpu_done)) due.push_back(g_deferred[i]);
       else g_deferred[w++] = g_deferred[i];
     }
     g_deferred.resize(w);

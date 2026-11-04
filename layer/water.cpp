@@ -265,7 +265,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) 
     out = Buf{};
     return false;
   }
-  dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if (dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
+    dd->vk.FreeMemory(dd->device, out.m, nullptr);
+    out = Buf{};
+    return false;
+  }
   out.size = size;
   if (host) {
     void* p = nullptr;
@@ -1013,11 +1018,14 @@ void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkComma
   }
   harvest(i);
   ++g_next;
-  dd->vk.ResetFences(dd->device, 1, &s.fence);
-  dd->vk.ResetCommandBuffer(s.cb, 0);
+  s.used = false;   // The previous submission is complete; failed recording owns no fence.
+  if (dd->vk.ResetFences(dd->device, 1, &s.fence) != VK_SUCCESS ||
+      dd->vk.ResetCommandBuffer(s.cb, 0) != VK_SUCCESS) return;
   VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  dd->vk.BeginCommandBuffer(s.cb, &bi);
+  const VkResult begin_result = dd->vk.BeginCommandBuffer(s.cb, &bi);
+  fault_on_result(dd, begin_result, "water build begin recording");
+  if (begin_result != VK_SUCCESS) return;
   // Everything the game's batch wrote (XFB, conversions) before our reads.
   barrier(s.cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
@@ -1060,7 +1068,9 @@ void water_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkComma
     }
   }
   g_demand = 0;
-  dd->vk.EndCommandBuffer(s.cb);
+  const VkResult end_result = dd->vk.EndCommandBuffer(s.cb);
+  fault_on_result(dd, end_result, "water build end recording");
+  if (end_result != VK_SUCCESS) return;
   VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
   si.commandBufferCount = 1;
   si.pCommandBuffers = &s.cb;
