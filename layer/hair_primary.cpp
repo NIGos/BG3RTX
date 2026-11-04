@@ -978,6 +978,10 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
   // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
   if (!g_order) allowed = false;
+  {   // rt_hair_primary_passes (diagnostic bitmask, default 7): 1 G-buffer, 2 velocity, 4 prepass clone
+    const int passes = cfg_int("rt_hair_primary_passes", 7);
+    if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) allowed = false;
+  }
   if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
   if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) allowed = false;
   if (!allowed) {
