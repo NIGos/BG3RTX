@@ -79,7 +79,9 @@ std::unordered_map<VkPipeline, VkPipeline> g_probe;
 struct CoveragePeriod { bool probed = false; uint32_t swapped = 0; uint64_t last_swap = UINT64_MAX; };
 std::unordered_map<uint64_t, CoveragePeriod> g_coverage_period;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
-struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0; } g_st;
+struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0, orphan = 0; } g_st;
+// Keys whose prepass card depth went (each G-buffer pass after it must swap them: else counted as orphan).
+std::unordered_set<uint64_t> g_prepass_swapped;
 uint64_t g_logged_pipes = 0;
 // Fail-safe feedback (SwapGate::feedback): strand pixels per groom of the last frame's pixel record, counted on the GPU
 // (rt/hair_primary_count.hlsl) at the next publish, copied to a host-visible ring and read kCountSlots - 1 publishes
@@ -505,7 +507,10 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
   // strand swap; the probe was the only groom trace in the game's command buffers).
   if (g_load.quiet(now)) { ++g_probe_quiet; return; }
   ProbeSlot& slot = g_probe_slots[now % kCoverageSlots];
-  if (slot.frame == now + 1 || !slot_free(slot) || !coverage_pool()) return;
+  if (slot.frame == now + 1) return;   // once per frame (the first prepass)
+  g_st.orphan += g_prepass_swapped.size();   // prepass swaps of the last frame without a G-buffer draw of the key
+  g_prepass_swapped.clear();
+  if (!slot_free(slot) || !coverage_pool()) return;
   if (slot.frame && slot.submitted_frame && slot.n) read_samples(slot, uint32_t(now % kCoverageSlots) * kProbeDraws * 2, true);
   slot = ProbeSlot{};
   slot.frame = now + 1;
@@ -1005,7 +1010,13 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) allowed = false;
   }
   if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
-  if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) allowed = false;
+  // The prepass drops the card depth only after a G-buffer pass applied a header holding the key: the most recent
+  // G-buffer apply (g_applied_frame: frame_index + 1 of that G-buffer). The game records the next frame's prepass before
+  // the present that advances frame_index, so that apply is this frame's number or the next (an equality with now
+  // refused every prepass: hv7 2026-11-04, 0 prepass strand draws next to 187 G-buffer ones).
+  if (g_order && pass == Pass::Prepass && (g_applied_frame < now || g_applied_frame > now + 1 || !g_live_keys.count(key)))
+    allowed = false;
+  if (pass == Pass::Gbuffer && g_prepass_swapped.erase(key) && !allowed) ++g_st.orphan;   // card depth gone, cards drawn
   if (!allowed) {
     // Cards drawn; the masked strand variant follows the native draw (hair_primary_unswap) for the strand samples.
     if (probe && (passes & 8)) {   // bit 8 off: no masked probe draw (no strand evidence)
@@ -1022,6 +1033,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
+  if (pass == Pass::Prepass) g_prepass_swapped.insert(key);
   if (probe) g_coverage_period[key].probed = true;   // the swapped strand draw writes its pixel entries itself
   const uint32_t ts = uint32_t(now % kTimeSlots);
   if (pass == Pass::Gbuffer && g_qp && g_slot_frame[ts] == now + 1 && g_timed[ts] < kTimed) {
@@ -1160,9 +1172,11 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   if (now % 300 == 0)
     log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
-        "G-buffer and %llu velocity strand draws, %llu pipelines refused",
+        "G-buffer and %llu velocity strand draws, %llu pipelines refused; prepass card depth dropped without its G-buffer "
+        "swap %llu",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
-        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused);
+        (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused,
+        (unsigned long long)g_st.orphan);
   if (now % 300 == 0 && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
     // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
     float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
@@ -1181,7 +1195,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   if (now % 300 == 0 && g_ms_frames)
     log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);
-  if (now % 300 == 0) g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
+  if (now % 300 == 0) g_st.orphan = 0, g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
 }
 
 }  // namespace bg3
