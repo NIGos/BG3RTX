@@ -1,3 +1,5 @@
+> Retired scheduling, 2026-11-04. Rejected: 16,616 unique S6 candidates, 0 published; generated rows added no coverage and cost +0.3/+0.5 ms. Removed from active regeneration and scheduling; historical artifacts remain for tests. The instructions below are historical.
+
 # Compact catalogue: S6 publication qualification
 
 `cp5-compact-s6-publication` uses Adamantine Forge (S6), the compatible

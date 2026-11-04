@@ -1036,10 +1036,10 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // (compact hit state, alpha metadata cache, empty water tiles), perf_* keys, diagnostics and
 // knobs owned by an automatic release policy are not listed and stay developer only.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel", "exp_water_hit_shade", "exp_water_hit_cost",
+  "water_surface_fresnel",
   "exp_hair_groom", "exp_hair_groom_primary", "exp_hair_fibre", "exp_hair_fibre_gi",
   "exp_hair_groom_crowd", "exp_hair_groom_shadow_t", "exp_hair_groom_tips",
-  "exp_hair_physical_origin", "exp_alpha_spill", "exp_hit_paks"};
+  "exp_hair_physical_origin"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;
@@ -1248,6 +1248,7 @@ inline void enforce_release_policy(Map& m) {
   };
   // experimental_options=1: the player opted into the unqualified kOptInKnobs; 0 restores them.
   const bool opt_in = map_int(m, "experimental_options", 0) == 1;
+  const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rt_trace_scale"] = "1.0"; m["rr_post"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
@@ -1269,11 +1270,11 @@ inline void enforce_release_policy(Map& m) {
   bool qualified_full = (lookup(m, "preset") == "high" || lookup(m, "preset") == "ultra") && map_int(m, "rt_alpha", 0) &&
       lookup(m, "rt_build") != "0";
   write("exp_vt_alpha_masks", qualified_full ? 1 : 0);
-  write("exp_omm", qualified_full ? 1 : 0);
+  write("exp_omm", qualified_full && omm_enabled ? 1 : 0);
   // Approved k1 optimisation, no release control. Lower presets lack qualification.
   write("exp_ls_exact_k", lookup(m, "preset") == "ultra" && lookup(m, "rt_build") != "0" &&
       knob_value(*find_knob("local_shadows"), m) == 2 ? 1 : 0);
-  // Candidate correction follows water; wf9 remains a release blocker.
+  // Qualified camera correction follows water.
   m["rt_water_compose_shift"] = map_int(m, "rt_water_compose", 0) ? "1" : "0";
 }
 
@@ -1378,11 +1379,11 @@ inline bool choice_available(const Knob& k, int c, bool dev, bool experimental, 
 }
 
 // Pass these values to render_user_ini to preserve hidden/custom keys during an unrelated save.
-inline std::vector<int> presentation_values(const Map& effective, bool dev) {
+inline std::vector<int> presentation_values(const Map& effective, bool dev, bool opt_in = false) {
   auto values = knob_values(effective);
   for (int i = 0; i < kKnobCount; ++i)
-    if (!knob_visible(kKnobs[i], dev) ||
-        (kKnobs[i].kind == Kind::Choice && !choice_visible(kKnobs[i], values[i], dev))) values[i] = -1;
+    if (!knob_visible(kKnobs[i], dev, opt_in) ||
+        (kKnobs[i].kind == Kind::Choice && !choice_visible(kKnobs[i], values[i], dev, opt_in))) values[i] = -1;
   return values;
 }
 

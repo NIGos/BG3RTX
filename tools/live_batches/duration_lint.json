@@ -8017,7 +8017,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\gpu_opt1\\jobs\\go1-camp.json": {
     "problems": [],
@@ -11461,7 +11461,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\gpu_opt1\\jobs\\go2-s8.json": {
     "problems": [],
@@ -17153,7 +17153,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\gpu_opt2\\jobs\\go2-camp-high.json": {
     "problems": [],
@@ -17905,7 +17905,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\gpu_opt2\\jobs\\go2-s8-medium.json": {
     "problems": [],
@@ -19023,7 +19023,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-hit-shade.json": {
     "problems": [],
@@ -23654,7 +23654,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\water_flicker_wf9\\jobs\\wf9-s8-compose-shift.json": {
     "problems": [],
@@ -34214,7 +34214,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House.json": {
     "problems": [],
@@ -53388,7 +53388,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Campsite---27h-part2.json": {
     "problems": [],
@@ -54140,7 +54140,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part1.json": {
     "problems": [],
@@ -62265,7 +62265,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part2.json": {
     "problems": [],
@@ -72562,7 +72562,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part3.json": {
     "problems": [],
@@ -81381,7 +81381,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\box_lights\\jobs\\bx1-box-s6-fg2.json": {
     "problems": [
@@ -122572,7 +122572,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\hair_l2\\jobs\\l2a-dialogue1-fg2.json": {
     "active": false
@@ -127212,7 +127212,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-bit4.json": {
     "problems": [],
@@ -131843,7 +131843,7 @@
       ],
       "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
     },
-    "active": true
+    "active": false
   },
   "tools\\live_batches\\release_qual\\jobs\\rel1-smoke-ultra-s8.json": {
     "duration": {

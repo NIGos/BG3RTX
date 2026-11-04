@@ -34,6 +34,14 @@ class MergeScopeTests(unittest.TestCase):
             self.assertEqual(classify(paths)['scope'], expected)
             self.assertEqual(classify(paths[::-1])['scope'], expected)
 
+    def test_mixed_shader_tooling_runs_both(self):
+        for paths in (['scripts/a.py', 'shaders/a.hlsl'], ['shaders/a.hlsl', 'scripts/a.py']):
+            self.assertTrue(classify(paths)['tooling'])
+        self.assertFalse(classify(['shaders/a.hlsl'])['tooling'])
+        source = (ROOT / 'scripts/merge-green.ps1').read_text()
+        self.assertIn("$toolingChanged -and $scope -in @('shaders', 'full')", source)
+        self.assertIn("Fail 'tooling checks failed'", source)
+
     @patch('scripts.merge_scope.subprocess.run')
     def test_diff_includes_deleted_rename_source_and_spaces(self, run):
         run.return_value.stdout = b'core/old.cpp\0docs/new name.md\0'

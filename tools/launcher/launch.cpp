@@ -35,9 +35,12 @@ bool read_file(const std::wstring& path, std::string& out) {
   if (h == INVALID_HANDLE_VALUE) return false;
   char buf[8192];
   DWORD n = 0;
-  while (ReadFile(h, buf, sizeof buf, &n, nullptr) && n) out.append(buf, n);
+  BOOL ok;
+  while ((ok = ReadFile(h, buf, sizeof buf, &n, nullptr)) && n) out.append(buf, n);
+  DWORD error = ok ? ERROR_SUCCESS : GetLastError();
   CloseHandle(h);
-  return true;
+  if (!ok) { out.clear(); SetLastError(error); }
+  return ok != FALSE;
 }
 
 bool write_file_atomic(const std::wstring& path, const std::string& text, std::wstring* err) {
@@ -49,8 +52,8 @@ bool write_file_atomic(const std::wstring& path, const std::string& text, std::w
   }
   DWORD n = 0;
   BOOL ok = WriteFile(h, text.data(), DWORD(text.size()), &n, nullptr) && n == text.size();
-  FlushFileBuffers(h);
-  CloseHandle(h);
+  if (!FlushFileBuffers(h)) ok = FALSE;
+  if (!CloseHandle(h)) ok = FALSE;
   if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
     DeleteFileW(tmp.c_str());
     if (err) *err = L"cannot write " + path;
@@ -153,10 +156,10 @@ std::wstring saved_game_dir() {
   return {};
 }
 
-void save_game_dir(const std::wstring& dir) {
-  write_file_atomic(launcher_ini_path(),
+bool save_game_dir(const std::wstring& dir, std::wstring* err) {
+  return write_file_atomic(launcher_ini_path(),
                     "# BG3RTX.exe: the game folder (the one with bin\\bg3.exe).\ngame_dir=" + narrow(dir) + "\n",
-                    nullptr);
+                    err);
 }
 
 bool game_running() {
@@ -199,7 +202,7 @@ LaunchPlan make_plan(const std::wstring& game_dir, const std::wstring& exe_overr
   }
   // Developer/test variables must not leak into a player's game.
   p.env_unset = {L"BG3RTX_INI", L"BG3RTX_USER_INI", L"BG3RTX_BACKGROUND", L"BG3RTX_SAVE_ONLY",
-                 L"VK_LOADER_LAYERS_DISABLE"};
+                 L"VK_LOADER_LAYERS_DISABLE", L"BG3RTX_ASSETDB", L"BG3RTX_SE_DIR", L"BG3RTX_SAVE_LOG"};
   return p;
 }
 
@@ -234,15 +237,16 @@ std::wstring describe(const LaunchPlan& p) {
   return d;
 }
 
-static std::wstring env_block(const LaunchPlan& p) {
+bool compose_environment(const LaunchPlan& p, const wchar_t* inherited, std::wstring& out) {
+  out.clear();
+  if (!inherited) return false;
   // Case-insensitive like Windows; sorted as CreateProcess expects.
   struct Less {
     bool operator()(const std::wstring& a, const std::wstring& b) const { return _wcsicmp(a.c_str(), b.c_str()) < 0; }
   };
   std::map<std::wstring, std::wstring, Less> env;
   std::vector<std::wstring> special;   // "=C:=C:\..." entries keep their place first
-  wchar_t* block = GetEnvironmentStringsW();
-  for (wchar_t* e = block; *e; e += wcslen(e) + 1) {
+  for (const wchar_t* e = inherited; *e; e += wcslen(e) + 1) {
     std::wstring s = e;
     size_t eq = s.find(L'=', 1);
     if (s[0] == L'=' || eq == std::wstring::npos) {
@@ -251,14 +255,13 @@ static std::wstring env_block(const LaunchPlan& p) {
     }
     env[s.substr(0, eq)] = s.substr(eq + 1);
   }
-  FreeEnvironmentStringsW(block);
   for (auto& k : p.env_unset) env.erase(k);
   for (auto& kv : p.env_set) env[kv.first] = kv.second;
-  std::wstring out;
   for (auto& s : special) out += s + L'\0';
   for (auto& kv : env) out += kv.first + L"=" + kv.second + L'\0';
+  if (out.empty()) out += L'\0';
   out += L'\0';
-  return out;
+  return true;
 }
 
 bool launch(const LaunchPlan& p, DWORD* pid, std::wstring* err) {
@@ -267,7 +270,14 @@ bool launch(const LaunchPlan& p, DWORD* pid, std::wstring* err) {
     return false;
   }
   std::wstring cmd = command_line(p);
-  std::wstring env = env_block(p);
+  wchar_t* inherited = GetEnvironmentStringsW();
+  std::wstring env;
+  bool ok = compose_environment(p, inherited, env);
+  if (inherited) FreeEnvironmentStringsW(inherited);
+  if (!ok) {
+    if (err) *err = L"Cannot read the launch environment.";
+    return false;
+  }
   STARTUPINFOW si{sizeof si};
   PROCESS_INFORMATION pi{};
   if (!CreateProcessW(p.exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, CREATE_UNICODE_ENVIRONMENT, env.data(),
@@ -294,8 +304,14 @@ std::wstring caps_text(unsigned caps) {
 // ---- settings state ----
 
 void load_state(State& s) {
-  read_file(base_ini_path(), s.base_text);
-  read_file(user_ini_path(), s.user_text);
+  auto read_optional = [](const std::wstring& path, std::string& text) {
+    if (read_file(path, text)) return true;
+    DWORD error = GetLastError();
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+  };
+  bool base_ok = read_optional(base_ini_path(), s.base_text);
+  bool user_ok = read_optional(user_ini_path(), s.user_text);
+  s.settings_readable = base_ok && user_ok;
   s.base = st::parse_ini(s.base_text);
   s.user = st::parse_ini(s.user_text);
   st::Map raw;
@@ -317,6 +333,10 @@ st::KVList forced_keys(const State& s) {
 }
 
 bool save_state(State& s, std::wstring* err) {
+  if (!s.settings_readable) {
+    if (err) *err = L"Settings could not be read. Close and retry before saving.";
+    return false;
+  }
   std::string text = st::render_user_ini(s.user_text, s.preset, s.values, forced_keys(s));
   if (!write_file_atomic(user_ini_path(), text, err)) return false;
   s.user_text = text;

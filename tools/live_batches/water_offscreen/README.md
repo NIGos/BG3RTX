@@ -1,3 +1,5 @@
+> Retired scheduling, 2026-11-04. Rejected: compose refused every pass because of the light binding 21-22 mismatch. Bits 1/2/4/7 have no qualification. Removed from active regeneration and scheduling; jobs/plans remain as test/lint fixtures. The instructions below are historical.
+
 # Water reflection cost bits
 
 Prepared offline, never queued. `python -m tools.live_batches.water_offscreen.make_jobs` reads retained source seeds and uses shared live_flow timing/readiness. `dryrun.ps1` validates each launch independently.

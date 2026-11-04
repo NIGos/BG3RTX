@@ -1,3 +1,5 @@
+> Retired scheduling, 2026-11-04. Rejected: compact hit state, alpha metadata cache and empty water tiles. Removed from active regeneration and scheduling; generators and artifacts remain for regression tests. No release keys are enabled by this batch. The instructions below are historical.
+
 # gpu-opt1 draft (offline only)
 
 Run `python tools/live_batches/gpu_opt1/make_job.py` to regenerate. Run `dryrun.ps1` for the existing fake queue and shared lints. The generator never queues jobs. Live execution needs new user steering; never copy these drafts to a watched inbox beforehand.

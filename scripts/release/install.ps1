@@ -71,30 +71,76 @@ foreach ($f in $files) {
 }
 foreach ($f in $old) { $null = Inside $dst $f }
 if ($WhatIf) { Write-Host "Would install $($files.Count) files in $dst. Originals would be backed up. Nothing changed."; return }
-New-Item -ItemType Directory -Force -Path $dst | Out-Null
-# Keep the original collision once, across every later reinstall.
-foreach ($f in $files) {
-  $to = Inside $dst $f
-  $save = Inside $backup $f
-  if ($f -notin $old -and (Test-Path -LiteralPath $to) -and -not (Test-Path -LiteralPath $save)) {
-    New-Item -ItemType Directory -Force -Path (Split-Path $save) | Out-Null
-    Copy-Item -LiteralPath $to -Destination $save
-  }
-}
-# Ownership is written first so interrupted copies can be uninstalled.
-@($old + $files | Sort-Object -Unique) | Set-Content -LiteralPath $manifest -Encoding UTF8
-'BG3RTX per-user installation' | Set-Content -LiteralPath $marker -Encoding UTF8
-foreach ($f in $files) {
-  $to = Inside $dst $f
+# Stage and verify the payload before modifying the installation. Keep previous
+# files until both the payload and its ownership metadata have committed.
+$stage = Join-Path ([IO.Path]::GetTempPath()) ('bg3rtx-install-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $stage | Out-Null
+$journal = @()
+$createdBackups = @()
+$backupTemps = @()
+$hadBackup = Test-Path -LiteralPath $backup
+$rollbackFailed = $false
+function Copy-Verified([string]$from, [string]$to) {
   New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
-  Copy-Item -LiteralPath (Inside $src $f) -Destination $to -Force
+  Copy-Item -LiteralPath $from -Destination $to -Force
+  if ((Get-FileHash -LiteralPath $from).Hash -ne (Get-FileHash -LiteralPath $to).Hash) { throw "Copy verification failed: $to" }
 }
-# Keep retired entries in the manifest so uninstall can restore their originals.
-foreach ($f in $old) {
-  if ($f -notin $files) {
-    $p = Inside $dst $f
-    if (Test-Path -LiteralPath $p -PathType Leaf) { Remove-Item -LiteralPath $p -Force }
+try {
+  foreach ($f in $files) { Copy-Verified (Inside $src $f) (Inside $stage ('payload\' + $f)) }
+  $targets = @($files + $old | Sort-Object -Unique) + @('install_manifest.txt', '.bg3rtx_install')
+  foreach ($f in $targets) {
+    $to = Join-Path $dst $f
+    $previous = Join-Path $stage ('previous\' + $f)
+    $exists = Test-Path -LiteralPath $to -PathType Leaf
+    if ($exists) { Copy-Verified $to $previous }
+    $journal += @{ Path = $to; Previous = $previous; Existed = $exists }
   }
+  # Only verified, atomically renamed backups are authoritative on retry.
+  foreach ($f in $files) {
+    $to = Inside $dst $f
+    $save = Inside $backup $f
+    if ($f -notin $old -and (Test-Path -LiteralPath $to) -and -not (Test-Path -LiteralPath $save)) {
+      $tmp = $save + '.' + [guid]::NewGuid() + '.tmp'
+      Assert-Safe $tmp
+      $backupTemps += $tmp
+      Copy-Verified $to $tmp
+      Move-Item -LiteralPath $tmp -Destination $save -Force
+      $createdBackups += $save
+    }
+  }
+  foreach ($f in $files) { Copy-Verified (Inside $stage ('payload\' + $f)) (Inside $dst $f) }
+  foreach ($f in $old) {
+    if ($f -notin $files) {
+      $to = Inside $dst $f
+      if (Test-Path -LiteralPath $to -PathType Leaf) { Remove-Item -LiteralPath $to -Force }
+    }
+  }
+  @($old + $files | Sort-Object -Unique) | Set-Content -LiteralPath $manifest -Encoding UTF8
+  'BG3RTX per-user installation' | Set-Content -LiteralPath $marker -Encoding UTF8
+} catch {
+  $failure = $_
+  foreach ($entry in $journal) {
+    try {
+      if ($entry.Existed) { Copy-Verified $entry.Previous $entry.Path }
+      elseif (Test-Path -LiteralPath $entry.Path -PathType Leaf) { Remove-Item -LiteralPath $entry.Path -Force }
+    } catch { $rollbackFailed = $true; Write-Warning "Could not restore $($entry.Path). Recovery files: $stage" }
+  }
+  if ($rollbackFailed) { throw "Install failed and rollback needs recovery from $stage. Original error: $failure" }
+  foreach ($save in @($createdBackups + $backupTemps)) {
+    if (Test-Path -LiteralPath $save -PathType Leaf) { Remove-Item -LiteralPath $save -Force }
+  }
+  if (-not $hadBackup -and (Test-Path -LiteralPath $backup)) {
+    Get-ChildItem -LiteralPath $backup -Directory -Recurse | Sort-Object { $_.FullName.Length } -Descending | ForEach-Object {
+      if (-not (Get-ChildItem -LiteralPath $_.FullName -Force)) { [IO.Directory]::Delete($_.FullName, $false) }
+    }
+    if (-not (Get-ChildItem -LiteralPath $backup -Force)) { [IO.Directory]::Delete($backup, $false) }
+  }
+  throw $failure
+} finally {
+  # This is a freshly created temp tree, never an installation or shared tree.
+  $resolvedStage = [IO.Path]::GetFullPath($stage)
+  if (-not $resolvedStage.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe staging cleanup path' }
+  if (-not $rollbackFailed) { Remove-Item -LiteralPath $resolvedStage -Recurse -Force }
 }
 if (-not $NoShortcut) {
   $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'BG3RTX.lnk'

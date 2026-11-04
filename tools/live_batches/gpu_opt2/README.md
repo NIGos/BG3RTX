@@ -1,3 +1,5 @@
+> Retired scheduling, 2026-11-04. Rejected for release: Medium half-resolution and the High candidate. Removed from active regeneration and scheduling; historical artifacts remain for test/lint consumers. The instructions below are historical.
+
 Prepared only; never copy to a watched inbox without explicit batch steering.
 Camp uses High, S8 Medium, fixed geometry throughout each launch; 1.0 / 0.5 / 1.0.
 Cost windows are trace-free and diagnostics-free. Require complete 300-frame timing lines in every state.

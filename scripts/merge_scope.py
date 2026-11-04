@@ -86,7 +86,7 @@ def classify(paths):
     if not scopes:
         return dict(scope='full', reason='empty change list (safe default)')
     scope = max(scopes, key=('docs', 'tooling', 'shaders').index)
-    return dict(scope=scope, reason=f'{len(paths)} changed paths; broadest required scope is {scope}')
+    return dict(scope=scope, tooling='tooling' in scopes, reason=f'{len(paths)} changed paths; broadest required scope is {scope}')
 
 
 def changed_paths(root, ref):

@@ -1,3 +1,5 @@
+> Retired scheduling, 2026-11-04. Scheduling retired during consolidation. The generator now has no source groups. Its rejected pak, GPU and water-hit experiments must not be queued. All generated jobs, plans and manifests remain as historical test/lint fixtures. The instructions below are historical.
+
 # Next live series, prepared 2026-11-03
 
 Offline drafts only. Nothing is queued and no game launch is authorized.
