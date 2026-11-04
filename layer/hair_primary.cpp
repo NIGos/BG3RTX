@@ -105,7 +105,8 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 // frame its draw key, LOD, strand pixels and pool-bound refusals.
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
-                   uint32_t traced = 0, hit = 0, tag = 0; float ray[16] = {}; };
+                   uint32_t traced = 0, hit = 0, tag = 0, evidence_tag = 0, tag_totals[hair_primary::kCountTags] = {};
+                   float ray[16] = {}; };
 CountSeen g_seen;
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
 std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
@@ -276,11 +277,24 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
       if (s.keys[k] && t[3] == 1.0f) g_transmit[s.keys[k]].add(t);
       other_total += other[k];
     }
-    if (s.gframe) {   // coverage evidence: unique strand pixels per draw key of the counted G-buffer frame
-      std::unordered_map<uint64_t, uint64_t> strand;
-      for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
-        if (s.keys[k]) strand[s.keys[k]] += s.map[k];
-      for (const auto& [key, v] : strand) pair_samples(key, s.gframe, v, false);
+    {   // coverage evidence: unique strand pixels per draw key of the newest G-buffer frame whose entries the count saw
+      uint32_t totals[hair_primary::kCountTags] = {};
+      const uint32_t* tc = s.map + hair_primary::kTagCountOffset / 4;
+      for (uint32_t j = 0; j < hair_primary::kCountTags; ++j)
+        for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) totals[j] += tc[j * hair_primary::kMaxGrooms + k];
+      std::memcpy(g_seen.tag_totals, totals, sizeof totals);
+      const int j = hair_primary::newest_counted_tag(totals);
+      const GbFrame* gf = nullptr;   // the G-buffer frame that applied that tag (the newest such frame)
+      if (j >= 0)
+        for (const GbFrame& f : g_gb_frames)
+          if (f.frame && f.tag == s.tag - uint32_t(j) && (!gf || f.frame > gf->frame)) gf = &f;
+      g_seen.evidence_tag = gf ? gf->tag : 0;
+      if (gf) {
+        std::unordered_map<uint64_t, uint64_t> strand;
+        for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k)
+          if (gf->keys[k]) strand[gf->keys[k]] += tc[uint32_t(j) * hair_primary::kMaxGrooms + k];
+        for (const auto& [key, v] : strand) pair_samples(key, gf->frame, v, false);
+      }
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
     // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
@@ -1159,10 +1173,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       const float* r = g_seen.ray;
       log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
-          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u",
+          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; strand pixels "
+          "with tag %u/%u/%u/%u: %u/%u/%u/%u, evidence from tag %u",
           (unsigned long long)g_seen.frame, g_seen.traced,
           g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
-          g_seen.tag, g_last_tag);
+          g_seen.tag, g_last_tag, g_seen.tag, g_seen.tag - 1, g_seen.tag - 2, g_seen.tag - 3, g_seen.tag_totals[0],
+          g_seen.tag_totals[1], g_seen.tag_totals[2], g_seen.tag_totals[3], g_seen.evidence_tag);
     }
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
