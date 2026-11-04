@@ -9,8 +9,9 @@ const fontBase = localFiles?assetBase+'fonts/':'https://fonts.bg3rtx.local/';
 const fontStyle=document.createElement('style');
 fontStyle.textContent='@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Regular.ttf")}@font-face{font-family:Lato;src:url("'+fontBase+'LatoWeb-Semibold.ttf");font-weight:600 900}';
 document.head.append(fontStyle);
-if(localFiles)['dark-stone.svg','frame.svg','corner.svg','divider.svg','hero-lantern.png','parchment-panel.svg'].forEach(name=>document.documentElement.style.setProperty('--art-'+name.split('.')[0], 'url("'+assetBase+'branding/ornaments/'+name+'")'));
 document.querySelector('.emblem').src=localFiles?assetBase+'branding/bg3rtx.svg':'https://branding.bg3rtx.local/bg3rtx.svg';
+// The native window paints the real title bar; ?chrome=1 previews it in a plain browser.
+if(query.has('chrome'))$('titlebar').hidden=false;
 let state = null;
 const sampleView=query.get('view')||'';
 let section = query.get('section') || (sampleView==='missing'?'Support':'Lighting');
@@ -19,80 +20,179 @@ const disclosureState=new Map();
 let reportSignature=null;
 function rememberDisclosures(root) {root.querySelectorAll('details').forEach(d=>{if(d.id)disclosureState.set(d.id,d.open);});}
 function restoreDisclosure(d) {d.open=disclosureState.get(d.id)||false;}
-const sections = [['Lighting','M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'],['Surfaces','M3 15c3-2 6 2 9 0s6-2 9 0M3 19c3-2 6 2 9 0s6-2 9 0M12 3v8'],['Performance','M3 17l5-6 4 4 4-7 5 9M3 21h18'],['Advanced','M4 8h16M8 4v16M16 4v16M4 16h16'],['Support','M12 4v8M12 17v1']];
-const labels = {Surfaces:'Surfaces',Advanced:'Advanced',Support:'Help & support'};
+// One stroke style: 24-unit grid, 1.75 stroke, round caps (see .icon svg in app.css).
+const icons = {
+ Lighting:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+ Surfaces:'<path d="M12 3.2c3.4 4 5.8 7.2 5.8 10.3a5.8 5.8 0 0 1-11.6 0c0-3.1 2.4-6.3 5.8-10.3z"/><path d="M9.1 14.1a3 3 0 0 0 2.6 2.6"/>',
+ Performance:'<path d="M4.4 17.6a8.6 8.6 0 1 1 15.2 0"/><path d="M12 14.6l4.2-4.9"/><circle cx="12" cy="14.6" r="1.4"/><path d="M6.6 11.6l1.3.6M12 6.4v1.5M17.4 11.6l-1.3.6"/>',
+ Experimental:'<path d="M9.5 3.5h5M10.6 3.5v5.9L5.3 18.1a1.6 1.6 0 0 0 1.4 2.4h10.6a1.6 1.6 0 0 0 1.4-2.4l-5.3-8.7V3.5"/><path d="M7.5 14.6h9"/>',
+ Support:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.8-1.1 1.5v.6"/><path d="M12 16.9v.2"/>',
+ Advanced:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+ Developer:'<path d="M8.5 7.5 4 12l4.5 4.5M15.5 7.5 20 12l-4.5 4.5M13.5 5.5l-3 13"/>',
+ Needs:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.4v.2"/>'
+};
+function icon(name) {const s=el('span','icon');s.setAttribute('aria-hidden','true');s.innerHTML='<svg viewBox="0 0 24 24" focusable="false">'+icons[name]+'</svg>';return s;}
+const sections = ['Lighting','Surfaces','Performance','Experimental','Advanced','Support'];
+const labels = {Support:'Help & support'};
+const leads = {
+ Lighting:'Ray-traced shadows, bounced light and the strength of the mod.',
+ Surfaces:'Reflections, water and post-effect smoothing.',
+ Performance:'Frame rate, latency and frame generation.',
+ Experimental:'Not fully tested. May change the image or cost performance.',
+ Support:'Game folder, graphics checks and problem reports.'
+};
 function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
 function send(type, extra={}) { if(sample) { $('status').textContent='Sample preview — actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
 function measured(text) {return !!text && !/unknown|not measured|unavailable/i.test(text);}
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function showDialog(d) {if(!d.open)d.showModal();}
+const releaseOptIn=()=>!!state&&!state.developer&&!!state.experimental;
+const optInPage=s=>!state.developer&&s.category==='Experimental';
+// Release copy on the Experimental page drops the metadata's own "Experimental:" and "(unqualified)" markers.
+const plainLabel=(s,text)=>optInPage(s)?text.replace(/\s*\((?:unqualified|experimental|advanced)\)/gi,''):text;
+// Short apply badge; the full sentence stays in the title and in Details.
+function applyBadge(apply) {
+ if(/restart/i.test(apply))return el('span','badge restart','Restart to apply');
+ if(/pause/i.test(apply))return el('span','badge pause','May briefly pause');
+ return el('span','badge','Applies after saving');
+}
+// Measured costs written at the end of a description move to their own muted line.
+function splitCost(text) {const m=/^(.*?)\s*((?:About|Around) \d[\d.]*(?:[–-]\d[\d.]*)? ms\b.*)$/.exec(text||'');return m?[m[1],m[2]]:[text||'',''];}
+// Unmet requirements only, once per card: "Needs X" or "Rough needs X".
+function needsText(s) {
+ const choices=(s.choices||[]),byReason=new Map();
+ choices.forEach(ch=>{if(ch.reason){if(!byReason.has(ch.reason))byReason.set(ch.reason,[]);byReason.get(ch.reason).push(plainLabel(s,ch.label));}});
+ const upgrades=choices.slice(1).length;
+ return [...byReason].map(([reason,names])=>{
+  if(!/^Needs /.test(reason)||names.length>=upgrades||choices.length<=2)return reason;
+  return names.join(', ').replace(/, ([^,]*)$/,' and $1')+(names.length>1?' need ':' needs ')+reason.slice(6);
+ }).join('\n');
+}
+// Full requirements for Details, grouped by identical lists.
+function requirementLines(s) {
+ const groups=new Map();
+ (s.choices||[]).forEach(ch=>{if(ch.requirements){if(!groups.has(ch.requirements))groups.set(ch.requirements,[]);groups.get(ch.requirements).push(plainLabel(s,ch.label));}});
+ return [...groups].map(([req,names])=>names.join(', ')+': '+req);
+}
+function choiceControl(s,control,describedBy) {
+ const choices=s.choices,name=s.title||s.label;
+ const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',name);
+ choices.forEach(ch=>{const text=plainLabel(s,ch.label),b=el('button',ch.value===s.value?'on':'',text);b.disabled=ch.enabled===false;b.title=[ch.apply,ch.reason].filter(Boolean).join('. ');b.setAttribute('aria-label',text+'; '+ch.apply);b.setAttribute('aria-pressed',ch.value===s.value?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});
+ // Shown instead of the buttons when they do not fit the card (fitChoices).
+ const wrap=el('span','select-wrap'),select=el('select','choice-select');select.id='control-'+s.id+'-select';select.setAttribute('aria-label',name);select.setAttribute('aria-describedby',describedBy);
+ if(s.value<0){const o=el('option','','Custom value');o.value='-1';o.selected=true;o.disabled=true;select.append(o);}
+ choices.forEach(ch=>{const o=el('option','',plainLabel(s,ch.label));o.value=String(ch.value);o.selected=ch.value===s.value;o.disabled=ch.enabled===false;select.append(o);});
+ select.onchange=()=>send('set',{id:s.id,value:Number(select.value)});wrap.append(select);
+ control.className+=' choices';control.append(seg,wrap);
+}
 function card(s) {
- const c=el('article','card');c.id='card-'+s.id;const r=el('div','row');r.append(el('h3','',s.title||s.label));c.append(r);
- c.append(el('p','description',(s.description||s.summary||'')+(s.developer?' GPU cost: '+(s.cost||'Not measured.') : '')));
- const control=el('div','control row');
+ const c=el('article','card');c.id='card-'+s.id;
+ const head=el('div','card-head');head.append(el('h3','',s.title||s.label));
+ const badge=applyBadge(s.apply||'');badge.title=s.apply||'';head.append(badge);c.append(head);
+ let [description,cost]=splitCost(s.description||s.summary||'');
+ if(optInPage(s))description=description.replace(/^Experimental:\s*/,'').replace(/^./,x=>x.toUpperCase());
+ c.append(el('p','description',description+(s.developer?' GPU cost: '+(s.cost||'Not measured.') : '')));
+ const needs=el('p','needs');needs.id='needs-'+s.id;needs.append(icon('Needs'),el('span','',needsText(s)));needs.hidden=!needsText(s);c.append(needs);
+ const foot=el('div','card-foot'),control=el('div','control');
  const choices=s.choices||[];
- if(s.custom)control.append(el('span','help-copy','Custom value kept. Choose an option to replace it.'));
- if(choices.length===2&&choices[0].label==='Off'&&choices[1].label==='On') {
-  const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=[choices[i.checked?0:1].apply,choices[i.checked?0:1].reason].filter(Boolean).join('; ');i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','help-copy',i.checked?'On':'Off'));
+ if(s.custom)foot.append(el('p','help-copy','Custom value kept. Choose an option to replace it.'));
+ if(choices.length===2&&choices[0].label==='Off'&&plainLabel(s,choices[1].label)==='On') {
+  const l=el('label','toggle'),i=el('input');i.type='checkbox';i.checked=s.value===choices[1].value;i.disabled=choices[i.checked?0:1].enabled===false;i.setAttribute('aria-label',s.title||s.label);i.title=[choices[i.checked?0:1].apply,choices[i.checked?0:1].reason].filter(Boolean).join('. ');i.onchange=()=>send('set',{id:s.id,value:choices[i.checked?1:0].value});l.append(i,el('span'));control.append(l,el('span','toggle-state',i.checked?'On':'Off'));
  } else if(choices.length) {
-  const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);
-  choices.forEach(ch=>{const b=el('button',ch.value===s.value?'on':'',ch.label);b.disabled=ch.enabled===false;b.title=[ch.apply,ch.reason].filter(Boolean).join('; ');b.setAttribute('aria-label',ch.label+'; '+ch.apply);b.setAttribute('aria-pressed',ch.value===s.value?'true':'false');b.onclick=()=>send('set',{id:s.id,value:ch.value});seg.append(b);});control.append(seg);
+  choiceControl(s,control,needs.id);
  } else if(s.min!==undefined) {
   const isOff=s.hasOff&&s.value===0;
-  if(s.hasOff){const off=el('button','btn'+(isOff?' on':''),'Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button','btn'+(!isOff?' on':''),'On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});control.append(off,on);}
+  if(s.hasOff){const seg=el('div','seg');seg.setAttribute('role','group');seg.setAttribute('aria-label',s.title||s.label);const off=el('button',isOff?'on':'','Off');off.setAttribute('aria-pressed',String(isOff));off.onclick=()=>send('set',{id:s.id,value:0});const on=el('button',!isOff?'on':'','On');on.setAttribute('aria-pressed',String(!isOff));on.onclick=()=>send('set',{id:s.id,value:isOff?s.min:s.value});seg.append(off,on);control.append(seg);}
   const valueText=value=>String(value)+(s.unit?(s.unit==='%'?'':' ')+s.unit:'');
-  const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=isOff?s.min:s.value;i.disabled=isOff;i.setAttribute('aria-label',s.title||s.label);i.setAttribute('aria-valuetext',isOff?'Off':valueText(s.value));const out=el('span','help-copy',isOff?'Off':valueText(s.value));i.oninput=()=>{out.textContent=valueText(i.value);i.setAttribute('aria-valuetext',valueText(i.value));};i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.append(i,out);
+  const i=el('input');i.type='range';i.min=s.min;i.max=s.max;i.step=s.step||1;i.value=isOff?s.min:s.value;i.disabled=isOff;i.setAttribute('aria-label',s.title||s.label);i.setAttribute('aria-valuetext',isOff?'Off':valueText(s.value));const out=el('output','range-value',isOff?'Off':valueText(s.value));i.oninput=()=>{out.textContent=valueText(i.value);i.setAttribute('aria-valuetext',valueText(i.value));};i.onchange=()=>send('set',{id:s.id,value:Number(i.value)});control.className+=' range';control.append(i,out);
  } else control.append(el('span','help-copy',s.value===-1?'Custom value preserved':String(s.value??'Unknown')));
- // Keep requirements readable by keyboard and assistive technology, including disabled choices.
- const requirements=el('p','detail-copy');requirements.id='needs-'+s.id;
- requirements.textContent=choices.filter(ch=>ch.reason||ch.requirements).map(ch=>ch.label+': '+[ch.requirements,ch.reason].filter(Boolean).join('; ')).join('\n');
- requirements.hidden=!requirements.textContent;c.append(requirements);
- [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',requirements.id);});
- c.append(control);
- const badges=el('div','row');
- if(s.developer){if(measured(s.cost))badges.append(pill(s.cost,'cost'));if(measured(s.vram))badges.append(pill(s.vram,'vram'));}
- badges.append(pill(s.apply,/restart/i.test(s.apply)?'restart':''));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));c.append(badges);
- if(s.applyNote||s.details||s.reason||s.provenance){const d=el('details'),sum=el('summary','','Details and requirements');d.id='details-'+s.id;sum.id='details-summary-'+s.id;restoreDisclosure(d);d.append(sum,el('p','detail-copy',[s.applyNote,s.details,s.reason,s.provenance].filter(Boolean).join('\n')));c.append(d);}
+ [...control.querySelectorAll('button,input')].forEach((e,index)=>{e.id='control-'+s.id+'-'+index;if(e.type==='checkbox')e.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();e.click();}};e.setAttribute('aria-describedby',needs.id);});
+ foot.append(control);
+ if(cost)foot.append(el('p','cost',cost));
+ if(s.developer){const badges=el('div','row');if(measured(s.cost))badges.append(pill(s.cost,'cost'));if(measured(s.vram))badges.append(pill(s.vram,'vram'));if(s.maturity==='experimental')badges.append(pill('Experimental','exp'));if(badges.children.length)foot.append(badges);}
+ const requirements=requirementLines(s);
+ const detail=[s.apply,s.applyNote,s.details,s.reason,s.provenance].filter(Boolean);
+ const d=el('details'),sum=el('summary','','Details and requirements');d.id='details-'+s.id;sum.id='details-summary-'+s.id;restoreDisclosure(d);d.append(sum);
+ if(detail.length)d.append(el('p','detail-copy',detail.join('\n')));
+ if(requirements.length){d.append(el('p','detail-heading','Requirements'));d.append(el('p','detail-copy',requirements.join('\n')));}
+ if(detail.length||requirements.length)foot.append(d);
+ c.append(foot);
  return c;
 }
+// Segmented choices size to their labels; a card too narrow for them gets the dropdown instead.
+function fitChoices() {
+ if(!document.querySelectorAll)return;
+ document.querySelectorAll('.control.choices').forEach(c=>{
+  const seg=c.querySelector('.seg'),focused=document.activeElement;
+  c.classList.remove('compact');
+  if(seg.offsetWidth>c.clientWidth+1){c.classList.add('compact');if(seg.contains(focused))c.querySelector('select').focus({preventScroll:true});}
+ });
+}
+if(window.addEventListener)window.addEventListener('resize',fitChoices);
+document.fonts?.ready?.then(fitChoices);
+function sectionHead(root,id) {const head=el('div','section-head');head.append(el('h2','section-title',labels[id]||id));if(leads[id])head.append(el('p','section-lead',leads[id]));root.append(head);}
 function renderSettings() {
  const root=$('section-content');rememberDisclosures(root);root.replaceChildren();
- root.append(el('h2','section-title',labels[section]||section));
+ sectionHead(root,section);
  if(section==='Support') {
-  const c=el('article','card');c.append(el('h3','','Local report'),el('p','','Preview logs, settings and graphics details before saving a report on your PC. Nothing uploads automatically.'));const b=el('button','btn','Report a problem');b.id='support-report';b.onclick=()=>send('report');c.append(b);root.append(c);
-  const memory=state.compatibility||{},mem=el('article','card');mem.append(el('h3','','Video memory'),el('p','help-copy',[memory.vram,memory.memory||'Compatibility not checked'].filter(Boolean).join('\n')));root.append(mem);
-  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','help-copy',"Ctrl+Shift+F9 compares BG3RTX with the game's own image. If an overlay causes problems, disable it for one launch, then restore it."));root.append(help);
-  const info=el('article','card');info.style.marginTop='16px';info.append(el('h3','','Compatibility'),el('p','help-copy',[state.compatibility?.gpu,...(state.compatibility?.details||[]).filter(x=>x!==state.compatibility?.memory)].filter(Boolean).join('\n')));root.append(info);
-  const setup=el('article','card');setup.style.marginTop='16px';setup.append(el('h3','','Game and graphics'),el('p','detail-copy',state.gamePath||'Choose the game folder containing bin\\bg3.exe.'));
-  const actions=el('div','row');const browse=el('button','btn','Choose game folder…');browse.id='support-browse';browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.id='support-recheck';recheck.onclick=()=>send('recheck');actions.append(browse,recheck);setup.append(actions,el('p','detail-copy','Launches the Vulkan version.'));
-  if((state.compatibility?.adapters||[]).length>1){const label=el('label','help-copy','GPU '),select=el('select','btn');select.id='support-adapter';select.setAttribute('aria-label','GPU');const unknown=el('option','','Choose GPU');unknown.value='-1';select.append(unknown);state.compatibility.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===state.compatibility.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});label.append(select);setup.append(label);}root.append(setup);const notices=el('a','help-copy','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};root.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));return;
+  const grid=el('div','grid support');
+  const report=el('article','card');report.append(el('h3','','Report a problem'),el('p','description','Preview logs, settings and graphics details before saving a report on your PC. Nothing uploads automatically.'));const b=el('button','btn','Report a problem…');b.id='support-report';b.onclick=()=>send('report');const rf=el('div','card-foot');rf.append(b);report.append(rf);grid.append(report);
+  const setup=el('article','card');setup.append(el('h3','','Game and graphics'),el('p','description path',state.gamePath||'Choose the game folder containing bin\\bg3.exe.'));
+  const actions=el('div','row');const browse=el('button','btn','Choose game folder…');browse.id='support-browse';browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.id='support-recheck';recheck.onclick=()=>send('recheck');actions.append(browse,recheck);
+  const sf=el('div','card-foot');sf.append(actions);
+  if((state.compatibility?.adapters||[]).length>1){const label=el('label','adapter','GPU '),wrap=el('span','select-wrap'),select=el('select');select.id='support-adapter';select.setAttribute('aria-label','GPU');const unknown=el('option','','Choose GPU');unknown.value='-1';select.append(unknown);state.compatibility.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===state.compatibility.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});wrap.append(select);label.append(wrap);sf.append(label);}
+  sf.append(el('p','cost','Starts the Vulkan version of the game.'));setup.append(sf);grid.append(setup);
+  const memory=state.compatibility||{},mem=el('article','card');mem.append(el('h3','','Video memory'),el('p','description pre',[memory.vram,memory.memory||'Compatibility not checked'].filter(Boolean).join('\n')));grid.append(mem);
+  const info=el('article','card');info.append(el('h3','','Compatibility'),el('p','description pre',[state.compatibility?.gpu,...(state.compatibility?.details||[]).filter(x=>x&&x!==state.compatibility?.memory)].filter(Boolean).join('\n')));grid.append(info);
+  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','description',"Ctrl+Shift+F9 compares BG3RTX with the game's own image. If an overlay causes problems, disable it for one launch, then restore it."));grid.append(help);
+  root.append(grid);
+  const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
  const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "rt_intensity"];
  const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
  if(section==='Lighting')all.sort((a,b)=>{const rank=s=>lightingOrder.includes(s.id)?lightingOrder.indexOf(s.id):lightingOrder.length;return rank(a)-rank(b);});
+ if(section==='Experimental'&&!state.developer) {
+  // Release opt-in page: grouped by what the options touch.
+  const group=s=>/water/.test(s.id)?'Water':/hair/.test(s.id)?'Strand hair':'Scene capture';
+  ['Water','Strand hair','Scene capture'].forEach(name=>{const items=all.filter(s=>group(s)===name);if(!items.length)return;root.append(el('h3','group-title',name));const grid=el('div','grid');items.forEach(s=>grid.append(card(s)));root.append(grid);});
+  fitChoices();return;
+ }
  const isExperimental=s=>s.experimental===true||(s.experimental===undefined&&s.maturity==='experimental');
  const regular=all.filter(s=>!isExperimental(s)),experimental=all.filter(isExperimental);
  const grid=el('div','grid');regular.forEach(s=>grid.append(card(s)));root.append(grid);
- // One disclosure authorizes experimental choices; policy remains in the bridge.
+ // Developer mode: one disclosure authorizes experimental choices; policy remains in the bridge.
  if(state.developer&&(experimental.length||section==='Advanced')) {
   const d=el('details','exp');d.open=experimentalOpen;const summary=el('summary');summary.id='experimental-summary';summary.append(pill('Experimental','exp'),el('span','','Unqualified features. Cost and output may vary.'));d.append(summary);const g=el('div','grid');experimental.forEach(s=>g.append(card(s)));if(!experimental.length)g.append(el('p','help-copy','Experimental choices are available on their feature cards when expanded.'));d.append(g);d.ontoggle=()=>{if(experimentalOpen!==d.open){experimentalOpen=d.open;send('experimental',{value:d.open});}};root.append(d);
  }
+ fitChoices();
 }
-
+function renderNavigation() {
+ const nav=$('navigation');nav.replaceChildren();
+ const list=sections.filter(id=>id==='Advanced'?state.developer:id==='Experimental'?releaseOptIn():true);
+ if(state.developer&&(state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,'Developer');
+ list.forEach(id=>{const b=el('button',id===section?'on':'');b.id='nav-'+id;b.setAttribute('aria-current',id===section?'page':'false');b.append(icon(id),el('span','',labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});
+ const foot=el('div','nav-foot');
+ if(!state.developer){
+  // Release opt-in for unqualified options. Off hides the page and restores the qualified values.
+  const row=el('label','switch-row'),text=el('span','switch-text'),i=el('input');const title=el('span','switch-title');title.append(el('span','long','Show experimental options'),el('span','short','Experimental'));text.append(title,el('span','switch-note','Not fully tested'));i.setAttribute('aria-label','Show experimental options');
+  const t=el('span','toggle');i.type='checkbox';i.id='experimental-switch';i.checked=releaseOptIn();i.onchange=()=>{if(!i.checked&&section==='Experimental')section='Lighting';send('experimental',{value:i.checked});};i.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();i.click();}};t.append(i,el('span'));row.append(text,t);foot.append(row);
+ }
+ if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));
+ nav.append(foot);
+}
 function render(next) {
  const focused=document.activeElement?.id;
  const focusedDialog=['confirmation','report-dialog'].find(id=>$(id).open&&$(id).contains(document.activeElement));
  state=next;if(state.experimental!==undefined)experimentalOpen=state.experimental;
  if(['Advanced','Developer','Memory'].includes(section)&&!state.developer)section='Lighting';
+ if(section==='Experimental'&&!releaseOptIn())section='Lighting';
  $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
- const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const b=el('button',!state.custom&&state.preset===index?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',!state.custom&&state.preset===index?'true':'false');b.title=index===state.recommendedPreset?'Suggested for this GPU; performance varies.':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
- const nav=$('navigation');nav.replaceChildren();const list=sections.filter(([id])=>state.developer||id!=='Advanced');if(state.developer&&(state.settings||[]).some(s=>s.developer))list.splice(list.length-1,0,['Developer','M4 4h16v16H4z']);
- list.forEach(([id,path])=>{const b=el('button',id===section?'on':'');b.id='nav-'+id;b.setAttribute('aria-current',id===section?'page':'false');const glyph=el('img','glyph');glyph.alt='';glyph.src=(localFiles?assetBase+'branding/':'https://branding.bg3rtx.local/')+'ornaments/glyph-'+({Lighting:'light',Surfaces:'water',Performance:'performance',Memory:'memory',Advanced:'performance',Developer:'memory',Support:'help'}[id])+'.svg';b.append(glyph);b.append(document.createTextNode(labels[id]||id));b.onclick=()=>{section=id;render(state);$('main').scrollTop=0;};nav.append(b);});const foot=el('div','foot');if(sample)foot.append(el('div','sample-label','Sample data · no game launch'));nav.append(foot);
+ const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=index===state.recommendedPreset?'Suggested for this GPU; performance varies.':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
+ renderNavigation();
  $('hero-version').textContent=state.version||'Version unavailable';
- $('hero-preset').textContent=(state.custom?'Custom':state.presetLabel||['Low','Medium','High','Ultra'][state.preset]||'Custom')+(state.unsavedCount?' (unsaved changes)':'');
- $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' / ')||'Not detected';
- $('hero-status').textContent=state.modStatus||'Not checked';
- const warnings=$('warnings');warnings.replaceChildren();([]).filter(Boolean).forEach(w=>warnings.append(el('div','notice',w)));if(state.error)warnings.append(el('div','notice error',state.error));
+ $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' · ')||'Not detected';
+ const mod=$('hero-status');mod.textContent=state.modStatus||'Not checked';mod.className=/missing/i.test(state.modStatus||'')?'warn':/present/i.test(state.modStatus||'')?'ok':'';
+ const warnings=$('warnings');warnings.replaceChildren();if(state.error)warnings.append(el('div','notice error',state.error));
  const count=state.unsavedCount??state.dirty??0;let status=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved.');const banner=$('restart-banner');banner.hidden=!state.restartNeeded;banner.textContent=state.restartBanner||'';$('status').textContent=status;$('discard').disabled=!count;$('save').disabled=!count;$('play').disabled=!state.canPlay;
  renderSettings();renderPreview();renderReport();
  if(focused){const target=$(focused);if(target&&((focusedDialog&&$(focusedDialog).open&&$(focusedDialog).contains(target))||(!$('confirmation').open&&!$('report-dialog').open)))target.focus({preventScroll:true});}
@@ -109,8 +209,7 @@ $('discard').onclick=()=>send('discard');$('save').onclick=()=>send('save',{poli
 $('close-report').onclick=()=>{$('report-dialog').close();send('closeReport');};$('report-dialog').addEventListener('cancel',()=>send('closeReport'));$('prepare-report').onclick=()=>{if(!sample){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report…';$('cancel-report').hidden=false;$('prepare-report').disabled=true;}send('prepareReport',{issue:$('issue').value,logs:$('include-logs').checked,settings:$('include-settings').checked,system:$('include-system').checked});};$('cancel-report').onclick=()=>send('cancelReport');$('export-report').onclick=()=>send('exportReport');
 window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state')render(data);else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
 if(sample) {
-
- const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true}));
+ const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true,apply:'Applies after saving'}));
  const settings=[
  ['rr','DLSS Ray Reconstruction','Lighting',['Off','On'],1,'Reduces noise in ray-traced lighting.'],
  ['rt_geometry','Ray-tracing detail','Lighting',['Off','Solid surfaces','Include foliage'],2,'Includes solid surfaces, or foliage, grates and chains too, in ray-traced lighting and shadows.'],

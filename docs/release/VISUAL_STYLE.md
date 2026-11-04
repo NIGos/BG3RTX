@@ -4,14 +4,15 @@ B1, branch `ux-b1-branding`, 2026-11-02. Offline asset candidate; no launcher,
 resource or packaging integration is claimed. Section 6 of PRODUCT_REVIEW on
 `codex-product-review` supplies the direction. No network was used.
 
-## Split lantern
+## Traced gem (2026-11-04, replaces the split lantern)
 
-The original mark uses two offset angular brackets, one square aperture and a
-short widening beam. Brackets open asymmetrically at top and bottom. There are
-no letters inside the mark, glow, borrowed symbols or enclosing title frame.
-Set plain BG3RTX text beside the emblem using the UI font; never squeeze the
-wordmark into a small icon. No Larian or Wizards of the Coast artwork, marks,
-typefaces or visual references were used or imitated.
+The original mark is a six-facet gem in gold tones struck by a cream ray from the
+upper left, answered by a three-stroke glint: light, a surface and its response.
+Solid polygons only, no letters, glow or borrowed symbols. The 16-unit master is
+pixel aligned for 16-24 px; 32 px and larger use the 64-unit master. Set plain
+BG3RTX text beside it in the UI font. No Larian or Wizards of the Coast artwork,
+marks, typefaces or visual references were used or imitated. Launcher icons are
+inline 24-unit SVG strokes (1.75, round caps) in tools/launcher/ui/app.js.
 
 | Stable source / output | Consumer |
 |---|---|

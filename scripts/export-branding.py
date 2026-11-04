@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 import io
 import json
+import re
 import os
 from pathlib import Path
 import struct
@@ -46,6 +47,11 @@ def render(source, size, ink=None):
     return image.resize((size, size), Image.Resampling.BOX)
 
 
+def master(size):
+    # The 16-unit optical master is pixel aligned for 16-24 px; larger sizes keep the facets.
+    return ASSETS / ("bg3rtx-small.svg" if size <= 24 else "bg3rtx.svg")
+
+
 def png(image):
     stream = io.BytesIO()
     image.save(stream, format="PNG", optimize=False, compress_level=9)
@@ -70,7 +76,7 @@ def outputs():
     result = {}
     icons = {}
     for size in sorted(set(SIZES + (512,))):
-        source = ASSETS / ("bg3rtx-small.svg" if size <= 48 else "bg3rtx.svg")
+        source = master(size)
         icons[size] = render(source, size)
         result[f"bg3rtx-{size}.png"] = png(icons[size])
     # Explicit directory preserves every requested frame (including 20/40/64).
@@ -91,8 +97,7 @@ def outputs():
         for row, ink in enumerate((None, "#000000", "#FFFFFF")):
             # White on black / black on white for system high-contrast examples.
             for size, x, y in ((16, 16, 24), (32, 64, 24), (48, 120, 24)):
-                source = ASSETS / "bg3rtx-small.svg"
-                image = render(source, size, ink)
+                image = render(master(size), size, ink)
                 sheet.paste(image, (column * 400 + x, row * 80 + y), image)
         image = icons[256]
         sheet.paste(image, (column * 400 + 32, 320), image)
@@ -103,8 +108,8 @@ def outputs():
     for suffix, colour in (("mono", "#000000"), ("contrast", "#FFFFFF")):
         for stem in ("bg3rtx", "bg3rtx-small"):
             text = (ASSETS / f"{stem}.svg").read_text(encoding="utf-8")
-            result[f"{stem}-{suffix}.svg"] = text.replace("#BEB5A4", colour).replace(
-                "#D6AA62", colour).encode("utf-8")
+            result[f"{stem}-{suffix}.svg"] = re.sub(r'fill="#[0-9A-Fa-f]{6}"', f'fill="{colour}"',
+                                                    text).encode("utf-8")
     manifest = {"python": "3.11", "pillow": PILLOW_VERSION, "ico_sizes": SIZES,
                 "sha256": {name: hashlib.sha256(data).hexdigest()
                            for name, data in sorted(result.items())}}

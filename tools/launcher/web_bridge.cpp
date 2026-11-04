@@ -70,26 +70,75 @@ std::string capability_requirements(unsigned mask, bool release = true) {
     else text+=item.second;}
   return text;
 }
+// Release copy: short names, met hardware never shown, one entry per requirement.
+const char* capability_name(unsigned cap){
+  switch(cap){
+    case st::kCapRayQuery:return "hardware ray tracing";
+    case st::kCapDlss:return "an NVIDIA RTX GPU with DLSS";
+    case st::kCapFg:return "Frame Generation support";
+    case st::kCapMfg:return "Multi Frame Generation support";
+    case st::kCapOpacityMicromap:return "opacity micromap support";
+    case st::kCapLinearSweptSpheres:return "linear swept spheres support";
+    case st::kCapShaderInt64:return "64-bit shader integers (shaderInt64)";
+    case st::kCapFragmentStores:return "fragment shader stores (fragmentStoresAndAtomics)";
+    case st::kCapHairGrooms:return "local hair groom files";
+  }return "";
+}
+std::vector<std::string> capability_list(unsigned mask){
+  std::vector<std::string> out;
+  for(unsigned cap:{st::kCapRayQuery,st::kCapDlss,st::kCapFg,st::kCapMfg,st::kCapOpacityMicromap,st::kCapLinearSweptSpheres,st::kCapShaderInt64,st::kCapFragmentStores,st::kCapHairGrooms})
+    if(mask&cap)out.push_back(capability_name(cap));
+  return out;
+}
+std::string join(const std::vector<std::string>& items,const char* separator){std::string out;for(auto& x:items){if(!out.empty())out+=separator;out+=x;}return out;}
+void add_unique(std::vector<std::string>& items,std::string item){if(!item.empty()&&std::find(items.begin(),items.end(),item)==items.end())items.push_back(std::move(item));}
+std::string capitalised(std::string text){if(!text.empty()&&text[0]>='a'&&text[0]<='z')text[0]=char(text[0]-'a'+'A');return text;}
+// Unmet requirement of one choice, or "". Startup keys are written by Save, so they never block.
+std::string release_reason(const st::Knob& k,int c,unsigned caps,const std::vector<int>& values){
+  if(!st::choice_supported(k,c,caps))return "Needs "+join(capability_list(k.choices[c].caps&~caps)," and ");
+  for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);
+    if(j>=0&&values[j]>=0&&values[j]<n.min_choice)return "Needs "+std::string(st::kKnobs[j].label)+": "+st::kKnobs[j].choices[n.min_choice].label;}
+  return {};
+}
+// Every requirement of one choice for Details, hardware included, without duplicates.
+std::string release_requirements(const st::Knob& k,int c){
+  std::vector<std::string> items;
+  for(auto& name:capability_list(k.choices[c].caps))add_unique(items,capitalised(name));
+  for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0)add_unique(items,std::string(st::kKnobs[j].label)+": "+st::kKnobs[j].choices[n.min_choice].label);}
+  for(auto& n:k.required_on)if(n.key&&c>=n.min_choice)add_unique(items,"Sets at startup: "+std::string(n.label));
+  return join(items,"; ");
+}
+// Replaces one raw key of the user file text; render_user_ini keeps it as an unmanaged line.
+std::string with_raw_key(const std::string& text,const std::string& key,const std::string& value){
+  std::string out;size_t pos=0;
+  while(pos<text.size()){size_t nl=text.find('\n',pos);std::string line=text.substr(pos,nl==std::string::npos?std::string::npos:nl-pos+1);pos=nl==std::string::npos?text.size():nl+1;
+    std::string s=line;auto hash=s.find('#');if(hash!=std::string::npos)s.resize(hash);auto eq=s.find('=');
+    if(eq!=std::string::npos&&st::trim(s.substr(0,eq))==key)continue;out+=line;}
+  if(!value.empty()){if(!out.empty()&&out.back()!='\n')out+='\n';out+=key+"="+value+"\n";}
+  return out;
+}
 std::string label(int i,int value){auto& k=st::kKnobs[i];return value<0?"Custom value preserved":k.kind==st::Kind::Choice?std::string(k.choices[value].label):std::to_string(value);}
 }
 Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),saved_(state.values),saved_preset_(state.preset) {
   auto m=effective();dev=st::same_value(st::lookup(m,"dev"),"1");
-  for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev)||(k.kind==st::Kind::Choice&&!st::choice_visible(k,state_.values[i],dev)))state_.values[i]=-1;}
+  experimental=saved_experimental_=!dev&&st::same_value(st::lookup(m,"experimental_options"),"1");
+  for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k)||(k.kind==st::Kind::Choice&&!st::choice_visible(k,state_.values[i],dev,opt_in())))state_.values[i]=-1;}
   saved_=state_.values;
 }
 st::Map Bridge::effective() const {st::Map m;st::apply_layer(m,state_.base);st::apply_layer(m,state_.user);for(int i=0;i<st::kKnobCount;++i){st::KVList kv;st::knob_kvs(st::kKnobs[i],state_.values[i],kv);for(auto& v:kv)m[v.first]=v.second;}return m;}
-int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L""));}
+int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::dirty(state_.values,saved_,state_.preset,saved_preset_,L"",L"")+int(!dev&&experimental!=saved_experimental_));}
+bool Bridge::shown(const st::Knob& k) const {return st::knob_visible(k,dev,opt_in());}
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
 bool Bridge::is_cancel_collection_intent(const std::string& message){Object o;if(!Parser{message}.parse(o))return false;auto type=get<std::string>(o,"type");return type=="closeReport"||type=="cancelReport";}
 void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=false;preview_kind_.clear();inspection_=std::move(p);selected_=selected;if(selected_<0&&inspection_.adapters.size()==1)selected_=0;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
 bool Bridge::save_preview(bool enable_required){
-  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental);
+  auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in());
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,p.values[i]));
   for(auto& kv:p.required_keys){
     std::string name="Required startup setting";
-    for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;
+    for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;
       for(auto& n:k.required_on)if(n.key&&kv.first==n.key&&preview_values_[i]>=n.min_choice){name=std::string(k.label)+": "+n.label;break;}
       if(name!="Required startup setting")break;
     }
@@ -106,7 +155,9 @@ std::string Bridge::handle(const std::string& message){
     if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
     else if(preview_kind_=="save"&&blocked_.empty()){
       State candidate=state_;candidate.values=preview_values_;std::string error;
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_="Saved.";}
+      // The release opt-in travels with the settings it unlocks; Off removes the key.
+      if(!dev)candidate.user_text=with_raw_key(candidate.user_text,"experimental_options",experimental?"1":"");
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;saved_experimental_=experimental;preview_kind_.clear();status_="Saved.";}
       else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
     }
     if(pending_play_&&preview_kind_.empty()){
@@ -119,15 +170,27 @@ std::string Bridge::handle(const std::string& message){
   if(type=="set"||type=="preset"||type=="discard"||type=="experimental"){preview_kind_.clear();pending_play_=false;}
   if(type=="set"){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
-    if(i<0||!st::knob_visible(st::kKnobs[i],dev)){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
-    auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
+    if(i<0||!shown(st::kKnobs[i])){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
+    auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps,opt_in()):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
     if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
-    for(int i=0;i<st::kKnobCount;++i){if(!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
-  }else if(type=="experimental")experimental=dev&&get<bool>(o,"value");
-  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Changes discarded.";}
+    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i]))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
+  }else if(type=="experimental"){
+    bool on=get<bool>(o,"value");
+    if(dev)experimental=on;
+    else if(on!=experimental){
+      // Release opt-in: shown options start from their stored value; hiding restores Off (qualified).
+      experimental=on;
+      for(int i=0;i<st::kKnobCount;++i)if(st::opt_in_knob(st::kKnobs[i])){
+        if(on){if(state_.values[i]<0)state_.values[i]=0;if(saved_[i]<0)saved_[i]=0;}
+        else state_.values[i]=0;
+      }
+      status_=on?"Experimental options shown. Save to keep them.":"Experimental options hidden and reset to Off.";
+    }
+  }
+  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;if(!dev)experimental=saved_experimental_;status_="Changes discarded.";}
   else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
   else if(type=="play"){
     if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
@@ -154,16 +217,24 @@ std::string Bridge::handle(const std::string& message){
 }
 std::string Bridge::state_json() const {
   auto preset_values=st::preset_values_for(state_.preset,state_.caps);bool custom=false;
-  for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],dev)&&state_.values[i]!=preset_values[i])custom=true;
+  for(int i=0;i<st::kKnobCount;++i)if(shown(st::kKnobs[i])&&state_.values[i]!=preset_values[i])custom=true;
   std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_count_>0)+",\"restartCount\":"+std::to_string(restart_count_)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_count_))+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
-  bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;if(!first)out+=",";first=false;
+  bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value),!k.dev_only))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
-    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?std::string(k.dev_only?"Graphics compatibility unavailable: ":"GPU requirement: ")+capability_requirements(k.choices[c].caps & ~state_.caps,!k.dev_only):!available?"Enable Experimental to select":need;
-      std::string requirements=capability_requirements(k.choices[c].caps,!k.dev_only);
-      for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+=std::string(k.dev_only?"needs ":"Requires ")+st::kKnobs[j].label+(k.dev_only?" ":": ")+label(j,n.min_choice);}}
-      for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+=std::string(k.dev_only?"needs ":"Requires ")+n.label;}
-      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c),!k.dev_only))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
+    // Opted-in release options use release copy and live on their own Experimental page.
+    const bool opted=!dev&&st::opt_in_knob(k),developer=k.dev_only&&!opted;
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(opted?"Experimental":k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(developer)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value),!developer))+",\"applyNote\":"+q(developer?k.apply_note:"")+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev,opt_in()))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps,opt_in());
+      std::string reason,requirements;
+      if(developer){
+        // Developer cards keep their original wording.
+        auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());
+        reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable: "+capability_requirements(k.choices[c].caps & ~state_.caps,false):!available?"Enable Experimental to select":need;
+        requirements=capability_requirements(k.choices[c].caps,false);
+        for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+=std::string("needs ")+st::kKnobs[j].label+" "+label(j,n.min_choice);}}
+        for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+=std::string("needs ")+n.label;}
+      }else{reason=release_reason(k,c,state_.caps,state_.values);requirements=release_requirements(k,c);}
+      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c),!developer))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
   std::string gpu="GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
