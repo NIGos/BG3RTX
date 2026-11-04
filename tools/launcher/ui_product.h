@@ -115,8 +115,7 @@ static std::wstring choice_label(const st::Knob& k,int c) {
   if(c<0)return L"Custom value preserved";
   std::wstring s=widen(k.choices[c].label);
   std::string maturity=st::choice_maturity(k,c);
-  if(maturity=="awaiting_qualification")s+=L" (awaiting qualification)";
-  if(maturity=="experimental")s+=L" (experimental)";
+  if(maturity=="awaiting_qualification"||maturity=="experimental")s+=L" (Experimental)";
   if(!st::choice_supported(k,c,g.st.caps))s+=L" (unavailable)";
   return s;
 }
@@ -149,7 +148,7 @@ static void rebuild() {
     label(g.body,L"Choose the game folder containing bin\\bg3.exe. Launches the Vulkan version.",16,y,w,48);y+=56;
     button(g.body,BROWSE,L"Choose game folder…",16,y,224);y+=48;
     button(g.body,RETRY,L"Recheck graphics",16,y,224);y+=48;
-    label(g.body,L"If an overlay causes problems, disable it for one launch, then restore it.",16,y,w,96);y+=104;
+    label(g.body,L"If the game does not start or Frame Generation does nothing, turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.",16,y,w,96);y+=104;
     const auto compatibility=assess_compatibility(g_inspection,g_adapter);
     label(g.body,L"Compatibility",16,y,w,28,true);y+=36;
     label(g.body,widen(compatibility.hardware_text+"\n"+compatibility.driver_text+"\n"+compatibility.adapter_text),16,y,w,120);y+=128;
@@ -163,7 +162,7 @@ static void rebuild() {
       SendMessageW(adapter,CB_SETCURSEL,g_adapter+1,0);y+=48;
     }
     label(g.body,L"Comparison and overlays",16,y,w,28,true);y+=36;
-    label(g.body,L"Ctrl+Shift+F9 compares BG3RTX with the game's own image.",16,y,w,48);y+=56;
+    label(g.body,L"Ctrl+Shift+F9 in game switches all ray-traced lighting off and on, to compare with the game's own image.",16,y,w,48);y+=56;
     place(add(g.body,WC_LINK,L"<a>Fonts and third-party notices</a>",WS_TABSTOP,NOTICES),16,y,w,32);y+=48;
     label(g.body,L"Independent fan mod; not affiliated with the game's developers.",16,y,w,48);y+=56;
   } else {

@@ -50,7 +50,7 @@ for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(JSON.
 assert(!ids.get('navigation').children.some(e=>['nav-Advanced','nav-Memory'].includes(e.id)));
 assert(!all(ids.get('section-content')).some(e=>e.id==='experimental-summary'));
 ids.get('nav-Support').onclick();
-assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shift+F9 compares BG3RTX with the game's own image.")));
+assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shift+F9 in game switches all ray-traced lighting off and on")));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Video memory'));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Compatibility'));
 assert(ids.get('support-report')&&ids.get('support-browse')&&ids.get('support-recheck'));

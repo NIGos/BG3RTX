@@ -14,7 +14,9 @@ document.querySelector('.emblem').src=localFiles?assetBase+'branding/bg3rtx.svg'
 if(query.has('chrome'))$('titlebar').hidden=false;
 let state = null;
 const sampleView=query.get('view')||'';
-let section = query.get('section') || (sampleView==='missing'?'Support':'Lighting');
+// Review views (--screenshot-view) open the page they show.
+const viewSection={missing:'Support',probe:'Support',support:'Support',surfaces:'Surfaces',performance:'Performance',experimental:'Experimental',advanced:'Advanced'};
+let section = query.get('section') || viewSection[sampleView] || 'Lighting';
 let experimentalOpen = query.has('experimental')||sampleView==='experimental';
 const disclosureState=new Map();
 let reportSignature=null;
@@ -43,7 +45,7 @@ const leads = {
 };
 function el(tag, className, text) { const e=document.createElement(tag);if(className)e.className=className;if(text!==undefined)e.textContent=text;return e; }
 function send(type, extra={}) { if(sample) { $('status').textContent='Sample preview — actions do not change settings or launch the game';return; } window.chrome?.webview?.postMessage({type,...extra}); }
-function measured(text) {return !!text && !/unknown|not measured|unavailable/i.test(text);}
+function measured(text) {return !!text && !/unknown|not measured|not detected|unavailable/i.test(text);}
 function pill(text,kind) {return el('span','pill '+(kind||''),text);}
 function showDialog(d) {if(!d.open)d.showModal();}
 const releaseOptIn=()=>!!state&&!state.developer&&!!state.experimental;
@@ -51,8 +53,10 @@ const optInPage=s=>!state.developer&&s.category==='Experimental';
 // Release copy on the Experimental page drops the metadata's own "Experimental:" and "(unqualified)" markers.
 const plainLabel=(s,text)=>optInPage(s)?text.replace(/\s*\((?:unqualified|experimental|advanced)\)/gi,''):text;
 // Short apply badge; the full sentence stays in the title and in Details.
-function applyBadge(apply) {
+// A card whose current choice applies live can still have choices that need a restart (water On, Frame Generation Off).
+function applyBadge(apply,choices) {
  if(/restart/i.test(apply))return el('span','badge restart','Restart to apply');
+ if((choices||[]).some(ch=>/restart/i.test(ch.apply||'')))return el('span','badge restart','May need a restart');
  if(/pause/i.test(apply))return el('span','badge pause','May briefly pause');
  return el('span','badge','Applies after saving');
 }
@@ -88,7 +92,7 @@ function choiceControl(s,control,describedBy) {
 function card(s) {
  const c=el('article','card');c.id='card-'+s.id;
  const head=el('div','card-head');head.append(el('h3','',s.title||s.label));
- const badge=applyBadge(s.apply||'');badge.title=s.apply||'';head.append(badge);c.append(head);
+ const badge=applyBadge(s.apply||'',s.choices);badge.title=[s.apply,...(s.choices||[]).filter(ch=>/restart/i.test(ch.apply||'')).map(ch=>plainLabel(s,ch.label)+': '+ch.apply)].filter(Boolean).join('\n');head.append(badge);c.append(head);
  let [description,cost]=splitCost(s.description||s.summary||'');
  if(optInPage(s))description=description.replace(/^Experimental:\s*/,'').replace(/^./,x=>x.toUpperCase());
  c.append(el('p','description',description+(s.developer?' GPU cost: '+(s.cost||'Not measured.') : '')));
@@ -141,15 +145,17 @@ function renderSettings() {
   const actions=el('div','row');const browse=el('button','btn','Choose game folder…');browse.id='support-browse';browse.onclick=()=>send('browseGame');const recheck=el('button','btn','Recheck graphics');recheck.id='support-recheck';recheck.onclick=()=>send('recheck');actions.append(browse,recheck);
   const sf=el('div','card-foot');sf.append(actions);
   if((state.compatibility?.adapters||[]).length>1){const label=el('label','adapter','GPU '),wrap=el('span','select-wrap'),select=el('select');select.id='support-adapter';select.setAttribute('aria-label','GPU');const unknown=el('option','','Choose GPU');unknown.value='-1';select.append(unknown);state.compatibility.adapters.forEach(a=>{const option=el('option','',a.label);option.value=a.value;option.selected=a.value===state.compatibility.selected;select.append(option);});select.onchange=()=>send('adapter',{value:Number(select.value)});wrap.append(select);label.append(wrap);sf.append(label);}
-  sf.append(el('p','cost','Starts the Vulkan version of the game.'));setup.append(sf);grid.append(setup);
-  const memory=state.compatibility||{},mem=el('article','card');mem.append(el('h3','','Video memory'),el('p','description pre',[memory.vram,memory.memory||'Compatibility not checked'].filter(Boolean).join('\n')));grid.append(mem);
+  sf.append(el('p','cost','Play starts the Vulkan version of the game (bin\\bg3.exe) with BG3RTX.'));setup.append(sf);grid.append(setup);
+  const memory=state.compatibility||{},mem=el('article','card');mem.append(el('h3','','Video memory'),el('p','description pre',memory.memory||(measured(memory.vram)?memory.vram:'Not checked yet. Use Recheck graphics.')));grid.append(mem);
   const info=el('article','card');info.append(el('h3','','Compatibility'),el('p','description pre',[state.compatibility?.gpu,...(state.compatibility?.details||[]).filter(x=>x&&x!==state.compatibility?.memory)].filter(Boolean).join('\n')));grid.append(info);
-  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','description',"Ctrl+Shift+F9 compares BG3RTX with the game's own image. If an overlay causes problems, disable it for one launch, then restore it."));grid.append(help);
+  const help=el('article','card');help.append(el('h3','','Comparison and overlays'),el('p','description pre',"Ctrl+Shift+F9 in game switches all ray-traced lighting off and on, to compare with the game's own image. DLSS and Frame Generation stay as they are.\nIf the game does not start or Frame Generation does nothing, turn off other overlays (Steam, Discord, GOG Galaxy) for one launch."));grid.append(help);
   root.append(grid);
   const foot=el('div','page-foot');const notices=el('a','link','Fonts and third-party notices');notices.href='https://app.bg3rtx.local/notices';notices.onclick=e=>{e.preventDefault();send('notices');};foot.append(notices,el('p','help-copy',"Independent fan mod; not affiliated with the game's developers."));root.append(foot);return;
  }
  const lightingOrder=["rt_geometry", "rr", "sun_shadows", "gi", "exp_hidden_surface", "local_shadows", "box_lights", "exp_native_coverage", "rt_intensity"];
  const all=(state.settings||[]).filter(s=>section==='Developer'?state.developer&&s.developer:s.category===section&&!s.developer);
+ const performanceOrder=['frame_generation','reflex','fps_cap'];
+ if(section==='Performance')all.sort((a,b)=>{const rank=s=>performanceOrder.includes(s.id)?performanceOrder.indexOf(s.id):performanceOrder.length;return rank(a)-rank(b);});
  if(section==='Lighting')all.sort((a,b)=>{const rank=s=>lightingOrder.includes(s.id)?lightingOrder.indexOf(s.id):lightingOrder.length;return rank(a)-rank(b);});
  if(section==='Experimental'&&!state.developer) {
   // Release opt-in page: grouped by what the options touch.
@@ -187,18 +193,20 @@ function render(next) {
  if(['Advanced','Developer','Memory'].includes(section)&&!state.developer)section='Lighting';
  if(section==='Experimental'&&!releaseOptIn())section='Lighting';
  $('report-progress').hidden=true;$('cancel-report').hidden=true;$('prepare-report').disabled=false;
- const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=index===state.recommendedPreset?'Suggested for this GPU; performance varies.':'';b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
+ const presets=$('presets');presets.replaceChildren();['Low','Medium','High','Ultra'].forEach((name,index)=>{const on=!state.custom&&state.preset===index,b=el('button',on?'on':'',name);b.id='preset-'+index;b.setAttribute('aria-pressed',on?'true':'false');b.title=[state.presetDescriptions?.[index],index===state.recommendedPreset?'Suggested for this GPU; performance varies.':''].filter(Boolean).join('\n');b.onclick=()=>send('preset',{value:index});presets.append(b);});if(state.custom){const custom=el('span','custom-preset','Custom');custom.setAttribute('aria-label','Custom settings');presets.append(custom);}
  renderNavigation();
  $('hero-version').textContent=state.version||'Version unavailable';
  $('hero-gpu').textContent=[state.compatibility?.gpu,measured(state.compatibility?.vram)?state.compatibility.vram:null].filter(Boolean).join(' · ')||'Not detected';
  const mod=$('hero-status');mod.textContent=state.modStatus||'Not checked';mod.className=/missing/i.test(state.modStatus||'')?'warn':/present/i.test(state.modStatus||'')?'ok':'';
- const warnings=$('warnings');warnings.replaceChildren();if(state.error)warnings.append(el('div','notice error',state.error));
+ const warnings=$('warnings');warnings.replaceChildren();
+ if(state.gamePath===''){const n=el('div','notice setup'),b=el('button','btn','Choose game folder…');b.id='notice-browse';b.onclick=()=>send('browseGame');n.append(el('span','','Baldur\'s Gate 3 was not found. Choose the game folder that contains bin\\bg3.exe to enable Play.'),b);warnings.append(n);}
+ if(state.error)warnings.append(el('div','notice error',state.error));
  const count=state.unsavedCount??state.dirty??0;let status=state.status||(count?count+' unsaved '+(count===1?'change':'changes'):'Saved.');const banner=$('restart-banner');banner.hidden=!state.restartNeeded;banner.textContent=state.restartBanner||'';$('status').textContent=status;$('discard').disabled=!count;$('save').disabled=!count;$('play').disabled=!state.canPlay;
  renderSettings();renderPreview();renderReport();
  if(focused){const target=$(focused);if(target&&((focusedDialog&&$(focusedDialog).open&&$(focusedDialog).contains(target))||(!$('confirmation').open&&!$('report-dialog').open)))target.focus({preventScroll:true});}
 }
 function renderPreview() {
- const p=state.preview,d=$('confirmation');if(!p?.kind){if(d.open)d.close();return;}const root=$('confirmation-copy');root.replaceChildren();$('confirmation-title').textContent=p.kind==='preset'?'Review preset: '+(p.presetLabel||state.presetLabel):'Review required settings';const ul=el('ul','help-copy');(p.changes||[]).forEach(c=>ul.append(el('li','',c)));root.append(ul);(p.blocked||[]).forEach(c=>root.append(el('p','notice',c)));$('confirm-preview').disabled=!!p.blocked?.length;showDialog(d);
+ const p=state.preview,d=$('confirmation');if(!p?.kind){if(d.open)d.close();return;}const root=$('confirmation-copy');root.replaceChildren();$('confirmation-title').textContent=p.kind==='preset'?'Review preset: '+(p.presetLabel||state.presetLabel):'Review required settings';const pi=['Low','Medium','High','Ultra'].indexOf(p.presetLabel);if(p.kind==='preset'&&state.presetDescriptions?.[pi])root.append(el('p','',state.presetDescriptions[pi]));if(!(p.changes||[]).length)root.append(el('p','','No settings change.'));const ul=el('ul','help-copy');(p.changes||[]).forEach(c=>ul.append(el('li','',c)));root.append(ul);(p.blocked||[]).forEach(c=>root.append(el('p','notice',c)));$('confirm-preview').disabled=!!p.blocked?.length;showDialog(d);
 }
 function renderReport() {
  const r=state.report,d=$('report-dialog');if(!r?.visible){if(d.open)d.close();return;}$('privacy').textContent=r.privacy||'Saves selected logs, settings and graphics details as a ZIP on your PC. Personal paths are partly removed; review every file before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded.';
@@ -207,7 +215,14 @@ function renderReport() {
 }
 $('discard').onclick=()=>send('discard');$('save').onclick=()=>send('save',{policy:'enable'});$('play').onclick=()=>send('play');$('cancel-preview').onclick=()=>send('cancel');$('confirm-preview').onclick=()=>send('confirm');$('confirmation').addEventListener('cancel',e=>{e.preventDefault();send('cancel');});
 $('close-report').onclick=()=>{$('report-dialog').close();send('closeReport');};$('report-dialog').addEventListener('cancel',()=>send('closeReport'));$('prepare-report').onclick=()=>{if(!sample){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report…';$('cancel-report').hidden=false;$('prepare-report').disabled=true;}send('prepareReport',{issue:$('issue').value,logs:$('include-logs').checked,settings:$('include-settings').checked,system:$('include-system').checked});};$('cancel-report').onclick=()=>send('cancelReport');$('export-report').onclick=()=>send('exportReport');
-window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state')render(data);else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
+window.chrome?.webview?.addEventListener('message',e=>{const data=typeof e.data==='string'?JSON.parse(e.data):e.data;if(data.type==='state'){render(data);if(sample)reviewView(true);}else if(data.type==='progress'){$('report-progress').hidden=false;$('report-progress').textContent='Preparing report: '+data.done+' / '+data.total;$('cancel-report').hidden=false;}});
+// Review views (--screenshot-view) adjust the sample, or the host's review state, before rendering again.
+function reviewView(host) {
+ {if(sampleView==='error')state.error='Settings could not be saved. The destination could not be replaced because another application is using it. Your edits are preserved. Close the application and try again. Windows error 32: the process cannot access the file because it is being used by another process.';if(sampleView==='missing'&&!host){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe. Settings browsing remains available.'];}if(sampleView==='probe'&&!host){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
+ if(sampleView==='restart'){state.dirty=0;state.unsavedCount=0;state.status='Saved';state.restartNeeded=true;state.restartCount=3;state.restartBanner='Restart the game to apply 3 changes';render(state);}
+ if((query.has('report')||sampleView==='report')&&!state.report?.files?.length){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
+ if(sampleView==='experimental'||query.has('bottom'))$('main').scrollTop=$('main').scrollHeight;
+}
 if(sample) {
  const choices=(labels)=>labels.map((label,value)=>({label,value,enabled:true,apply:'Applies after saving'}));
  const settings=[
@@ -227,10 +242,7 @@ if(sample) {
  ['fps_cap','Rendered frame limit','Performance',[],58,'Limits the frame rate before Frame Generation adds frames.'],
  ['reflex','NVIDIA Reflex','Performance',['Off','On','On + Boost'],1,'Reduces latency; frame generation requires On or Boost.']
  ].map(([id,title,category,levels,value,description])=>({id,title,category,value,description,choices:choices(levels),cost:'Not measured (sample)',apply:['rt_geometry','exp_hidden_surface','exp_native_coverage','exp_water','frame_generation'].includes(id)?'Restart the game to apply':'Applies after saving',...(id==='rt_intensity'?{min:50,max:100,step:5,unit:'%'}:id==='fps_cap'?{min:30,max:240,step:1,unit:'fps',hasOff:true}:{})}));
- render({type:'state',version:'0.9.0.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
- if(['error','missing','probe'].includes(sampleView)){if(sampleView==='error')state.error='Settings could not be saved. The destination could not be replaced because another application is using it. Your edits are preserved. Close the application and try again. Windows error 32: the process cannot access the file because it is being used by another process.';if(sampleView==='missing'){state.gamePath='';state.compatibility.warnings=['Choose the game folder containing bin\\bg3.exe. Settings browsing remains available.'];}if(sampleView==='probe'){state.compatibility={gpu:'Graphics unknown',vram:'Unknown',driver:'Unknown',warnings:['Graphics compatibility could not be checked. Recheck graphics or choose an adapter in Help & support.'],adapters:[{value:0,label:'Discrete graphics adapter'},{value:1,label:'Integrated graphics adapter'}],selected:-1};}render(state);}
- if(sampleView==='restart'){state.dirty=0;state.unsavedCount=0;state.status='Saved';state.restartNeeded=true;state.restartCount=3;state.restartBanner='Restart BG3 to apply 3 changes';render(state);}
- if(sampleView==='experimental')$('main').scrollTop=$('main').scrollHeight;
- if(sampleView==='missing')$('main').scrollTop=90;
- if(query.has('report')||sampleView==='report'){state.report={visible:true,privacy:'Creates a ZIP on your PC with BG3RTX logs, graphics settings, version and system graphics details. Logs may contain file paths. We remove common personal path details, but you should review the files before sharing. Nothing is uploaded. Saves, screenshots and crash dumps are excluded.',files:[{name:'CONTENTS.txt',size:248,text:'Sample preview only. No files have been collected.'},{name:'graphics.txt',size:112,text:'Sample adapter: NVIDIA GeForce RTX 5090\nDriver: 621.01\nAdapter used by the game: unconfirmed'}],bytes:360};renderReport();}
+ // The WebView host sends its review state (real settings table); a plain browser uses this sample.
+ if(!window.chrome?.webview){render({type:'state',version:'0.9.0.0',modStatus:'Sample preview; game launch disabled',preset:3,presetLabel:'Ultra',recommendedPreset:3,frameGeneration:'2x',frameGenerationNote:'Configured; displayed frames include generated frames',dirty:1,unsavedCount:1,canPlay:false,compatibility:{gpu:'NVIDIA GeForce RTX 5090',vram:'32 GB',driver:'Driver 621.01',warnings:[]},settings,status:'1 unsaved change · Sample preview'});
+ reviewView(false);}
 } else send('init');

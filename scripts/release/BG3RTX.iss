@@ -109,10 +109,11 @@ Name: "{autoprograms}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{a
 Name: "{autodesktop}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; IconFilename: "{app}\bin\ui\branding\bg3rtx.ico"; Tasks: desktop
 
 [Run]
-Filename: "{app}\bin\BG3RTX.exe"; Description: "Start BG3RTX"; WorkingDir: "{app}\bin"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\bin\BG3RTX.exe"; Description: "Open BG3RTX now to choose the game folder and a preset"; WorkingDir: "{app}\bin"; Flags: nowait postinstall skipifsilent
 
 [Messages]
-WelcomeLabel2=The game folder is not changed; set the game to Vulkan + DLSS.
+WelcomeLabel2=This installs [name/ver], a ray-tracing mod for Baldur's Gate 3, for your Windows user only. Your game folder and saves are not changed.%n%nBG3RTX starts the game's Vulkan version. In the game's graphics options, select DLSS as the upscaler.%n%nBG3RTX is tested only on an NVIDIA GeForce RTX 5090. Close the game before continuing.
+FinishedLabel=BG3RTX is installed. Open BG3RTX from the Start menu, choose your game folder and a preset, then press Play.%n%nTo start through Steam instead, see README.md in the install folder.
 
 [Code]
 var
@@ -141,7 +142,7 @@ begin
       exit;
     end;
     if not Lifecycle('Recover', '', ExpandConstant('{tmp}\bg3rtx-lifecycle.ps1')) then begin
-      Result := 'Recovery failed. Keep the backup folder and see SETUP.md before retrying.';
+      Result := 'Recovery failed. Keep the backup folder and run setup again. If it fails again, report the problem and include the setup log.';
       exit;
     end;
   end;
@@ -154,7 +155,7 @@ begin
     Extra := Extra + ' -TransferLegacy';
   end;
   if not Lifecycle('Install', Extra, ExpandConstant('{tmp}\bg3rtx-lifecycle.ps1')) then
-    Result := 'Setup could not stage or replace BG3RTX. Close the game and settings app, check the destination and disk space, then retry. An interrupted transaction requires recovery; see SETUP.md. Choose the default per-user folder if the location is not writable.'
+    Result := 'Setup could not stage or replace BG3RTX. Close the game and settings app, check the destination and disk space, then retry. If setup was interrupted, run it again to recover. Choose the default per-user folder if the location is not writable.'
   else Applied := True;
 end;
 
