@@ -36,9 +36,15 @@
     "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "settle-off-00",
@@ -53,7 +59,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-00",
@@ -116,7 +129,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-00",
@@ -242,7 +264,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-01",
@@ -368,7 +397,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-02",
@@ -494,7 +532,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-03",
@@ -620,7 +665,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-04",
@@ -746,7 +800,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-05",
@@ -872,7 +933,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-06",
@@ -998,7 +1068,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-07",
@@ -1124,7 +1201,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-08",
@@ -1250,7 +1336,14 @@
     "motion_end": 2.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-09",
@@ -1343,7 +1436,16 @@
     "motion_end": 5.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "timing-on-cost",
@@ -1373,6 +1475,13 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

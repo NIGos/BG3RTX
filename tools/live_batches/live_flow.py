@@ -91,6 +91,12 @@ def job_files(directory):
     return sorted(directory.glob("jobs/*.json")) + sorted(directory.glob("*/jobs/*.json"))
 
 
+def active_job_files():
+    """Explicit inventory; historical artifacts remain available for audit."""
+    inventory = read(ROOT / "tools/live_batches/duration_lint.json")
+    return {ROOT / Path(path) for path, result in inventory.items() if result.get("active", False)}
+
+
 def load_job(path):
     path = Path(path)
     job = read(path)
@@ -810,6 +816,7 @@ def main(argv=None):
     ap.add_argument("--report")
     ap.add_argument("--tree", help="actual runner tree for preflight plan resolution")
     ap.add_argument("--preflight", action="store_true", help="refuse invalid or overlong launches before starting the runner")
+    ap.add_argument("--active", action="store_true", help="check only active jobs in duration_lint.json")
     a = ap.parse_args(argv)
     if a.newest < 1:
         ap.error("--newest must be positive")
@@ -821,7 +828,10 @@ def main(argv=None):
     report = dict(corpus={k: v for k, v in index.items() if k not in ("entries", "key", "matches")}, jobs={})
     failures = 0
     memo = index.get("matches", {})
+    active = active_job_files() if a.active else None
     for path in job_files(a.target):
+        if active is not None and path not in active:
+            continue
         try:
             if a.preflight and a.tree:
                 job = read(path)

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 840.0,
+  "timeout": 1276,
   "repeat": 1,
   "live_batch": "gpu-opt2",
   "window_mode": "visible_unfocused_fg",
@@ -213,7 +213,13 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
         ]
       }
-    ]
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    }
   },
   "estimated_phase_seconds": 241.0
 }

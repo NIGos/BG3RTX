@@ -1,0 +1,1795 @@
+{
+  "version": 1,
+  "slices": [
+    {
+      "prefix": "b1-cp4-compact-camp-join--",
+      "offset": 0,
+      "count": 7,
+      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\cov_paks_compact\\jobs\\cp4-compact-camp-join.json",
+      "job": {
+        "save": "Campsite - 27h",
+        "session": false,
+        "traces": 0,
+        "hold": 120,
+        "repeat": 1,
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0",
+        "patterns": [
+          "\\[hot\\]",
+          "\\[ngx\\] RR create",
+          "\\[sl\\] DLSS-G frame",
+          "\\[pace\\]",
+          "\\[watch\\]",
+          "rt passes: GPU cost",
+          "rt applied",
+          "\\[rt\\] scene wait",
+          "\\[rt\\] scene build GPU",
+          "\\[trace\\]",
+          "\\[shaders\\].*\\?",
+          "\\[crash\\]",
+          "FAILED",
+          "\\[geo\\] transform feedback",
+          "\\[geo\\] \\d+ vertex shader modules",
+          "gi: GPU cost",
+          "gi: trace pass",
+          "GI hit direct",
+          "hit material",
+          "rt stats",
+          "\\[rrpost\\] exposure (held|hold|probe)",
+          "\\[hit material pool pairs\\]",
+          "\\[hit material instanced\\]",
+          "\\[geo\\] RT capture",
+          "\\[cascade\\] casters",
+          "\\[hit material paks\\]",
+          "\\[hit material paks join\\]",
+          "\\[mesh content"
+        ],
+        "forbid": [
+          "\\[crash\\] exception 0x",
+          "VK_ERROR_DEVICE_LOST",
+          "\\[hot\\] core (rejected|faulted)",
+          "FAILED, keeping previous",
+          "compile call failed",
+          "RR creation failed",
+          "RR evaluate failed"
+        ],
+        "window_mode": "visible_unfocused_fg",
+        "name": "cp4-compact-camp-join",
+        "live_batch": "cov-paks-compact",
+        "timeout": 1744.0,
+        "args": [
+          "-RealPresent",
+          "-Move",
+          "-MovePlan",
+          "captures/live_batches/cov_paks_compact/plans/compact_camp.json"
+        ],
+        "expect": [
+          "\\[auto\\] scene ready",
+          "\\[hit material paks\\] loaded 40983 candidates",
+          "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+        ],
+        "expect_every": [
+          {
+            "name": "draw attempts and rejection reasons in each ON observation",
+            "period_s": 9,
+            "select": "\\[hit material paks join\\]",
+            "match": "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*",
+            "windows": [
+              "observe-on",
+              "observe-on-repeat"
+            ],
+            "min": 1
+          }
+        ],
+        "expect_runner": [
+          "\\[window-mode\\].*visible_unfocused",
+          "^Run ended: done",
+          "\\[motion-plan\\] complete phases=7\\b"
+        ],
+        "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
+        "estimated_phase_seconds": 102.9,
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      },
+      "plan": [
+        {
+          "label": "warmup",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 29.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 29.0,
+          "motion_end": 29.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/gi_trace_rt_hit_sun_em\\.hlsl\\?[^ ]* generation ",
+            "\\[water\\] rt/water_reflect\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_reflect: built",
+            "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
+            "\\[auto\\] scene ready"
+          ],
+          "wait_log_timeout": 600.0
+        },
+        {
+          "label": "producer-sanity-warmup",
+          "kind": "static",
+          "seconds": 1.1,
+          "capture_at": 0,
+          "serial": 0,
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+          ],
+          "wait_log_timeout": 20.86799999998766
+        },
+        {
+          "label": "warmup-off",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 5.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 5.0,
+          "motion_end": 5.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0,
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ]
+        },
+        {
+          "label": "observe-on",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 32.8,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 32.8,
+          "motion_end": 32.8,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "observe-off",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 1.1,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 1.1,
+          "motion_end": 1.1,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "observe-on-repeat",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 32.8,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 32.8,
+          "motion_end": 32.8,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "restore",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 1.1,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 1.1,
+          "motion_end": 1.1,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+          "wait_log": [
+            "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        }
+      ]
+    },
+    {
+      "prefix": "b2-go1-camp--",
+      "offset": 8,
+      "count": 21,
+      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a1f09aa8ed1b0702d\\tools\\live_batches\\gpu_opt1\\jobs\\go1-camp.json",
+      "job": {
+        "name": "go1-camp",
+        "save": "Campsite - 27h",
+        "session": false,
+        "traces": 0,
+        "hold": 120,
+        "timeout": 2697,
+        "repeat": 1,
+        "live_batch": "gpu-opt1",
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+        "args": [
+          "-RealPresent",
+          "-Move",
+          "-MovePlan",
+          "captures/live_batches/gpu_opt1/plans/gpu_opt1.json"
+        ],
+        "patterns": [
+          "\\[hot\\]",
+          "\\[ngx\\] RR create",
+          "\\[sl\\] DLSS-G frame",
+          "\\[pace\\]",
+          "\\[watch\\]",
+          "rt passes: GPU cost",
+          "\\[rt\\] scene wait",
+          "\\[rt\\] scene build GPU",
+          "\\[trace\\]",
+          "\\[shaders\\].*\\?",
+          "\\[crash\\]",
+          "FAILED",
+          "\\[water\\]",
+          "gi: GPU cost",
+          "\\[rrpost\\] exposure (held|probe)",
+          "\\[geo\\] RT capture",
+          "\\[cascade\\] casters",
+          "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+          "gi: trace pass",
+          "gi: GPU cost",
+          "gi: background builds",
+          "building in the background",
+          "\\[em\\]",
+          "\\[geo\\]",
+          "\\[rrpost\\] exposure",
+          "rf: reflection pass",
+          "ls: local-light shadow pass"
+        ],
+        "expect": [
+          "\\[auto\\] scene ready",
+          "gi: trace pass .*GPU median",
+          "gi: GPU cost .*average of 300 frames",
+          "\\[trace\\] frame \\d+ written",
+          "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+          "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+        ],
+        "expect_every": [
+          {
+            "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+            "select": "\\[rt\\] scene wait: \\d+ frames",
+            "match": "got this frame's scene, 0 timeouts",
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ],
+            "min": 1
+          },
+          {
+            "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+            "select": "\\[geo\\] RT capture, last \\d+ frames:",
+            "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+            "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+            "match": ", buffer full 0\\.0, added ",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ],
+            "when_present": true
+          },
+          {
+            "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+            "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+            "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ],
+            "min": 1
+          },
+          {
+            "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+            "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+            "match": "; non-finite terms 0 \\(",
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ],
+            "min": 1
+          },
+          {
+            "name": "no pipeline builds in every measured window",
+            "select": "gi: background builds \\(\\d+ frames\\):",
+            "match": ": 0 frames waiting, 0 pending, 0 started",
+            "min": 1,
+            "windows": [
+              "shot-off-a",
+              "cost-off-a",
+              "shot-compact",
+              "cost-compact",
+              "shot-off-b",
+              "cost-off-b",
+              "shot-alpha",
+              "cost-alpha",
+              "shot-off-c",
+              "cost-off-c",
+              "shot-water",
+              "cost-water",
+              "shot-off-d",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "no skipped background pass in measured windows",
+            "select": "building in the background",
+            "match": "(?!)",
+            "min": 0,
+            "event": true,
+            "windows": [
+              "shot-off-a",
+              "cost-off-a",
+              "shot-compact",
+              "cost-compact",
+              "shot-off-b",
+              "cost-off-b",
+              "shot-alpha",
+              "cost-alpha",
+              "shot-off-c",
+              "cost-off-c",
+              "shot-water",
+              "cost-water",
+              "shot-off-d",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "complete trace timer every cost state",
+            "select": "gi: trace pass",
+            "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "complete GI timer every cost state",
+            "select": "gi: GPU cost",
+            "match": "average of 300 frames",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "rf: reflection pass complete timer per cost state",
+            "select": "rf: reflection pass",
+            "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+            "period_frames": 300,
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "ls: local-light shadow pass complete timer per cost state",
+            "select": "ls: local-light shadow pass",
+            "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+            "period_frames": 300,
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "enclosing RT cost complete timer",
+            "select": "rt passes: GPU cost",
+            "match": "average of 300 frames",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "water compose GPU timer present",
+            "select": "\\[water\\] compose GPU",
+            "match": "\\([1-9]\\d* timed frames:",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          },
+          {
+            "name": "water reflection GPU timer present",
+            "select": "\\[water\\] reflections GPU",
+            "match": "\\([1-9]\\d* timed;",
+            "min": 1,
+            "windows": [
+              "cost-off-a",
+              "cost-compact",
+              "cost-off-b",
+              "cost-alpha",
+              "cost-off-c",
+              "cost-water",
+              "cost-off-d"
+            ]
+          }
+        ],
+        "forbid": [
+          "\\[crash\\] exception 0x",
+          "VK_ERROR_DEVICE_LOST",
+          "\\[hot\\] core (rejected|faulted)",
+          "FAILED, keeping previous",
+          "compile call failed",
+          "RR creation failed",
+          "RR evaluate failed",
+          "\\[water\\] water geometry UNAVAILABLE",
+          "\\[water\\] build submission failed",
+          "\\[water\\] reflections unavailable",
+          "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
+          "\\[water\\] compose UNAVAILABLE",
+          "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+          "\\[water\\] compose: variant pipeline creation failed",
+          "\\[water\\] compose: a water pipeline blends",
+          "\\[rrpost\\] exposure hold REFUSED",
+          "\\[cascade\\] could not allocate",
+          "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
+          "skipped: no variant for"
+        ],
+        "expect_runner": [
+          "\\[window-mode\\].*visible_unfocused",
+          "\\[motion-trace\\] phase=6 label=shot-off-a repeat=0",
+          "\\[motion-trace\\] phase=8 label=shot-compact repeat=0",
+          "\\[motion-trace\\] phase=10 label=shot-off-b repeat=0",
+          "\\[motion-trace\\] phase=12 label=shot-alpha repeat=0",
+          "\\[motion-trace\\] phase=14 label=shot-off-c repeat=0",
+          "\\[motion-trace\\] phase=16 label=shot-water repeat=0",
+          "\\[motion-trace\\] phase=18 label=shot-off-d repeat=0",
+          "\\[motion-plan\\] complete phases=21\\b",
+          "^Run ended: done"
+        ],
+        "stop_on_dump": true,
+        "purpose": "Ultra exact candidates, same-run independent ON states bracketed by OFF. Static float/PNG identity must pass noise-derived OFF-repeat bands; no release promotion from energy alone. Complete 300-frame cost timers required; missing sample lines INVALID. No game permission granted.",
+        "estimated_phase_seconds": 567.5,
+        "window_mode": "visible_unfocused_fg",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      },
+      "plan": [
+        {
+          "label": "warmup",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 29.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 29.0,
+          "motion_end": 29.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=1,rt_water_empty_tiles=1,qa_exposure_hold=0,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "\\[auto\\] scene ready"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "producer-sanity-warmup",
+          "kind": "static",
+          "seconds": 1.1,
+          "capture_at": 0,
+          "serial": 0,
+          "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=1,rt_water_empty_tiles=1,qa_exposure_hold=0,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "gi: trace pass .*GPU median",
+            "gi: GPU cost .*average of 300 frames"
+          ],
+          "wait_log_timeout": 29.200000000000728
+        },
+        {
+          "label": "warm-rt_compact_hit_state",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 10.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 10.0,
+          "motion_end": 10.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+          ],
+          "wait_log_timeout": 180.0,
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ]
+        },
+        {
+          "label": "warm-rt_alpha_metadata_cache",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 10.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 10.0,
+          "motion_end": 10.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0,
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ]
+        },
+        {
+          "label": "warm-rt_water_empty_tiles",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 10.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 10.0,
+          "motion_end": 10.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+          ],
+          "wait_log_timeout": 180.0,
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ]
+        },
+        {
+          "label": "warm-off",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 10.0,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 10.0,
+          "motion_end": 10.0,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "wait_log": [
+            "\\[shaders\\] cache: prefetched ",
+            "gi: gi/[^ ]+ generation ",
+            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0,
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ]
+        },
+        {
+          "label": "shot-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ]
+        },
+        {
+          "label": "cost-off-a",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-compact",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-compact",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-off-b",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-alpha",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-alpha",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-off-c",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+            "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-off-c",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-water",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-water",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "shot-off-d",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 21.4,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 21.4,
+          "motion_end": 21.4,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+          "trace_at": [
+            5
+          ],
+          "wait_log": [
+            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_fresh": [
+            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+          ],
+          "wait_log_timeout": 180.0
+        },
+        {
+          "label": "cost-off-d",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 49.5,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 49.5,
+          "motion_end": 49.5,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+        },
+        {
+          "label": "restore",
+          "kind": "static",
+          "speed": "static",
+          "seconds": 1.1,
+          "repeat_ms": 0,
+          "scan": 16,
+          "capture_at": 0,
+          "serial": 0,
+          "motion_start": 1.1,
+          "motion_end": 1.1,
+          "pixels_per_second": 0,
+          "direction": 0,
+          "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
+        }
+      ]
+    }
+  ],
+  "plan": [
+    {
+      "label": "b1-cp4-compact-camp-join--warmup",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 29.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 29.0,
+      "motion_end": 29.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/gi_trace_rt_hit_sun_em\\.hlsl\\?[^ ]* generation ",
+        "\\[water\\] rt/water_reflect\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_reflect: built",
+        "\\[water\\] rt/water_compose\\.hlsl\\?[^ ]*WATER_HIT_SHADE_LAYOUT=1[^ ]* water_compose: built",
+        "\\[auto\\] scene ready"
+      ],
+      "wait_log_timeout": 600.0
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--producer-sanity-warmup",
+      "kind": "static",
+      "seconds": 1.1,
+      "capture_at": 0,
+      "serial": 0,
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
+      ],
+      "wait_log_timeout": 20.86799999998766
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--warmup-off",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 5.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 5.0,
+      "motion_end": 5.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--observe-on",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 32.8,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 32.8,
+      "motion_end": 32.8,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--observe-off",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 1.1,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 1.1,
+      "motion_end": 1.1,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--observe-on-repeat",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 32.8,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 32.8,
+      "motion_end": 32.8,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b1-cp4-compact-camp-join--restore",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 1.1,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 1.1,
+      "motion_end": 1.1,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+      "wait_log": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--settings-reset",
+      "kind": "static",
+      "seconds": 1.1,
+      "repeat_ms": 0,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 1.1,
+      "motion_end": 1.1,
+      "set": "crash_dump=1,dump_images=1,dump_png_width=1280,dump_preview_f32=1,dump_raw=0,dump_shaders=0,fg=2,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi=1,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,gi_rt=1,gi_rt_fallback=0,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_stats=0,pan_capture=0,pan_inputs=0,pan_prepare=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_shade=0,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_compact_hit_state=0,rt_debug=0,rt_em_fx_pulse=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_generated=0,rt_hit_material_instanced=1,rt_hit_material_ip_grass=0,rt_hit_material_paks=0,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_mesh_content_id=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_reflections=1,rt_scene_wait_log_frames=120,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_water_empty_tiles=0,rt_xfb_mb=1024,sharc=0,sharc_device=1"
+    },
+    {
+      "label": "b2-go1-camp--warmup",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 29.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 29.0,
+      "motion_end": 29.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=1,rt_water_empty_tiles=1,qa_exposure_hold=0,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready",
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b2-go1-camp--producer-sanity-warmup",
+      "kind": "static",
+      "seconds": 1.1,
+      "capture_at": 0,
+      "serial": 0,
+      "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=1,rt_water_empty_tiles=1,qa_exposure_hold=0,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "gi: trace pass .*GPU median",
+        "gi: GPU cost .*average of 300 frames"
+      ],
+      "wait_log_timeout": 29.200000000000728
+    },
+    {
+      "label": "b2-go1-camp--warm-rt_compact_hit_state",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 10.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 10.0,
+      "motion_end": 10.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b2-go1-camp--warm-rt_alpha_metadata_cache",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 10.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 10.0,
+      "motion_end": 10.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b2-go1-camp--warm-rt_water_empty_tiles",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 10.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 10.0,
+      "motion_end": 10.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b2-go1-camp--warm-off",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 10.0,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 10.0,
+      "motion_end": 10.0,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "wait_log": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0,
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ]
+    },
+    {
+      "label": "b2-go1-camp--shot-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ]
+    },
+    {
+      "label": "b2-go1-camp--cost-off-a",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-compact",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-compact",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-off-b",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-alpha",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-alpha",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-off-c",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-off-c",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-water",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-water",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--shot-off-d",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 21.4,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 21.4,
+      "motion_end": 21.4,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+      "trace_at": [
+        5
+      ],
+      "wait_log": [
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "wait_log_timeout": 180.0
+    },
+    {
+      "label": "b2-go1-camp--cost-off-d",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 49.5,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 49.5,
+      "motion_end": 49.5,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    },
+    {
+      "label": "b2-go1-camp--restore",
+      "kind": "static",
+      "speed": "static",
+      "seconds": 1.1,
+      "repeat_ms": 0,
+      "scan": 16,
+      "capture_at": 0,
+      "serial": 0,
+      "motion_start": 1.1,
+      "motion_end": 1.1,
+      "pixels_per_second": 0,
+      "direction": 0,
+      "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0"
+    }
+  ]
+}

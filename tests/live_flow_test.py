@@ -33,6 +33,15 @@ def fixture(name="one"):
 
 
 class PipelineReadinessTests(unittest.TestCase):
+    def test_explicit_conservative_mapping_keeps_generic_completion_and_quiet(self):
+        j = dict(set="rt_hair_fibre=0")
+        p = [phase("before"), phase("on", values="rt_hair_fibre=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+        self.assertIn(f.pipeline_readiness.GENERIC, p[1]['wait_log'])
+        p[1]['wait_log'].remove(f.pipeline_readiness.GENERIC)
+        self.assertTrue(f.pipeline_readiness.problems(j, p))
+
     def test_each_changed_key_requires_its_completion_even_after_prefetch(self):
         j = dict(set="rt_water_surface_fresnel=0", live_flow={})
         p = [phase("warm"), phase("on", values="rt_water_surface_fresnel=1"),

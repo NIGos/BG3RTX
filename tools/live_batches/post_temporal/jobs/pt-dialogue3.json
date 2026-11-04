@@ -6,7 +6,7 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 900.0,
+  "timeout": 3205,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,

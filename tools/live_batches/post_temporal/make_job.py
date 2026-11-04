@@ -4,8 +4,8 @@ from pathlib import Path
 from tools.live_batches.edge_flicker.make_job import write
 from tools.live_batches.live_flow import repair_known_forbids
 HERE = Path(__file__).resolve().parent
-# Minimum ceil(log2(12/.05)) = 8; ten is the largest even count fitting
-# the 900 s cap with all energy exports and the observed dispatch stall.
+# Minimum ceil(log2(12/.05)) = 8; retain ten counterbalanced pairs.
+# Shared preflight accounts for energy exports, dispatch and median readiness.
 PAIRS = 10
 D3_WINDOWS = [(f'{"on" if on else "off"}-{i:02d}', on)
               for i in range(PAIRS) for on in ((0,1) if i % 2 == 0 else (1,0))]

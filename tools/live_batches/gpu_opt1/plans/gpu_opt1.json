@@ -49,9 +49,17 @@
     "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-rt_alpha_metadata_cache",
@@ -69,9 +77,16 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-rt_water_empty_tiles",
@@ -89,9 +104,17 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-off",
@@ -109,9 +132,14 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "shot-off-a",
@@ -162,7 +190,17 @@
     "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-compact",
@@ -195,7 +233,17 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-b",
@@ -228,7 +276,17 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-alpha",
@@ -261,7 +319,17 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-c",
@@ -294,7 +362,15 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-water",
@@ -327,7 +403,15 @@
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-d",

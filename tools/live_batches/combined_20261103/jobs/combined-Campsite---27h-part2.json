@@ -1,0 +1,513 @@
+{
+  "name": "combined-Campsite---27h-part2",
+  "save": "Campsite - 27h",
+  "session": false,
+  "traces": 0,
+  "hold": 90,
+  "timeout": 1455.0,
+  "repeat": 1,
+  "live_batch": "combined",
+  "window_mode": "visible_unfocused_fg",
+  "set": "dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,fps_cap=0,gi_debug=0,gi_rr_rays=1,headless=0,ls_check=0,ls_stats=0,pan_capture=0,pan_inputs=0,pan_prepare=0,preset=high,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rt=1,rt_debug=0,rt_occ_stats=0,rt_primary_check=0,rt_scene_wait_log_frames=120,rt_stats=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_xfb_mb=1024",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/combined_20261103/plans/combined-Campsite---27h-part2.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[trace\\]",
+    "\\[ngx\\] RR",
+    "\\[rrpost\\] exposure",
+    "\\[rt\\] scene wait",
+    "gi: resources",
+    "gi: trace pass",
+    "rf: reflection pass"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "gi: trace pass .*GPU median",
+    "rf: reflection pass GPU median",
+    "\\[rrpost\\] exposure held",
+    "\\[ngx\\] RR create .*: Success"
+  ],
+  "expect_every": [
+    {
+      "name": "b1-go2-camp-high--GI timing",
+      "select": "gi: trace pass .*GPU median [\\d.]+ ms",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, ",
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-go2-camp-high--reflection timing",
+      "select": "rf: reflection pass GPU median [\\d.]+ ms",
+      "match": "rf: reflection pass GPU median [\\d.]+ ms",
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--cost-off-b"
+      ],
+      "min": 1,
+      "period_frames": 300
+    },
+    {
+      "name": "b1-go2-camp-high--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--cost-off-b"
+      ]
+    },
+    {
+      "select": "\\[trace\\] frame \\d+ written",
+      "match": "\\[trace\\] frame \\d+ written",
+      "windows": [
+        "b1-go2-camp-high--shot-off-a",
+        "b1-go2-camp-high--shot-on",
+        "b1-go2-camp-high--shot-off-b"
+      ],
+      "event": true,
+      "settle_s": 1,
+      "min": 3,
+      "name": "b1-go2-camp-high--\\[trace\\] frame \\d+ written"
+    },
+    {
+      "name": "b1-go2-camp-high--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--cost-off-b"
+      ]
+    },
+    {
+      "name": "b1-go2-camp-high--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--cost-off-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "b1-go2-camp-high--scaled GI actually applied",
+      "select": "gi: trace pass",
+      "match": "1 rays/sample, half res, spatial resolve \\+ RR",
+      "windows": [
+        "b1-go2-camp-high--cost-on"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-go2-camp-high--no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "b1-go2-camp-high--cost-off-a",
+        "b1-go2-camp-high--shot-off-a",
+        "b1-go2-camp-high--cost-on",
+        "b1-go2-camp-high--shot-on",
+        "b1-go2-camp-high--cost-off-b",
+        "b1-go2-camp-high--shot-off-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "RR (creation|evaluate) failed",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[crash\\] exception 0x[0-9a-f]+",
+    "query basis overflow",
+    "skipped: no variant"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-trace\\] phase=5 label=b1\\-go2\\-camp\\-high\\-\\-shot\\-off\\-a repeat=0",
+    "\\[motion-trace\\] phase=8 label=b1\\-go2\\-camp\\-high\\-\\-shot\\-on repeat=0",
+    "\\[motion-trace\\] phase=11 label=b1\\-go2\\-camp\\-high\\-\\-shot\\-off\\-b repeat=0",
+    "\\[motion-plan\\] complete phases=12\\b"
+  ],
+  "requires_success_of": [],
+  "post_gate": true,
+  "fail_fast": true,
+  "fail_fast_slices": [
+    {
+      "offset": 0,
+      "count": 12,
+      "forbid": [
+        "VK_ERROR_DEVICE_LOST",
+        "\\[crash\\] exception 0x[0-9a-f]+",
+        "skipped: no variant",
+        "query basis overflow",
+        "RR (creation|evaluate) failed"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "gi: trace pass .*GPU median",
+        "rf: reflection pass GPU median",
+        "\\[rrpost\\] exposure held",
+        "\\[ngx\\] RR create .*: Success"
+      ],
+      "expect_every": [
+        {
+          "name": "b1-go2-camp-high--GI timing",
+          "select": "gi: trace pass .*GPU median [\\d.]+ ms",
+          "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, ",
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--cost-off-b"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-go2-camp-high--reflection timing",
+          "select": "rf: reflection pass GPU median [\\d.]+ ms",
+          "match": "rf: reflection pass GPU median [\\d.]+ ms",
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--cost-off-b"
+          ],
+          "min": 1,
+          "period_frames": 300
+        },
+        {
+          "name": "b1-go2-camp-high--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--cost-off-b"
+          ]
+        },
+        {
+          "select": "\\[trace\\] frame \\d+ written",
+          "match": "\\[trace\\] frame \\d+ written",
+          "windows": [
+            "b1-go2-camp-high--shot-off-a",
+            "b1-go2-camp-high--shot-on",
+            "b1-go2-camp-high--shot-off-b"
+          ],
+          "event": true,
+          "settle_s": 1,
+          "min": 3,
+          "name": "b1-go2-camp-high--\\[trace\\] frame \\d+ written"
+        },
+        {
+          "name": "b1-go2-camp-high--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--cost-off-b"
+          ]
+        },
+        {
+          "name": "b1-go2-camp-high--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--cost-off-b"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "b1-go2-camp-high--scaled GI actually applied",
+          "select": "gi: trace pass",
+          "match": "1 rays/sample, half res, spatial resolve \\+ RR",
+          "windows": [
+            "b1-go2-camp-high--cost-on"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-go2-camp-high--no mesh pool exhaustion in measured windows (load excluded)",
+          "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b1-go2-camp-high--cost-off-a",
+            "b1-go2-camp-high--shot-off-a",
+            "b1-go2-camp-high--cost-on",
+            "b1-go2-camp-high--shot-on",
+            "b1-go2-camp-high--cost-off-b",
+            "b1-go2-camp-high--shot-off-b"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=high,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 4,
+        "startup_only": [
+          "rt_xfb_mb"
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 12.39669421487566,
+            "windows": 115,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 7.562389715155868,
+            "windows": 14,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              1,
+              0,
+              0,
+              0
+            ],
+            "fps": 6.949270326617158,
+            "windows": 3,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
+      }
+    }
+  ],
+  "estimated_phase_seconds": 241.0,
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 4,
+    "startup_only": [
+      "rt_xfb_mb"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 12.39669421487566,
+        "windows": 115,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 7.562389715155868,
+        "windows": 14,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 6.949270326617158,
+        "windows": 3,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    },
+    "segments": [
+      {
+        "offset": 0,
+        "count": 12,
+        "set": "preset=high,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 4,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 12.39669421487566,
+              "windows": 115,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 7.562389715155868,
+              "windows": 14,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc2-ambient-camp-fg2.1.013422.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw2-camp-fg2.1.213409.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\va1-camp-vt-masks-fg2.1.140543.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 6.949270326617158,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.022717.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      }
+    ]
+  },
+  "post": "py -3 tools/live_batches/combine.py --extract \"tools/live_batches/combined_20261103/combined-Campsite---27h-part2.manifest.json\" --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --out \"{log}.batches\" --run-post"
+}

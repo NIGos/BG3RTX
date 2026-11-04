@@ -36,9 +36,14 @@
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-settle",
@@ -56,9 +61,17 @@
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "set-a-native",
@@ -149,7 +162,17 @@
     "motion_end": 5.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "reload-b-origin",
@@ -225,7 +248,17 @@
     "motion_end": 5.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "reload-c-strands",
@@ -301,7 +334,15 @@
     "motion_end": 5.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "reload-d-fibre",
@@ -407,7 +448,15 @@
     "motion_end": 62.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=1,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "order-gbuffer-2",
@@ -437,6 +486,14 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=1,rt_hair_groom_primary_order=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

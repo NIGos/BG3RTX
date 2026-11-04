@@ -41,6 +41,32 @@ for key in ("rt_water_hit_cost", "rt_water_hit_shade", "rt_water_compose_shift",
 TABLE["ls_box"] = [r"gi: gi/rt_local_shadows_box\.hlsl[^ ]* generation "]
 TABLE["rr_post"] = [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"]
 
+# VALID su1-ultra-s8-fg2.1.004527.log: core/gi.cpp refresh() records;
+# these scalar settings are push constants / pass enables, not new variants.
+TABLE.update({
+    "gi_ao": [r"gi: gi/gi_ao_apply\.hlsl[^ ]* generation "],
+    "gi_strength": [r"gi: gi/gi_composite\.hlsl[^ ]* generation "],
+    "rt_shadows": [r"gi: gi/rt_shadow\.hlsl[^ ]* generation "],
+    "rf_max_rough": [r"gi: gi/rt_reflections\.hlsl[^ ]* generation "],
+    "ls_samples": [r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation "],
+    "ls_shadowed": [r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation "],
+    "rr_cbt": [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"],
+    "rt_alpha": list(GI_QUERY),
+    "rt_water_compose": [WATER_COMPOSE],
+    "rt_water_reflections": [r"\[water\] rt/water_reflect\.hlsl[^ ]* water_reflect: built"],
+})
+# No authoritative pipeline completion witness in the VALID corpus for these
+# paths. Explicitly opt them into the conservative generic shader completion
+# fallback requested for preparation. Quiet and outstanding-build reconciliation
+# are still required; this does not qualify their timing or rendering behaviour.
+# hair_fibre selects gi/hair_fibre.hlsl (core/gi.cpp); primary_order and crowd
+# change CPU publication/LOD; paks changes host data, geometry capture is host
+# side, and rr/fg use vendor pipelines. preset and ab_off affect many passes.
+GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: prefetched )"
+CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_groom_crowd_ksegments rt_hit_material_paks rt_water_geometry rr fg preset ab_off".split())
+for key in CONSERVATIVE:
+    TABLE[key] = [GENERIC]
+
 # Settings which schedule observations or change CPU/log policy, without
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.
 CONTROL = set("qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())

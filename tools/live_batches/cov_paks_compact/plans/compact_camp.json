@@ -50,9 +50,14 @@
     "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "observe-on",
@@ -67,7 +72,15 @@
     "motion_end": 32.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "observe-off",
@@ -82,7 +95,15 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "observe-on-repeat",
@@ -97,7 +118,15 @@
     "motion_end": 32.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "restore",
@@ -112,6 +141,14 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0"
+    "set": "rt_hit_material_paks=0,rt_mesh_content_id=1,rt_stats=0,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

@@ -271,6 +271,7 @@ def main(argv=None):
     ap.add_argument("jobs", nargs="*")
     ap.add_argument("--out", type=Path, default=ROOT / "tools/live_batches/combined")
     ap.add_argument("--results", type=Path, default=flow.default_results())
+    ap.add_argument("--split-seconds", type=float, help="split same-save groups at source boundaries under this preflight budget")
     ap.add_argument("--extract", type=Path)
     ap.add_argument("--log", type=Path)
     ap.add_argument("--runner", type=Path)
@@ -299,12 +300,33 @@ def main(argv=None):
         raise ValueError("cannot combine batches that depend on each other")
     index = flow.corpus(a.results, ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
     flow.fps_windows.configure(index["entries"])
+    flow.configure_trace_exports(index["entries"])
+    flow.readiness_budget.configure(index["entries"])
+    prepared = []
+    for save, sources in groups.items():
+        chunks, chunk = [], []
+        for source in sources:
+            candidate = chunk + [source]
+            trial, phases, _ = combine_group(candidate, "unused.json")
+            flow.retime(trial, phases)
+            budget = flow.duration_budget(trial, phases)
+            if a.split_seconds and chunk and budget["seconds"] + budget["expected_readiness_seconds"] > a.split_seconds:
+                chunks.append(chunk)
+                chunk = [source]
+            else:
+                chunk = candidate
+        chunks.append(chunk)
+        for i, chunk in enumerate(chunks):
+            suffix = f"-part{i + 1}" if len(chunks) > 1 else ""
+            prepared.append((save, chunk, suffix))
     bad = False
     memo = {}
-    for save, sources in groups.items():
-        stem = "combined-" + slug(save)
+    for save, sources, suffix in prepared:
+        stem = "combined-" + slug(save) + suffix
         plan_path = a.out / "plans" / (stem + ".json")
         job, plan, manifest = combine_group(sources, path_arg(plan_path))
+        flow.retime(job, plan)
+        job["name"] = stem
         manifest["plan"] = plan
         manifest_path = a.out / (stem + ".manifest.json")
         job["post"] = f'py -3 tools/live_batches/combine.py --extract "{path_arg(manifest_path)}" --log "{{log}}" --runner "{{runner}}" --status "{{status}}" --out "{{log}}.batches" --run-post'

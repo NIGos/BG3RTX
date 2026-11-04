@@ -29,7 +29,7 @@
     "wait_log": [
       "\\[water\\] compose stability"
     ],
-    "wait_log_timeout": 9.432000000000698
+    "wait_log_timeout": 9.447999999996682
   },
   {
     "label": "prefetch-shift-on",
@@ -47,9 +47,14 @@
     "set": "rt_water_compose_shift=1,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "energy-static-0",
@@ -67,7 +72,15 @@
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
     "trace_at": [
       6
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "energy-static-1",
@@ -85,7 +98,15 @@
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "trace_at": [
       6
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "energy-static-2",
@@ -103,7 +124,15 @@
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
     "trace_at": [
       6
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "energy-static-3",
@@ -121,7 +150,15 @@
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
     "trace_at": [
       6
-    ]
+    ],
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "diag-view-static",
@@ -136,7 +173,15 @@
     "motion_end": 4.5,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25,pan_capture=99100"
+    "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25,pan_capture=99100",
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-turn-0",
@@ -216,7 +261,15 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "snap-turn-1",
@@ -280,7 +333,15 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "snap-turn-2",
@@ -344,7 +405,15 @@
     "pixels_per_second": 1,
     "direction": 1,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
-    "turn_mode": "keys"
+    "turn_mode": "keys",
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "snap-turn-3",
@@ -407,6 +476,14 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,qa_exposure_hold=0,pan_prepare=0,pan_water=0,pan_delay_ms=0"
+    "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,qa_exposure_hold=0,pan_prepare=0,pan_water=0,pan_delay_ms=0",
+    "wait_log": [
+      "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

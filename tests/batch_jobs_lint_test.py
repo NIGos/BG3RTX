@@ -13,6 +13,40 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_active_combined_chunks_cover_each_source_once(self):
+        from tools.live_batches.combined_20261103.make_jobs import SOURCES
+        from tools.live_batches.regenerate_active import active_paths
+        sources = []
+        for path in active_paths():
+            if path.parent.parent.name != 'combined_20261103':
+                continue
+            manifest = flow.read(path.parent.parent / (path.stem + '.manifest.json'))
+            for segment in manifest['slices']:
+                source = Path(segment['source'])
+                sources.append(source.relative_to(ROOT / 'tools/live_batches').as_posix())
+                original, plan, _ = flow.load_job(source)
+                self.assertEqual(segment['job']['expect_every'], original['expect_every'])
+                self.assertEqual(segment['plan'], plan)
+        self.assertCountEqual(sources, SOURCES)
+
+    def test_active_inventory_passes_current_preflight(self):
+        from tools.live_batches.regenerate_active import active_paths
+        paths = set(active_paths())
+        self.assertEqual(paths, flow.active_job_files())
+        self.assertTrue(paths)
+        index = flow.corpus(flow.default_results(), ROOT / 'captures/.cache/live_flow_corpus.json', newest=100000)
+        self.assertTrue(index['entries'], 'no readable VALID corpus')
+        flow.fps_windows.configure(index['entries'])
+        flow.configure_trace_exports(index['entries'])
+        flow.readiness_budget.configure(index['entries'])
+        for path in sorted(paths):
+            with self.subTest(job=path.name):
+                job, plan, _ = flow.load_job(path)
+                result = flow.lint(job, plan, index['entries'], index.get('matches', {}))
+                self.assertEqual(result['problems'], [])
+                self.assertEqual(flow.launch_problems(job, result['duration']), [])
+                self.assertLessEqual(result['duration']['seconds'] + result['duration']['expected_readiness_seconds'], 900)
+
     def test_compact_generator_confines_stats_and_warms_both_values(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(compact, 'HERE', Path(folder)):
             (Path(folder) / 'plans').mkdir()
