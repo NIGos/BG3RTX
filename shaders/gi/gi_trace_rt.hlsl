@@ -98,6 +98,8 @@ bool gi_hit_term_ok(float3 c, uint bin) {
 #error RT_SPEC_GI_FAR replaces RT_GI_FAR
 #endif
 [[vk::constant_id(1007)]] const uint kSpecGiFar = 0u;
+[[vk::constant_id(1027)]] const uint kSpecGiRoofReject = 0u;
+#include "gi_roof_reject.hlsli"
 #endif
 #if RT_GI_FAR || defined(RT_SPEC_GI_FAR)
 // gi_far (docs/TRACK_C_GI.md "Far-field sun bounce"; core/gi.cpp hit_gi_dispatch, request flag kGiFar on
@@ -406,10 +408,23 @@ void main(uint3 tid : SV_DispatchThreadID) {
     }
 #endif
 #if RT_HIT_GI_DIRECT
+#if defined(RT_SPEC_GI_FAR) && RT_HIT_GI_SUN
+    // Emission and successful screen/cache hits have already contributed. Only
+    // hidden direct shading is discarded: beyond RB a blocked roof makes
+    // far_sun false, gi_far_hit.radiance false and fr.w0 zero. The fallback
+    // only adds +0 to the nonnegative occ/wfall sums. Statistics keep the full path.
+#endif
     // Screen and successful SHaRC hits already returned their radiance above.
     // This replaces only fallback0's zero bounce; its native ambient occlusion
     // remains exactly the same. Direct-only radiance never replaces a full probe.
-    if(!visible && !aborted && t>=0 && pc.gi_rt_fallback==0u && hit_material_publication_ready()){
+    if(!visible && !aborted && t>=0 && pc.gi_rt_fallback==0u && hit_material_publication_ready()
+#if defined(RT_SPEC_GI_FAR) && RT_HIT_GI_SUN
+       && (kSpecGiRoofReject == 0u ||
+           !gi_roof_reject_eligible(kSpecGiRoofReject, kSpecGiFar, pc.rt_stats,
+                                    visible, aborted, t, RB, pc.gi_rt_fallback) ||
+           gi_far_roof_clear(o, dir, t))
+#endif
+       ){
       uint hit_bin=fp.x^fp.y;
       if(pc.rt_stats!=0u)stat_add(282u,true,hit_bin);
       NativeHitMaterial material=rt_hit_material(hh,cone.f0+cone.spread*t);

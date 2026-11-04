@@ -31,6 +31,7 @@ enum SpecId : unsigned {
   kSpecIdWindRgb = 1004,             // S2  RT_HIT_WIND_RGB
   // Retired: 1005 IP grass, 1006 generated two-sided pool rows. Never reuse.
   kSpecIdGiFar = 1007,               // S2  RT_GI_FAR
+  kSpecIdGiRoofReject = 1027,        // opt-roof: skip discarded hidden far shading
   kSpecIdTileset = 1008,             // S3  RT_NATIVE_TILESET
   kSpecIdHairOrigin = 1009,          // S3  RT_HAIR_PHYSICAL_ORIGIN
   kSpecIdScalpHair = 1010,           // S3  RT_NATIVE_SCALP + RT_NATIVE_HAIR (always together)

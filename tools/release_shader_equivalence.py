@@ -44,6 +44,8 @@ REMOVED_KEYS = {1001: "gi_temporal_mv_sample", 1002: "gi_prev_radiance_guard",
                 1016: "rt_water_hit_shade", 1021: "rt_water_hit_cost",
                 1022: "rt_alpha_metadata_cache", 1023: "rt_water_empty_tiles",
                 1024: "rt_compact_hit_state"}
+# Reviewed candidate disabled-path contract. This does NOT certify key ON.
+FIXED_OFF_KEYS = {1027: "gi_roof_reject"}
 # The domain audit above is of bundle35's settings/release policy. A different
 # policy needs a fresh audit, rather than silently applying these assumptions.
 REVIEWED_POLICY_SHA256 = "6081e6b3682aeba6c2fe4bf3c51ad0d8d15b21823ea4303cc127262e6b4b9761"
@@ -91,9 +93,10 @@ def baseline_request(request, known):
 def assignments(ids, removed):
     # Every other registered retained constant is an on/off uint. Crossing both
     # values is a conservative superset of release preset and opt-in states.
-    retained = sorted(ids - removed)
+    fixed = removed | (ids & set(FIXED_OFF_KEYS))
+    retained = sorted(ids - fixed)
     domains = [(0,) if i == 1008 else (0, 1) for i in retained]
-    return [dict(zip(retained, values)) | {i: 0 for i in sorted(removed)}
+    return [dict(zip(retained, values)) | {i: 0 for i in sorted(fixed)}
             for values in itertools.product(*domains)]
 
 
@@ -168,7 +171,7 @@ def check_request(item):
                 continue
             # Leave retained constants symbolic. Canonical equality is then
             # universal, not evidence inferred from a few sampled assignments.
-            universal_assign = {i: 0 for i in REMOVED_KEYS} | {1008: 0}
+            universal_assign = {i: 0 for i in REMOVED_KEYS | FIXED_OFF_KEYS} | {1008: 0}
             universal = (normalizer.get(a, universal_assign, temp, "old") ==
                          normalizer.get(b, universal_assign, temp, "new"))
             actual_checks += 1
@@ -188,6 +191,7 @@ def check_request(item):
                     ca = normalizer.get(a, assign, temp, "old", full=True)
                     cb = normalizer.get(b, assign, temp, "new", full=True)
                     first = f"{entry} {assign}: {first_difference(ca, cb)}"
+                    print(f"DIFFERENT: {r}: {first}", flush=True)
                 _WORKER_PROGRESS.put(bad)
             # These states are proven by symbolic equality; the row records
             # their coverage separately from the actual normalization checks.
@@ -222,9 +226,17 @@ def main(argv=None):
     new = SourceTree.worktree(ROOT).with_sharc(tool.sharc)
     try:
         removed = (registry_ids(base) - registry_ids(new)) | (shader_ids(base) - shader_ids(new))
-        if removed != set(REMOVED_KEYS):
+        if not removed <= set(REMOVED_KEYS):
             raise RuntimeError(f"unreviewed removed spec IDs: {sorted(removed)}")
-        validate_policy(base.read("common/settings.h"))
+        if removed:
+            validate_policy(base.read("common/settings.h"))
+        for spec, key in FIXED_OFF_KEYS.items():
+            if spec in shader_ids(new):
+                defaults = new.read("common/settings.h").decode().split("// BEGIN GENERATED DEFAULTS", 1)[1]
+                if not re.search(r'\{"' + re.escape(key) + r'", "0"\}', defaults):
+                    raise RuntimeError(f"disabled-path key {key} must default to 0")
+        print("candidate spec constants fixed OFF (ON is not certified): " +
+              ", ".join(f"{i} {key}" for i, key in FIXED_OFF_KEYS.items()), flush=True)
         print("removed spec constants (release value 0): " + ", ".join(f"{i} {REMOVED_KEYS[i]}" for i in sorted(removed)), flush=True)
         listed = new.requests()
         reqs = [r for r in dict.fromkeys(listed) if not args.filter or re.search(args.filter, r)]

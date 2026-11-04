@@ -423,6 +423,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
 
+  {"gi_roof_reject", "Skip blocked far bounce shading",
+   "Experimental performance option. Skips lighting work whose far bounce is blocked by a cut-away roof. Emission is preserved. Cost is unqualified.",
+   Kind::Choice, Apply::Hitch, "First use builds a pipeline; then live A/B is available.", false,
+   {{"off", "Off", 0, {{"gi_roof_reject", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"gi_roof_reject", "1"}}, {{"exp_hidden_surface", 2}}, {}, false, false, false, Apply::Hitch}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Performance", {}},
+
   {"detailed_logging", "Detailed logging",
    "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
    Kind::Choice, Apply::Restart, "Restart the game to apply", false,
@@ -699,6 +706,7 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
+    {"gi_roof_reject", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
