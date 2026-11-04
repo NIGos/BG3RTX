@@ -66,8 +66,9 @@
   }
  },
  "pass_bisect_hv7": {
-  "cause": "hv6 07:30: VK_ERROR_DEVICE_LOST 2.5 s after order-1 readiness; invalid read 0x25be68a000.",
-  "prediction": "Cards throughout warmup (order 0, then order 1 with mask 0); first swap in passes-1-gbuffer. Masks 1, 3, 7 each require two complete 300-frame coverage periods and swapped frames; participation respects enabled passes. First device-loss window names the failing pass set.",
-  "status": "OFFLINE_PREPARED; dry-run budget fails at 7.3 min including 120 s load; no live authorization"
+  "cause": "hv7 08:10 lost the device after warm-order-cards applied order 1 with the old mask 0; no bisect window ran.",
+  "prediction": "One order-0 mask-15 warm-all retains cards and readies groom pipelines; then order 1 masks 0 (header only), 8 (probe only), 15 (all). Every order-1 window holds two complete 300-frame periods after readiness and requires periodic [fault] hair primary breadcrumbs. Coverage is required only with probe bit 8; swaps and conditional strand participation only with swap passes enabled.",
+  "status": "OFFLINE_PREPARED; no live authorization",
+  "runtime_dependency": "Current layer logs periodic breadcrumbs with [hair primary], and [fault] only on device loss; the requested periodic [fault] producer must be supplied before live validation."
  }
 }

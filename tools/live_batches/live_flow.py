@@ -517,7 +517,10 @@ def warmup_problems(job, plan):
             if values - {initial.get(key)}:
                 out.append(f"warmup: startup-only key {key} differs from its startup value")
             continue
-        if key in CONTROL:
+        # These host-side gates select no shader variant. Pre-warming order 1
+        # would execute the header path before a first-use crash bisect can
+        # measure it. Changed-key readiness is still checked independently.
+        if key in CONTROL or key in {"rt_hair_groom_primary_order", "rt_hair_primary_passes"}:
             continue
         warmed = {s.get(key) for p, s in zip(plan[:first], states[:first])
                   if float(p.get("seconds", 0)) > 0 and not p.get("trace_at") and not p.get("serial")}

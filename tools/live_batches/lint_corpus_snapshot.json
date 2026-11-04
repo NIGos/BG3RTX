@@ -10124,6 +10124,305 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "960"
+        ],
+        [
+          "dump_preview_f32",
+          "1"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_letterbox",
+          "1"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "gi_hit_direct",
+          "1"
+        ],
+        [
+          "gi_hit_sun",
+          "1"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "ls_box",
+          "2"
+        ],
+        [
+          "ls_k",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rt",
+          "1"
+        ],
+        [
+          "rt_alpha",
+          "1"
+        ],
+        [
+          "rt_alpha_spill",
+          "0"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_cascade_casters",
+          "1"
+        ],
+        [
+          "rt_cascade_mb",
+          "587"
+        ],
+        [
+          "rt_emissive",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "0"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "0"
+        ],
+        [
+          "rt_hair_groom_tips",
+          "0"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_passes",
+          "15"
+        ],
+        [
+          "rt_hit_emission",
+          "1"
+        ],
+        [
+          "rt_hit_material",
+          "1"
+        ],
+        [
+          "rt_hit_material_instanced",
+          "1"
+        ],
+        [
+          "rt_hit_material_recycle",
+          "1"
+        ],
+        [
+          "rt_hit_reference",
+          "0"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_native_scalp",
+          "1"
+        ],
+        [
+          "rt_native_tileset",
+          "0"
+        ],
+        [
+          "rt_omm",
+          "1"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_origin",
+          "1"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "60"
+        ],
+        [
+          "rt_stability_log",
+          "0"
+        ],
+        [
+          "rt_sun_cascade_current",
+          "0"
+        ],
+        [
+          "rt_timing_frames",
+          "60"
+        ],
+        [
+          "rt_xfb_mb",
+          "1408"
+        ],
+        [
+          "sharc",
+          "0"
+        ],
+        [
+          "sharc_device",
+          "1"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.0,
+        "samples": 8,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
+          "rt_hair_primary_passes",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair_primary_passes",
+          "8"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair_primary_passes",
+          "15"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {

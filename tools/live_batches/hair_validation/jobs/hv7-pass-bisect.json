@@ -4,10 +4,10 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 1879,
+  "timeout": 1324,
   "repeat": 1,
   "live_batch": "hair-validation",
-  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=0,rt_hair_groom_tips=0,rt_hair_primary_passes=1",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=0,rt_hair_groom_tips=0,rt_hair_primary_passes=15",
   "live_flow": {
     "settings_latency_s": 1,
     "trace_stall_s": 1,
@@ -60,7 +60,7 @@
     "trace_export": {
       "seconds": 0.30399999999644933,
       "quantile": 0.95,
-      "samples": 428,
+      "samples": 425,
       "maximum": 0.43699999999807915
     }
   },
@@ -141,12 +141,12 @@
   ],
   "expect_runner": [
     "window-mode.*visible_unfocused",
-    "\\[motion-plan\\] complete phases=8\\b",
+    "\\[motion-plan\\] complete phases=5\\b",
     "^Run ended: done"
   ],
   "stop_on_dump": true,
-  "purpose": "First-swap pass bisect: G-buffer (1), + velocity (3), + prepass (7); first device-loss phase identifies the failing pass set.",
-  "estimated_phase_seconds": 318.9,
+  "purpose": "First-swap pass bisect: header only (0), probe only (8), all passes (15); two complete 300-frame periods after readiness per window, with breadcrumbs in each.",
+  "estimated_phase_seconds": 303.9,
   "expect_every": [
     {
       "name": "first load quiet period",
@@ -162,59 +162,40 @@
       "min": 1
     },
     {
-      "name": "card and strand samples in every pass window",
+      "name": "card and strand samples in every probe window",
       "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
       "match": "coverage \\(last 300 frames\\): [1-9]\\d* draws probed, \\d+ swapped; per draw [^:]*:.*\\b[0-9a-fA-F]{4}:[1-9]\\d*/[1-9]\\d*=",
       "min": 2,
       "period_frames": 300,
       "windows": [
-        "passes-1-gbuffer",
-        "passes-3-gbuffer-velocity",
-        "passes-7-all"
+        "passes-8-probe",
+        "passes-15-all"
       ]
     },
     {
-      "name": "swapped frames in every pass window",
+      "name": "swapped frames in every swap window",
       "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
       "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b",
       "min": 2,
       "period_frames": 300,
       "windows": [
-        "passes-1-gbuffer",
-        "passes-3-gbuffer-velocity",
-        "passes-7-all"
+        "passes-15-all"
       ]
     },
     {
-      "name": "strand participation passes-1-gbuffer",
-      "select": "\\[hair primary\\] frame \\d+:",
-      "match": "[1-9]\\d* grooms published; last 300 frames: \\d+ publishes, 0 prepass, [1-9]\\d* G-buffer and 0 velocity strand draws, 0 pipelines refused",
-      "required_if": {
-        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
-        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
-      },
-      "min": 1,
+      "name": "hair primary breadcrumbs in every order-1 window",
+      "select": "\\[hair primary\\] hair primary breadcrumbs:",
+      "match": "\\[hair primary\\] hair primary breadcrumbs:",
+      "min": 2,
       "period_frames": 300,
       "windows": [
-        "passes-1-gbuffer"
+        "passes-0-header",
+        "passes-8-probe",
+        "passes-15-all"
       ]
     },
     {
-      "name": "strand participation passes-3-gbuffer-velocity",
-      "select": "\\[hair primary\\] frame \\d+:",
-      "match": "[1-9]\\d* grooms published; last 300 frames: \\d+ publishes, 0 prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
-      "required_if": {
-        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
-        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
-      },
-      "min": 1,
-      "period_frames": 300,
-      "windows": [
-        "passes-3-gbuffer-velocity"
-      ]
-    },
-    {
-      "name": "strand participation passes-7-all",
+      "name": "strand participation passes-15-all",
       "select": "\\[hair primary\\] frame \\d+:",
       "match": "[1-9]\\d* grooms published; last 300 frames: \\d+ publishes, [1-9]\\d* prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
       "required_if": {
@@ -224,11 +205,11 @@
       "min": 1,
       "period_frames": 300,
       "windows": [
-        "passes-7-all"
+        "passes-15-all"
       ]
     }
   ],
   "window_mode": "visible_unfocused_fg",
   "fail_fast": true,
-  "max_minutes": 6
+  "max_minutes": 15
 }

@@ -268,22 +268,23 @@ def diagnostic_job(name, save, plan):
     return j
 
 
-PASS_WINDOWS = ["passes-1-gbuffer", "passes-3-gbuffer-velocity", "passes-7-all"]
+PASS_MASKS = (0, 8, 15)
+PASS_WINDOWS = ["passes-0-header", "passes-8-probe", "passes-15-all"]
 
 
 def make_pass_bisect():
-    def step(label, mask, order="0", seconds=5):
-        return stage_phase(label, seconds, dict(hp.ON, rt_hair_primary_passes=mask,
-                           rt_hair_groom_primary_order=order, rt_hair_groom_tips="0",
-                           qa_exposure_hold="0"))
-    # As in hv6, order 0 keeps cards. Warm the masks without allowing a swap;
-    # mask 0 then warms order 1 with cards still retained. The first real swap
-    # must belong to the labelled G-buffer-only window, never to warmup.
-    plan = [step("warmup", "1", seconds=25), step("warm-velocity", "3"),
-            step("warm-all", "7"), step("warm-order-cards", "0", "1")]
+    def step(label, mask, order="0", seconds=5, groom="1"):
+        return stage_phase(label, seconds, dict(hp.ON, rt_hair_primary_passes=str(mask),
+                           rt_hair_groom=groom, rt_hair_groom_primary_order=order,
+                           rt_hair_groom_tips="0", qa_exposure_hold="0"))
+    # The old mask-0 order-1 warmup lost the device before any bisect window.
+    # Order 0 retains cards. One all-pass warmup exercises groom pipelines;
+    # changed-key readiness handles subsequent CPU routing switches. Never
+    # enter order 1 before its measured header-only window.
+    plan = [step("warm-all", 15, seconds=25)]
     plan += [step(label, mask, "1", COST_FRAMES / UNFOCUSED_FPS)
-             for label, mask in zip(PASS_WINDOWS, ("1", "3", "7"))]
-    plan.append(stage_phase("restore", 5, dict(hp.OFF, rt_hair_primary_passes="7",
+             for label, mask in zip(PASS_WINDOWS, PASS_MASKS)]
+    plan.append(stage_phase("restore", 5, dict(hp.OFF, rt_hair_primary_passes="15",
                              rt_hair_groom_primary_order="0", rt_hair_groom_tips="0",
                              qa_exposure_hold="0")))
     return plan
@@ -291,28 +292,34 @@ def make_pass_bisect():
 
 def pass_bisect_job(name, save, plan):
     j = diagnostic_job(name, save, plan)
-    j.update(max_minutes=6, purpose="First-swap pass bisect: G-buffer (1), + velocity (3), + prepass (7); first device-loss phase identifies the failing pass set.")
-    j["set"] += ",rt_hair_primary_passes=1"
+    j.update(max_minutes=15, purpose="First-swap pass bisect: header only (0), probe only (8), all passes (15); two complete 300-frame periods after readiness per window, with breadcrumbs in each.")
+    j["set"] += ",rt_hair_primary_passes=15"
     # Retain hv6's first-load safety and global fault forbids, without its
     # capture/order comparison gates. This diagnostic records no image bursts.
     j["expect"] = [rx for rx in j["expect"] if "exposure held" not in rx]
     samples = (r"coverage \(last 300 frames\): [1-9]\d* draws probed, \d+ swapped; per draw [^:]*:.*"
                r"\b[0-9a-fA-F]{4}:[1-9]\d*/[1-9]\d*=")
+    probe_windows = [label for label, mask in zip(PASS_WINDOWS, PASS_MASKS) if mask & 8]
+    swap_windows = [label for label, mask in zip(PASS_WINDOWS, PASS_MASKS) if mask & 8 and mask & 1]
+    crumbs = r"\[hair primary\] hair primary breadcrumbs:"  # periodic; the [fault] line only after a device loss
     j["expect_every"] = [j["expect_every"][0],
         dict(name="job has nonzero card and strand samples", select=samples, match=samples, min=1),
-        dict(name="card and strand samples in every pass window", select=COVERAGE,
-             match=samples, min=2, period_frames=300, windows=PASS_WINDOWS),
-        dict(name="swapped frames in every pass window", select=COVERAGE,
-             match=SWAPPED, min=2, period_frames=300, windows=PASS_WINDOWS)]
-    for label, mask in zip(PASS_WINDOWS, (1, 3, 7)):
-        # Velocity is deliberately absent in mask 1; prepass only in mask 7.
+        dict(name="card and strand samples in every probe window", select=COVERAGE,
+             match=samples, min=2, period_frames=PRIMARY_LOG_FRAMES, windows=probe_windows),
+        dict(name="swapped frames in every swap window", select=COVERAGE,
+             match=SWAPPED, min=2, period_frames=PRIMARY_LOG_FRAMES, windows=swap_windows),
+        dict(name="hair primary breadcrumbs in every order-1 window", select=crumbs,
+             match=crumbs, min=2, period_frames=PRIMARY_LOG_FRAMES, windows=PASS_WINDOWS)]
+    for label, mask in zip(PASS_WINDOWS, PASS_MASKS):
+        if not (mask & 8 and mask & 1):
+            continue  # No probe evidence in masks 0/7; probe-only has no swaps.
         prepass = r"[1-9]\d*" if mask & 4 else "0"
         velocity = r"[1-9]\d*" if mask & 2 else "0"
         j["expect_every"].append(dict(name="strand participation " + label,
             select=r"\[hair primary\] frame \d+:",
             match=(r"[1-9]\d* grooms published; last 300 frames: \d+ publishes, " + prepass +
                    r" prepass, [1-9]\d* G-buffer and " + velocity + r" velocity strand draws, 0 pipelines refused"),
-            required_if=dict(select=COVERAGE, match=SWAPPED), min=1, period_frames=300, windows=[label]))
+            required_if=dict(select=COVERAGE, match=SWAPPED), min=1, period_frames=PRIMARY_LOG_FRAMES, windows=[label]))
     return j
 
 
