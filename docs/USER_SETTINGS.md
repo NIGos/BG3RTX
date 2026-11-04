@@ -35,7 +35,8 @@ reports. Each card shows how a change applies: "Applies after saving", "May brie
 
 Visible hair is the game's stock hair. With Hair shadows On, the game's hair and scalp cast
 ray-traced shadows. The first start after turning it on compiles shaders and can pause or stutter.
-No replacement hair is included in this release. Strand hair is planned as a later update.
+No replacement hair is included in this release. The Experimental page shows only Water surface
+reflections in this release; strand hair returns there with its post-release update.
 
 Off-screen bounce light also carries light from glowing surfaces. Far extends sunlight bounce to 6 m.
 Interior light shadows respect the game's shadow flags, including lights whose shadows were
