@@ -62,18 +62,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.29200000000128057,
+      "seconds": 0.2930000000014843,
       "quantile": 0.95,
-      "samples": 360,
+      "samples": 359,
       "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
-      "seconds": 2.61315,
-      "source": "wf7a-s8-fg2.1.164300.log",
+      "seconds": 2.6511199999999997,
+      "source": "hmm1-mask-s8-fg2.1.083713.log",
       "quantile": 0.95,
-      "samples": 360,
+      "samples": 359,
       "maximum": 2.90531,
-      "logs": 57
+      "logs": 58
     }
   },
   "args": [
@@ -167,7 +167,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "hv9 same-run cards/strands visual pair, tips/shadow transmittance, strand GPU ms and rendered K8 hair flicker. Energy recorded, not gated; no live authorization.",
-  "estimated_phase_seconds": 63.8,
+  "estimated_phase_seconds": 66.6,
   "expect_every": [
     {
       "name": "zero refused pipelines and orphan depth",

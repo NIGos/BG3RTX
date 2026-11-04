@@ -78,7 +78,7 @@
     "\\[motion-plan\\] complete phases=7\\b"
   ],
   "purpose": "Unqueued diagnostic only. Count UV candidates, exact witnesses and reasons. Zero candidates is a valid diagnostic result; no material promotion.",
-  "estimated_phase_seconds": 53.3,
+  "estimated_phase_seconds": 52.9,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -95,12 +95,13 @@
           0,
           0
         ],
-        "fps": 12.39669421487566,
-        "windows": 102,
+        "fps": 11.909487892019543,
+        "windows": 113,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn1-generated-camp-fg2.1.161807.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
@@ -119,12 +120,13 @@
           0,
           0
         ],
-        "fps": 7.562389715155868,
-        "windows": 17,
+        "fps": 7.72996650347605,
+        "windows": 21,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn1-generated-camp-fg2.1.161807.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
@@ -150,9 +152,9 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.29200000000128057,
+      "seconds": 0.2930000000014843,
       "quantile": 0.95,
-      "samples": 365,
+      "samples": 359,
       "maximum": 0.49399999999877764
     }
   }

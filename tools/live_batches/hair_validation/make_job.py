@@ -391,7 +391,10 @@ def make_visual():
     for label, passes, serial in (("d-strands", 15, 98900), ("d-cards", 0, 98901)):
         if label == "d-cards":
             back = step("return-camera", plus=1)
-            back.update(kind="pan", scan=18, seconds=2, frames=0,
+            # A timed return must omit frames: the runner rejects frames=0.
+            for key in ("frames", "settle_frames", "stats_reset"):
+                back.pop(key)
+            back.update(kind="pan", scan=18, seconds=2,
                         motion_start=0, motion_end=2, key_period_ms=500, key_down_ms=100)
             plan.append(back)
         p = step(label, passes, plus=1)

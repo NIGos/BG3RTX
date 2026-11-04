@@ -32,7 +32,7 @@
     "wait_log": [
       "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
     ],
-    "wait_log_timeout": 14.680000000000291
+    "wait_log_timeout": 15.076000000000931
   },
   {
     "label": "warmup-off",
@@ -63,7 +63,7 @@
     "label": "observe-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.0,
+    "seconds": 7.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -115,7 +115,7 @@
     "label": "observe-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.0,
+    "seconds": 7.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,

@@ -813,7 +813,7 @@
     ],
     "duration": {
       "seconds": 215.63799999999998,
-      "minimum_seconds": 214.838,
+      "minimum_seconds": 224.138,
       "unresolved": [
         {
           "window": "warmup",
@@ -930,8 +930,8 @@
         {
           "window": "shot-cards-a",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.009,
@@ -942,8 +942,8 @@
         {
           "window": "shot-strands-a",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -954,8 +954,8 @@
         {
           "window": "shot-cards-b",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.009,
@@ -966,8 +966,8 @@
         {
           "window": "shot-strands-b",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -978,8 +978,8 @@
         {
           "window": "shot-cards-c",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.009,
@@ -1158,7 +1158,7 @@
         {
           "window": "presented-cards",
           "seconds": 5.0,
-          "minimum_seconds": 5.0,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -1182,7 +1182,7 @@
         {
           "window": "presented-strands",
           "seconds": 5.0,
-          "minimum_seconds": 5.0,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -2099,7 +2099,7 @@
     ],
     "duration": {
       "seconds": 223.40000000000003,
-      "minimum_seconds": 224.2,
+      "minimum_seconds": 232.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -2297,8 +2297,8 @@
         {
           "window": "shot-cards-a",
           "seconds": 6.2,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.0,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -2311,8 +2311,8 @@
         {
           "window": "shot-strands-a",
           "seconds": 6.2,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.0,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -2325,8 +2325,8 @@
         {
           "window": "shot-cards-b",
           "seconds": 6.2,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.0,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -2339,8 +2339,8 @@
         {
           "window": "shot-strands-b",
           "seconds": 6.2,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.0,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -2353,8 +2353,8 @@
         {
           "window": "shot-cards-c",
           "seconds": 6.2,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.0,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -2545,7 +2545,7 @@
         {
           "window": "presented-cards",
           "seconds": 5.0,
-          "minimum_seconds": 5.0,
+          "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -2571,7 +2571,7 @@
         {
           "window": "presented-strands",
           "seconds": 5.0,
-          "minimum_seconds": 5.0,
+          "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -4120,7 +4120,7 @@
     ],
     "duration": {
       "seconds": 200.9,
-      "minimum_seconds": 205.0,
+      "minimum_seconds": 213.0,
       "unresolved": [
         {
           "window": "warmup",
@@ -4318,7 +4318,7 @@
         {
           "window": "shot-cards-a",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -4332,7 +4332,7 @@
         {
           "window": "shot-strands-a",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -4346,7 +4346,7 @@
         {
           "window": "shot-cards-b",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -4360,7 +4360,7 @@
         {
           "window": "shot-strands-b",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -4374,7 +4374,7 @@
         {
           "window": "shot-cards-c",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -5076,7 +5076,7 @@
         "gate": "float energy off-00",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333339
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-off-00",
@@ -5105,7 +5105,7 @@
         "gate": "float energy on-00",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-on-00",
@@ -5134,7 +5134,7 @@
         "gate": "float energy on-01",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-on-01",
@@ -5163,7 +5163,7 @@
         "gate": "float energy off-01",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-off-01",
@@ -5192,7 +5192,7 @@
         "gate": "float energy off-02",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-off-02",
@@ -5221,7 +5221,7 @@
         "gate": "float energy on-02",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-on-02",
@@ -5250,7 +5250,7 @@
         "gate": "float energy on-03",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-on-03",
@@ -5279,7 +5279,7 @@
         "gate": "float energy off-03",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-off-03",
@@ -5308,7 +5308,7 @@
         "gate": "float energy off-04",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-off-04",
@@ -5337,7 +5337,7 @@
         "gate": "float energy on-04",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "presented-on-04",
@@ -5366,7 +5366,7 @@
         "gate": "float energy on-05",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-on-05",
@@ -5395,7 +5395,7 @@
         "gate": "float energy off-05",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-off-05",
@@ -5424,7 +5424,7 @@
         "gate": "float energy off-06",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-off-06",
@@ -5453,7 +5453,7 @@
         "gate": "float energy on-06",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-on-06",
@@ -5482,7 +5482,7 @@
         "gate": "float energy on-07",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-on-07",
@@ -5511,7 +5511,7 @@
         "gate": "float energy off-07",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-off-07",
@@ -5540,7 +5540,7 @@
         "gate": "float energy off-08",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-off-08",
@@ -5569,7 +5569,7 @@
         "gate": "float energy on-08",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-on-08",
@@ -5598,7 +5598,7 @@
         "gate": "float energy on-09",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-on-09",
@@ -5627,7 +5627,7 @@
         "gate": "float energy off-09",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "presented-off-09",
@@ -5719,8 +5719,8 @@
       }
     ],
     "duration": {
-      "seconds": 388.29999999999995,
-      "minimum_seconds": 388.3,
+      "seconds": 458.3000000000005,
+      "minimum_seconds": 458.3,
       "unresolved": [
         {
           "window": "warmup",
@@ -5780,8 +5780,8 @@
         },
         {
           "window": "rendered-off-00",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5792,8 +5792,8 @@
         },
         {
           "window": "presented-off-00",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -5804,8 +5804,8 @@
         },
         {
           "window": "energy-off-00",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5828,8 +5828,8 @@
         },
         {
           "window": "rendered-on-00",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5840,8 +5840,8 @@
         },
         {
           "window": "presented-on-00",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -5852,8 +5852,8 @@
         },
         {
           "window": "energy-on-00",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5876,8 +5876,8 @@
         },
         {
           "window": "rendered-on-01",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5888,8 +5888,8 @@
         },
         {
           "window": "presented-on-01",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -5900,8 +5900,8 @@
         },
         {
           "window": "energy-on-01",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5924,8 +5924,8 @@
         },
         {
           "window": "rendered-off-01",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5936,8 +5936,8 @@
         },
         {
           "window": "presented-off-01",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -5948,8 +5948,8 @@
         },
         {
           "window": "energy-off-01",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5972,8 +5972,8 @@
         },
         {
           "window": "rendered-off-02",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -5984,8 +5984,8 @@
         },
         {
           "window": "presented-off-02",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -5996,8 +5996,8 @@
         },
         {
           "window": "energy-off-02",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6020,8 +6020,8 @@
         },
         {
           "window": "rendered-on-02",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6032,8 +6032,8 @@
         },
         {
           "window": "presented-on-02",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6044,8 +6044,8 @@
         },
         {
           "window": "energy-on-02",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6068,8 +6068,8 @@
         },
         {
           "window": "rendered-on-03",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6080,8 +6080,8 @@
         },
         {
           "window": "presented-on-03",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6092,8 +6092,8 @@
         },
         {
           "window": "energy-on-03",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6116,8 +6116,8 @@
         },
         {
           "window": "rendered-off-03",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6128,8 +6128,8 @@
         },
         {
           "window": "presented-off-03",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6140,8 +6140,8 @@
         },
         {
           "window": "energy-off-03",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6164,8 +6164,8 @@
         },
         {
           "window": "rendered-off-04",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6176,8 +6176,8 @@
         },
         {
           "window": "presented-off-04",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6188,8 +6188,8 @@
         },
         {
           "window": "energy-off-04",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6212,8 +6212,8 @@
         },
         {
           "window": "rendered-on-04",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6224,8 +6224,8 @@
         },
         {
           "window": "presented-on-04",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6236,8 +6236,8 @@
         },
         {
           "window": "energy-on-04",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6260,8 +6260,8 @@
         },
         {
           "window": "rendered-on-05",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6272,8 +6272,8 @@
         },
         {
           "window": "presented-on-05",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6284,8 +6284,8 @@
         },
         {
           "window": "energy-on-05",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6308,8 +6308,8 @@
         },
         {
           "window": "rendered-off-05",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6320,8 +6320,8 @@
         },
         {
           "window": "presented-off-05",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6332,8 +6332,8 @@
         },
         {
           "window": "energy-off-05",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6356,8 +6356,8 @@
         },
         {
           "window": "rendered-off-06",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6368,8 +6368,8 @@
         },
         {
           "window": "presented-off-06",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6380,8 +6380,8 @@
         },
         {
           "window": "energy-off-06",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6404,8 +6404,8 @@
         },
         {
           "window": "rendered-on-06",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6416,8 +6416,8 @@
         },
         {
           "window": "presented-on-06",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6428,8 +6428,8 @@
         },
         {
           "window": "energy-on-06",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6452,8 +6452,8 @@
         },
         {
           "window": "rendered-on-07",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6464,8 +6464,8 @@
         },
         {
           "window": "presented-on-07",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6476,8 +6476,8 @@
         },
         {
           "window": "energy-on-07",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6500,8 +6500,8 @@
         },
         {
           "window": "rendered-off-07",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6512,8 +6512,8 @@
         },
         {
           "window": "presented-off-07",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6524,8 +6524,8 @@
         },
         {
           "window": "energy-off-07",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6548,8 +6548,8 @@
         },
         {
           "window": "rendered-off-08",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6560,8 +6560,8 @@
         },
         {
           "window": "presented-off-08",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6572,8 +6572,8 @@
         },
         {
           "window": "energy-off-08",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6596,8 +6596,8 @@
         },
         {
           "window": "rendered-on-08",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6608,8 +6608,8 @@
         },
         {
           "window": "presented-on-08",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6620,8 +6620,8 @@
         },
         {
           "window": "energy-on-08",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6644,8 +6644,8 @@
         },
         {
           "window": "rendered-on-09",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6656,8 +6656,8 @@
         },
         {
           "window": "presented-on-09",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6668,8 +6668,8 @@
         },
         {
           "window": "energy-on-09",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6692,8 +6692,8 @@
         },
         {
           "window": "rendered-off-09",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6704,8 +6704,8 @@
         },
         {
           "window": "presented-off-09",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -6716,8 +6716,8 @@
         },
         {
           "window": "energy-off-09",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -6862,12 +6862,7 @@
     "active": true
   },
   "tools\\live_batches\\post_temporal\\jobs\\pt-s8.json": {
-    "problems": [
-      "windows: energy-off-a: float energy off-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330884 s including serialized trace stalls",
-      "windows: energy-on-a: float energy on-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls",
-      "windows: energy-off-b: float energy off-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls",
-      "windows: energy-on-b: float energy on-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330955 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: VK_ERROR_DEVICE_LOST": 0,
       "forbid: \\[crash\\] exception 0x": 0,
@@ -6890,9 +6885,9 @@
       {
         "window": "energy-off-a",
         "gate": "float energy off-a",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330884
+        "minimum_seconds_exclusive": 3.758253333333087
       },
       {
         "window": "timing-off-a",
@@ -7003,9 +6998,9 @@
       {
         "window": "energy-on-a",
         "gate": "float energy on-a",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330955
+        "minimum_seconds_exclusive": 3.758253333333087
       },
       {
         "window": "timing-on-a",
@@ -7169,9 +7164,9 @@
       {
         "window": "energy-off-b",
         "gate": "float energy off-b",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330955
+        "minimum_seconds_exclusive": 3.758253333333087
       },
       {
         "window": "timing-off-b",
@@ -7282,9 +7277,9 @@
       {
         "window": "energy-on-b",
         "gate": "float energy on-b",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330955
+        "minimum_seconds_exclusive": 3.758253333333087
       },
       {
         "window": "timing-on-b",
@@ -7447,8 +7442,8 @@
       }
     ],
     "duration": {
-      "seconds": 99.09999999999997,
-      "minimum_seconds": 113.1,
+      "seconds": 125.89999999999999,
+      "minimum_seconds": 125.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -7528,7 +7523,7 @@
         },
         {
           "window": "settle-off-a",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -7542,9 +7537,9 @@
         },
         {
           "window": "rendered-off-a",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -7554,9 +7549,9 @@
         },
         {
           "window": "presented-off-a",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -7566,8 +7561,8 @@
         },
         {
           "window": "energy-off-a",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -7578,7 +7573,7 @@
         },
         {
           "window": "timing-off-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -7590,7 +7585,7 @@
         },
         {
           "window": "settle-on-a",
-          "seconds": 5.3,
+          "seconds": 6.8,
           "minimum_seconds": 6.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -7604,9 +7599,9 @@
         },
         {
           "window": "rendered-on-a",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -7616,9 +7611,9 @@
         },
         {
           "window": "presented-on-a",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -7628,8 +7623,8 @@
         },
         {
           "window": "energy-on-a",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -7640,7 +7635,7 @@
         },
         {
           "window": "timing-on-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -7652,7 +7647,7 @@
         },
         {
           "window": "settle-off-b",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -7666,9 +7661,9 @@
         },
         {
           "window": "rendered-off-b",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -7678,9 +7673,9 @@
         },
         {
           "window": "presented-off-b",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -7690,8 +7685,8 @@
         },
         {
           "window": "energy-off-b",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -7702,7 +7697,7 @@
         },
         {
           "window": "timing-off-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -7714,7 +7709,7 @@
         },
         {
           "window": "settle-on-b",
-          "seconds": 5.3,
+          "seconds": 6.8,
           "minimum_seconds": 6.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -7728,9 +7723,9 @@
         },
         {
           "window": "rendered-on-b",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -7740,9 +7735,9 @@
         },
         {
           "window": "presented-on-b",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -7752,8 +7747,8 @@
         },
         {
           "window": "energy-on-b",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -7764,7 +7759,7 @@
         },
         {
           "window": "timing-on-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -7893,7 +7888,7 @@
       }
     ],
     "duration": {
-      "seconds": 53.300000000000004,
+      "seconds": 52.9,
       "minimum_seconds": 52.9,
       "unresolved": [
         {
@@ -7916,7 +7911,7 @@
         }
       ],
       "expected_readiness_seconds": 16.897,
-      "readiness_timeout_seconds": 624.6800000000003,
+      "readiness_timeout_seconds": 625.0760000000009,
       "windows": [
         {
           "window": "warmup",
@@ -7940,7 +7935,7 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 14.680000000000291,
+          "readiness_timeout_seconds": 15.076000000000931,
           "expected_readiness_seconds": 9.762000000002445,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
@@ -7962,9 +7957,9 @@
         },
         {
           "window": "observe-on",
-          "seconds": 8.0,
+          "seconds": 7.8,
           "minimum_seconds": 7.8,
-          "savings_seconds": 0.2,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -7986,9 +7981,9 @@
         },
         {
           "window": "observe-on-repeat",
-          "seconds": 8.0,
+          "seconds": 7.8,
           "minimum_seconds": 7.8,
-          "savings_seconds": 0.2,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -10996,7 +10991,7 @@
     ],
     "duration": {
       "seconds": 158.00000000000003,
-      "minimum_seconds": 160.8,
+      "minimum_seconds": 162.2,
       "unresolved": [
         {
           "window": "warmup",
@@ -11169,7 +11164,7 @@
         {
           "window": "shot-off-a",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -11193,7 +11188,7 @@
         {
           "window": "shot-compact",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -11219,7 +11214,7 @@
         {
           "window": "shot-off-b",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -11245,7 +11240,7 @@
         {
           "window": "shot-alpha",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -11271,7 +11266,7 @@
         {
           "window": "shot-off-c",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -11297,7 +11292,7 @@
         {
           "window": "shot-water",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -11323,7 +11318,7 @@
         {
           "window": "shot-off-d",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -16694,7 +16689,7 @@
     ],
     "duration": {
       "seconds": 125.69999999999999,
-      "minimum_seconds": 132.7,
+      "minimum_seconds": 143.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -16867,7 +16862,7 @@
         {
           "window": "shot-off-a",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -16891,7 +16886,7 @@
         {
           "window": "shot-compact",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -16917,7 +16912,7 @@
         {
           "window": "shot-off-b",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -16943,7 +16938,7 @@
         {
           "window": "shot-alpha",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -16969,7 +16964,7 @@
         {
           "window": "shot-off-c",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -16995,7 +16990,7 @@
         {
           "window": "shot-water",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -17021,7 +17016,7 @@
         {
           "window": "shot-off-d",
           "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -17913,11 +17908,7 @@
     "active": true
   },
   "tools\\live_batches\\gpu_opt2\\jobs\\go2-s8-medium.json": {
-    "problems": [
-      "windows: shot-off-a: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333088 s including serialized trace stalls",
-      "windows: shot-on: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
-      "windows: shot-off-b: \\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: VK_ERROR_DEVICE_LOST": 0,
       "forbid: \\[crash\\] exception 0x[0-9a-f]+": 0,
@@ -18411,21 +18402,21 @@
       {
         "window": "shot-off-a",
         "gate": "\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333088
       },
       {
         "window": "shot-on",
         "gate": "\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333095
       },
       {
         "window": "shot-off-b",
         "gate": "\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333095
       },
@@ -18802,7 +18793,7 @@
       }
     ],
     "duration": {
-      "seconds": 95.49999999999999,
+      "seconds": 99.99999999999999,
       "minimum_seconds": 100.0,
       "unresolved": [
         {
@@ -18891,7 +18882,7 @@
         },
         {
           "window": "settle-off-a",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -18905,7 +18896,7 @@
         },
         {
           "window": "cost-off-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -18917,7 +18908,7 @@
         },
         {
           "window": "shot-off-a",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -18929,7 +18920,7 @@
         },
         {
           "window": "settle-on",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -18943,7 +18934,7 @@
         },
         {
           "window": "cost-on",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -18955,7 +18946,7 @@
         },
         {
           "window": "shot-on",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -18967,7 +18958,7 @@
         },
         {
           "window": "settle-off-b",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -18981,7 +18972,7 @@
         },
         {
           "window": "cost-off-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -18993,7 +18984,7 @@
         },
         {
           "window": "shot-off-b",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -19035,12 +19026,7 @@
     "active": true
   },
   "tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-hit-shade.json": {
-    "problems": [
-      "windows: shot-sparse-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-sparse-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-sparse-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-sparse-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -22261,28 +22247,28 @@
       {
         "window": "shot-sparse-off-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-sparse-on-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-sparse-off-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 13.107133333333088
+        "minimum_seconds_exclusive": 13.107133333333095
       },
       {
         "window": "shot-sparse-on-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333095
       },
@@ -23348,7 +23334,7 @@
       }
     ],
     "duration": {
-      "seconds": 89.20000000000002,
+      "seconds": 93.19999999999999,
       "minimum_seconds": 93.2,
       "unresolved": [
         {
@@ -23473,7 +23459,7 @@
         },
         {
           "window": "shot-sparse-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -23487,7 +23473,7 @@
         },
         {
           "window": "shot-sparse-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -23501,7 +23487,7 @@
         },
         {
           "window": "shot-sparse-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -23515,7 +23501,7 @@
         },
         {
           "window": "shot-sparse-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -23529,7 +23515,7 @@
         },
         {
           "window": "cost-sparse-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -23543,7 +23529,7 @@
         },
         {
           "window": "cost-sparse-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -23557,7 +23543,7 @@
         },
         {
           "window": "cost-sparse-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -23571,7 +23557,7 @@
         },
         {
           "window": "cost-sparse-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -23671,12 +23657,7 @@
     "active": true
   },
   "tools\\live_batches\\water_flicker_wf9\\jobs\\wf9-s8-compose-shift.json": {
-    "problems": [
-      "windows: energy-static-0: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
-      "windows: energy-static-1: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
-      "windows: energy-static-2: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls",
-      "windows: energy-static-3: static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333088 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -26473,30 +26454,30 @@
       {
         "window": "energy-static-0",
         "gate": "static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333088
+        "minimum_seconds_exclusive": 8.758253333333087
       },
       {
         "window": "energy-static-1",
         "gate": "static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333088
+        "minimum_seconds_exclusive": 8.758253333333087
       },
       {
         "window": "energy-static-2",
         "gate": "static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333088
+        "minimum_seconds_exclusive": 8.758253333333087
       },
       {
         "window": "energy-static-3",
         "gate": "static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333088
+        "minimum_seconds_exclusive": 8.758253333333087
       },
       {
         "window": "energy-static-1",
@@ -26606,8 +26587,8 @@
       }
     ],
     "duration": {
-      "seconds": 272.70000000000005,
-      "minimum_seconds": 273.3,
+      "seconds": 281.30000000000007,
+      "minimum_seconds": 281.3,
       "unresolved": [
         {
           "window": "warmup",
@@ -26675,9 +26656,9 @@
         },
         {
           "window": "energy-static-0",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.019,
@@ -26687,9 +26668,9 @@
         },
         {
           "window": "energy-static-1",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.014,
@@ -26699,9 +26680,9 @@
         },
         {
           "window": "energy-static-2",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.019,
@@ -26711,9 +26692,9 @@
         },
         {
           "window": "energy-static-3",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.014,
@@ -26723,8 +26704,8 @@
         },
         {
           "window": "diag-view-static",
-          "seconds": 4.5,
-          "minimum_seconds": 4.7,
+          "seconds": 6.3,
+          "minimum_seconds": 6.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
@@ -26988,10 +26969,7 @@
     "active": true
   },
   "tools\\live_batches\\smoke_ultra\\jobs\\su1-ultra-s8-fg2.json": {
-    "problems": [
-      "windows: static-a: one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333088 s including serialized trace stalls",
-      "windows: static-b: one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333081 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -27362,16 +27340,16 @@
       {
         "window": "static-a",
         "gate": "one trace written in each static window",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 11.107133333333088
+        "minimum_seconds_exclusive": 12.75825333333308
       },
       {
         "window": "static-b",
         "gate": "one trace written in each static window",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 11.107133333333081
+        "minimum_seconds_exclusive": 12.758253333333101
       },
       {
         "window": "static-a",
@@ -29199,8 +29177,8 @@
       }
     ],
     "duration": {
-      "seconds": 151.49999999999997,
-      "minimum_seconds": 151.7,
+      "seconds": 154.9,
+      "minimum_seconds": 154.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -29300,9 +29278,9 @@
         },
         {
           "window": "static-a",
-          "seconds": 11.1,
-          "minimum_seconds": 11.2,
-          "savings_seconds": 0,
+          "seconds": 12.8,
+          "minimum_seconds": 12.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -29360,9 +29338,9 @@
         },
         {
           "window": "static-b",
-          "seconds": 11.1,
-          "minimum_seconds": 11.2,
-          "savings_seconds": 0,
+          "seconds": 12.8,
+          "minimum_seconds": 12.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -29652,7 +29630,7 @@
     ],
     "duration": {
       "seconds": 162.00000000000006,
-      "minimum_seconds": 162.0,
+      "minimum_seconds": 190.0,
       "unresolved": [
         {
           "window": "warmup",
@@ -29883,7 +29861,7 @@
         {
           "window": "rendered-base-a",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -29895,7 +29873,7 @@
         {
           "window": "presented-base-a",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -29919,7 +29897,7 @@
         {
           "window": "rendered-fg-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -29931,7 +29909,7 @@
         {
           "window": "presented-fg-off",
           "seconds": 3.8,
-          "minimum_seconds": 3.8,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -29955,7 +29933,7 @@
         {
           "window": "rendered-ao-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -29967,7 +29945,7 @@
         {
           "window": "presented-ao-off",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -29991,7 +29969,7 @@
         {
           "window": "rendered-sun-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30003,7 +29981,7 @@
         {
           "window": "presented-sun-off",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -30027,7 +30005,7 @@
         {
           "window": "rendered-gi-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30039,7 +30017,7 @@
         {
           "window": "presented-gi-off",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -30063,7 +30041,7 @@
         {
           "window": "rendered-rr-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30075,7 +30053,7 @@
         {
           "window": "presented-rr-off",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -30099,7 +30077,7 @@
         {
           "window": "rendered-cbt-off",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30111,7 +30089,7 @@
         {
           "window": "presented-cbt-off",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -30137,7 +30115,7 @@
         {
           "window": "rendered-post-late",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30149,7 +30127,7 @@
         {
           "window": "presented-post-late",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -30173,7 +30151,7 @@
         {
           "window": "rendered-base-b",
           "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -30185,7 +30163,7 @@
         {
           "window": "presented-base-b",
           "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "minimum_seconds": 5.4,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -31689,7 +31667,7 @@
         "gate": "b1-pt-dialogue3--float energy off-00",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333339
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-off-00",
@@ -31718,7 +31696,7 @@
         "gate": "b1-pt-dialogue3--float energy on-00",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-on-00",
@@ -31747,7 +31725,7 @@
         "gate": "b1-pt-dialogue3--float energy on-01",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-on-01",
@@ -31776,7 +31754,7 @@
         "gate": "b1-pt-dialogue3--float energy off-01",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-off-01",
@@ -31805,7 +31783,7 @@
         "gate": "b1-pt-dialogue3--float energy off-02",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.0851333333333315
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-off-02",
@@ -31834,7 +31812,7 @@
         "gate": "b1-pt-dialogue3--float energy on-02",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-on-02",
@@ -31863,7 +31841,7 @@
         "gate": "b1-pt-dialogue3--float energy on-03",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-on-03",
@@ -31892,7 +31870,7 @@
         "gate": "b1-pt-dialogue3--float energy off-03",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-off-03",
@@ -31921,7 +31899,7 @@
         "gate": "b1-pt-dialogue3--float energy off-04",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-off-04",
@@ -31950,7 +31928,7 @@
         "gate": "b1-pt-dialogue3--float energy on-04",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333337
       },
       {
         "window": "b1-pt-dialogue3--presented-on-04",
@@ -31979,7 +31957,7 @@
         "gate": "b1-pt-dialogue3--float energy on-05",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-on-05",
@@ -32008,7 +31986,7 @@
         "gate": "b1-pt-dialogue3--float energy off-05",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-off-05",
@@ -32037,7 +32015,7 @@
         "gate": "b1-pt-dialogue3--float energy off-06",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333346
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-off-06",
@@ -32066,7 +32044,7 @@
         "gate": "b1-pt-dialogue3--float energy on-06",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-on-06",
@@ -32095,7 +32073,7 @@
         "gate": "b1-pt-dialogue3--float energy on-07",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-on-07",
@@ -32124,7 +32102,7 @@
         "gate": "b1-pt-dialogue3--float energy off-07",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-off-07",
@@ -32153,7 +32131,7 @@
         "gate": "b1-pt-dialogue3--float energy off-08",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-off-08",
@@ -32182,7 +32160,7 @@
         "gate": "b1-pt-dialogue3--float energy on-08",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-on-08",
@@ -32211,7 +32189,7 @@
         "gate": "b1-pt-dialogue3--float energy on-09",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-on-09",
@@ -32240,7 +32218,7 @@
         "gate": "b1-pt-dialogue3--float energy off-09",
         "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 6.085133333333317
+        "minimum_seconds_exclusive": 7.736253333333309
       },
       {
         "window": "b1-pt-dialogue3--presented-off-09",
@@ -32508,8 +32486,8 @@
       }
     ],
     "duration": {
-      "seconds": 580.2000000000003,
-      "minimum_seconds": 580.2,
+      "seconds": 678.2000000000002,
+      "minimum_seconds": 678.2,
       "unresolved": [
         {
           "window": "b1-pt-dialogue3--warmup",
@@ -32644,8 +32622,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-00",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32656,8 +32634,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-00",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32668,8 +32646,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-00",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32692,8 +32670,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-00",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32704,8 +32682,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-00",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32716,8 +32694,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-00",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32740,8 +32718,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-01",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32752,8 +32730,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-01",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32764,8 +32742,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-01",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32788,8 +32766,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-01",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32800,8 +32778,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-01",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32812,8 +32790,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-01",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32836,8 +32814,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-02",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32848,8 +32826,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-02",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32860,8 +32838,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-02",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32884,8 +32862,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-02",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32896,8 +32874,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-02",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32908,8 +32886,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-02",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32932,8 +32910,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-03",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32944,8 +32922,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-03",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -32956,8 +32934,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-03",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32980,8 +32958,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-03",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -32992,8 +32970,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-03",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33004,8 +32982,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-03",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33028,8 +33006,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-04",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33040,8 +33018,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-04",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33052,8 +33030,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-04",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33076,8 +33054,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-04",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33088,8 +33066,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-04",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33100,8 +33078,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-04",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33124,8 +33102,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-05",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33136,8 +33114,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-05",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33148,8 +33126,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-05",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33172,8 +33150,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-05",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33184,8 +33162,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-05",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33196,8 +33174,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-05",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33220,8 +33198,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-06",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33232,8 +33210,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-06",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33244,8 +33222,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-06",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33268,8 +33246,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-06",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33280,8 +33258,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-06",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33292,8 +33270,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-06",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33316,8 +33294,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-07",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33328,8 +33306,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-07",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33340,8 +33318,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-07",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33364,8 +33342,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-07",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33376,8 +33354,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-07",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33388,8 +33366,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-07",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33412,8 +33390,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-08",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33424,8 +33402,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-08",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33436,8 +33414,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-08",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33460,8 +33438,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-08",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33472,8 +33450,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-08",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33484,8 +33462,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-08",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33508,8 +33486,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-on-09",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33520,8 +33498,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-on-09",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33532,8 +33510,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-on-09",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33556,8 +33534,8 @@
         },
         {
           "window": "b1-pt-dialogue3--rendered-off-09",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33568,8 +33546,8 @@
         },
         {
           "window": "b1-pt-dialogue3--presented-off-09",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
+          "seconds": 4.1,
+          "minimum_seconds": 4.1,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -33580,8 +33558,8 @@
         },
         {
           "window": "b1-pt-dialogue3--energy-off-09",
-          "seconds": 6.1,
-          "minimum_seconds": 6.1,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33821,8 +33799,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-base-a",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33833,9 +33811,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-base-a",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -33857,8 +33835,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-fg-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33869,9 +33847,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-fg-off",
-          "seconds": 3.8,
-          "minimum_seconds": 3.8,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -33893,8 +33871,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-ao-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33905,9 +33883,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-ao-off",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -33929,8 +33907,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-sun-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33941,9 +33919,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-sun-off",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -33965,8 +33943,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-gi-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -33977,9 +33955,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-gi-off",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -34001,8 +33979,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-rr-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -34013,9 +33991,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-rr-off",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -34037,8 +34015,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-cbt-off",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -34049,9 +34027,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-cbt-off",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -34075,8 +34053,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-post-late",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -34087,9 +34065,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-post-late",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -34111,8 +34089,8 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--rendered-base-b",
-          "seconds": 2.7,
-          "minimum_seconds": 2.7,
+          "seconds": 4.3,
+          "minimum_seconds": 4.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -34123,9 +34101,9 @@
         },
         {
           "window": "b2-ef1-dialogue3-attribution--presented-base-b",
-          "seconds": 3.9,
-          "minimum_seconds": 3.9,
-          "savings_seconds": 0,
+          "seconds": 5.4,
+          "minimum_seconds": 5.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -41371,12 +41349,7 @@
     "active": true
   },
   "tools\\live_batches\\water_surface_fresnel\\jobs\\wsf1-s8-interface-column.json": {
-    "problems": [
-      "windows: partition-static-0: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
-      "windows: partition-static-1: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
-      "windows: partition-static-2: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333088 s including serialized trace stalls",
-      "windows: partition-static-3: post-water float shots at the pool rim: trace schedule guarantees 1 complete events, need 2; minimum > 10.107133333333095 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -44172,30 +44145,30 @@
       {
         "window": "partition-static-0",
         "gate": "post-water float shots at the pool rim",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 10.107133333333088
+        "minimum_seconds_exclusive": 11.758253333333087
       },
       {
         "window": "partition-static-1",
         "gate": "post-water float shots at the pool rim",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 10.107133333333088
+        "minimum_seconds_exclusive": 11.758253333333087
       },
       {
         "window": "partition-static-2",
         "gate": "post-water float shots at the pool rim",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 10.107133333333088
+        "minimum_seconds_exclusive": 11.758253333333087
       },
       {
         "window": "partition-static-3",
         "gate": "post-water float shots at the pool rim",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 10.107133333333095
+        "minimum_seconds_exclusive": 11.758253333333087
       },
       {
         "window": "partition-static-1",
@@ -44835,8 +44808,8 @@
       }
     ],
     "duration": {
-      "seconds": 120.6,
-      "minimum_seconds": 121.0,
+      "seconds": 127.39999999999999,
+      "minimum_seconds": 127.4,
       "unresolved": [
         {
           "window": "warmup",
@@ -44858,7 +44831,7 @@
         }
       ],
       "expected_readiness_seconds": 57.354,
-      "readiness_timeout_seconds": 233.00400000007357,
+      "readiness_timeout_seconds": 241.60399999993388,
       "windows": [
         {
           "window": "warmup",
@@ -44896,7 +44869,7 @@
           "unresolved": [
             "scene/pipeline settle bound retained; not a producer cadence"
           ],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 1,
           "readiness_source": "VALID same-save/key median",
@@ -44904,11 +44877,11 @@
         },
         {
           "window": "partition-static-0",
-          "seconds": 10.1,
-          "minimum_seconds": 10.2,
-          "savings_seconds": 0,
+          "seconds": 11.8,
+          "minimum_seconds": 11.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 12,
           "readiness_source": "VALID same-save/key median",
@@ -44916,11 +44889,11 @@
         },
         {
           "window": "partition-static-1",
-          "seconds": 10.1,
-          "minimum_seconds": 10.2,
-          "savings_seconds": 0,
+          "seconds": 11.8,
+          "minimum_seconds": 11.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 10,
           "readiness_source": "VALID same-save/key median",
@@ -44928,11 +44901,11 @@
         },
         {
           "window": "partition-static-2",
-          "seconds": 10.1,
-          "minimum_seconds": 10.2,
-          "savings_seconds": 0,
+          "seconds": 11.8,
+          "minimum_seconds": 11.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 12,
           "readiness_source": "VALID same-save/key median",
@@ -44940,11 +44913,11 @@
         },
         {
           "window": "partition-static-3",
-          "seconds": 10.1,
-          "minimum_seconds": 10.2,
-          "savings_seconds": 0,
+          "seconds": 11.8,
+          "minimum_seconds": 11.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 10,
           "readiness_source": "VALID same-save/key median",
@@ -44956,7 +44929,7 @@
           "minimum_seconds": 12.0,
           "savings_seconds": 0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 2,
           "readiness_source": "VALID same-save/key median",
@@ -44968,7 +44941,7 @@
           "minimum_seconds": 12.0,
           "savings_seconds": 0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 10,
           "readiness_source": "VALID same-save/key median",
@@ -44980,7 +44953,7 @@
           "minimum_seconds": 12.0,
           "savings_seconds": 0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 12,
           "readiness_source": "VALID same-save/key median",
@@ -44992,7 +44965,7 @@
           "minimum_seconds": 12.0,
           "savings_seconds": 0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 10,
           "readiness_source": "VALID same-save/key median",
@@ -45004,7 +44977,7 @@
           "minimum_seconds": 1.1,
           "savings_seconds": 0,
           "unresolved": [],
-          "readiness_timeout_seconds": 4.354000000006636,
+          "readiness_timeout_seconds": 5.213999999992666,
           "expected_readiness_seconds": 5.213999999992666,
           "readiness_samples": 12,
           "readiness_source": "VALID same-save/key median",
@@ -49375,7 +49348,7 @@
     ],
     "duration": {
       "seconds": 144.1,
-      "minimum_seconds": 145.9,
+      "minimum_seconds": 146.7,
       "unresolved": [
         {
           "window": "warmup",
@@ -49588,7 +49561,7 @@
         {
           "window": "shot-cards",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -49600,7 +49573,7 @@
         {
           "window": "shot-strands",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -49614,7 +49587,7 @@
         {
           "window": "shot-crowd",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -49628,7 +49601,7 @@
         {
           "window": "shot-cards-b",
           "seconds": 7.5,
-          "minimum_seconds": 7.7,
+          "minimum_seconds": 7.9,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -52818,8 +52791,8 @@
       }
     ],
     "duration": {
-      "seconds": 212.40000000000003,
-      "minimum_seconds": 214.8,
+      "seconds": 216.2,
+      "minimum_seconds": 216.2,
       "unresolved": [
         {
           "window": "b1-cp4-compact-camp-join--warmup",
@@ -52918,7 +52891,7 @@
         }
       ],
       "expected_readiness_seconds": 23.935,
-      "readiness_timeout_seconds": 2633.880000000001,
+      "readiness_timeout_seconds": 2634.2760000000017,
       "windows": [
         {
           "window": "b1-cp4-compact-camp-join--warmup",
@@ -52942,7 +52915,7 @@
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
-          "readiness_timeout_seconds": 14.680000000000291,
+          "readiness_timeout_seconds": 15.076000000000931,
           "expected_readiness_seconds": 9.762000000002445,
           "readiness_samples": 0,
           "readiness_source": "unproven; no VALID same-save/key observation",
@@ -52964,9 +52937,9 @@
         },
         {
           "window": "b1-cp4-compact-camp-join--observe-on",
-          "seconds": 8.0,
+          "seconds": 7.8,
           "minimum_seconds": 7.8,
-          "savings_seconds": 0.2,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -52988,9 +52961,9 @@
         },
         {
           "window": "b1-cp4-compact-camp-join--observe-on-repeat",
-          "seconds": 8.0,
+          "seconds": 7.8,
           "minimum_seconds": 7.8,
-          "savings_seconds": 0.2,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.02,
@@ -53113,9 +53086,9 @@
         },
         {
           "window": "b2-go1-camp--shot-off-a",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -53125,7 +53098,7 @@
         },
         {
           "window": "b2-go1-camp--cost-off-a",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53137,9 +53110,9 @@
         },
         {
           "window": "b2-go1-camp--shot-compact",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53151,7 +53124,7 @@
         },
         {
           "window": "b2-go1-camp--cost-compact",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53163,9 +53136,9 @@
         },
         {
           "window": "b2-go1-camp--shot-off-b",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53177,7 +53150,7 @@
         },
         {
           "window": "b2-go1-camp--cost-off-b",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53189,9 +53162,9 @@
         },
         {
           "window": "b2-go1-camp--shot-alpha",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53203,7 +53176,7 @@
         },
         {
           "window": "b2-go1-camp--cost-alpha",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53215,9 +53188,9 @@
         },
         {
           "window": "b2-go1-camp--shot-off-c",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53229,7 +53202,7 @@
         },
         {
           "window": "b2-go1-camp--cost-off-c",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53241,9 +53214,9 @@
         },
         {
           "window": "b2-go1-camp--shot-water",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53255,7 +53228,7 @@
         },
         {
           "window": "b2-go1-camp--cost-water",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -53267,9 +53240,9 @@
         },
         {
           "window": "b2-go1-camp--shot-off-d",
-          "seconds": 7.5,
-          "minimum_seconds": 7.7,
-          "savings_seconds": 0,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -53281,7 +53254,7 @@
         },
         {
           "window": "b2-go1-camp--cost-off-d",
-          "seconds": 4.9,
+          "seconds": 5.1,
           "minimum_seconds": 5.1,
           "savings_seconds": 0,
           "unresolved": [],
@@ -54170,10 +54143,7 @@
     "active": true
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part1.json": {
-    "problems": [
-      "windows: b1-su1-ultra-s8-fg2--static-a: b1-su1-ultra-s8-fg2--one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333088 s including serialized trace stalls",
-      "windows: b1-su1-ultra-s8-fg2--static-b: b1-su1-ultra-s8-fg2--one trace written in each static window: trace schedule guarantees 0 complete events, need 1; minimum > 11.107133333333081 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: FAILED, keeping previous": 0,
       "forbid: RR creation failed": 0,
@@ -54542,16 +54512,16 @@
       {
         "window": "b1-su1-ultra-s8-fg2--static-a",
         "gate": "b1-su1-ultra-s8-fg2--one trace written in each static window",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 11.107133333333088
+        "minimum_seconds_exclusive": 12.75825333333308
       },
       {
         "window": "b1-su1-ultra-s8-fg2--static-b",
         "gate": "b1-su1-ultra-s8-fg2--one trace written in each static window",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 11.107133333333081
+        "minimum_seconds_exclusive": 12.758253333333101
       },
       {
         "window": "b1-su1-ultra-s8-fg2--static-a",
@@ -61573,8 +61543,8 @@
       }
     ],
     "duration": {
-      "seconds": 278.29999999999995,
-      "minimum_seconds": 285.5,
+      "seconds": 299.90000000000015,
+      "minimum_seconds": 299.9,
       "unresolved": [
         {
           "window": "b1-su1-ultra-s8-fg2--warmup",
@@ -61757,9 +61727,9 @@
         },
         {
           "window": "b1-su1-ultra-s8-fg2--static-a",
-          "seconds": 11.1,
-          "minimum_seconds": 11.2,
-          "savings_seconds": 0,
+          "seconds": 12.8,
+          "minimum_seconds": 12.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -61817,9 +61787,9 @@
         },
         {
           "window": "b1-su1-ultra-s8-fg2--static-b",
-          "seconds": 11.1,
-          "minimum_seconds": 11.2,
-          "savings_seconds": 0,
+          "seconds": 12.8,
+          "minimum_seconds": 12.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -61984,8 +61954,8 @@
         },
         {
           "window": "b2-go2-s8--shot-off-a",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
@@ -61996,7 +61966,7 @@
         },
         {
           "window": "b2-go2-s8--cost-off-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62008,8 +61978,8 @@
         },
         {
           "window": "b2-go2-s8--shot-compact",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62022,7 +61992,7 @@
         },
         {
           "window": "b2-go2-s8--cost-compact",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62034,8 +62004,8 @@
         },
         {
           "window": "b2-go2-s8--shot-off-b",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62048,7 +62018,7 @@
         },
         {
           "window": "b2-go2-s8--cost-off-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62060,8 +62030,8 @@
         },
         {
           "window": "b2-go2-s8--shot-alpha",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62074,7 +62044,7 @@
         },
         {
           "window": "b2-go2-s8--cost-alpha",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62086,8 +62056,8 @@
         },
         {
           "window": "b2-go2-s8--shot-off-c",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62100,7 +62070,7 @@
         },
         {
           "window": "b2-go2-s8--cost-off-c",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62112,8 +62082,8 @@
         },
         {
           "window": "b2-go2-s8--shot-water",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62126,7 +62096,7 @@
         },
         {
           "window": "b2-go2-s8--cost-water",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62138,8 +62108,8 @@
         },
         {
           "window": "b2-go2-s8--shot-off-d",
-          "seconds": 6.1,
-          "minimum_seconds": 6.2,
+          "seconds": 7.8,
+          "minimum_seconds": 7.8,
           "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
@@ -62152,7 +62122,7 @@
         },
         {
           "window": "b2-go2-s8--cost-off-d",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -62298,19 +62268,7 @@
     "active": true
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part2.json": {
-    "problems": [
-      "windows: b1-go2-s8-medium--shot-off-a: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333088 s including serialized trace stalls",
-      "windows: b1-go2-s8-medium--shot-on: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
-      "windows: b1-go2-s8-medium--shot-off-b: b1-go2-s8-medium--\\[trace\\] frame \\d+ written: trace schedule guarantees 2 complete events, need 3; minimum > 15.107133333333095 s including serialized trace stalls",
-      "windows: b2-wo1-s8-hit-shade--shot-sparse-off-a: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls",
-      "windows: b2-wo1-s8-hit-shade--shot-sparse-on-a: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b2-wo1-s8-hit-shade--shot-sparse-off-b: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b2-wo1-s8-hit-shade--shot-sparse-on-b: b2-wo1-s8-hit-shade--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b3-wo1-s8-bit2--shot-cone-off-a: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b3-wo1-s8-bit2--shot-cone-on-a: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b3-wo1-s8-bit2--shot-cone-off-b: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls",
-      "windows: b3-wo1-s8-bit2--shot-cone-on-b: b3-wo1-s8-bit2--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333081 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: VK_ERROR_DEVICE_LOST": 0,
       "expect: \\[auto\\] scene ready": 19,
@@ -62806,21 +62764,21 @@
       {
         "window": "b1-go2-s8-medium--shot-off-a",
         "gate": "b1-go2-s8-medium--\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333088
       },
       {
         "window": "b1-go2-s8-medium--shot-on",
         "gate": "b1-go2-s8-medium--\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333095
       },
       {
         "window": "b1-go2-s8-medium--shot-off-b",
         "gate": "b1-go2-s8-medium--\\[trace\\] frame \\d+ written",
-        "complete": 2,
+        "complete": 3,
         "required": 3,
         "minimum_seconds_exclusive": 15.107133333333095
       },
@@ -66378,28 +66336,28 @@
       {
         "window": "b2-wo1-s8-hit-shade--shot-sparse-off-a",
         "gate": "b2-wo1-s8-hit-shade--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333095
       },
       {
         "window": "b2-wo1-s8-hit-shade--shot-sparse-on-a",
         "gate": "b2-wo1-s8-hit-shade--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
       {
         "window": "b2-wo1-s8-hit-shade--shot-sparse-off-b",
         "gate": "b2-wo1-s8-hit-shade--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
       {
         "window": "b2-wo1-s8-hit-shade--shot-sparse-on-b",
         "gate": "b2-wo1-s8-hit-shade--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
@@ -70646,28 +70604,28 @@
       {
         "window": "b3-wo1-s8-bit2--shot-cone-off-a",
         "gate": "b3-wo1-s8-bit2--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
       {
         "window": "b3-wo1-s8-bit2--shot-cone-on-a",
         "gate": "b3-wo1-s8-bit2--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
       {
         "window": "b3-wo1-s8-bit2--shot-cone-off-b",
         "gate": "b3-wo1-s8-bit2--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 13.107133333333081
+        "minimum_seconds_exclusive": 13.10713333333311
       },
       {
         "window": "b3-wo1-s8-bit2--shot-cone-on-b",
         "gate": "b3-wo1-s8-bit2--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333081
       },
@@ -71733,7 +71691,7 @@
       }
     ],
     "duration": {
-      "seconds": 276.0999999999999,
+      "seconds": 288.6,
       "minimum_seconds": 288.6,
       "unresolved": [
         {
@@ -71976,7 +71934,7 @@
         },
         {
           "window": "b1-go2-s8-medium--settle-off-a",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -71990,7 +71948,7 @@
         },
         {
           "window": "b1-go2-s8-medium--cost-off-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72002,7 +71960,7 @@
         },
         {
           "window": "b1-go2-s8-medium--shot-off-a",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72014,7 +71972,7 @@
         },
         {
           "window": "b1-go2-s8-medium--settle-on",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -72028,7 +71986,7 @@
         },
         {
           "window": "b1-go2-s8-medium--cost-on",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72040,7 +71998,7 @@
         },
         {
           "window": "b1-go2-s8-medium--shot-on",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72052,7 +72010,7 @@
         },
         {
           "window": "b1-go2-s8-medium--settle-off-b",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -72066,7 +72024,7 @@
         },
         {
           "window": "b1-go2-s8-medium--cost-off-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72078,7 +72036,7 @@
         },
         {
           "window": "b1-go2-s8-medium--shot-off-b",
-          "seconds": 15.1,
+          "seconds": 15.2,
           "minimum_seconds": 15.2,
           "savings_seconds": 0,
           "unresolved": [],
@@ -72148,7 +72106,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--shot-sparse-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72162,7 +72120,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--shot-sparse-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72176,7 +72134,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--shot-sparse-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72190,7 +72148,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--shot-sparse-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72204,7 +72162,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--cost-sparse-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72218,7 +72176,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--cost-sparse-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72232,7 +72190,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--cost-sparse-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72246,7 +72204,7 @@
         },
         {
           "window": "b2-wo1-s8-hit-shade--cost-sparse-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72330,7 +72288,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--shot-cone-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72344,7 +72302,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--shot-cone-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72358,7 +72316,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--shot-cone-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72372,7 +72330,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--shot-cone-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -72386,7 +72344,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--cost-cone-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72400,7 +72358,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--cost-cone-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72414,7 +72372,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--cost-cone-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72428,7 +72386,7 @@
         },
         {
           "window": "b3-wo1-s8-bit2--cost-cone-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -72607,20 +72565,7 @@
     "active": true
   },
   "tools\\live_batches\\combined_20261103\\jobs\\combined-Water-Queens-House-part3.json": {
-    "problems": [
-      "windows: b1-wo1-s8-bit4--shot-order-off-a: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: b1-wo1-s8-bit4--shot-order-on-a: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: b1-wo1-s8-bit4--shot-order-off-b: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: b1-wo1-s8-bit4--shot-order-on-b: b1-wo1-s8-bit4--static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls",
-      "windows: b2-wf9-s8-compose-shift--energy-static-0: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.1071333333330955 s including serialized trace stalls",
-      "windows: b2-wf9-s8-compose-shift--energy-static-1: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
-      "windows: b2-wf9-s8-compose-shift--energy-static-2: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
-      "windows: b2-wf9-s8-compose-shift--energy-static-3: b2-wf9-s8-compose-shift--static float means: trace schedule guarantees 0 complete events, need 1; minimum > 7.107133333333081 s including serialized trace stalls",
-      "windows: b3-pt-s8--energy-off-a: b3-pt-s8--float energy off-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
-      "windows: b3-pt-s8--energy-on-a: b3-pt-s8--float energy on-a: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
-      "windows: b3-pt-s8--energy-off-b: b3-pt-s8--float energy off-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls",
-      "windows: b3-pt-s8--energy-on-b: b3-pt-s8--float energy on-b: trace schedule guarantees 0 complete events, need 1; minimum > 2.1071333333330813 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: FAILED, keeping previous": 0,
       "forbid: PNG write failed": 0,
@@ -75824,28 +75769,28 @@
       {
         "window": "b1-wo1-s8-bit4--shot-order-off-a",
         "gate": "b1-wo1-s8-bit4--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "b1-wo1-s8-bit4--shot-order-on-a",
         "gate": "b1-wo1-s8-bit4--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "b1-wo1-s8-bit4--shot-order-off-b",
         "gate": "b1-wo1-s8-bit4--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 13.107133333333088
+        "minimum_seconds_exclusive": 13.107133333333095
       },
       {
         "window": "b1-wo1-s8-bit4--shot-order-on-b",
         "gate": "b1-wo1-s8-bit4--static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333095
       },
@@ -79668,30 +79613,30 @@
       {
         "window": "b2-wf9-s8-compose-shift--energy-static-0",
         "gate": "b2-wf9-s8-compose-shift--static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.1071333333330955
+        "minimum_seconds_exclusive": 8.758253333333101
       },
       {
         "window": "b2-wf9-s8-compose-shift--energy-static-1",
         "gate": "b2-wf9-s8-compose-shift--static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333081
+        "minimum_seconds_exclusive": 8.758253333333101
       },
       {
         "window": "b2-wf9-s8-compose-shift--energy-static-2",
         "gate": "b2-wf9-s8-compose-shift--static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333081
+        "minimum_seconds_exclusive": 8.758253333333101
       },
       {
         "window": "b2-wf9-s8-compose-shift--energy-static-3",
         "gate": "b2-wf9-s8-compose-shift--static float means",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 7.107133333333081
+        "minimum_seconds_exclusive": 8.758253333333101
       },
       {
         "window": "b2-wf9-s8-compose-shift--energy-static-1",
@@ -79802,9 +79747,9 @@
       {
         "window": "b3-pt-s8--energy-off-a",
         "gate": "b3-pt-s8--float energy off-a",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330813
+        "minimum_seconds_exclusive": 3.758253333333073
       },
       {
         "window": "b3-pt-s8--timing-off-a",
@@ -79915,9 +79860,9 @@
       {
         "window": "b3-pt-s8--energy-on-a",
         "gate": "b3-pt-s8--float energy on-a",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330813
+        "minimum_seconds_exclusive": 3.758253333333073
       },
       {
         "window": "b3-pt-s8--timing-on-a",
@@ -80081,9 +80026,9 @@
       {
         "window": "b3-pt-s8--energy-off-b",
         "gate": "b3-pt-s8--float energy off-b",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330813
+        "minimum_seconds_exclusive": 3.758253333333073
       },
       {
         "window": "b3-pt-s8--timing-off-b",
@@ -80194,9 +80139,9 @@
       {
         "window": "b3-pt-s8--energy-on-b",
         "gate": "b3-pt-s8--float energy on-b",
-        "complete": 0,
+        "complete": 1,
         "required": 1,
-        "minimum_seconds_exclusive": 2.1071333333330813
+        "minimum_seconds_exclusive": 3.758253333333073
       },
       {
         "window": "b3-pt-s8--timing-on-b",
@@ -80359,8 +80304,8 @@
       }
     ],
     "duration": {
-      "seconds": 463.2000000000003,
-      "minimum_seconds": 481.8,
+      "seconds": 502.6,
+      "minimum_seconds": 502.6,
       "unresolved": [
         {
           "window": "b1-wo1-s8-bit4--warmup",
@@ -80559,7 +80504,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--shot-order-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -80573,7 +80518,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--shot-order-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -80587,7 +80532,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--shot-order-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -80601,7 +80546,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--shot-order-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -80615,7 +80560,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--cost-order-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -80629,7 +80574,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--cost-order-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -80643,7 +80588,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--cost-order-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -80657,7 +80602,7 @@
         },
         {
           "window": "b1-wo1-s8-bit4--cost-order-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -80742,9 +80687,9 @@
         },
         {
           "window": "b2-wf9-s8-compose-shift--energy-static-0",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.019,
@@ -80754,9 +80699,9 @@
         },
         {
           "window": "b2-wf9-s8-compose-shift--energy-static-1",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.014,
@@ -80766,9 +80711,9 @@
         },
         {
           "window": "b2-wf9-s8-compose-shift--energy-static-2",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.019,
@@ -80778,9 +80723,9 @@
         },
         {
           "window": "b2-wf9-s8-compose-shift--energy-static-3",
-          "seconds": 7.1,
-          "minimum_seconds": 7.2,
-          "savings_seconds": 0,
+          "seconds": 8.8,
+          "minimum_seconds": 8.8,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.014,
@@ -80790,8 +80735,8 @@
         },
         {
           "window": "b2-wf9-s8-compose-shift--diag-view-static",
-          "seconds": 4.5,
-          "minimum_seconds": 4.7,
+          "seconds": 6.3,
+          "minimum_seconds": 6.3,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
@@ -81050,7 +80995,7 @@
         },
         {
           "window": "b3-pt-s8--settle-off-a",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -81064,9 +81009,9 @@
         },
         {
           "window": "b3-pt-s8--rendered-off-a",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -81076,9 +81021,9 @@
         },
         {
           "window": "b3-pt-s8--presented-off-a",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -81088,8 +81033,8 @@
         },
         {
           "window": "b3-pt-s8--energy-off-a",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -81100,7 +81045,7 @@
         },
         {
           "window": "b3-pt-s8--timing-off-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -81112,7 +81057,7 @@
         },
         {
           "window": "b3-pt-s8--settle-on-a",
-          "seconds": 5.3,
+          "seconds": 6.8,
           "minimum_seconds": 6.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -81126,9 +81071,9 @@
         },
         {
           "window": "b3-pt-s8--rendered-on-a",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -81138,9 +81083,9 @@
         },
         {
           "window": "b3-pt-s8--presented-on-a",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -81150,8 +81095,8 @@
         },
         {
           "window": "b3-pt-s8--energy-on-a",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -81162,7 +81107,7 @@
         },
         {
           "window": "b3-pt-s8--timing-on-a",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -81174,7 +81119,7 @@
         },
         {
           "window": "b3-pt-s8--settle-off-b",
-          "seconds": 2.3,
+          "seconds": 2.8,
           "minimum_seconds": 2.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -81188,9 +81133,9 @@
         },
         {
           "window": "b3-pt-s8--rendered-off-b",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -81200,9 +81145,9 @@
         },
         {
           "window": "b3-pt-s8--presented-off-b",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -81212,8 +81157,8 @@
         },
         {
           "window": "b3-pt-s8--energy-off-b",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -81224,7 +81169,7 @@
         },
         {
           "window": "b3-pt-s8--timing-off-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -81236,7 +81181,7 @@
         },
         {
           "window": "b3-pt-s8--settle-on-b",
-          "seconds": 5.3,
+          "seconds": 6.8,
           "minimum_seconds": 6.8,
           "savings_seconds": 0,
           "unresolved": [
@@ -81250,9 +81195,9 @@
         },
         {
           "window": "b3-pt-s8--rendered-on-b",
-          "seconds": 2.6,
-          "minimum_seconds": 2.8,
-          "savings_seconds": 0,
+          "seconds": 4.4,
+          "minimum_seconds": 4.4,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
           "expected_readiness_seconds": 0,
@@ -81262,9 +81207,9 @@
         },
         {
           "window": "b3-pt-s8--presented-on-b",
-          "seconds": 3.6,
+          "seconds": 4.9,
           "minimum_seconds": 4.9,
-          "savings_seconds": 0,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -81274,8 +81219,8 @@
         },
         {
           "window": "b3-pt-s8--energy-on-b",
-          "seconds": 2.1,
-          "minimum_seconds": 2.2,
+          "seconds": 3.8,
+          "minimum_seconds": 3.8,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 0.0,
@@ -81286,7 +81231,7 @@
         },
         {
           "window": "b3-pt-s8--timing-on-b",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [],
@@ -120851,7 +120796,7 @@
     ],
     "duration": {
       "seconds": 133.7,
-      "minimum_seconds": 130.7,
+      "minimum_seconds": 140.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -120936,8 +120881,8 @@
         {
           "window": "cards-a",
           "seconds": 8.7,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 2.5,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.8,
           "unresolved": [],
           "readiness_timeout_seconds": 30.0,
           "expected_readiness_seconds": 0,
@@ -120972,8 +120917,8 @@
         {
           "window": "cards-b",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 180.0,
           "expected_readiness_seconds": 0.007,
@@ -120984,8 +120929,8 @@
         {
           "window": "order-prepass-2",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 180.0,
           "expected_readiness_seconds": 0.02,
@@ -120996,8 +120941,8 @@
         {
           "window": "order-gbuffer-2",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 180.0,
           "expected_readiness_seconds": 0.005,
@@ -121008,8 +120953,8 @@
         {
           "window": "tips-on",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -121022,8 +120967,8 @@
         {
           "window": "cards-c",
           "seconds": 6.3,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.1,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0,
           "unresolved": [
             "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ],
@@ -122639,12 +122584,7 @@
     "active": false
   },
   "tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-bit2.json": {
-    "problems": [
-      "windows: shot-cone-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-cone-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-cone-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-cone-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -125865,28 +125805,28 @@
       {
         "window": "shot-cone-off-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-cone-on-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-cone-off-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 13.107133333333088
+        "minimum_seconds_exclusive": 13.107133333333095
       },
       {
         "window": "shot-cone-on-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333095
       },
@@ -126952,7 +126892,7 @@
       }
     ],
     "duration": {
-      "seconds": 89.20000000000002,
+      "seconds": 93.19999999999999,
       "minimum_seconds": 93.2,
       "unresolved": [
         {
@@ -127077,7 +127017,7 @@
         },
         {
           "window": "shot-cone-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -127091,7 +127031,7 @@
         },
         {
           "window": "shot-cone-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -127105,7 +127045,7 @@
         },
         {
           "window": "shot-cone-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -127119,7 +127059,7 @@
         },
         {
           "window": "shot-cone-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -127133,7 +127073,7 @@
         },
         {
           "window": "cost-cone-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -127147,7 +127087,7 @@
         },
         {
           "window": "cost-cone-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -127161,7 +127101,7 @@
         },
         {
           "window": "cost-cone-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -127175,7 +127115,7 @@
         },
         {
           "window": "cost-cone-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -127275,12 +127215,7 @@
     "active": true
   },
   "tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-bit4.json": {
-    "problems": [
-      "windows: shot-order-off-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-order-on-a: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-order-off-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333088 s including serialized trace stalls",
-      "windows: shot-order-on-b: static float energy inputs: trace schedule guarantees 1 complete events, need 2; minimum > 13.107133333333095 s including serialized trace stalls"
-    ],
+    "problems": [],
     "regex_coverage": {
       "forbid: \\[crash\\] exception 0x": 0,
       "forbid: VK_ERROR_DEVICE_LOST": 0,
@@ -130501,28 +130436,28 @@
       {
         "window": "shot-order-off-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-order-on-a",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333088
       },
       {
         "window": "shot-order-off-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
-        "minimum_seconds_exclusive": 13.107133333333088
+        "minimum_seconds_exclusive": 13.107133333333095
       },
       {
         "window": "shot-order-on-b",
         "gate": "static float energy inputs",
-        "complete": 1,
+        "complete": 2,
         "required": 2,
         "minimum_seconds_exclusive": 13.107133333333095
       },
@@ -131588,7 +131523,7 @@
       }
     ],
     "duration": {
-      "seconds": 89.20000000000002,
+      "seconds": 93.19999999999999,
       "minimum_seconds": 93.2,
       "unresolved": [
         {
@@ -131713,7 +131648,7 @@
         },
         {
           "window": "shot-order-off-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -131727,7 +131662,7 @@
         },
         {
           "window": "shot-order-on-a",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -131741,7 +131676,7 @@
         },
         {
           "window": "shot-order-off-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -131755,7 +131690,7 @@
         },
         {
           "window": "shot-order-on-b",
-          "seconds": 13.1,
+          "seconds": 13.2,
           "minimum_seconds": 13.2,
           "savings_seconds": 0,
           "unresolved": [
@@ -131769,7 +131704,7 @@
         },
         {
           "window": "cost-order-0",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -131783,7 +131718,7 @@
         },
         {
           "window": "cost-order-1",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -131797,7 +131732,7 @@
         },
         {
           "window": "cost-order-2",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -131811,7 +131746,7 @@
         },
         {
           "window": "cost-order-3",
-          "seconds": 2.4,
+          "seconds": 3.3,
           "minimum_seconds": 3.3,
           "savings_seconds": 0,
           "unresolved": [
@@ -132296,8 +132231,8 @@
       }
     ],
     "duration": {
-      "seconds": 63.800000000000004,
-      "minimum_seconds": 63.2,
+      "seconds": 66.6,
+      "minimum_seconds": 66.6,
       "unresolved": [
         {
           "window": "warm-all",
@@ -132379,9 +132314,9 @@
         },
         {
           "window": "a-cards",
-          "seconds": 7.0,
-          "minimum_seconds": 6.2,
-          "savings_seconds": 0.8,
+          "seconds": 7.9,
+          "minimum_seconds": 7.9,
+          "savings_seconds": 0.0,
           "unresolved": [],
           "readiness_timeout_seconds": 2.0,
           "expected_readiness_seconds": 0.005,
@@ -132391,7 +132326,7 @@
         },
         {
           "window": "b-strands",
-          "seconds": 8.6,
+          "seconds": 8.7,
           "minimum_seconds": 8.7,
           "savings_seconds": 0,
           "unresolved": [],
@@ -132403,7 +132338,7 @@
         },
         {
           "window": "c-strands-plus",
-          "seconds": 8.6,
+          "seconds": 8.7,
           "minimum_seconds": 8.7,
           "savings_seconds": 0,
           "unresolved": [
@@ -132441,8 +132376,8 @@
         },
         {
           "window": "d-cards",
-          "seconds": 3.3,
-          "minimum_seconds": 3.3,
+          "seconds": 5.0,
+          "minimum_seconds": 5.0,
           "savings_seconds": 0,
           "unresolved": [],
           "readiness_timeout_seconds": 180.0,

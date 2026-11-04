@@ -101,6 +101,24 @@ class BatchJobsLintTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'refresh lint snapshot'):
             flow.readiness_budget.estimate(dict(save='unknown'), dict(wait_log=['new producer']), {}, True)
 
+    def test_frozen_snapshot_covers_jobs_outside_active_inventory(self):
+        from tools.live_batches import lint_snapshot
+        index = lint_snapshot.load()
+        self.addCleanup(flow.readiness_budget.configure, [])
+        self.addCleanup(flow.fps_windows.configure, [])
+        self.addCleanup(flow.TRACE_EXPORT.clear)
+        paths = set(flow.job_files(ROOT / 'tools/live_batches')) - flow.active_job_files()
+        self.assertTrue(paths)
+        for path in sorted(paths):
+            with self.subTest(job=path.name):
+                job, plan, _ = flow.load_job(path)
+                patterns = set(job.get('forbid', []) + job.get('expect', []))
+                self.assertFalse(patterns - index['matches'].keys())
+                # merge-green checks changed jobs even when they are inactive.
+                # Both sizing and generator timeout queries must be frozen.
+                flow.duration_budget(job, plan)
+                flow.readiness_budget.timeouts(job, plan)
+
     def test_compact_generator_confines_stats_and_warms_both_values(self):
         from functools import partial
         self.addCleanup(flow.readiness_budget.configure, [])

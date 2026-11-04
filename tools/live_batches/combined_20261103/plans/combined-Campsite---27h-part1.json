@@ -32,7 +32,7 @@
     "wait_log": [
       "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
     ],
-    "wait_log_timeout": 14.680000000000291
+    "wait_log_timeout": 15.076000000000931
   },
   {
     "label": "b1-cp4-compact-camp-join--warmup-off",
@@ -63,7 +63,7 @@
     "label": "b1-cp4-compact-camp-join--observe-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.0,
+    "seconds": 7.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -76,6 +76,9 @@
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ],
     "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
@@ -83,9 +86,6 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_stats": [
-      "\\[hit material paks join\\]"
     ]
   },
   {
@@ -115,7 +115,7 @@
     "label": "b1-cp4-compact-camp-join--observe-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.0,
+    "seconds": 7.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -128,6 +128,9 @@
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ],
     "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
@@ -135,9 +138,6 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_stats": [
-      "\\[hit material paks join\\]"
     ]
   },
   {
@@ -328,7 +328,7 @@
     "label": "b2-go1-camp--shot-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -353,7 +353,7 @@
     "label": "b2-go1-camp--cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -385,7 +385,7 @@
     "label": "b2-go1-camp--shot-compact",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -419,7 +419,7 @@
     "label": "b2-go1-camp--cost-compact",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -451,7 +451,7 @@
     "label": "b2-go1-camp--shot-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -485,7 +485,7 @@
     "label": "b2-go1-camp--cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -517,7 +517,7 @@
     "label": "b2-go1-camp--shot-alpha",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -551,7 +551,7 @@
     "label": "b2-go1-camp--cost-alpha",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -583,7 +583,7 @@
     "label": "b2-go1-camp--shot-off-c",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -617,7 +617,7 @@
     "label": "b2-go1-camp--cost-off-c",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -649,7 +649,7 @@
     "label": "b2-go1-camp--shot-water",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -681,7 +681,7 @@
     "label": "b2-go1-camp--cost-water",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -713,7 +713,7 @@
     "label": "b2-go1-camp--shot-off-d",
     "kind": "static",
     "speed": "static",
-    "seconds": 7.5,
+    "seconds": 7.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -745,7 +745,7 @@
     "label": "b2-go1-camp--cost-off-d",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.9,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,

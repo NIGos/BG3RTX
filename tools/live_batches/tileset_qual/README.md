@@ -10,6 +10,8 @@ Do not run a nominal 0/1/0/1 plan: all four states would retain the startup valu
 Fallback: run `ts1-native-tileset-off`, then `ts1-native-tileset-on`, separate
 processes in the existing serial queue, only after explicit batch authorization.
 Both use visible_unfocused_fg, release Ultra and Hair shadows; paks stay off.
+Both set dev=1 so release policy preserves the hidden Tilesets choice; each
+requires its requested rt_native_tileset value in the logged cfg keys line.
 The complete profile comes from existing `release_qual/profile.cpp` compiled
 against this tree's settings, bg3rtx.ini and data/release.ini. Only the Tileset
 key differs between launch rendering settings. Qualification diagnostics and

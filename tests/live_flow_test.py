@@ -148,11 +148,32 @@ class FlowTests(unittest.TestCase):
             self.assertTrue(f.window_problems(j, p)[0])
             f.retime(j, p)
             self.assertEqual(p[0]['frames'], 60)
-            self.assertEqual(p[0]['seconds'], 10.1)
+            self.assertEqual(p[0]['seconds'], 11.5)
             self.assertFalse(f.window_problems(j, p)[0])
             f.TRACE_STALL.clear()
             self.assertEqual(f.capture_stall(j['live_flow']), 2.4)
-            self.assertEqual(f.duration_budget(j, p)['windows'][0]['minimum_seconds'], 10.1)
+            self.assertEqual(f.duration_budget(j, p)['windows'][0]['minimum_seconds'], 11.5)
+
+    def test_trace_schedule_uses_measured_stall_with_serialization_and_reload(self):
+        with patch.dict(f.TRACE_STALL, dict(seconds=2.65), clear=True), \
+                patch.dict(f.TRACE_EXPORT, {}, clear=True):
+            j, _ = fixture()
+            j['live_flow'] = dict(trace_stall_s=1, trace_dispatch_s=.5)
+            p = [phase('previous', 2), phase('capture', 4)]
+            p[0]['trace_at'] = [1]
+            p[1]['trace_at'] = [1, 2]
+            j['expect_every'] = [dict(select=r'\[trace\] frame', event=True,
+                                     min=2, windows=['capture'])]
+            # All three requests serialize, including the ungated previous phase.
+            expected = 1 + 3 * (.5 + 2/30 + 2.65) - 2
+            self.assertAlmostEqual(f.trace_schedules(j, p)['capture'][-1], expected)
+            self.assertTrue(f.window_problems(j, p)[0])
+            f.retime(j, p)
+            self.assertFalse(f.window_problems(j, p)[0])
+            self.assertGreater(p[1]['seconds'], f.trace_schedules(j, p)['capture'][-1])
+            schedule = f.trace_schedules(j, p)
+            f.TRACE_STALL.clear()
+            self.assertEqual(f.trace_schedules(j, p), schedule)
 
     def test_frame_counts_do_not_depend_on_scene_fps(self):
         j, _ = fixture()

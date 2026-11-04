@@ -52,7 +52,7 @@
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
@@ -62,7 +62,7 @@
     "label": "partition-static-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.1,
+    "seconds": 11.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -84,7 +84,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -100,7 +100,7 @@
     "label": "partition-static-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.1,
+    "seconds": 11.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -122,7 +122,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -141,7 +141,7 @@
     "label": "partition-static-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.1,
+    "seconds": 11.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -163,7 +163,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -179,7 +179,7 @@
     "label": "partition-static-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.1,
+    "seconds": 11.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -201,7 +201,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -239,7 +239,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -275,7 +275,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -314,7 +314,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -350,7 +350,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 4.354000000006636,
+    "wait_log_timeout": 5.213999999992666,
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -388,6 +388,6 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 4.354000000006636
+    "wait_log_timeout": 5.213999999992666
   }
 ]
