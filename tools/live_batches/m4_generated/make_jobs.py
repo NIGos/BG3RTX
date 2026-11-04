@@ -24,6 +24,9 @@ def run():
         # Use the existing consumer completion as the conditional build witness; a fresh quiet watch
         # still reconciles outstanding builds after the settings acknowledgement.
         for p,wanted in zip(plan,ready.requirements(job,plan)):
+            # Capacity/generated/streams producers are gated by rt_stats.
+            if p['label'].startswith(('producer-sanity-', 'diag-')):
+                p['set']=p['set'].replace('rt_stats=0','rt_stats=1')
             if 'rt_hit_material_generated' in wanted:
                 p['wait_log']=['(?#rt_hit_material_generated)'+ready.GI_TRACE]
         for gate in job['expect_every']:
