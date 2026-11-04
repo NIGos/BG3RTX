@@ -36,7 +36,7 @@ def phase(label, seconds=7, on=False, trace=False, turn=0, wheel=0):
 # rt_hair_groom_primary is latched on at startup (main 8df7978d), so the groom stage is also the strands-on-screen
 # stage; the last stage adds the fibre pass (rt_hair_fibre, a live core key).
 STAGES = [("a-native", dict(rt_native_hair="1", rt_native_scalp="1", rt_hair_physical_origin="0", rt_hair_groom="0",
-                            rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="0")),
+                            rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="1")),   # cards stay in order 0
           ("b-origin", dict(rt_hair_physical_origin="1")),
           ("c-strands", dict(rt_hair_groom="1")),
           ("d-fibre", dict(rt_hair_fibre="1"))]
@@ -273,4 +273,4 @@ def main():
 if __name__ == "__main__":
     main()
     from tools.live_batches.live_flow import tighten_files
-    tighten_files(HERE, cache=ROOT / ".offline/hair-diag-flow-corpus.json", job_names=["hv5-reload-bisect", "hv6-strand-diagnostic"])
+    tighten_files(HERE, job_names=["hv5-reload-bisect", "hv6-strand-diagnostic"])
