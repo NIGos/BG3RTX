@@ -433,6 +433,14 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_shadow_t", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
+  {"exp_hair_primary_passes", "Strand passes that swap",
+   "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"all", "All", 0, {{"rt_hair_primary_passes", "7"}}, {}, {}, false, false, false, Apply::Live},
+    {"gbuffer", "G-buffer only", kCapRayQuery, {{"rt_hair_primary_passes", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live},
+    {"gbuffer_velocity", "G-buffer and motion vectors", kCapRayQuery, {{"rt_hair_primary_passes", "3"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+
   {"exp_hair_primary_order", "Strand header in G-buffer order",
    "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
    Kind::Choice, Apply::Live, "live", true,
@@ -771,6 +779,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_primary_order", "0"},
+    {"rt_hair_primary_passes", "7"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_fibre", "0"},
     {"rt_hair_fibre_gi", "0"},

@@ -67,7 +67,7 @@ TABLE.update({
 # change CPU publication/LOD; paks changes host data, geometry capture is host
 # side, and rr/fg use vendor pipelines. preset and ab_off affect many passes.
 GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: prefetched )"
-CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_hit_material_paks rt_water_geometry rr fg preset ab_off".split())
+CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_primary_passes rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_hit_material_paks rt_water_geometry rr fg preset ab_off".split())
 for key in CONSERVATIVE:
     TABLE[key] = [GENERIC]
 
