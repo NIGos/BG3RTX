@@ -207,6 +207,13 @@ int main() {
     for (int i = 0; i < 3; ++i) m.tick(0, 3, 1176 + 16 * i, 4, &w, &b);
     CHECK(m.tick(0, 3, 1224, 4, &w, &b) == pa::Monitor::kWindow);
     CHECK(w.waiting == 0 && w.started == 0 && w.pending == 0);
+    // Reset a partial pre-readiness period without replaying lifetime starts.
+    m.tick(1, 4, 1240, 4, &w, &b);
+    m.reset_window(4, 1240);
+    for (int i = 0; i < 3; ++i) CHECK((m.tick(0, 4, 1256 + 16 * i, 4, &w, &b) & pa::Monitor::kWindow) == 0);
+    CHECK(m.tick(0, 4, 1304, 4, &w, &b) == pa::Monitor::kWindow);
+    CHECK(w.frames == 4 && w.started == 0 && w.waiting == 0);
+
   }
   for (auto state : {pa::State::kStarted, pa::State::kBuilding, pa::State::kFailed, pa::State::kReady}) {
     // Full -> half and half -> full both refuse an old pipeline until ready.

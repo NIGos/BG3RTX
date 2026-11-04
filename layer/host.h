@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "../common/host_api.h"
+#include "../common/stats_window.h"
 #include "../common/hair_primary.h"
 
 // BG3RTX_DIAGNOSTICS (CMake option, default ON): 0 compiles out diagnostic-only host
@@ -55,6 +56,7 @@ uint64_t hash64(const void* data, size_t size);   // FNV-1a 64
 // ---- config (util.cpp) ----
 void cfg_poll();                       // re-reads bg3rtx.ini when it changes
 int cfg_int(const char* key, int fallback);
+inline unsigned stats_period(unsigned native) { return stats_window::period(cfg_int, native); }
 // rt_order_trace=N: log record/submit order of the scene build and the RT passes for N
 // frames every 600 frames (P1 frame-lag diagnosis).
 #if BG3RTX_DIAGNOSTICS
@@ -357,7 +359,8 @@ void count_pass();
 enum DiagCounter { DIAG_PRESENT, DIAG_PIPELINES, DIAG_PIPELINE_US, DIAG_DESC_WRITES, DIAG_SHADER_MODULES, DIAG_SUBMIT, DIAG_BEGIN_CMD, DIAG_BEGIN_PASS, DIAG_BEGIN_RENDERING, DIAG_BIND_PIPE, DIAG_DRAW,
                    DIAG_DISPATCH, DIAG_EXEC, DIAG_DISPLAYED, DIAG_SUBMIT_US, DIAG_DESCRIPTOR_US, DIAG_ALPHA_DESC_US, DIAG_ALPHA_DESC_CALLS, DIAG_AUX_COALESCED, DIAG_COUNT };
 void diag(DiagCounter c, uint64_t n = 1);
-void watchdog_start();                     // passes per frame feed the auto trigger
+void watchdog_start();
+void watchdog_stats_tick(uint64_t frame);                     // passes per frame feed the auto trigger
 void dumps_on_submit(const std::vector<VkCommandBuffer>& cmds, uint64_t frame);
 void dumps_finish(uint64_t frame, const std::string& capture_dir, VkQueue queue);
 bool write_png_rgb(const std::string& path, uint32_t w, uint32_t h, const std::vector<uint8_t>& rgb);
@@ -928,6 +931,8 @@ void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
 // After a device loss (layer/devfault.cpp): the strand breadcrumbs (common/hair_primary.h kCrumbAddrOffset).
 void hair_primary_fault_log();
+void hair_primary_stats_reset();
+void alpha_stats_reset();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);

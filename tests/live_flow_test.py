@@ -70,6 +70,13 @@ class PipelineReadinessTests(unittest.TestCase):
         f.pipeline_readiness.apply(j, p)
         self.assertFalse(any(row.get("wait_log") for row in p))
 
+    def test_exact_k_settings_reset_requires_known_pipeline_family(self):
+        j = dict(set='ls_k=0')
+        p = [phase('before', values='ls_k=0'), phase('settings-reset', values='ls_k=1')]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+        self.assertIn(r'gi: gi/rt_local_shadows[^ ]*_k\.hlsl[^ ]* generation ', p[1]['wait_log'])
+
     def test_temporal_wait_uses_cached_pipeline_and_fresh_quiescence(self):
         j = dict(set="rr_post_temporal=0")
         p = [phase("before"), phase("on", values="rr_post_temporal=1")]
@@ -101,7 +108,11 @@ class FlowTests(unittest.TestCase):
     def test_wsf1_window4_replays_stretched_complete_period(self):
         data = f.read(f.ROOT / 'tests/fixtures/window_stall_wsf1.json')
         job, plan, _ = f.load_job(f.ROOT / 'tools/live_batches/water_surface_fresnel/jobs/wsf1-s8-interface-column.json')
-        self.assertEqual(plan[4]['seconds'], data['new_seconds'])
+        # Historical replay retains its original seconds window; regenerated
+        # plans now terminate on reset-aligned frame counts.
+        plan[4] = dict(plan[4], seconds=data['new_seconds'])
+        for field in ('frames', 'settle_frames', 'stats_reset', 'wait_stats'):
+            plan[4].pop(field, None)
         clock = f.fps_windows.gates._sec
         ready = data['runner'].splitlines()[-1]
         self.assertAlmostEqual(clock(data['new_end']) - clock(ready), plan[4]['seconds'])
@@ -136,11 +147,56 @@ class FlowTests(unittest.TestCase):
             j['expect_every'] = [dict(select='capacity', period_frames=120, windows=['capture'])]
             self.assertTrue(f.window_problems(j, p)[0])
             f.retime(j, p)
-            self.assertEqual(p[0]['seconds'], 13.9)
+            self.assertEqual(p[0]['frames'], 60)
+            self.assertEqual(p[0]['seconds'], 10.1)
             self.assertFalse(f.window_problems(j, p)[0])
             f.TRACE_STALL.clear()
             self.assertEqual(f.capture_stall(j['live_flow']), 2.4)
-            self.assertEqual(f.duration_budget(j, p)['windows'][0]['minimum_seconds'], 13.9)
+            self.assertEqual(f.duration_budget(j, p)['windows'][0]['minimum_seconds'], 10.1)
+
+    def test_frame_counts_do_not_depend_on_scene_fps(self):
+        j, _ = fixture()
+        j['expect_every'] = [dict(select='rt passes: GPU cost', min=2,
+                                  settle_frames=8, windows=['cost'])]
+        counts = []
+        seconds = []
+        for fps in (5, 60):
+            job, plan = deepcopy(j), [phase('cost')]
+            with patch.object(f.fps_windows, 'expected', return_value=dict(fps=fps)):
+                f.frame_windows(job, plan)
+                counts.append(plan[0]['frames'])
+                seconds.append(plan[0]['seconds'])
+                self.assertTrue(plan[0]['stats_reset'])
+                self.assertEqual(plan[0]['wait_stats'], ['rt passes: GPU cost'])
+                self.assertFalse(f.window_problems(job, plan)[0])
+        self.assertEqual(counts, [68, 68])
+        self.assertGreater(seconds[0], seconds[1])
+
+    def test_standalone_settling_uses_reconstruction_frame_count(self):
+        j, _ = fixture()
+        j['expect_every'] = []
+        j['set'] += ',rt_stats_period_frames=0'
+        p = [phase('settle-off'), phase('settle-on', values='rr_post_temporal=1')]
+        f.frame_windows(j, p)
+        self.assertEqual(f.settings(j['set'])['rt_stats_period_frames'], '60')
+        self.assertEqual([x['frames'] for x in p], [32, 108])
+        self.assertTrue(all(x['stats_reset'] and not x['wait_stats'] for x in p))
+
+    def test_frame_period_override_preserves_unknown_and_startup(self):
+        state = {'rt_stats_period_frames': '60'}
+        self.assertEqual(f.period(dict(select='rt passes: GPU cost'), state, 10), 6)
+        self.assertIsNone(f.period(dict(select='new unknown producer'), state, 10))
+        self.assertIsNone(f.period(dict(select=r'\[hit material paks\] loaded'), state, 10))
+
+    def test_noise_and_trend_counts_are_not_weakened(self):
+        j, _ = fixture()
+        j['expect_every'] = [dict(select='rt passes: GPU cost', min=2, trend=True,
+                                  windows=['cost'])]
+        p = [phase('cost')]
+        f.frame_windows(j, p)
+        self.assertEqual(j['expect_every'][0]['min'], 2)
+        self.assertEqual(p[0]['frames'], 120)
+        self.assertEqual(f.period(j['expect_every'][0], f.settings(j['set']), 30), 2)
 
     def test_trace_export_quantile_and_previous_phase_serialization(self):
         entry = dict(runner='00:00:01.000 [motion-trace]\n00:00:02.000 [motion-trace]',

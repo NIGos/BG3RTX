@@ -4,7 +4,7 @@
   "traces": 0,
   "hold": 120,
   "repeat": 1,
-  "set": "crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi=1,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,gi_rt=1,gi_rt_fallback=0,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_stats=0,pan_capture=0,pan_inputs=0,pan_prepare=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_shade=0,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_em_fx_pulse=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_generated=0,rt_hit_material_instanced=1,rt_hit_material_ip_grass=0,rt_hit_material_paks=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_mesh_content_id=1,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_reflections=1,rt_scene_wait_log_frames=120,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_water_empty_tiles=0,rt_xfb_mb=1024,sharc=0,sharc_device=1",
+  "set": "crash_dump=0,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi=1,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,gi_rt=1,gi_rt_fallback=0,headless=0,ls_box=0,ls_check=0,ls_debug=0,ls_k=0,ls_stats=0,pan_capture=0,pan_inputs=0,pan_prepare=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_shade=0,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_compact_hit_state=0,rt_debug=0,rt_em_fx_pulse=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_generated=0,rt_hit_material_instanced=1,rt_hit_material_ip_grass=0,rt_hit_material_paks=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_mesh_content_id=1,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_reflections=1,rt_scene_wait_log_frames=120,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_sun_cascade_current=0,rt_timing_frames=120,rt_water_empty_tiles=0,rt_xfb_mb=1024,sharc=0,sharc_device=1",
   "patterns": [
     "\\[hot\\]",
     "\\[ngx\\] RR create",
@@ -57,7 +57,7 @@
   "window_mode": "visible_unfocused_fg",
   "name": "combined-Campsite---27h-part1",
   "live_batch": "combined",
-  "timeout": 3616.0,
+  "timeout": 3386.0,
   "args": [
     "-RealPresent",
     "-Move",
@@ -69,7 +69,7 @@
     "\\[hit material paks\\] loaded 40983 candidates",
     "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*",
     "gi: trace pass .*GPU median",
-    "gi: GPU cost .*average of 300 frames",
+    "gi: GPU cost .*average of \\d+ frames",
     "\\[trace\\] frame \\d+ written",
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
     "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
@@ -210,7 +210,7 @@
     {
       "name": "b2-go1-camp--complete trace timer every cost state",
       "select": "gi: trace pass",
-      "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+      "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames\\)",
       "min": 1,
       "windows": [
         "b2-go1-camp--cost-off-a",
@@ -225,7 +225,7 @@
     {
       "name": "b2-go1-camp--complete GI timer every cost state",
       "select": "gi: GPU cost",
-      "match": "average of 300 frames",
+      "match": "average of \\d+ frames",
       "min": 1,
       "windows": [
         "b2-go1-camp--cost-off-a",
@@ -240,7 +240,7 @@
     {
       "name": "b2-go1-camp--rf: reflection pass complete timer per cost state",
       "select": "rf: reflection pass",
-      "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+      "match": "GPU median [0-9.]+ ms, .*\\(\\d+ frames;",
       "period_frames": 300,
       "min": 1,
       "windows": [
@@ -256,7 +256,7 @@
     {
       "name": "b2-go1-camp--ls: local-light shadow pass complete timer per cost state",
       "select": "ls: local-light shadow pass",
-      "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+      "match": "GPU median [0-9.]+ ms, .*\\(\\d+ frames;",
       "period_frames": 300,
       "min": 1,
       "windows": [
@@ -272,7 +272,7 @@
     {
       "name": "b2-go1-camp--enclosing RT cost complete timer",
       "select": "rt passes: GPU cost",
-      "match": "average of 300 frames",
+      "match": "average of \\d+ frames",
       "min": 1,
       "windows": [
         "b2-go1-camp--cost-off-a",
@@ -362,7 +362,7 @@
         }
       ],
       "fail_fast": true,
-      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0",
+      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_stats_period_frames=60",
       "live_flow": {
         "expected_fps": 30,
         "settings_latency_s": 1,
@@ -434,18 +434,18 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.3019999999960419,
+          "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 0.43699999999807915
+          "samples": 370,
+          "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.7200900000000003,
-          "source": "wf1-s8-fg2.1.100826.log",
+          "seconds": 2.61315,
+          "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 2.9799,
-          "logs": 65
+          "samples": 365,
+          "maximum": 2.90531,
+          "logs": 58
         }
       }
     },
@@ -476,7 +476,7 @@
       "expect": [
         "\\[auto\\] scene ready",
         "gi: trace pass .*GPU median",
-        "gi: GPU cost .*average of 300 frames",
+        "gi: GPU cost .*average of \\d+ frames",
         "\\[trace\\] frame \\d+ written",
         "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
         "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
@@ -606,7 +606,7 @@
         {
           "name": "b2-go1-camp--complete trace timer every cost state",
           "select": "gi: trace pass",
-          "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+          "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(\\d+ frames\\)",
           "min": 1,
           "windows": [
             "b2-go1-camp--cost-off-a",
@@ -621,7 +621,7 @@
         {
           "name": "b2-go1-camp--complete GI timer every cost state",
           "select": "gi: GPU cost",
-          "match": "average of 300 frames",
+          "match": "average of \\d+ frames",
           "min": 1,
           "windows": [
             "b2-go1-camp--cost-off-a",
@@ -636,7 +636,7 @@
         {
           "name": "b2-go1-camp--rf: reflection pass complete timer per cost state",
           "select": "rf: reflection pass",
-          "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+          "match": "GPU median [0-9.]+ ms, .*\\(\\d+ frames;",
           "period_frames": 300,
           "min": 1,
           "windows": [
@@ -652,7 +652,7 @@
         {
           "name": "b2-go1-camp--ls: local-light shadow pass complete timer per cost state",
           "select": "ls: local-light shadow pass",
-          "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+          "match": "GPU median [0-9.]+ ms, .*\\(\\d+ frames;",
           "period_frames": 300,
           "min": 1,
           "windows": [
@@ -668,7 +668,7 @@
         {
           "name": "b2-go1-camp--enclosing RT cost complete timer",
           "select": "rt passes: GPU cost",
-          "match": "average of 300 frames",
+          "match": "average of \\d+ frames",
           "min": 1,
           "windows": [
             "b2-go1-camp--cost-off-a",
@@ -712,7 +712,7 @@
         }
       ],
       "fail_fast": true,
-      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024,rt_stats_period_frames=60",
       "live_flow": {
         "expected_fps": 30,
         "settings_latency_s": 1,
@@ -784,23 +784,23 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.3019999999960419,
+          "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 0.43699999999807915
+          "samples": 370,
+          "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.7200900000000003,
-          "source": "wf1-s8-fg2.1.100826.log",
+          "seconds": 2.61315,
+          "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 2.9799,
-          "logs": 65
+          "samples": 365,
+          "maximum": 2.90531,
+          "logs": 58
         }
       }
     }
   ],
-  "estimated_phase_seconds": 675.4,
+  "estimated_phase_seconds": 212.4,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -872,24 +872,24 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.3019999999960419,
+      "seconds": 0.29200000000128057,
       "quantile": 0.95,
-      "samples": 402,
-      "maximum": 0.43699999999807915
+      "samples": 365,
+      "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
-      "seconds": 2.7200900000000003,
-      "source": "wf1-s8-fg2.1.100826.log",
+      "seconds": 2.61315,
+      "source": "wf7a-s8-fg2.1.164300.log",
       "quantile": 0.95,
-      "samples": 402,
-      "maximum": 2.9799,
-      "logs": 65
+      "samples": 365,
+      "maximum": 2.90531,
+      "logs": 58
     },
     "segments": [
       {
         "offset": 0,
         "count": 7,
-        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0",
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=0,rt_hit_material_paks=1,rt_hit_emission=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,rt_mesh_content_id=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_stats_period_frames=60",
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -961,25 +961,25 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3019999999960419,
+            "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 0.43699999999807915
+            "samples": 370,
+            "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.7200900000000003,
-            "source": "wf1-s8-fg2.1.100826.log",
+            "seconds": 2.61315,
+            "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 2.9799,
-            "logs": 65
+            "samples": 365,
+            "maximum": 2.90531,
+            "logs": 58
           }
         }
       },
       {
         "offset": 8,
         "count": 21,
-        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024,rt_stats_period_frames=60",
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -1051,18 +1051,18 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3019999999960419,
+            "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 0.43699999999807915
+            "samples": 370,
+            "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.7200900000000003,
-            "source": "wf1-s8-fg2.1.100826.log",
+            "seconds": 2.61315,
+            "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 2.9799,
-            "logs": 65
+            "samples": 365,
+            "maximum": 2.90531,
+            "logs": 58
           }
         }
       }

@@ -487,6 +487,12 @@ int main() {
     CHECK(stats_window_due(1920, logged) && !stats_window_due(1920, logged));   // one line per window
     CHECK(stats_window_due(2100, logged) && logged == 17);   // a window with no query at all is skipped, not owed
     CHECK(!stats_window_due(2000, logged));                  // never a window twice (out-of-order slot frames)
+    logged = 0; // reset-relative frame zero: never accept a straddling bucket
+    CHECK(!stats_window_due(59, logged, 60));
+    CHECK(stats_window_due(60, logged, 60));
+    CHECK(!stats_window_due(61, logged, 60));
+    CHECK(stats_window_due(121, logged, 60));
+
   }
   std::printf("native_hit_instanced_test: %u checks passed\n", checks);
   return 0;

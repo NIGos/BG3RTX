@@ -26,10 +26,10 @@
     "seconds": 1.1,
     "capture_at": 0,
     "serial": 0,
-    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0",
+    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=0",
     "wait_log": [
       "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
-      "\\[pace\\] rendered frame time over 600 frames",
+      "\\[pace\\] rendered frame time over \\d+ frames",
       "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
       "\\[hit material capacity\\] frame \\d+ ",
       "hit material \\(\\d+ frames\\): attempted [1-9]\\d* qualified \\d+ unsupported \\d+; reasons base/epoch/row/clip/geometry/sampling/fields/frame/parameters \\d+(/\\d+){8}; of base, instance without a material record \\d+",
@@ -67,7 +67,7 @@
     "label": "diag-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.3,
+    "seconds": 5.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -76,7 +76,17 @@
     "motion_end": 16.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
+    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material generated\\] frame \\d+ key",
+      "\\[hit material generated\\] frame \\d+ key 0",
+      "hit material \\(\\d+ frames\\): attempted",
+      "\\[hit material capacity\\] frame \\d+ "
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "gap-diag-on",
@@ -105,7 +115,7 @@
     "label": "diag-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.3,
+    "seconds": 5.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -114,7 +124,20 @@
     "motion_end": 16.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
+    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material generated\\] frame \\d+ key",
+      "\\[hit material generated\\] frame \\d+ key 1",
+      "hit material instanced clip \\(\\d+ frames\\)",
+      "hit material \\(\\d+ frames\\): attempted",
+      "\\[hit material instanced\\] frame \\d+ key 1; wind:",
+      "\\[hit material instanced\\] frame \\d+ wind RGB 2S: prepass",
+      "\\[hit material capacity\\] frame \\d+ "
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "gap-diag-off-b",
@@ -143,7 +166,7 @@
     "label": "diag-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.3,
+    "seconds": 5.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -152,13 +175,23 @@
     "motion_end": 16.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1"
+    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material generated\\] frame \\d+ key",
+      "\\[hit material generated\\] frame \\d+ key 0",
+      "hit material \\(\\d+ frames\\): attempted",
+      "\\[hit material capacity\\] frame \\d+ "
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.6,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -167,13 +200,22 @@
     "motion_end": 20.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_generated=0,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.6,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -190,13 +232,21 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 40
+    "wait_log_timeout": 40,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ]
   },
   {
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.6,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -213,7 +263,15 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 40
+    "wait_log_timeout": 40,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ]
   },
   {
     "label": "shot-off-a",

@@ -263,6 +263,12 @@ class Monitor {
   struct Window { unsigned frames = 0, waiting = 0, started = 0; size_t pending = 0; };
   struct Burst { unsigned builds = 0; uint64_t frames = 0; double ms = 0, longest_ms = 0; };
   enum : unsigned { kWindow = 1, kBurst = 2 };
+  void reset_window(uint64_t started_total, double now_ms) {
+    win_ = Window{};
+    last_started_ = started_total;
+    last_ms_ = now_ms;
+    have_last_ = true;
+  }
   // One call per present: `pending` and `started_total` from Builds, `now_ms` a steady clock.
   unsigned tick(size_t pending, uint64_t started_total, double now_ms, unsigned window_frames, Window* w, Burst* b) {
     unsigned out = 0;

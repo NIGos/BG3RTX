@@ -29,7 +29,11 @@
     "wait_log_fresh",
     "wait_log_timeout",
     "recenter",
-    "reload_selected"
+    "reload_selected",
+    "frames",
+    "settle_frames",
+    "stats_reset",
+    "wait_stats"
   ],
   "analysis_only": [
     "registration_policy"

@@ -70,13 +70,24 @@ def main():
     import re
     wf9 = json.loads((ROOT / "tools/live_batches/water_flicker_wf9/jobs/wf9-s8-compose-shift.json").read_text())
     static_camera_gate = next(g for g in wf9["expect_every"] if g["name"] == "static build-camera delta < 0.01 m")
+    compose_cpu_suffix = ("; CPU hit shade selected spec 0/1/2 passes 120/0/0, flag 64 passes 0; "
+                          "refused light-binding/input-lifetime/scene-material/frame-shift 120/120/0/0 "
+                          "(overlapping, first light mismatch index 2, bindings 22..28)")
     check("wf9 checks both static ON windows", static_camera_gate["windows"] == ["energy-static-1", "energy-static-3"])
     for delta, samples, expected in [("0.000000", 120, True), ("0.009999", 120, True),
                                       ("0.010000", 120, False), ("294.800000", 120, False), ("0.000000", 0, False)]:
         line = f"[core] [water] compose (120 frames): build-camera delta avg/max {delta}/294.800000 m ({samples} last-pass samples)"
-        check(f"wf9 static delta {delta}, samples {samples}",
-              bool(re.search(static_camera_gate["select"], line)) and
-              bool(re.search(static_camera_gate["match"], line)) == expected)
+        for suffix in ("", compose_cpu_suffix):
+            check(f"wf9 static delta {delta}, samples {samples}, CPU fields {bool(suffix)}",
+                  bool(re.search(static_camera_gate["select"], line + suffix)) and
+                  bool(re.search(static_camera_gate["match"], line + suffix)) == expected)
+    wo1 = json.loads((ROOT / "tools/live_batches/water_offscreen/jobs/wo1-s8-hit-shade.json").read_text())
+    hit_line = ("[core] [water] compose (120 frames): hit shade attempted 100, hidden 80, offscreen 20, "
+                "rejected material/light/sun/invalid 0/0/0/0; world truncated 0" + compose_cpu_suffix)
+    for g in wo1["expect_every"]:
+        if "hit shade attempted" in g["match"] or "world truncated" in g["match"]:
+            if re.search(g["select"], hit_line):
+                check("wo1 appended CPU fields: " + g["name"], bool(re.search(g["match"], hit_line)))
     check("the old any-line expect passes the bad run (the bug)", bool(re.search(OK, bad_run)))
     f = queue_gates.check(gate(windows=["diag-on"]), bad_run, RUNNER, PLAN)
     check("every-window gate fails the bad run", len(f) == 1 and "1 of 2 line(s) fail" in f[0] and "3.1362" in f[0])
@@ -316,6 +327,40 @@ class MidnightTests(unittest.TestCase):
             self.assertFalse(queue_gates.check([dict(select="event", match="ok", event=True, windows=["cost"])],
                                          game_text, runner_text, [dict(label="cost")]))
 
+
+
+
+class ResetPeriodTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = [dict(label='on', stats_reset=True, wait_log=['ready'])]
+        self.runner = ('10:00:00.000 [pan-plan] window 0\n'
+                       '10:00:02.100 [motion-ready] phase=0 stats_reset=7 frame=100\n'
+                       '10:00:05.000 [motion-plan] complete')
+        self.log = ('10:00:00.100 [cfg] settings read\n'
+                    '10:00:02.000 [stats] reset token=7 frame=100\n'
+                    '10:00:04.000 coverage swaps 1\n'
+                    '10:00:04.001 cost good')
+        self.gate = dict(select='cost ', match='good', windows=['on'])
+
+    def test_first_complete_period_after_ack_counts(self):
+        self.assertEqual(queue_gates.check([self.gate], self.log, self.runner, self.plan), [])
+        self.assertTrue(queue_gates.check([dict(self.gate, min=2)], self.log, self.runner, self.plan))
+        self.assertTrue(queue_gates.check([self.gate], self.log.replace('cost good','cost bad'), self.runner, self.plan))
+
+    def test_runner_poll_delay_does_not_drop_acknowledged_complete_period(self):
+        late_runner=self.runner.replace('10:00:02.100 [motion-ready]', '10:00:04.500 [motion-ready]')
+        self.assertEqual(queue_gates.check([self.gate], self.log, late_runner, self.plan), [])
+
+    def test_missing_stale_or_wrong_ack_cannot_pass(self):
+        for log in [self.log.replace('token=7','token=8'),
+                    self.log.replace('10:00:02.000 [stats]', '09:59:59.000 [stats]')]:
+            self.assertTrue(queue_gates.check([self.gate], log, self.runner, self.plan))
+        legacy = [dict(label='on', wait_log=['ready'])]
+        self.assertTrue(queue_gates.check([self.gate], self.log, self.runner.replace(' stats_reset=7 frame=100',''), legacy))
+
+    def test_first_complete_trigger_after_reset_is_required(self):
+        gate = dict(self.gate, required_if=dict(select='coverage ',match='swaps 1'))
+        self.assertTrue(queue_gates.check([gate], self.log.replace('cost good','cost bad'), self.runner, self.plan))
 
 
 class NumericItemsTests(unittest.TestCase):

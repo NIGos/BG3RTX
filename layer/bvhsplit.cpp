@@ -872,6 +872,7 @@ struct GroomStats {
   uint32_t lod[kGroomLods] = {};
   uint64_t miss[size_t(hair_groom::JoinMiss::Count)] = {};
 } g_groom_st;
+uint64_t g_groom_stats_start = 0;
 std::unordered_set<uint32_t> g_groom_logged_counts;
 std::unordered_set<uint64_t> g_groom_logged_unmatched;   // (index count, verdict) of unmatched hair draws, logged once
 
@@ -2772,7 +2773,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   std::vector<Fixup> fix;
   const int draw_log = cfg_int("rt_mesh_draw_log", 0);
   const bool draw_sample = draw_log && now % uint64_t(draw_log > 1 ? draw_log :
-                                      (std::max)(cfg_int("rt_timing_frames", 300), 30)) == 0;
+                                      stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)))) == 0;
   uint32_t n = 0;
   // Local copies of each instance's BLAS reference and flags for the TLAS signature and
   // the chunk guard below: reading them back from the mapped ring is uncached (P3).
@@ -3591,11 +3592,11 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_count = groom_count;
   out->groom_first = n;
   g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
-  if (g_groom_on && now % 300 == 0) {
-    log("[hair groom] frame %llu: %u groom instances; last 300 frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
+  if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
+    log("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
         "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB",
-        (unsigned long long)now, groom_count, g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
+        (unsigned long long)now, groom_count, stats_period(300), g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
         g_groom_st.lod[2], (unsigned long long)g_groom_st.builds, (unsigned long long)g_groom_st.refits,
         (unsigned long long)g_groom_st.compacted, (unsigned long long)g_groom_st.unmatched,
         (unsigned long long)g_groom_st.miss[1], (unsigned long long)g_groom_st.miss[2], (unsigned long long)g_groom_st.miss[3],
@@ -3675,7 +3676,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       s_min = d_min = UINT32_MAX; s_max = d_max = 0;
     }
   }
-  if (++g_phase_n >= 300) {
+  if (++g_phase_n >= stats_period(300)) {
     if (cfg_int("cpu_timing", 0))
       log("[cpu] bvh_build phases, ms/build over %llu: decide %.3f, per-draw BLAS keys %.3f, TLAS instances %.3f, "
           "GPU convert/extract/compaction %.3f, BLAS/TLAS build recording %.3f",
@@ -4146,6 +4147,12 @@ void bvh_on_present() {
   if (!g_on) return;
   std::lock_guard<std::mutex> lock(g_mu);
   const uint64_t now = frame_index();
+  static int reset_token = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    std::lock_guard<std::mutex> sl(g_st_mu); g_st = Stats{};
+    g_groom_st = GroomStats{}; g_groom_stats_start = now;
+    for (double& v : g_phase_ms) v = 0; g_phase_n = 0;
+  }
   pool_repack_poll(now);
   // Ranges of evicted meshes and slots, once no frame in flight can use them:
   // the GPU must have finished frame + 2 (as defer_tick), not just 6 presents
@@ -4371,7 +4378,7 @@ void bvh_on_present() {
   for (auto it = g_rejected.begin(); it != g_rejected.end();)
     it = now > it->second.until + 72000 ? g_rejected.erase(it) : std::next(it);
 
-  int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (g_st.builds < uint64_t(every)) return;
   Stats s;
   {

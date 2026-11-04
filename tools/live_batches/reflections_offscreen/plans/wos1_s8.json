@@ -56,13 +56,13 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.4,
+    "seconds": 3.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -79,7 +79,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] compose GPU",
+      "\\[water\\] coverage \\(",
+      "\\[water\\] (reflections|compose) \\("
+    ]
   },
   {
     "label": "shot-off-a",
@@ -104,7 +116,7 @@
     "label": "cost-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.4,
+    "seconds": 3.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -121,7 +133,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] compose GPU",
+      "\\[water\\] coverage \\(",
+      "\\[water\\] (reflections|compose) \\("
+    ]
   },
   {
     "label": "shot-on",
@@ -146,7 +170,7 @@
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.4,
+    "seconds": 3.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -163,7 +187,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] compose GPU",
+      "\\[water\\] coverage \\(",
+      "\\[water\\] (reflections|compose) \\("
+    ]
   },
   {
     "label": "shot-off-b",
@@ -243,7 +279,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0
   },
   {
     "label": "return-on",
@@ -285,7 +321,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0
   },
   {
     "label": "return-off-b",

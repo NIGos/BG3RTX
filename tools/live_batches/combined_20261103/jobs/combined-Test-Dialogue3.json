@@ -6,10 +6,10 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 1841,
+  "timeout": 3037.0,
   "repeat": 1,
   "stop_on_dump": false,
-  "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_ao=1.0,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
+  "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_ao=1.0,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_stats_period_frames=60,rt_timing_frames=120,rt_xfb_mb=1024",
   "args": [
     "-RealPresent",
     "-Move",
@@ -2211,7 +2211,7 @@
         }
       ],
       "fail_fast": true,
-      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,pan_post=1,qa_exposure_hold=0",
+      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,pan_post=1,qa_exposure_hold=0,rt_stats_period_frames=60",
       "live_flow": {
         "expected_fps": 30,
         "settings_latency_s": 1,
@@ -2240,18 +2240,18 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.3019999999960419,
+          "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 0.43699999999807915
+          "samples": 370,
+          "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.7200900000000003,
-          "source": "wf1-s8-fg2.1.100826.log",
+          "seconds": 2.61315,
+          "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 2.9799,
-          "logs": 65
+          "samples": 365,
+          "maximum": 2.90531,
+          "logs": 58
         }
       }
     },
@@ -2547,7 +2547,7 @@
         }
       ],
       "fail_fast": true,
-      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
+      "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rt_stats_period_frames=60",
       "live_flow": {
         "expected_fps": 30,
         "settings_latency_s": 1,
@@ -2575,23 +2575,23 @@
           }
         ],
         "trace_export": {
-          "seconds": 0.3019999999960419,
+          "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 0.43699999999807915
+          "samples": 370,
+          "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.7200900000000003,
-          "source": "wf1-s8-fg2.1.100826.log",
+          "seconds": 2.61315,
+          "source": "wf7a-s8-fg2.1.164300.log",
           "quantile": 0.95,
-          "samples": 402,
-          "maximum": 2.9799,
-          "logs": 65
+          "samples": 365,
+          "maximum": 2.90531,
+          "logs": 58
         }
       }
     }
   ],
-  "estimated_phase_seconds": 584.4,
+  "estimated_phase_seconds": 580.2,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -2620,24 +2620,24 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.3019999999960419,
+      "seconds": 0.29200000000128057,
       "quantile": 0.95,
-      "samples": 402,
-      "maximum": 0.43699999999807915
+      "samples": 365,
+      "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
-      "seconds": 2.7200900000000003,
-      "source": "wf1-s8-fg2.1.100826.log",
+      "seconds": 2.61315,
+      "source": "wf7a-s8-fg2.1.164300.log",
       "quantile": 0.95,
-      "samples": 402,
-      "maximum": 2.9799,
-      "logs": 65
+      "samples": 365,
+      "maximum": 2.90531,
+      "logs": 58
     },
     "segments": [
       {
         "offset": 0,
         "count": 87,
-        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,pan_post=1,qa_exposure_hold=0",
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,pan_post=1,qa_exposure_hold=0,rt_stats_period_frames=60",
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -2666,25 +2666,25 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3019999999960419,
+            "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 0.43699999999807915
+            "samples": 370,
+            "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.7200900000000003,
-            "source": "wf1-s8-fg2.1.100826.log",
+            "seconds": 2.61315,
+            "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 2.9799,
-            "logs": 65
+            "samples": 365,
+            "maximum": 2.90531,
+            "logs": 58
           }
         }
       },
       {
         "offset": 88,
         "count": 38,
-        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rt_stats_period_frames=60",
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -2712,18 +2712,18 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3019999999960419,
+            "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 0.43699999999807915
+            "samples": 370,
+            "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.7200900000000003,
-            "source": "wf1-s8-fg2.1.100826.log",
+            "seconds": 2.61315,
+            "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 2.9799,
-            "logs": 65
+            "samples": 365,
+            "maximum": 2.90531,
+            "logs": 58
           }
         }
       }

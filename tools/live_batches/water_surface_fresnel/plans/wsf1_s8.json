@@ -52,7 +52,7 @@
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 4.354000000006636,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
@@ -62,7 +62,7 @@
     "label": "partition-static-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 15.4,
+    "seconds": 10.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -84,13 +84,24 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU"
+    ]
   },
   {
     "label": "partition-static-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 15.4,
+    "seconds": 10.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -112,13 +123,27 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+      "\\[water\\] surface partition:",
+      "\\[water\\] surface FS GPU"
+    ]
   },
   {
     "label": "partition-static-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 15.4,
+    "seconds": 10.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -140,13 +165,24 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU"
+    ]
   },
   {
     "label": "partition-static-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 15.4,
+    "seconds": 10.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -168,7 +204,21 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+      "\\[water\\] surface partition:",
+      "\\[water\\] surface FS GPU"
+    ]
   },
   {
     "label": "cost-turn-0",
@@ -193,7 +243,18 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU"
+    ]
   },
   {
     "label": "cost-turn-1",
@@ -218,7 +279,21 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+      "\\[water\\] surface partition:",
+      "\\[water\\] surface FS GPU"
+    ]
   },
   {
     "label": "cost-turn-2",
@@ -243,7 +318,18 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU"
+    ]
   },
   {
     "label": "cost-turn-3",
@@ -268,7 +354,21 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] surface Fresnel \\(\\d+ frames\\):",
+      "\\[water\\] surface partition:",
+      "\\[water\\] surface FS GPU"
+    ]
   },
   {
     "label": "restore",
@@ -292,6 +392,6 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 6.464000000007218
+    "wait_log_timeout": 4.354000000006636
   }
 ]

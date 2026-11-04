@@ -2540,7 +2540,9 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     }
   }
 
-  if (g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(g_fg_running ? cfg_int("fg_state_every", 60) : 600)) {
+  static int stats_reset_token = 0;
+  if (stats_window::reset(cfg_int, stats_reset_token)) g_last_state_log = frame;
+  if (g_sl.DLSSGGetState && frame >= g_last_state_log + uint64_t(stats_period(unsigned(g_fg_running ? cfg_int("fg_state_every", 60) : 600)))) {
     sl::DLSSGState st{};
     g_sl.DLSSGGetState(0, st, nullptr);
     uint64_t shown = g_displayed.load();

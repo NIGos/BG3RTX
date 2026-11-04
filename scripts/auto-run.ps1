@@ -657,7 +657,7 @@ function Send-UiKey([int]$vk, [int]$scan) {
 }
 if ($MovePlan -and (-not $Move -or -not $Background)) { throw '-MovePlan requires -Move -Background' }
 $panIndex = -1; $panAt = $null; $panCaptureSent = $false; $panNextKey = [datetime]::MinValue; $shiftHeld = $false; $shiftNext = [datetime]::MinValue
-$phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
+$phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=0L; $phaseStatsText=""; $phaseStatsComplete=$false
 . (Join-Path $PSScriptRoot 'queue-reload.ps1')
 $hairReload = $null
 $wheelSent = 0; $wheelNext = [datetime]::MinValue   # step.wheel: mouse-wheel notches posted at the phase start
@@ -665,6 +665,7 @@ $rotateHeld = $false; $rotateSegment = -1; $rotateX = 0; $rotateY = 0
 $planClock = [System.Diagnostics.Stopwatch]::StartNew(); $phaseStartMs = 0.0
 $frameRotation = @{label="";frame=0;offset=0;segment=0}
 $motionFrame=0L; $motionLogPos=0L
+$statsFrame=0L; $statsLogPos=0L; $statsResetToken=0L; $traceWrites=0L; $phaseTraceWritesStart=0L
 $rotationInput = @{stage="released";at=[double]::NegativeInfinity;segment=-1;x=0;y=0}
 $pointerCentred = $false
 $planHoverNext = [datetime]::MinValue
@@ -713,7 +714,7 @@ while ((Get-Date) -lt $deadline) {
       Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-plan] skipped slice=$($failure.slice) next_phase=$guardNextPhase"
       if($panIndex -ge 0 -and $guardNextPhase -gt $panIndex){
         $panIndex=$guardNextPhase; $panAt=Get-Date; $phaseStartMs=$planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent=$false; $rotateSegment=-1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
+        $panCaptureSent=$false; $rotateSegment=-1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false
         $wheelSent=0; $wheelNext=[datetime]::MinValue; $hairReload=$null
       }
     }
@@ -756,10 +757,34 @@ while ((Get-Date) -lt $deadline) {
     if ($panIndex -ge 0) {
       $step = $panPlan[$panIndex]
       $elapsed = ($planClock.Elapsed.TotalMilliseconds-$phaseStartMs)/1000.0
+      if (($step.frames -or $null -ne $step.trace_at) -and (Test-Path -LiteralPath $log)) {
+        $sf=[IO.File]::Open($log,'Open','Read','ReadWrite,Delete')
+        try {
+          if ($sf.Length -lt $statsLogPos) { $statsLogPos=0L }
+          [void]$sf.Seek($statsLogPos,'Begin')
+          $sr=New-Object IO.StreamReader($sf)
+          $st=$sr.ReadToEnd(); $newline=$st.LastIndexOf("`n")
+          if ($newline -ge 0) {
+            $complete=$st.Substring(0,$newline+1)
+            $statsLogPos += [Text.Encoding]::UTF8.GetByteCount($complete)
+            $traceWrites += [regex]::Matches($complete,'\[trace\] frame \d+ written:').Count
+            if ($phaseReady) { $phaseStatsText += $complete }
+            $phaseStatsComplete=Test-CameraPlanStatsComplete $step $phaseStatsText
+            foreach ($marker in [regex]::Matches($complete,'\[stats\] frame=(\d+)')) {
+              $statsFrame=[Math]::Max($statsFrame,[long]$marker.Groups[1].Value)
+            }
+          }
+        } finally { $sf.Dispose() }
+      }
+      $phaseFinished=if ($step.frames) {
+        Test-CameraPlanFrameComplete $step $phaseFrameStart $statsFrame
+      } else { $elapsed -ge $step.seconds }
+
       # A slow guard/log poll must not skip a phase's settings or trace requests.
       # Keep serialized requests in this phase until the existing request clears.
-      if ($panCaptureSent -and $elapsed -ge $step.seconds -and
-          ($null -eq $step.trace_at -or $phaseTraceIndex -ge @($step.trace_at).Count) -and
+      if ($panCaptureSent -and $phaseFinished -and (-not $step.frames -or $phaseStatsComplete) -and
+          ($null -eq $step.trace_at -or ($phaseTraceIndex -ge @($step.trace_at).Count -and
+            ($traceWrites-$phaseTraceWritesStart -ge $phaseTraceIndex))) -and
           (-not $step.wait_log -or $phaseReady)) {
         # Let the final closed window settle and be checked before normal exit.
         if($panIndex -eq $panPlan.Count-1 -and $env:BG3RTX_QUEUE_CONTEXT_FILE){
@@ -778,7 +803,7 @@ while ((Get-Date) -lt $deadline) {
           $result = if($failFastFailures.Count){'done with failed slices'}else{'done'}; break
         }
         $panAt = Get-Date; $phaseStartMs = $planClock.Elapsed.TotalMilliseconds
-        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false
+        $panCaptureSent = $false; $elapsed = 0; $step = $panPlan[$panIndex]; $rotateSegment = -1; $phaseTraceIndex=0; $phaseReady=$false; $phaseWaitAt=$null; $phaseRecentered=$false; $phaseStatsToken=$null; $phaseFrameStart=$null; $phaseSettleStart=$null; $phaseTraceWritesStart=$traceWrites; $phaseStatsText=""; $phaseStatsComplete=$false
         $wheelSent = 0; $wheelNext = [datetime]::MinValue
         $hairReload = $null
       }
@@ -847,7 +872,7 @@ while ((Get-Date) -lt $deadline) {
       }
       # A cached specialization may already be ready from an earlier phase. Read
       # this run's log independently with sharing; never consume Read-NewLog's cursor.
-      if ($step.wait_log -and -not $phaseReady) {
+      if (($step.wait_log -or $step.stats_reset) -and -not $phaseReady) {
         # Apply the phase's settings at capture_at before awaiting their pipelines.
         if (-not $panCaptureSent) { Start-Sleep -Milliseconds 100; continue }
         if ($null -eq $phaseWaitAt) {
@@ -866,10 +891,41 @@ while ((Get-Date) -lt $deadline) {
           finally { $readyStream.Dispose() }
         }
         $phaseReady=Test-CameraPlanReady $step $readyText $freshText
+        if ($phaseReady -and $step.stats_reset) {
+          if ($null -eq $phaseSettleStart) { $phaseSettleStart=$statsFrame }
+          if ($statsFrame-$phaseSettleStart -lt [long]$step.settle_frames) {
+            $phaseReady=$false
+          } elseif ($null -eq $phaseStatsToken) {
+            # A token edge after settings/pipelines are acknowledged aligns every
+            # periodic producer. Never reuse a stale acknowledgment from warmup.
+            $existing=[regex]::Match((Get-Content -LiteralPath $ini -Raw), '(?m)^rt_stats_reset=(\d+)')
+            if ($existing.Success) { $statsResetToken=[Math]::Max($statsResetToken,[long]$existing.Groups[1].Value) }
+            $statsResetToken++; $phaseStatsToken=$statsResetToken
+            $resetLines=@(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^rt_stats_reset=' })
+            $resetLines += "rt_stats_reset=$phaseStatsToken"
+            $resetLines | Set-Content -LiteralPath $ini
+          }
+          if ($null -ne $phaseStatsToken) {
+            $resetAck=Get-CameraPlanStatsReset $freshText $phaseStatsToken
+            $phaseReady=$null -ne $resetAck
+            if ($phaseReady) {
+              $phaseFrameStart=[long]$resetAck.frame-[long]$step.settle_frames
+              $phaseTraceWritesStart=$traceWrites
+              $phaseStatsText=$freshText.Substring($resetAck.end)
+              $phaseStatsComplete=Test-CameraPlanStatsComplete $step $phaseStatsText
+            }
+          }
+        }
         $waitAnchor=Get-CameraPlanWaitAnchor $phaseShaderProgress $step $readyText $planClock.Elapsed.TotalSeconds $phaseWaitAt
         if (-not $phaseReady) {
-          if ($planClock.Elapsed.TotalSeconds-$waitAnchor -ge $step.wait_log_timeout) {
-            $result="pipeline readiness timed out: $($step.label); missing: $(@(Get-CameraPlanMissing $step $readyText $freshText) -join '; ')"
+          if ($planClock.Elapsed.TotalSeconds-$waitAnchor -ge $([Math]::Max(10,[double]$step.wait_log_timeout))) {
+            $missing=@(Get-CameraPlanMissing $step $readyText $freshText)
+            if ($step.stats_reset -and $null -ne $phaseStatsToken -and $null -eq (Get-CameraPlanStatsReset $freshText $phaseStatsToken)) {
+              $missing += "[stats] reset token=$phaseStatsToken acknowledgment"
+            } elseif ($step.stats_reset -and $null -eq $phaseStatsToken -and $null -ne $phaseSettleStart) {
+              $missing += "settling rendered frames $($statsFrame-$phaseSettleStart)/$($step.settle_frames)"
+            }
+            $result="pipeline readiness timed out: $($step.label); missing: $($missing -join '; ')"
             if($step.label -match '(?:^|--)producer-sanity-'){
               $silent=@($step.wait_log | Where-Object {$readyText -notmatch $_})
               $result='producer silent: '+($silent -join '; ')
@@ -881,8 +937,8 @@ while ((Get-Date) -lt $deadline) {
           continue
         }
         $phaseStartMs=$planClock.Elapsed.TotalMilliseconds; $elapsed=0
-        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
-        Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
+        Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)$(if ($step.stats_reset) { " stats_reset=$phaseStatsToken frame=$($resetAck.frame)" })"
+        Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)$(if ($step.stats_reset) { " stats_reset=$phaseStatsToken frame=$($resetAck.frame)" })"
       }
       # Settings may be acknowledged before a burst finishes. Arm only after
       # motion-ready so measured events retain the same readiness boundary.
@@ -905,6 +961,9 @@ while ((Get-Date) -lt $deadline) {
           $elapsed -ge @($step.trace_at)[$phaseTraceIndex]) {
         $request=Tagged $root 'trace' '.request'
         if (-not (Test-Path -LiteralPath $request)) {
+          # Everything read before the first request belongs to earlier work,
+          # including warmup exports in seconds-only capture phases.
+          if ($phaseTraceIndex -eq 0) { $phaseTraceWritesStart=$traceWrites }
           Set-Content -LiteralPath $request "phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
           Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-trace] phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
           # A late poll or a previous pending request cannot consume the planned
@@ -933,7 +992,8 @@ while ((Get-Date) -lt $deadline) {
         Send-PlanMouse 0x0200 0 ([int]($step.hover_x*($rect.Right-$rect.Left))) ([int]($step.hover_y*($rect.Bottom-$rect.Top)))
         $planHoverNext = (Get-Date).AddMilliseconds(100)
       }
-      $sample = Get-CameraPlanSample $step $elapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
+      $sampleElapsed=if ($step.frames -and -not $phaseFinished -and $elapsed -ge $step.motion_end) { [Math]::Max([double]$step.motion_start,[double]$step.motion_end-0.001) } else { $elapsed }
+      $sample = Get-CameraPlanSample $step $sampleElapsed ([Math]::Max(32,$rect.Right-$rect.Left)) ([Math]::Max(32,$rect.Bottom-$rect.Top))
       $panInMotion = $sample.kind -in @('pan','key_turn') -and $sample.active
       if (-not $panInMotion -and $moving) { Send-MoveKey $false; $moving = $false; if ($step.shift) { Send-ShiftKey $false } }
       if ($panInMotion -and (Get-Date) -ge $panNextKey) {

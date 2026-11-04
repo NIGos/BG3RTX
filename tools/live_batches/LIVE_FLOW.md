@@ -17,31 +17,30 @@ Forbids matching any VALID log fail with a quoted line. Expect patterns are also
 compiled and matched, with hit counts in a JSON `--report`; no historic match
 is required for an expectation about a new effect. Missing corpus evidence fails.
 
-Window gates use the producer cadence, the worst alignment of the next line,
-and the runner's skipped first line after settings apply. The window endpoint is
-exclusive. Every required line must fit; `when_present` does not excuse an
-insufficient window when its pass runs. Known periodic events also have their
-cadence checked. One-off trace/burst events retain event semantics.
-For periodic gates in phases with `wait_log`, scheduled seconds start at
-`[motion-ready]` (auto-run resets the phase clock). Settings latency belongs to
-the separate readiness allowance and is not subtracted again. The first stats
-line is still skipped, and capture stalls and exclusive endpoints still apply.
-`tests/fixtures/window_ready_wsf1_064436.json` retains the exact VALID wsf1 phase 4
-producer lines and readiness/next-window timestamps: its unchanged 15.4 s fits
-at the fresh S8 26.3158 FPS; charging settings latency twice falsely required
-more than 15.5571 s. Readiness alone cannot make a short window valid.
-The initial 89-log refresh found real shortages without a readiness wait in go2-s8
-(first shot 12.7 -> 12.9 s; cost 23.4 -> 24.0 s), go2-s8-medium (cost
-23.4 -> 24.0 s), and smoke_ultra (static 12.8 -> 12.9 s), inherited by
-combined S8 part 1. Its other shot findings, hv3, wf9, wo1, wsf1 and combined
-S8 part 2 were settings-delay false positives. A VALID run remains evidence
-for its actual alignment, not a blanket exemption from future sizing checks.
-Three historical logs disappeared from the shared corpus before final checks;
-the final 86-log corpus gives 26.1552 FPS and a > 23.94 s cost bound. The frozen
-snapshot was refreshed against that readable corpus, without queue writes.
-Trace-write events must have enough scheduled `trace_at` requests and time for
-serialized completion (two presents plus the declared write stall per request).
-A missing request or a completion beyond the exclusive endpoint fails offline.
+Measured periodic comparison windows use rendered frames. Generators set
+`rt_stats_period_frames=60`, `frames`, `settle_frames` and `stats_reset=true`.
+The frame budget is settling plus one complete producer period. A gate with a
+derived larger sample requirement must retain that requirement explicitly.
+FPS converts this budget to seconds for duration and launch-cap estimates; it
+does not decide when the runner ends a frame window.
+
+The runner acknowledges the phase settings and pipelines, waits the settling
+frames, then changes `rt_stats_reset`. It requires the matching
+`[stats] reset token=N frame=F` acknowledgement before logging motion-ready.
+Periodic producers clear their accumulated and pending samples at the reset.
+The first completed period is therefore usable without a straddling-line skip.
+A missing or mismatched acknowledgement cannot establish this boundary. Legacy
+logs without an acknowledged reset keep the conservative first-line skip.
+GPU readback completion can lag the last sampled frame; complete producer lines
+must arrive before the settings advance. A frame count alone is insufficient.
+
+Trace stalls are charged only in windows with trace requests. Trace windows
+retain their requested event counts and wait for completed exports. Trace-only
+capture windows have no periodic stats sample to collect; their completion is
+bounded by the requested exports rather than an assumed frame rate. The
+seconds estimate includes the measured capture stall, without increasing the
+comparison's required sample frames. Non-comparison scene settling, reload and
+failure-survival observations retain their independently justified bounds.
 
 Required pool-log lines also need `rt_stats=1` in each gated window; startup
 candidate-loading lines do not. Producer prerequisites live in `PRODUCER_SETTINGS`.
@@ -75,9 +74,10 @@ decode time alone; dumps without a trace request are excluded. The nearest-rank
 p95 of 437 samples in 75 VALID logs is 2.71857 s (source wf7a 164300, maximum
 2.9799 s). `trace_capture_stall` preserves this evidence in jobs and the lint
 snapshot; the larger of measured p95 and declared trace_stall_s is charged per
-trace, alongside settings latency and the straddling period. Trace export event
-scheduling retains its separate request-to-written model.
-For wsf1, 26.8817 rendered FPS gives 120 / FPS = 4.464 s per geo period:
+trace. Legacy seconds-only windows also charge settings latency and the
+straddling period. Trace export event scheduling retains its separate
+request-to-written model.
+For the historical wsf1 seconds-only plan, 26.8817 rendered FPS gives 120 / FPS = 4.464 s per geo period:
 1 + 2 * 2.71857 + 2 * 4.464 = 15.36514 s, rounded exclusively to 15.4 s.
 The window 4 timing replay in tests/fixtures/window_stall_wsf1.json retains the
 real geo timestamps: 13.642 -> 22.432 is excluded by the old 21.797 endpoint,

@@ -18,7 +18,7 @@
       "gi: gi/[^ ]+ generation ",
       "\\[auto\\] scene ready"
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "warm-off",
@@ -40,7 +40,7 @@
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 60,
+    "wait_log_timeout": 180.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -67,39 +67,57 @@
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 21.1,
+    "seconds": 2.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 21.1,
-    "motion_end": 21.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rt passes: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "diag-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.1,
+    "seconds": 2.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 8.1,
-    "motion_end": 8.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_stats=1,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]",
+      "\\[hit material paks\\] frame"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 60
+    ]
   },
   {
     "label": "shot-on",
@@ -123,16 +141,27 @@
     "label": "cost-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 21.1,
+    "seconds": 2.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 21.1,
-    "motion_end": 21.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_paks=1,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rt passes: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-b",
@@ -158,45 +187,63 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 60
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 21.1,
+    "seconds": 2.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 21.1,
-    "motion_end": 21.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rt passes: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "diag-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 8.1,
+    "seconds": 2.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 8.1,
-    "motion_end": 8.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_stats=1,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hit material paks join\\]",
+      "\\[hit material paks\\] frame"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 60
+    ]
   },
   {
     "label": "shot-on-repeat",
@@ -220,16 +267,27 @@
     "label": "cost-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 21.1,
+    "seconds": 2.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 21.1,
-    "motion_end": 21.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=1,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_paks=1,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rt passes: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-c",
@@ -255,22 +313,33 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 60
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-c",
     "kind": "static",
     "speed": "static",
-    "seconds": 21.1,
+    "seconds": 2.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 21.1,
-    "motion_end": 21.1,
+    "motion_start": 35,
+    "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1"
+    "set": "rt_hit_material_paks=0,rt_stats=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rt passes: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

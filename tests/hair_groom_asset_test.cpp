@@ -422,10 +422,41 @@ int main() {
       latch.prepass(key);
       CHECK(latch.begin() == 0); // repeated prepasses cannot count an orphan
       latch.gbuffer();
+      CHECK(latch.begin() == 0); // allow late G-buffer draws one more epoch
+      CHECK(latch.needs_card_depth(key, false));
+      latch.gbuffer();
       CHECK(latch.begin() == 1); // a genuinely unresolved epoch is counted once
       CHECK(latch.begin() == 0);
       CHECK(!latch.needs_card_depth(key, false));
     }
+  }
+  { // G-buffer draws may be recorded after the next prepass begins.
+    using namespace hair_primary;
+    constexpr uint64_t key = 0xABCD000000000001ULL, F = 100;
+    DepthLatch latch;
+    CHECK(latch.begin() == 0);
+    latch.prepass(key, F);
+    latch.gbuffer(); // pass begin(F), before its draws
+    CHECK(latch.begin() == 0); // prepass(F+1)
+    CHECK(latch.previous.at(key) == F);
+    CHECK(latch.needs_card_depth(key, false)); // late refusal still needs fallback
+    latch.prepass(key, F + 1);
+    CHECK(!latch.needs_card_depth(key, true)); // G-buffer draw(F) swaps
+    latch.resolved(key);
+    CHECK(latch.keys.empty() && latch.previous.empty());
+    latch.gbuffer(); // G-buffer(F+1) also swaps
+    latch.resolved(key);
+    CHECK(latch.begin() == 0);
+    // No G-buffer swap or fallback: retain the original prepass frame until drop.
+    latch.prepass(key, F + 2);
+    latch.gbuffer();
+    CHECK(latch.begin() == 0);
+    CHECK(latch.previous.at(key) == F + 2);
+    latch.gbuffer();
+    CHECK(latch.begin() == 1);
+    CHECK(!latch.needs_card_depth(key, false));
+    latch.gbuffer();
+    CHECK(latch.begin() == 0); // count it only once
   }
   { // Compact draw keys: duplicates share, live slots survive reorder/removal, overflow keeps cards.
     using namespace hair_primary;

@@ -497,7 +497,7 @@ void timing_collect() {
     g_ms_sum += ms;
     ++g_ms_count;
   }
-  if (g_ms_count >= 300) {
+  if (g_ms_count >= stats_period(300)) {
     host->log("gi: GPU cost %.3f ms/frame (average of %u frames)", g_ms_sum / g_ms_count, g_ms_count);
     g_ms_sum = 0;
     g_ms_count = 0;
@@ -542,7 +542,7 @@ void rt_timing_collect() {
     g_rt_ms_sum += ms;
     ++g_rt_ms_count;
   }
-  if (g_rt_ms_count >= 300) {
+  if (g_rt_ms_count >= stats_period(300)) {
     host->log("rt passes: GPU cost %.3f ms/frame (average of %u frames); TLAS this frame %llu, previous frame %llu, "
               "none %llu", g_rt_ms_sum / g_rt_ms_count, g_rt_ms_count, (unsigned long long)g_rt_frames_traced,
               (unsigned long long)g_rt_frames_stale, (unsigned long long)g_rt_frames_missing);
@@ -596,7 +596,7 @@ void trace_timing_collect() {
   if (ms >= 0 && ms < 1000) g_tr_ms[g_tr_rt[old] ? 1 : 0].push_back(float(ms));
   for (int k = 0; k < 2; ++k) {
     auto& v = g_tr_ms[k];
-    if (v.size() < 300) continue;
+    if (v.size() < stats_period(300)) continue;
     std::sort(v.begin(), v.end());
     const int rr_setting=host->cfg_int("gi_rr",-1);
     bool rr_mode=rr_setting<0?host->rr_active():rr_setting!=0;
@@ -1547,7 +1547,7 @@ void rf_hit_fold(const uint32_t* c) {
     g_rfh.d_sq += d * d;
     ++g_rfh.d_frames;
   }
-  if (++g_rfh.frames < 300) return;
+  if (++g_rfh.frames < stats_period(300)) return;
   const uint64_t* t = g_rfh.sum;
   if (t[0] || t[6] || t[7]) {
     const double q = 1.0 / kRfHitScale, n = double(g_rfh.d_frames);
@@ -1605,7 +1605,7 @@ struct HitEmWindow {
 void hit_em_fold(const uint32_t* c) {
   for (uint32_t i = 0; i < kHitEmCount; ++i)
     for (int b = 0; b < 64; ++b) g_hem.sum[i] += c[(kHitEmFirst + i) * 64 + b];
-  if (++g_hem.frames < 300) return;
+  if (++g_hem.frames < stats_period(300)) return;
   const uint64_t* t = g_hem.sum;
   if (t[0] | t[4] | t[8] | t[12]) {
     auto u = [&](uint32_t i) { return (unsigned long long)t[i]; };
@@ -1666,7 +1666,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
                 (unsigned long long)(g_guard_total[2] + g_guard_sum[2]), (unsigned long long)(g_guard_total[3] + g_guard_sum[3]),
                 unk);
     }
-    if (++g_guard_frames >= 300) {
+    if (++g_guard_frames >= stats_period(300)) {
       bool any_unk = false;
       for (uint32_t u = 0; u < kUnknownPasses; ++u) any_unk = any_unk || g_unk_sum[u] != 0;
       if (g_guard_sum[0] || g_guard_sum[1] || g_guard_sum[2] || g_guard_sum[3] || any_unk) {
@@ -1714,7 +1714,7 @@ void stats_begin(VkCommandBuffer cmd, bool alpha_test, bool full, bool scene_cur
     std::memset(g_stats_sum, 0, sizeof g_stats_sum);
     return;
   }
-  if (g_stats_n < 120) return;
+  if (g_stats_n < stats_period(120)) return;
   const uint64_t* t = g_stats_sum;
   if(g_hair_origin_cap && t[188])host->log("[hair origin] %u frames: matched virtual Hair pixels %llu, physical origin available %llu, unresolved %llu",g_stats_n,(unsigned long long)t[188],(unsigned long long)t[189],(unsigned long long)t[190]);
   if (t[0]) {
@@ -2730,7 +2730,7 @@ void rf_timing_collect() {
   g_rf_written[old] = false;
   double ms = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
   if (ms >= 0 && ms < 1000) g_rf_ms.push_back(float(ms));
-  if (g_rf_ms.size() < 300) return;
+  if (g_rf_ms.size() < stats_period(300)) return;
   auto& v = g_rf_ms;
   std::sort(v.begin(), v.end());
   int rf_rr = host->cfg_int("rf_rr", -1);
@@ -2780,7 +2780,7 @@ void ls_timing_collect() {
     g_ls_ms.push_back(float(ms));
     g_ls_join_ms.push_back(float(join));
   }
-  if (g_ls_ms.size() < 300) return;
+  if (g_ls_ms.size() < stats_period(300)) return;
   auto& v = g_ls_ms;
   auto& j = g_ls_join_ms;
   std::sort(v.begin(), v.end());
@@ -2838,7 +2838,7 @@ void occ_fold_slot(uint64_t now) {
   if (g_occ_map && g_occ_frame[slot] && g_occ_frame[slot] + kOccRing - 1 <= now) {
     occ::occ_fold(g_occ_win, g_occ_map + size_t(slot) * (kOccBytes / 4));
     // rt_occ_stats_frames: the window (60; 1-4 for frame-by-frame occluder kind and distance of a moving shadow)
-    if (g_occ_win.frames >= uint32_t((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1))) {
+    if (g_occ_win.frames >= stats_period(unsigned((std::max)(host->cfg_int("rt_occ_stats_frames", 60), 1)))) {
       host->log("%s", occ::occ_format(g_occ_win).c_str());
       g_occ_win = occ::OccWindow{};
     }
@@ -3517,8 +3517,10 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     // Command-application counts, not expensive per-ray atomics. Existing GPU
     // timestamps and static debug captures independently prove execution/output.
     static uint32_t frames=0, sun=0, gi=0, local=0, reflection=0;
+    static int reset_token=0;
+    if(bg3::stats_window::reset(host->cfg_int,reset_token)) frames=sun=gi=local=reflection=0;
     sun+=s.rt_sun; gi+=s.rt_gi_applied; local+=local_applied; reflection+=reflection_applied;
-    if (++frames>=120) {
+    if (++frames>=stats_period(120)) {
       host->log("rt applied (%u frames): sun %u GI %u local %u reflections %u (recorded dispatches; GPU timings separate)",
                 frames,sun,gi,local,reflection);
       frames=sun=gi=local=reflection=0;
@@ -3739,10 +3741,29 @@ void gi_on_cmd_end(VkCommandBuffer cmd) { flush(cmd); }
 // one when a burst of builds is done (the gates of tools/live_batches/hair_qual).
 void gi_on_frame(uint64_t) {
   static bg3::pipe_async::Monitor mon;
+  static int reset_token = 0;
+  if (bg3::stats_window::reset(host->cfg_int, reset_token)) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    // Discard in-flight readbacks as well as sums: pre-readiness GPU work must
+    // never enter the first complete measurement window.
+    std::fill_n(g_slot_written, kRing, false); std::fill_n(g_rt_written, kRing, false);
+    std::fill_n(g_tr_written, kRing, false); std::fill_n(g_rf_written, kRing, false);
+    std::fill_n(g_ls_written, kRing, false); std::fill_n(g_stats_frame, kStatsRing, uint64_t(0));
+    std::fill_n(g_occ_frame, kOccRing, uint64_t(0));
+    g_ms_sum = g_rt_ms_sum = 0; g_ms_count = g_rt_ms_count = 0;
+    g_rt_frames_traced = g_rt_frames_stale = g_rt_frames_missing = 0;
+    g_tr_ms[0].clear(); g_tr_ms[1].clear(); g_rf_ms.clear(); g_ls_ms.clear(); g_ls_join_ms.clear();
+    std::fill_n(g_stats_sum, kStatsCounters, uint64_t(0)); g_stats_n = 0;
+    std::fill_n(g_guard_sum, 4, uint64_t(0)); std::fill_n(g_unk_sum, kUnknownPasses, uint64_t(0)); g_guard_frames = 0;
+    g_epoch_motion = CameraMotionWindow{}; g_rfh = RfHitWindow{}; g_hem = HitEmWindow{}; g_occ_win = occ::OccWindow{};
+    mon.reset_window(g_builds.started_total(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    water_stats_reset(); em_stats_reset();
+  }
   const double now = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
   bg3::pipe_async::Monitor::Window w;
   bg3::pipe_async::Monitor::Burst b;
-  const int frames = host->cfg_int("rt_timing_frames", 120);
+  const int native_frames = host->cfg_int("rt_timing_frames", 120);
+  const int frames = int(stats_period(unsigned(native_frames > 0 ? native_frames : 120)));
   const unsigned ev = mon.tick(g_builds.pending(), g_builds.started_total(), now, unsigned(frames > 0 ? frames : 120), &w, &b);
   if (ev & bg3::pipe_async::Monitor::kWindow)
     host->log("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,

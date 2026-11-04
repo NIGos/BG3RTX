@@ -1,0 +1,33 @@
+{
+  "status": "READY_FOR_LIVE",
+  "date": "2026-11-04",
+  "branch": "gi-1ray-qual",
+  "base": "cd534813",
+  "committed": false,
+  "game_launched": false,
+  "presets_changed": false,
+  "live_flow": {
+    "exit_code": 0,
+    "valid_corpus_logs": 76,
+    "failing_jobs": 0,
+    "plan_seconds": 225.9,
+    "expected_readiness_seconds": 0.027,
+    "load_allowance_seconds": 120,
+    "expected_total_seconds": 345.927,
+    "actual_runtime_cap_seconds": 354,
+    "readiness_timeout_allowance_seconds": 370,
+    "note": "Cold readiness allowance exceeds the actual runtime cap; a slow load/build aborts. Historical replay cannot prove the new four-state plan."
+  },
+  "unittest": {"exit_code": 0, "acceptance_tests": 4, "batch_jobs_lint_tests": 6},
+  "qa_detectors_test": {"exit_code": 0, "result": "all passed"},
+  "dryrun": {
+    "exit_code": 0,
+    "run_a": "1/1 INVALID with full expectations and no fake-game evidence; inbox empty",
+    "run_b": "1/1 VALID structural run with expectations stripped; single unfocused launch; inbox empty",
+    "estimate_mb": 1390,
+    "source": "%TEMP%/bg3rtx-gi1-qual-final",
+    "note": "Fake queue only, no game and no watched production inbox."
+  },
+  "git_diff_check": {"exit_code": 0},
+  "remaining": "Live energy, GI GPU savings and both static/held-pan flicker acceptance. A live PASS precedes any separate preset promotion."
+}

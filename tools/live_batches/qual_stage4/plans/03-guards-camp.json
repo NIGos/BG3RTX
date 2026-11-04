@@ -150,16 +150,25 @@
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.4,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.4,
-    "motion_end": 20.4,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0"
+    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-mv",
@@ -229,16 +238,25 @@
     "label": "cost-mv",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.4,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.4,
-    "motion_end": 20.4,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,gi_temporal_mv_sample=1,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0"
+    "set": "rt_stats=0,gi_temporal_mv_sample=1,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-prev",
@@ -309,16 +327,25 @@
     "label": "cost-prev",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.4,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.4,
-    "motion_end": 20.4,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=1,qa_exposure_hold=1,pan_capture=0,pan_prepare=0"
+    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=1,qa_exposure_hold=1,pan_capture=0,pan_prepare=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-b",
@@ -388,16 +415,25 @@
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.4,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.4,
-    "motion_end": 20.4,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0"
+    "set": "rt_stats=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0,qa_exposure_hold=1,pan_capture=0,pan_prepare=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass \\(ray-traced",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

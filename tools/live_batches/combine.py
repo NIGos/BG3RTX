@@ -281,6 +281,7 @@ def main(argv=None):
     ap.add_argument("--out", type=Path, default=ROOT / "tools/live_batches/combined")
     ap.add_argument("--results", type=Path, default=flow.default_results())
     ap.add_argument("--split-seconds", type=float, help="split same-save groups at source boundaries under this preflight budget")
+    ap.add_argument("--name", help="retain an explicitly named single-save partition when regenerating")
     ap.add_argument("--extract", type=Path)
     ap.add_argument("--log", type=Path)
     ap.add_argument("--runner", type=Path)
@@ -330,10 +331,12 @@ def main(argv=None):
         for i, chunk in enumerate(chunks):
             suffix = f"-part{i + 1}" if len(chunks) > 1 else ""
             prepared.append((save, chunk, suffix))
+    if a.name and len(prepared) != 1:
+        ap.error("--name requires one save and one partition")
     bad = False
     memo = {}
     for save, sources, suffix in prepared:
-        stem = "combined-" + slug(save) + suffix
+        stem = a.name or "combined-" + slug(save) + suffix
         plan_path = a.out / "plans" / (stem + ".json")
         job, plan, manifest = combine_group(sources, path_arg(plan_path))
         flow.retime(job, plan)

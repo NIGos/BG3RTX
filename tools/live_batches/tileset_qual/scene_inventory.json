@@ -1,0 +1,53 @@
+{
+  "captures_scanned": 101,
+  "scenes": {
+    "?": {
+      "draws": 97,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\20261030-152728",
+      "fs_counts": {
+        "73e0bbdd83014ddf": 13,
+        "4256bb458b367608": 6,
+        "02807a6862ae93e4": 61,
+        "4413fc572b139107": 17
+      },
+      "supported_depth_draws": 0,
+      "supported_material_draws": 0
+    },
+    "S6": {
+      "draws": 1,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261101-112913",
+      "fs_counts": {
+        "02807a6862ae93e4": 1
+      },
+      "supported_depth_draws": 0,
+      "supported_material_draws": 0
+    },
+    "S8": {
+      "draws": 62,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261102-215534",
+      "fs_counts": {
+        "73e0bbdd83014ddf": 1,
+        "d54ed410f408de35": 16,
+        "cad41eff979970e4": 15,
+        "02807a6862ae93e4": 30
+      },
+      "supported_depth_draws": 15,
+      "supported_material_draws": 15
+    },
+    "Test Dialogue3": {
+      "draws": 132,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261103-181930",
+      "fs_counts": {
+        "d54ed410f408de35": 11,
+        "02807a6862ae93e4": 68,
+        "cad41eff979970e4": 48,
+        "4413fc572b139107": 1,
+        "73e0bbdd83014ddf": 1,
+        "d559a22648041874": 3
+      },
+      "supported_depth_draws": 56,
+      "supported_material_draws": 48
+    }
+  },
+  "method": "Maximum Tileset-named G-buffer draws in one retained frame per identified save. DB names, not all-pass counts. Unknown saves excluded from choice. Supported exact shader pairs counted separately."
+}

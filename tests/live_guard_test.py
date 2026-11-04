@@ -247,6 +247,17 @@ class LiveGuardTest(unittest.TestCase):
         self.job["fail_fast"] = False
         self.assertIsNone(evaluate_session(self.job, "BROKEN", 100))
 
+    def test_frame_window_has_no_fps_silence_deadline(self):
+        self.plan[0].update(frames=60, stats_reset=True)
+        self.job['expect'] = [r"\[rt\] scene wait:"]
+        self.assertIsNone(self.run_guard(stamp(2, '[cfg] settings read') + stamp(3, '[stats] frame=10'), now=45))
+
+    def test_reset_first_complete_bad_line_is_irreversible(self):
+        self.plan[0].update(frames=60, stats_reset=True, wait_log=['ready'])
+        runner=self.runner+stamp(3, '[motion-ready] phase=0 stats_reset=7 frame=100')
+        game=stamp(2, '[cfg] settings read')+stamp(2.9, '[stats] reset token=7 frame=100')+stamp(4, 'stats bad')
+        self.assertIn('line(s) fail',self.run_guard(game, now=4, runner=runner)['check'])
+
     def test_explicit_gate_cadence_is_used_for_new_producer(self):
         pattern = r"\[hair primary\] frame \d+: [1-9]\d* grooms published"
         self.job["expect"] = [pattern]

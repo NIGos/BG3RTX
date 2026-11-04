@@ -43,7 +43,7 @@
   {
     "label": "settle-off-a",
     "kind": "static",
-    "seconds": 2.8,
+    "seconds": 2.3,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -54,18 +54,32 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 33.2,
-    "set": "qa_exposure_hold=1"
+    "seconds": 2.4,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-a",
     "kind": "static",
-    "seconds": 15.2,
+    "seconds": 15.1,
     "trace_at": [
       1,
       6,
@@ -76,7 +90,7 @@
   {
     "label": "settle-on",
     "kind": "static",
-    "seconds": 2.8,
+    "seconds": 2.3,
     "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -87,18 +101,33 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 33.2,
-    "set": "qa_exposure_hold=1"
+    "seconds": 2.4,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-on",
     "kind": "static",
-    "seconds": 15.2,
+    "seconds": 15.1,
     "trace_at": [
       1,
       6,
@@ -109,7 +138,7 @@
   {
     "label": "settle-off-b",
     "kind": "static",
-    "seconds": 2.8,
+    "seconds": 2.3,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -120,18 +149,32 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 33.2,
-    "set": "qa_exposure_hold=1"
+    "seconds": 2.4,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-b",
     "kind": "static",
-    "seconds": 15.2,
+    "seconds": 15.1,
     "trace_at": [
       1,
       6,

@@ -54,13 +54,27 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-go2-camp-high--cost-off-a",
     "kind": "static",
-    "seconds": 49.5,
-    "set": "qa_exposure_hold=1"
+    "seconds": 4.9,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-go2-camp-high--shot-off-a",
@@ -87,13 +101,28 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-go2-camp-high--cost-on",
     "kind": "static",
-    "seconds": 49.5,
-    "set": "qa_exposure_hold=1"
+    "seconds": 4.9,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: trace pass"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-go2-camp-high--shot-on",
@@ -120,13 +149,27 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-go2-camp-high--cost-off-b",
     "kind": "static",
-    "seconds": 49.5,
-    "set": "qa_exposure_hold=1"
+    "seconds": 4.9,
+    "set": "qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: trace pass .*GPU median [\\d.]+ ms",
+      "rf: reflection pass GPU median [\\d.]+ ms",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-go2-camp-high--shot-off-b",

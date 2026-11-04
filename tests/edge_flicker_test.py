@@ -230,6 +230,12 @@ class EdgeFlickerTest(unittest.TestCase):
             for i, step in enumerate(plan):
                 runner.append(f'{stamp(t)} [pan-plan] window {i} set={step["set"]}')
                 game.append(f'{stamp(t+.01)} [cfg] settings read')
+                if step.get('wait_log') or step.get('stats_reset'):
+                    reset = ''
+                    if step.get('stats_reset'):
+                        game.append(f'{stamp(t+.02)} [stats] reset token={i+1} frame={100+i}')
+                        reset = f' stats_reset={i+1} frame={100+i}'
+                    runner.append(f'{stamp(t+.03)} [motion-ready] phase={i} label={step["label"]}{reset}')
                 kind, _, label = step['label'].partition('-')
                 if kind in ('rendered', 'presented'):
                     d = root/step['label']

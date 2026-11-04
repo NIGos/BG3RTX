@@ -269,7 +269,12 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "rendered-base-a",
@@ -291,7 +296,7 @@
     "label": "presented-base-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -301,7 +306,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-fg-off",
@@ -325,7 +337,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-fg-off",
@@ -382,7 +398,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-ao-off",
@@ -404,7 +424,7 @@
     "label": "presented-ao-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -414,7 +434,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-sun-off",
@@ -439,7 +466,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-sun-off",
@@ -461,7 +492,7 @@
     "label": "presented-sun-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -471,7 +502,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-gi-off",
@@ -496,7 +534,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-gi-off",
@@ -518,7 +560,7 @@
     "label": "presented-gi-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -528,7 +570,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-rr-off",
@@ -553,7 +602,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-rr-off",
@@ -575,7 +628,7 @@
     "label": "presented-rr-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -585,7 +638,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-cbt-off",
@@ -610,7 +670,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-cbt-off",
@@ -632,7 +696,7 @@
     "label": "presented-cbt-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -642,7 +706,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-post-late",
@@ -666,7 +737,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-post-late",
@@ -688,7 +763,7 @@
     "label": "presented-post-late",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -698,7 +773,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle-base-b",
@@ -722,7 +804,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "rendered-base-b",
@@ -744,7 +830,7 @@
     "label": "presented-base-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -754,7 +840,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

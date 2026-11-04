@@ -106,6 +106,7 @@ struct Query {
  std::vector<Material> pool_rows;Buffer pool_ubo;std::vector<VkSampler> pool_samplers;VkDeviceSize rows_bytes{};
  // rt_hit_material_instanced: the instance order counters and permutations (host, native_hit_instanced.h kRemapPermBase).
  Buffer remap;
+ int stats_reset_token{};
 };
 constexpr VkDeviceSize pool_rows_bytes=VkDeviceSize(nh_pool_rows)*record_bytes;
 static_assert(nh_pool_row_base==row_bytes,"pool rows follow the publication word");
@@ -676,7 +677,7 @@ bool capture(VkCommandBuffer cmd,CmdState* resolved,Material& material,const nat
 }
 void destroy_query(Query& q){if(q.pool)dd->vk.DestroyDescriptorPool(dd->device,q.pool,nullptr);destroy(q.data);destroy(q.rows);destroy(q.pool_ubo);
  // The remap shader's counters: final once the query retired (collect, GPU done), zero if it never ran.
- if(q.remap.mapped){const auto* c=static_cast<const uint32_t*>(q.remap.mapped);
+ if(q.remap.mapped && (cfg_int("rt_stats_period_frames",0)<=0 || q.stats_reset_token==cfg_int("rt_stats_reset",0))){const auto* c=static_cast<const uint32_t*>(q.remap.mapped);
   for(uint32_t f=1;f<instanced::kFamilies;++f)for(uint32_t k=0;k<instanced::kOrderCounters;++k)order_window[f][k]+=c[4*f+k];}
  destroy(q.remap);
  for(auto sampler:q.pool_samplers)dd->vk.DestroySampler(dd->device,sampler,nullptr);q.pool_samplers.clear();}
@@ -832,8 +833,11 @@ void pool_jobs_poll(uint64_t frame,uint64_t epoch){
 // Counters cover one frame: the first lookup of a new frame logs the previous one (rt_stats,
 // every 120 frames) and starts over.
 void pool_rollover(uint64_t frame,uint64_t epoch){
+ static int reset_token=0;static uint64_t stats_start=0;
+ if(stats_window::reset(cfg_int,reset_token))stats_start=frame;
  if(pool_counter_frame==frame)return;
- if(pool_counter_frame && pool_counter_frame%120==0 && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
+ const bool due=cfg_int("rt_stats_period_frames",0)<=0 ? pool_counter_frame%120==0 : pool_counter_frame>stats_start && (pool_counter_frame-stats_start)%stats_period(120)==0;
+ if(pool_counter_frame && due && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
  pool_table.end_frame();pool_counter_frame=frame;pool_basis.rows=pool_basis.row_instances=0;
  pool_mask_on.store(cfg_int("rt_hit_material_mask",0)!=0,std::memory_order_relaxed);
  ip_grass_key.store(cfg_int("rt_hit_material_ip_grass",0)!=0,std::memory_order_relaxed);
@@ -856,7 +860,7 @@ uint64_t recycled_bytes(){std::lock_guard lock(recycle_mutex);return recycled.re
 void cpu_report(uint64_t frames){
  if(on)recycle_service();
  const bool want=on && cfg_int("cpu_timing",0)!=0;cpu_on.store(want,std::memory_order_relaxed);
- static uint64_t last=0;if(!want){last=frames;return;}if(frames-last<300)return;const uint64_t n=frames-last;last=frames;
+ static uint64_t last=0;static int reset_token=0;if(stats_window::reset(cfg_int,reset_token)){last=frames;for(auto& n:cpu_ns)n.exchange(0);cpu_allocs.exchange(0);cpu_alloc_mb.exchange(0);cpu_frees.exchange(0);cpu_reuses.exchange(0);}if(!want){last=frames;return;}if(frames-last<stats_period(300))return;const uint64_t n=frames-last;last=frames;
  double ms[CpuPhases];for(int i=0;i<CpuPhases;++i)ms[i]=double(cpu_ns[i].exchange(0))*1e-6/double(n);
  uint64_t retained=0;size_t count=0;{std::lock_guard lock(recycle_mutex);retained=recycled.retained();count=recycled.size();}
  log("[cpu] hit material over %llu frames, ms/frame (all threads): prepass hooks %.3f, scene_prepare %.3f, G-buffer material hooks %.3f, query (lighting thread) %.3f; "
@@ -1432,7 +1436,7 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
   static uint64_t logged=UINT64_MAX;if(cfg_hot(CfgHot::rt_stats) && slot.frame%120==0 && logged!=slot.frame){logged=slot.frame;log("[hit material query] unavailable frame %llu scene %u packet %u pending packets %zu queries %zu source camera %p+%llu",
    (unsigned long long)slot.frame,slot.generation,unsigned(bool(packet)),packets.size(),queries.size(),(void*)slot.camera,(unsigned long long)slot.camera_offset);}return false;
  }
- auto query=std::make_unique<Query>();auto& q=*query;q.command=handle(cmd);q.recording=state->recording;q.source=slot.recording;q.slot=index;q.generation=slot.generation;q.deferred=packet;q.users.add(state->recording);
+ auto query=std::make_unique<Query>();auto& q=*query;q.stats_reset_token=cfg_int("rt_stats_reset",0);q.command=handle(cmd);q.recording=state->recording;q.source=slot.recording;q.slot=index;q.generation=slot.generation;q.deferred=packet;q.users.add(state->recording);
  // Candidate identity narrows the pair; exact GPU clip+UV comparison remains
  // mandatory. Neither CPU recording order nor a matching handle certifies it.
  VkDeviceSize cursor=0;uint32_t query_overflow=0,table_overflow=0,tables_used=0;
@@ -1440,8 +1444,10 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  // Rows used vs capacity and every overflow, one line per 120-frame window (live check).
  auto log_capacity=[&](const char* outcome){
   // The first query to get here in each 120-frame window (not only frame % 120 == 0: often rejected, hmm2 inn 11-02).
-  static uint64_t capacity_window=UINT64_MAX;
-  if(!cfg_hot(CfgHot::rt_stats) || !instanced::stats_window_due(slot.frame,capacity_window))return;slot.capacity_logged=true;const double mb=1.0/1048576.0;
+  static uint64_t capacity_window=UINT64_MAX, capacity_start=0;static int capacity_reset=0;
+  if(stats_window::reset(cfg_int,capacity_reset)){capacity_start=frame_index();capacity_window=0;}
+  const bool cadence=!cfg_hot(CfgHot::rt_stats) ? false : cfg_int("rt_stats_period_frames",0)<=0 ? instanced::stats_window_due(slot.frame,capacity_window) : slot.frame>=capacity_start && instanced::stats_window_due(slot.frame-capacity_start,capacity_window,stats_period(120));
+  if(!cfg_hot(CfgHot::rt_stats) || !cadence)return;slot.capacity_logged=true;const double mb=1.0/1048576.0;
   log("[hit material capacity] frame %llu %s; opaque rows %u/%u overflow %u; deferred rows %zu/%u overflow %u; samplers %u/%u overflow %u; cache views %u/%u overflow %u; "
       "source stream %.1f/%.0f MB overflow %u; deferred stream %.1f MB in %zu/%u chunks overflow %u; query mapped %zu basis %.1f/%.0f MB overflow %u; tables %u/%u overflow %u",
    (unsigned long long)slot.frame,outcome,slot.opaque_used,nh_opaque_rows,slot.opaque_overflow,packet->materials.size(),material_slots,packet->slot_overflow,
@@ -1464,8 +1470,15 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
  auto log_instanced=[&](){
   // The first query to get here in each 120-frame window logs (instanced::stats_window_due): the query of frame
   // % 120 == 0 alone is often rejected (source epoch), which left 2 of 3 windows without a line (camp 11-02).
-  static uint64_t window_logged=UINT64_MAX;
-  if(!instanced_on || !cfg_hot(CfgHot::rt_stats) || !instanced::stats_window_due(slot.frame,window_logged))return;
+  static uint64_t window_logged=UINT64_MAX, stats_start=0;static int reset_token=0;
+  if(stats_window::reset(cfg_int,reset_token)){
+    stats_start=frame_index();window_logged=0;
+    for(auto& kind:pair_window)for(auto& count:kind)count=0;
+    for(auto& kind:order_window)for(auto& count:kind)count=0;
+    tolerant_window=0;
+  }
+  const bool cadence=(!instanced_on || !cfg_hot(CfgHot::rt_stats)) ? false : cfg_int("rt_stats_period_frames",0)<=0 ? instanced::stats_window_due(slot.frame,window_logged) : slot.frame>=stats_start && instanced::stats_window_due(slot.frame-stats_start,window_logged,stats_period(120));
+  if(!instanced_on || !cfg_hot(CfgHot::rt_stats) || !cadence)return;
   {
    const auto& w=pair_window[1];const auto& a=pair_window[2];
    log("[hit material instanced] frame %llu pairs since the last line (wind/2S): same frame %llu/%llu, other frame (time) %llu/%llu, camera %llu/%llu, placement %llu/%llu, wind inputs %llu/%llu, unread %llu/%llu; wind rows with the derived clip tolerance %llu",

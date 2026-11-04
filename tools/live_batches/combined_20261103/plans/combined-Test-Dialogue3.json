@@ -66,7 +66,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-00",
@@ -87,7 +91,7 @@
     "label": "b1-pt-dialogue3--presented-off-00",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -96,7 +100,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-00",
@@ -138,7 +149,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-00",
@@ -159,7 +174,7 @@
     "label": "b1-pt-dialogue3--presented-on-00",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -168,7 +183,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-00",
@@ -201,7 +223,12 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-01",
@@ -222,7 +249,7 @@
     "label": "b1-pt-dialogue3--presented-on-01",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -231,7 +258,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-01",
@@ -271,7 +305,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-01",
@@ -292,7 +330,7 @@
     "label": "b1-pt-dialogue3--presented-off-01",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -301,7 +339,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-01",
@@ -334,7 +379,12 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-02",
@@ -355,7 +405,7 @@
     "label": "b1-pt-dialogue3--presented-off-02",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -364,7 +414,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-02",
@@ -406,7 +463,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-02",
@@ -427,7 +488,7 @@
     "label": "b1-pt-dialogue3--presented-on-02",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -436,7 +497,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-02",
@@ -469,7 +537,12 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-03",
@@ -490,7 +563,7 @@
     "label": "b1-pt-dialogue3--presented-on-03",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -499,7 +572,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-03",
@@ -539,7 +619,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-03",
@@ -560,7 +644,7 @@
     "label": "b1-pt-dialogue3--presented-off-03",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -569,7 +653,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-03",
@@ -602,7 +693,12 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-04",
@@ -623,7 +719,7 @@
     "label": "b1-pt-dialogue3--presented-off-04",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -632,7 +728,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-04",
@@ -674,7 +777,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-04",
@@ -695,7 +802,7 @@
     "label": "b1-pt-dialogue3--presented-on-04",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -704,7 +811,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-04",
@@ -737,7 +851,12 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-05",
@@ -758,7 +877,7 @@
     "label": "b1-pt-dialogue3--presented-on-05",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -767,7 +886,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-05",
@@ -807,7 +933,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-05",
@@ -828,7 +958,7 @@
     "label": "b1-pt-dialogue3--presented-off-05",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -837,7 +967,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-05",
@@ -870,7 +1007,12 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-06",
@@ -891,7 +1033,7 @@
     "label": "b1-pt-dialogue3--presented-off-06",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -900,7 +1042,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-06",
@@ -942,7 +1091,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-06",
@@ -963,7 +1116,7 @@
     "label": "b1-pt-dialogue3--presented-on-06",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -972,7 +1125,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-06",
@@ -1005,7 +1165,12 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-07",
@@ -1026,7 +1191,7 @@
     "label": "b1-pt-dialogue3--presented-on-07",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1035,7 +1200,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-07",
@@ -1075,7 +1247,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-07",
@@ -1096,7 +1272,7 @@
     "label": "b1-pt-dialogue3--presented-off-07",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1105,7 +1281,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-07",
@@ -1138,7 +1321,12 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-08",
@@ -1159,7 +1347,7 @@
     "label": "b1-pt-dialogue3--presented-off-08",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1168,7 +1356,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-08",
@@ -1210,7 +1405,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-08",
@@ -1231,7 +1430,7 @@
     "label": "b1-pt-dialogue3--presented-on-08",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1240,7 +1439,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-08",
@@ -1273,7 +1479,12 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-09",
@@ -1294,7 +1505,7 @@
     "label": "b1-pt-dialogue3--presented-on-09",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1303,7 +1514,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-on-09",
@@ -1343,7 +1561,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-09",
@@ -1364,7 +1586,7 @@
     "label": "b1-pt-dialogue3--presented-off-09",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.3,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1373,7 +1595,14 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--energy-off-09",
@@ -1406,22 +1635,34 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b1-pt-dialogue3--timing-off-cost",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.1,
+    "seconds": 2.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.1,
-    "motion_end": 11.1,
+    "motion_start": 12,
+    "motion_end": 12,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[rrpost\\] gpu:"
+    ]
   },
   {
     "label": "b1-pt-dialogue3--settle-timing-on-cost",
@@ -1445,22 +1686,34 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b1-pt-dialogue3--timing-on-cost",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.1,
+    "seconds": 2.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.1,
-    "motion_end": 11.1,
+    "motion_start": 12,
+    "motion_end": 12,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[rrpost\\] gpu:",
+      "\\[rrpost\\] gpu temporal:"
+    ]
   },
   {
     "label": "b1-pt-dialogue3--restore",
@@ -1493,7 +1746,7 @@
     "serial": 0,
     "motion_start": 1.1,
     "motion_end": 1.1,
-    "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
+    "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_stats_period_frames=60,rt_timing_frames=120,rt_xfb_mb=1024",
     "wait_log": [
       "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
@@ -1770,12 +2023,17 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-base-a",
@@ -1797,7 +2055,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-base-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1807,7 +2065,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-fg-off",
@@ -1818,8 +2083,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1831,7 +2096,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-fg-off",
@@ -1874,8 +2143,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1888,7 +2157,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-ao-off",
@@ -1910,7 +2183,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-ao-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1920,7 +2193,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-sun-off",
@@ -1931,8 +2211,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1945,7 +2225,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-sun-off",
@@ -1967,7 +2251,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-sun-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -1977,7 +2261,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-gi-off",
@@ -1988,8 +2279,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2002,7 +2293,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-gi-off",
@@ -2024,7 +2319,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-gi-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -2034,7 +2329,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-rr-off",
@@ -2045,8 +2347,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2059,7 +2361,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-rr-off",
@@ -2081,7 +2387,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-rr-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -2091,7 +2397,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-cbt-off",
@@ -2102,8 +2415,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2116,7 +2429,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-cbt-off",
@@ -2138,7 +2455,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-cbt-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -2148,7 +2465,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-post-late",
@@ -2159,8 +2483,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2172,7 +2496,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-post-late",
@@ -2194,7 +2522,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-post-late",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -2204,7 +2532,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--settle-base-b",
@@ -2215,8 +2550,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.6,
-    "motion_end": 5.6,
+    "motion_start": 2.4,
+    "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2228,7 +2563,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "b2-ef1-dialogue3-attribution--rendered-base-b",
@@ -2250,7 +2589,7 @@
     "label": "b2-ef1-dialogue3-attribution--presented-base-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 3.8,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -2260,7 +2599,14 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=16,pan_capture=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[sl\\] DLSS-G frame"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "b2-ef1-dialogue3-attribution--restore",

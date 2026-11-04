@@ -599,7 +599,7 @@ bool start_capture(Capture& c, bool readback, uint32_t w, uint32_t h) {
   c.sig = 1469598103934665603ull;
   c.rt_draws = 0;
   c.state_log = cfg_int("rt_capture_state_log", 0) != 0;
-  c.state_sample = c.state_log && c.record_frame % (std::max)(cfg_int("rt_timing_frames", 300), 30) == 0;
+  c.state_sample = c.state_log && c.record_frame % stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30))) == 0;
   c.discard_filter = cfg_int("rt_capture_discard", 1) != 0;
   c.fade_class = cfg_int("rt_primary_fade_class", 0) != 0;
   c.discard_skipped = 0;
@@ -1633,6 +1633,11 @@ void cascade_on_present() {
   if (g_cc_qp) {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     const uint64_t now = frame_index();
+    static int reset_token = 0;
+    if (stats_window::reset(cfg_int, reset_token)) {
+      g_cc_st = CcStats{}; g_cc_ms.clear();
+      for (auto& f : g_cc_ts_frame) f = 0;
+    }
     for (uint32_t s = 0; s < kCcTs; ++s) {
       if (!g_cc_ts_frame[s] || g_cc_ts_frame[s] + 6 > now) continue;
       uint64_t r[4] = {};
@@ -1651,7 +1656,7 @@ void cascade_on_present() {
   uint64_t capacity=cascade_bytes();
   {
     std::lock_guard<std::mutex> lock(g_cc_mu);
-    const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+    const int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
     if (g_cc_st.frames < uint64_t(every)) return;
     st = g_cc_st;
     g_cc_st = CcStats{};
@@ -2301,7 +2306,7 @@ void geo_pass_ending(VkCommandBuffer cmd, CmdState* s) {
 // The demand of this frame (next frame's alpha/opaque split) and the loud log of
 // everything that did not make it into the RT soup as it should.
 void rt_capture_stats(const Capture& c) {
-  if (c.discard_filter && c.record_frame % uint64_t((std::max)(cfg_int("rt_timing_frames", 300), 30)) == 0)
+  if (c.discard_filter && c.record_frame % uint64_t(stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)))) == 0)
     log("[rt-capture] discard filter 1 frame %llu skipped %llu always-discard draws",
         (unsigned long long)c.record_frame, (unsigned long long)c.discard_skipped);
   g_alpha_demand_prev = c.alpha_demand;
@@ -2333,6 +2338,8 @@ void rt_capture_stats(const Capture& c) {
   }
   std::lock_guard<std::mutex> lock(g_drop_mu);
   RtDropLog& l = g_drop;
+  static int reset_token = 0;
+  if (stats_window::reset(cfg_int, reset_token)) l = RtDropLog{};
   ++l.frames;
   l.alpha_overflow += c.alpha_overflow;
   l.alpha_overflow_mb += c.alpha_overflow_bytes >> 20;
@@ -2373,7 +2380,7 @@ void rt_capture_stats(const Capture& c) {
     log("[geo] WARNING draws left out of the RT scene this frame: %u indirect, %u with a topology that cannot be "
         "sized exactly (%llu triangles)", c.drop_indirect, c.drop_topo, (unsigned long long)c.drop_topo_tris);
   }
-  int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (l.frames >= uint64_t(every)) {
     if (c.state_log)
       log("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f",

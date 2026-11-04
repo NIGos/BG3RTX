@@ -17,7 +17,7 @@
       "\\[shaders\\] cache: prefetched ",
       "\\[auto\\] scene ready"
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "producer-sanity-warmup",
@@ -31,29 +31,41 @@
       "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
       "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
-      "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+      "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
       "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
       "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
       "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
       "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
       "gi: GPU cost [0-9.]+ ms/frame"
     ],
-    "wait_log_timeout": 20.610000000015134
+    "wait_log_timeout": 16.77000000003318
   },
   {
     "label": "static-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.5,
+    "seconds": 3.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 13.5,
-    "motion_end": 13.5,
+    "motion_start": 16.6,
+    "motion_end": 16.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "pan-q",
@@ -68,7 +80,19 @@
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": -1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "pan-e",
@@ -83,7 +107,19 @@
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": 1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "rotate-r",
@@ -98,7 +134,19 @@
     "motion_end": 19.0,
     "pixels_per_second": 60,
     "direction": 1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "rotate-l",
@@ -113,7 +161,19 @@
     "motion_end": 19.0,
     "pixels_per_second": 60,
     "direction": -1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "ab-off",
