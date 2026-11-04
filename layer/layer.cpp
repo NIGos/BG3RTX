@@ -497,7 +497,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   if (geo_submit_wanted()) geo_on_submit(cmds);
   if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   if(!batch || !cmds.empty()) pan_on_submit(cmds);
-  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);   // before it goes down: a destroy may follow on another thread at once
   fault_note_queue(queue);
   auto lock = queue_lock();
@@ -513,6 +512,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
+  if (r == VK_SUCCESS) {
+    if (!batch || !cmds.empty()) sl_note_submit(cmds);
+    alpha_submit_recordings(cmds);
+  }
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit");
@@ -560,7 +563,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   if (geo_submit_wanted()) geo_on_submit(cmds);
   if(!batch || !cmds.empty()) bvh_on_submit(cmds);   // the TLAS instances' matrices, read as the game submits
   if(!batch || !cmds.empty()) pan_on_submit(cmds);
-  if(!batch || !cmds.empty()) sl_note_submit(cmds);
   life_on_submit(queue, cmds);
   fault_note_queue(queue);
   auto lock = queue_lock();
@@ -576,6 +578,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
   hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
+  if (r == VK_SUCCESS) {
+    if (!batch || !cmds.empty()) sl_note_submit(cmds);
+    alpha_submit_recordings(cmds);
+  }
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit2");

@@ -1,3 +1,6 @@
+> Superseded. These proposals are historical. See the [current release report](PROGRESS_CODEX.md).
+> Ctrl+Shift+F9 is the master RT toggle, not a menu hotkey.
+
 # User-facing settings: design study
 
 Status: **phase 1 implemented (2026-10-26)**: settings table, presets, layered ini, launcher,
@@ -328,8 +331,9 @@ swapchain path (`layer.cpp` `CreateSwapchainKHR`/`QueuePresentKHR`) and the wind
 - **Controllers.** Gamepads (SDL GameController / XInput, polled) cannot be blocked this way.
   The overlay is a mouse-and-keyboard UI, and the game is paused anyway while the in-game
   ESC menu is open.
-- **The hotkey.** Polled with `GetAsyncKeyState`, like the tracer. The default is
-  **Ctrl+Shift+F9**, configurable (`menu_key=`). Keys to avoid:
+- **The hotkey (historical proposal).** Polled with `GetAsyncKeyState`, like the tracer.
+  The proposal used **Ctrl+Shift+F9**. The shipped shortcut is the master RT toggle;
+  it does not open a menu. The proposed `menu_key=` control is not a player setting. Keys considered:
   - Insert (MCM, OptiScaler);
   - Home (ReShade);
   - F12 (Steam screenshots);

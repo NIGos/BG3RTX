@@ -100,6 +100,7 @@ if ($LASTEXITCODE -ne 0) { Fail "invalid merge ref: $Ref" }
 # Classify before merging; failure must never reduce gates. Use this gate's
 # helper for first integration with -MainRoot, too.
 $scope = 'full'
+$toolingChanged = $true
 $scopeHelper = Join-Path $PSScriptRoot 'merge_scope.py'
 $scopePython = 'py'
 $scopePythonArgs = @('-3')
@@ -115,6 +116,7 @@ if (Test-Path -LiteralPath $scopeHelper) {
       $selected = $scopeJson | ConvertFrom-Json
       if ($selected.scope -in @('docs', 'tooling', 'shaders', 'full')) {
         $scope = $selected.scope
+        $toolingChanged = $selected.tooling -ne $false
         $scopeReason = $selected.reason
       }
     }
@@ -137,6 +139,11 @@ try {
   if ($mergeCode -ne 0) { Fail "merge failed: $($mergeOutput -join ' ')" }
   if (-not $script:mergeStarted) { Write-Host "ALREADY MERGED: $Ref"; exit 0 }
 
+  if ($toolingChanged -and $scope -in @('shaders', 'full')) {
+    $tooling = Invoke-Gate 'tooling' { & $scopePython @scopePythonArgs $scopeHelper --root $root --ref "$target" --run tooling }
+    $tooling | ForEach-Object { Write-Host "  $_" }
+    if ($script:gateCode -ne 0) { Fail 'tooling checks failed' }
+  }
   if ($scope -in @('docs', 'tooling')) {
     $light = Invoke-Gate $scope { & $scopePython @scopePythonArgs $scopeHelper --root $root --ref "$target" --run $scope }
     $light | ForEach-Object { Write-Host "  $_" }

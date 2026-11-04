@@ -70,3 +70,5 @@ For relocated captures, use `--captures-root <directory>` and optionally `--out`
 Historical replay is unproven for this new four-state plan; offline validation
 does not prove rendering quality. If it passes live, promotion remains a separate
 settings change. Review shaded stone and roof transitions in this save for stippling.
+
+Final outcome (2026-11-04): one-ray Ultra GI rejected. GI trace saved 3.27/3.50 ms; energy -7.8%/+3.9% stayed inside OFF spread 11.6%, but ON-b static flicker failed (PQ excess 0.0032/0.0022 > 0.00098). Ultra keeps two rays. See [GI outcomes](../../../docs/TRACK_C_GI.md) and [backlog](../../../docs/BACKLOG_20261104.md).

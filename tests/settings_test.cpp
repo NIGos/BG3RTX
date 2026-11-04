@@ -4,6 +4,7 @@
 //   bin/settings_test.exe --write-schema   regenerate data/settings_schema.json
 #include "../common/settings.h"
 #include "../common/stats_window.h"
+#include "../common/experimental_ab.h"
 
 #include <cstdio>
 #include <fstream>
@@ -1111,6 +1112,47 @@ static void test_retired_hair_ini() {
   }
 }
 
+static void test_consolidation_policy() {
+  for (const char* id : {"exp_water_hit_shade", "exp_water_hit_cost", "exp_alpha_spill", "exp_hit_paks"}) {
+    const auto& k = *find_knob(id);
+    CHECK(!knob_visible(k, false, true));
+    for (const char* opt : {"0", "1"}) {
+      Map m; KVList pairs; knob_kvs(k, 1, pairs);
+      for (const auto& kv : pairs) m[kv.first] = kv.second;
+      m["experimental_options"] = opt; enforce_release_policy(m);
+      CHECK(knob_value(k, m) == 0);
+    }
+  }
+  Map m; apply_layer(m, parse_ini("preset=high\nrt_omm=0\n"));
+  CHECK_EQ(get(m, "rt_omm"), "0");
+  CHECK_EQ(get(m, "rt_omm_dyn"), "0");
+  enforce_release_policy(m); CHECK_EQ(get(m, "rt_omm"), "0");
+  namespace ab = bg3::experimental_ab;
+  const auto& fresnel = *find_knob("water_surface_fresnel");
+  Map shown; apply_layer(shown, parse_ini("preset=high\nexperimental_options=1\nrt_water_surface_fresnel=1\n"));
+  CHECK(presentation_values(shown, false, true)[knob_index("water_surface_fresnel")] == 1);
+  CHECK(presentation_values(shown, false)[knob_index("water_surface_fresnel")] == -1);
+  ab::Selection selection;
+  selection.touch(fresnel, 1); CHECK(!selection.pending);
+  selection.touch(fresnel, 1, true); CHECK(!selection.pending); // Startup-only On remains excluded.
+  m.clear(); m["experimental_options"] = "1";
+  KVList keys; selection.append(keys); knob_kvs(fresnel, 0, keys);
+  for (const auto& kv : keys) m[kv.first] = kv.second;
+  std::string indicator;
+  m["ab_target"] = fresnel.id; m["ab_choice"] = "1";
+  CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
+  m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
+  CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
+  const auto& live = *find_knob("exp_hair_groom");
+  selection.touch(live, 1, true); CHECK(selection.pending);
+  keys.clear(); selection.append(keys); knob_kvs(live, 0, keys);
+  m["experimental_options"] = "1";
+  for (const auto& kv : keys) m[kv.first] = kv.second;
+  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 1);
+  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 0);
+
+}
+
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water",
@@ -1269,6 +1311,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_consolidation_policy();
   test_stats_window();
   test_release_migration();
   test_retired_rejected_controls();

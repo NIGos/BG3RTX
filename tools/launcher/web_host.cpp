@@ -51,7 +51,7 @@ struct Host {
   std::wstring game, shot, shot_view, export_path;
   std::string session;
   st::Map baseline;
-  bool no_game{}, report{}, failed{}, ready{}, busy{};
+  bool no_game{}, report{}, failed{}, ready{}, busy{}, closed{};
   int result{};
   std::thread worker;
   std::atomic<bool> cancel{false};
@@ -244,7 +244,7 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
         if(answer==IDCANCEL)return 0;
         if(answer==IDYES){send(*h,h->bridge->handle("{\"type\":\"save\"}"));return 0;}
       }DestroyWindow(window);return 0;
-    case WM_DESTROY:KillTimer(window,1);KillTimer(window,2);KillTimer(window,3);PostQuitMessage(0);return 0;
+    case WM_DESTROY:h->closed=true;KillTimer(window,1);KillTimer(window,2);KillTimer(window,3);PostQuitMessage(0);return 0;
   }return DefWindowProcW(window,message,w,l);
 }
 }
@@ -262,7 +262,8 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
   const DPI_AWARENESS_CONTEXT previous_dpi=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   int rc=0;
   {
-    Host h;h.no_game=no_game||report||!screenshot.empty();h.report=report;h.result=report?3:0;h.shot=screenshot;h.shot_view=shot_view;
+    auto owner=std::make_shared<Host>();
+    Host& h=*owner;h.no_game=no_game||report||!screenshot.empty();h.report=report;h.result=report?3:0;h.shot=screenshot;h.shot_view=shot_view;
     h.game=!screenshot.empty()?L"":(game.empty()?saved_game_dir():game);
     if(!h.no_game&&!valid_game_dir(h.game))h.game=detect_game_dir();
     // Screenshot mode does not read player configuration or probe hardware.
@@ -273,6 +274,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       if(pending)for(auto& kv:saved)if(kv.first.rfind("baseline_",0)==0)h.baseline[kv.first.substr(9)]=kv.second;
       Hooks hooks;
       hooks.save=[&h](State& candidate,const st::KVList& required,std::string& error){
+        if(!candidate.settings_readable){error="Settings could not be read. Close and retry before saving.";return false;}
         if(h.no_game){error="Review mode cannot write settings.";return false;}
         auto forced=forced_keys(candidate);forced.insert(forced.end(),required.begin(),required.end());
         auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced);
@@ -302,7 +304,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return narrow(h.game);
         dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
         dialog->SetTitle(L"Choose the game folder containing bin\\bg3.exe");
-        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){h.game=dir;save_game_dir(dir);}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
+        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){std::wstring error;if(save_game_dir(dir,&error))h.game=dir;else h.bridge->set_status("Game folder not saved. "+narrow(error));}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
         h.bridge->set_can_play(valid_game_dir(h.game)&&!game_running());return narrow(h.game);
       };
       hooks.recheck=[](){return inspect_graphics();};
@@ -318,20 +320,23 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
     // Client size in logical pixels: 32 for the title bar plus the 760 the page was designed for.
     const UINT system_dpi=GetDpiForSystem();RECT r{0,0,MulDiv(width>0?width:1180,system_dpi,96),MulDiv(760+32,system_dpi,96)};
     AdjustWindowRectExForDpi(&r,WS_OVERLAPPEDWINDOW,FALSE,0,system_dpi);r.top+=GetSystemMetricsForDpi(SM_CYCAPTION,system_dpi);
-    CreateWindowW(cls.lpszClassName,L"BG3RTX",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,inst,&h);
-    if(h.window)apply_window_frame(h);
+    HWND created=CreateWindowW(cls.lpszClassName,L"BG3RTX",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,inst,&h);
+    if(!created){h.closed=true;h.failed=true;}
+    else apply_window_frame(h);
     PWSTR local{};std::wstring profile;
     if(!screenshot.empty())profile=exe_dir()+L"\\webview-review-profile";
     else if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local))){profile=std::wstring(local)+L"\\BG3RTX\\WebView2";CoTaskMemFree(local);}
-    if(profile.empty()){DestroyWindow(h.window);h.failed=true;}
+    if(h.failed||profile.empty()){DestroyWindow(h.window);h.failed=true;}
     else {
       auto options=Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
       options->put_AdditionalBrowserArguments(L"--disable-background-networking --disable-component-update --disable-sync --no-first-run");
       HRESULT started=CreateCoreWebView2EnvironmentWithOptions(nullptr,profile.c_str(),options.Get(),
-        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([&h,ui](HRESULT result,ICoreWebView2Environment* env)->HRESULT {
+        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([owner,ui](HRESULT result,ICoreWebView2Environment* env)->HRESULT {
+          auto& h=*owner;if(h.closed)return S_OK;
           if(FAILED(result)||!env){fail(h,"Environment",result);return S_OK;}
           h.environment=env;
-          HRESULT started=env->CreateCoreWebView2Controller(h.window,Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([&h,ui](HRESULT result,ICoreWebView2Controller* controller)->HRESULT {
+          HRESULT started=env->CreateCoreWebView2Controller(h.window,Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([owner,ui](HRESULT result,ICoreWebView2Controller* controller)->HRESULT {
+            auto& h=*owner;if(h.closed){if(controller)controller->Close();return S_OK;}
             if(FAILED(result)||!controller){fail(h,"Controller",result);return S_OK;}h.controller=controller;controller->get_CoreWebView2(&h.view);
             ComPtr<ICoreWebView2_3> mapping;if(FAILED(h.view.As(&mapping))){fail(h);return S_OK;}
             if(FAILED(mapping->SetVirtualHostNameToFolderMapping(L"app.bg3rtx.local",ui.c_str(),COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS))||
@@ -377,6 +382,11 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       if(FAILED(started))fail(h);
     }
     if(!h.failed){ShowWindow(h.window,SW_SHOWNOACTIVATE);SetTimer(h.window,3,60000,nullptr);MSG msg{};while(GetMessageW(&msg,nullptr,0,0)>0){TranslateMessage(&msg);DispatchMessageW(&msg);}}
+    h.closed=true;h.cancel=true;
+    if(h.worker.joinable())h.worker.join();
+    if(IsWindow(h.window))DestroyWindow(h.window);
+    if(h.controller)h.controller->Close();
+    h.view.Reset();h.controller.Reset();h.environment.Reset();
     rc=h.failed?(screenshot.empty()?-1:2):h.result;
   }
   if(rc==-1){MSG quit{};PeekMessageW(&quit,nullptr,WM_QUIT,WM_QUIT,PM_REMOVE);}

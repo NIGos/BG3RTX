@@ -35,7 +35,7 @@ std::wstring base_ini_path();
 // "<...>\Baldurs Gate 3" (the folder with bin\bg3.exe), or "".
 std::wstring detect_game_dir();
 std::wstring saved_game_dir();               // bg3rtx_launcher.ini
-void save_game_dir(const std::wstring& dir);
+bool save_game_dir(const std::wstring& dir, std::wstring* err = nullptr);
 bool valid_game_dir(const std::wstring& dir);
 // Walks up from any path inside an install to the folder with bin\bg3.exe.
 std::wstring game_dir_from_path(const std::wstring& path);
@@ -54,6 +54,7 @@ LaunchPlan make_plan(const std::wstring& game_dir, const std::wstring& exe_overr
                      const std::vector<std::wstring>& args, bool clean, int fg);
 std::wstring command_line(const LaunchPlan& p);
 std::wstring describe(const LaunchPlan& p);
+bool compose_environment(const LaunchPlan& p, const wchar_t* inherited, std::wstring& out);
 bool launch(const LaunchPlan& p, DWORD* pid, std::wstring* err);
 
 // ---- GPU probe (Vulkan, own process, no layers) ----
@@ -71,6 +72,7 @@ struct State {
   int preset = bg3::settings::kHigh;  // base preset written as preset=
   bg3::settings::Gpu gpu;
   bool have_gpu = false;
+  bool settings_readable = true;
   unsigned caps = ~0u;
   int suggested = bg3::settings::kHigh;
 };

@@ -235,13 +235,21 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
     dd->vk.DestroyImage(dd->device, g.image, nullptr);
     return g = Img{}, false;
   }
-  dd->vk.BindImageMemory(dd->device, g.image, g.mem, 0);
+  if (dd->vk.BindImageMemory(dd->device, g.image, g.mem, 0) != VK_SUCCESS) {
+    dd->vk.DestroyImage(dd->device, g.image, nullptr);
+    dd->vk.FreeMemory(dd->device, g.mem, nullptr);
+    return g = Img{}, false;
+  }
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = g.image;
   vi.viewType = type == VK_IMAGE_TYPE_3D ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
   vi.format = fmt;
   vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  dd->vk.CreateImageView(dd->device, &vi, nullptr, &g.view);
+  if (dd->vk.CreateImageView(dd->device, &vi, nullptr, &g.view) != VK_SUCCESS) {
+    dd->vk.DestroyImage(dd->device, g.image, nullptr);
+    dd->vk.FreeMemory(dd->device, g.mem, nullptr);
+    return g = Img{}, false;
+  }
   g.fmt = fmt;
   g.w = w;
   g.h = h;
@@ -256,7 +264,26 @@ bool img_ensure(DeviceData* dd, Img& g, VkFormat fmt, uint32_t w, uint32_t h, co
 }
 
 bool ensure_layout(DeviceData* dd) {
-  if (g_dsl) return true;
+  if (g_dsl && g_pl && g_pool && g_sampler && g_dummy_buf) return true;
+  auto failed = [&]() {
+    img_destroy(g_dummy2d);
+    img_destroy(g_dummy3d);
+    if (g_dummy_buf) dd->vk.DestroyBuffer(dd->device, g_dummy_buf, nullptr);
+    if (g_dummy_buf_mem) dd->vk.FreeMemory(dd->device, g_dummy_buf_mem, nullptr);
+    if (g_sampler) dd->vk.DestroySampler(dd->device, g_sampler, nullptr);
+    if (g_pool) dd->vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
+    if (g_pl) dd->vk.DestroyPipelineLayout(dd->device, g_pl, nullptr);
+    if (g_dsl) dd->vk.DestroyDescriptorSetLayout(dd->device, g_dsl, nullptr);
+    g_dummy_buf = VK_NULL_HANDLE;
+    g_dummy_buf_mem = VK_NULL_HANDLE;
+    g_dummy_buf_map = nullptr;
+    g_sampler = VK_NULL_HANDLE;
+    g_pool = VK_NULL_HANDLE;
+    g_pl = VK_NULL_HANDLE;
+    g_dsl = VK_NULL_HANDLE;
+    memset(g_sets, 0, sizeof g_sets);
+    return false;
+  };
   VkDescriptorSetLayoutBinding b[20] = {};
   const VkDescriptorType types[20] = {
       VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -275,14 +302,14 @@ bool ensure_layout(DeviceData* dd) {
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.bindingCount = 20;
   dci.pBindings = b;
-  if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return false;
+  if (dd->vk.CreateDescriptorSetLayout(dd->device, &dci, nullptr, &g_dsl) != VK_SUCCESS) return failed();
   VkPushConstantRange pcr{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
   VkPipelineLayoutCreateInfo pci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pci.setLayoutCount = 1;
   pci.pSetLayouts = &g_dsl;
   pci.pushConstantRangeCount = 1;
   pci.pPushConstantRanges = &pcr;
-  if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
+  if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return failed();
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 9 * kRing},
                                    {VK_DESCRIPTOR_TYPE_SAMPLER, kRing},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 6 * kRing},
@@ -291,23 +318,23 @@ bool ensure_layout(DeviceData* dd) {
   ppi.maxSets = kRing;
   ppi.poolSizeCount = 4;
   ppi.pPoolSizes = sizes;
-  if (dd->vk.CreateDescriptorPool(dd->device, &ppi, nullptr, &g_pool) != VK_SUCCESS) return false;
+  if (dd->vk.CreateDescriptorPool(dd->device, &ppi, nullptr, &g_pool) != VK_SUCCESS) return failed();
   std::vector<VkDescriptorSetLayout> layouts(kRing, g_dsl);
   VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
   ai.descriptorPool = g_pool;
   ai.descriptorSetCount = kRing;
   ai.pSetLayouts = layouts.data();
-  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, g_sets) != VK_SUCCESS) return false;
+  if (dd->vk.AllocateDescriptorSets(dd->device, &ai, g_sets) != VK_SUCCESS) return failed();
   VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
   si.magFilter = si.minFilter = VK_FILTER_LINEAR;
   si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
   si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   si.maxLod = 0.0f;
-  if (dd->vk.CreateSampler(dd->device, &si, nullptr, &g_sampler) != VK_SUCCESS) return false;
+  if (dd->vk.CreateSampler(dd->device, &si, nullptr, &g_sampler) != VK_SUCCESS) return failed();
   if (!img_ensure(dd, g_dummy2d, VK_FORMAT_R16G16B16A16_SFLOAT, 1, 1, "dummy 2D (unused bindings)") ||
       !img_ensure(dd, g_dummy3d, VK_FORMAT_R16G16B16A16_SFLOAT, 1, 1, "dummy 3D (unused bindings)", VK_IMAGE_TYPE_3D) ||
       !alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &g_dummy_buf, &g_dummy_buf_mem, &g_dummy_buf_map))
-    return false;
+    return failed();
   if (dd->vk.CreateQueryPool) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;

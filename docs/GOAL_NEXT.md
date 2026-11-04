@@ -1,3 +1,5 @@
+> Superseded. This is historical evidence. See the [2026-11-04 release report](PROGRESS_CODEX.md) for current decisions.
+
 # Current goal (user, 2026-11-03 night, v3)
 
 Short form of the /goal text. AGENTS.md is binding. Work in this order; each stage ends with a short consolidation.

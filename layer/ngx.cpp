@@ -267,6 +267,7 @@ static std::vector<SrFeature> g_feats;
 static GBuffer g_gbuf;
 static std::mutex g_gbuf_mu;
 
+static std::mutex g_guide_mu;
 static Guide g_guide[3];  // diffuse, specular, normal+roughness
 static uint32_t g_guide_w = 0, g_guide_h = 0;
 
@@ -513,7 +514,7 @@ static bool guide_create(DeviceData* dd, Guide& g, VkFormat fmt, uint32_t w, uin
   mai.allocationSize = req.size;
   mai.memoryTypeIndex = device_memory_type(dd, req.memoryTypeBits);
   if (dd->vk.AllocateMemory(dd->device, &mai, nullptr, &g.memory) != VK_SUCCESS) return false;
-  dd->vk.BindImageMemory(dd->device, g.image, g.memory, 0);
+  if (dd->vk.BindImageMemory(dd->device, g.image, g.memory, 0) != VK_SUCCESS) return false;
   VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vi.image = g.image;
   vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -540,12 +541,14 @@ static bool guide_create(DeviceData* dd, Guide& g, VkFormat fmt, uint32_t w, uin
 }
 
 bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
+  std::lock_guard lock(g_guide_mu);
   if (!g_guide[0].view || g_guide_w != w || g_guide_h != h || !g_guide[0].initialized) return false;
   *view = g_guide[0].view;
   return true;
 }
 
 static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
+  std::lock_guard lock(g_guide_mu);
   if (g_guide_w == w && g_guide_h == h && g_guide[0].image) return true;
   for (auto& g : g_guide) guide_destroy(dd, g);
   retire_guide_pool();
@@ -553,6 +556,8 @@ static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
   for (int i = 0; i < 3; ++i)
     if (!guide_create(dd, g_guide[i], fmts[i], w, h)) {
       log("[ngx] could not create guide image %d (%ux%u)", i, w, h);
+      for (auto& failed : g_guide) guide_destroy(dd, failed);
+      g_guide_w = g_guide_h = 0;
       return false;
     }
   g_guide_w = w;
@@ -563,7 +568,7 @@ static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
 }
 
 static bool ensure_layouts(DeviceData* dd) {
-  if (g_dsl) return true;
+  if (g_dsl && g_pl) return true;
   VkDescriptorSetLayoutBinding b[8] = {};
   for (uint32_t i = 0; i < 8; ++i) {
     b[i].binding = i;
@@ -581,7 +586,11 @@ static bool ensure_layouts(DeviceData* dd) {
   pci.pSetLayouts = &g_dsl;
   pci.pushConstantRangeCount = 1;
   pci.pPushConstantRanges = &pcr;
-  if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) return false;
+  if (dd->vk.CreatePipelineLayout(dd->device, &pci, nullptr, &g_pl) != VK_SUCCESS) {
+    dd->vk.DestroyDescriptorSetLayout(dd->device, g_dsl, nullptr);
+    g_dsl = VK_NULL_HANDLE;
+    return false;
+  }
   return true;
 }
 
@@ -810,6 +819,7 @@ static GuidePush guide_push(const SrFeature& f, uint32_t w, uint32_t h, const Gu
 
 // Guide images go UNDEFINED -> GENERAL once, then stay GENERAL.
 static void guides_init_barrier(DeviceData* dd, VkCommandBuffer cmd) {
+  std::lock_guard lock(g_guide_mu);
   VkImageMemoryBarrier init[3];
   uint32_t n = 0;
   for (auto& g : g_guide)

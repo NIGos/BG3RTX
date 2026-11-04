@@ -1,6 +1,6 @@
-// M5.2 water reflections (docs/PLAN_M5_WATER.md M5.2, rt_water_reflections, default 0; needs
-// rt_water_geometry=1). Ray-traced reflections ON the water surface, computed and measured,
-// not yet composed into the image (the composition plan is in the plan, M5.3):
+// Water reflections and composition (docs/PLAN_M5_WATER.md M5.2-M5.5).
+// Enabled by the release presets together with rt_water_geometry. Reflections are
+// composed into the forward water passes as described below:
 //
 //  - water_rf (core/gi.cpp run_post, after the GI composite and the debug views): two
 //    dispatches of shaders/rt/water_reflect.hlsl. water_primary traces the water TLAS that
@@ -14,7 +14,7 @@
 //  - every rt_timing_frames frames: "[water] reflections" (coverage, tiers, means, skips)
 //    and "[water] reflections GPU" (the two dispatches, median and p90).
 //
-// M5.3 water composition (rt_water_compose, default 0; needs rt_water_reflections=1 and the key
+// M5.3 water composition (rt_water_compose; needs rt_water_reflections=1 and the key
 // on when the water pipelines are created: layer/water.cpp patches the audited water FS then).
 // The patched FS stores its probe-term factors per pixel (common/water_compose.h). Here:
 //  - compose_at_lighting (in water_rf, after the reflection dispatches): the record buffer's
@@ -30,28 +30,28 @@
 //  - "[water] compose", "compose energy", "compose ratio", "compose GPU" every rt_timing_frames.
 // Key off: nothing is allocated, dispatched or bound; core/gi.cpp only tests the key.
 //
-// M5.4 water shadows (rt_water_shadows, default 0; needs rt_water_reflections=1 and the key on when
+// M5.4 water shadows (rt_water_shadows; needs rt_water_reflections=1 and the key on when
 // the water pipelines are created: the layer then patches the FS with the sun words, 40-byte
 // records). The same lighting copy, pass and device-local counters as M5.3, with the WATER_SHADOWS
 // variant of the compose shader: one sun ray per record with a sun term, C' = max(C - (1 - V) D, 0)
 // (plus the reflection term when rt_water_compose is on too). "[water] shadows" every
 // rt_timing_frames; rt_debug 26 the shadow view.
 //
-// M5.4b water local-light shadows (rt_water_ls_shadows, default 0; the same needs, 96-byte records with
+// M5.4b water local-light shadows (rt_water_ls_shadows; the same needs, 96-byte records with
 // the sun's and the local-light words). The WATER_SHADOWS;WATER_LS compose walks each record's froxel
 // list in the first water draw's own set 2 light buffers (captured at that draw, core/em_policy.cpp,
 // pushed at 22..28), checks the recomputed sum against the FS's, and traces the lights the game leaves
 // unshadowed: C' = max(C - F sum (1 - V_k) c_k, 0). A pass without the list gets kFlagLs cleared.
 // "[water] local shadows" every rt_timing_frames; rt_debug 27 the view.
 //
-// M5.5 step 1 water refraction (rt_water_refraction, default 0; the same needs, 104-byte records: the
+// M5.5 step 1 water refraction (rt_water_refraction; the same needs, 104-byte records: the
 // local-light record plus the FS's refraction sample and its weight 1 - a). The WATER_SHADOWS;WATER_LS;
 // WATER_REFR compose traces one refracted ray per transmissive record (Snell at the FS's N, n from its F0)
 // and, where the hit resolves on screen, reads the water draw's own colour copy (its set 2 b4, captured at
 // the draw, core/em_policy.cpp, pushed at 68) there: C' = max(C + (1 - a) (Copy(hit) - Refr), 0). A pass
 // without the copy gets kFlagRefr cleared. "[water] refraction" every rt_timing_frames; rt_debug 28 the view.
 //
-// M5.4c the game's sun shadow on the water (rt_water_game_shadow, default 0; with rt_water_shadows, and both on
+// M5.4c the game's sun shadow on the water (rt_water_game_shadow; with rt_water_shadows, and both on
 // when the water pipelines are created: 8 more bytes per record, common/water_compose.h kGshBytes). The FS
 // that sample the game's cascade shadow map (PL_noCaustics_Shadows, huge_PL_Shadow) record the sun light that
 // shadow removed (Dg) and its Vg; the ;WATER_GSH=1 compose variant gives a record lit by the traced sun ray
@@ -1069,7 +1069,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   g_hit = in.hit;
   const bool want_hit = host->cfg_int("rt_water_hit_shade", 0) != 0 && hit_active();
   bool hit_ready = false;
-  if (hit_active()) {
+  if (want_hit) {
     select_compose_mode(true);
     hit_ready = ensure_compose(alpha_layout, in.push_bytes, sun, ls, refr, gsh);
   }
@@ -1513,7 +1513,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
        [&](auto selected,auto* reference,auto* identity){
          if(host->rt_omm_scene_reference)host->rt_omm_scene_reference(cmd,selected,reference,identity);
        })) {++g_win.skip_layout;return skip();}
-  g_hit=in.hit;
+  g_hit=host->cfg_int("rt_water_hit_shade",0)?in.hit:WaterHitInputs{};
   VkDescriptorSet material_alpha=in.alpha;
   if(hit_active() && (!host->rt_hit_material_use ||
       !host->rt_hit_material_use(cmd,in.scene_tlas,in.alpha,in.hit_identity,&material_alpha) || !material_alpha)) g_hit=WaterHitInputs{};
@@ -1523,11 +1523,10 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   g_building = false;
   bool ready = false;
   if (in.scene_tlas && in.alpha && host->rt_alpha && host->rt_alpha(&alpha_layout, &alpha_any) && alpha_layout && ensure_buffers()) {
-    // Prepare both layouts at the first lighting, even when hit shading is off.
-    // Preserve the ordinary pass until the hit layout's pipelines are ready.
+    // Prepare hit resources only on request; preserve the ordinary pass while they build.
     const bool want_hit = host->cfg_int("rt_water_hit_shade", 0) != 0 && hit_active();
     bool hit_ready = false;
-    if (hit_active()) {
+    if (want_hit) {
       select_reflection_mode(true);
       hit_ready = ensure_layouts(alpha_layout, in.push_bytes, in.rf_hit != VK_NULL_HANDLE);
     }
@@ -1669,6 +1668,7 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   const bool drawn = core_water_pass_take(cmd, lights, &lights_ok, &copy, &copy_ok);
   const int view = host->cfg_int("rt_debug", 0);
   const bool views = view >= 21 && view <= 24 && water_rf_wanted();
+  std::lock_guard<std::mutex> lock(g_mu);
   // M5.3, or M5.4 / M5.4b alone on a buffer with their words (else compose_at_lighting stashed nothing).
   const bool comp = compose_wanted() || (shadows_wanted() && g_csun) || (ls_wanted() && g_cls) || (refr_wanted() && g_crr);
   const bool pan_water = host->pan_capture && host->cfg_int("pan_water", 0) && host->cfg_int("pan_capture", 0) > 0;
@@ -1680,7 +1680,6 @@ void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p) {
   bool ends = false;
   for (const auto& a : kAudited) ends |= a.fs == p->first_fs_hash || a.fs == p->last_fs_hash;
   if (!ends && !drawn) return;
-  std::lock_guard<std::mutex> lock(g_mu);
   // Raw diagnostic capture, before post/RR. No dispatch or shader changes.
   Bg3Binding pan_target{};
   if (pan_water) {

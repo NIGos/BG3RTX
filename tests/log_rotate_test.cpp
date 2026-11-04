@@ -54,7 +54,8 @@ int main(){
  // No file at all: shift fails quietly, the open creates it.
  DeleteFileA(log.c_str());DeleteFileA(prev.c_str());
  CHECK(!shift(log));
- {Writer w;w.path=log;CHECK(w.write("first\n"));CHECK(!exists(prev));std::fclose(w.f);}
+ {Writer w;w.path=log;CHECK(w.write("first\n"));CHECK(!exists(prev));CHECK(slurp(log)=="first\r\n");std::fclose(w.f);}
+ {Writer w;w.path=dir+"\\missing\\bg3rtx.log";CHECK(!w.write("unavailable\n"));CHECK(!w.f);}
  DeleteFileA(log.c_str());DeleteFileA(prev.c_str());RemoveDirectoryA(dir.c_str());
  std::printf("log_rotate_test: %u checks passed\n",checks);
  return 0;

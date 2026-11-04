@@ -90,3 +90,5 @@ python tools/live_batches/tileset_qual/analyze.py --compare <off.tileset.json> <
 
 No pending inbox is written. Historical replay has no ON Tileset evidence;
 successful lint/dry-run is preparation only. No release promotion is implied.
+
+Final outcome (2026-11-04): hidden and off, deferred after release. OFF VALID: RT 9.92 ms, GI 12.03 ms, float mean 0.295. ON INVALID twice: missing debug dispatch, then pipeline still building in the 60-frame diagnostic window. Complete records 19, unknown 33, capture-incomplete 0; cross-launch qualified hits 13.06 M -> 10.57 M, row rejects +6.3 M. No coverage gain is claimed. See [Tileset outcome](../../../docs/TRACK_D_SCENE_BUILD.md#native-tilesets-qualification-outcome-2026-11-04).

@@ -9,8 +9,7 @@
 //   Options: --game <folder> --exe <program> --clean --no-clamp --out <file> -- <game arguments>
 //   Steam launch option:  "<path>\bin\BG3RTX.exe" %command%
 //
-// The window is plain Win32 + common controls, generated from the shared
-// table in common/settings.h (the phase-2 overlay draws the same table).
+// The WebView UI and native Win32 fallback share the settings table in common/settings.h.
 #include "launcher.h"
 #include "web_host.h"
 

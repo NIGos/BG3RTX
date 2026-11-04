@@ -191,9 +191,7 @@ bool slot_retired(const SceneSlot& s, uint64_t gpu_done, uint64_t now) {
   }
   if (!s.used) return true;
   if (gpu_done >= s.last_use + 2) return true;
-  if (omm::has_resources() || native_hit::enabled()) return false; // Neither provider substitutes age for completion.
-  // No present fence completed for 240 frames (as defer_tick's fallback).
-  return now >= s.last_use + 240;
+  return false;   // Frame age never proves GPU completion.
 }
 
 // Caller holds g_mu.
@@ -281,7 +279,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char*
     out = Buf{};
     return false;
   }
-  dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if (dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
+    dd->vk.FreeMemory(dd->device, out.m, nullptr);
+    out = Buf{};
+    return false;
+  }
   out.size = size;
   VkBufferDeviceAddressInfo ai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
   ai.buffer = out.b;

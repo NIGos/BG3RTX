@@ -1,3 +1,5 @@
+> Superseded. This is historical evidence. See the [2026-11-04 release report](PROGRESS_CODEX.md) for current decisions.
+
 # Release check, 2026-11-01 (main 89dd500)
 
 ## 1. Default-path identity against the last live-verified main

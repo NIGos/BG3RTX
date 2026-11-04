@@ -295,7 +295,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host) 
     out = Buf{};
     return false;
   }
-  dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if (dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
+    dd->vk.FreeMemory(dd->device, out.m, nullptr);
+    out = Buf{};
+    return false;
+  }
   out.size = size;
   if (host) {
     void* p = nullptr;
@@ -417,6 +422,12 @@ bool ensure_pipeline() {
 
 bool make_image(bool array, Img& out) {
   DeviceData* dd = g_dd;
+  auto failed = [&]() {
+    if (out.image) dd->vk.DestroyImage(dd->device, out.image, nullptr);
+    if (out.mem) dd->vk.FreeMemory(dd->device, out.mem, nullptr);
+    out = Img{};
+    return false;
+  };
   VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
   ici.imageType = VK_IMAGE_TYPE_2D;
   ici.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -424,21 +435,22 @@ bool make_image(bool array, Img& out) {
   ici.mipLevels = ici.arrayLayers = 1;
   ici.samples = VK_SAMPLE_COUNT_1_BIT;
   ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-  if (dd->vk.CreateImage(dd->device, &ici, nullptr, &out.image) != VK_SUCCESS) return false;
+  if (dd->vk.CreateImage(dd->device, &ici, nullptr, &out.image) != VK_SUCCESS) return failed();
   VkMemoryRequirements req;
   dd->vk.GetImageMemoryRequirements(dd->device, out.image, &req);
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
   mai.allocationSize = req.size;
   mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out.mem) != VK_SUCCESS)
-    return false;
-  dd->vk.BindImageMemory(dd->device, out.image, out.mem, 0);
+    return failed();
+  if (dd->vk.BindImageMemory(dd->device, out.image, out.mem, 0) != VK_SUCCESS) return failed();
   VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
   vci.image = out.image;
   vci.viewType = array ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
   vci.format = ici.format;
   vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  return dd->vk.CreateImageView(dd->device, &vci, nullptr, &out.view) == VK_SUCCESS;
+  if (dd->vk.CreateImageView(dd->device, &vci, nullptr, &out.view) != VK_SUCCESS) return failed();
+  return true;
 }
 
 // The dummies are white (factor 1), filled once in the first build's command buffer.
@@ -1415,11 +1427,14 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
     return;
   }
   ++g_own_next;
-  dd->vk.ResetFences(dd->device, 1, &o.fence);
-  dd->vk.ResetCommandBuffer(o.cb, 0);
+  o.used = false;   // The previous submission is complete; failed recording owns no fence.
+  if (dd->vk.ResetFences(dd->device, 1, &o.fence) != VK_SUCCESS ||
+      dd->vk.ResetCommandBuffer(o.cb, 0) != VK_SUCCESS) return;
   VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  dd->vk.BeginCommandBuffer(o.cb, &bi);
+  const VkResult begin_result = dd->vk.BeginCommandBuffer(o.cb, &bi);
+  fault_on_result(dd, begin_result, "emissive build begin recording");
+  if (begin_result != VK_SUCCESS) return;
   // Everything the game's batch wrote (effects-pass XFB, conversions) before our reads.
   barrier(o.cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
@@ -1452,7 +1467,9 @@ void em_after_submit(DeviceData* dd, VkQueue queue, const std::vector<VkCommandB
     }
   }
   g_demand = 0;
-  dd->vk.EndCommandBuffer(o.cb);
+  const VkResult end_result = dd->vk.EndCommandBuffer(o.cb);
+  fault_on_result(dd, end_result, "emissive build end recording");
+  if (end_result != VK_SUCCESS) return;
   // The game's images our build samples (masks, base maps, VT caches) stay alive until it
   // ran: register what the game's command buffers referenced on ours too (tracker.cpp).
   if (CmdState* ms = cmd_state(o.cb, true)) ms->refs = std::move(refs);

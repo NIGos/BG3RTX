@@ -5,8 +5,7 @@
 // What it does today:
 //  - a pass census: every distinct pass signature (first fragment shader +
 //    attachment formats + size) with how often it ran, logged on request;
-//  - the pattern for hot-reloaded compute work: a pipeline rebuilt whenever
-//    its HLSL source recompiles.
+//  - lighting, GI and water through the callbacks below.
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -44,74 +43,10 @@ static void census_dump() {
               k.w, k.h, k.colors, k.c0, k.depth, s.draws, (unsigned long long)s.count);
 }
 
-// ---- hot-reloaded compute pipeline (template for GI work) ----
-
-struct Compute {
-  VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
-  VkPipelineLayout layout = VK_NULL_HANDLE;
-  VkPipeline pipeline = VK_NULL_HANDLE;
-  uint64_t generation = 0;
-};
-static Compute g_probe;
-
-static void compute_release(Compute& c) {
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)c.pipeline);
-  host->defer_destroy(BG3_DEFER_PIPELINE_LAYOUT, (uint64_t)c.layout);
-  host->defer_destroy(BG3_DEFER_DESCRIPTOR_SET_LAYOUT, (uint64_t)c.set_layout);
-  c = Compute{};
-}
-
-// Rebuilds the pipeline when its source compiled to a new generation.
-static bool compute_refresh(Compute& c, const char* file) {
-  Bg3ShaderBlob blob{};
-  if (!host->get_shader(file, "main", "cs_6_6", &blob)) return false;
-  if (c.pipeline && blob.generation == c.generation) return true;
-
-  const VkDeviceFuncs& vk = *host->vk;
-  VkDevice dev = host->device;
-  if (!c.set_layout) {
-    VkDescriptorSetLayoutBinding b{0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-    VkDescriptorSetLayoutCreateInfo sci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    sci.bindingCount = 1;
-    sci.pBindings = &b;
-    vk.CreateDescriptorSetLayout(dev, &sci, nullptr, &c.set_layout);
-    VkPushConstantRange pc{VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
-    VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    lci.setLayoutCount = 1;
-    lci.pSetLayouts = &c.set_layout;
-    lci.pushConstantRangeCount = 1;
-    lci.pPushConstantRanges = &pc;
-    vk.CreatePipelineLayout(dev, &lci, nullptr, &c.layout);
-  }
-  VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-  mci.codeSize = blob.size_bytes;
-  mci.pCode = blob.code;
-  // A real module: a null module with VkShaderModuleCreateInfo chained needs maintenance5.
-  VkShaderModule mod = VK_NULL_HANDLE;
-  if (vk.CreateShaderModule(dev, &mci, nullptr, &mod) != VK_SUCCESS) return c.pipeline != VK_NULL_HANDLE;
-  VkComputePipelineCreateInfo pci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-  pci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main",
-               nullptr};
-  pci.layout = c.layout;
-  VkPipeline p = VK_NULL_HANDLE;
-  VkResult r = vk.CreateComputePipelines(dev, VK_NULL_HANDLE, 1, &pci, nullptr, &p);
-  vk.DestroyShaderModule(dev, mod, nullptr);
-  if (r != VK_SUCCESS) {
-    host->log("%s: pipeline creation failed (%d), keeping the previous one", file, r);
-    return c.pipeline != VK_NULL_HANDLE;
-  }
-  host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)c.pipeline);
-  c.pipeline = p;
-  c.generation = blob.generation;
-  host->log("%s: pipeline generation %llu ready", file, (unsigned long long)blob.generation);
-  return true;
-}
-
 // ---- callbacks ----
 
 static void on_frame(uint64_t frame) {
   gi_on_frame(frame);   // the background pipeline builds' status lines
-  compute_refresh(g_probe, "probe.hlsl");
   int* census_req = static_cast<int*>(host->persist("core.census_request", sizeof(int)));
   int want = host->cfg_int("census_dump", 0);
   if (want != *census_req) {
@@ -144,7 +79,6 @@ static void unload() {
   gi_release();
   em_release();
   water_release();
-  compute_release(g_probe);
   host->log("core unloading");
 }
 

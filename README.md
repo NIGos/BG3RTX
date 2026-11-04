@@ -7,14 +7,29 @@ It is a Vulkan layer that runs from this repository and never modifies the game 
 or the registry. Inside the layer, a core DLL and HLSL shaders reload while the
 game is running.
 
-## Quick start
+## Players
+
+Use the packaged README and installer for installation and play. The source copy is
+[docs/release/README.md](docs/release/README.md). It covers **Install.cmd**, the launcher,
+requirements and support. See [the settings guide](docs/USER_SETTINGS.md) for player controls.
+
+## Developers
+
+Build from a PowerShell development environment with MSVC, Ninja and the Vulkan SDK:
 
 ```powershell
-.\scripts\build.ps1                 # first build (MSVC + Ninja + Vulkan SDK)
-.\scripts\launch-bg3.ps1            # start bg3.exe with the layer enabled
+.\scripts\build.ps1 -Test          # build and run CTests
 ```
 
-Use the **Vulkan** renderer (`bg3.exe`). The DX11 executable doesn't go through Vulkan layers.
+Start with [the session handoff](docs/HANDOFF_SESSION.md) and
+[the release report](docs/PROGRESS_CODEX.md). Read [the architecture](docs/ARCHITECTURE.md)
+for the host/core boundary, [QA](docs/QA.md) for checks and [the docs index](docs/README.md)
+for effect designs.
+
+Agents must launch the game only through `scripts/test-queue.ps1`. Live batches need
+explicit user steering. Do not start the runner while the user plays or while
+`captures/queue/USER_PLAYING` exists. See [AGENTS.md](AGENTS.md) for the full rules.
+Use the Vulkan renderer (`bg3.exe`).
 
 | Do this | Effect |
 |---|---|
@@ -23,10 +38,4 @@ Use the **Vulkan** renderer (`bg3.exe`). The DX11 executable doesn't go through 
 | `.\scripts\build.ps1 -Watch` | rebuilds the core on every save; the game swaps it in at the next present |
 | edit anything under `shaders\` | the shader recompiles and its pipeline is rebuilt in game |
 | edit `bg3rtx.ini` | re-read within about a second |
-| `.\scripts\auto-run.ps1` | unattended loop: build, launch on the latest save, auto-capture, close, analyse (~1 min). Headless by default (display can be off); `-RealPresent` for real presentation, `-Move` to pan the camera during the capture, `-Set key=value` for ini overrides |
 | check `bg3rtx.log` | output from the host, core and shader compiler; it can be read while the game runs |
-
-To check that the layer works without starting BG3, run any Vulkan program:
-`.\scripts\launch-bg3.ps1 -Exe "$env:VULKAN_SDK\Bin\vkcube.exe"`.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/README.md](docs/README.md) (the docs index; the old roadmap is in [docs/archive/ROADMAP.md](docs/archive/ROADMAP.md)).

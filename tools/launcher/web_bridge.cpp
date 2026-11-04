@@ -172,7 +172,7 @@ std::string Bridge::handle(const std::string& message){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!shown(st::kKnobs[i])){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps,opt_in()):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
+    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value,opt_in());state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
