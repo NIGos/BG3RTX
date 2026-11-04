@@ -59,6 +59,68 @@ Increment 1 uses the game's own hair lighting (class 5, Marschner R/TT/TRT in th
 with the fibre BSDF of `tools/hair_groom/bsdf.py` (Chiang 2016 from the papers, licence-clean) plus dual
 scattering, fed by the sun, the local-light lists and our GI; colour from Hair_Color via Chiang eq. 9.
 
+### M4.1: diffuse indirect response (offline, 2026-11-04)
+
+`rt_hair_fibre_gi=0/1` is live, Developer only, and off in every preset. It requires on-screen strands.
+The referenced `RTX_HAIR_COMPLETE_PLAN.md` is absent in this checkout; this implements C4 below.
+
+Source: [Zinke et al. 2008, Dual Scattering Approximation for Fast Multiple Scattering in Hair](https://www.cemyuksel.com/research/dualscattering/dualscattering.pdf),
+eq. 5 (forward attenuation), eqs. 10 and 14 (local backward scattering), eqs. 18-22 and Fig. 5
+(angular integration and direct/global combination). The following slab integral and its calibration are
+our extension, not a volume-albedo formula claimed by the paper.
+
+Let q = 1 - a_f^2. The local multiple-backward fraction is
+`B = a_b a_f^2/q + a_b^3 a_f^2/q^3`; `f_back` is its normalized angular kernel already implemented in
+`dual.shade`. For the first visible fibre, sample depth `z = mu_o Exp(1)` and incident crossings
+`n ~ Poisson(z/mu_i)`. Here `mu_i` and `mu_o` are positive slab-normal cosines, incident directions are
+cosine distributed, view directions uniform over the upper hemisphere, and fibre tangent and offset
+are random. With `I0 = 1[n=0]`, `I+ = 1[n>0]`, the integrated dual model is:
+
+```
+S = 2 pi mean[(mu_o/mu_i) I0 f_s]
+M = 2 pi mean[(mu_o/mu_i) k {
+      d_f a_f^n I+ f_s + d_b (I0 + pi d_f a_f^n I+) f_back }]
+A = S + k_volume M
+```
+
+The `1/mu_i` changes incident flux sampling to the fibre's radiance measure. `d_f = d_b = 0.7` and
+the existing directional correction `k` are unchanged. Directional `k` alone is not calibrated for
+uniform incident radiance. A separate `k_volume = (A_MC - S)/M` is fitted on grey diffuse slabs:
+100,000 adjoint paths per grid cell, two seeds, 4,000 bounces. The calibration JSON records S, M,
+k_volume and both references. We bake A for a cheap lookup, linear in colour and roughness.
+The nonabsorbing semi-infinite slab has `A(1,beta)=1` by conservation; it is an explicit endpoint,
+not the direct table's clamped colour 0.9. Other inputs inherit the calibrated ranges: colour >= 0.02,
+roughness 0.35-0.7 (clamped outside). This is an isotropic random-fibre volume response, not directional GI.
+
+The diffuse reference reuses `bsdf.slab_albedo` with an analytic attenuation-mixture sampler for
+`bsdf.evaluate`: longitudinal von Mises-Fisher marginal and inverse-CDF logistic azimuth. Its angular
+moments agree with independent uniform-direction integration within four standard errors. This avoids
+the old candidate walk's multiplicative weight noise near white; normal-incidence legacy tests are unchanged.
+
+`dual.volume_albedo` and `hd_volume_albedo` use generated twin tables. Independent held-out RGB slab
+walks (50,000 paths, seed 91) give maximum channel errors 1.3882% for CHAR_Hair at beta 0.41,
+0.7563% for (0.6, 0.45, 0.3) at 0.55, and 0.8466% for (0.85, 0.7, 0.5) at 0.7.
+White furnace: A = 1 at beta 0.35/0.5/0.7; an independent 20,000-bounce white walk returns 0.9842
+(finite-path truncation). GPU vs CPU: 2,006 volume samples, maximum relative error 1.46e-7.
+
+Integration is in `gi_composite.hlsl`, where `gather_history` already supplies the exact irradiance
+used for `gi.rgb * diffuse_colour * strength`. On class 5 pixels with a sealed, current-frame strand
+entry at the winning depth and a valid segment, replace the response with `gi.rgb * A * strength`
+before adding it and before storing next frame's bounce source. This avoids adding and subtracting the
+Lambert term, and needs no new irradiance binding or ABI. Native game ambient is not estimated or removed.
+The earlier direct fibre pass cannot use its D-LS bindings to access this gathered GI result.
+
+Only the two extra composite requests have `RT_HAIR_FIBRE_GI_REFERENCE=1`. The define isolates the
+physical-storage-buffer/shaderInt64 capabilities as well as the arithmetic. Key off uses the original
+Pipe, so a pending asynchronous feature pipeline cannot run after switching off. Request delta: +2.
+All seven ordinary requests depending on the edited shaders are byte-identical to starting HEAD;
+all nine explicit touched requests compile and pass spirv-val. Live appearance and GPU cost are unmeasured;
+no game launch is authorized for this task. Keep the key off pending those checks.
+Build succeeds and 145/146 CTests pass, including both hair tests. The inherited water surface gate fails
+13 OFF comparisons against merge-base 009f60f, although all its shader inputs are unchanged from starting
+HEAD 97e2487. The unmodified water gate passes with `--baseline HEAD` (16/16 OFF, 2/2 ordinary, 16/16
+production validation). Full-suite acceptance remains blocked by that unrelated baseline difference.
+
 ## 4. RR, DLSS-G, DoF
 RR guides are built from the G-buffer at its pass end (`layer/ngx.cpp record_guides_at_gbuffer`): strands
 there are ordinary pixels (albedo, normal, roughness). Specular hit distance: D-RF's, unchanged. Motion
@@ -228,6 +290,23 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
   the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
 
+## 5c. Dithered strand tips (C3a, offline)
+`rt_hair_groom_tips` is a live Developer switch, off in every preset. Header word 15 is flags;
+bit 0 enables the native depth/velocity TAA alpha test at the strand UV. Both variants use the
+mask combination M.w (native velocity m2/m3 map to G-buffer m5/m7), fragment pixel centres,
+header tag minus 1 modulo 4, and the native auxiliary x jitter (G-buffer location 2, velocity
+location 6). SoftenTipsAlpha = 0 and DontTouchMe_Beard_Alpha = 1; no card grazing factor on a
+cylinder. Failed coverage discards the fragment after accepting/caching the strand hit; the
+pixel record and its consumers are unchanged. Velocity reconstructs UV from the same segment
+endpoints and cached parameter. Flag off bypasses the added test and velocity texture reads.
+
+CPU twin `primary.tips_keep`, CTest `hair_groom_test`: 4 x 5 pixel centres, four frame phases,
+20 uniform native-jitter phases, 1600 samples per alpha. Kept shares 0/0.25/0.5/0.75/1,
+exact for the five tested alphas; integration tolerance is one jitter bin (0.05). The spatial
+pattern alone is not uniform. Shader request delta: 0. Live appearance, matching coverage/MV
+and GPU cost remain unmeasured. In Test Dialogue1, enable on-screen strands only after the
+reload safety fix is qualified, then toggle tips and inspect fading tips and temporal edges.
+
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
    built from the interpolated frame (view space like the normal). Open: the root-to-tip sign of that frame.
@@ -304,3 +383,21 @@ key-off identity, then the smoke_ultra job with the other qualified keys on. Gat
 | C6 | Every view: portraits and small passes, instanced hair (0ca5ee93), reflections/water secondary hits shade strands with the fibre BSDF | offline, then live | per-pass strand participation lines; no card-only pass left in the smoke run |
 | C7 | Qualify: Ultra preset entry, GUI, cost table, user check notes (what to look at, which save) | live | smoke_ultra clean; cost within the user's budget |
 Strand dynamics of their own (collision, wind per strand) stay out: strands follow the game's simulated cards.
+
+### C2 specialization default (2026-11-04)
+`rt_hair_groom_shadow_t` is specialization 1026 (`kSpecIdHairGroomShadowT`), default 0.
+At 0, rt_visibility uses the original rt_groom_trace first-hit expression. At 1 it uses
+rt_groom_blocks and the shared hp_crossing deduplication used by the GPU bench.
+GI and native water pipelines carry the value in their specialization cache key; toggles
+require driver pipeline creation only. No shader request or ABI change. The former
+RT_GROOM_SHADOW_T_REFERENCE text copy is removed. tools/hair_shadow_check.py compares
+ordinary requests against main, accepting raw differences only through the shared strict
+canonical equivalence with 1026 fixed to zero and every other surviving specialization variable.
+The opt-in primary count/G-buffer and fibre programs have separate GPU validation.
+Live quality and GPU cost remain unmeasured. Check skin and neck under hair in Test Dialogue1,
+then Campsite, with the prepared hair_l2 same-run pairs; no live batch is authorized here.
+Offline gates: 113/255 ordinary requests byte-identical to main 9cb1e3a; 142 strict equivalent
+at default, zero failures. Request delta 0. Unchanged water_surface_shader_test passes against
+009f60f: 16/16 OFF accepted, 16/16 production validated. Full build: 147/147 CTests passed.
+GPU shadow bench: 3000/3000 crossing counts match CPU; 174623 transmitted trials vs 175064.4
+expected, sigma 353.2 (1.25 sigma error). These are offline gates; live GPU cost remains pending.

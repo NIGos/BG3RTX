@@ -146,6 +146,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float4 ma = tex(gMask, uv + nz * m7, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
   const float4 mb = tex(gMask, uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
   const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
+  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
   const float m18 = F(18u);
   const float3 c279 = lerp(V(4u), V(6u), m18);
   const float f281 = frac(uv.y);
@@ -189,5 +190,10 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
                  clamp((1.0 - 0.3 * z550) * saturate(f334 * (saturate(dot(c279, 1.0.xxx)) * 2.0 - 1.0) + F(38u)),
                        0.01, 1.0));
   o.depth = asfloat(e.z);
+  // C2: one fragment per 8 x 8 pixel block stores this groom's colour sample (albedo, fibre roughness) and the tag.
+  if (all((uint2(pos.xy) & 7u) == 0u)) {
+    vk::RawBufferStore<uint4>(rec + hair_primary_colour_offset + k * 32u, asuint(float4(o.rt1.rgb, max(0.09, o.rt2.x))), 16);
+    vk::RawBufferStore<uint>(rec + hair_primary_colour_offset + k * 32u + 16u, tag, 4);
+  }
   return o;
 }

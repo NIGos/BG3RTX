@@ -427,7 +427,10 @@ static void test_gui_levels() {
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 14);   // native coverage and pool trim graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, temporal post, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_primary_order", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
+  CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
+  CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
   const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
   if(submit_batch){
     CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);

@@ -279,10 +279,14 @@ bool as_create(VkDeviceSize size, AsAlloc& out, const char* guard_what = nullptr
   return as_handle(size, ci, off, out);
 }
 
-void as_destroy(AsAlloc& a) {
+// Groom BLAS, points and LOD ranges: the strand passes in the game's command buffers (rt_hair_groom_primary: the
+// G-buffer variant, the coverage probe) may trace a groom TLAS published up to 2 frames before the one the scene slots
+// track (hc1/hv5 2026-11-04: device lost in the first load, reads in no buffer of ours). Their frees wait that long more.
+constexpr uint64_t kGroomFreeLag = 3;
+void as_destroy(AsAlloc& a, uint64_t lag = 0) {
   if (a.chunk >= 0) {
     g_chunks[a.chunk].ra.mark_pending(a.size);
-    g_pending_free.push_back({frame_index(), a.chunk, a.off, a.size, a.as});
+    g_pending_free.push_back({frame_index() + lag, a.chunk, a.off, a.size, a.as});
   }
   else if (a.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(a.as));
   a = AsAlloc{};
@@ -910,10 +914,10 @@ bool ensure_groom_pipeline() {
 
 void groom_release(GroomSlot& g, uint64_t now) {
   if (g.pos_size) {
-    g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+    g_pending_free.push_back({now + kGroomFreeLag, -1, g.pos_off, g.pos_size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
   }
-  as_destroy(g.as);
+  as_destroy(g.as, kGroomFreeLag);
   if (g.readback.b) free_buf(g.readback);
   if (g.compact == 1) g_groom_free_queries.push_back(g.query);
   g = GroomSlot{};
@@ -946,7 +950,7 @@ bool groom_make_room(VkDeviceSize need, uint64_t now) {
   }
   for (uint64_t key : evict) {
     GroomAsset::Lod& l = *refs[size_t(key)];
-    g_pending_free.push_back({now, -1, l.base, l.size});
+    g_pending_free.push_back({now + kGroomFreeLag, -1, l.base, l.size});
     g_groom_pool_used -= (std::min)(g_groom_pool_used, l.size);
     l.ready = false;
   }
@@ -994,7 +998,7 @@ const GroomAsset::Lod* groom_lod(VkCommandBuffer cmd, uint64_t id, GroomAsset& a
   if (!pool_alloc(cmd, total, &base)) return nullptr;
   GroomUpload u{};
   if (!make_buf(u.staging, total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, "hair groom upload")) {
-    g_pending_free.push_back({now, -1, base, total});
+    g_pending_free.push_back({now + kGroomFreeLag, -1, base, total});
     return nullptr;
   }
   std::memcpy(u.staging.map + n.tri, l.triangle, size_t(l.points) * 4);
@@ -2681,10 +2685,10 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       // A new LOD, or primary strands turned on for a slot without per-point UVs: new points range and a full build.
       if (ok && (lod != g.lod || (hp_on && g.pos_size && !g.uv_off))) {
         if (g.pos_size) {
-          g_pending_free.push_back({now, -1, g.pos_off, g.pos_size});
+          g_pending_free.push_back({now + kGroomFreeLag, -1, g.pos_off, g.pos_size});
           g_groom_pool_used -= (std::min)(g_groom_pool_used, g.pos_size);
         }
-        as_destroy(g.as);
+        as_destroy(g.as, kGroomFreeLag);
         if (g.compact == 1) g_groom_free_queries.push_back(g.query);
         g.pos_size = 0; g.uv_off = 0; g.prev_off = 0; g.prev_frames = 0; g.built = false; g.compact = 0; g.lod = lod;
       }
@@ -3025,7 +3029,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         VkCopyAccelerationStructureInfoKHR cp{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
         cp.src = w.old.as; cp.dst = w.g->as.as; cp.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
         dd->vk.CmdCopyAccelerationStructureKHR(cmd, &cp);
-        as_destroy(w.old);
+        as_destroy(w.old, kGroomFreeLag);
       }
       dd->vk.CmdFillBuffer(cmd, g_pool.b, w.g->bounds_off, 12, 0xFFFFFFFFu);
       dd->vk.CmdFillBuffer(cmd, g_pool.b, w.g->bounds_off + 12, 12, 0u);
@@ -3454,7 +3458,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         in.accelerationStructureReference = w.g->as.addr;
         std::memcpy(gi + groom_count, &in, sizeof in);
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
-        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), 0u, 0u};
+        // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
+        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
         if (groom_count < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).

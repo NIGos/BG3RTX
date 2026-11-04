@@ -412,6 +412,19 @@
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
+    {"id": "exp_hair_fibre_gi", "label": "Strand indirect scattering",
+     "description": "Uses the fibre volume's multiple-scattering reflectance for indirect light on visible strands. Experimental; cost and look unqualified.",
+     "apply": "live", "apply_note": "live; needs Strand hair on screen and GI", "advanced": false, "experimental": true, "developer": true,
+     "category": "Developer", "summary": "Uses the fibre volume's multiple-scattering reflectance for indirect light on visible strands. Experimental; cost and look unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {"rt": "1"},
+     "required_from_choice": {"rt": 1},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_fibre_gi": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_fibre_gi": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_groom_crowd", "label": "Strand hair crowd budget",
      "description": "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
      "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
@@ -426,6 +439,19 @@
        {"id": "large", "label": "3.5 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "3500"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
        {"id": "small", "label": "1.8 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "1800"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
+    {"id": "exp_hair_groom_shadow_t", "label": "Strand shadow transmittance",
+     "description": "Experimental: shadow rays through strand hair pass with the fibre's forward-scattered light per crossing instead of being blocked. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Developer", "summary": "Experimental: shadow rays through strand hair pass with the fibre's forward-scattered light per crossing instead of being blocked. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_shadow_t": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_shadow_t": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
     {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
      "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
@@ -438,6 +464,19 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary_order": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary_order": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+     ]},
+    {"id": "exp_hair_groom_tips", "label": "Dithered strand tips",
+     "description": "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
+     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
+     "category": "Developer", "summary": "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
+     "details": "",
+     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "required_on": {},
+     "required_from_choice": {},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "kind": "choice", "choices": [
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_tips": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_tips": "1"}, "needs": {"exp_hair_groom_primary": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims unused hair capture memory.",

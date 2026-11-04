@@ -97,6 +97,7 @@ int main(int argc, char** argv) {
     CHECK(slot<kPipelineSlots && gpu_opt_slots.insert(slot).second);
   }
   CHECK(kSpecIdHairGroom == 1020);
+  CHECK(kSpecIdHairGroomShadowT == 1026);
   for (unsigned base = 0; base < kHairGroomSlot; ++base) {
     const auto on = base | hair_groom_slot("gi/rt_shadow.hlsl", true);
     CHECK((base | hair_groom_slot("gi/rt_shadow.hlsl", false)) == base && on != base && on < kPipelineSlots);

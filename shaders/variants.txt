@@ -4,6 +4,8 @@ gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1
 gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1
 gi/gi_composite.hlsl?RT_SPEC_NATIVE=1
 gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1
+gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_HAIR_FIBRE_GI_REFERENCE=1
+gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_HAIR_FIBRE_GI_REFERENCE=1
 gi/gi_contact.hlsl?RT_SPEC_NATIVE=1
 gi/gi_contact.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1
 gi/gi_temporal.hlsl?RT_SPEC_NATIVE=1;GI_SPEC_GUARDS=1

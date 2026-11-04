@@ -39,10 +39,24 @@ float hp_strand_depth_ortho(float d_card, float t_card, float t_strand, float dd
 }
 
 // The frame record (common/hair_primary.h): table offset, pixel entry size, the no-strand key, the segment bits.
+// Header word 15 is flags; bit 0 enables native mask-alpha tip coverage (common/hair_primary.h).
+static const uint hair_primary_flag_tips = 1u;
+// Native depth/velocity TAA alpha test (5a03e5b6 / b70cadc5): m8 = 0, m9 = 1,
+// no card grazing term on a cylindrical strand. Pixel centres and native per-draw jitter
+// are identical in both passes; tag is frame index + 1. The cached hit is never changed.
+bool hp_tips_keep(float alpha, float2 pixel, uint tag, float jitter) {
+  const float phase = float((tag - 1u) & 3u);
+  const float2 pattern = frac(float2((pixel.y * 2.0 + pixel.x - 1.5 + phase) * 0.2,
+                                   pixel.x * 2.4084 + pixel.y * 3.2535));
+  const float dither = frac(dot(float2(0.833, 0.1666), pattern) + jitter);
+  return alpha + dither - 0.6667 >= 0.3333;
+}
+
 static const uint hair_primary_table_offset = 64u;
 static const uint hair_primary_pixel_bytes = 16u;
 static const uint hair_primary_no_strand = 0xFFFFFFFFu;
 static const uint hair_primary_max_segment = 0x00FFFFFFu;
+static const uint hair_primary_colour_offset = 1088u;   // common/hair_primary.h kColourOffset (32 bytes per groom)
 // The first point i0 of segment `seg` of groom table row `row` (mesh-pool byte offsets of the points, point UVs, segment
 // starts, previous points; common/hair_primary.h), when every pool byte the strand readers touch for that segment lies
 // inside the mesh pool (pool_bytes: header word 14). A pixel entry of another groom, LOD or frame then fails closed
@@ -60,6 +74,23 @@ bool hp_segment(uint64_t pool, uint pool_bytes, uint4 row, uint seg, out uint i0
 }
 // Byte address of element i (size bytes) of the pool array at offset off (after hp_segment accepted i0).
 uint64_t hp_at(uint64_t pool, uint off, uint i, uint size) { return pool + uint64_t(off) + uint64_t(i) * size; }
+
+// Strand crossings of one ray from the candidates of a non-opaque groom query (arbitrary order): a strand's chained
+// segments meet in one joint that both report, so a candidate whose neighbour segment (same instance, primitive +- 1)
+// was already seen is the same crossing. The last kHpSeen candidates are kept (a shadow ray crosses few strands).
+static const uint kHpSeen = 8u;
+struct HpCrossings { uint inst[kHpSeen]; uint prim[kHpSeen]; uint n; };
+HpCrossings hp_crossings_init() { HpCrossings c = (HpCrossings)0; c.n = 0u; return c; }
+bool hp_crossing(inout HpCrossings c, uint inst, uint prim) {
+  bool fresh = true;
+  [unroll] for (uint i = 0; i < kHpSeen; ++i)
+    if (i < min(c.n, kHpSeen) && c.inst[i] == inst && (c.prim[i] + 1u == prim || prim + 1u == c.prim[i])) fresh = false;
+  const uint slot = c.n % kHpSeen;
+  c.inst[slot] = inst;
+  c.prim[slot] = prim;
+  ++c.n;
+  return fresh;
+}
 
 // Largest strand radius a groom file may hold (common/hair_groom_asset.h rejects radii >= 10 mm).
 static const float hair_primary_max_radius = 0.01;

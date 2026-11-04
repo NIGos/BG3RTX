@@ -56,11 +56,16 @@ float hf_strands(float3 P, float3 L, float dist) {
   r.Direction = L;
   r.TMin = 1e-3;
   r.TMax = dist;
+  // One non-opaque query, each strand once: the joint of two chained segments reports both, so a candidate next to
+  // an already seen segment is the same crossing (hp_crossing; tests/hair_primary_gpu_test.py shadow check: equal to
+  // the CPU count on every ray; successive closest hits counted 35% of the rays one or more strands too many).
+  if (!rt_groom_live()) return 0.0;
   uint n = 0u;
-  [loop] for (; n < kMaxStrands; ++n) {
-    const RtGroomHit g = rt_groom_trace(r, false);
-    if (g.t < 0.0) break;
-    r.TMin = g.t + 1e-4;
+  HpCrossings seen = hp_crossings_init();
+  RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> q;
+  q.TraceRayInline(rt_groom_scene(gSceneStamp.Load2(48u)), 0u, 0xFFu, r);
+  while (q.Proceed()) {
+    if (hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex()) && ++n >= kMaxStrands) q.Abort();
   }
   return float(n);
 #else
