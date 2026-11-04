@@ -29,6 +29,7 @@ struct CmdState {
 };
 struct DrawArgs {uint32_t count=3,first{},kind=1,instances=1;int32_t vertex_offset{};};
 struct InstPipe {
+ bool paks_cull_known=true,paks_two_sided=false;
  bool ok=true,uv_ok=true,pos_float3=true;uint32_t pos_binding=0,uv_binding=0xff,
  pos_offset{},uv_offset{},uv_stride{},pos_stride=12,vtx_bindings=3;uint64_t vtx_sig=8;
  uint32_t paks_uv_binding=1,paks_uv_offset{},paks_uv_stride=4;bool paks_uv_half=true;
@@ -153,10 +154,11 @@ void publication_replay(bool mismatch){
 void chunk_replay(bool discard,bool invalidate=false){
  pak_uv_destroy();owners.clear();pak_budget={};recording=300;done=0;frame=300;
  CmdState s;s.recording=recording;s.ib=1;s.ib_type=VK_INDEX_TYPE_UINT32;s.vb[0]={11,0,12};s.vb[1]={12,0,4};
+ s.vs=0x2d2ac3c38992b7f0ull;s.fs=0xb0ecc292e8661561ull;
  DrawArgs a;a.count=3;InstPipe ip;const uint32_t indices[3]={0,1,400000};
  buffers[1].resize(sizeof indices);std::memcpy(buffers[1].data(),indices,sizeof indices);
  buffers[11].assign(400001*12,0);buffers[12].assign(400001*4,0);
- std::vector<float> expected(15,0);mesh_paks::Row row;row.index_count=3;row.compact=true;
+ std::vector<float> expected(15,0);mesh_paks::Row row;row.index_count=3;row.compact=true;row.flags=4;
  row.geometry_digest=bg3::shader_cache::sha256_hex(expected.data(),expected.size()*4);pak_meshes={row};
  PakUvEntry entry;entry.stage=1;entry.count=3;entry.stride=88;entry.witness=&pak_meshes[0];entry.result.state=mesh_paks::uv_join::State::Ready;
  const auto key=pak_uv_key(s,a,ip);pak_uv_cache.emplace(key,std::move(entry));uint64_t xfb{},offset{},bytes{};
@@ -182,5 +184,27 @@ void chunk_replay(bool discard,bool invalidate=false){
  if(discard||invalidate){CHECK(!pak_uv_cache.contains(key));CHECK(!pak_witness_get(s,a,ip,&pak_meshes[0]));}
  else{CHECK(pak_witness_get(s,a,ip,&pak_meshes[0]));CHECK(pak_uv_cache.at(key).host.b==0);}
  pak_uv_destroy();owners.clear();
+}
+void culled_recipe(){
+ pak_uv_destroy();owners.clear();pak_budget={};frame=700;
+ CmdState s;s.vs=0x2d2ac3c38992b7f0ull;s.fs=0xb0ecc292e8661561ull;
+ s.vb[0]={11,0,12};s.vb[1]={12,0,4};InstPipe ip;DrawArgs a;a.count=39408;
+ // Real cp4 count bucket has exactly one row: native HLOD_VT, not HLOD_GM_VT.
+ mesh_paks::Row row;row.index_count=a.count;row.flags=0;
+ row.material="b5f71b80-9151-8d0c-fae7-8ee13a5357ba";pak_meshes={row};
+ PakUvEntry e;e.stage=1;e.count=a.count;e.witness=&pak_meshes[0];
+ const auto before=pak_budget_deferred.load();const auto allocations=next_buffer;
+ pak_witness_capture(9,&s,a,ip,e);
+ CHECK(e.stage==1&&!e.host.b&&next_buffer==allocations&&pak_budget.bytes==0);
+ CHECK(pak_budget_deferred==before); // terminal recipe failure is not budget pressure
+ pak_meshes[0].flags=4;s.fs=0x14678345c10aefbcull; // ordinary STI pair still owns its native row
+ pak_witness_capture(9,&s,a,ip,e);CHECK(e.stage==1&&!e.host.b&&pak_budget.bytes==0);
+ s.fs=0xb0ecc292e8661561ull;
+ for(unsigned condition=0;condition<3;++condition){
+  pak_meshes[0].flags=condition==0?6:4;ip.paks_cull_known=condition!=1;ip.paks_two_sided=condition==2;
+  pak_witness_capture(9,&s,a,ip,e);CHECK(e.stage==1&&!e.host.b&&pak_budget.bytes==0);
+ }
+ // Existing publication_replay/chunk_replay prove compatible candidates still run.
+ pak_meshes.clear();
 }
 }

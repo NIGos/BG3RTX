@@ -7,6 +7,7 @@ using namespace bg3::mesh_paks;
 #include "pak_uv_readback_fixture.h"
 #include "pak_witness_fixture.h"
 int main(){
+  readback_fixture::culled_recipe();
   witness_fixture::decoders_and_budget();
   readback_fixture::replay();
   readback_fixture::publication_replay(false);

@@ -791,12 +791,32 @@ memory stays unknown on this path; mapping a retained source or a tracked GPU
 write invalidates its token and dependent records. No fence wait or queue idle
 is added.
 
-The cp4 follow-up requires witness_ok > 0, published_records > 0 and pak
-records/basis ready > 0 in each 19.1 s ON window. Mismatches and budget deferrals
-are explicit on the existing join line. These are predicted participation
-numbers, not observed coverage; 21,588 repeated UV joins do not predict a
-number of distinct published records. The key stays off in presets; GPU cost,
-energy and visible coverage remain unmeasured. No game launch is authorized.
+The positive cp4 prediction above is superseded by the VALID 03:18:42 camp
+run: 22,686/22,686 unique observations fail recipe/cull, with zero witness
+completions, pak records or pak basis. Only 5.655% of 401,144 attempts (3.762%
+of 603,000 draws) are unique UV observations; these are not distinct meshes.
+The gate requires the live HLOD_GM pair, catalogue mask 4, no vertex-colour
+requirement, known culling and matching sidedness. It does not look up UUIDs
+or texture keys. Count 39,408 selects material b5f71b80-9151-8d0c-fae7-8ee13a5357ba,
+Engine_Default_HLOD_VT, flags 0: it cannot pass the GM template condition even
+with the GM shader pair. At least 24 of 39 completed unique readbacks have no
+eligible template anywhere in their count bucket. Other buckets cannot be
+attributed without their selected UV/UUID and live pair/cull facts; the old log
+does not contain them. See cov_paks_compact/recipe-cull-audit.json under tools/live_batches.
+
+Pak-recipe-cull preserves this physical gate and ordinary native precedence.
+The independent raw scheduler previously advanced every unique UV candidate,
+even one rejected by paks_match. It now checks the same recipe/cull contract
+before spending raw transfer/decode budget; executable fixtures cover the real
+culled recipe and successful compatible publication. First-rejection counters
+split shader pair, template, vertex colour, unknown cull and sidedness mismatch.
+The 27,172 budget deferrals are cumulative admission failures, not a backlog;
+this log cannot split raw versus XFB pressure or predict a reduction.
+For the same observed cohort, predict witness_ok/published_records/pak basis
+ready = 0/0/0 in both ON windows, additional pak publication share 0%. This does
+not erase native coverage (196 native basis rows ready at frame 3240). No
+shading defect or positive coverage gain is proved. The key stays off; ABI and
+shader request deltas are 0. GPU cost/energy are unmeasured; no game was run.
 Host build and 7/7 focused CTests pass, including production-ring SHA replay,
 unsampled mismatch, budget retry, chunk discard and stale-token hit lookup.
 cp4 live_flow preflight passes (1 job, 0 failures).

@@ -152,6 +152,12 @@ std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
 std::atomic<uint64_t> pak_uv_attempts{0},pak_uv_unique{0},pak_missing{0},pak_ambiguous{0},pak_invalid{0},pak_witness{0},pak_recipe{0},pak_inputs{0},pak_id_equal{0},pak_id_different{0};
 std::atomic<uint64_t> pak_missing_count{0},pak_missing_uv{0};
 std::atomic<uint64_t> pak_witness_ok{0},pak_witness_mismatch{0},pak_budget_deferred{0};
+std::atomic<uint64_t> pak_recipe_reasons[size_t(mesh_paks::RecipeGate::Count)]{};
+bool paks_recipe_accept(const mesh_paks::Row& row,const CmdState& state,const InstPipe& ip){
+ const auto reason=mesh_paks::hlod_recipe_gate(row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided);
+ if(reason==mesh_paks::RecipeGate::Ready)return true;
+ ++pak_recipe;++pak_recipe_reasons[size_t(reason)];return false;
+}
 // A count absent from the immutable catalogue is terminal, not an input wait.
 bool paks_count_missing(uint32_t count){
  if(mesh_paks::has_candidates(pak_meshes,count))return false;
@@ -225,7 +231,7 @@ const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,cons
    attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
    if(match.status!=mesh_paks::Match::Unique)return nullptr;
    if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
-   if(!mesh_paks::hlod_compatible(*match.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+   if(!paks_recipe_accept(*match.row,state,ip))return nullptr;
    if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
    return match.row;
   }
@@ -236,7 +242,7 @@ const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,cons
  if(pak_uv_get(state,args,ip,got)){
   attempt.candidate=true;const auto candidate=paks_candidate(args.count,got.data());
   if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
-  if(!mesh_paks::hlod_compatible(*candidate.row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided)){++pak_recipe;return nullptr;}
+  if(!paks_recipe_accept(*candidate.row,state,ip))return nullptr;
   if(pak_witness_get(state,args,ip,candidate.row,proof))return candidate.row;
   ++pak_witness;
  }
@@ -760,6 +766,10 @@ void pool_log(uint64_t frame){
   uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak && (!r.payload.pak_valid || r.payload.pak_valid->load(std::memory_order_relaxed))){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
   log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu witness_ok %llu witness_mismatch %llu budget_deferred %llu published_records %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load(),(unsigned long long)pak_witness_ok.load(),(unsigned long long)pak_witness_mismatch.load(),(unsigned long long)pak_budget_deferred.load(),(unsigned long long)records);
   log("[hit material paks reasons] cumulative draw observations: missing_count %llu missing_uv %llu witness_rejected %llu inputs_unavailable %llu; inputs_pending is not queue depth",(unsigned long long)pak_missing_count.load(),(unsigned long long)pak_missing_uv.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_inputs.load());
+  log("[hit material paks recipe] cumulative HLOD first rejection: shader_pair %llu template %llu vertex_color %llu cull_unknown %llu cull_mismatch %llu",
+   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::ShaderPair)].load(),(unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::Template)].load(),
+   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::VertexColor)].load(),(unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::CullUnknown)].load(),
+   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::CullMismatch)].load());
   log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
   log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;

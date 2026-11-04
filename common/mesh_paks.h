@@ -219,9 +219,19 @@ inline bool tileset_color_publication(const Row* row,bool key_on,bool joined,boo
  return key_on && joined && row && row->color_layout==1 && (row->compact || row->colors.size()==size_t(row->index_count)*4) &&
   cull_known && two_sided==bool(row->flags&1u);
 }
+// First failing condition, in the same order as the publication contract.
+// Mask 4 identifies Engine_Default_HLOD_GM_VT, not every HLOD template.
+enum class RecipeGate { Ready, ShaderPair, Template, VertexColor, CullUnknown, CullMismatch, Count };
+inline RecipeGate hlod_recipe_gate(const Row& row,uint64_t vs,uint64_t fs,bool cull_known,bool two_sided) {
+  if(vs!=0x2d2ac3c38992b7f0ull||fs!=0xb0ecc292e8661561ull)return RecipeGate::ShaderPair;
+  if(!(row.flags&4u))return RecipeGate::Template;
+  if(row.flags&2u)return RecipeGate::VertexColor;
+  if(!cull_known)return RecipeGate::CullUnknown;
+  if(two_sided!=bool(row.flags&1u))return RecipeGate::CullMismatch;
+  return RecipeGate::Ready;
+}
 inline bool hlod_compatible(const Row& row,uint64_t vs,uint64_t fs,bool cull_known,bool two_sided) {
-  return vs==0x2d2ac3c38992b7f0ull&&fs==0xb0ecc292e8661561ull&&
-    (row.flags&4u)&&!(row.flags&2u)&&cull_known&&two_sided==bool(row.flags&1u);
+  return hlod_recipe_gate(row,vs,fs,cull_known,two_sided)==RecipeGate::Ready;
 }
 enum class Match { Missing, Unique, Ambiguous, Invalid };
 struct Result {Match status=Match::Missing;const Row* row{};};
