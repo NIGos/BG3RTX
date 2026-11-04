@@ -271,20 +271,43 @@ function Assert-CameraPlanFields($step) {
   foreach ($name in $names) {
     if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
   }
+  if ('frames' -in $names) {
+    if ([long]$step.frames -le 0 -or -not $step.stats_reset -or [long]$step.settle_frames -lt 0 -or
+        [long]$step.settle_frames -ge [long]$step.frames) { throw 'Frame windows need stats_reset and 0 <= settle_frames < frames' }
+  }
   if ($step.wait_log_fresh) {
     foreach ($pattern in @($step.wait_log_fresh)) {
       if ($pattern -notin @($step.wait_log)) { throw 'wait_log_fresh must be a subset of wait_log' }
     }
   }
-  if ($step.wait_log) {
+  if ($step.wait_log -or $step.stats_reset) {
     if (-not ($step.wait_log_timeout -gt 0) -or [double]::IsInfinity([double]$step.wait_log_timeout)) {
       throw 'wait_log requires a finite positive wait_log_timeout'
     }
-    foreach ($pattern in @($step.wait_log)) {
+    foreach ($pattern in @($step.wait_log | Where-Object { $null -ne $_ })) {
       if (-not ($pattern -is [string]) -or -not $pattern.Trim()) { throw 'wait_log requires nonempty regex strings' }
       [void][regex]::new($pattern)
     }
-  } elseif ($step.wait_log_timeout) { throw 'wait_log_timeout requires wait_log' }
+  } elseif ($step.wait_log_timeout) { throw 'wait_log_timeout requires wait_log or stats_reset' }
   if ('recenter' -in $names -and -not ($step.recenter -is [bool])) { throw 'recenter requires a boolean' }
   if ('reload_selected' -in $names -and -not ($step.reload_selected -is [bool])) { throw 'reload_selected requires a boolean' }
+}
+
+# Frame windows cannot end because an FPS estimate or a trace stall consumed a
+# wall-clock allowance. An acknowledged reset supplies the actual frame origin.
+function Test-CameraPlanFrameComplete($step, $origin, [long]$frame) {
+  if (-not $step.frames -or [long]$step.frames -le 0) { throw 'Frame window needs positive frames' }
+  return $null -ne $origin -and $frame -ge ([long]$origin+[long]$step.frames)
+}
+function Get-CameraPlanStatsReset([string]$text, [long]$token) {
+  $ack=[regex]::Match($text, '\[stats\] reset token='+$token+' frame=(\d+)\b')
+  if ($ack.Success) { return @{token=$token;frame=[long]$ack.Groups[1].Value;end=$ack.Index+$ack.Length} }
+  return $null
+}
+
+function Test-CameraPlanStatsComplete($step, [string]$text) {
+  foreach ($pattern in @($step.wait_stats)) {
+    if ($pattern -and $text -notmatch $pattern) { return $false }
+  }
+  return $true
 }

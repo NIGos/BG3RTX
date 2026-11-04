@@ -690,7 +690,9 @@ static void log_vram_ours(uint64_t used, uint64_t budget, const BvhVram& b, uint
 // key off only the window breakdown runs (our share vs the game's, for the guard-off A/B).
 static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
   static uint64_t s_window_start = 0;
-  const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  static int stats_reset_token = 0;
+  if (stats_window::reset(cfg_int, stats_reset_token)) s_window_start = frame;
+  const int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   const bool window_end = frame >= s_window_start + uint64_t(every);
   if ((frame & 15) != 0 && !window_end) return;
   const bool on = cfg_int("rt_vram_guard", 0) != 0;
@@ -783,15 +785,17 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
     if (last.QuadPart) ft.push_back(float(double(now.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart)));
     last = now;
-    if (ft.size() >= 600) {
+    static int pace_reset_token = 0;
+    if (stats_window::reset(cfg_int, pace_reset_token)) { ft.clear(); last = now; }
+    if (ft.size() >= stats_period(600)) {
       std::vector<float> s = ft;
       std::sort(s.begin(), s.end());
       float med = s[s.size() / 2], p99 = s[s.size() * 99 / 100];
       double worst = 0;
       for (size_t i = s.size() * 99 / 100; i < s.size(); ++i) worst += s[i];
       worst /= double(s.size() - s.size() * 99 / 100);
-      log("[pace] rendered frame time over 600 frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
-          med, 1000.0 / med, p99, 1000.0 / worst, s.back());
+      log("[pace] rendered frame time over %zu frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
+          s.size(), med, 1000.0 / med, p99, 1000.0 / worst, s.back());
       ft.clear();
       log_memory_budget(dd);
     }
@@ -804,12 +808,18 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
     defer_tick(false);
     core_poll(queue);
     core_on_frame(frame);
+    static int stats_reset_token = 0;
+    const bool stats_reset = stats_window::reset(cfg_int, stats_reset_token);
+    if (stats_reset) { hair_primary_stats_reset(); alpha_stats_reset(); }
     ngx_on_present();
     geo_on_present(queue);
     rt_on_present();
     em_on_present();
     water_on_present();
     assetdb_on_present(frame);
+    watchdog_stats_tick(frame);
+    if (stats_reset) log("[stats] reset token=%d frame=%llu", stats_reset_token, (unsigned long long)frame);
+    if (cfg_int("rt_stats_period_frames", 0) > 0) log("[stats] frame=%llu", (unsigned long long)frame);
   }
   trace_on_present(queue, info);
   pan_on_present(queue);

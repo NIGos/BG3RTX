@@ -55,7 +55,7 @@
     "serial": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0",
     "wait_log": [
-      "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused"
+      "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last \\d+ frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused"
     ],
     "wait_log_timeout": 35.859999999993306
   },
@@ -545,7 +545,7 @@
     "label": "cost-cards-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.4,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -564,13 +564,22 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records"
+    ]
   },
   {
     "label": "cost-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 61.8,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -589,13 +598,23 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records",
+      "\\[hair primary\\] frame \\d+:"
+    ]
   },
   {
     "label": "cost-cards-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.4,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -614,7 +633,16 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 2.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records"
+    ]
   },
   {
     "label": "reload-selected",
@@ -646,7 +674,7 @@
     "label": "cost-after-reload",
     "kind": "static",
     "speed": "static",
-    "seconds": 62.8,
+    "seconds": 6.038,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -655,7 +683,18 @@
     "motion_end": 62.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records",
+      "\\[hair primary\\] frame \\d+:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

@@ -24,70 +24,90 @@
     "label": "passes-0-header",
     "kind": "static",
     "speed": "static",
-    "seconds": 92.6,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 92.6,
-    "motion_end": 92.6,
+    "motion_start": 25.0,
+    "motion_end": 25.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=1,rt_hair_primary_passes=0,rt_hair_groom_tips=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] hair primary breadcrumbs:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "passes-8-probe",
     "kind": "static",
     "speed": "static",
-    "seconds": 92.6,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 92.6,
-    "motion_end": 92.6,
+    "motion_start": 25.0,
+    "motion_end": 25.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=1,rt_hair_primary_passes=8,rt_hair_groom_tips=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
+      "\\[hair primary\\] hair primary breadcrumbs:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "passes-15-all",
     "kind": "static",
     "speed": "static",
-    "seconds": 92.6,
+    "seconds": 6.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 92.6,
-    "motion_end": 92.6,
+    "motion_start": 25.0,
+    "motion_end": 25.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_primary_order=1,rt_hair_primary_passes=15,rt_hair_groom_tips=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
+      "\\[hair primary\\] hair primary breadcrumbs:"
+    ],
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "restore",
@@ -113,6 +133,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]

@@ -29,9 +29,9 @@
     "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=1,rt_water_empty_tiles=1,qa_exposure_hold=0,rt_stats=0,rt_primary_check=0",
     "wait_log": [
       "gi: trace pass .*GPU median",
-      "gi: GPU cost .*average of 300 frames"
+      "gi: GPU cost .*average of \\d+ frames"
     ],
-    "wait_log_timeout": 29.77999999999156
+    "wait_log_timeout": 29.200000000000728
   },
   {
     "label": "warm-rt_compact_hit_state",
@@ -145,52 +145,83 @@
     "label": "shot-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 23.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 23.1,
-    "motion_end": 23.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-compact",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -199,41 +230,64 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-compact",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=1,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -242,41 +296,64 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-alpha",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -285,41 +362,64 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-alpha",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=1,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-c",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -328,105 +428,167 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-off-c",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-water",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-water",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=1,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-off-d",
     "kind": "static",
     "speed": "static",
-    "seconds": 22.1,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 22.1,
-    "motion_end": 22.1,
+    "motion_start": 11,
+    "motion_end": 11,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-off-d",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0"
+    "set": "rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,qa_exposure_hold=1,rt_stats=0,rt_primary_check=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "gi: background builds \\(\\d+ frames\\):",
+      "gi: trace pass",
+      "gi: GPU cost",
+      "rf: reflection pass",
+      "ls: local-light shadow pass",
+      "rt passes: GPU cost",
+      "\\[water\\] compose GPU",
+      "\\[water\\] reflections GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

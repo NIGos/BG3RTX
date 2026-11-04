@@ -357,8 +357,8 @@ static_assert(kRemapPermBase >= 16 * kFamilies, "remap counters (16 B per family
 // window prints them, not only a query on frame % 120 == 0: that one query is often rejected (source epoch one frame
 // behind) and the window then had no line (hig1 camp 2026-11-02: frames 1800 and 1920 rejected, 1 line in 3 windows).
 inline constexpr uint64_t kStatsWindowFrames = 120;
-inline bool stats_window_due(uint64_t frame, uint64_t& logged_window) {
-  const uint64_t w = frame / kStatsWindowFrames;
+inline bool stats_window_due(uint64_t frame, uint64_t& logged_window, uint64_t period = kStatsWindowFrames) {
+  const uint64_t w = frame / (period ? period : kStatsWindowFrames);
   if (logged_window != UINT64_MAX && w <= logged_window) return false;
   logged_window = w;
   return true;

@@ -28,11 +28,13 @@ void cmd_cpu_report(uint64_t frames) {
   static uint64_t last = 0;
   static int mode = -1;
   const int current = cfg_hot(CfgHot::perf_hook_state);
-  if (!g_cpu_timing.load() || mode != current || !last) {
+  static int reset_token = 0;
+  const bool reset = stats_window::reset(cfg_int, reset_token);
+  if (reset || !g_cpu_timing.load() || mode != current || !last) {
     for (auto& ticks : g_cpu_ticks) ticks.exchange(0);
     g_cpu_draws.exchange(0); last = frames; mode = current; return;
   }
-  if (!g_cpu_timing.load() || frames - last < 300) return;
+  if (!g_cpu_timing.load() || frames - last < stats_period(300)) return;
   const uint64_t n = frames - last; last = frames;
   LARGE_INTEGER f; QueryPerformanceFrequency(&f);
   std::string o; double total = 0; char b[96];

@@ -205,8 +205,8 @@ $readyStep=@{wait_log=@('temporal spec mv=1 pg=0, pipeline', 'trace spec mv=0 pg
 Check (-not (Test-CameraPlanReady $readyStep 'temporal spec mv=1 pg=0, pipeline')) 'partial pipeline readiness blocks capture'
 Check (-not (Test-CameraPlanReady $readyStep "temporal spec mv=0 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline")) 'wrong specialization blocks capture'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline") 'all matching specializations release capture'
-Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($null -ne $step.trace_at -and')) 'runner checks readiness before any phase trace'
-Check ($runner -match '(?s)waitAnchor -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
+Check ($runner.IndexOf('if (($step.wait_log -or $step.stats_reset) -and -not $phaseReady)') -lt $runner.IndexOf('if ($null -ne $step.trace_at -and')) 'runner checks readiness before any phase trace'
+Check ($runner -match '(?s)waitAnchor -ge .*?wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline`nunrelated later line") 'unchanged cached spec releases a later phase'
 Check (-not (Test-CameraPlanReady @{wait_log=@('temporal.*trace')} "temporal`ntrace")) 'readiness cannot match across log lines'
 Assert-CameraPlanFields @{wait_log=@('ready');wait_log_timeout=60;recenter=$true}
@@ -264,7 +264,7 @@ $planClock=@{Elapsed=@{TotalMilliseconds=1000}};$NoActivate=$false;$panIndex=0
 . $applyBlock
 Check ((Get-Content $ini -Raw) -match 'pan_capture=0') 'settings write defers burst until readiness'
 Check ((Get-Content $ini -Raw) -match 'pan_prepare=1' -and (Get-Content $ini -Raw) -match 'pan_edge=1') 'non-arming preparation and mode keys apply before readiness'
-$begin=$runner.IndexOf('      if ($step.wait_log -and -not $phaseReady)')
+$begin=$runner.IndexOf('      if (($step.wait_log -or $step.stats_reset) -and -not $phaseReady)')
 $end=$runner.IndexOf('      if ($step.recenter', $begin)
 $waitSource=$runner.Substring($begin,$end-$begin)
 # Observe the real settings write; moving it ahead of the readiness marker fails.
@@ -335,4 +335,66 @@ while ($true) { . $pollBlock;break }
 Check ($result -like 'pipeline readiness timed out: warmup*' -and -not $waited) 'actual stalled prefetch fails after inactivity budget'
 Check ($runner.Contains('$deadline = $start.AddSeconds([Math]::Min($TimeoutSec,900))') -and
        $runner.Contains('while ((Get-Date) -lt $deadline)')) 'progress cannot extend absolute 15-minute launch cap'
+# Execute production reset wait over settling, request, stale ack and exact ack.
+$step=@{label='short';frames=64;settle_frames=4;stats_reset=$true;wait_log=@('ready cached');wait_log_timeout=30;wait_stats=@('gpu complete')}
+$phaseReady=$false;$phaseWaitAt=$null;$phaseStatsToken=$null;$phaseSettleStart=$null;$phaseFrameStart=$null
+$statsResetToken=7;$statsFrame=100;$traceWrites=0;$phaseShaderProgress=@{};$phaseBurstArmed=$true
+$phaseReadyOffset=0;$panCaptureSent=$true;$planClock=@{Elapsed=@{TotalSeconds=20;TotalMilliseconds=20000}}
+Set-Content $ini 'rt_stats_reset=7'
+[IO.File]::WriteAllText($log,'ready cached')
+$waited=$false
+while ($true) { . $pollBlock;break }
+Check ($waited -and $null -eq $phaseStatsToken) 'actual reset waits settling frames after settings readiness'
+$statsFrame=104;$waited=$false
+while ($true) { . $pollBlock;break }
+Check ($waited -and $phaseStatsToken -eq 8 -and (Get-Content $ini -Raw) -match 'rt_stats_reset=8') 'actual reset writes one token edge after settling'
+[IO.File]::WriteAllText($log,"ready cached`n[stats] reset token=7 frame=100")
+while ($true) { . $pollBlock;break }
+Check (-not $phaseReady) 'actual runtime rejects old reset acknowledgment'
+[IO.File]::WriteAllText($log,"ready cached`n[stats] reset token=8 frame=105`ngpu complete")
+while ($true) { . $pollBlock;break }
+Check ($phaseReady -and $phaseFrameStart -eq 101 -and $phaseStatsComplete) 'actual matching reset starts one full measured period after settling'
+Check ((Get-Content $guardRunner -Raw) -match 'stats_reset=8 frame=105') 'actual readiness records exact reset token and frame'
+# Pure frame termination and reset protocol: timing estimates never end windows.
+$short=@{frames=64;settle_frames=4;stats_reset=$true;wait_log_timeout=30;wait_stats=@('gpu complete','coverage complete')}
+Assert-CameraPlanFields $short
+Check $true 'reset-only phase accepts finite timeout without wait_log'
+foreach ($badTimeout in @(0,-1,[double]::PositiveInfinity,[double]::NaN)) {
+  $badReset=@{frames=60;stats_reset=$true;wait_log_timeout=$badTimeout}
+  $rejected=$false
+  try { Assert-CameraPlanFields $badReset } catch { $rejected=$true }
+  Check $rejected "reset-only phase rejects invalid timeout $badTimeout"
+}
+$rejected=$false
+try { Assert-CameraPlanFields @{frames=0;stats_reset=$true;wait_log_timeout=30} } catch { $rejected=$true }
+Check $rejected 'explicit zero frame target rejected'
+
+Check (-not (Test-CameraPlanFrameComplete $short $null 9999)) 'no acknowledged origin cannot complete frames'
+Check (-not (Test-CameraPlanFrameComplete $short 100 163)) '63 frames do not satisfy 64-frame comparison'
+Check (Test-CameraPlanFrameComplete $short 100 164) 'exact needed frame completes independent of elapsed seconds'
+Check (-not (Test-CameraPlanStatsComplete $short 'gpu complete')) 'frame endpoint waits delayed GPU and coverage producers'
+Check (Test-CameraPlanStatsComplete $short "gpu complete`ncoverage complete") 'all requested first periods complete'
+Check ($null -eq (Get-CameraPlanStatsReset '[stats] reset token=6 frame=100' 7)) 'stale reset token rejected'
+$ack=Get-CameraPlanStatsReset '[stats] reset token=7 frame=104' 7
+Check ($ack.frame -eq 104) 'exact token supplies actual frame origin'
+Check ($runner.Contains('$traceWrites-$phaseTraceWritesStart -ge $phaseTraceIndex')) 'frame endpoint awaits actual trace export'
+# Execute the production endpoint condition for a seconds-only trace window.
+$finishBegin=$runner.IndexOf('      if ($panCaptureSent -and $phaseFinished')
+$finishEnd=$runner.IndexOf(' {', $finishBegin)
+$finishBlock=[scriptblock]::Create($runner.Substring($finishBegin,$finishEnd-$finishBegin)+' { $completed=$true }')
+$step=@{seconds=1;trace_at=@(0);wait_log=@()}
+$panCaptureSent=$true;$phaseFinished=$true;$phaseStatsComplete=$false;$phaseReady=$false
+$phaseTraceIndex=1;$phaseTraceWritesStart=5;$traceWrites=5;$completed=$false
+. $finishBlock
+Check (-not $completed) 'elapsed estimate and five stale exports cannot finish seconds-only trace phase'
+$traceWrites=6;. $finishBlock
+Check $completed 'actual export finishes seconds-only trace phase'
+$step.trace_at=@(0,1);$phaseTraceIndex=1;$completed=$false;. $finishBlock
+Check (-not $completed) 'all scheduled trace requests must be issued before phase ends'
+$phaseTraceIndex=2;$completed=$false;. $finishBlock
+Check (-not $completed) 'second trace must export as well'
+$traceWrites=7;. $finishBlock
+Check $completed 'all requested actual exports release phase'
+Check ($runner.Contains('if (($step.frames -or $null -ne $step.trace_at) -and (Test-Path -LiteralPath $log))')) 'seconds-only trace phase consumes export log reader'
+Check ($runner.Contains('if ($phaseTraceIndex -eq 0) { $phaseTraceWritesStart=$traceWrites }')) 'first request excludes already consumed warmup exports'
 Write-Host "$count camera-input and permission checks passed"

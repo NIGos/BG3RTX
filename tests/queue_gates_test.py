@@ -329,6 +329,40 @@ class MidnightTests(unittest.TestCase):
 
 
 
+
+class ResetPeriodTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = [dict(label='on', stats_reset=True, wait_log=['ready'])]
+        self.runner = ('10:00:00.000 [pan-plan] window 0\n'
+                       '10:00:02.100 [motion-ready] phase=0 stats_reset=7 frame=100\n'
+                       '10:00:05.000 [motion-plan] complete')
+        self.log = ('10:00:00.100 [cfg] settings read\n'
+                    '10:00:02.000 [stats] reset token=7 frame=100\n'
+                    '10:00:04.000 coverage swaps 1\n'
+                    '10:00:04.001 cost good')
+        self.gate = dict(select='cost ', match='good', windows=['on'])
+
+    def test_first_complete_period_after_ack_counts(self):
+        self.assertEqual(queue_gates.check([self.gate], self.log, self.runner, self.plan), [])
+        self.assertTrue(queue_gates.check([dict(self.gate, min=2)], self.log, self.runner, self.plan))
+        self.assertTrue(queue_gates.check([self.gate], self.log.replace('cost good','cost bad'), self.runner, self.plan))
+
+    def test_runner_poll_delay_does_not_drop_acknowledged_complete_period(self):
+        late_runner=self.runner.replace('10:00:02.100 [motion-ready]', '10:00:04.500 [motion-ready]')
+        self.assertEqual(queue_gates.check([self.gate], self.log, late_runner, self.plan), [])
+
+    def test_missing_stale_or_wrong_ack_cannot_pass(self):
+        for log in [self.log.replace('token=7','token=8'),
+                    self.log.replace('10:00:02.000 [stats]', '09:59:59.000 [stats]')]:
+            self.assertTrue(queue_gates.check([self.gate], log, self.runner, self.plan))
+        legacy = [dict(label='on', wait_log=['ready'])]
+        self.assertTrue(queue_gates.check([self.gate], self.log, self.runner.replace(' stats_reset=7 frame=100',''), legacy))
+
+    def test_first_complete_trigger_after_reset_is_required(self):
+        gate = dict(self.gate, required_if=dict(select='coverage ',match='swaps 1'))
+        self.assertTrue(queue_gates.check([gate], self.log.replace('cost good','cost bad'), self.runner, self.plan))
+
+
 class NumericItemsTests(unittest.TestCase):
     def test_all_items_and_safe_fallback(self):
         gate = dict(match='coverage', items=dict(pattern=r'x:(?P<value>[0-9.]+),(?P<active>\d+)', bound=r'bound ([0-9.]+)'))

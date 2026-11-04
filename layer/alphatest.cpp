@@ -1387,7 +1387,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     log("[alpha] first alpha-tested capture: %zu draws, %zu textures, %zu tile caches", g_recs.size(), g_tex.size(),
         g_cache.size());
   }
-  int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (g_frames >= uint64_t(every)) {
     log("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles, %zu textures, %zu tile caches per frame "
         "(capacity %u, %u, %u records); opaque fallbacks: no view %u, UBO %u, SSBO %u, non-finite %u, records full %u, "
@@ -1441,6 +1441,15 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
 // for its own submission only). Noted as submitted in `frame`: a destroy waits for
 // that frame's present fence. (A destroy before any fence covers it cannot wait;
 // tracker.cpp counts it as "no fence yet".)
+void alpha_stats_reset() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_frames = g_draws = g_tris = 0;
+  std::fill_n(g_fail, 6, uint32_t(0));
+  g_vt_substituted = g_vt_fine = 0;
+  g_scalp_hard.exchange(0); g_scalp_dither.exchange(0); g_scalp_invalid.exchange(0);
+  g_hair_records.exchange(0); g_hair_invalid.exchange(0); g_hair_bounds_invalid.exchange(0);
+}
+
 void alpha_slot_in_use(uint32_t slot, uint64_t frame) {
   native_hit::slot_in_use(slot,frame);
   if (!g_on || slot >= kRing) return;

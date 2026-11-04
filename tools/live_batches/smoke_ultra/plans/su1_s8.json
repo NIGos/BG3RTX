@@ -31,7 +31,7 @@
       "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
       "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
-      "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+      "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
       "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
       "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
       "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
@@ -85,7 +85,7 @@
     "label": "static-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.6,
+    "seconds": 11.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -97,6 +97,17 @@
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120",
     "trace_at": [
       10
+    ],
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
     ]
   },
   {
@@ -112,7 +123,18 @@
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": -1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "pan-e",
@@ -127,7 +149,18 @@
     "motion_end": 14.0,
     "pixels_per_second": 0,
     "direction": 1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "rotate-r",
@@ -142,7 +175,18 @@
     "motion_end": 19.0,
     "pixels_per_second": 60,
     "direction": 1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "rotate-l",
@@ -157,13 +201,24 @@
     "motion_end": 19.0,
     "pixels_per_second": 60,
     "direction": -1,
-    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
+    ]
   },
   {
     "label": "static-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.6,
+    "seconds": 11.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -175,6 +230,17 @@
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
     "trace_at": [
       10
+    ],
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "\\[water\\] reflections \\(\\d+ frames, ",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "\\[mem\\] ours \\("
     ]
   },
   {
@@ -196,7 +262,7 @@
     "label": "diag-omm",
     "kind": "static",
     "speed": "static",
-    "seconds": 16.4,
+    "seconds": 3.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -205,7 +271,15 @@
     "motion_end": 16.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=1,rt_primary_check=0,ab_off=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60"
+    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=1,rt_primary_check=0,ab_off=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log_timeout": 30,
+    "wait_stats": [
+      "omm check \\(\\d+ frames\\):",
+      "\\[rt\\] scene wait: \\d+ frames"
+    ]
   },
   {
     "label": "ab-off",

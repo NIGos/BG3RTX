@@ -21,7 +21,7 @@
   "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c.",
   "compose_abort_share": {
     "max": 1.7863675248347788e-05,
-    "samples": 2752,
+    "samples": 2833,
     "log": "wsf1-s8-interface-column.1.043141.log",
     "frames": 120,
     "rays_per_frame": 585453,

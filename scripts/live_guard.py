@@ -114,7 +114,7 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         requested = [requested] if isinstance(requested, str) else requested
         for pattern in requested:
             dt = producer_period(pattern, states[phase], flow.fps_windows.expected(job, states[phase])["fps"], job)
-            if window and dt is not None and not re.search(pattern, local, re.I | re.M):
+            if window and not plan[phase].get("frames") and dt is not None and not re.search(pattern, local, re.I | re.M):
                 deadline = window["settings_applied"] + dt + margin + float(source.get("live_flow", {}).get("settings_latency_s", 1))
                 if now >= deadline:
                     return failure("producer silent: " + pattern)
@@ -134,6 +134,11 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
                     and (not plan[w["index"]].get("wait_log") or w["index"] in readiness)
                     and all(states[w["index"]].get(k) == v for k, v in requirements.items())]
         if not eligible or re.search(pattern, local, re.I | re.M):
+            continue
+        # Frame windows have no wall-clock producer deadline. A slow rendered
+        # frame or trace stall cannot consume a promised period; final closed
+        # window gates still reject missing or bad samples.
+        if plan[eligible[0]["index"]].get("frames"):
             continue
         state = states[eligible[0]["index"]]
         dt = producer_period(pattern, state, flow.fps_windows.expected(job, state)["fps"], job)
