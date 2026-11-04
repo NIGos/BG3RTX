@@ -22,7 +22,9 @@ class LiveGuardTest(unittest.TestCase):
             if step['label'].startswith('warm'):
                 self.assertTrue(state['rt_hair_groom_primary_order'] == '0' or state['rt_hair_primary_passes'] == '0')
         participation = [g for g in job['expect_every'] if g['name'].startswith('strand participation ')]
-        for gate, prepass, velocity in zip(participation, (0, 0, 12), (0, 12, 12)):
+        # Masks 0 (header) and 8 (probe) swap nothing; only mask 15 requires strand draws in every pass.
+        self.assertEqual([g['windows'] for g in participation], [['passes-15-all']])
+        for gate, prepass, velocity in zip(participation, (12,), (12,)):
             line = f'[hair primary] frame 900: 5 grooms published; last 300 frames: 300 publishes, {prepass} prepass, 12 G-buffer and {velocity} velocity strand draws, 0 pipelines refused'
             self.assertTrue(line_matches(gate, line))
             self.assertFalse(line_matches(gate, line.replace('12 G-buffer', '0 G-buffer')))
