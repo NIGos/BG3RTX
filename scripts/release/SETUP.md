@@ -1,31 +1,43 @@
-# C1 setup and lifecycle handoff
+# Windows release setup
 
-`BG3RTX.iss` targets Inno Setup 6.x, Windows PowerShell 5.1 and a standard Windows user.
-The compiler is absent on this development machine. The PowerShell fixture checks are the
-available evidence; this is not a compiled-installer, signing or fresh-machine qualification.
-Pin the exact Inno compiler and its download hash in the release environment before shipping.
+`BG3RTX.iss` targets **Inno Setup 6.7.3**, Windows PowerShell 5.1 and a standard Windows user.
+Compiler: `C:\Users\quali\AppData\Local\Programs\Inno Setup 6\ISCC.exe`.
+Pinned Inno installer SHA256:
+`9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732`.
+`build_setup.ps1` rejects a different compiler banner version. The hash identifies the
+compiler distribution installer, not ISCC.exe or the generated BG3RTX setup.
 No elevation fallback, global Vulkan registration, game-folder deployment or game launch is used.
 Only Inno creates/removes its HKCU Apps entry. The lifecycle does not access the registry.
 
-## Compile (release owner / C2)
-
-Prepare a complete release payload separately, including required dependency notices. Then run:
+## Build from the ZIP payload
 
 ```powershell
-& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
-  '/DPayloadDir=C:\release\BG3RTX payload' '/DProductVersion=0.1.0' `
-  '.\scripts\release\BG3RTX.iss'
+.\scripts\package.ps1 -Version 0.1.0-beta1 -OutDir .scratch\release
+.\scripts\release\build_setup.ps1 `
+  -PayloadDir .scratch\release\BG3RTX-0.1.0-beta1 -OutDir .scratch\release\setup
 ```
 
-Output: `scripts/release/output/BG3RTX-0.1.0-Setup.exe`. Do not run it against a real game
-or existing user install for qualification. Use a disposable Windows VM/account and directories.
-Configure timestamped Authenticode for setup, uninstaller and our launcher before public release.
-No signing identity or trusted-publisher claim is fabricated here. C2 wires the B1 original
-icon into setup and the launcher, and packages its local WebView2 UI as described below.
+The second command reads the version from the assembled `VERSION.txt`, writes
+`payload.sha256.json` and the combined GPL/NVIDIA-exception licence page beside the
+setup, then compiles `BG3RTX-<version>-Setup.exe`. All setup outputs must be under
+this checkout's `.scratch/`; never commit them. The original ZIP payload remains
+**229 files**: the hash manifest is setup metadata, embedded separately and not deployed.
+Every deployed payload byte comes from the same assembled folder used for the ZIP.
+`verify_rc.ps1` compiles from the extracted ZIP, proving archive/setup equivalence.
+
+Setup uses `assets/branding/bg3rtx.ico`; Apps and shortcuts use its identical payload
+copy. Start menu shortcut is selected; desktop is unchecked. The finish page offers
+"Start BG3RTX" (suppressed in silent setup). The welcome page says:
+"The game folder is not changed; set the game to Vulkan + DLSS."
+The default is `%LOCALAPPDATA%\Programs\BG3RTX`, per-user, without admin.
+The fixed AppId supports upgrades in place and preserves user settings.
+
+Configure timestamped Authenticode for setup, uninstaller and launcher before public release.
+No signing identity or trusted-publisher claim is fabricated here.
 
 ### Payload contract
 
-Add UTF-8 `payload.sha256.json` **after** assembling the final payload:
+The build step generates UTF-8 `payload.sha256.json` **after** assembling the final payload:
 
 ```json
 {"schema":1,"files":[{"path":"bin/BG3RTX.exe","sha256":"<64 hex digits>"}]}
@@ -52,7 +64,7 @@ The helper rejects duplicate/canonical duplicate paths, traversal, ADS, device p
 points in ancestors, settings/control files, unins* and setup-support in the payload allowlist.
 Inno exclusively owns `setup-support/` (helper and uninstaller), shortcuts and the Apps entry.
 The lifecycle exclusively owns the hashed files and `.bg3rtx-state.json`.
-Do not package arbitrary files outside the allowlist. C2 must check portable/setup equivalence.
+Do not package arbitrary files outside the allowlist. The RC Setup stage checks portable/setup equivalence.
 
 ## Lifecycle entry points
 
@@ -90,12 +102,14 @@ and staged files, never recursively deleting a directory. Empty directories and 
 transaction artifacts are retained for recovery; do not bulk-clean this tree or follow links.
 
 Uninstall removes only manifest-owned program files. It keeps both INIs, reports, logs, unrelated
-files, original collision backups and shader cache by default. `-RemoveSettings` opts into removing
+files and original collision backups by default. Direct lifecycle calls also keep shader cache by default. `-RemoveSettings` opts into removing
 the two INIs. `-RemoveShaderCache` separately opts into deleting only files inside the standard
 per-user cache; it preflights the whole tree for links and prints its file count and byte size.
 Cache removal is disposable cleanup after the program transaction, outside rollback. Reports
 are always retained, including reports stored elsewhere. No save folder is enumerated.
-Inno owns removal of its shortcuts and Apps registration. Clear any BG3RTX Steam launch option
+Inno always requests shader-cache removal, matching the ZIP uninstaller. Its settings prompt
+defaults to keeping `bg3rtx_user.ini` and `bg3rtx_launcher.ini`; silent uninstall keeps them
+unless `/REMOVESETTINGS=1` is supplied. Inno owns removal of its shortcuts and Apps registration. Clear any BG3RTX Steam launch option
 manually, as the uninstall completion message explains. No Steam configuration is edited.
 
 ## Legacy transfer
@@ -119,14 +133,21 @@ interrupted recovery and deferred commit, settings/report/cache policy, legacy o
 unrelated collisions, corrupt backups, game/profile rejection and ancestor junction attacks.
 The development process is not elevated. Existing legacy fixture checks also remain applicable.
 
-After compiler availability, independently compile and test actual EXE setup/update/abort/Apps
-uninstall in a disposable standard-user VM, including an unwritable destination, disk exhaustion,
-locked files and forced process termination. Fixture failure injection does not prove OS power-loss
-durability or Inno event ordering. Review the compiled Apps metadata, HKCU-only registry diff,
-shortcuts and extracted payload equality. Verify no global layer registration and no game changes.
-Game detection/onboarding remains the shared launcher owner's contract; setup installs the app
-without requiring a game selection. The wizard currently uses native controls and no brand assets.
-Signatures, branding, launcher recovery gating/Restore UI and package hashing are C2/A handoffs.
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.
+Its Setup row compiles from the extracted ZIP and runs actual setup silently using
+`/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /DIR=<throwaway>` and `/TASKS=""`.
+It refuses an existing BG3RTX Apps entry, isolates TEMP/LOCALAPPDATA, checks 229 hashes
+after install and update (including repair of a corrupt DLL), then checks default
+settings retention, explicit settings removal, shader-cache removal and zero owned
+files or HKCU Apps entries after uninstall. Only the generated uninstaller removes
+its Apps entry. No Start menu/desktop shortcut or launcher runs during qualification.
+See `docs/release/RC_CHECK.md` and `docs/progress/inno-setup.md` for actual outcomes;
+implementation alone is not a compiled-installer pass.
+
+Still qualify in a disposable standard-user VM: wizard/shortcuts/finish-launch UI,
+abort, unwritable destination, disk exhaustion, locked files and forced termination.
+Fixture failure injection does not prove OS power-loss durability. Fresh-PC, signing,
+game/visual acceptance and upload approval remain separate.
 
 Inno extraction semantics: [ExtractTemporaryFiles](https://jrsoftware.org/ishelp/topic_isxfunc_extracttemporaryfiles.htm).
 Per-user mode: [PrivilegesRequired](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm).

@@ -1,13 +1,14 @@
 # Real ZIP candidate verification. Run from any directory with Windows PowerShell 5.1:
 # powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1
-# No game, payload executable, upload, Git mutation, shortcut or real installation runs.
+# No game, launcher, upload, Git mutation, shortcut or existing installation runs.
+# Setup is compiled and executed only against the isolated throwaway tree.
 param([ValidateRange(1,100000)][int]$ExpectedFiles = 229, [switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $report = Join-Path $root 'docs\release\RC_CHECK.md'
 $results = [ordered]@{}
-foreach ($name in @('Build','Archive','Manifest','Hashes','Exclusions','Licences','Version','Install','Update','Uninstall','Cleanup')) {
+foreach ($name in @('Build','Archive','Manifest','Hashes','Exclusions','Licences','Version','Install','Update','Uninstall','Setup','Cleanup')) {
   $results[$name] = [pscustomobject]@{ Status = 'FAIL'; Detail = 'Not reached' }
 }
 $stage = 'Build'
@@ -280,6 +281,11 @@ try {
   SameSnapshot $original (Snapshot $install)
   SameSnapshot $gameBefore (Snapshot $game)
   Pass 'Uninstall' "$($original.Count)/$($original.Count) original files restored byte-for-byte; fake game unchanged; no owned payload/metadata remains."
+
+  $stage = 'Setup'
+  Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch))
+  Pass 'Setup' 'Inno 6.7.3 compiled; 229 ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution.'
+
 } catch {
   $results[$stage].Status = 'FAIL'
   $results[$stage].Detail = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')
@@ -287,7 +293,11 @@ try {
 } finally {
   foreach ($name in $oldEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $oldEnv[$name], 'Process') }
   if ($scratch -and (Test-Path -LiteralPath $scratch)) {
-    try { RemoveScratch $scratch; Pass 'Cleanup' 'Owned TEMP test tree deleted; no global installation, cache, shortcuts or game files changed.' }
+    try {
+      Require (-not ($run -and (Test-Path -LiteralPath (Join-Path $run 'setup\setup-active.txt')))) "Setup cleanup is incomplete: retaining $scratch and its generated uninstaller for recovery"
+      RemoveScratch $scratch
+      Pass 'Cleanup' 'Owned TEMP test tree deleted; no existing installation, cache, shortcuts or game files changed. Setup Apps cleanup is checked in the Setup row.'
+    }
     catch { $results['Cleanup'].Detail = $_.Exception.Message; Write-Host "FAIL Cleanup: $_" }
   }
   $allPass = @($results.Values | Where-Object Status -ne 'PASS').Count -eq 0
@@ -300,7 +310,7 @@ try {
   $lines += @('', "Archive: $archive", '',
     'Scope: real ZIP legacy install.ps1/uninstall.ps1 route, no shortcut, settings retained. Update reapplies this candidate, not a different release.',
     'Only synthetic installer child shells mock named-process discovery, as release_install_test.py does; build process guards remain real. No game or payload binary executes.',
-    'Separate Inno Setup is not packaged or compiled by this check. No fresh-PC, signing, locked-file, interruption, game/visual acceptance or release/upload approval is claimed.',
+    'Setup row covers compiled Inno setup/update/uninstall in TEMP, with shortcuts disabled and isolated LOCALAPPDATA; only PASS qualifies that route. No fresh-PC, signing, shortcut UI, locked-file, interruption, game/visual acceptance or release/upload approval is claimed.',
     'Git metadata is read-only. Generated archives, symbols and logs remain under .scratch/rc and must not be added to Git.')
   if ($NoBuild) {
     $lines += 'This invocation used -NoBuild: only existing output presence/cache paths and lean configuration were checked. Compilation and source freshness require separate build evidence; rerun the default command after the last promotions.'
