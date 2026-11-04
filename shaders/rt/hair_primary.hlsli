@@ -77,14 +77,17 @@ uint64_t hp_at(uint64_t pool, uint off, uint i, uint size) { return pool + uint6
 
 // Strand crossings of one ray from the candidates of a non-opaque groom query (arbitrary order): a strand's chained
 // segments meet in one joint that both report, so a candidate whose neighbour segment (same instance, primitive +- 1)
-// was already seen is the same crossing. The last kHpSeen candidates are kept (a shadow ray crosses few strands).
+// was already seen is the same crossing, when the two share that joint (link_prev: primitive - 1 ends where this one
+// starts, link_next: primitive + 1 starts where this one ends; the last segment of one strand and the first of the
+// next are neighbours by index only). The last kHpSeen candidates are kept (a shadow ray crosses few strands).
 static const uint kHpSeen = 8u;
 struct HpCrossings { uint inst[kHpSeen]; uint prim[kHpSeen]; uint n; };
 HpCrossings hp_crossings_init() { HpCrossings c = (HpCrossings)0; c.n = 0u; return c; }
-bool hp_crossing(inout HpCrossings c, uint inst, uint prim) {
+bool hp_crossing(inout HpCrossings c, uint inst, uint prim, bool link_prev, bool link_next) {
   bool fresh = true;
   [unroll] for (uint i = 0; i < kHpSeen; ++i)
-    if (i < min(c.n, kHpSeen) && c.inst[i] == inst && (c.prim[i] + 1u == prim || prim + 1u == c.prim[i])) fresh = false;
+    if (i < min(c.n, kHpSeen) && c.inst[i] == inst &&
+        ((link_prev && c.prim[i] + 1u == prim) || (link_next && prim + 1u == c.prim[i]))) fresh = false;
   const uint slot = c.n % kHpSeen;
   c.inst[slot] = inst;
   c.prim[slot] = prim;
