@@ -498,3 +498,23 @@ Both motion-sample and previous-radiance guards were rejected for release.
 Key-off identity passed 2,987/2,987, but the approximately 11 GiB transient/energy
 gate remained unqualified; PNG screens did not replace that evidence.
 code removed 2026-11-05, evidence above
+
+## Optimisation round 1 timing and proof limits (opt-gi, 2026-11-05)
+
+The enclosing GI GPU timer includes pre and post injection regions: origin,
+trace, temporal, AO fold, sun, local shadows, reflections, composite, water and
+optional diagnostics. Hit direct/sun/emission and far bounce are inside the trace
+dispatch, not separate passes. Shared RR is outside these regions. Independent
+summary statistics cannot assign the 4.3-7.8 ms total-minus-trace difference.
+
+With `detailed_logging=1`, additional asynchronous GPU query pairs report origin,
+temporal, AO fold, sun trace, sun resolve, contact and composite costs. They average
+successfully dispatched frames, exclude surrounding transitions/barriers and reset
+with `rt_stats_reset`. No live costs measured on this branch; image path and shader
+requests unchanged. Timing policy fixtures pass; see `docs/progress/opt-gi.md`.
+
+Roof early rejection is dropped for this round: existing production replay packs
+lack hit-emission set 4 and the temporal/composite output chain, so they cannot prove
+complete Ultra output equality. The current-sample temporal shortcut is also dropped:
+there is no production temporal format/motion/history/downstream equality fixture.
+Neither candidate has a retained key, qualified saving or prepared live A/B job.
