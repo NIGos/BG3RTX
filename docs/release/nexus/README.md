@@ -76,7 +76,7 @@ images on the Images tab.
 
 ## Before publishing
 
-- Replace `BG3RTX-<version>-Setup.exe` in the installation section with the real file name.
+- Replace `BG3RTX-0.9.0-beta-Setup.exe` in the installation section with the real file name.
 - Check that the launcher labels quoted in the texts still match the current launcher
   ("Report a problem...", "Save report...", "Disable other Vulkan overlays",
   "Show experimental options", "Water surface reflections").

@@ -14,8 +14,10 @@
 - Found by the user before the live and fixed: the package lacked the runtime alpha table (all foliage was opaque in
   ray tracing, "cardboard" tree shadows); release logging was verbose (now quiet, Detailed logging switch).
 
-**Only question left: approve release candidate rc-20261104-66ed523b for upload?** Files:
-`.scratch/rc-test/rc-20261104-66ed523b-d3d675cc/` (Setup.zip, Setup.exe, portable ZIP). Nothing is uploaded by agents.
+**Released: BG3RTX 0.9.0 beta** (user approval 2026-11-04 after their own test: vegetation shadows fixed). Git tag
+`v0.9.0-beta` on 66ed523b. Files for Nexus (upload by the user): `.scratch/release/v0.9.0-beta/`
+BG3RTX-0.9.0-beta-Setup.zip (main file), BG3RTX-0.9.0-beta-Portable.zip (SHA256 b479fda0..., same as the RC check),
+SHA256SUMS.txt. Next: overnight optimisation goal (no visible quality loss), Codex-driven.
 
 **Done (all on main, pushed).**
 - Five independent reviews (layer; core, shaders, common; product surface; shaders; tools). Every finding
