@@ -86,6 +86,33 @@ class LiveGuardTest(unittest.TestCase):
     def run_guard(self, game="", now=5, phase=0, runner=None, failed=()):
         return evaluate(self.job, self.plan, game, self.runner if runner is None else runner, phase, now, failed)
 
+    def test_hv9_orphans_preserve_capture_but_fail_final_verdict(self):
+        from scripts.queue_gates import check
+        from tools.live_batches.hair_validation.make_job import make_visual, visual_job
+        job = visual_job('hv9-visual', 'Test Dialogue1', make_visual())
+        deferred = [g for g in job['expect_every'] if g.get('fail_fast') is False]
+        self.assertEqual([g['name'] for g in deferred], ['zero orphan depth', 'depth orphans none'])
+        from scripts.queue_gates import line_matches
+        frame = ('[hair primary] frame 2631: 5 grooms published; last 60 frames: 60 publishes, '
+                 '180 prepass, 180 G-buffer and 180 velocity strand draws, 0 pipelines refused; '
+                 'prepass card depth dropped without its G-buffer swap 3')
+        self.assertFalse(line_matches(deferred[0], frame))
+        self.assertTrue(line_matches(deferred[0], frame[:-1] + '0'))
+        self.assertTrue(line_matches(deferred[1], '[hair primary] depth orphans (last 60 frames): none'))
+        self.assertFalse(line_matches(deferred[1], '[hair primary] depth orphans (last 60 frames): e338'))
+        # Exercise a full window with the same guard used by auto-run. Capture is
+        # still reachable; final verdict keeps the every-window orphan gate.
+        self.job['expect_every'][0]['fail_fast'] = False
+        game = stamp(2, '[cfg] settings read') + stamp(3, 'stats bad') + stamp(4, 'stats bad')
+        self.assertIsNone(self.run_guard(game))
+        end = self.runner + stamp(11, '[motion-plan] complete phases=1')
+        self.assertTrue(check(self.job['expect_every'], game, end, self.plan))
+        self.assertIsNone(self.run_guard(game, runner=end, now=13))
+        # Other gates and crash monitoring retain immediate rejection.
+        self.job['expect_every'].append(dict(select='stats', match='good', windows=['diag']))
+        self.assertIsNotNone(self.run_guard(game))
+        self.assertIsNotNone(self.run_guard(game + stamp(5, 'BROKEN')))
+
     def test_readiness_excludes_bad_samples_until_complete(self):
         self.plan[0].update(wait_log=["ready"], wait_log_timeout=30)
         game = stamp(2, "[cfg] settings read") + stamp(3, "stats bad") + stamp(5, "stats bad")

@@ -15,6 +15,20 @@ from tools.live_batches.combine import combine
 
 
 class HairValidation(unittest.TestCase):
+    def test_hv9_frame_window_schema(self):
+        from tools.live_batches.hair_validation.make_job import make_visual
+        # hv9 17:14 had frames=0 on timed restore/return phases. Exercise the
+        # generated plan, not just a copied JSON artifact.
+        plan = make_visual()
+        for step in plan:
+            if 'frames' in step:
+                self.assertGreater(step['frames'], 0)
+                self.assertTrue(step['stats_reset'])
+                self.assertGreaterEqual(step['settle_frames'], 0)
+                self.assertLess(step['settle_frames'], step['frames'])
+        self.assertNotIn('frames', next(p for p in plan if p['label'] == 'return-camera'))
+        self.assertNotIn('frames', next(p for p in plan if p['label'] == 'restore'))
+
     def setUp(self):
         self.c = np.zeros((48, 48), bool)
         self.c[8:40, 8:40] = True

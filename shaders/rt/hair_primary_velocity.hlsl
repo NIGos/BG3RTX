@@ -78,6 +78,10 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   if (e.w != hp_seal(e.xyz, tag) || e.x == hair_primary_no_strand) { discard; return none; }
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
   if (k >= grooms) { discard; return none; }
+  // Only a strand accepted by this frame's G-buffer owner may write motion.
+  const uint accepted = ld(pixels + uint64_t(width) * height * 16u + uint64_t(px.y * width + px.x) * 8u + 4u);
+  if ((tag & 0xFFFFFFu) == 0u || (accepted >> 8u) != (tag & 0xFFFFFFu) ||
+      ld(rec + 3248u + k * 4u) != (accepted & 255u)) { discard; return none; }
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
   if (!hp_segment(pool, ld(rec + 56u), row, seg, i0)) { discard; return none; }

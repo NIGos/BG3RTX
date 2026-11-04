@@ -245,12 +245,17 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   `key:accepted/card=latest,swapped_frames,used=min..max` for all successful pass decisions. Every
   swapped key also has an untruncated `coverage used` line with its ratio range and decision count. New failed
   evidence prevents subsequent swaps; old late successes cannot replace it. Probes continue with cards.
-- A prepass epoch/key latch records dropped depth; only a G-buffer pass permits the next epoch. Refused G-buffer
-  strands use a native-material fallback with reversed-Z GREATER_OR_EQUAL plus depth writes, including when the header loses the key.
-  All sibling draws retain the depth obligation through that epoch. Only keys with a known fallback may
-  drop prepass depth. Remaining unresolved obligations are true orphans in the existing 300-frame log;
-  the coverage line also reports native depth fallback draws. Synthetic ordering tests cover delayed
-  readback, ambiguity, failed coverage, fallback and zero orphans on the supported path.
+- A frame/key latch records prepass depth drops at p for G-buffer draws in [p, p + 2].
+  Refused strands restore native GREATER_OR_EQUAL depth with writes; sibling draws retain membership.
+  A key seen on a G-buffer pipeline with neither strands nor fallback blocks depth drops for 300 frames.
+  Only a latched native G-buffer draw with no fallback counts as an orphan, at that draw.
+  The first four record key, prepass/draw frame, reason (no variant/no fallback) and pipeline handle.
+  Pass boundaries, absent draws and hitches never increment the counter. Epoch bookkeeping is removed.
+  CPU regressions cover both recording orders, interleaving, a hitch, an uncovered sibling,
+  one true orphan and a 60-frame three-key hv9 aggregate fixture (180/180/180; 0 orphans).
+  Historical hv9 aggregates cannot exclude unlogged native siblings: the old missing-variant,
+  missing-fallback branch logged neither fallback nor refusal. No per-draw replay is possible.
+  See section 9 for failure modes and docs/progress/claude-hair-consolidate.md for the evidence boundary.
 - Offline validation: final build and all 149 CTests passed, including host atomics lint and the corrected
   prepass -> G-buffer -> delayed-publish ordering regression. Revision CTests took 121.24 s. G-buffer, velocity and count requests
   compiled and passed spirv-val (3/3; 2 rebuilt, velocity cached); no shared shader include changed. Cache: worktree build/shader_cache.
@@ -417,3 +422,57 @@ at default, zero failures. Request delta 0. Unchanged water_surface_shader_test 
 009f60f: 16/16 OFF accepted, 16/16 production validated. Full build: 147/147 CTests passed.
 GPU shadow bench: 3000/3000 crossing counts match CPU; 174623 transmitted trials vs 175064.4
 expected, sigma 353.2 (1.25 sigma error). These are offline gates; live GPU cost remains pending.
+
+
+## 9. Known failure modes and offline proofs
+
+Closed means the named offline regression or reviewer disposition passes, not live qualification.
+
+Not hair: hgn1/hgn2 empty generated-material runs and the hgn share-window row are owned by [TRACK_D_REFLECTIONS](TRACK_D_REFLECTIONS.md) (generated-material publication/producer periods).
+
+| Live run(s) | Cause | Fix commit | Offline proof | Status |
+|---|---|---|---|---|
+| hv8 091526; earlier hc1/hv5/hv6/hv7 same fault class | Demoted lanes continued past discard into invalid reads | base, hair-demote-fix | hair_groom_test.test_strand_source_safety: every G-buffer/velocity discard immediately returns; hair_primary_gpu_test | closed |
+| hv6 045450; hc1 050004, hc2 050124, hv5 045720 | Recursive scene mutex, exit 0xFFFF7001 | base | hair_groom_test.test_publish_lock requires non-locking rt_this_build_camera | closed |
+| hv6 through 071137 | Vertically mirrored primary rays | base | hair_groom_test.test_ndc_ray: 50 rotated/projected points round-trip | closed |
+| hc2 002952; hc1/hc2 later silent swaps | Adjacent publish tags and camera-relative origin | base (f659b5ee order design) | hair_groom_asset_test pick_publish and camera rebase fixture | closed |
+| hv7 094814, 095747 | Count requested newest tag while entries were tag - 2 | base, hair-count-tags | hair_groom_asset_test newest_counted_tag and four-tag marker fixture | closed |
+| hv6/hv7 102509 | Different-latency card/strand samples never paired | base, superseded by hair-coverage-accept | hair_groom_asset_test packed card/accepted pair, same tag and slot | closed |
+| hv7 092619 (ratio 2.55) | Stacked card/strand occlusion samples | base, hair-coverage-accept | hair_groom_asset_test duplicate fragments and overlapping-key marker fixture | closed |
+| hv7 112828 | Rejected pixels counted as accepted strands | base, hair-coverage-accept | hair_groom_asset_test rejection/last-owner/stale-acceptance marker fixture | closed |
+| hv7 112828 | Reused applied tag attributed to multiple G-buffer frames | base, hair-coverage-accept | hair_groom_asset_test unique_frame ambiguity and invalidation regression | closed |
+| hv7 123740/145421/160354; hv9 180225 | Epoch expiry counted absent/late draws as orphans | working tree | hair_groom_asset_test both recording orders, interleaving, hitch, hv9 180/180/180 fixture | closed |
+| hv7/hv9 | Transparent native card pixels inflated denominator | base, hair-orphan-alpha | hair_groom_test.test_strand_source_safety alpha/grazing marker guard; test_tips_dither zero alpha | closed |
+| hv7 092619 | Prepass required the wrong present/frame equality (0 prepass vs 187 G-buffer draws) | base, extracted helper | hair_groom_asset_test::test_prepass_drop_decision exercises prepass_drop_allowed called by the layer: applied in [now, now + 1], both recording orders, off-by-one, live key and latch/sibling safety | closed |
+| hv9; uncovered sibling risk | Native sibling with neither variant nor fallback | working tree | hair_groom_asset_test uncovered sibling retained 300 frames; true orphan counted once | closed |
+| hv9 180225 | Orphan fail-fast aborted before strand PNG | working tree | live_guard_test.test_hv9_orphans_preserve_capture_but_fail_final_verdict; final gate remains mandatory | closed |
+| hv9 171448 | Timed return/restore carried invalid frames=0 | base; new regression | hair_validation_test.test_hv9_frame_window_schema; camera_plan_test rejects frames=0 | closed |
+| hc2 002952 | G-buffer timestamps depended on publish recording order | base timing_before_gbuffer | Diagnostic; covered by the presence gate `strand pass GPU ms` in hv9 expect_every (c-strands-plus). Regex requires a numeric ms line and nonzero sample count; no timestamp-value threshold | closed |
+| hc1 212704; hv5/hv6 readiness timeouts | Pending pipelines and cached readiness acknowledgements | base | camera_plan_test; live_guard_test readiness cutoff; batch_jobs_lint_test frozen preflight | closed |
+| hv6 030524..071137 | K8 armed before readiness / missing consecutive frames | base | camera_plan_test readiness before capture; live_guard_test.test_burst_gate_keeps_motion_ready_cutoff | closed |
+| hc1/hv5/hv6 05:49..05:54 | Stale rt/hair_primary_probe.hlsl prefetch FAILED | base stale manifest drop; working tree test | hair_prefetch_test checks layer shader_get producers (source of rolling requests.txt), variants.txt membership, source existence and stale-manifest drop path | closed |
+| hc2 052540 | Crowd producer demanded outside its producing scene/state | base job changes | Not in the candidate job (hv9 is the only job); hair_crowd re-qualifies it | closed for candidate |
+| hc1/hv5 early losses | First-load/reload handle reuse and held soup offsets | base (51956f86 guards) | hair_groom_asset_test LoadGuard first image/reload, soup_update_ok bounds/held draw | closed |
+| hv6 072839; hv7 fault attribution | Fault inventory omitted cascade/groom BLAS; TLAS label ambiguous | base, hair-blas-lifetime/hair-tlas-label | Diagnostic names only; covered by the presence gate `strand pass GPU ms` for candidate diagnostics. No image or numeric gate consumes BLAS/TLAS names; this closure does not qualify GPU lifetime safety | closed |
+| hv7 112828; close-up low ratios | Coverage bounds exit / delayed old success | base, hair-coverage-accept | hair_groom_asset_test lower/upper bounds and older-success invalidation | closed |
+| hv9 retrospective assertion | Aggregates cannot exclude extra native sibling draws | working tree | Cannot be proved from aggregates; closed by construction: exact draw-time layer depth_orphan counter uses DepthLatch::orphan; hair_groom_asset_test frame-latch recording-order/interleaving/hitch/uncovered-sibling/true-orphan fixtures and hv9 180/180/180 fixture; live_guard_test.test_hv9_orphans_preserve_capture_but_fail_final_verdict | closed (by construction) |
+| hv9 completion, c-strands-plus, K8 | Six positive patterns lacked historical matches | working tree | hair_patterns_test: check_patterns.source_contract renders actual auto-run.ps1 and dump.cpp emitter strings with sample values; all six regexes match, including K8 select + match predicates | closed |
+| F01 review | uint32 soup extent multiplication wrapped (tri 5592405, stride 256: need 280) | working tree | hair_groom_update.hlsl:35-42 checks base, available >= 24, then divides before multiplying; hair_groom_test.test_groom_soup_bounds compares every read byte using Python integers, including exact/short buffers, strides 24/256, last triangle and base past end. Hair-only: layer/bvhsplit.cpp:2393 gates groom_work on rt_hair_groom (set at :1954); dispatch :3092 | closed offline |
+| F08 review | Card-depth unprojection can round the same pixel ray differently per layer | working tree | hair_primary_gbuffer.hlsl:101-102 now uses fixed clip depth 1; origin is hp_rebase(rec, gCam.position) (:128), independent of layer. Hit k/seg, v and depth (:147-165) use only that ray, the shared TLAS/points and camera. Card ownership/material/tips are applied after the entry is sealed/stored (:167-168). All readers check hp_seal: G-buffer :142, velocity :78, count :42-58. hair_groom_test.test_pixel_seal_tearing: 100000 identical pairs pass; all 14 word mixes of different entries, 1400000 trials, 0 passes. The 31-bit seal is a probabilistic corruption check, not a collision-free proof | closed offline |
+| F09 review | Many fragments store one groom colour sample | unchanged | accepted: any one or a mix of this groom's samples of this frame; the a_f estimate is per groom. G-buffer hair_primary_gbuffer.hlsl:254-255 writes all four colour/roughness words at offset + k * 32 before its tag; count hair_primary_count.hlsl:75-79 requires that tag and finite components. Different grooms have disjoint slots. Count runs after all fragment writes: any current-frame writer overwrites all components, excluding old-frame components from a mix; fragment-to-compute and compute-to-fragment barriers in layer/hair_primary.cpp:315-318,354-358 separate frame writers from count readers. Header replacement waits for fragments (:409-430); pack ends before colour slots (common/hair_primary.h:53,83,158), so remapping cannot mix concurrently writing grooms | closed (accepted limitation) |
+| Review | Accepted marker precedes late depth test, as do card markers; both measure depth-free raster, matching the offline bound | unchanged | paired marker fixture | closed (accepted limitation) |
+| Review | Overlapping draw keys use last-writer marker attribution | unchanged | duplicate/overlapping-key marker fixture | closed (accepted limitation) |
+| Review | Epoch resolution finding is superseded by the frame-based latch | working tree | frame latch ordering fixtures | closed (accepted limitation) |
+| Review 1 P0 LOD upload | Stage only; use after copy recording submitted and frame done; discarded upload retries | working tree | hair_groom_asset_test::test_upload_submission | closed offline |
+| Review 2 P0 compaction | Separate query_rec; discarded query resets full build and query | working tree | hair_groom_asset_test::test_compaction_submission | closed offline |
+| Review 3 P1 UV joins | Track copy recording; discard job without matching stale samples | working tree | hair_groom_asset_test::test_uv_submission | closed offline |
+| Review 4 P2 counts | Store count recording; discard slot without coverage evidence | working tree | hair_groom_asset_test::test_count_submission | closed offline |
+| Review 5 P1 depth | G-buffer requires this key's prepass drop in [p, p + 2]; otherwise cards/probe | working tree | hair_groom_asset_test::test_gbuffer_depth_latch | closed offline |
+| Review 6 P1 velocity | Accepted marker word 1 must match frame tag and groom key-map slot; no new specialization | working tree | hair_groom_test.test_strand_source_safety; accepted marker fixture | closed offline |
+| Review 7 P2 wrapped tag | Count skips low-24-bit zero tags, including untouched zero markers | working tree | hair_groom_test.test_strand_source_safety; hair_groom_asset_test four-tag marker fixture | closed offline |
+| Review 8 P2 totals | Log card totals and accepted totals separately | working tree | hair_groom_asset_test::test_card_accepted_totals | closed offline |
+| Review 9 P2 refusals | Separate feedback failures; reset both counters each period | working tree | hair_groom_asset_test::test_period_failures | closed offline |
+
+Earlier review receipt: 151/151 CTests passed; the prescribed G-buffer/velocity/count validation passed 3/3.
+Closure receipt: 153/153 CTests passed (620.80 s), including hair_prefetch_test and hair_patterns_test. Hv9 lint: 1 job, 0 failing. Pattern audit: 101 checked, 0 missing positives, 0 forbidden hits.
+No live qualification. All hair rows are closed; historical aggregate limits remain explicit. See the branch progress fragment for current offline validation.

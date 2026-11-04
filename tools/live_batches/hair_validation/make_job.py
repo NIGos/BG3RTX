@@ -442,9 +442,10 @@ def visual_job(name, save, plan):
     shadow = r"\[hair primary\] shadow transmittance:"
     gpu = r"\[hair primary\] strand G-buffer draws GPU"
     j["expect_every"] = [
-        gate("zero refused pipelines and orphan depth", frame,
-             r"\b0 pipelines refused; prepass card depth dropped without its G-buffer swap 0\b", strands),
-        gate("depth orphans none", orphan, r": none\s*$", strands),
+        gate("zero refused pipelines", frame, r"\b0 pipelines refused", strands),
+        dict(gate("zero orphan depth", frame,
+             r"prepass card depth dropped without its G-buffer swap 0\b", strands), fail_fast=False),
+        dict(gate("depth orphans none", orphan, r": none\s*$", strands), fail_fast=False),
         gate("swapped frames in every strand window", coverage, SWAPPED, strands),
         gate("shadow transmittance participation", shadow, shadow, ["c-strands-plus"]),
         gate("strand pass GPU ms", gpu,
@@ -468,8 +469,20 @@ def visual_job(name, save, plan):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect,hv8-probe-aftermath,hv9-visual")
-    names = parser.parse_args().job_names.split(",")
+    parser.add_argument("--gates-only", action="store_true", help="update hv9 gates while preserving its verified timing/readiness plan")
+    args = parser.parse_args()
+    names = args.job_names.split(",")
     assert (HERE / "predicted.json").exists()
+    if args.gates_only:
+        if names != ["hv9-visual"]:
+            parser.error("--gates-only requires --job-names hv9-visual")
+        path = HERE / "jobs/hv9-visual.json"
+        current = json.loads(path.read_text())
+        plan = json.loads((HERE / "plans/hv9-visual.json").read_text())
+        current["expect_every"] = visual_job("hv9-visual", current["save"], plan)["expect_every"]
+        path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+        print("Updated hv9 gates only; verified plan preserved; no queue staging or lint snapshot refresh")
+        return
     for folder in ("jobs", "plans"):
         (HERE/folder).mkdir(exist_ok=True)
     for name, builder, factory in [("hv5-reload-bisect", make_bisect, bisect_job),

@@ -86,7 +86,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint64_t rec = record();
   const uint tag = ld(rec);
   const uint width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
-  // Camera-relative point of the card fragment: the ray direction (camera at the origin of the groom TLAS frame).
+  // Camera-relative card point for ownership; a fixed-depth pixel ray for the shared cache.
   // Vulkan viewport transform inverted (a flipped viewport has a negative height). Derivatives before any discard.
   const float4 view = asfloat(vk::RawBufferLoad<uint4>(rec + 40u, 8));
   // The clip position of the vp matrix: the game's vertex shaders write gl_Position.y = -clip.y (rt/xfb_to_world.hlsl,
@@ -97,7 +97,9 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float4 h = mul(float4(ndc, pos.z, 1.0), inv);
   const float3 pc = h.xyz / h.w;
   const float t_card = length(pc);
-  const float3 dir = pc / max(t_card, 1e-30);
+  // Card depth must not affect even the rounding of the cached hit's v/depth.
+  const float4 ray_h = mul(float4(ndc, 1.0, 1.0), inv);
+  const float3 dir = normalize(ray_h.xyz / ray_h.w);
   const float3 cn = cross(ddx(pc), ddy(pc));
   const float cos_card = abs(dot(dir, cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
