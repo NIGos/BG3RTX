@@ -1183,7 +1183,9 @@ bool ensure_tlas(uint32_t slot, uint32_t n,TlasSlot* extra=nullptr) {
   VkAccelerationStructureBuildSizesInfoKHR sz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
   g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &bi, &cap, &sz);
   Buf nb;
-  if (!make_buf(nb, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false, "split TLAS slot"))
+  // The groom TLAS of a slot is labelled apart (fault dumps: the strand passes trace it, the core passes the scene's).
+  if (!make_buf(nb, sz.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, false,
+                extra ? "hair groom TLAS slot" : "split TLAS slot"))
     return false;
   VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
   ci.buffer = nb.b;
