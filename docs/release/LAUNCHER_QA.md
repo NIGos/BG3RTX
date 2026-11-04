@@ -1,41 +1,25 @@
-# Launcher QA — 2026-11-03
+# Release launcher QA - 2026-11-04
 
-- PASS: offline QA on gui-review-fixes; no game launched, no player settings saved, Git metadata unchanged.
-- PASS: visible categories have navigation pages; Experimental uses native details/summary.
-- FIXED: Developer navigation and content require the bridge's dev=1 authorization.
-- FIXED: reviewed presets replace visible custom values; hidden developer controls stay intact.
-- PASS: all four presets match the central table on supported hardware; capability clamps remain.
-- FIXED: native fallback counts custom values when reporting a custom preset.
-- FIXED: card Apply badges use the saved-to-selected transition, including frame-generation Off/on crossings.
-- FIXED: every choice shows all prerequisites as text, including satisfied prerequisites.
-- PASS: save requires dependency review and confirmation; bridge tests check enforcement.
-- FIXED: keyboard focus survives bridge redraws; toggles accept Enter and native Space.
-- PASS: buttons, sliders and summaries retain native keyboard semantics; focus styles include select.
-- PASS: navigation icons are decorative beside text; toggles and groups have accessible names.
-- FIXED: cost appears in every card description; missing measurements say Not measured.
-- PASS: copy is factual; no poetic tagline in the shipped page.
-- FIXED: ornate theme no longer overrides forced-color hero width/background or focus colors.
-- FIXED: disabled controls preserve text opacity; forced colors use system disabled/focus colors.
-- PASS: reduced-motion removes transitions; text panels have flat backgrounds.
-- PASS: CSS token text contrast minimum 6.68:1; Play text 5.52:1 (WCAG sRGB calculation).
-- FIXED: controls wrap; short viewports scroll the full workbench to keep actions reachable.
-- PASS: DPI rule fallback checks no fixed pixel widths on text containers and wrapping/scroll rules.
-- OPEN: actual WebView2 100/150/200% zoom, Windows high contrast and Narrator acceptance.
-- PASS: shipped JS runs against a minimal offline DOM; no browser dependency was available.
-- PASS: bridge regression suite 904 checks; settings suite 4,356 checks; renderer, contrast and reflow contract registered in CTest.
-- OPEN: PRODUCT_REVIEW.md is absent from this checkout and local refs; RELEASE_BETA,
-  VISUAL_STYLE and USER_TRIAL_20261103 were read. No external document was substituted.
-- Validation: full build and all 146 CTests passed (194.04 s); git diff --check passed.
-- Scope: launcher and strand-primary startup safety gate; ABI and shader request delta 0; no new GPU effect or cost claim.
+- PASS: release navigation is Lighting, Surfaces, Performance and Help & support. Native fallback also retains its setup Overview. Advanced and Experimental require dev=1.
+- PASS: exactly 15 release settings; bridge rendering and direct requests enforce knob_visible and choice_visible. Exact labels, choices, slider bounds and steps match CONTROL_CONTRACT.md.
+- PASS: Low, Medium, High and Ultra remain visible globally in both renderers; Custom counts visible deviations, including preserved custom values. No GPU-model guarantee.
+- PASS: native fallback separates Lighting and Surfaces, uses the same central metadata and apply transitions, and shows prerequisites. Hidden release controls remain unavailable.
+- PASS: saved/pending restart state, dependency confirmation, failed-save edits, keyboard focus and card/report disclosure state retain regression coverage. Native redraws restore focus and scroll.
+- PASS: Help & support includes compatibility, memory, game-folder selection, graphics recheck, adapter selection when needed, overlay troubleshooting and a local report preview/export. Nothing uploads automatically.
+- PASS: Ctrl+Shift+F9 copy describes comparison with the game's own image. Release save copy has no F10 or Experimental instructions.
+- PASS: sample cards match all 15 release controls. Unmeasured sample costs are explicit; actual cards use central measurements and provenance. No new rendering-cost claim.
+- PASS: bundled Lato/system fallback, original branding, flat text panels, wrapping controls, forced-color focus and reduced motion remain. No Larian/WotC artwork or fonts introduced.
+- PASS: vcvars64 located through vswhere; launcher, bridge test and settings test build. launcher_web_bridge_test: 977 checks; settings_test: 4,422 checks. launcher_web_bridge_json and launcher_ui_test pass; requested CTest group 4/4.
+- PASS: offline tests use injected effects; no game launch, player settings write, common/settings.h edit or Git metadata write. Shader request delta 0.
+- OPEN: actual WebView2 100/150/200% zoom, multi-monitor DPI, Windows high contrast, Narrator and interactive native/WebView Apply/restart and focus acceptance. Offline DOM/source tests do not certify these.
 
-## GUI review fixes (gui-review-fixes)
+Release controls (details/requirements and apply badges accompany each setting):
 
-- Strand hair on screen is experimental and requires restart; the running process retains its startup setting, so saving On cannot activate it live. This does not qualify the pending device-loss fix.
-- Strand activation checks ray queries, linear swept spheres, local groom availability and, for on-screen strands, shaderInt64 and fragment stores. Missing capabilities have factual reasons; required startup settings are reviewed before save.
-- Fresnel, temporal depth of field/bloom and crowd budgets live in Advanced / Experimental, off in every preset. Awaiting-qualification choices require Experimental authorization.
-- Every water optimization requires hidden-surface water shading. Combined writes bit value 7. Crowd choices state segment budgets; character counts are estimates in Details.
-- Card and diagnostic disclosures retain open state across refreshes. Unchanged report previews keep their DOM; refreshed previews retain keyboard focus inside the dialog.
-- Slider Off/On buttons expose pressed state. Off disables the bounded range; value text includes units. Frame-generation badges follow the saved-to-selected Off/on transition.
-- Cost metadata supplies strand reference timings; other cards show numeric ms or Not measured. Reviewed card copy is one visible-effect sentence, with technical evidence and scene instructions in Details.
-- OPEN manual acceptance: real WebView2 zoom at 100/150/200%, Windows high contrast, Narrator, and multi-monitor DPI. Offline DOM tests do not certify these.
-- No game launch or Git metadata writes. Final build and CTest results are recorded in docs/progress/gui-review-fixes.md.
+| Page | Visible settings |
+|---|---|
+| Lighting | Ray Reconstruction; Ray-traced geometry; Sun shadows; Global illumination; Local light shadows; RT lighting strength; Off-screen bounce light; Box light shadows; Temporal depth of field and bloom; Hair shadows and occlusion |
+| Surfaces | Reflections; Water lighting |
+| Performance | Frame generation; Rendered frame limit; NVIDIA Reflex |
+| Help & support | Report a problem; Choose game folder; Recheck graphics; Graphics adapter (multiple adapters only); compatibility, memory, overlay and comparison guidance |
+
+Global actions: four presets, Custom indicator, Report a problem (WebView footer), Discard, Save and Play. Native additionally has Use recommended, Reset entire preset and Close; setup Overview retains the game-folder field, Browse and Continue/Finish setup. Report dialog: issue text; Logs, Graphics settings and Graphics hardware selections; Preview/Refresh contents; Cancel collection; Close; Create package. Preset/dependency confirmation: Apply changes or Cancel (native equivalents use standard Windows dialogs).

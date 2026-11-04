@@ -3,14 +3,19 @@
 #include <uxtheme.h>
 #pragma comment(lib, "uxtheme.lib")
 #include "ui_state.h"
+#include "version.h"
+#include "compatibility.h"
 #include "../../common/experimental_ab.h"
 
 static std::wstring g_screenshot, g_review;
+static std::vector<int> g_tab_ids;
+static GraphicsInspection g_inspection;
+static int g_adapter=-1;
 static bool g_screenshot_bottom=false, g_no_game=false;
 static float g_screenshot_scale=0;
 static int g_review_width=0;
 enum { PRESET=20, SUGGEST, TABS, EXPAND, SAVE, PLAY, DISCARD, CLOSE, REPORT, BROWSE,
-       GAME, CLEAN, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, KNOB=1000, DETAILS=2000 };
+       GAME, CLEAN, STATUS, NOTE, NEXT, RETRY, LOG, FOLDER, RESET, ERROR_DETAILS, ADAPTER, PRESET_LOW=60, KNOB=1000, DETAILS=2000 };
 struct Ui {
   HWND wnd{}, body{}; HFONT font{}, bold{}; HBRUSH bg{};
   bg3::experimental_ab::Selection ab_selection;
@@ -68,6 +73,7 @@ static void footer() {
   for(int i=0;i<st::kKnobCount;++i)if(st::knob_visible(st::kKnobs[i],g.dev))custom+=g.st.values[i]!=preset[i];
   std::wstring note=!g.st.have_gpu?L"Compatibility: Unknown\nRecheck in Overview":custom?L"Custom: "+std::to_wstring(custom)+L" settings\nSuitability: estimate":L"Matches preset\nSuitability: estimate";
   SetWindowTextW(control(g.wnd,NOTE),note.c_str());
+  for(int p=0;p<st::kPresetCount;++p)SendMessageW(control(g.wnd,PRESET_LOW+p),BM_SETCHECK,!custom&&p==g.st.preset?BST_CHECKED:BST_UNCHECKED,0);
   EnableWindow(control(g.wnd,PLAY),!g_no_game&&g_screenshot.empty()&&g.stage>=4&&valid_game_dir(g.dir)&&!running);
 }
 static void status(const std::wstring& s) {g.message=s;footer();}
@@ -88,8 +94,8 @@ static LRESULT CALLBACK focusproc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD
 static void rebuild();
 static void layout() {
   if(!g.body)return;RECT r{};GetClientRect(g.wnd,&r);int w=int(r.right/g.scale),h=int(r.bottom/g.scale);
-  place(control(g.wnd,PRESET),96,56,180,220);place(control(g.wnd,SUGGEST),288,56,200,32);
-  place(control(g.wnd,NOTE),504,56,w-520,40);place(control(g.wnd,TABS),16,104,w-32,32);
+  for(int p=0;p<st::kPresetCount;++p)place(control(g.wnd,PRESET_LOW+p),96+p*72,56,68,32);place(control(g.wnd,SUGGEST),392,56,176,32);
+  place(control(g.wnd,NOTE),584,56,w-600,40);place(control(g.wnd,TABS),16,104,w-32,32);
   place(g.body,0,144,w,h-296);place(control(g.wnd,STATUS),16,h-144,w-32,80);place(control(g.wnd,ERROR_DETAILS),16,h-48,160,32);
   int x=w-16;for(auto pair:{std::pair<int,int>{CLOSE,80},{PLAY,96},{SAVE,80},{DISCARD,88},{RESET,144}}){x-=pair.second;place(control(g.wnd,pair.first),x,h-48,pair.second,32);x-=8;}
   rebuild();
@@ -99,7 +105,7 @@ static bool matches(const st::Knob& k) {
   if(k.dev_only)return g.tab==5;
   if(k.experimental)return g.tab==3&&g.experimental;
   std::string c=k.category;
-  return (g.tab==1&&(c=="Lighting"||c=="Surfaces"))||(g.tab==2&&c=="Performance")||(g.tab==3&&c=="Advanced");
+  return (g.tab==1&&c=="Lighting")||(g.tab==6&&c=="Surfaces")||(g.tab==2&&c=="Performance")||(g.tab==3&&c=="Advanced");
 }
 static std::wstring choice_label(const st::Knob& k,int c) {
   if(c<0)return L"Custom value preserved";
@@ -111,7 +117,7 @@ static std::wstring choice_label(const st::Knob& k,int c) {
   return s;
 }
 static void rebuild() {
-  if(!g.body)return;g.updating=true;g.scroll=0;
+  if(!g.body)return;HWND focused=GetFocus();int focus_id=GetParent(focused)==g.body?GetDlgCtrlID(focused):0;int previous_scroll=g.scroll;g.updating=true;g.scroll=0;
   while(HWND h=GetWindow(g.body,GW_CHILD))DestroyWindow(h);
   int w=body_width(), y=16;
   if(g.tab==0) {
@@ -131,17 +137,25 @@ static void rebuild() {
     label(g.body,widen(st::kPresetDesc[g.st.preset]),16,y,w,96);y+=104;
     if(g.stage<4){button(g.body,NEXT,g.stage==3?L"Finish setup":L"Continue setup",16,y,176);y+=48;}
   } else if(g.tab==4) {
-    label(g.body,L"Support",16,y,w,32,true);y+=40;
+    label(g.body,L"Help & support",16,y,w,32,true);y+=40;
     label(g.body,L"Create a local report when the report service is available. Nothing is uploaded. Review its contents before sharing. Saves and crash dumps are excluded by default.",16,y,w,72);y+=80;
     button(g.body,REPORT,L"Report a problem",16,y,200);y+=48;
-    button(g.body,LOG,L"View log",16,y,200);y+=48;
-    button(g.body,FOLDER,L"Open mod folder",16,y,200);y+=48;
-    place(add(g.body,L"BUTTON",L"Disable other Vulkan overlays for the next launch",WS_TABSTOP|BS_AUTOCHECKBOX,CLEAN),16,y,w,40);
-    if(!g.high_contrast)SetWindowTheme(control(g.body,CLEAN),L"",L"");SendMessageW(control(g.body,CLEAN),BM_SETCHECK,g.clean?BST_CHECKED:BST_UNCHECKED,0);y+=56;
+    button(g.body,BROWSE,L"Choose game folder...",16,y,224);y+=48;
+    button(g.body,RETRY,L"Recheck graphics",16,y,224);y+=48;
     label(g.body,L"Overlay conflicts: try disabling Steam, EOS or GOG overlays for one launch. No driver minimum or VRAM budget has been verified here. Restore previous version is unavailable until setup provides a verified backup.",16,y,w,96);y+=104;
+    const auto compatibility=assess_compatibility(g_inspection,g_adapter);
+    label(g.body,widen(compatibility.hardware_text+"\n"+compatibility.driver_text+"\n"+compatibility.memory_text+"\n"+compatibility.adapter_text),16,y,w,144);y+=152;
+    if(g_inspection.adapters.size()>1){
+      label(g.body,L"Graphics adapter",16,y,w,28,true);y+=36;
+      HWND adapter=add(g.body,WC_COMBOBOXW,L"",WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST,ADAPTER);place(adapter,16,y,w,240);
+      SendMessageW(adapter,CB_ADDSTRING,0,LPARAM(L"Choose adapter"));
+      for(const auto& a:g_inspection.adapters)SendMessageW(adapter,CB_ADDSTRING,0,LPARAM(widen(a.gpu.name).c_str()));
+      SendMessageW(adapter,CB_SETCURSEL,g_adapter+1,0);y+=48;
+    }
+    label(g.body,L"Ctrl+Shift+F9 compares BG3RTX with the game's own image.",16,y,w,48);y+=56;
     label(g.body,L"Fonts: Lato Web, SIL Open Font License. Credits and notices: docs/release/THIRD_PARTY.md.",16,y,w,64);y+=72;
   } else {
-    if(g.tab==3) {
+    if(g.tab==3&&g.dev) {
       int enabled=0;for(int i=0;i<st::kKnobCount;++i)if(g.st.values[i]>0&&std::string(st::choice_maturity(st::kKnobs[i],g.st.values[i]))=="experimental")++enabled;
       button(g.body,EXPAND,(g.experimental?L"Hide Experimental":L"Show Experimental")+std::wstring(L" (")+std::to_wstring(enabled)+L" enabled)",16,y,w);y+=48;
     }
@@ -167,11 +181,15 @@ static void rebuild() {
       label(g.body,badge,32,y,w-32,48);y+=56;
       auto need=st::unmet_need(k,g.st.values[i],g.st.values);if(need.empty())need=st::unmet_key_need(k,g.st.values[i],effective_settings());
       label(g.body,widen(st::apply_label(st::transition_apply(k,i<int(g.saved.size())?g.saved[i]:-1,g.st.values[i]))),32,y,w-32,28,true);y+=36;
-      if(!need.empty()){label(g.body,widen(need),32,y,w-32,48);y+=56;}
+      for(int ch=0;ch<st::choice_count(k);++ch)if(st::choice_visible(k,ch,g.dev)){
+        for(const auto& n:k.choices[ch].need)if(n.knob){auto j=st::knob_index(n.knob);if(j>=0){if(!need.empty())need+="\n";need+=std::string(k.choices[ch].label)+": requires "+st::kKnobs[j].label+" "+st::kKnobs[j].choices[n.min_choice].label;}}
+      }
+      for(const auto& n:k.required_on)if(n.key){if(!need.empty())need+="\n";need+="Requires "+std::string(n.label);}
+      if(!need.empty()){int lines=1+int(std::count(need.begin(),need.end(),'\n'));int height=24*lines+24*int(need.size()/std::max(30,w/9));label(g.body,widen(need),32,y,w-32,height);y+=height+8;}
       button(g.body,DETAILS+i,L"Details and requirements",32,y,256);y+=48;place(add(g.body,L"STATIC",L"",SS_ETCHEDHORZ,0),16,y,w,2);y+=24;
     }
   }
-  g.height=S(y+16);scroll_to(0);g.updating=false;footer();
+  g.height=S(y+16);scroll_to(previous_scroll);g.updating=false;footer();if(focus_id)if(HWND target=control(g.body,focus_id))SetFocus(target);
 }
 static void browse() {
   IFileOpenDialog* d=nullptr;if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&d))))return;
@@ -212,7 +230,7 @@ static bool save(bool) {
   g.ab_selection.pending=false;
   g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;
   save_game_dir(g.dir);g.saved=g.st.values;g.saved_preset=g.st.preset;g.saved_dir=g.dir;
-  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved. Live settings apply automatically; Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.");rebuild();return true;
+  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved. Live settings apply automatically; Ctrl+Shift+F9 compares BG3RTX with the game's own image.");rebuild();return true;
 }
 static void select_preset(int p) {
   auto v=st::preset_values_for(p,g.st.caps);
@@ -221,7 +239,7 @@ static void select_preset(int p) {
   std::wstring t=L"Preview preset: "+widen(st::kPresetLabel[p])+L"\n";
   for(int i=0;i<st::kKnobCount;++i)if(v[i]!=g.st.values[i])t+=L"\n"+widen(st::kKnobs[i].label)+L": "+(st::kKnobs[i].kind==st::Kind::Choice?choice_label(st::kKnobs[i],v[i]):std::to_wstring(v[i]));
   if(MessageBoxW(g.wnd,t.c_str(),L"Replace settings with preset?",MB_OKCANCEL|MB_ICONQUESTION)==IDOK){g.st.preset=p;g.st.values=v;rebuild();}
-  SendMessageW(control(g.wnd,PRESET),CB_SETCURSEL,g.st.preset,0);
+  footer();
 }
 static void play() {
   if(g_no_game||!g_screenshot.empty()||game_running()||g.stage<4)return;
@@ -235,25 +253,30 @@ static void command(int id,int code,HWND source) {
   if(id>=KNOB&&id<KNOB+st::kKnobCount&&code==CBN_SELCHANGE){
     int i=id-KNOB;const auto& k=st::kKnobs[i];int row=int(SendMessageW(source,CB_GETCURSEL,0,0));int c=int(SendMessageW(source,CB_GETITEMDATA,row,0));
     if(c<0)return;
-    if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility or enable Experimental.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
+    if(!st::choice_available(k,c,g.dev,g.experimental,g.st.caps)){status(L"This choice is unavailable. Check graphics compatibility and requirements.");int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;}
     g.ab_selection.touch(k,c);g.st.values[i]=c;int previous=g.scroll;rebuild();scroll_to(previous);SetFocus(control(g.body,KNOB+i));return;
   }
   if(id>=DETAILS&&id<DETAILS+st::kKnobCount){auto& k=st::kKnobs[id-DETAILS];std::wstring t=widen(k.desc)+L"\n\n"+widen(k.details)+L"\n\n"+widen(k.cost.provenance)+L"\n\nApply: "+widen(st::apply_label(st::transition_apply(k,id-DETAILS<int(g.saved.size())?g.saved[id-DETAILS]:-1,g.st.values[id-DETAILS])))+L"\n"+widen(k.apply_note);MessageBoxW(g.wnd,t.c_str(),widen(k.label).c_str(),MB_OK);return;}
+  if(id==ADAPTER&&code==CBN_SELCHANGE){
+    g_adapter=int(SendMessageW(source,CB_GETCURSEL,0,0))-1;
+    auto c=assess_compatibility(g_inspection,g_adapter);g.st.caps=c.caps;g.st.suggested=c.model_preset;g.st.have_gpu=g_adapter>=0;
+    if(g.st.have_gpu)g.st.gpu=g_inspection.adapters[g_adapter].gpu;rebuild();return;
+  }
   if(id==GAME&&code==EN_CHANGE){int n=GetWindowTextLengthW(source);std::wstring t(n+1,L'\0');GetWindowTextW(source,t.data(),n+1);t.resize(n);g.dir=t;footer();return;}
-  if(id==PRESET&&code==CBN_SELCHANGE){select_preset(int(SendMessageW(source,CB_GETCURSEL,0,0)));return;}
+  if(id>=PRESET_LOW&&id<PRESET_LOW+st::kPresetCount&&code==BN_CLICKED){select_preset(id-PRESET_LOW);footer();return;}
   if(code!=BN_CLICKED)return;
   switch(id){
     case SUGGEST:select_preset(g.st.suggested);break;
     case EXPAND:g.experimental=!g.experimental;rebuild();SetFocus(control(g.body,EXPAND));break;
     case NEXT:{int previous=g.stage;g.stage=std::min(4,g.stage+1);std::wstring err;if(!persist(&err)){g.stage=previous;status(L"Setup progress could not be saved. "+err);}else rebuild();break;}
     case SAVE:save(false);break;case PLAY:play();break;
-    case DISCARD:g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;SendMessageW(control(g.wnd,PRESET),CB_SETCURSEL,g.st.preset,0);rebuild();break;
+    case DISCARD:g.ab_selection.pending=false;g.st.values=g.saved;g.st.preset=g.saved_preset;g.dir=g.saved_dir;rebuild();break;
     case RESET:select_preset(g.st.preset);break;
     case CLOSE:SendMessageW(g.wnd,WM_CLOSE,0,0);break;
     case BROWSE:browse();break;
     case REPORT:report_problem();break;
     case ERROR_DETAILS:if(MessageBoxW(g.wnd,(g.message+L"\n\nOpen Report a problem?").c_str(),L"Status details",MB_YESNO|MB_ICONINFORMATION)==IDYES)report_problem();break;
-    case RETRY:g.st.have_gpu=false;g.st.caps=0;g.gpu_err.clear();detect_gpu(g.st,&g.gpu_err);rebuild();break;
+    case RETRY:g.st.have_gpu=false;g.st.caps=0;g.gpu_err.clear();detect_gpu(g.st,&g.gpu_err);g_inspection=inspect_graphics();g_adapter=g_inspection.adapters.size()==1?0:-1;g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;rebuild();break;
     case CLEAN:g.clean=SendMessageW(source,BM_GETCHECK,0,0)==BST_CHECKED;break;
     case LOG:ShellExecuteW(g.wnd,L"open",(root_dir()+L"\\bg3rtx.log").c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;
     case FOLDER:ShellExecuteW(g.wnd,L"open",root_dir().c_str(),nullptr,nullptr,SW_SHOWNORMAL);break;
@@ -284,7 +307,7 @@ static LRESULT CALLBACK emblemproc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWOR
 static LRESULT CALLBACK wndproc(HWND h,UINT m,WPARAM w,LPARAM l) {
   switch(m){
     case WM_COMMAND:command(LOWORD(w),HIWORD(w),(HWND)l);return 0;
-    case WM_NOTIFY:if(((NMHDR*)l)->idFrom==TABS&&((NMHDR*)l)->code==TCN_SELCHANGE){g.tab=TabCtrl_GetCurSel(control(h,TABS));rebuild();}return 0;
+    case WM_NOTIFY:if(((NMHDR*)l)->idFrom==TABS&&((NMHDR*)l)->code==TCN_SELCHANGE){g.tab=g_tab_ids[TabCtrl_GetCurSel(control(h,TABS))];g.scroll=0;rebuild();}return 0;
     case WM_SIZE:layout();return 0;
     case WM_GETMINMAXINFO:((MINMAXINFO*)l)->ptMinTrackSize={S(736),S(620)};return 0;
     case WM_MOUSEWHEEL:return bodyproc(g.body,m,w,l);
@@ -318,6 +341,7 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   g.font=CreateFontW(-S(15),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");
   g.bold=CreateFontW(-S(21),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,g.high_contrast||!have_font?L"Segoe UI":L"Lato");g.bg=CreateSolidBrush(background());
   load_state(g.st);g.st.caps=0;detect_gpu(g.st,&g.gpu_err);g.dev=st::dev_mode(st::lookup(saved_settings(),"dev"));
+  g_inspection=inspect_graphics();g_adapter=g_inspection.adapters.size()==1?0:-1;g.st.caps=assess_compatibility(g_inspection,g_adapter).caps;
   g.st.values=st::presentation_values(saved_settings(),g.dev);g.saved=g.st.values;g.saved_preset=g.st.preset;
   g.dir=game_arg.empty()?saved_game_dir():game_arg;if(!valid_game_dir(g.dir)&&g_screenshot.empty())g.dir=detect_game_dir();g.saved_dir=g.dir;
   std::string state;read_file(ui_path(),state);auto config=st::parse_ini(state);g.stage=std::clamp(std::atoi(st::lookup(config,"onboarding").c_str()),0,4);
@@ -331,9 +355,9 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   }
   if(g_review==L"restart"){g.tab=1;g.baseline["rt_alpha"]=st::lookup(saved_settings(),"rt_alpha")=="0"?"1":"0";g.pending=true;}
   if(g_review==L"graphics")g.tab=1;
-  if(g_review==L"advanced")g.tab=3;
+  if(g_review==L"advanced"){g.dev=true;g.tab=3;}
   if(g_review==L"support")g.tab=4;
-  if(g_review==L"experimental"){g.tab=3;g.experimental=true;}
+  if(g_review==L"experimental"){g.dev=true;g.tab=3;g.experimental=true;}
   if(g_review==L"missing")g.dir=L"";
   if(g_review==L"probe"){g.st.have_gpu=false;g.st.caps=0;g.gpu_err=L"The graphics probe returned no adapter. Recheck or report a problem";}
   if(g_review==L"error")g.message=L"Settings saved; game could not start. The selected folder is unavailable or access was denied. Choose a folder in Overview, retry, or use Support > Report a problem. Windows error: access denied (5). Your saved settings are kept.";
@@ -342,10 +366,14 @@ static int run_window(HINSTANCE inst,const std::wstring& game_arg) {
   wc.lpfnWndProc=bodyproc;wc.lpszClassName=L"BG3RTXBody";RegisterClassExW(&wc);
   g.wnd=CreateWindowExW(WS_EX_CONTROLPARENT,L"BG3RTXLauncher",L"BG3RTX settings",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,S(g_review_width?g_review_width+16:960),S(900),nullptr,nullptr,inst,nullptr);
   auto emblem=add(g.wnd,L"STATIC",L"",SS_ICON,0);SendMessageW(emblem,STM_SETICON,WPARAM(wc.hIcon),0);SetWindowSubclass(emblem,emblemproc,1,0);place(emblem,16,8,32,32);
-  label(g.wnd,L"BG3RTX  |  Independent fan mod",64,8,660,32,true);label(g.wnd,L"Preset",16,60,72,24);
-  auto pc=add(g.wnd,WC_COMBOBOXW,L"",WS_TABSTOP|CBS_DROPDOWNLIST|WS_VSCROLL,PRESET);for(int p=0;p<st::kPresetCount;++p){auto text=p==st::kUltra?std::wstring(L"Ultra"):widen(st::kPresetLabel[p]);if(g.st.have_gpu&&p==g.st.suggested)text+=L" (Recommended)";SendMessageW(pc,CB_ADDSTRING,0,LPARAM(text.c_str()));}SendMessageW(pc,CB_SETCURSEL,g.st.preset,0);
+  label(g.wnd,L"BG3RTX " + widen(BG3RTX_PRODUCT_VERSION) + L" | Independent fan mod",64,8,660,32,true);label(g.wnd,L"Preset",16,60,72,24);
+  for(int p=0;p<st::kPresetCount;++p)add(g.wnd,L"BUTTON",widen(st::kPresetLabel[p]),WS_TABSTOP|BS_AUTORADIOBUTTON|BS_PUSHLIKE|(p==0?WS_GROUP:0),PRESET_LOW+p);
   add(g.wnd,L"BUTTON",L"Use recommended",WS_TABSTOP,SUGGEST);add(g.wnd,L"STATIC",L"Suitability: estimate\nCoverage: RTX 5090 reference",SS_LEFT,NOTE);
-  auto tabs=add(g.wnd,WC_TABCONTROLW,L"",WS_TABSTOP,TABS);for(auto t:{L"Overview",L"Graphics",L"Performance",L"Advanced",L"Support",L"Developer"}){if(std::wstring(t)==L"Developer"&&!g.dev)break;TCITEMW ti{};ti.mask=TCIF_TEXT;ti.pszText=const_cast<LPWSTR>(t);TabCtrl_InsertItem(tabs,TabCtrl_GetItemCount(tabs),&ti);}TabCtrl_SetCurSel(tabs,g.tab);
+  auto tabs=add(g.wnd,WC_TABCONTROLW,L"",WS_TABSTOP,TABS);
+  for(auto entry:{std::pair<int,const wchar_t*>{0,L"Overview"},{1,L"Lighting"},{6,L"Surfaces"},{2,L"Performance"},{3,L"Advanced"},{4,L"Help & support"},{5,L"Developer"}}){
+    if((entry.first==3||entry.first==5)&&!g.dev)continue;
+    TCITEMW ti{};ti.mask=TCIF_TEXT;ti.pszText=const_cast<LPWSTR>(entry.second);int row=TabCtrl_GetItemCount(tabs);TabCtrl_InsertItem(tabs,row,&ti);g_tab_ids.push_back(entry.first);if(entry.first==g.tab)TabCtrl_SetCurSel(tabs,row);
+  }
   g.body=CreateWindowExW(WS_EX_CONTROLPARENT,L"BG3RTXBody",L"Settings section",WS_CHILD|WS_VISIBLE|WS_VSCROLL,0,0,0,0,g.wnd,nullptr,inst,nullptr);
   add(g.wnd,L"STATIC",L"",SS_LEFT,STATUS);add(g.wnd,L"BUTTON",L"Details / report",WS_TABSTOP,ERROR_DETAILS);for(auto p:{std::pair<int,const wchar_t*>{RESET,L"Reset entire preset"},{DISCARD,L"Discard"},{SAVE,L"Save"},{PLAY,L"Play"},{CLOSE,L"Close"}})add(g.wnd,L"BUTTON",p.second,WS_TABSTOP,p.first);
   EnableWindow(control(g.wnd,SUGGEST),g.st.have_gpu);

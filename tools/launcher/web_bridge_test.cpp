@@ -10,7 +10,8 @@ int main(int argc,char** argv){
     std::printf("%s",bridge.state_json().c_str());return 0;
   }
   int checks=0,failed=0,saves=0,plays=0,prepares=0,exports=0;
-  auto check=[&](bool ok){++checks;if(!ok){++failed;std::printf("FAIL check %d\n",checks);}};
+  auto check_line=[&](bool ok,int line){++checks;if(!ok){++failed;std::printf("FAIL check %d at line %d\n",checks,line);}};
+#define check(ok) check_line((ok),__LINE__)
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   check(launcher::web::Bridge::is_export_intent("{\"type\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_export_intent("{\"type\":\"prepareReport\",\"issue\":\"exportReport\"}"));
@@ -40,7 +41,18 @@ int main(int argc,char** argv){
     }
   }
   launcher::web::Bridge bridge(s,h);
-  s.values[st::knob_index("exp_native_coverage")]=2;
+  int visible=0;
+  for(const auto& k:st::kKnobs){
+    const bool shown=st::knob_visible(k,false);visible+=shown;
+    check((bridge.state_json().find("\"id\":\""+std::string(k.id)+"\"")!=std::string::npos)==shown);
+    if(!shown){const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":1}");check(s.values==before);}
+    if(shown)for(int c=0;c<st::choice_count(k);++c)if(!st::choice_visible(k,c,false)){
+      const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
+    }
+  }
+  check(visible==15);
+  bridge.handle("{\"type\":\"experimental\",\"value\":true}");check(!bridge.experimental);
+  s.values[st::knob_index("exp_native_coverage")]=1;
   auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");
   check(pos!=std::string::npos);
   check(coverage.substr(pos,coverage.find("\"choices\"",pos)-pos).find("\"apply\":\"Restart to apply\"")!=std::string::npos);
@@ -59,7 +71,7 @@ int main(int argc,char** argv){
   check(json.find("Off-screen bounce light")!=std::string::npos);
   check(json.find("Ray-traced + hidden roofs")!=std::string::npos);
   check(json.find("Far-field sun bounce")==std::string::npos);
-  check(json.find("Opacity micromaps")!=std::string::npos);
+  check(json.find("Opacity micromaps")==std::string::npos);
   check(json.find("Measured: Not measured")==std::string::npos);
   check(json.find("\"cost\":\"Not measured\"")!=std::string::npos);
   check(json.find("Physical hair ray origins")==std::string::npos);
@@ -107,7 +119,7 @@ int main(int argc,char** argv){
   fail_save=false;pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");json=pb.handle("{\"type\":\"confirm\"}");
   check(pb.dirty()==0);check(json.find("\"restartNeeded\":false")!=std::string::npos);
   // Last Experimental edit is saved atomically with settings, never on draft/discard/failure.
-  launcher::State trial;trial.caps=~0u;trial.preset=st::kUltra;trial.values=st::preset_values(st::kUltra);
+  launcher::State trial;trial.base={{"dev","1"}};trial.caps=~0u;trial.preset=st::kUltra;trial.values=st::preset_values(st::kUltra);
   st::KVList written;bool reject=false;launcher::web::Hooks th;
   th.save=[&](launcher::State&,const st::KVList& keys,std::string&){if(reject)return false;written=keys;return true;};
   launcher::web::Bridge tb(trial,th);tb.experimental=true;
@@ -117,27 +129,23 @@ int main(int argc,char** argv){
   reject=true;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");check(written.empty()&&tb.dirty()>0);
   reject=false;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
   st::Map ab=st::code_defaults();for(auto& kv:written)ab[kv.first]=kv.second;
-  check(st::lookup(ab,"ab_target")=="exp_hair_groom");
+  check(written.empty()); // Developer-only choices are not release A/B targets.
   // Both hotkeys share the gate; F9 wins even with a saved Experimental target
   // or when both edges arrive together. Target validity never routes F9 to flip.
   using Action=bg3::experimental_ab::HotkeyAction;
   for(bool enabled:{false,true})for(bool master:{false,true})for(bool target:{false,true})
     check(bg3::experimental_ab::hotkey_action(master,target,enabled)==
           (!enabled?Action::None:master?Action::Master:target?Action::Experimental:Action::None));
-  check(tb.state_json().find("Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice.")!=std::string::npos);
+  check(tb.state_json().find("Ctrl+Shift+F9 compares BG3RTX with the game's own image.")!=std::string::npos);
   const auto before_master=ab;
   check(bg3::experimental_ab::hotkey_action(true,false,true)==Action::Master);
   check(ab==before_master);
   check(bg3::experimental_ab::hotkey_action(false,true,true)==Action::Experimental);
-  std::string line;check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="1");
-  check(line.find("A/B: rt_hair_groom=1") == 0);
-  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="0");
-  auto reloaded=st::code_defaults();for(auto& kv:written)reloaded[kv.first]=kv.second;
-  reloaded["rt_hair_groom"]="1";ab=reloaded;
-  check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="0");
-  ab["ab_target"]="rr_post";ab["ab_choice"]="1";ab["rr_post"]="1";
-  check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="0");
-  check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="1");
+  std::string line;
+  ab["ab_target"]="exp_hair_groom";ab["ab_choice"]="1";
+  check(!bg3::experimental_ab::flip(ab,line));
+  ab["ab_target"]="rr_post";ab["ab_choice"]="1";
+  check(!bg3::experimental_ab::flip(ab,line));
   ab.erase("ab_target");const auto no_target=ab;
   check(!bg3::experimental_ab::flip(ab,line));check(ab==no_target);
   check(bg3::experimental_ab::hotkey_action(true,false,true)==Action::Master);
@@ -152,7 +160,7 @@ int main(int argc,char** argv){
   const auto& primary=st::kKnobs[st::knob_index("exp_hair_groom_primary")];
   for (auto missing : {st::kCapRayQuery, st::kCapLinearSweptSpheres, st::kCapShaderInt64,
                        st::kCapFragmentStores, st::kCapHairGrooms}) {
-    launcher::State hair;hair.caps=~unsigned(missing);hair.values=st::preset_values(st::kUltra);
+    launcher::State hair;hair.base={{"dev","1"}};hair.caps=~unsigned(missing);hair.values=st::preset_values(st::kUltra);
     int calls=0;launcher::web::Hooks hh;hh.save=[&](launcher::State&,const st::KVList&,std::string&){++calls;return true;};
     launcher::web::Bridge hb(hair,hh);hb.experimental=true;
     hb.handle("{\"type\":\"set\",\"id\":\"exp_hair_groom_primary\",\"value\":1}");
@@ -164,7 +172,7 @@ int main(int argc,char** argv){
     hb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");hb.handle("{\"type\":\"confirm\"}");
     check(calls==0);
   }
-  launcher::State hair;hair.caps=~0u;hair.base=st::code_defaults();hair.base["sharc_device"]="0";hair.values=st::preset_values(st::kUltra);
+  launcher::State hair;hair.caps=~0u;hair.base=st::code_defaults();hair.base["dev"]="1";hair.base["sharc_device"]="0";hair.values=st::preset_values(st::kUltra);
   hair.values[st::knob_index(primary.id)]=1;st::KVList startup;
   launcher::web::Hooks hh;hh.save=[&](launcher::State&,const st::KVList& keys,std::string&){startup=keys;return true;};
   launcher::web::Bridge hb(hair,hh);hb.experimental=true;

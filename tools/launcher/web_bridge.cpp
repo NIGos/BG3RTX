@@ -94,7 +94,7 @@ std::string Bridge::handle(const std::string& message){
     if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
     else if(preview_kind_=="save"&&blocked_.empty()){
       State candidate=state_;candidate.values=preview_values_;std::string error;
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.";}
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 compares BG3RTX with the game's own image.";}
       else status_=error.empty()?"Settings could not be saved. Your edits are kept.":error;
     }return state_json();
   }
@@ -104,12 +104,12 @@ std::string Bridge::handle(const std::string& message){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
     if(i<0||!st::knob_visible(st::kKnobs[i],dev)){status_="Setting is unavailable.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This choice is unavailable. Review compatibility or Experimental.";
+    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This choice is unavailable. Review graphics compatibility and requirements.";
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Unknown preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
     for(int i=0;i<st::kKnobCount;++i){if(!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
-  }else if(type=="experimental")experimental=get<bool>(o,"value");
+  }else if(type=="experimental")experimental=dev&&get<bool>(o,"value");
   else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Edits discarded.";}
   else if(type=="save")save_preview(get<std::string>(o,"policy")=="enable");
   else if(type=="play"){
