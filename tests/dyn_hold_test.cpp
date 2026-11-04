@@ -90,5 +90,42 @@ int main() {
     return std::strcmp(key,"rt_hair_pool_trim")==0;
   });
   if (mask!=(1u<<3)) return 24;
+  // OFF is the previous predicate for every layout/hold/camera combination.
+  for (bool layout : {false,true}) for (bool trim : {false,true})
+    for (bool moving : {false,true}) for (uint32_t hold : {0u,4u,120u}) {
+      const bool legacy=layout && trim && hold && !moving;
+      if (dyn_hold_compact_requested(layout,trim,false,hold,moving)!=legacy) return 25;
+      if (dyn_hold_compact_requested(layout,trim,true,hold,moving)!=
+          (layout && hold && !moving)) return 26;
+    }
+  // Geometry/UV byte equality over multiple partial workgroups and bit patterns
+  // including NaN, infinity and signed zero. Payload outside the ordinary
+  // recipe is never read; native recipes must retain every captured byte.
+  for (uint32_t vertices : {1u,3u,63u,64u,65u,129u}) {
+    std::array<uint32_t,129u*22u> soup{};
+    std::array<uint32_t,129u*6u> out{};
+    const uint32_t bits[]={0x00000000u,0x80000000u,0x7fc12345u,0x7f800000u,
+                           0xff800000u,0x3f800000u,0xffffffffu};
+    for (uint32_t i=0;i<soup.size();++i) soup[i]=bits[i%7u];
+    for (uint32_t lane=0;lane<64;++lane)
+      for (uint32_t v=lane;v<vertices;v+=64u) {
+        // hold_pack.hlsl Store4 + Store2, no floating-point arithmetic.
+        std::memcpy(out.data()+6u*v,soup.data()+22u*v,16);
+        std::memcpy(out.data()+6u*v+4u,soup.data()+22u*v+4u,8);
+      }
+    for (uint32_t v=0;v<vertices;++v)
+      if (std::memcmp(out.data()+6u*v,soup.data()+22u*v,24)) return 27;
+    for (uint32_t kind=0;kind<9;++kind) {
+      const uint32_t step=dyn_hold_stride(88,true,true,kind);
+      if (step!=24 && step!=88) return 28;
+      if ((kind<1 || kind>3) && step!=88) return 29;
+    }
+  }
+  // The new toggle rejects already-recorded OFF GPU timings without changing
+  // the existing four bits or hold lifetime rules.
+  const uint32_t scene_mask=hair_cost_mask([](const char* key,int) {
+    return std::strcmp(key,"rt_scene_compact_holds")==0;
+  });
+  if (scene_mask!=(1u<<4) || !epoch.update(scene_mask) || epoch.accepts(queued_off)) return 30;
   return 0;
 }

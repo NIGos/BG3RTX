@@ -1158,3 +1158,70 @@ The second set it, but the pipeline was still building in the background through
 Records were complete 19, unknown 33, capture-incomplete 0. Cross-launch, ON qualified material hits fell from
 13.06 M to 10.57 M (row rejects +6.3 M). Post-release: let the diag window wait for the pipeline build, then
 explain the row rejects before any coverage claim.
+
+### Independent scene hold packing (2026-11-05, opt-scene, offline candidate)
+
+The measured High-after-Ultra session retains the device's 88-byte capture stride,
+but High disables `rt_hair_pool_trim`. This disables existing ordinary-recipe
+snapshot packing too: S8 steady High copies 19.58 GB over 120 frames, versus
+Ultra's 4.00 GB packed plus 0.285 GB raw. Static pose and scene populations differ
+because the profiling plan pans before switching preset; this is a mechanism,
+not an attribution of the entire preset timing difference. Both presets bake
+zero steady-state dynamic OMMs; UV checks still execute. High also uses the
+60-frame rebuild interval versus Ultra 600.
+
+`rt_scene_compact_holds` (developer-only, default 0, forced off in release)
+independently opts into the existing `hold_pack.hlsl` path. It changes only the
+packing predicate, not capture, BLAS flags, rebuild cadence, held-slot age or
+retirement. Only static-camera enabled holds with a native 88-byte layout are
+eligible. Opaque held geometry has no material payload; alpha recipes 1-3 use
+only position/w and UV. Those words are copied as integers to stride 24. Hair,
+Tileset and unknown alpha recipes keep all captured words. Pipeline failure
+falls back to the original copies. Shader requests: delta 0.
+
+The extended `dyn_hold_test` compares every gate combination with the old OFF
+predicate and checks bit-exact position/w/UV output over partial workgroups,
+NaN/Inf/signed-zero payloads and every recipe kind. Existing submitted-record,
+hold expiry and deferred allocation fixtures remain applicable. Timing epoch
+bit 4 (packing) rejects delayed results from before a toggle; the original
+four bits keep their meanings. Expected saving:
+0.05-0.30 ms High inn on an Ultra-provisioned
+device, pending the prepared same-launch A/B. A 24-byte High-only device has
+nothing to pack. Gate scene convert/extract and total build together with trace,
+float pre-post energy within OFF-repeat noise and flicker no worse.
+
+Cascade reuse (#6) was rejected this round. `c_sig` proves list/count equality
+for refitting, not immutable vertex contents. The static classifier proves an
+affine layout and buffer usage, not every transform/UBO/time/descriptor input.
+Existing mesh invalidation plus periodic audits cannot prove every cascade
+triangle current; no general dependency tracker is added. Refit/rebuild policy
+stays unchanged until total build plus all trace costs demonstrate a win.
+
+The inn is the highest measured static scene-build cost and the prepared
+packing A/B scene. Its Ultra static receipt reports convert/extract 1.208 ms,
+BLAS 0.781 ms, TLAS 0.325 ms and total 2.451 ms; High reports 2.073, 0.876,
+0.328 and total 3.389 ms. Hold transfers are approximately 57.5 MB/frame
+(packed plus raw) versus 210.6 MB/frame (raw). These unmatched-camera receipts
+support testing the transfer mechanism; they do not measure its saving.
+
+
+### Rejected coalesced XFB conversion (2026-11-05, opt-scene)
+
+Candidate #3 used adjacent subgroup lanes for triangle corners with unchanged
+vertex arithmetic and collapse rules. Real windowless Vulkan fixtures passed
+680 / 680 full-buffer byte comparisons (perspective/orthographic, five strides,
+invalid vertices, singular/nonbinary matrices, tails and grid-stride loops),
+with 0 validation errors. The mandatory OFF release-equivalence gate against
+main failed: the optimized module retained an unused GroupNonUniformShuffle
+capability. The cascade negative control passed. The candidate was dropped
+without weakening normalization; no key, shader or live job remains. The
+0.05-0.30 ms combined conversion estimate was never measured.
+
+Final offline checks: `scripts/build.ps1 -Test` passed 175/175 in 175.17 s.
+The late-registered `opt_scene_jobs_test` passed separately (1/1 CTest,
+12 analyzer tests). A local shader cache replaced the unwritable shared cache;
+the initial failed attempt is discarded. Live-flow lint reports 0 issues and
+277.72 s including 120 s load for the inn job. Shader request delta 0; no
+shader or ABI changes. READY_FOR_LIVE awaits measured cost, float energy and
+flicker gates; no quality or saving pass is claimed. No game, queue staging
+or commit occurred.

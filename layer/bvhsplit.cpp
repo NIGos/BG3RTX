@@ -2146,8 +2146,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   const uint32_t hold_frames = uint32_t((std::clamp)(cfg_int("rt_dyn_hold", 4), 0, 120));
   const bool moving = rt_camera_moving();
   const uint32_t hold_max_prims = uint32_t((std::max)(cfg_int("rt_dyn_hold_max_prims", 8192), 0));
-  const bool compact_holds_requested = geo_native_hair_enabled() && cfg_int("rt_hair_pool_trim", 1) != 0 &&
-                                       hold_frames && !moving;
+  const bool compact_holds_requested = dyn_hold_compact_requested(geo_native_hair_enabled(),
+      cfg_int("rt_hair_pool_trim", 1) != 0, cfg_int("rt_scene_compact_holds", 0) != 0, hold_frames, moving);
   const bool compact_holds = compact_holds_requested && ensure_hold_pack_pipeline();
   if (compact_holds_requested && !compact_holds) ++g_st.hold_pack_unavailable;
   if (moving || !hold_frames) {

@@ -672,6 +672,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_omm_dyn_mb", "256"},
     {"rt_native_hair", "0"},
     {"rt_hair_pool_trim", "0"},
+    {"rt_scene_compact_holds", "0"},
     {"rt_hair_groom", "0"},
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
@@ -1174,6 +1175,7 @@ inline void enforce_release_policy(Map& m) {
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
   m["rr_post"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
+       "rt_scene_compact_holds",
        "sharc",
        "rt_hair_receiver_guard"}) m[key] = "0";
   m.erase("rt_water_rf_edge"); m.erase("rt_water_rr_hitdist");

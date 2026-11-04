@@ -497,6 +497,60 @@ void timing_collect() {
 Bg3Image* const all_images[] = {&g_raw, &g_hist[0], &g_hist[1], &g_raw_depth, &g_hist_depth[0], &g_hist_depth[1],
                                 &g_prev_radiance, &g_rt_vis, &g_rf_hit, &g_origin, &g_aux, &g_ls_nodata};
 
+// Log-only subdivisions of the enclosing GI timer. Hit direct/sun/emission and
+// far bounce run INSIDE gi_trace_rt, so the existing trace timer includes them.
+// These pairs measure dispatches only; image transitions/join barriers stay in
+// the enclosing timer. Never infer these costs by subtracting summary medians.
+enum GiPass { kOrigin, kTemporal, kAoFold, kSunTrace, kSunResolve, kContact, kComposite, kGiPasses };
+constexpr const char* kGiPassNames[kGiPasses] = {
+  "origin", "temporal", "AO fold", "sun trace", "sun resolve", "contact", "composite"};
+VkQueryPool g_pass_queries = VK_NULL_HANDLE;
+uint32_t g_pass_written[kRing] = {};
+double g_pass_sum[kGiPasses] = {};
+uint32_t g_pass_count[kGiPasses] = {};
+
+void pass_timing_reset() {
+  std::fill_n(g_pass_written, kRing, 0u);
+  std::fill_n(g_pass_sum, kGiPasses, 0.0);
+  std::fill_n(g_pass_count, kGiPasses, 0u);
+}
+
+void pass_timing_collect() {
+  if (!host->cfg_int("detailed_logging", 0)) return;
+  if (!g_pass_queries) return;
+  const uint32_t old = (g_slot + 1) % kRing;
+  for (uint32_t pass = 0; pass < kGiPasses; ++pass) {
+    if (!(g_pass_written[old] & (1u << pass))) continue;
+    uint64_t t[2];
+    const uint32_t q = (old * kGiPasses + pass) * 2;
+    if (host->vk->GetQueryPoolResults(host->device, g_pass_queries, q, 2, sizeof t, t,
+          sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) != VK_SUCCESS) continue;
+    g_pass_written[old] &= ~(1u << pass);
+    const double ms = double(t[1] - t[0]) * g_ns_per_tick * 1e-6;
+    if (ms >= 0 && ms < 1000) { g_pass_sum[pass] += ms; ++g_pass_count[pass]; }
+    if (g_pass_count[pass] < stats_period(300)) continue;
+    host->log("gi: %s pass GPU cost %.3f ms/frame (average of %u dispatched frames)",
+      kGiPassNames[pass], g_pass_sum[pass] / g_pass_count[pass], g_pass_count[pass]);
+    g_pass_sum[pass] = 0; g_pass_count[pass] = 0;
+  }
+}
+
+void pass_timestamp(VkCommandBuffer cmd, GiPass pass, uint32_t edge, bool dispatched = true) {
+  if (!host->cfg_int("detailed_logging", 0)) return;
+  if (!g_pass_queries) {
+    if (edge != 0) return;
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    qi.queryCount = kRing * kGiPasses * 2;
+    if (host->vk->CreateQueryPool(host->device, &qi, nullptr, &g_pass_queries) != VK_SUCCESS) return;
+  }
+  const uint32_t q = (g_slot * kGiPasses + pass) * 2 + edge;
+  host->vk->CmdResetQueryPool(cmd, g_pass_queries, q, 1);
+  host->vk->CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_pass_queries, q);
+  // Missing/failed/partly recorded passes are not zero-cost samples.
+  if (edge == 1 && dispatched) g_pass_written[g_slot] |= 1u << pass;
+}
+
 // Track D: GPU time of the ray-traced shadow pass, 2 timestamps per frame.
 VkQueryPool g_rt_queries = VK_NULL_HANDLE;
 uint32_t g_rt_slot = 0;
@@ -514,6 +568,7 @@ void hair_timing_update() {
   g_ms_sum = g_rt_ms_sum = 0;
   g_ms_count = g_rt_ms_count = 0;
   g_rt_frames_traced = g_rt_frames_stale = g_rt_frames_missing = 0;
+  pass_timing_reset();
 }
 
 void rt_timing_collect() {
@@ -2891,6 +2946,8 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   }
   timing_init();
   timing_collect();
+  pass_timing_collect();
+  g_pass_written[g_slot] = 0;
   timestamp(cmd, 0);
   {
     VkImage im;
@@ -3016,7 +3073,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   // Robust ray origins first: every ray-traced pass (and D-LS after the lighting) reads them.
   if (tlas && pc.rt_origin != 0) {
     rt_begin();
+    pass_timestamp(cmd, kOrigin, 0);
     if(!dispatch(cmd, g_rt_origin, b, pc, g_w, g_h, true))return false;
+    pass_timestamp(cmd, kOrigin, 1);
     if(g_hair_origin_cap && g_hair_origin_last_mode!=uint32_t(s.hair_physical_origin)){
       g_hair_origin_last_mode=uint32_t(s.hair_physical_origin);
       host->log("[hair origin] frame %llu secondary origin mode %u; virtual primary/history unchanged",(unsigned long long)host->frame_index(),g_hair_origin_last_mode);
@@ -3059,13 +3118,17 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
     trace_timestamp(cmd, 1, s.rt_gi_applied);
     memory_barrier(cmd, kCS, kCS);
-    dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
+    pass_timestamp(cmd, kTemporal, 0);
+    const bool temporal_applied = dispatch(cmd, g_temporal, b, pc, g_hw, g_hh);
+    pass_timestamp(cmd, kTemporal, 1, temporal_applied);
     if (mv_move) image_layout(cmd, g_mv_image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, g_mv_layout, kCS, kAll);
     memory_barrier(cmd, kCS, kCS);
     if (pc.ao > 0.0f || pc.debug == 3 || (pc.qa_zero & 4u)) {   // qa_zero bit 2: gi_ao_apply writes AO 0
       s.aux_ao = true;
       image_layout(cmd, s.ao.image, s.ao.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
-      dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
+      pass_timestamp(cmd, kAoFold, 0);
+      const bool ao_applied = dispatch(cmd, g_ao_apply, b, pc, g_w, g_h);
+      pass_timestamp(cmd, kAoFold, 1, ao_applied);
       image_layout(cmd, s.ao.image, VK_IMAGE_LAYOUT_GENERAL, s.ao.layout, kCS, kCS);
     }
   }
@@ -3077,11 +3140,15 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   if (rt_shadows) {
     rt_begin();
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
+    pass_timestamp(cmd, kSunTrace, 0);
     s.rt_sun=dispatch(cmd,g_rt_shadow,b,pc,g_w,g_h,true);
+    pass_timestamp(cmd, kSunTrace, 1, s.rt_sun);
     if (s.rt_sun && g_sunt.replace && pc.rt_debug != 3 && pc.rt_debug != 5 && pc.rt_debug != 8 &&
         refresh(g_sun_resolve, "gi/rt_sun_resolve.hlsl", g_rt_layout)) {
       memory_barrier(cmd, kCS, kCS);
+      pass_timestamp(cmd, kSunResolve, 0);
       s.rt_sun=dispatch(cmd, g_sun_resolve, b, pc, g_w, g_h, true);
+      pass_timestamp(cmd, kSunResolve, 1, s.rt_sun);
     }
     sunt_end(cmd);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
@@ -3093,7 +3160,9 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
     }
   } else if (s.shadow.view && host->cfg_int("contact_shadows", 1)) {
     image_layout(cmd, s.shadow.image, s.shadow.layout, VK_IMAGE_LAYOUT_GENERAL, kAll, kCS);
-    dispatch(cmd, g_contact, b, pc, g_w, g_h);
+    pass_timestamp(cmd, kContact, 0);
+    const bool contact_applied = dispatch(cmd, g_contact, b, pc, g_w, g_h);
+    pass_timestamp(cmd, kContact, 1, contact_applied);
     image_layout(cmd, s.shadow.image, VK_IMAGE_LAYOUT_GENERAL, s.shadow.layout, kCS, kCS);
   }
   // D-LS validation (ls_debug=4/5): the lighting then computes only direct local light.
@@ -3449,7 +3518,9 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
   if (s.gi) {
     const bool fibre = host->cfg_int("rt_hair_fibre_gi", 0) && host->cfg_int("rt_hair_groom_primary", 0) &&
                        refresh(g_composite_fibre, "gi/gi_composite.hlsl");
-    dispatch(cmd, fibre ? g_composite_fibre : g_composite, b, pc, g_w, g_h);
+    pass_timestamp(cmd, kComposite, 0);
+    const bool composite_applied = dispatch(cmd, fibre ? g_composite_fibre : g_composite, b, pc, g_w, g_h);
+    pass_timestamp(cmd, kComposite, 1, composite_applied);
   }
   if (host->cfg_int("rt_primary_epoch",0)) {
     // Command-application counts, not expensive per-ray atomics. Existing GPU
@@ -3672,6 +3743,7 @@ void gi_on_frame(uint64_t) {
     std::fill_n(g_ls_written, kRing, false); std::fill_n(g_stats_frame, kStatsRing, uint64_t(0));
     std::fill_n(g_occ_frame, kOccRing, uint64_t(0));
     g_ms_sum = g_rt_ms_sum = 0; g_ms_count = g_rt_ms_count = 0;
+    pass_timing_reset();
     g_rt_frames_traced = g_rt_frames_stale = g_rt_frames_missing = 0;
     g_tr_ms[0].clear(); g_tr_ms[1].clear(); g_rf_ms.clear(); g_ls_ms.clear(); g_ls_join_ms.clear();
     std::fill_n(g_stats_sum, kStatsCounters, uint64_t(0)); g_stats_n = 0;
@@ -3737,6 +3809,9 @@ void gi_release() {
   g_hem = HitEmWindow{};
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_queries);
   g_queries = VK_NULL_HANDLE;
+  host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_pass_queries);
+  g_pass_queries = VK_NULL_HANDLE;
+  pass_timing_reset();
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_rt_queries);
   g_rt_queries = VK_NULL_HANDLE;
   host->defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_tr_queries);

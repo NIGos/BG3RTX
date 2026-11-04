@@ -1059,9 +1059,13 @@ static void test_retired_rejected_controls() {
     CHECK(schema_json().find(id) == std::string::npos);
   }
   for (const char* key : {"rr_hair_resolve", "rt_cascade_static_only"}) CHECK(code_default(key) == nullptr);
-  for (const char* key : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+  for (const char* key : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "rt_scene_compact_holds"}) {
     CHECK_EQ(code_default(key), "0");
     for (int p=0;p<kPresetCount;++p) { Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second; CHECK(preset.count(key) == 0); }
+    Map release=code_defaults(); release[key]="1"; release["dev"]="0";
+    enforce_release_policy(release); CHECK_EQ(get(release,key),"0");
+    Map developer=code_defaults(); developer[key]="1"; developer["dev"]="1";
+    enforce_release_policy(developer); CHECK_EQ(get(developer,key),"1");
   }
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");

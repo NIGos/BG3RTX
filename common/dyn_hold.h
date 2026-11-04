@@ -22,6 +22,10 @@ inline bool dyn_slot_expired(uint64_t now, uint64_t seen, uint32_t hold,
 
 // Only ordinary position/UV recipes can discard native strand/frame/color
 // payload. Held opaque instances have no hit-material metadata by contract.
+inline bool dyn_hold_compact_requested(bool native_layout, bool hair_trim,
+                                       bool scene_compact, uint32_t hold, bool moving) {
+  return native_layout && (hair_trim || scene_compact) && hold && !moving;
+}
 inline uint32_t dyn_hold_stride(uint32_t captured, bool trim, bool alpha, uint32_t kind) {
   return trim && captured >= 88u && (!alpha || (kind >= 1u && kind <= 3u)) ? 24u : captured;
 }
