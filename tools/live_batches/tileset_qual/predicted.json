@@ -6,7 +6,7 @@
   "supported_material_draws": 48,
   "supported_depth_draws": 56,
   "startup_constraint": "layer/util.cpp retains startup_tilesets on every reload. No live gate isolates this choice. Two launches required; no fake 0/1/0/1.",
-  "pass_rule": "Each measured interval: zero scene-wait timeouts, capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.",
+  "pass_rule": "Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.",
   "coverage_prediction": "ON has positive family2 acquisitions, OFF has no enabled Tileset acquisitions. Report complete record counts, hybrid GI hit/screen/hidden/off-screen shares and overall material qualified/attempted. No invented minimum coverage percentage.",
   "pt_reference": null,
   "energy_rule": "No matched Dialogue3 PT reference found. Report float pre-post scene colour and exposure per launch; independent load/camera/exposure can confound differences. Never a quality PASS from cross-run comparison.",

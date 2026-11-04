@@ -133,12 +133,10 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "static-a",
         "pan-q",
         "pan-e",
         "rotate-r",
-        "rotate-l",
-        "static-b"
+        "rotate-l"
       ]
     },
     {
@@ -189,15 +187,6 @@
       "name": "OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
       "select": "omm check \\(\\d+ frames\\):",
       "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
-      "windows": [
-        "diag-omm"
-      ],
-      "min": 1
-    },
-    {
-      "name": "OMM diagnostic: scene wait has zero timeouts",
-      "select": "\\[rt\\] scene wait: \\d+ frames",
-      "match": "got this frame's scene, 0 timeouts",
       "windows": [
         "diag-omm"
       ],

@@ -65,6 +65,8 @@ struct WaterRfIn {
 };
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
+// Current deferred bindings, observed before run_post can be delayed past water recording.
+void water_note_lighting(const Bg3Binding* lights, VkDescriptorSet game);
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p);
 void water_release();
 

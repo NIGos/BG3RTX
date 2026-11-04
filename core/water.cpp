@@ -593,6 +593,12 @@ struct Stash {
   bg3::water::ComposeBuffer buf{};
 };
 Stash g_st;
+bg3::water::HitLightingObservation<Bg3Binding,VkDescriptorSet> g_lighting_observation;
+
+bool same_light_resource(const Bg3Binding& a, const Bg3Binding& b) {
+  return a.type == b.type && a.buffer == b.buffer && a.offset == b.offset && a.range == b.range &&
+         a.image == b.image && a.view == b.view && a.layout == b.layout;
+}
 
 struct CWindow {
   uint64_t frames = 0, ran = 0, passes = 0;
@@ -625,8 +631,8 @@ struct CWindow {
   uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0;
   uint64_t camera_samples = 0, camera_missing = 0, tlas_age_sum = 0, tlas_age_max = 0, tlas_age_samples = 0;
   uint64_t hit_specs[3] = {}, hit_flag_passes = 0;
-  // Requested but refused passes; independent reasons may overlap. Index is lights[0..6],
-  // mapping to shader bindings 22..28; -1 means no compared mismatch in this window.
+  // Requested but refused passes; independent reasons may overlap. Deferred lights[0..8]
+  // map to bindings 21..29; -1 means no compared mismatch in this window.
   uint64_t hit_light_refused = 0, hit_input_refused = 0, hit_scene_refused = 0, hit_frame_refused = 0;
   int hit_first_mismatch = -1;
   double camera_delta_sum = 0, camera_delta_max = 0;
@@ -881,7 +887,7 @@ void maybe_log_compose() {
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
             "passes on this frame's lighting %llu, on the previous lighting %llu, refused: no recent lighting %llu, no "
-            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu; TLAS age avg/max %.2f/%llu frames (%llu samples, camera missing %llu); build-camera delta avg/max %.6f/%.6f m (%llu last-pass samples); CPU hit shade selected spec 0/1/2 passes %llu/%llu/%llu, flag 64 passes %llu; refused light-binding/input-lifetime/scene-material/frame-shift %llu/%llu/%llu/%llu (overlapping, first light mismatch index %d, bindings 22..28)",
+            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu; TLAS age avg/max %.2f/%llu frames (%llu samples, camera missing %llu); build-camera delta avg/max %.6f/%.6f m (%llu last-pass samples); CPU hit shade selected spec 0/1/2 passes %llu/%llu/%llu, flag 64 passes %llu; refused light-binding/input-lifetime/scene-material/frame-shift %llu/%llu/%llu/%llu (overlapping, first deferred light mismatch index %d, bindings 21..29)",
             (unsigned long long)W.frames, (unsigned long long)W.ran, W.ran ? double(W.passes) / double(W.ran) : 0.0,
             W.ran ? rec / double(W.ran) : 0.0, pct(own, rec), pct(rec - own, rec), (unsigned long long)w[4],
             pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0,
@@ -1250,21 +1256,17 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     return false;
   }
   VkDescriptorSet material_alpha=alpha;
-  // WATER_LS shares bindings with hit shading. Certify the entire list before selecting
-  // the hit pipeline; without WATER_LS, hit_sources binds the lighting stash's own list.
+  // Forward F usually precedes run_post F, so the stash is F-1. Forward bindings
+  // only certify WATER_LS compatibility; deferred F certifies the borrowed tuple.
   const bool ls_list = g_cls && lights_ok && lights;
-  bool same_lights = !g_cls;
+  bool same_forward_lights = ls_list;
+  if (ls_list) for (uint32_t i=0; i<7; ++i)
+    same_forward_lights &= same_light_resource(lights[i],g_st.hit.lights[i+1]);
   int first_light_mismatch = -1;
-  if (ls_list) {
-    same_lights = true;
-    for (uint32_t i=0; i<7 && same_lights; ++i) {
-      const auto& a=lights[i]; const auto& b=g_st.hit.lights[i+1];
-      same_lights=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
-      if (!same_lights) first_light_mismatch = int(i);
-    }
-  }
+  const bool seen_lighting = g_lighting_observation.seen(now,g_st.hit.lights,g_st.hit.game,
+      same_light_resource,first_light_mismatch);
   const bool hit_requested=host->cfg_int("rt_water_hit_shade",0) != 0;
-  const bool hit_inputs_alive=hit_shade_inputs_alive(g_st.frame,now,ls_list && same_lights);
+  const bool hit_inputs_alive=hit_shade_inputs_alive(g_st.frame,now,seen_lighting);
   const bool want_hit=hit_requested && g_st.hit.game && hit_inputs_alive;
   const bool shift_on=host->cfg_int("rt_water_compose_shift",0) != 0;
   bool previous_hit=false,shade_pass=false;
@@ -1304,13 +1306,13 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   const bool shifted = shift_on && camera_buffer && build_camera.frame && compose_shift_needed(use,pick);
   if (previous_hit && !shifted) { previous_hit = false; shade_pass = false; }
   if(!previous_hit) {
-    const bool frame_ok=want_hit && hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted);
+    const bool frame_ok=want_hit && hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,hit_inputs_alive,shifted);
     shade_pass=frame_ok && host->rt_hit_material_use &&
         host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
     if (frame_ok && !shade_pass) hit_scene_failed=true;
   }
   if (hit_requested && !shade_pass) {
-    if (!same_lights) {
+    if (!hit_inputs_alive && first_light_mismatch >= 0) {
       ++g_cwin.hit_light_refused;
       if (g_cwin.hit_first_mismatch < 0) g_cwin.hit_first_mismatch = first_light_mismatch;
     }
@@ -1319,7 +1321,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
     if (!g_st.frame || (g_st.frame != now && !(shifted && now > g_st.frame && now-g_st.frame == 1)))
       ++g_cwin.hit_frame_refused;
   }
-  const bool apply_ls=ls_list && hit_shade_local_shadows(shade_pass,previous_hit,same_lights);
+  const bool apply_ls=ls_list && hit_shade_local_shadows(shade_pass,same_forward_lights);
   if (pick == ScenePick::kNewer) ++g_cwin.newer_scene;
   if (pick == ScenePick::kStashKept) ++g_cwin.stash_kept;
   select_compose_mode(shade_pass);
@@ -1415,7 +1417,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   }
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, nw, wr);
   vk.CmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 1, 1, &material_alpha, 0, nullptr);
-  if(shade_pass) hit_sources(cmd,g_clayout,g_st.hit,g_cls && !previous_hit);
+  if(shade_pass) hit_sources(cmd,g_clayout,g_st.hit,same_forward_lights);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
@@ -1476,6 +1478,11 @@ void release_compose() {
 }
 
 }  // namespace
+
+void water_note_lighting(const Bg3Binding* lights, VkDescriptorSet game) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_lighting_observation.note(host->frame_index(),lights,game);
+}
 
 bool water_rf_wanted() { return host->cfg_int("rt_water_reflections", 0) != 0; }
 

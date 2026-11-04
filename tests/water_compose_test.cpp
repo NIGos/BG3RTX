@@ -298,8 +298,48 @@ int main(int argc, char** argv) {
     CHECK(!hit_shade_previous_frame(lighting,100,true,true));
   // Shared light bindings cannot evaluate current forward local-shadow records
   // with a different F-1 froxel list. Only that experimental mismatch falls back.
-  for(bool shade:{false,true})for(bool previous:{false,true})for(bool same:{false,true})
-    CHECK(hit_shade_local_shadows(shade,previous,same)==(!shade || !previous || same));
+  for(bool shade:{false,true})for(bool same:{false,true})
+    CHECK(hit_shade_local_shadows(shade,same)==(!shade || same));
+  // Actual CPU order: deferred F is observed at dispatch pre; forward F ends
+  // before lighting F flushes, leaving the F-1 compose stash. A different
+  // forward exposure binding must not stand in for deferred lifetime evidence.
+  for (uint64_t now=100; now<220; ++now) {
+    const uint64_t stash=now-1;
+    HitLightingObservation<uint64_t,uint64_t> deferred;
+    uint64_t stashed[9]={21,22,23,24,25,26,27,28,29};
+    auto equal=[](uint64_t a,uint64_t b){return a==b;};
+    int mismatch=-1;
+    deferred.note(stash,stashed,1000); // flush F-1
+    CHECK(!deferred.seen(now,stashed,1000,equal,mismatch)); // no deferred F yet
+    deferred.note(now,stashed,1000); // dispatch pre F, before forward F ends
+    const bool observed=deferred.seen(now,stashed,1000,equal,mismatch);
+    CHECK(mismatch==-1);
+    for (unsigned slot=0;slot<9;++slot) {
+      uint64_t rotated[9]; std::memcpy(rotated,stashed,sizeof rotated);
+      rotated[slot]+=100;
+      deferred.note(now,rotated,1000);
+      CHECK(!deferred.seen(now,stashed,1000,equal,mismatch));
+      CHECK(mismatch==int(slot));
+    }
+    deferred.note(now,stashed,2000); // level transition retires borrowed set
+    CHECK(!deferred.seen(now,stashed,1000,equal,mismatch));
+    deferred.note(now,nullptr,1000); // incomplete snapshot invalidates observation
+    CHECK(!deferred.seen(now,stashed,1000,equal,mismatch));
+    deferred.note(now,stashed,1000);
+    CHECK(deferred.seen(now,stashed,1000,equal,mismatch));
+    const bool alive=hit_shade_inputs_alive(stash,now,observed);
+    CHECK(alive && hit_shade_previous_frame(stash,now,alive,true));
+    CHECK(hit_shade_frame_ok(stash,now,true,alive,true));
+    CHECK(!hit_shade_local_shadows(true,false)); // forward b0 differs: bind full stash, keep native LS
+    CHECK(hit_shade_local_shadows(false,false)); // fallback keeps ordinary WATER_LS
+    // Rotated/freed deferred buffers or a retired game set cannot certify F-1.
+    CHECK(!hit_shade_inputs_alive(stash,now,hit_shade_lighting_seen(now,now,false,true)));
+    CHECK(!hit_shade_inputs_alive(stash,now,hit_shade_lighting_seen(now,now,true,false)));
+    CHECK(!hit_shade_inputs_alive(stash,now,hit_shade_lighting_seen(now+1,now,true,true)));
+    // After flush F, same-frame inputs do not depend on the forward list.
+    CHECK(hit_shade_inputs_alive(now,now,false));
+    CHECK(!hit_shade_frame_ok(stash,now,true,alive,false)); // camera shift still mandatory
+  }
   // Retaining a TLAS alone is insufficient. Publication needs its exact
   // lighting-frame material generation, and a failure exposes no partial tuple.
   for(bool scene_ok:{false,true})for(bool material_ok:{false,true})for(bool nonempty:{false,true}){

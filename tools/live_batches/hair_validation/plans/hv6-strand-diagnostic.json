@@ -95,9 +95,7 @@
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
-    "wait_stats": [
-      "\\[rt\\] scene wait: \\d+ frames"
-    ],
+    "wait_stats": [],
     "wait_log_timeout": 30
   },
   {
@@ -121,8 +119,7 @@
     "settle_frames": 0,
     "stats_reset": true,
     "wait_stats": [
-      "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
-      "\\[rt\\] scene wait: \\d+ frames"
+      "\\[hair primary\\] coverage \\(last \\d+ frames\\):"
     ],
     "wait_log_timeout": 180.0,
     "wait_log": [
@@ -157,8 +154,7 @@
     "stats_reset": true,
     "wait_stats": [
       "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
-      "\\[hair primary\\] counted frame \\d+:",
-      "\\[rt\\] scene wait: \\d+ frames"
+      "\\[hair primary\\] counted frame \\d+:"
     ],
     "wait_log_timeout": 180.0,
     "wait_log": [

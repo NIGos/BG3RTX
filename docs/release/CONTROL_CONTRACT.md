@@ -32,7 +32,7 @@ Capability/dependency previews, startup prerequisites and existing hardware/loca
 Advanced has no release controls; omit its navigation and the developer Experimental disclosure.
 Release "Show experimental options" switch (off by default, saved as `experimental_options=1`) shows the
 `settings::kOptInKnobs` on their own Experimental page; Off resets them to Off. Never listed: rejected
-exp_compact_hit_state / exp_alpha_metadata_cache / exp_water_empty_tiles, perf_* keys, diagnostics and
+exp_compact_hit_state / exp_alpha_metadata_cache / exp_water_empty_tiles / exp_alpha_spill, perf_* keys, diagnostics and
 policy-owned knobs (rt_trace_scale, exp_omm, exp_vt_alpha_masks, rr_post, exp_water_compose_shift,
 exp_hair_pool_trim, exp_ls_exact_k, exp_hit_reference, exp_current_sun).
 Help & support owns setup, compatibility, memory, overlay/comparison help, notices and one local-report entry. Keep Ctrl+Shift+F9; omit experimental F10 instructions.
@@ -48,7 +48,8 @@ Automatic release policies (also after stale user INI layering):
 - `rt_hair_pool_trim=1` whenever stock hair capture is selected; otherwise 0.
 - OMM/dynamic OMM/fine LOD and offline masks On only for High or Ultra + Full geometry.
   High qualified by rel2-smoke-high-s8 (2026-11-04 12:13). Unsupported hardware/missing masks retain native fallback.
-- Water camera correction follows water; wf9 is still a release blocker, not a qualification claim.
+- Water camera correction follows water; wf9 qualified 08:59 with 17 gates, static unchanged,
+  turning hits about 6.7% -> 17%; compose 0.154 ms absolute.
 - Near/Far writes material/instanced/wind capture, direct/sun bounce and emission mode 1.
 - Box On writes `ls_box=2`, `ls_box_honour_shadow=1`; obsolete mode 1 migrates to On.
 - Stale Far + reflections migrates to Far and Tilesets to stock hair. Raw `ls_shadowed=1`
@@ -62,7 +63,7 @@ Automatic release policies (also after stale user INI layering):
 - Hidden candidates and perf_* overrides are reset; unknown unrelated keys remain preserved.
 - Release profile no longer pins `ls_box` or `rt_emissive` Off.
 
-Hidden knob ids (developer mode retains them):
+Controls hidden from the three main pages (Experimental opt-ins remain available there):
 - `rt_trace_scale`, `water_surface_fresnel`, `exp_omm`, `exp_vt_alpha_masks`
 - `exp_water_hit_shade`, `exp_water_hit_cost`, `rr_post`, `exp_compact_hit_state`
 - `exp_alpha_metadata_cache`, `exp_water_empty_tiles`, `exp_water_compose_shift`, `exp_hair_groom`
@@ -72,7 +73,14 @@ Hidden knob ids (developer mode retains them):
 - `exp_hit_reference`, `exp_ls_exact_k`, `exp_current_sun`
 Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed;
 exp_hidden_surface Far + reflections; exp_native_coverage + Tilesets.
-Fresnel remains Off pending user verdict. Three GPU candidates remain rejected/Off (08:12).
+Fresnel stays Experimental and Off in presets: invisible on open water to the user.
+Strand hair is a post-release update on Experimental; stock visible hair ships.
+One-ray Ultra GI and Tilesets are being qualified; retain two rays and hide Tilesets until accepted.
+Temporal Ultra promotion is accepted by visual verdict, not a statistical/energy pass.
+Rejected/Off: three GPU candidates, Medium Half, water bits 2/4, glint, alpha spill
+(no S8 overflow), GI guards, current Sun and IP grass. SHaRC is rejected unless matched inputs exist.
+Rejected controls stay excluded from Experimental; diagnostic strand controls stay developer only.
+Only RTX 5090 tested. Manual launcher acceptance is DPI only; keep work lean.
 Exact-k selects existing LS_K requests in Ultra; no shader source, define, specialization ID
 or variants catalogue changes; request delta 0. Non-Ultra keeps the default path.
 Copy/layout changes do not change keys, values, presets, dependencies or apply transitions. The only flow change is Play saving first; blur smoothing moves to Surfaces.

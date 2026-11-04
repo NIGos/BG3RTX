@@ -371,8 +371,31 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
 // previous frame is usable only when compose shifts the ray into that frame's space.
 // Failure selects ordinary composition, preserving shadows and refraction.
 // Scene/material retention does not retain the game's lighting buffers, views or
-// descriptor sets. Same-frame inputs are safe; F-1 inputs only when this frame binds
-// the very same lighting list (then the game still owns them after a level unload).
+// descriptor sets. Same-frame inputs are safe; F-1 requires this frame's DEFERRED
+// pass to bind the same complete tuple, including the borrowed game set. Forward
+// bindings are a separate contract: they only control the shared WATER_LS slots.
+inline constexpr bool hit_shade_lighting_seen(uint64_t observed, uint64_t now, bool same_game, bool same_inputs) {
+  return observed && observed == now && same_game && same_inputs;
+}
+template<class Binding, class Set> struct HitLightingObservation {
+  uint64_t frame = 0;
+  Binding lights[9]{};
+  Set game{};
+  void note(uint64_t now, const Binding* inputs, Set set) {
+    *this = {};
+    if (!inputs || set == Set{}) return;
+    frame = now; game = set;
+    for (unsigned i=0; i<9; ++i) lights[i] = inputs[i];
+  }
+  template<class Equal>
+  bool seen(uint64_t now, const Binding* inputs, Set set, Equal equal, int& mismatch) const {
+    mismatch = -1;
+    for (unsigned i=0; i<9; ++i) if (!equal(lights[i],inputs[i])) {
+      mismatch = int(i); break;
+    }
+    return hit_shade_lighting_seen(frame,now,game == set,mismatch < 0);
+  }
+};
 inline constexpr bool hit_shade_inputs_alive(uint64_t lighting_frame, uint64_t now, bool seen_this_frame) {
   return lighting_frame && (lighting_frame == now || seen_this_frame);
 }
@@ -388,8 +411,8 @@ inline constexpr bool hit_shade_previous_frame(uint64_t lighting_frame,uint64_t 
 }
 // WATER_LS and hit shading share b22..28. A borrowed lighting list can replace
 // the forward list only if its identity matches; otherwise keep native LS energy.
-inline constexpr bool hit_shade_local_shadows(bool shade,bool previous,bool same_lights) {
-  return !shade || !previous || same_lights;
+inline constexpr bool hit_shade_local_shadows(bool shade,bool same_lights) {
+  return !shade || same_lights;
 }
 inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
 

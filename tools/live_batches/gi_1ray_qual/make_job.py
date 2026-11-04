@@ -31,10 +31,10 @@ def make():
     step('prefetch-one-ray', 3, gi_rr_rays=1)
     step('prefetch-two-rays', 3, gi_rr_rays=2)
     every = []
-    costs, shots, measured = [], [], []
+    costs, shots = [], []
     for i, (label, rays) in enumerate(STATES):
         cost, shot, pan = 'cost-'+label, 'shot-rays-'+label, 'pan-'+label
-        costs.append(cost); shots.append(shot); measured.extend([cost, shot, pan])
+        costs.append(cost); shots.append(shot)
         state = dict(gi_rr_rays=rays, qa_exposure_hold=1, pan_capture=0)
         step(cost, 24, **state)
         step(shot, 17, **state).update(trace_at=[1, 6, 11])
@@ -58,14 +58,14 @@ def make():
         every.append(dict(name='float traces '+label, select=r'\[trace\] frame \d+ written:',
                           match=r'\[trace\] frame \d+ written:', event=True, min=3, windows=[shot]))
     step('restore', 1, gi_rr_rays=2, qa_exposure_hold=0, pan_capture=0, pan_prepare=0, pan_edge=0)
-    # Preserve the established capacity and scene-wait gates, extended to shots.
+    # Capture stalls delay scene builds; only capacity gates extend to shots.
     for gate in job['expect_every']:
-        gate['windows'] = costs + shots
+        gate['windows'] = costs if 'scene wait:' in gate['select'] else costs + shots
         every.append(gate)
     every.append(dict(name='zero scene-wait timeouts throughout measurement',
                       select=r'\[rt\] scene wait: \d+ frames',
                       match=r'got this frame\x27s scene, 0 timeouts',
-                      event=True, min=0, windows=measured))
+                      event=True, min=0, windows=costs))
     job.update(name='gi1-ultra-1ray', live_batch='gi-1ray-qual', hold=90,
                timeout=354, max_minutes=5.9, window_mode='visible_unfocused_fg',
                set=','.join(f'{k}={v}' for k,v in startup.items()),

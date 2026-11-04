@@ -208,6 +208,21 @@ def main():
     sw_job = {"set": "rt=1,rt_scene_wait_log_frames=120", "expect": [r"\[rt\] scene wait: 120 frames"], "expect_every": [sw_gate]}
     check("scene wait lint: traced cost windows only (rt=0 and shot windows excluded)",
           queue_gates.scene_wait_windows(sw_job, sw_plan) == ["cost-off-a", "cost-on"])
+    check("scene wait lint: a cost label with float traces is excluded",
+          queue_gates.scene_wait_windows(sw_job, sw_plan + [dict(label="cost-capture", trace_at=[1], set="rt=1")])
+          == ["cost-off-a", "cost-on"])
+    check("capacity lint: cost windows with float traces still need capacity gates",
+          bool(queue_gates.capacity_problems(sw_job, [dict(label="cost-capture", trace_at=[1], seconds=20)])))
+    from tools.live_batches.pipeline_readiness import CONTROL
+    for key in sorted(k for k in CONTROL if k.endswith(('_stats', '_check', '_debug'))):
+        diagnostic_plan = [dict(label='cost-diag', seconds=20),
+                           dict(label='cost-clean', seconds=20, set=key + '=0')]
+        diagnostic_job = dict(sw_job, set=sw_job['set'] + ',' + key + '=1')
+        check('scene wait lint: inherited ' + key + ' excluded until disabled',
+              queue_gates.scene_wait_windows(diagnostic_job, diagnostic_plan) == ['cost-clean'])
+        check('capacity lint: ' + key + ' does not exclude capacity gates',
+              queue_gates.scene_wait_windows(diagnostic_job, diagnostic_plan, include_traces=True)
+              == ['cost-diag', 'cost-clean'])
     check("scene wait lint: the canonical gate over both cost windows: ok", queue_gates.scene_wait_problems(sw_job, sw_plan) == [])
     p = queue_gates.scene_wait_problems(dict(sw_job, expect_every=[]), sw_plan)
     check("scene wait lint: a lean job without the gate is flagged", len(p) == 1 and "no expect_every entry" in p[0])

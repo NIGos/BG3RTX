@@ -117,10 +117,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "shot-sparse-off-a",
-        "shot-sparse-on-a",
-        "shot-sparse-off-b",
-        "shot-sparse-on-b",
         "cost-sparse-0",
         "cost-sparse-1",
         "cost-sparse-2",

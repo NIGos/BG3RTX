@@ -3694,6 +3694,11 @@ void gi_on_dispatch_pre(VkCommandBuffer cmd, const Bg3DispatchInfo* d) {
   Snapshot s{};
   if (!snapshot(cmd, s)) return;
   s.native_direct_validation=validation && actual;
+  if (water_rf_wanted()) {
+    const Bg3Binding lights[] = {s.l_flags,s.l_scale,s.l_clusters,s.l_index,s.l_lights,
+                                s.l_consts,s.l_shadows,s.l_atlas,s.l_cam2};
+    water_note_lighting(s.ls_ok ? lights : nullptr, s.game_set1);
+  }
   if(s.native_direct_validation) {
     static uint64_t accepted=0;
     if(++accepted<=4 || accepted%300==0)host->log("[ls-native-direct] active frame %llu cs %016llx matched native module; AO0/direct1/sun0 validation",

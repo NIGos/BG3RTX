@@ -362,9 +362,109 @@ def probe_aftermath_job(name, save, plan):
     return j
 
 
+HV9_CASCADE = False  # Enable only after claude/hair-cascade merges (M2.2).
+
+
+def make_visual():
+    def step(label, passes=15, plus=0, trace=False):
+        p = stage_phase(label, 7, dict(hp.ON, rt_hair_primary_passes=str(passes),
+            rt_hair_groom_tips=str(plus), rt_hair_groom_shadow_t=str(plus),
+            qa_exposure_hold="0", pan_delay_ms="0"), trace=trace)
+        p.update(frames=60, settle_frames=0, stats_reset=True,
+                 motion_start=7, motion_end=7)
+        return p
+
+    warm = step("warm-all", plus=1)
+    for key in ("frames", "settle_frames", "stats_reset"):
+        warm.pop(key)
+    warm.update(seconds=25, motion_start=25, motion_end=25,
+        wait_log=[r"\[shaders\] cache: prefetched ", r"gi: gi/[^ ]+ generation ",
+                  r"\[auto\] scene ready"], wait_log_timeout=180)
+    warm_base = step("warm-base")
+    for key in ("frames", "settle_frames", "stats_reset"):
+        warm_base.pop(key)
+    warm_base.update(seconds=1.1, motion_start=1.1, motion_end=1.1)
+    plan = [warm, warm_base, step("a-cards", 0, trace=True), step("b-strands", trace=True),
+            step("c-strands-plus", plus=1, trace=True)]
+    # Slow pulsed Q input, then identical inverse E pulses to return before
+    # the cards repeat. Registration still has to prove the views comparable.
+    for label, passes, serial in (("d-strands", 15, 98900), ("d-cards", 0, 98901)):
+        if label == "d-cards":
+            back = step("return-camera", plus=1)
+            back.update(kind="pan", scan=18, seconds=2, frames=0,
+                        motion_start=0, motion_end=2, key_period_ms=500, key_down_ms=100)
+            plan.append(back)
+        p = step(label, passes, plus=1)
+        p.update(kind="pan", scan=16, seconds=3.3,
+                 motion_start=0, motion_end=2, key_period_ms=500, key_down_ms=100,
+                 capture_at=.1, serial=serial,
+                 registration_policy="per-frame-exclude-unregistered")
+        p["set"] += f",pan_prepare=1,pan_edge=1,pan_capture={serial},pan_delay_ms=0"
+        plan.append(p)
+    if HV9_CASCADE:
+        p = step("e-cascade", plus=1, trace=True)
+        p["set"] += ",rt_hair_groom_cascade=1"
+        plan.append(p)
+    restore = step("restore", 0)
+    for key in ("frames", "settle_frames", "stats_reset"):
+        restore.pop(key)
+    restore.update(seconds=1.1, motion_start=1.1, motion_end=1.1)
+    # Restore startup state; auto-run also restores the original INI on exit.
+    restore["set"] += ",rt_hair_primary_passes=15,dump_images=1,dump_png_width=960,dump_preview_f32=1"
+    if HV9_CASCADE:
+        restore["set"] += ",rt_hair_groom_cascade=0"
+    plan.append(restore)
+    return plan
+
+
+def visual_job(name, save, plan):
+    # Copy the current VALID hv7 artifact, including its startup/readiness model.
+    j = json.loads((HERE / "jobs/hv7-pass-bisect.json").read_text())
+    startup = dict(item.split("=", 1) for item in j["set"].split(","))
+    startup.update(rt_hair_groom_primary_order="1", rt_hair_primary_passes="15",
+                   rt_hair_groom_tips="0", rt_hair_groom_shadow_t="0")
+    j.update(name=name, save=save, set=",".join(f"{k}={v}" for k, v in startup.items()),
+        timeout=1400, purpose="hv9 same-run cards/strands visual pair, tips/shadow transmittance, strand GPU ms and rendered K8 hair flicker. Energy recorded, not gated; no live authorization.")
+    j["args"] = ["-RealPresent", "-Move", "-MovePlan",
+                 f"captures/live_batches/hair_validation/plans/{name}.json"]
+    strands = ["b-strands", "c-strands-plus", "d-strands"]
+    if HV9_CASCADE:
+        strands.append("e-cascade")
+    def gate(name, select, match, windows):
+        return dict(name=name, select=select, match=match, min=1,
+                    period_frames=60, windows=windows)
+    frame = r"\[hair primary\] frame \d+:"
+    coverage = r"\[hair primary\] coverage \(last \d+ frames\):"
+    orphan = r"\[hair primary\] depth orphans .*:"
+    shadow = r"\[hair primary\] shadow transmittance:"
+    gpu = r"\[hair primary\] strand G-buffer draws GPU"
+    j["expect_every"] = [
+        gate("zero refused pipelines and orphan depth", frame,
+             r"\b0 pipelines refused; prepass card depth dropped without its G-buffer swap 0\b", strands),
+        gate("depth orphans none", orphan, r": none\s*$", strands),
+        gate("swapped frames in every strand window", coverage, SWAPPED, strands),
+        gate("shadow transmittance participation", shadow, shadow, ["c-strands-plus"]),
+        gate("strand pass GPU ms", gpu,
+             r"GPU [0-9.]+ ms/frame \(average of [1-9]\d* frames", ["c-strands-plus"])]
+    j["expect"] += [r"\b0 pipelines refused", shadow, gpu]
+    j["expect_runner"] = [r"window-mode.*visible_unfocused", "^Run ended: done",
+                           rf"\[motion-plan\] complete phases={len(plan)}\b"]
+    for i, p in enumerate(plan):
+        if p.get("trace_at"):
+            j["expect_runner"].append(rf"\[motion-trace\] phase={i} label={p['label']} repeat=0")
+        if p.get("serial"):
+            serial = p["serial"]
+            j["expect_every"].append(dict(name="K8 " + p["label"],
+                select=rf"\[pan\] burst {serial} complete",
+                match=rf"\[pan\] burst {serial} complete: 8 frames, 20 samples, transport ok",
+                event=True, min=1, windows=[p["label"]]))
+    j["patterns"] += [orphan, shadow, gpu]
+    return j
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect,hv8-probe-aftermath")
+    parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect,hv8-probe-aftermath,hv9-visual")
     names = parser.parse_args().job_names.split(",")
     assert (HERE / "predicted.json").exists()
     for folder in ("jobs", "plans"):
@@ -372,7 +472,8 @@ def main():
     for name, builder, factory in [("hv5-reload-bisect", make_bisect, bisect_job),
                                    ("hv6-strand-diagnostic", make_diagnostic, diagnostic_job),
                                    ("hv7-pass-bisect", make_pass_bisect, pass_bisect_job),
-                                   ("hv8-probe-aftermath", make_probe_aftermath, probe_aftermath_job)]:
+                                   ("hv8-probe-aftermath", make_probe_aftermath, probe_aftermath_job),
+                                   ("hv9-visual", make_visual, visual_job)]:
         if name not in names:
             continue
         plan = builder()

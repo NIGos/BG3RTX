@@ -13,6 +13,27 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_scene_wait_timeout_gates_exclude_captures_and_diagnostics(self):
+        from tools.live_batches.regenerate_active import active_paths
+        from scripts.queue_gates import line_matches, SCENE_WAIT_BAD, phase_states, scene_wait_eligible
+        paths = list(active_paths()) + sorted((ROOT / 'tools/live_batches/tileset_qual/jobs').glob('*.json'))
+        paths += [ROOT / 'tools/live_batches/gi_1ray_qual/jobs/gi1-ultra-1ray.json']
+        for path in paths:
+            job, plan, _ = flow.load_job(path)
+            excluded = {p['label'] for p, state in zip(plan, phase_states(job, plan))
+                        if not scene_wait_eligible(p, state)}
+            for gate in job.get('expect_every', []):
+                if 'scene wait:' in gate.get('select', '') and '0 timeouts' in gate.get('match', ''):
+                    with self.subTest(job=path.name, gate=gate['name']):
+                        self.assertTrue(gate.get('windows'))
+                        self.assertFalse(excluded.intersection(gate['windows']))
+                        self.assertFalse(line_matches(gate, SCENE_WAIT_BAD))
+        gi = flow.read(paths[-1])
+        gates = [g for g in gi['expect_every'] if 'scene wait:' in g.get('select', '')]
+        self.assertEqual(len(gates), 2)
+        for gate in gates:
+            self.assertEqual(gate['windows'], ['cost-off-a', 'cost-on-a', 'cost-off-b', 'cost-on-b'])
+
     def test_active_combined_chunks_cover_each_source_once(self):
         from tools.live_batches.combined_20261103.make_jobs import PARTITIONS
         from tools.live_batches.regenerate_active import active_paths

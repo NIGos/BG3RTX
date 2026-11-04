@@ -1,3 +1,16 @@
+## hv9 visual (prepared only)
+Generate: `python tools/live_batches/hair_validation/make_job.py --job-names hv9-visual`.
+Test Dialogue1, one visible_unfocused_fg launch; primary latched 1, groom 1, order 1.
+Plan 63.8 s after load; with a 120 s load allowance, about 183.8 s (3.1 min).
+Warm plus/base, then 60-frame reset windows: a cards (passes 0), b strands (15), c +tips/shadow_t.
+Static a/b/c each export one 960-wide PNG and dumps.json pre-post float scene mean; energy is ungated.
+d strands/cards repeat slow pulsed Q input (E return between), K8 pan_98900/98901; no presented-FG claim.
+Use edge_flicker burst/registered_run/masks/energy with a fixed Dialogue1 hair ROI and rigid control.
+Report both residuals, ungated: its full analyzer requires other windows/presented captures; reject ambiguous registration.
+Expected strands <= cards: unknown, first measurement. Require swaps, zero depth orphans/refusals per strand window.
+c also requires shadow transmittance participation and strand GPU ms. Final phase restores startup live keys; runner restores INI.
+M2.2 e-cascade PNG/mean window is reserved in make_visual, disabled by `HV9_CASCADE = False` until its branch merges.
+
 # Current offline batches: hv5 and hv6
 
 No live is authorized. Generate with `py -3 tools/live_batches/hair_validation/make_job.py`.

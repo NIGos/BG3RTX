@@ -175,10 +175,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "b2-wo1-s8-hit-shade--shot-sparse-off-a",
-        "b2-wo1-s8-hit-shade--shot-sparse-on-a",
-        "b2-wo1-s8-hit-shade--shot-sparse-off-b",
-        "b2-wo1-s8-hit-shade--shot-sparse-on-b",
         "b2-wo1-s8-hit-shade--cost-sparse-0",
         "b2-wo1-s8-hit-shade--cost-sparse-1",
         "b2-wo1-s8-hit-shade--cost-sparse-2",
@@ -422,10 +418,6 @@
       "match": "got this frame's scene, 0 timeouts",
       "min": 1,
       "windows": [
-        "b3-wo1-s8-bit2--shot-cone-off-a",
-        "b3-wo1-s8-bit2--shot-cone-on-a",
-        "b3-wo1-s8-bit2--shot-cone-off-b",
-        "b3-wo1-s8-bit2--shot-cone-on-b",
         "b3-wo1-s8-bit2--cost-cone-0",
         "b3-wo1-s8-bit2--cost-cone-1",
         "b3-wo1-s8-bit2--cost-cone-2",

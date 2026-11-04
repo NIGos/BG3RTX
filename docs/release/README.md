@@ -1,5 +1,8 @@
 # BG3RTX (beta)
 
+BG3RTX is licensed under GPL-3.0-or-later with the NVIDIA SDK exception (user decision 2026-11-04).
+See [LICENSE](LICENSE) and [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md); third-party terms are in [THIRD_PARTY.md](THIRD_PARTY.md).
+
 BG3RTX adds ray-traced lighting to Baldur's Gate 3: ray-traced sun and local-light shadows, global
 illumination, reflections, NVIDIA DLSS Ray Reconstruction and DLSS Frame Generation. It runs as a
 Vulkan layer that `BG3RTX.exe` enables for the game process only. Nothing in the game folder, the

@@ -1,28 +1,43 @@
-﻿# BG3RTX progress - 2026-11-04 night
+# BG3RTX progress - 2026-11-04
 
-## User questions and decisions
+## Current user decisions
 
-- Promote water surface Fresnel (rt_water_surface_fresnel) to Ultra? wsf1 VALID 06:44: all gates pass; pool rim
-  +43% brighter ON (open water +1.8%), FS 0.10-0.15 ms. Look at the S8 pool rim for shimmer first:
-  ON shots vary 13% vs 2% OFF. [Result](../tools/live_batches/water_surface_fresnel/RESULT_wsf1_064436.md).
-- Promote rr_post_temporal to Ultra on the user's visual judgement? Keep it off pending that decision.
-  Dialogue3 paired evidence is inconclusive: 12 sign tests p 0.17-0.83; energy +0.15% unproven; cost 0.153 ms.
-- Choose the project licence and whether to notify NVIDIA for the beta. No notification has been sent.
-- Decide game-data redistribution, SHaRC distribution form and Microsoft runtime terms before release.
-  SDK notices do not grant game-data rights. Static CRT is selected; no VC runtime installer/DLL is shipped.
-- Complete manual launcher checks: Apply/restart badges, keyboard/focus, WebView2 zoom, DPI, high contrast and Narrator.
-- Open appearance choices: S8 water sun-shadow edge/glint in shade; ambient ratio 1.44; rt_hit_emission 1 or 2.
-  Ultra keeps emission 1. Mode 2 remains developer only.
+- Stock visible hair ships. Strands are a post-release update on Experimental.
+- Fresnel stays Experimental, Off in presets: invisible on open water to the user.
+- Temporal post is accepted for Ultra by visual verdict. Cost 0.152-0.153 ms;
+  statistical tests remain inconclusive and float energy +0.1492% failed.
+- One-ray Ultra GI and Tilesets are being qualified; current defaults stay until accepted.
+- Rejected: three GPU candidates, Medium Half, water bits 2/4, glint, alpha spill
+  (no overflow at S8), GI guards, current Sun and IP grass. SHaRC is rejected unless matched inputs exist.
+- GPL-3.0-or-later plus NVIDIA exception chosen; no NVIDIA notification planned.
+- Microsoft runtime uses static CRT; no VC runtime installer or DLL ships.
+- Only RTX 5090 tested. Manual launcher acceptance is DPI only. Keep work lean.
+- Open: game-data rights, remaining backlog deferrals, installer lifecycle, oversized Git
+  blob remedy, ambient ratio/water appearance, final archive/upload and acceptance below.
+
+## Current qualification receipts
+
+- wf9 VALID 08:59: 17 gates, static unchanged, turning hits about 6.7% -> 17%;
+  compose 0.154 ms absolute. No release blocker remains for wf9.
+- rel2 High VALID 12:13 qualifies OMM/masks; rel1 Ultra VALID 13:47;
+  rel3 stock hair VALID 13:51. Review retained stock-hair images separately.
+- Exact-k Ultra accepted: S7 0.717 -> 0.555 ms (-23%); energy within OFF spread 0.89%.
+- Strands: demote fault fixed; hv7 VALID 12:37 swaps on 2 draws. Close-up 0.80 < 0.891;
+  coverage/orphan follow-up remains. This supersedes the morning first-swap blocker.
+- Packaging/provenance, DPI, memory/transition and Act 2/3 acceptance remain open.
+  Repeat integrated smoke only for a material release change. New lives need explicit steering.
+
+## Earlier night evidence (historical)
 
 ## Night report, part 2 (04:00-07:45)
 
 - Bundles 16-22 plus four tooling merges; main de413e94. ABI unchanged (26).
 - Water Fresnel: wsf1 VALID 06:44 (281 s). Pool rim +43% ON, open water +1.8%, surface FS 0.10-0.15 ms;
-  promotion waits on the user's look (question above). [Result](../tools/live_batches/water_surface_fresnel/RESULT_wsf1_064436.md).
+  stays Experimental by user decision. [Result](../tools/live_batches/water_surface_fresnel/RESULT_wsf1_064436.md).
 - Hair strands, found and fixed in sequence by hv6 lives: recursive scene lock (load exit), coverage queries
   never paired (0/0), probe at the card's own depth, rays mirrored vertically (clip y not negated, 0.66 m off).
 - Hair now: strand rays hit; hv6 07:30 lost the device 2.5 s after the first real swap. The fault dump shows
-  in-flight scene TLAS referencing a released BLAS (#552). Fix with the hair agent; hv5/hair_crowd/L2 wait.
+  in-flight scene TLAS referencing a released BLAS (#552). Later hv7 supersedes this fault status; see current receipts.
 - Hair core 1/3/4 (shadow crossings): identity 147/257 byte-identical, 107 equivalent, 3 main-side differences;
   cached recheck running on claude/hair-core-shadow.
 - Tooling fixed from INVALID runs: readiness waits a full producer period (wsf1 2.0 -> 6.4 s), trace capture
@@ -53,16 +68,14 @@
 - New on/off keys use specialization constants unless layouts/bindings change. Retired IDs stay reserved.
 - Open: first-use pipeline continuity/toggle latency. Readiness repairs do not prove rendering quality.
 
-## Stage 3 - Visible defects: fixes kept, water qualification open
+## Stage 3 - Visible defects: qualified fixes kept
 
-- Dialogue cascade identity matches 16-18 duplicates/frame, formerly 0; moving shadow band fixed by default.
-- User accepts AO self-occlusion: 50% of character pixels; 99% of self-hits below 5 cm.
-- Water camera correction looks right to the user; offline static camera delta is 0.
-- wf9 still needs valid static delta < 0.01 m, nonzero samples and held Q/E coverage/energy evidence.
-- Exploratory compose cost +0.009 ms is not qualification. Reflection edge/hit-distance keys remain off.
-- Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa. Do not restore their old jobs.
+- Dialogue cascade identity matches 16-18 duplicates/frame, formerly 0; moving band fixed.
+- AO self-occlusion is accepted: 50% of character pixels; 99% of self-hits below 5 cm.
+- wf9 is qualified; see current receipts. Reflection edge/hit-distance keys remain Off.
+- Removed null keys: rt_water_rr_mv, rt_water_fg_mv, rt_water_glint_aa.
 
-## Stage 4 - Qualification: integrated smoke kept; hair and temporal open
+## Stage 4 - Qualification: stock release; strands post-release
 
 - Ultra qualifies rt_omm, rt_omm_dyn, rt_vt_alpha_masks, rt_alpha_fine_lod and ls_box=2.
 - ls_box_honour_shadow=1. Two later smoke_ultra runs are reported VALID with zero cascade overflow.
@@ -71,22 +84,22 @@
 - Pool alpha S6 coverage 14.8% -> 52.1%; GI trace +0.46 ms. Wind RGB S8 45.0% -> 63.5%; +0.67 ms.
 - Mask rows: S8 +0.65 coverage points/+0.006 ms; inn +12.1 points/+0.92 ms.
 - Earlier secondary grooms cost about 40% less than native cards. This does not qualify primary strands.
-- Primary strands remain off in presets: rays now hit, but the first swap lost the device (released BLAS).
-- rr_post_temporal stays off/Advanced. VALID 032335 has 10 pairs; all 12 primary sign tests miss significance.
+- Primary strands remain Off in presets; post-release coverage and GPU safety remain unqualified.
+- rr_post_temporal is accepted for Ultra by visual verdict. Earlier paired evidence has 10 pairs.
 - Exact p range 0.171875-0.828125 vs 0.00416667; presented registration rejects 9/20, face support 0.
-- Paired float energy +0.1492% fails; background join fails. Cost 0.152-0.153 ms; promotion is unproven.
-- User sees steadier DoF. Any visual-judgement promotion must be explicit; S8 quality is still missing.
+- Paired float energy +0.1492% fails; background join fails. Cost 0.152-0.153 ms; no statistical quality pass.
+- User sees steadier DoF and accepted promotion; this does not change the failed/inconclusive gates.
 - Rejected: CPU perf keys, rr_hair_resolve, hair GI culling (+9-20% energy). No new queue for these.
 - IP grass stays off: +3 coverage points costs +1.9 ms and about +1.5 GB.
-- Generated-row publication/recovery and GI reprojection guards still lack complete valid qualification.
+- Generated-row publication/recovery remains unqualified. GI guards are rejected.
 
-## Stage 5 - Effects and performance: experimental candidates stay off
+## Stage 5 - Effects and performance: retained evidence
 
 - Ultra keeps water + Refraction, hidden-surface shading + Bounce, rt_hit_emission=1 and gi_far=6 m.
-- gi_far: S8 energy -2.01%, camp -2.42%; trace +3.2/+3.7 ms. Ultra retains two GI rays.
+- gi_far: S8 energy -2.01%, camp -2.42%; trace +3.2/+3.7 ms. One-ray Ultra GI is now being qualified; no promotion yet.
 - Fresnel uses native foam coverage c plus clean BRDF (1-c), with finite/domain/partition checks.
 - wsf1 VALID 06:44: rim +43%, open water +1.8%, FS 0.10-0.15 ms, compose 0.61-0.67 ms; no PT reference here,
-  so the user's look decides.
+  it remains Experimental by user decision.
 - M5.6 step 1 water glint is reported rejected offline; retain evidence, do not queue it.
 - Camp pak join proves 0 additional publication: all 22,686 unique observations fail recipe/cull.
 - Unique observations are 5.655% of attempts and 3.762% of draws. Raw UV matches alone cannot publish.
@@ -94,10 +107,10 @@
 - Compact v4: 40,983 rows/40.01 MiB. Native precedence remains mandatory; rt_hit_material_paks stays off.
 - Water sparse-hit reflection 2.107 -> 0.530 ms, repeat 2.491 -> 0.531 ms; energy/coverage not qualified.
 - wo1 must prove post-water float energy within OFF noise, preserved coverage and zero truncation in every ON.
-- rt_compact_hit_state, rt_alpha_metadata_cache and rt_water_empty_tiles remain experimental/off.
+- rt_compact_hit_state, rt_alpha_metadata_cache and rt_water_empty_tiles are rejected/Off.
 - Offline replay is 36/36 byte-exact; empty-tile compose saving ~0.156 ms is exploratory only.
-- Low/Medium rt_trace_scale=0.5 lacks quality gates; High/Ultra stays 1.0. Medium RT saving ~0.18 ms is exploratory.
-- SHaRC stays off: no PT superiority/cache-history evidence. Hit-GI AO needs a pack with instanced hits.
+- Full tracing everywhere. Medium Half rejected: about 0.25 ms saving without quality acceptance.
+- SHaRC is rejected unless matched inputs exist. Hit-GI AO needs instanced-hit inputs.
 - Animated lava, HeightGradient, HLOD sidedness, texture publication and AS fragmentation remain open.
 
 ## Stage 6 - Tooling and release: repairs kept; acceptance open
@@ -108,36 +121,21 @@
 - Frozen lint corpus: 223 KB derived from 90 VALID runs; preflight still uses live corpus.
 - Folded checks: 147/147 CTests, 26/26 active lints, 6/6 combined dryruns. These are offline receipts.
 - REFUSED/CRASH rows and crash monitor are reported added; verify runner behaviour on real use without fault injection.
-- GUI fixes cover 13 review findings; settings 4,356 checks and bridge 904 passed. Manual acceptance remains open.
+- GUI fixes cover 13 findings; settings 4,356 checks and bridge 904 passed. Manual check is DPI only.
 - Version-matched DXC/Vulkan notices are resolved: five texts retained verbatim; packaging tests 3/3 pass.
-- Project licence, NVIDIA notification, data rights, Microsoft terms and SHaRC distribution remain release decisions.
-- Disposable-VM installer, long sessions, acts 2-3 and other GPUs remain open. No release approval is implied.
+- Licence, notification and static CRT choices are settled above; game-data rights remain open.
+- Installer, memory/transition and Act 2/3 remain open. Only RTX 5090 tested; no release approval implied.
 
 ## Stage 7 - Backlog and cleanup
 
-- Follow the handoff queue before remaining READY_FOR_LIVE jobs; no speculative research ahead of the hair fix.
+- Follow the current release handoff; strand fixes belong to the post-release update.
 - Open branch: water-glint, evidence only. Earlier open-branch lists in the archive are historical.
 - Audit rejected keys/generated-row supersession, inn material records, BLAS relocation and M5.5 steps 2-4.
 - Keep current replay/gate inputs; remove worktrees only with the dedicated junction-safe script.
 
-## RTX hair milestones M0-M8
+## Post-release RTX hair
 
-- [Complete hair plan](RTX_HAIR_COMPLETE_PLAN.md) defines the scope; its milestone table predates later night updates.
-- M0 stability: bundle15 lives, including hv5 reloads, reportedly survive. Primary participation is still blocked.
-  Strand rays hit since bundle22; the first swap lost the device (released BLAS #552). Fix before hv5/hair_crowd.
-- M1 conversion: 877/1,217 pass, confirmed as the coverage-bound cohort; companion completion is a supplied update.
-  Converter 2.4-3.4x faster, renders 1.8x, bit-identical; 80-style representative set, GR2/groom caches.
-  LOD0-to-LOD1 transfer rejected by coverage/IoU gates. Gale beard LOD1 remains unresolved.
-- M2 shadows: transmittance offline verified, rt_hair_groom_shadow_t off; shadow-map consistency and AO open.
-  GPU bench: 3,000/3,000 crossing counts match; transmission error 1.25 sigma. L2 live/cost still missing.
-- M3 image: dithered tips offline verified, off; 1,600 samples/alpha give exact expected shares.
-  Sub-pixel coverage, RR guides, DoF/fog/water depth and full temporal/energy quality remain open.
-- M4 indirect: fibre-GI offline candidate; white furnace 1.0, coloured errors <= 1.3882%, GPU/CPU 1.46e-7.
-  Full suite was 145/146 with inherited water identity failure; no complete acceptance or live/GPU cost claim.
-  Specular indirect, many-light fibre sampling and strand radiance-cache integration remain open.
-- M5 views: portraits, dialogue/small passes, instanced hair, reflections and water-hit fibre shading remain open.
-- M6 performance: half-resolution traces and crowd budgets remain unqualified; no measured primary strand cost.
-  SER does not apply to these inline queries. Native-card cost is not a strand budget receipt.
-- M7 content: 877-style cohort exists; all companions except Gale beard LOD1 reported converted; dyes need live A/B.
-- M8 qualification: not done. Need visible strands, every-window gates, cost/VRAM, real Ultra smoke and user check.
-  Keep unqualified keys off in presets; run hv4 GPU-AV after the participation and L2 prerequisites.
+- [Hair plan](RTX_HAIR_COMPLETE_PLAN.md) retains M0-M8 scope and earlier evidence.
+- 877/1,217 conversions pass; Gale beard LOD1 remains open.
+- Shadow crossings 3,000/3,000; tips exact at 1,600 samples/alpha; fibre furnace 1.0.
+- These offline results do not qualify coverage, temporal quality, cost/VRAM or GPU safety.
