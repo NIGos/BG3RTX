@@ -295,17 +295,17 @@
        {"id": "after", "label": "After post", "apply": "live", "caps": ["dlss"], "keys": {"rr_post": "0"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
      ]},
     {"id": "rr_post_temporal", "label": "Temporal depth of field and bloom",
-     "description": "Experimental: smooths depth of field and bloom around fine edges.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Experimental: smooths depth of field and bloom around fine edges.",
-     "details": "Quality and GPU cost await a live comparison in Dialogue3.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
+     "description": "Stabilises depth of field and bloom around fine edges.",
+     "apply": "live", "apply_note": "live", "advanced": false, "experimental": false, "developer": false,
+     "category": "Lighting", "summary": "Stabilises depth of field and bloom around fine edges.",
+     "details": "Dialogue3 VALID 032335: cost 0.152-0.153 ms; paired sign tests inconclusive (p 0.17-0.83). Promoted on the user's visual verdict, 2026-11-04: depth of field much more stable.",
+     "cost": {"status": "Measured", "gpu": "+0.152-0.153 ms Dialogue3", "vram": "~250 MiB at 2560 x 1067", "provenance": "RTX 5090; Dialogue3 VALID 032335"},
      "required_on": {"rr_post": "1"},
      "required_from_choice": {"rr_post": 1},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
+     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 1},
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rr_post_temporal": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_temporal": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "awaiting_qualification"}
+       {"id": "on", "label": "On", "apply": "live", "caps": ["dlss"], "keys": {"rr_post_temporal": "1"}, "needs": {"rr": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
      ]},
     {"id": "exp_compact_hit_state", "label": "Compact ray hit state",
      "description": "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
