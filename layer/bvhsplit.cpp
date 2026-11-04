@@ -3468,7 +3468,8 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         std::memcpy(gi + groom_count, &in, sizeof in);
         // InstInfo row n + k: the card instance and the segment -> card triangle table (rt_common.hlsli rt_groom_trace).
         // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
-        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), 0u};
+        // Word 3: the segment start table (rt_common.hlsli rt_groom_links: chained segments share a joint).
+        const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), uint32_t(w.l->seg)};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
         if (frame_index() % 300 == 0 && groom_count < 6)
           log("[hair groom] diag groom %u: camera-relative bounds centre (%.3f %.3f %.3f) of frame %.0f (now %llu), "

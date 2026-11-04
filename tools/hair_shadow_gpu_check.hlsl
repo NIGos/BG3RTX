@@ -25,6 +25,17 @@ uint3 pcg3d(uint3 v) {   // gi/gi_common.hlsli
   return v;
 }
 
+// rt_common.hlsli rt_groom_links on this check's segment start table (gStarts: start point of each segment).
+void links(uint prim, out bool prev, out bool next) {
+  uint bytes;
+  gStarts.GetDimensions(bytes);
+  prev = next = true;
+  if ((prim + 2u) * 4u > bytes) return;
+  const uint st = gStarts.Load(prim * 4u);
+  prev = prim > 0u && gStarts.Load((prim - 1u) * 4u) + 1u == st;
+  next = gStarts.Load((prim + 1u) * 4u) == st + 1u;
+}
+
 // (4) rt_common.hlsli rt_groom_blocks' estimator with a_f = 0.5 in every channel: rays that pass of kTrials.
 static const uint kTrials = 256u;
 uint passes(RayDesc r, float3 o) {
@@ -32,17 +43,19 @@ uint passes(RayDesc r, float3 o) {
   for (uint s = 0u; s < kTrials; ++s) {
     HpCrossings seen = hp_crossings_init();
     uint n = 0u;
-    bool blocked = false;
+    float3 T = 1.0.xxx;   // rt_groom_blocks: transmitted colour over the crossings, one decision on its luminance
     RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> q;
     q.TraceRayInline(gScene, 0u, 0xFFu, r);
     while (q.Proceed()) {
-      if (!hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex())) continue;
-      const float pass = 0.5 * (n == 0u ? 0.7 : 1.0);
-      const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
-                                  asuint(o.z) ^ (n * 0x9E3779B9u) ^ (s * 0x85EBCA6Bu)));
+      bool lp, ln;
+      links(q.CandidatePrimitiveIndex(), lp, ln);
+      if (!hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex(), lp, ln)) continue;
+      T *= 0.5 * (n == 0u ? 0.7 : 1.0);
       ++n;
-      if (float(h.x >> 8) * (1.0 / 16777216.0) >= pass) { blocked = true; q.Abort(); }
     }
+    const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
+                                asuint(o.z) ^ (s * 0x85EBCA6Bu)));
+    const bool blocked = n > 0u && float(h.x >> 8) * (1.0 / 16777216.0) >= dot(T, float3(0.2126, 0.7152, 0.0722));
     lit += blocked ? 0u : 1u;
   }
   return lit;
@@ -68,7 +81,9 @@ void main(uint3 id : SV_DispatchThreadID) {
   q.TraceRayInline(gScene, 0u, 0xFFu, r);
   while (q.Proceed()) {
     ++cand;
-    cand_d += hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex()) ? 1u : 0u;
+    bool lp, ln;
+    links(q.CandidatePrimitiveIndex(), lp, ln);
+    cand_d += hp_crossing(seen, q.CandidateInstanceIndex(), q.CandidatePrimitiveIndex(), lp, ln) ? 1u : 0u;
   }
   const uint lit = passes(r, r.Origin);
   uint succ = 0u, succ_d = 0u, last = 0xFFFFFFFFu;

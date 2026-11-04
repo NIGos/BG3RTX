@@ -1180,32 +1180,42 @@ RtGroomHit rt_groom_trace(RayDesc r, bool first_hit) {
 // joint both report: a candidate next to an already seen segment is the same crossing (hp_crossing; the GPU check
 // equals the CPU count on every ray). Row word 2 = 0 (key off, not measured yet): the first strand blocks, as the
 // first-hit query did.
+// Whether segment prim of groom instance k shares its first point with prim - 1 (prev) and its last with prim + 1
+// (next): the segment start table at InstInfo word 3 (bvhsplit; segment s spans points start[s], start[s] + 1).
+// No table: both linked (the deduplication before the table existed).
+void rt_groom_links(uint first, uint k, uint prim, out bool prev, out bool next) {
+  prev = next = true;
+  const uint off = inst_info(first + k).tris;
+  uint bytes;
+  gMeshPool.GetDimensions(bytes);
+  if (off == 0u || off + (prim + 2u) * 4u > bytes) return;
+  const uint s = gMeshPool.Load(off + prim * 4u);
+  prev = prim > 0u && gMeshPool.Load(off + (prim - 1u) * 4u) + 1u == s;
+  next = gMeshPool.Load(off + (prim + 1u) * 4u) == s + 1u;
+}
 bool rt_groom_blocks(RayDesc r, float3 o) {
   if (!rt_groom_live()) return false;
   const uint first = gSceneStamp.Load(60u);
   HpCrossings seen = hp_crossings_init();
   uint n = 0u;
-  bool blocked = false;
+  float3 T = 1.0.xxx;   // transmitted colour over the crossings (the visibility decides once on its luminance)
   RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> q;
   q.TraceRayInline(rt_groom_scene(gSceneStamp.Load2(48u)), 0u, 0xFFu, r);
   while (q.Proceed()) {
-    const uint k = q.CandidateInstanceIndex();
-    if (!hp_crossing(seen, k, q.CandidatePrimitiveIndex())) continue;
+    const uint k = q.CandidateInstanceIndex(), prim = q.CandidatePrimitiveIndex();
+    bool lp, ln;
+    rt_groom_links(first, k, prim, lp, ln);
+    if (!hp_crossing(seen, k, prim, lp, ln)) continue;
     const uint t = inst_info(first + k).rec;
-    float pass = 0.0;
-    if ((t >> 31) != 0u) {
-      const float3 a_f = float3(t & 1023u, (t >> 10) & 1023u, (t >> 20) & 1023u) / 1023.0;
-      pass = dot(a_f, float3(0.2126, 0.7152, 0.0722)) * (n == 0u ? 0.7 : 1.0);   // d_f once (hair_dual.hlsli kHdDf)
-    }
-    const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
-                                asuint(o.z) ^ (n * 0x9E3779B9u) ^ (pc.frame * 0x85EBCA6Bu)));
+    const float3 a_f = (t >> 31) != 0u ? float3(t & 1023u, (t >> 10) & 1023u, (t >> 20) & 1023u) / 1023.0 : 0.0.xxx;
+    T *= a_f * (n == 0u ? 0.7 : 1.0);   // d_f once (hair_dual.hlsli kHdDf)
     ++n;
-    if (float(h.x >> 8) * (1.0 / 16777216.0) >= pass) {
-      blocked = true;
-      q.Abort();
-    }
+    if (all(T <= 0.0)) { q.Abort(); break; }
   }
-  return blocked;
+  if (n == 0u) return false;
+  const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
+                              asuint(o.z) ^ (pc.frame * 0x85EBCA6Bu)));
+  return float(h.x >> 8) * (1.0 / 16777216.0) >= dot(T, float3(0.2126, 0.7152, 0.0722));
 }
 #else
 #ifdef RT_NATIVE_HAIR
