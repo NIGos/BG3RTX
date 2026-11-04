@@ -14,10 +14,25 @@
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <commctrl.h>
+#include <shellapi.h>
 
 using Microsoft::WRL::ComPtr;
 using Microsoft::WRL::Callback;
 namespace launcher::web {
+int action_dialog(HWND owner, const std::wstring& title, const std::wstring& text,
+                  const std::vector<std::pair<int, std::wstring>>& actions) {
+  std::vector<TASKDIALOG_BUTTON> buttons;
+  for (const auto& action : actions) buttons.push_back({action.first, action.second.c_str()});
+  TASKDIALOGCONFIG config{sizeof config};
+  config.hwndParent = owner; config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT;
+  config.pszWindowTitle = title.c_str(); config.pszContent = text.c_str();
+  config.cButtons = UINT(buttons.size()); config.pButtons = buttons.data();
+  config.nDefaultButton = IDCANCEL;
+  int selected = IDCANCEL;
+  TaskDialogIndirect(&config, &selected, nullptr, nullptr);
+  return selected;
+}
 namespace {
 namespace st = bg3::settings;
 constexpr UINT work_done = WM_APP + 32;
@@ -103,7 +118,7 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
     case WM_CLOSE:
       if(h->busy){h->cancel=true;return 0;}
       if(h->bridge&&h->bridge->dirty()){
-        int answer=MessageBoxW(window,L"Save your changes before closing?\nYes: review Save   No: Discard   Cancel: keep editing",L"Unsaved changes",MB_YESNOCANCEL|MB_ICONQUESTION);
+        int answer=action_dialog(window,L"Unsaved changes",L"Save changes before closing?",{{IDYES,L"Save"},{IDNO,L"Discard changes"},{IDCANCEL,L"Keep editing"}});
         if(answer==IDCANCEL)return 0;
         if(answer==IDYES){send(*h,h->bridge->handle("{\"type\":\"save\"}"));return 0;}
       }DestroyWindow(window);return 0;
@@ -138,13 +153,14 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         auto text=st::render_user_ini(candidate.user_text,candidate.preset,candidate.values,forced);
         auto after=candidate.base;st::apply_layer(after,st::parse_ini(text));
         bool pending=game_running()&&ui_state::restart(h.baseline,after);std::wstring err;
-        if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)||!write_file_atomic(user_ini_path(),text,&err)){error=narrow(err);return false;}
+        if(!write_file_atomic(root_dir()+L"\\bg3rtx_ui.ini",ui_state::serialize(4,pending,h.session,h.baseline),&err)){error="Settings not saved. Restart information could not be saved.\n"+narrow(err);return false;}
+        if(!write_file_atomic(user_ini_path(),text,&err)){error="Settings not saved. Your edits are kept.\n"+narrow(err);return false;}
         candidate.user_text=text;candidate.user=st::parse_ini(text);candidate.loaded=candidate.values;
         h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,after):0);return true;
       };
       hooks.play=[&h](std::string& error){
-        if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder containing bin\\bg3.exe (Vulkan), or wait for the running game to close.";return false;}
-        DWORD pid{};std::wstring err;bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=narrow(err);return ok;
+        if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
+        DWORD pid{};std::wstring err;bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?"":std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
       };
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system){
         diagnostics::Request r;r.install_root=root_dir();r.issue=issue;r.include_logs=logs;r.include_settings=settings;r.include_system=system;
@@ -152,7 +168,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         return diagnostics::prepare_report(r,[&h](size_t done,size_t total){PostMessageW(h.window,work_progress,done,total);return !h.cancel.load();});
       };
       hooks.exportReport=[&h](const diagnostics::Snapshot& snapshot,std::string& error){
-        if(h.export_path.empty()){error="Cancelled. Preview retained.";return false;}
+        if(h.export_path.empty()){error="Save cancelled. Preview kept.";return false;}
         auto result=diagnostics::save_report_zip(snapshot,h.export_path,[&h](size_t done,size_t total){PostMessageW(h.window,work_progress,done,total);return !h.cancel.load();});if(h.report)h.result=diagnostics::exit_code(result.status);error=result.message;return result.status==diagnostics::Status::Complete||result.status==diagnostics::Status::Partial;
       };
       hooks.browseGame=[&h](){
@@ -160,15 +176,16 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         ComPtr<IFileOpenDialog> dialog;
         if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return narrow(h.game);
         dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_NOCHANGEDIR);
-        dialog->SetTitle(L"Choose the game folder containing bin\\bg3.exe (Vulkan)");
-        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){h.game=dir;save_game_dir(dir);}else h.bridge->set_status("Choose the folder containing bin\\bg3.exe (Vulkan).");CoTaskMemFree(path);}}}
+        dialog->SetTitle(L"Choose the game folder containing bin\\bg3.exe");
+        if(SUCCEEDED(dialog->Show(h.window))){ComPtr<IShellItem> item;if(SUCCEEDED(dialog->GetResult(&item))){PWSTR path{};if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&path))){auto dir=game_dir_from_path(path);if(valid_game_dir(dir)){h.game=dir;save_game_dir(dir);}else h.bridge->set_status("Choose the game folder containing bin\\bg3.exe.");CoTaskMemFree(path);}}}
         h.bridge->set_can_play(valid_game_dir(h.game)&&!game_running());return narrow(h.game);
       };
       hooks.recheck=[](){return inspect_graphics();};
+      hooks.notices=[&h](){auto path=root_dir()+L"\\THIRD_PARTY.md";if(!file_exists(path))path=root_dir()+L"\\docs\\release\\THIRD_PARTY.md";ShellExecuteW(h.window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL);};
       h.bridge=std::make_unique<Bridge>(h.state,std::move(hooks));
       h.bridge->set_game_path(narrow(h.game));
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
-      h.bridge->set_status(valid_game_dir(h.game)?"Saved settings apply on next launch. Select the adapter used by the game.":"Choose the game folder containing bin\\bg3.exe (Vulkan). Settings remain available.");
+      h.bridge->set_status(valid_game_dir(h.game)?"Settings loaded.":"Choose the game folder containing bin\\bg3.exe. Settings remain available.");
     }
     WNDCLASSW cls{};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));RegisterClassW(&cls);
     RECT r{0,0,width>0?width:1180,760};AdjustWindowRect(&r,WS_OVERLAPPEDWINDOW,FALSE);
@@ -209,11 +226,11 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
               if(h.busy){if(Bridge::is_cancel_collection_intent(text)){h.cancel=true;h.after_work=text;}return S_OK;}
               if(Bridge::is_export_intent(text)){
                 h.export_path=choose_zip(h.window);
-                if(h.export_path.empty()){h.bridge->set_status("Cancelled. Preview retained.");send(h,h.bridge->state_json());return S_OK;}
+                if(h.export_path.empty()){h.bridge->set_status("Save cancelled. Preview kept.");send(h,h.bridge->state_json());return S_OK;}
               }
               // Only bounded allowlisted collection runs on a worker; mutations stay serialized.
               if(Bridge::is_collection_intent(text)||Bridge::is_export_intent(text)){
-                h.busy=true;h.cancel=false;h.worker=std::thread([&h,text]{try{h.reply=h.bridge->handle(text);}catch(...){h.bridge->set_status("Report operation failed. Preview and settings are retained.");h.reply=h.bridge->state_json();}PostMessageW(h.window,work_done,0,0);});}
+                h.busy=true;h.cancel=false;h.worker=std::thread([&h,text]{try{h.reply=h.bridge->handle(text);}catch(...){h.bridge->set_status("Report failed. Preview and settings are kept.");h.reply=h.bridge->state_json();}PostMessageW(h.window,work_done,0,0);});}
               else send(h,h.bridge->handle(text));return S_OK;
             }).Get(),&token);
             h.view->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>([&h](ICoreWebView2*,ICoreWebView2NavigationCompletedEventArgs* args)->HRESULT {
@@ -276,7 +293,7 @@ void native_work(NativeReportPreview& p, std::wstring destination = {}) {
   p.busy = true; p.cancel = false; p.exporting = !destination.empty();
   EnableWindow(p.save, FALSE); EnableWindow(p.files, FALSE);
   SetWindowTextW(p.cancelButton, L"Cancel");
-  SetWindowTextW(p.status, p.exporting ? L"Writing the reviewed snapshot..." : L"Preparing bounded, sanitized report files...");
+  SetWindowTextW(p.status, p.exporting ? L"Saving report…" : L"Preparing report…");
   p.worker = std::thread([&p, destination] {
     auto progress = [&p](size_t done, size_t total) {
       PostMessageW(p.window, native_progress, WPARAM(done), LPARAM(total));
@@ -291,8 +308,8 @@ void native_work(NativeReportPreview& p, std::wstring destination = {}) {
         p.snapshot = diagnostics::prepare_report(request, progress);
       }
     } catch (...) {
-      if (p.exporting) p.exported = {diagnostics::Status::Failed, "Report export failed. Preview retained; choose another ZIP path to retry."};
-      else { p.snapshot.status = diagnostics::Status::Failed; p.snapshot.message = "Report collection failed. Close this preview and retry."; }
+      if (p.exporting) p.exported = {diagnostics::Status::Failed, "Report not saved. Preview kept; choose another file."};
+      else { p.snapshot.status = diagnostics::Status::Failed; p.snapshot.message = "Report could not be prepared. Close and retry."; }
     }
     PostMessageW(p.window, native_done, 0, 0);
   });
@@ -313,11 +330,11 @@ LRESULT CALLBACK native_report_proc(HWND window, UINT message, WPARAM w, LPARAM 
       };
       p->privacy = control(L"STATIC", widen(diagnostics::privacy_text).c_str(), 0, 0);
       p->files = control(L"LISTBOX", L"", LBS_NOTIFY | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 101);
-      p->contents = control(L"EDIT", L"Select a file to review its exact sanitized contents.",
+      p->contents = control(L"EDIT", L"Select a file to review its contents.",
         ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 102);
       SendMessageW(p->contents, EM_SETLIMITTEXT, 0x7ffffffe, 0);
-      p->status = control(L"STATIC", L"Preparing report...", 0, 0);
-      p->save = control(L"BUTTON", L"Create ZIP...", BS_DEFPUSHBUTTON | WS_TABSTOP, IDOK);
+      p->status = control(L"STATIC", L"Preparing report…", 0, 0);
+      p->save = control(L"BUTTON", L"Save report…", BS_DEFPUSHBUTTON | WS_TABSTOP, IDOK);
       p->cancelButton = control(L"BUTTON", L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, IDCANCEL);
       p->body = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI");
@@ -331,8 +348,8 @@ LRESULT CALLBACK native_report_proc(HWND window, UINT message, WPARAM w, LPARAM 
     case WM_SIZE: native_layout(*p); return 0;
     case WM_GETMINMAXINFO: reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize = {760, 580}; return 0;
     case native_progress:
-      if (p->busy) SetWindowTextW(p->status, ((p->exporting ? L"Writing reviewed files: " : L"Preparing report: ") +
-        std::to_wstring(size_t(w)) + L" / " + std::to_wstring(size_t(l)) + L". Cancel stops this operation.").c_str());
+      if (p->busy) SetWindowTextW(p->status, ((p->exporting ? L"Saving report: " : L"Preparing report: ") +
+        std::to_wstring(size_t(w)) + L" / " + std::to_wstring(size_t(l)) ).c_str());
       return 0;
     case native_done: {
       if (p->worker.joinable()) p->worker.join();
@@ -366,7 +383,7 @@ LRESULT CALLBACK native_report_proc(HWND window, UINT message, WPARAM w, LPARAM 
     case WM_CLOSE:
       if (p->busy) {
         p->cancel = true; p->closeWhenDone = true;
-        EnableWindow(p->cancelButton, FALSE); SetWindowTextW(p->status, L"Cancelling safely...");
+        EnableWindow(p->cancelButton, FALSE); SetWindowTextW(p->status, L"Cancelling…");
       } else DestroyWindow(window);
       return 0;
   }
@@ -381,9 +398,9 @@ int native_report(HWND owner) {
   cls.lpszClassName = L"BG3RTX.NativeReportPreview"; cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   cls.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1)); cls.hbrBackground = HBRUSH(COLOR_BTNFACE + 1);
   RegisterClassW(&cls);
-  auto window = CreateWindowExW(WS_EX_DLGMODALFRAME, cls.lpszClassName, L"BG3RTX - Report preview (local only)",
+  auto window = CreateWindowExW(WS_EX_DLGMODALFRAME, cls.lpszClassName, L"BG3RTX report preview",
     WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1060, 760, owner, nullptr, instance, &preview);
-  if (!window) { MessageBoxW(owner, L"The native report preview could not be opened. Nothing was collected or written.", L"Report a problem", MB_OK | MB_ICONERROR); return 2; }
+  if (!window) { MessageBoxW(owner, L"Report preview could not open. No files were collected or saved.", L"Report a problem", MB_OK | MB_ICONERROR); return 2; }
   bool restoreOwner = owner && IsWindowEnabled(owner);
   if (restoreOwner) EnableWindow(owner, FALSE);
   ShowWindow(window, SW_SHOW); native_work(preview);

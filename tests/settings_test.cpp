@@ -431,7 +431,8 @@ static void test_gui_levels() {
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
-  for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
+  for (const char* id : {"exp_hit_reference", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
+  CHECK(!find_knob("exp_ls_exact_k")->experimental);
   CHECK(dev_mode("1"));
   CHECK(!dev_mode("0"));
   CHECK(!dev_mode(code_default("dev")));   // the release profile hides them
@@ -772,7 +773,7 @@ static void test_schema_file() {
   CHECK(norm == want);
 }
 
-// Stage 3 of the M5 water promotion (m5_promotion passed 11-01): RT water "+ Refraction" in Ultra, Off elsewhere.
+// Stage 3 of the M5 water promotion (m5_promotion passed 11-01): RT water "Include refraction" in Ultra, Off elsewhere.
 static void test_ultra_water() {
   const char* keys[] = {"rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows",
                         "rt_water_ls_shadows", "rt_water_game_shadow", "rt_water_refraction"};
@@ -817,7 +818,7 @@ static void test_ultra_water() {
   CHECK(iw < first_exp);
   const Knob& temporal = *find_knob("rr_post_temporal");
   CHECK(!temporal.experimental && !temporal.advanced && !temporal.dev_only);
-  CHECK_EQ(temporal.category, "Lighting");   // Alongside Ray Reconstruction.
+  CHECK_EQ(temporal.category, "Surfaces");   // Blur and bloom belong with surface effects.
   CHECK(temporal.apply == Apply::Live);
   CHECK(!temporal.choices[1].experimental && !temporal.choices[1].awaiting_qualification);
   CHECK(temporal.choices[1].caps == kCapDlss);
@@ -878,7 +879,7 @@ static void test_product_policy() {
   Map disabled = on_map(omm, 0);
   for (const char* key : {"rt_omm", "rt_omm_dyn", "rt_alpha_fine_lod", "rt_omm_reference"})
     CHECK_EQ(get(disabled, key), "0");
-  CHECK_EQ(find_knob("exp_water")->choices[3].label, "+ Refraction");
+  CHECK_EQ(find_knob("exp_water")->choices[3].label, "Include refraction");
 
   auto edited = preset_values(kMedium);
   edited[knob_index("rr")] = 0;
@@ -998,9 +999,9 @@ static void test_apply_modes() {
       CHECK(knob_apply(k,c)==k.choices[c].apply);
     }
   }
-  CHECK_EQ(apply_label(Apply::Live),"Live");
-  CHECK_EQ(apply_label(Apply::Hitch),"Applies after a short hitch");
-  CHECK_EQ(apply_label(Apply::Restart),"Restart to apply");
+  CHECK_EQ(apply_label(Apply::Live),"Applies after saving");
+  CHECK_EQ(apply_label(Apply::Hitch),"Applies after saving; may briefly pause");
+  CHECK_EQ(apply_label(Apply::Restart),"Restart the game to apply");
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));
@@ -1139,7 +1140,8 @@ static void test_release_migration() {
       std::string id = k.id;
       if (id == "rt_trace_scale") want = 1;
       if ((id == "exp_omm" || id == "exp_vt_alpha_masks" ||
-           id == "exp_water_compose_shift" || id == "exp_hair_pool_trim") && p == kUltra) want = 1;
+           id == "exp_water_compose_shift" || id == "exp_hair_pool_trim" ||
+           id == "exp_ls_exact_k") && p == kUltra) want = 1;
       CHECK(knob_value(k, m) == want);
     }
     CHECK_EQ(get(m, "perf_submit_batch"), "0"); CHECK_EQ(get(m, "perf_hook_state"), "0");
@@ -1168,6 +1170,49 @@ static void test_release_migration() {
   CHECK_EQ(get(m, "ls_box"), "2"); CHECK_EQ(get(m, "ls_box_honour_shadow"), "1");
   CHECK_EQ(get(m, "ls_shadowed"), "3"); CHECK_EQ(get(m, "rt_native_tileset"), "0");
   CHECK_EQ(get(m, "rf_hit_gi"), "0"); CHECK_EQ(get(m, "rt_hit_emission"), "1");
+  // Audit every visible knob with a hidden choice. Partial raw files must migrate too.
+  std::vector<std::string> hidden_choices;
+  for (const auto& k : kKnobs) if (knob_visible(k, false))
+    for (int c = 0; c < choice_count(k); ++c)
+      if (!choice_visible(k, c, false)) {
+        CHECK(!knob_keys(k).empty());
+        hidden_choices.push_back(k.id);
+      }
+  CHECK(hidden_choices == (std::vector<std::string>{"local_shadows", "exp_hidden_surface",
+    "box_lights", "exp_native_coverage"}));
+  for (int p = 0; p < kPresetCount; ++p) {
+    for (const char* samples : {"0", "1"}) for (const char* enabled : {"0", "1"}) {
+      Map layer = parse_ini("dev=0\nls_shadowed=1\n");
+      layer["preset"] = kPresetId[p]; layer["ls_samples"] = samples;
+      layer["rt_local_shadows"] = enabled;
+      m = code_defaults(); apply_layer(m, layer);
+      CHECK_EQ(get(m, "ls_shadowed"), std::string(samples) == "0" ? "3" : "0");
+      CHECK_EQ(get(m, "ls_samples"), samples); CHECK_EQ(get(m, "rt_local_shadows"), enabled);
+      CHECK(knob_value(*find_knob("local_shadows"), m) != 3);
+      Map again = m; enforce_release_policy(again); CHECK(again == m);
+      layer["dev"] = "1"; m = code_defaults(); apply_layer(m, layer);
+      CHECK_EQ(get(m, "ls_shadowed"), "1");
+    }
+    for (const char* raw : {"ls_box=1\nls_box_honour_shadow=0\n", "rt_native_tileset=1\nrt_native_hair=0\n",
+         "rf_hit_shade=1\n", "rf_hit_gi=1\n", "rt_hit_emission=2\n"}) {
+      Map layer = parse_ini(raw); layer["dev"] = "0"; layer["preset"] = kPresetId[p];
+      m = code_defaults(); apply_layer(m, layer);
+      CHECK(get(m, "ls_box") != "1"); CHECK_EQ(get(m, "rt_native_tileset"), "0");
+      CHECK_EQ(get(m, "rf_hit_shade"), "0"); CHECK_EQ(get(m, "rf_hit_gi"), "0");
+      CHECK(get(m, "rt_hit_emission") != "2");
+      Map again = m; enforce_release_policy(again); CHECK(again == m);
+      layer["dev"] = "1"; m = code_defaults(); apply_layer(m, layer);
+      for (const auto& kv : parse_ini(raw)) CHECK_EQ(get(m, kv.first.c_str()), kv.second);
+    }
+    m = code_defaults();
+    apply_layer(m, parse_ini(std::string("dev=0\npreset=") + kPresetId[p] + "\nls_k=2\nls_rest_samples=4\n"));
+    CHECK_EQ(get(m, "ls_k"), p == kUltra ? "1" : "0");
+    CHECK_EQ(get(m, "ls_rest_samples"), "1");
+  }
+  for (const char* override : {"rt_local_shadows=0\n", "ls_samples=1\nls_shadowed=0\n", "rt_build=0\n"}) {
+    m = code_defaults(); apply_layer(m, parse_ini(std::string("dev=0\npreset=ultra\n") + override));
+    CHECK_EQ(get(m, "ls_k"), "0");
+  }
   stale["dev"] = "1"; m = code_defaults(); apply_layer(m, stale);
   for (const auto& kv : stale) CHECK_EQ(get(m, kv.first.c_str()), kv.second);
 }

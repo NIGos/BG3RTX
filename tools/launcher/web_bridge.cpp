@@ -52,17 +52,22 @@ template<class T> T get(const Object& o,const char* key,T fallback={}) {auto i=o
 std::string q(const std::string& s){std::string out="\"";constexpr char hex[]="0123456789abcdef";for(unsigned char c:s){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}return out+'"';}
 const char* b(bool value){return value?"true":"false";}
 std::string strings(const std::vector<std::string>& values){std::string out="[";for(auto& x:values){if(out.size()>1)out+=",";out+=q(x);}return out+"]";}
-std::string capability_requirements(unsigned mask) {
+std::string capability_requirements(unsigned mask, bool release = true) {
   const std::pair<unsigned,const char*> names[] = {
-    {st::kCapRayQuery,"hardware ray queries"}, {st::kCapDlss,"NVIDIA RTX DLSS"},
-    {st::kCapFg,"frame generation support"}, {st::kCapMfg,"multi-frame generation support"},
+    {st::kCapRayQuery,"Hardware ray tracing"}, {st::kCapDlss,"Compatible NVIDIA RTX GPU with DLSS"},
+    {st::kCapFg,"Frame Generation support"}, {st::kCapMfg,"Multi Frame Generation support"},
     {st::kCapOpacityMicromap,"opacity micromap support"},
     {st::kCapLinearSweptSpheres,"linear swept spheres support"},
     {st::kCapShaderInt64,"64-bit shader integers (shaderInt64)"},
     {st::kCapFragmentStores,"fragment shader stores (fragmentStoresAndAtomics)"},
     {st::kCapHairGrooms,"valid local hair groom files"}};
   std::string text;
-  for (const auto& item:names) if(mask & item.first){if(!text.empty())text+="; ";text+="needs ";text+=item.second;}
+  for (const auto& item:names) if(mask & item.first){if(!text.empty())text+="; ";text+=release?"Requires ":"needs ";
+    if(!release&&item.first==st::kCapRayQuery)text+="hardware ray queries";
+    else if(!release&&item.first==st::kCapDlss)text+="NVIDIA RTX DLSS";
+    else if(!release&&item.first==st::kCapFg)text+="frame generation support";
+    else if(!release&&item.first==st::kCapMfg)text+="multi-frame generation support";
+    else text+=item.second;}
   return text;
 }
 std::string label(int i,int value){auto& k=st::kKnobs[i];return value<0?"Custom value preserved":k.kind==st::Kind::Choice?std::string(k.choices[value].label):std::to_string(value);}
@@ -77,59 +82,74 @@ int Bridge::dirty() const {return std::max(int(ab_selection_.pending),ui_state::
 bool Bridge::is_collection_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="prepareReport";}
 bool Bridge::is_export_intent(const std::string& message){Object o;return Parser{message}.parse(o)&&get<std::string>(o,"type")=="exportReport";}
 bool Bridge::is_cancel_collection_intent(const std::string& message){Object o;if(!Parser{message}.parse(o))return false;auto type=get<std::string>(o,"type");return type=="closeReport"||type=="cancelReport";}
-void Bridge::set_compatibility(GraphicsInspection p,int selected){preview_kind_.clear();inspection_=std::move(p);selected_=selected;if(selected_<0&&inspection_.adapters.size()==1)selected_=0;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
+void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=false;preview_kind_.clear();inspection_=std::move(p);selected_=selected;if(selected_<0&&inspection_.adapters.size()==1)selected_=0;compatibility_=assess_compatibility(inspection_,selected_);state_.caps=compatibility_.caps;state_.suggested=compatibility_.model_preset;state_.have_gpu=selected_>=0&&size_t(selected_)<inspection_.adapters.size();if(state_.have_gpu)state_.gpu=inspection_.adapters[selected_].gpu;}
 bool Bridge::save_preview(bool enable_required){
   auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental);
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
   for(int i:p.changed)changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,p.values[i]));
-  for(auto& kv:p.required_keys){std::string name="Startup prerequisite";for(auto& k:st::kKnobs)for(auto& n:k.required_on)if(n.key&&kv.first==n.key)name=n.label;changes_.push_back(name+": enable at next launch");}
+  for(auto& kv:p.required_keys){
+    std::string name="Required startup setting";
+    for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;
+      for(auto& n:k.required_on)if(n.key&&kv.first==n.key&&preview_values_[i]>=n.min_choice){name=std::string(k.label)+": "+n.label;break;}
+      if(name!="Required startup setting")break;
+    }
+    changes_.push_back(name+": required setup applies after restarting the game");
+  }
   return blocked_.empty();
 }
 std::string Bridge::handle(const std::string& message){
-  Object o;if(!Parser{message}.parse(o)){status_="Invalid launcher message.";return state_json();}
+  Object o;if(!Parser{message}.parse(o)){status_="Launcher request failed. Reopen the launcher.";return state_json();}
   auto type=get<std::string>(o,"type");
   if(type=="init"||type=="state")return state_json();
-  if(type=="cancel"){preview_kind_.clear();changes_.clear();blocked_.clear();return state_json();}
+  if(type=="cancel"){pending_play_=false;preview_kind_.clear();changes_.clear();blocked_.clear();return state_json();}
   if(type=="confirm"){
     if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
     else if(preview_kind_=="save"&&blocked_.empty()){
       State candidate=state_;candidate.values=preview_values_;std::string error;
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 compares BG3RTX with the game's own image.";}
-      else status_=error.empty()?"Settings could not be saved. Your edits are kept.":error;
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_="Saved.";}
+      else {pending_play_=false;status_=error.empty()?"Settings not saved. Your edits are kept.":error;}
+    }
+    if(pending_play_&&preview_kind_.empty()){
+      pending_play_=false;std::string error;
+      if(!can_play_||!hooks_.play||!hooks_.play(error))status_=error.empty()?"Settings saved, but the game could not start. See Help & support.":error;
+      else{status_="Game started.";can_play_=false;}
     }return state_json();
   }
   // An edit invalidates the exact preview to prevent stale confirmations.
-  if(type=="set"||type=="preset"||type=="discard"||type=="experimental")preview_kind_.clear();
+  if(type=="set"||type=="preset"||type=="discard"||type=="experimental"){preview_kind_.clear();pending_play_=false;}
   if(type=="set"){
     int i=st::knob_index(get<std::string>(o,"id"));int value=get<int>(o,"value",INT_MIN);
-    if(i<0||!st::knob_visible(st::kKnobs[i],dev)){status_="Setting is unavailable.";return state_json();}
+    if(i<0||!st::knob_visible(st::kKnobs[i],dev)){status_="This option is unavailable. Check its requirements in Help & support.";return state_json();}
     auto& k=st::kKnobs[i];bool valid=k.kind==st::Kind::Choice?st::choice_available(k,value,dev,experimental,state_.caps):((k.slider.has_off&&value==0)||(value>=k.slider.min&&value<=k.slider.max&&(value-k.slider.min)%k.slider.step==0));
-    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This choice is unavailable. Review graphics compatibility and requirements.";
+    if(k.experimental&&!experimental)valid=false;if(valid){ab_selection_.touch(k,value);state_.values[i]=value;status_.clear();}else status_="This option is unavailable. Check its requirements in Help & support.";
   }else if(type=="preset"){
-    int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Unknown preset.";return state_json();}
+    int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
     for(int i=0;i<st::kKnobCount;++i){if(!st::knob_visible(st::kKnobs[i],dev))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
   }else if(type=="experimental")experimental=dev&&get<bool>(o,"value");
-  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Edits discarded.";}
-  else if(type=="save")save_preview(get<std::string>(o,"policy")=="enable");
+  else if(type=="discard"){ab_selection_.pending=false;state_.values=saved_;state_.preset=saved_preset_;status_="Changes discarded.";}
+  else if(type=="save"){pending_play_=false;save_preview(get<std::string>(o,"policy")=="enable");}
   else if(type=="play"){
-    if(!can_play_)status_="Play is unavailable. Check game location and whether the game is running.";
-    else if(dirty())status_="Save or discard your edits before playing.";
-    else{std::string error;if(!hooks_.play||!hooks_.play(error))status_=error.empty()?"Game could not start.":error;else{status_="Game started.";can_play_=false;}}
+    if(!can_play_)status_="Choose the game folder or close the running game to enable Play.";
+    else{
+      pending_play_=true;save_preview(true);
+      if(blocked_.empty()&&changes_.empty())return handle("{\"type\":\"confirm\"}");
+    }
   }else if(type=="report"){report_visible_=true;}
   else if(type=="closeReport"){report_visible_=false;}
-  else if(type=="cancelReport"){status_="Report collection cancelled. Nothing was uploaded.";}
+  else if(type=="cancelReport"){status_="Report cancelled.";}
   else if(type=="browseGame"){if(hooks_.browseGame)game_path_=hooks_.browseGame();}
   else if(type=="recheck"){if(hooks_.recheck)set_compatibility(hooks_.recheck());}
+  else if(type=="notices"){if(hooks_.notices)hooks_.notices();}
   else if(type=="adapter"){
-    int selected=get<int>(o,"value",-1);if(selected>=0&&size_t(selected)<inspection_.adapters.size())set_compatibility(inspection_,selected);else status_="Choose an available adapter.";
+    int selected=get<int>(o,"value",-1);if(selected>=0&&size_t(selected)<inspection_.adapters.size())set_compatibility(inspection_,selected);else status_="Choose an available GPU.";
   }
   else if(type=="prepareReport"){
-    report_visible_=true;report_={};if(hooks_.prepareReport)report_=hooks_.prepareReport(get<std::string>(o,"issue"),get<bool>(o,"logs",true),get<bool>(o,"settings",true),get<bool>(o,"system",true));else report_.message="Report collector unavailable.";
+    report_visible_=true;report_={};if(hooks_.prepareReport)report_=hooks_.prepareReport(get<std::string>(o,"issue"),get<bool>(o,"logs",true),get<bool>(o,"settings",true),get<bool>(o,"system",true));else report_.message="Reports are unavailable. Reopen the launcher.";
   }else if(type=="exportReport"){
-    if(report_.files.empty()||report_.status==diagnostics::Status::Cancelled||report_.status==diagnostics::Status::Failed)status_="Prepare and review a report first.";
-    else{std::string error;if(hooks_.exportReport&&hooks_.exportReport(report_,error))status_=error.empty()?"Report saved locally. Nothing was uploaded.":error;else status_=error.empty()?"Report was not saved. Preview is retained; choose another folder or retry.":error;}
-  }else status_="Unknown launcher intent.";
+    if(report_.files.empty()||report_.status==diagnostics::Status::Cancelled||report_.status==diagnostics::Status::Failed)status_="Preview the report before saving.";
+    else{std::string error;if(hooks_.exportReport&&hooks_.exportReport(report_,error))status_=error.empty()?"Report saved on your PC.":error;else status_=error.empty()?"Report not saved. Preview kept; retry or choose another folder.":error;}
+  }else status_="Launcher request failed. Reopen the launcher.";
   return state_json();
 }
 std::string Bridge::state_json() const {
@@ -138,15 +158,15 @@ std::string Bridge::state_json() const {
   std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_count_>0)+",\"restartCount\":"+std::to_string(restart_count_)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_count_))+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
   bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!st::knob_visible(k,dev))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
-    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value)))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
-    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?"Graphics compatibility unavailable: "+capability_requirements(k.choices[c].caps & ~state_.caps):!available?"Enable Experimental to select":need;
-      std::string requirements=capability_requirements(k.choices[c].caps);
-      for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(st::kKnobs[j].label)+" "+label(j,n.min_choice);}}
-      for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+="needs "+std::string(n.label);}
-      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c)))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
+    out+="{\"id\":"+q(k.id)+",\"title\":"+q(k.label)+",\"description\":"+q(k.desc)+",\"details\":"+q(k.details)+",\"category\":"+q(k.category)+",\"maturity\":"+q(maturity)+",\"experimental\":"+b(k.experimental)+",\"developer\":"+b(k.dev_only)+",\"value\":"+std::to_string(value)+",\"custom\":"+b(value<0)+",\"cost\":"+q((std::string(k.cost.gpu)=="Unknown"||std::string(k.cost.gpu)=="Not measured")?"Not measured":std::string(k.cost.status)+": "+k.cost.gpu)+",\"vram\":"+q(std::string(k.cost.vram)=="Unknown"?"":k.cost.vram)+",\"provenance\":"+q(std::string(k.cost.provenance)=="No qualified measurement available."?"":k.cost.provenance)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],value),!k.dev_only))+",\"applyNote\":"+q(k.apply_note)+",\"kind\":"+q(k.kind==st::Kind::Choice?"choice":"slider")+",\"choices\":[";
+    bool fc=true;for(int c=0;c<st::choice_count(k);++c){if(!st::choice_visible(k,c,dev))continue;if(!fc)out+=",";fc=false;bool available=st::choice_available(k,c,dev,experimental,state_.caps);auto need=st::unmet_need(k,c,state_.values);if(need.empty())need=st::unmet_key_need(k,c,effective());std::string reason=!st::choice_supported(k,c,state_.caps)?std::string(k.dev_only?"Graphics compatibility unavailable: ":"GPU requirement: ")+capability_requirements(k.choices[c].caps & ~state_.caps,!k.dev_only):!available?"Enable Experimental to select":need;
+      std::string requirements=capability_requirements(k.choices[c].caps,!k.dev_only);
+      for(auto& n:k.choices[c].need)if(n.knob){int j=st::knob_index(n.knob);if(j>=0){if(!requirements.empty())requirements+="; ";requirements+=std::string(k.dev_only?"needs ":"Requires ")+st::kKnobs[j].label+(k.dev_only?" ":": ")+label(j,n.min_choice);}}
+      for(auto& n:k.required_on)if(n.key&&c>=n.min_choice){if(!requirements.empty())requirements+="; ";requirements+=std::string(k.dev_only?"needs ":"Requires ")+n.label;}
+      out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c),!k.dev_only))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
-  std::string gpu="Unknown adapter",vram="Unknown",driver="Unknown";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Unknown":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
+  std::string gpu="GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
   auto fg=st::lookup(effective(),"fg");std::string fg_label=fg=="0"?"Off":fg=="2"?"2x":fg=="3"?"3x":fg=="4"?"4x":"Unknown";
   std::vector<std::string> warnings;
   if(compatibility_.hardware!=CheckState::Supported&&!compatibility_.hardware_text.empty())warnings.push_back(compatibility_.hardware_text);
@@ -154,8 +174,8 @@ std::string Bridge::state_json() const {
   out+="],\"gamePath\":"+q(game_path_)+",\"compatibility\":{\"gpu\":"+q(gpu)+",\"vram\":"+q(vram)+",\"memory\":"+q(compatibility_.memory_text)+",\"driver\":"+q(driver)+",\"warnings\":"+strings(warnings)+",\"details\":"+strings({compatibility_.hardware_text,compatibility_.driver_text,compatibility_.memory_text,compatibility_.adapter_text})+",\"selected\":"+std::to_string(selected_)+",\"adapters\":[";
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
   out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
-  out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Displayed frames include generated frames; this is not measured rendering performance.\"";
-  out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
+  out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
+  out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
   out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
   first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+"}";}
   return out+"]}}";

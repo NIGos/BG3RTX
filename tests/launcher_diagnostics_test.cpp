@@ -89,7 +89,7 @@ int wmain(int argc, wchar_t** argv) {
     r.max_total_bytes = 65536;
     write(root / L"sl_logs" / L"big.log", std::string(40000, 'x'));
     auto total_bound = d::prepare_report(r);
-    check(total_bound.bytes <= r.max_total_bytes && all(total_bound).find("size/file limit") != std::string::npos, "total bound");
+    check(total_bound.bytes <= r.max_total_bytes && all(total_bound).find("size or file limit reached") != std::string::npos, "total bound");
     r.max_total_bytes = 16 * 1024 * 1024;
     fs::create_directory(root / L"empty");
     d::Request empty; empty.install_root = root / L"empty";
@@ -136,15 +136,15 @@ int wmain(int argc, wchar_t** argv) {
     g.adapters.push_back(a);
     auto c = launcher::assess_compatibility(g);
     check(c.hardware == launcher::CheckState::Supported && c.driver == launcher::CheckState::Supported, "RTX test driver recognized");
-    check(c.memory_text.find("31.7") != c.memory_text.npos && c.memory_text.find("0 MiB") != c.memory_text.npos, "memory caution and saturated headroom");
+    check(c.memory_text.find("Ultra may exceed available memory") != c.memory_text.npos && c.memory_text.find("0 MiB") != c.memory_text.npos, "memory caution and saturated headroom");
     for (int gb : {8, 12, 16, 24, 32}) {
       g.adapters[0].dedicated_bytes = uint64_t(gb) << 30;
       c = launcher::assess_compatibility(g);
-      check(c.memory_text.find("Risk estimate") != c.memory_text.npos, "VRAM tier is estimate");
+      check(c.memory_text.find("Guidance is for approximately 4K") != c.memory_text.npos, "VRAM tier is estimate");
     }
     g.adapters[0].driver_version = "500.00";
     c = launcher::assess_compatibility(g);
-    check(c.driver == launcher::CheckState::Warning && c.driver_text.find("Untested") != c.driver_text.npos && c.driver_text.find("minimum") != c.driver_text.npos, "old driver not false minimum");
+    check(c.driver == launcher::CheckState::Warning && c.driver_text.find("Tested reference: NVIDIA 621.01") != c.driver_text.npos && c.driver_text.find("minimum") != c.driver_text.npos, "old driver not false minimum");
     g.adapters[0].gpu.vendor = 0x1002;
     check(launcher::assess_compatibility(g).hardware == launcher::CheckState::Warning, "non-NVIDIA RT distinguished");
     g.adapters[0].gpu.ray_query = false;

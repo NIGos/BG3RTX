@@ -102,14 +102,14 @@ Snapshot prepare_report(const Request& r, Progress cb) {
   Snapshot out;
   std::error_code directory_error;
   if (!safe_path(r.install_root) || !fs::is_directory(r.install_root, directory_error)) {
-    out.message = "Install folder unavailable or linked. Choose an ordinary local install folder."; return out;
+    out.message = "Choose a local installation folder that is not a link."; return out;
   }
   if (r.max_files < 8 || r.max_files > hard_count || r.max_file_bytes == 0 || r.max_file_bytes > hard_file ||
       r.max_total_bytes < 65536 || r.max_total_bytes > hard_total || r.issue.size() > 65536 || r.system_text.size() > 65536) {
-    out.message = "Invalid report limits or description too long."; return out;
+    out.message = "Report could not be prepared. Check the description length and retry."; return out;
   }
   if (!r.include_logs && !r.include_settings && !r.include_system && r.issue.empty()) {
-    out.message = "Select report contents or enter an issue description."; return out;
+    out.message = "Select report contents or describe the problem."; return out;
   }
   out.status = Status::Complete;
   std::vector<std::string> notes;
@@ -117,14 +117,14 @@ Snapshot prepare_report(const Request& r, Progress cb) {
   auto add = [&](std::string name, std::string text, std::string info = "") {
     text = redact_text(std::move(text), r.install_root);
     if (out.files.size() + 1 >= r.max_files || out.bytes + text.size() + 32768 > r.max_total_bytes) {
-      note(name + ": omitted (report size/file limit)"); return false;
+      note(name + ": Omitted: report size or file limit reached."); return false;
     }
     out.bytes += text.size(); out.files.push_back({std::move(name), std::move(text), std::move(info)}); return true;
   };
   std::vector<fs::path> inputs = {L"bg3rtx.log", L"bg3rtx.prev.log", L"bg3rtx.ini", L"bg3rtx_user.ini", L"VERSION.txt"};
   // Bounded, nonrecursive discovery. Never even list captures or a save folder.
   auto discover = [&](const fs::path& dir, bool streamline) {
-    if (!safe_path(dir)) { note("Log directory skipped (linked path)"); return; }
+    if (!safe_path(dir)) { note("Log folder skipped because it is a link."); return; }
     WIN32_FIND_DATAW data{};
     HANDLE h = FindFirstFileW((dir / L"*").c_str(), &data);
     if (h == INVALID_HANDLE_VALUE) return;
@@ -151,7 +151,7 @@ Snapshot prepare_report(const Request& r, Progress cb) {
   }
   std::string effective;
   for (size_t i = 0; i < inputs.size(); ++i) {
-    if (cancelled(cb, i, inputs.size())) { out = {}; out.status = Status::Cancelled; out.message = "Report cancelled. No files written."; return out; }
+    if (cancelled(cb, i, inputs.size())) { out = {}; out.status = Status::Cancelled; out.message = "Report cancelled. No files saved."; return out; }
     if ((i < 2 || i >= 5) ? !r.include_logs : !r.include_settings) continue;
     auto path = r.install_root / inputs[i];
     const std::string label = i < 5 ? utf8(inputs[i].wstring()) : "log-" + std::to_string(i) + ".txt";
@@ -171,7 +171,7 @@ Snapshot prepare_report(const Request& r, Progress cb) {
     std::string text; text.reserve(size_t(size));
     bool ok = true;
     for (uint64_t read = 0; read < size;) {
-      if (cancelled(cb, i, inputs.size())) { out = {}; out.status = Status::Cancelled; out.message = "Report cancelled. No files written."; return out; }
+      if (cancelled(cb, i, inputs.size())) { out = {}; out.status = Status::Cancelled; out.message = "Report cancelled. No files saved."; return out; }
       char b[65536]; DWORD got = 0;
       if (!ReadFile(f.h, b, DWORD(std::min<uint64_t>(sizeof(b), size - read)), &got, nullptr)) { ok = false; break; }
       if (!got) break;
@@ -226,35 +226,35 @@ Snapshot prepare_report(const Request& r, Progress cb) {
   for (const auto& n : notes) manifest << n << '\n';
   std::string m = redact_text(manifest.str(), r.install_root);
   out.bytes += m.size(); out.files.push_back({"CONTENTS.txt", m, "Report manifest"});
-  out.message = out.status == Status::Complete ? "Report ready for review. Nothing written or uploaded." : "Partial report ready. Review missing/skipped items in CONTENTS.txt.";
+  out.message = out.status == Status::Complete ? "Report ready to preview." : "Partial report ready. See CONTENTS.txt for omitted files.";
   return out;
 }
 
 ExportResult save_report_zip(const Snapshot& s, const fs::path& path, Progress cb) {
-  if (s.status != Status::Complete && s.status != Status::Partial) return {Status::Failed, "No report to export."};
-  if (!safe_path(path) || path.extension() != L".zip" || s.files.empty() || s.files.size() > hard_count) return {Status::Failed, "Choose an ordinary local .zip path in an existing folder."};
+  if (s.status != Status::Complete && s.status != Status::Partial) return {Status::Failed, "Preview a report before saving."};
+  if (!safe_path(path) || path.extension() != L".zip" || s.files.empty() || s.files.size() > hard_count) return {Status::Failed, "Choose a new .zip file in an existing local folder that is not a link."};
   uint64_t bytes = 0;
   std::vector<std::string> names;
   for (const auto& e : s.files) {
     if (e.name.empty() || e.name.size() > 255 || e.name.find("..") != e.name.npos || e.name.front() == '/' ||
         e.name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./-") != e.name.npos ||
-        std::find(names.begin(), names.end(), e.name) != names.end()) return {Status::Failed, "Invalid report entry."};
+        std::find(names.begin(), names.end(), e.name) != names.end()) return {Status::Failed, "Report contains an invalid file. Prepare it again."};
     names.push_back(e.name); bytes += e.text.size();
   }
-  if (bytes > hard_total) return {Status::Failed, "Report exceeds export limit."};
-  if (cancelled(cb, 0, s.files.size())) return {Status::Cancelled, "Export cancelled."};
+  if (bytes > hard_total) return {Status::Failed, "Report is too large to save."};
+  if (cancelled(cb, 0, s.files.size())) return {Status::Cancelled, "Save cancelled."};
   Handle output;
   // DELETE access + FILE_DISPOSITION_INFO deletes the exact owned handle on
   // cancellation/failure, even if an ancestor is renamed. Never delete by path.
   output.h = CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-  if (output.h == INVALID_HANDLE_VALUE) return {Status::Failed, "Could not create report (Windows error " + windows_error(GetLastError()) + "). Retry or choose another folder; existing files are never overwritten."};
+  if (output.h == INVALID_HANDLE_VALUE) return {Status::Failed, "Report not saved. Retry with a new filename or another folder. Existing files are kept. Windows error " + windows_error(GetLastError()) + "."};
   auto fail = [&](Status status, const char* msg) {
     FILE_DISPOSITION_INFO d{TRUE};
     if (!SetFileInformationByHandle(output.h, FileDispositionInfo, &d, sizeof(d)))
-      return ExportResult{Status::Failed, "Export failed and Windows could not remove the incomplete output (error " + windows_error(GetLastError()) + "). Choose another filename; do not share the incomplete ZIP."};
+      return ExportResult{Status::Failed, "Report not saved. An incomplete ZIP remains; do not share it. Choose another filename. Windows error " + windows_error(GetLastError()) + "."};
     return ExportResult{status, msg};
   };
-  if (!handle_matches(output.h, path)) return fail(Status::Failed, "Destination changed or linked. Choose another folder.");
+  if (!handle_matches(output.h, path)) return fail(Status::Failed, "Destination changed or is a link. Choose another folder.");
   // ZIP32 STORE: standard ZIP, no runtime/script/SDK dependency. Bounded payload.
   uint32_t offset = 0; bool ok = true;
   size_t done = 0;
@@ -272,7 +272,7 @@ ExportResult save_report_zip(const Snapshot& s, const fs::path& path, Progress c
   auto u32 = [&](std::string& b, uint32_t v) { u16(b, uint16_t(v)); u16(b, uint16_t(v >> 16)); };
   std::string central;
   for (const auto& e : s.files) {
-    if (cancelled(cb, done, s.files.size())) return fail(Status::Cancelled, "Export cancelled; owned output removed.");
+    if (cancelled(cb, done, s.files.size())) return fail(Status::Cancelled, "Save cancelled. Incomplete ZIP removed.");
     uint32_t start = offset, hash = crc(e.text), length = uint32_t(e.text.size());
     std::string h; u32(h, 0x04034b50); u16(h, 20); u16(h, 0x800); u16(h, 0); u16(h, 0); u16(h, 33);
     u32(h, hash); u32(h, length); u32(h, length); u16(h, uint16_t(e.name.size())); u16(h, 0); h += e.name;
@@ -287,8 +287,8 @@ ExportResult save_report_zip(const Snapshot& s, const fs::path& path, Progress c
   std::string end; u32(end, 0x06054b50); u16(end, 0); u16(end, 0); u16(end, uint16_t(s.files.size())); u16(end, uint16_t(s.files.size()));
   u32(end, uint32_t(central.size())); u32(end, central_start); u16(end, 0);
   if (ok) ok = put(end) && FlushFileBuffers(output.h);
-  if (!ok) return fail(was_cancelled ? Status::Cancelled : Status::Failed, "Export stopped; owned output removed. Retry or choose another folder.");
-  return {s.status, s.status == Status::Partial ? "Partial report saved. Review CONTENTS.txt before sharing." : "Report saved. Nothing uploaded."};
+  if (!ok) return fail(was_cancelled ? Status::Cancelled : Status::Failed, "Save stopped. Incomplete ZIP removed; retry or choose another folder.");
+  return {s.status, s.status == Status::Partial ? "Partial report saved. Review CONTENTS.txt before sharing." : "Report saved on your PC."};
 }
 int exit_code(Status s) { return s == Status::Complete ? 0 : s == Status::Partial ? 1 : s == Status::Cancelled ? 3 : 2; }
 } // namespace launcher::diagnostics

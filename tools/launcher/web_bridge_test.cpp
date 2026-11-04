@@ -12,6 +12,32 @@ int main(int argc,char** argv){
   int checks=0,failed=0,saves=0,plays=0,prepares=0,exports=0;
   auto check_line=[&](bool ok,int line){++checks;if(!ok){++failed;std::printf("FAIL check %d at line %d\n",checks,line);}};
 #define check(ok) check_line((ok),__LINE__)
+  // Play persists the candidate before launch; failed saves and cancelled
+  // dependency reviews must never reach the launch callback.
+  {
+    launcher::State ps; ps.caps=~0u; ps.base=st::code_defaults();
+    ps.base["dev"]="0"; ps.values=st::preset_values(st::kLow);
+    bool fail_save=false; std::string effects;
+    launcher::web::Hooks ph;
+    ph.save=[&](launcher::State&,const st::KVList&,std::string&){effects+='S';return !fail_save;};
+    ph.play=[&](std::string&){effects+='P';return true;};
+    launcher::web::Bridge pb(ps,ph); pb.set_can_play(true);
+    pb.handle("{\"type\":\"set\",\"id\":\"rt_intensity\",\"value\":90}");
+    pb.handle("{\"type\":\"play\"}");
+    check(effects=="SP"&&pb.dirty()==0);
+    pb.set_can_play(true); effects.clear(); fail_save=true;
+    pb.handle("{\"type\":\"set\",\"id\":\"rt_intensity\",\"value\":80}");
+    pb.handle("{\"type\":\"play\"}");
+    check(effects=="S"&&pb.dirty()>0);
+    check(pb.state_json().find("Settings not saved. Your edits are kept.")!=std::string::npos);
+    effects.clear(); fail_save=false;
+    pb.handle("{\"type\":\"set\",\"id\":\"gi\",\"value\":2}");
+    pb.handle("{\"type\":\"play\"}"); check(effects.empty());
+    pb.handle("{\"type\":\"cancel\"}"); pb.handle("{\"type\":\"confirm\"}");
+    check(effects.empty()&&pb.dirty()>0);
+    pb.handle("{\"type\":\"play\"}"); pb.handle("{\"type\":\"confirm\"}");
+    check(effects=="SP"&&pb.dirty()==0);
+  }
   check(launcher::web::Bridge::is_collection_intent("{\"type\":\"prepareReport\"}"));
   check(launcher::web::Bridge::is_export_intent("{\"type\":\"exportReport\"}"));
   check(!launcher::web::Bridge::is_export_intent("{\"type\":\"prepareReport\",\"issue\":\"exportReport\"}"));
@@ -55,12 +81,12 @@ int main(int argc,char** argv){
   s.values[st::knob_index("exp_native_coverage")]=1;
   auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");
   check(pos!=std::string::npos);
-  check(coverage.substr(pos,coverage.find("\"choices\"",pos)-pos).find("\"apply\":\"Restart to apply\"")!=std::string::npos);
+  check(coverage.substr(pos,coverage.find("\"choices\"",pos)-pos).find("\"apply\":\"Restart the game to apply\"")!=std::string::npos);
   s.values[st::knob_index("exp_native_coverage")]=0;
   check(bridge.dirty()==0);auto json=bridge.state_json();check(json.find("\"type\":\"state\"")!=std::string::npos);check(!bridge.dev);check(json.find("\"id\":\"ls_k\"")==std::string::npos);
-  for(auto bad:{"", "[]", "{\"type\":\"discard\"} trailing", "{\"type\":\"discard\",\"type\":\"play\"}", "{\"type\":[]}","{\"type\":\"set\",\"value\":01}","{\"type\":\"set\",\"value\":1.2}","{\"type\":\"set\",\"value\":999999999999999}","{\"type\":\"\\uD800\"}"})check(bridge.handle(bad).find("Invalid launcher message")!=std::string::npos);
+  for(auto bad:{"", "[]", "{\"type\":\"discard\"} trailing", "{\"type\":\"discard\",\"type\":\"play\"}", "{\"type\":[]}","{\"type\":\"set\",\"value\":01}","{\"type\":\"set\",\"value\":1.2}","{\"type\":\"set\",\"value\":999999999999999}","{\"type\":\"\\uD800\"}"})check(bridge.handle(bad).find("Launcher request failed. Reopen the launcher.")!=std::string::npos);
   bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.dirty()==1);check(s.values[st::knob_index("rr")]==1);
-  bridge.handle("{\"type\":\"play\"}");check(plays==0);bridge.set_can_play(true);bridge.handle("{\"type\":\"play\"}");check(plays==0);
+  bridge.handle("{\"type\":\"play\"}");check(plays==0);bridge.set_can_play(true);bridge.handle("{\"type\":\"play\"}");check(plays==1);check(saves==1);check(bridge.dirty()==0);bridge.set_can_play(true);plays=0;saves=0;
   bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":999}");check(s.values[st::knob_index("rr")]==1);
   bridge.handle("{\"type\":\"discard\"}");check(bridge.dirty()==0);
   bridge.handle("{\"type\":\"preset\",\"value\":3}");check(s.preset==st::kLow);bridge.handle("{\"type\":\"cancel\"}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==st::kLow);
@@ -69,7 +95,7 @@ int main(int argc,char** argv){
   bridge.handle("{\"type\":\"play\"}");check(plays==1);bridge.handle("{\"type\":\"play\"}");check(plays==1);
   json=bridge.state_json();
   check(json.find("Off-screen bounce light")!=std::string::npos);
-  check(json.find("Ray-traced + hidden roofs")!=std::string::npos);
+  check(json.find("Include hidden roofs")!=std::string::npos);
   check(json.find("Far-field sun bounce")==std::string::npos);
   check(json.find("Opacity micromaps")==std::string::npos);
   check(json.find("Measured: Not measured")==std::string::npos);
@@ -78,14 +104,14 @@ int main(int argc,char** argv){
   auto saved=s.values;s.values[st::knob_index("rr")]=-1;bridge.handle("{\"type\":\"preset\",\"value\":0}");bridge.handle("{\"type\":\"confirm\"}");check(s.values[st::knob_index("rr")]==0);s.values=saved;
   bridge.handle("{\"type\":\"report\"}");check(prepares==0);bridge.handle("{\"type\":\"exportReport\"}");check(exports==0);
   json=bridge.handle("{\"type\":\"prepareReport\",\"issue\":\"Line\\n\\\"quoted\\\" \\u2600\",\"logs\":false,\"settings\":true,\"system\":true}");check(prepares==1);check(json.find("Line\\u000a\\\"quoted\\\"")!=std::string::npos);bridge.handle("{\"type\":\"exportReport\"}");check(exports==1);
-  launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("Graphics compatibility unavailable")!=std::string::npos);
+  launcher::GraphicsInspection p;bridge.set_compatibility(p);check(s.caps==0);bridge.handle("{\"type\":\"set\",\"id\":\"rr\",\"value\":1}");check(bridge.state_json().find("GPU requirement:")!=std::string::npos);
   bridge.set_restart_count(3);check(bridge.state_json().find("\"restartNeeded\":true")!=std::string::npos);
-  check(bridge.state_json().find("Restart BG3 to apply 3 changes")!=std::string::npos);
-  bridge.handle("{\"type\":\"discard\"}");check(bridge.state_json().find("Restart BG3 to apply 3 changes")!=std::string::npos);
+  check(bridge.state_json().find("Restart the game to apply 3 changes")!=std::string::npos);
+  bridge.handle("{\"type\":\"discard\"}");check(bridge.state_json().find("Restart the game to apply 3 changes")!=std::string::npos);
   bridge.set_restart_count(0);check(bridge.state_json().find("\"restartNeeded\":false")!=std::string::npos);
   bridge.handle("{\"type\":\"closeReport\"}");check(bridge.state_json().find("\"visible\":false")!=std::string::npos);
   int before=s.preset;bridge.handle("{\"type\":\"preset\",\"value\":3}");bridge.handle("{\"type\":\"experimental\",\"value\":true}");bridge.handle("{\"type\":\"confirm\"}");check(s.preset==before);
-  check(bridge.handle(std::string(65537,'x')).find("Invalid launcher message")!=std::string::npos);
+  check(bridge.handle(std::string(65537,'x')).find("Launcher request failed. Reopen the launcher.")!=std::string::npos);
   launcher::State dependencies;dependencies.caps=~0u;dependencies.preset=st::kLow;dependencies.values=st::preset_values(st::kLow);dependencies.values[st::knob_index("frame_generation")]=0;dependencies.values[st::knob_index("reflex")]=0;
   int writes=0;launcher::web::Hooks dh;dh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return true;};
   launcher::web::Bridge db(dependencies,dh);
@@ -111,11 +137,11 @@ int main(int argc,char** argv){
   launcher::web::Bridge pb(pending,ph);pending_bridge=&pb;
   auto edit_save=[&](const char* edit){pb.handle(edit);pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");return pb.handle("{\"type\":\"confirm\"}");};
   json=edit_save("{\"type\":\"set\",\"id\":\"rt_geometry\",\"value\":2}");
-  check(pb.dirty()==0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  check(pb.dirty()==0);check(json.find("Restart the game to apply 1 change")!=std::string::npos);
   json=edit_save("{\"type\":\"set\",\"id\":\"fps_cap\",\"value\":60}");
-  check(pb.dirty()==0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  check(pb.dirty()==0);check(json.find("Restart the game to apply 1 change")!=std::string::npos);
   fail_save=true;json=edit_save("{\"type\":\"set\",\"id\":\"rt_geometry\",\"value\":1}");
-  check(pb.dirty()>0);check(json.find("Restart BG3 to apply 1 change")!=std::string::npos);
+  check(pb.dirty()>0);check(json.find("Restart the game to apply 1 change")!=std::string::npos);
   fail_save=false;pb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");json=pb.handle("{\"type\":\"confirm\"}");
   check(pb.dirty()==0);check(json.find("\"restartNeeded\":false")!=std::string::npos);
   // Last Experimental edit is saved atomically with settings, never on draft/discard/failure.
@@ -136,7 +162,7 @@ int main(int argc,char** argv){
   for(bool enabled:{false,true})for(bool master:{false,true})for(bool target:{false,true})
     check(bg3::experimental_ab::hotkey_action(master,target,enabled)==
           (!enabled?Action::None:master?Action::Master:target?Action::Experimental:Action::None));
-  check(tb.state_json().find("Ctrl+Shift+F9 compares BG3RTX with the game's own image.")!=std::string::npos);
+  check(tb.state_json().find("Live settings apply automatically")==std::string::npos);
   const auto before_master=ab;
   check(bg3::experimental_ab::hotkey_action(true,false,true)==Action::Master);
   check(ab==before_master);
@@ -197,8 +223,8 @@ int main(int argc,char** argv){
       launcher::web::Bridge qb(qs);qb.experimental=true;auto text=qb.state_json();
       auto start=text.find("\"id\":\""+std::string(k.id)+"\"");check(start!=std::string::npos);
       auto end=text.find("\"choices\":[",start);auto card=text.substr(start,end-start);
-      check(card.find("\"apply\":\""+std::string(st::apply_label(st::transition_apply(k,c,c)))+"\"")!=std::string::npos);
-      for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find("needs "+std::string(st::kKnobs[st::knob_index(n.knob)].label))!=std::string::npos);
+      check(card.find("\"apply\":\""+std::string(st::apply_label(st::transition_apply(k,c,c),!k.dev_only))+"\"")!=std::string::npos);
+      for(auto& n:k.choices[c].need)if(n.knob)check(text.substr(end,text.find("],\"min\"",end)-end).find(std::string(k.dev_only?"needs ":"Requires ")+st::kKnobs[st::knob_index(n.knob)].label)!=std::string::npos);
       for(auto& n:k.choices[c].need)if(n.knob){
         qs.values[st::knob_index(n.knob)]=0;
         int writes=0;launcher::web::Hooks hooks;hooks.save=[&](launcher::State& candidate,const st::KVList&,std::string&){++writes;check(st::unmet_need(k,c,candidate.values).empty());return true;};

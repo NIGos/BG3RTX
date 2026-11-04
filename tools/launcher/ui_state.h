@@ -38,7 +38,7 @@ inline bool restart(const bg3::settings::Map& baseline,const bg3::settings::Map&
   return restart_count(baseline,candidate)>0;
 }
 inline std::string restart_banner(int count) {
-  return count>0?"Restart BG3 to apply "+std::to_string(count)+(count==1?" change":" changes"):"";
+  return count>0?"Restart the game to apply "+std::to_string(count)+(count==1?" change.":" changes."):"";
 }
 inline bool same_session(const std::string& stored,const std::string& current) { return !current.empty()&&stored==current; }
 inline std::string serialize(int stage,bool pending,const std::string& session,const bg3::settings::Map& baseline) {

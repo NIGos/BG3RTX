@@ -28,7 +28,7 @@ for(const category of new Set(fixture.settings.map(s=>s.category))){
  for(const s of fixture.settings.filter(s=>s.category===category)){
   assert(cards.some(c=>c.id==='card-'+s.id),s.id+' unreachable');
   const card=cards.find(c=>c.id==='card-'+s.id);
-  assert(all(card).some(e=>e.textContent.includes('GPU cost:')),s.id+' missing cost');
+  assert(!all(card).some(e=>/GPU cost:|Not measured|VRAM: Unknown/.test(e.textContent)),s.id+' has unknown or duplicate cost');
   for(const control of card.querySelectorAll('button,input'))assert(control.id&&control.attributes['aria-describedby']);
   const reasons=ids.get('needs-'+s.id).textContent;
   for(const ch of s.choices){if(ch.reason)assert(reasons.includes(ch.reason));if(ch.requirements)assert(reasons.includes(ch.requirements));}
@@ -36,6 +36,9 @@ for(const category of new Set(fixture.settings.map(s=>s.category))){
  }
 }
 ids.get('nav-Lighting').onclick();
+assert.deepStrictEqual(all(ids.get('section-content')).filter(e=>e.tagName==='article'&&e.id).map(e=>e.id),
+ ['rt_geometry','rr','sun_shadows','gi','exp_hidden_surface','local_shadows','box_lights','exp_native_coverage','rt_intensity'].map(id=>'card-'+id));
+assert(!ids.has('summary')&&!ids.has('report'),'duplicate summary or report entry');
 const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['aria-label']);
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');
 const checkbox=ids.get(rr.id);let clicked=false;checkbox.click=()=>clicked=true;checkbox.onkeydown({key:'Enter',preventDefault(){}});assert(clicked);
@@ -47,6 +50,9 @@ assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shif
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Video memory'));
 assert(all(ids.get('section-content')).some(e=>e.textContent==='Compatibility'));
 assert(ids.get('support-report')&&ids.get('support-browse')&&ids.get('support-recheck'));
+const notices=all(ids.get('section-content')).find(e=>e.tagName==='a');
+assert(notices&&notices.textContent==='Fonts and third-party notices');
+notices.onclick({preventDefault(){}});assert.strictEqual(sent.at(-1).type,'notices');
 // Explicit bridge authorization, rather than the presence of a developer row.
 const dev={...fixture.settings[0],id:'test-dev',developer:true};
 render({...fixture,settings:[...fixture.settings,dev]});assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
