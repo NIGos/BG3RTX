@@ -56,11 +56,17 @@ PFN_vkCmdBeginQuery g_begin_query = nullptr;
 PFN_vkCmdEndQuery g_end_query = nullptr;
 VkQueryPool g_coverage_qp = VK_NULL_HANDLE;
 constexpr uint32_t kCoverageSlots = uint32_t(hair_primary::kCoverageLatency), kProbeDraws = 128;
+// CmdState::hp_coverage of a G-buffer draw: the strand query index, with kProbeAfter when the masked strand variant is
+// drawn after the native card draw (the draw keeps its cards), without it when the swapped strand draw is counted.
+constexpr uint32_t kProbeAfter = 1u << 31;
 struct ProbeSlot {
   uint64_t frame = 0, cmd = 0, recording = 0, submitted_frame = 0;
+  // The G-buffer recording holding this frame's strand queries (pair index + 1), and its submission.
+  uint64_t gb_cmd = 0, gb_recording = 0, gb_submitted_frame = 0;
   uint32_t n = 0;
   bool ready = false;
   uint64_t keys[kProbeDraws] = {};
+  bool strand_used[kProbeDraws] = {};   // pair i's strand query already recorded in the G-buffer
   std::unordered_set<uint64_t> header_keys, incomplete_keys;
 };
 ProbeSlot g_probe_slots[kCoverageSlots];
@@ -107,7 +113,7 @@ struct StagedHeader {
   bool submitted = false;
   uint32_t n = 0, pixels = 0;
   uint8_t bytes[hair_primary::kHeaderBytes] = {};
-  float cam[4] = {};   // the build camera (kCameraOffset; valid with kFlagCamera)
+  float cam[8] = {};   // the build camera (kCameraOffset; kFlagCamera), the previous publish's (kFlagPrevCamera)
   uint64_t keys[hair_primary::kMaxGrooms] = {};
   uint8_t lods[hair_primary::kMaxGrooms] = {};
 };
@@ -115,6 +121,8 @@ constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
+float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
+uint64_t g_last_pub_camera_frame = 0;
 uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0, g_probe_no_camera = 0;   // no_camera: publishes
 bool g_order = false;                       // the last publish was staged (the key on)
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
@@ -364,7 +372,7 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
   dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
                             0, nullptr);
   dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
-  dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);
+  dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   dd->vk.CmdPipelineBarrier(cmd,
@@ -411,6 +419,11 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
     // Pending recordings may still be submitted; completed reusable recordings may
     // be submitted again. Keep their query indices until reset/free invalidates them.
     if (still_recorded) return;
+    // The G-buffer recording with this slot's strand queries: the same rule (its queries must not land after the reset).
+    if (slot.gb_cmd && slot.gb_cmd != slot.cmd) {
+      if (slot.gb_submitted_frame && life_gpu_done() <= slot.gb_submitted_frame + 1) return;
+      if (cmd_recording(reinterpret_cast<VkCommandBuffer>(slot.gb_cmd)) == slot.gb_recording) return;
+    }
   }
   if (!g_coverage_qp) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -493,7 +506,7 @@ void coverage_log(uint64_t now) {
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
   }
-  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
+  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: newest strand/card samples = ratio, swapped frames of the period):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
       "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u; publishes without a build "
       "camera %u",
       probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet,
@@ -675,19 +688,12 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     if (it != g_variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
     g_variant[out[i]] = v;
     g_pass_of[v] = pass;
-    if (pass == Pass::Prepass) {
-      Bg3ShaderBlob blob{};
-      if (!shader_get("rt/hair_primary_probe.hlsl", "main", "ps_6_6", &blob)) continue;
-      VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-      mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
-      VkShaderModule pm = VK_NULL_HANDLE;
-      if (vk.CreateShaderModule(device, &mi, nullptr, &pm) != VK_SUCCESS) continue;
-      const uint32_t words[2] = {uint32_t(g_probe_header.addr), uint32_t(g_probe_header.addr >> 32)};
-      const VkSpecializationInfo pspec{2, spec_map, sizeof words, words};
-      stages[size_t(fs)].module = pm;
-      stages[size_t(fs)].pName = "main";
-      stages[size_t(fs)].pSpecializationInfo = &pspec;
-      // Preserve native depth test, sample count and culling. No depth, stencil or colour stores.
+    if (pass == Pass::Gbuffer) {
+      // Coverage probe: the strand G-buffer variant itself (the shader that draws the strands: same ray, rebase, pool
+      // bound and ownership band) with no colour or depth writes, drawn after the native card draw inside an occlusion
+      // query. It replaces a prepass probe whose rays never counted a strand sample (hv6 2026-11-04, 0/102163) and
+      // which was the only strand shader running when hv5 lost the device.
+      dsv.depthWriteEnable = VK_FALSE;
       dsv.front.writeMask = dsv.back.writeMask = 0;
       VkPipelineColorBlendStateCreateInfo blend{};
       std::vector<VkPipelineColorBlendAttachmentState> attachments;
@@ -698,10 +704,21 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
         blend.pAttachments = attachments.data();
         vci.pColorBlendState = &blend;
       }
+      Bg3ShaderBlob blob{};
+      VkShaderModule pm = VK_NULL_HANDLE;
+      if (shader_get("rt/hair_primary_gbuffer.hlsl", "main", "ps_6_6", &blob)) {
+        VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
+        if (vk.CreateShaderModule(device, &mi, nullptr, &pm) != VK_SUCCESS) pm = VK_NULL_HANDLE;
+      }
       VkPipeline probe = VK_NULL_HANDLE;
-      const VkResult pr = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &probe);
-      vk.DestroyShaderModule(device, pm, nullptr);
-      if (pr == VK_SUCCESS && probe) {
+      if (pm) {
+        stages[size_t(fs)].module = pm;
+        const VkResult pr = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &probe);
+        vk.DestroyShaderModule(device, pm, nullptr);
+        if (pr != VK_SUCCESS) probe = VK_NULL_HANDLE;
+      }
+      if (probe) {
         auto old = g_probe.find(out[i]);
         if (old != g_probe.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
         g_probe[out[i]] = probe;
@@ -742,6 +759,7 @@ HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& 
     for (uint32_t i = 0; i < kCoverageSlots; ++i) {
       const auto& slot = g_probe_slots[i];
       if (slot.frame && slot.cmd == uint64_t(cmd) && slot.recording == recording) recordings.queries[i] = recording;
+      if (slot.frame && slot.gb_cmd == uint64_t(cmd) && slot.gb_recording == recording) recordings.gb_queries[i] = recording;
     }
     for (int i = 0; i < kStaged; ++i) {
       const auto& st = g_staged[i];
@@ -757,6 +775,9 @@ void hair_primary_submit_end(const HairPrimarySubmit& recordings, bool success) 
   for (uint32_t i = 0; i < kCoverageSlots; ++i)
     if (recordings.queries[i] && g_probe_slots[i].recording == recordings.queries[i])
       g_probe_slots[i].submitted_frame = frame_index() + 1;
+  for (uint32_t i = 0; i < kCoverageSlots; ++i)
+    if (recordings.gb_queries[i] && g_probe_slots[i].gb_recording == recordings.gb_queries[i])
+      g_probe_slots[i].gb_submitted_frame = frame_index() + 1;
   for (int i = 0; i < kStaged; ++i)
     if (recordings.headers[i] && g_staged[i].recording == recordings.headers[i]) g_staged[i].submitted = true;
 }
@@ -861,9 +882,9 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     return false;
   }
   const Pass pass = g_pass_of[it->second];
-  // Probe before any swap is allowed. The card query wraps the real native draw or its
-  // no-depth-write clone; the duplicate trace draw follows after transform feedback ends.
-  if (pass == Pass::Prepass && !s->pass.color_count && g_probe.count(s->pipe[0]) &&
+  // Card samples before any swap is allowed: the query wraps the real native prepass draw or its no-depth-write clone.
+  // The strand samples of the same pair are counted in the G-buffer pass (strand_query below).
+  if (pass == Pass::Prepass && !s->pass.color_count &&
       slot.ready && slot.frame == now + 1 && slot.cmd == uint64_t(cmd) &&
       slot.recording == cmd_recording(cmd) && slot.header_keys.count(key)) {
     if (slot.n >= kProbeDraws || s->hp_native_queries) {
@@ -884,16 +905,42 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
     g_coverage.invalidate(key, now + 1);
     return false;
   }
-  const bool probing = s->hp_coverage != UINT32_MAX;
-  if (g_published + 2 < now + 1 || g_load.quiet(now) ||
-      !g_coverage.allow(key, now + 1)) return probing;
-  if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
-                                                                                    : g_gate.allow_prepass(key))) return probing;
+  // The strand samples of this G-buffer draw's pair (its key's next unused prepass card query of this frame): only
+  // with this frame's applied header holding the key (order mode), the prepass recording ordered before this one (the
+  // same recording, or submitted already: its reset precedes), no game query open, no load window.
+  uint32_t strand_query = UINT32_MAX;
+  if (pass == Pass::Gbuffer && slot.frame == now + 1 && g_order && g_applied_frame == now + 1 && g_live_keys.count(key) &&
+      !s->hp_native_queries && !g_load.quiet(now) && g_probe.count(s->pipe[0]) &&
+      ((slot.cmd == uint64_t(cmd) && slot.recording == cmd_recording(cmd)) || slot.submitted_frame == now + 1) &&
+      (!slot.gb_cmd || (slot.gb_cmd == uint64_t(cmd) && slot.gb_recording == cmd_recording(cmd)))) {
+    for (uint32_t i = 0; i < slot.n; ++i)
+      if (slot.keys[i] == key && !slot.strand_used[i]) {
+        slot.strand_used[i] = true;
+        slot.gb_cmd = uint64_t(cmd);
+        slot.gb_recording = cmd_recording(cmd);
+        strand_query = (uint32_t(now % kCoverageSlots) * kProbeDraws + i) * 2 + 1;
+        break;
+      }
+  }
+  bool allowed = !(g_published + 2 < now + 1 || g_load.quiet(now) || !g_coverage.allow(key, now + 1)) &&
+                 (pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
+                                                                                         : g_gate.allow_prepass(key));
   // Header order prepass (rt_hair_groom_primary_order 0): the G-buffer may read another frame's header than the probe
   // proved (hc2 2026-11-04: adjacent tags in 296 of 300 counted frames, the player half bald). Cards, fail closed.
-  if (!g_order && pass != Pass::Prepass) return probing;
-  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) return probing;
-  if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) return probing;
+  // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
+  // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
+  if (!g_order) allowed = false;
+  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
+  if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) allowed = false;
+  if (!allowed) {
+    // Cards drawn; the masked strand variant follows the native draw (hair_primary_unswap) for the strand samples.
+    if (strand_query != UINT32_MAX) {
+      s->hp_coverage = strand_query | kProbeAfter;
+      g_coverage_period[key].probed = true;
+      return true;
+    }
+    return s->hp_coverage != UINT32_MAX;   // a prepass card query: unswap ends it
+  }
   if (pass == Pass::Gbuffer) {
     g_gate.gbuffer_drew(key);
     auto& period = g_coverage_period[key];
@@ -901,6 +948,11 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   }
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
+  if (strand_query != UINT32_MAX) {   // the swapped strand draw itself is the strand count of its pair
+    s->hp_coverage = strand_query;
+    g_coverage_period[key].probed = true;
+    g_begin_query(cmd, g_coverage_qp, strand_query, VK_QUERY_CONTROL_PRECISE_BIT);
+  }
   const uint32_t ts = uint32_t(now % kTimeSlots);
   if (pass == Pass::Gbuffer && g_qp && g_slot_frame[ts] == now + 1 && g_timed[ts] < kTimed) {
     s->hp_query = (ts * kTimed + g_timed[ts]++) * 2u;
@@ -915,13 +967,17 @@ void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args)
   if (s->hp_query != UINT32_MAX) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query + 1);
   s->hp_query = UINT32_MAX;
   if (s->hp_coverage != UINT32_MAX) {
-    g_end_query(cmd, g_coverage_qp, s->hp_coverage);
-    const auto it = g_probe.find(s->pipe[0]);
-    if (it != g_probe.end()) {
-      g_begin_query(cmd, g_coverage_qp, s->hp_coverage + 1, VK_QUERY_CONTROL_PRECISE_BIT);
-      g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
-      g_dd->vk.CmdDrawIndexed(cmd, args.count, args.instances, args.first, args.vertex_offset, args.first_instance);
-      g_end_query(cmd, g_coverage_qp, s->hp_coverage + 1);
+    if (s->hp_coverage & kProbeAfter) {   // G-buffer: masked strand variant after the native card draw
+      const uint32_t q = s->hp_coverage & ~kProbeAfter;
+      const auto it = g_probe.find(s->pipe[0]);
+      if (it != g_probe.end()) {
+        g_begin_query(cmd, g_coverage_qp, q, VK_QUERY_CONTROL_PRECISE_BIT);
+        g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
+        g_dd->vk.CmdDrawIndexed(cmd, args.count, args.instances, args.first, args.vertex_offset, args.first_instance);
+        g_end_query(cmd, g_coverage_qp, q);
+      }
+    } else {
+      g_end_query(cmd, g_coverage_qp, s->hp_coverage);   // prepass card query, or the swapped strand draw's
     }
     s->hp_coverage = UINT32_MAX;
   }
@@ -983,6 +1039,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     h.flags |= hair_primary::kFlagCamera;
   else
     ++g_probe_no_camera;
+  // The rows' previous points are the last update's: the publish of the previous frame, with its build camera.
+  if (g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == now) {
+    std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
+    h.flags |= hair_primary::kFlagPrevCamera;
+  }
+  g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? now : 0;
+  std::memcpy(g_last_pub_camera, st.cam, sizeof g_last_pub_camera);
   st.pick = {h.tag, rec, uint64_t(cmd)};
   st.recording = cmd_recording(cmd);
   st.n = hair_primary::pack(h, rows, count, st.bytes);

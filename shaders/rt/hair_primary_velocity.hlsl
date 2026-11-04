@@ -92,12 +92,18 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
     if (!hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
   }
-  // The strand drawn is the published pose (the build camera's frame, org from this camera). Its previous-camera-relative
-  // position: build-relative point + build camera - previous camera (build camera = this camera - org). The pose of the
-  // publish before is not in this header (its build camera is not kept): the motion vector carries the camera motion
-  // and not the strand's own animation of the last frame.
-  const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);
-  const float3 prev = cur + gCam.position - org - gPrev.position;
+  // The strand drawn is the published pose (the build camera's frame; build camera = this camera - org). Last frame
+  // showed the previous publish's pose: the rows' previous points, relative to that publish's build camera. In the
+  // previous camera's space: point + its build camera - previous camera. Without previous points or that camera: the
+  // published pose moved with the camera only.
+  float3 prev_build;
+  float3 prev;
+  if (row.w != 0u && hp_prev_build_camera(rec, prev_build)) {
+    prev = lerp(ldf3(hp_at(pool, row.w, i0, 12u)), ldf3(hp_at(pool, row.w, i0 + 1u, 12u)), v) + prev_build - gPrev.position;
+  } else {
+    const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);
+    prev = cur + gCam.position - org - gPrev.position;
+  }
   const float4 c = mul(float4(prev, 1.0), gPrev.vp);
   // 42a95e17's sibling b70cadc5:49, with the strand's previous clip position in place of the card's.
   const float2 prev_px = ((c.xy / c.w) * float2(0.5, -0.5) + 0.5) * gScreen.scale + gScreen.offset;
