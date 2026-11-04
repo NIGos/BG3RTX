@@ -12,7 +12,7 @@ release plan; update the texts when those change.
 | `short_description.txt` | Brief overview / summary | 350 characters max; 320 now |
 | `description.bbcode` | Description tab, BBCode editor ("Source" / BBCode mode) | Nexus allows a long description; this one is about 13 KB |
 | `sticky_post.bbcode` | Posts tab: write it as a comment, then pin it (sticky) and lock replies if you wish | Same BBCode |
-| `img/*.png` | Images referenced by both BBCode files | Each under 1 MB, all together about 1.4 MB |
+| `img/*.png` | Images referenced by both BBCode files | Each under 1 MB, all together about 1.3 MB |
 | `make_graphics.py` | Regenerates `img/` and composes screenshot pairs | Python 3 + Pillow |
 
 ## Images: upload and replace the URLs
@@ -29,7 +29,7 @@ The BBCode uses placeholders like `[img]IMAGE_URL:banner.png[/img]`.
 
 | Image | Size | Used in |
 |---|---|---|
-| `banner.png` | 1200 x 400 | description, top |
+| `banner.png` | 1300 x 372 (Nexus header size) | Nexus header image; also usable at the top of the description |
 | `sticky_banner.png` | 1000 x 190 | sticky post, top |
 | `badges.png` | 935 x 34 | description, under the banner |
 | `divider.png` | 720 x 42 | both, between blocks and at the end |

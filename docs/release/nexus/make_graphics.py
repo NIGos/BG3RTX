@@ -332,6 +332,30 @@ def hero_crop(w, h, focus_y=0.42, zoom=1.0, right=1.0):
     return hero.crop((x0, y0, x0 + w, y0 + h))
 
 
+def hero_fit(w, h, scale, y0):
+    """Hero at `scale`, right-aligned, so the whole lantern fits a short banner.
+
+    The strip left of the painting continues its dark left edge (stretched and
+    blurred); the left shade covers it, so no seam shows.
+    """
+    hero = Image.open(os.path.join(ORN, "hero-lantern.png")).convert("RGB")
+    hw, hh = int(hero.width * scale), int(hero.height * scale)
+    hero = hero.resize((hw, hh), Image.LANCZOS).crop((0, y0, hw, y0 + h))
+    img = Image.new("RGB", (w, h))
+    pad = w - hw
+    if pad > 0:
+        ramp_w = 160
+        edge = hero.crop((0, 0, 24, h)).resize((1, h), Image.BOX).resize((pad + ramp_w, h), Image.BILINEAR)
+        img.paste(edge.filter(ImageFilter.GaussianBlur(16)), (0, 0))
+        hero_m = Image.new("L", (hw, h), 255)
+        ramp = Image.linear_gradient("L").rotate(90).resize((ramp_w, h))
+        hero_m.paste(ImageChops.invert(ramp), (0, 0))
+        img.paste(hero, (pad, 0), hero_m)
+    else:
+        img.paste(hero.crop((hw - w, 0, hw, h)), (0, 0))
+    return img
+
+
 def left_shade(img, reach=0.62, max_alpha=0.88, color=BG_DEEP):
     w, h = img.size
     m = Image.new("L", (w, 1))
@@ -354,32 +378,30 @@ def edge_rule(img, inset=6, color=GOLD, alpha=150):
 
 # ---------------------------------------------------------------- graphics
 def make_banner():
-    W, H = 1200, 400
-    img = hero_crop(W, H, focus_y=0.455, zoom=1.06)
-    img = left_shade(img, reach=0.70, max_alpha=0.93)
+    """Nexus header banner: exactly 1300 x 372."""
+    W, H = 1300, 372
+    img = hero_fit(W, H, scale=0.70, y0=153)
+    img = left_shade(img, reach=0.66, max_alpha=0.93)
     img = vignette(img, 0.35)
     img = edge_rule(img, inset=8)
-    img = corner_frame(img, 8, 0, 0.8)
+    img = corner_frame(img, 8, 0, 0.78)
     d = ImageDraw.Draw(img)
 
-    x0 = 76
-    em = emblem(104)
-    img.alpha_composite(em, (x0, 92))
+    x0, top = 92, 72
+    img.alpha_composite(emblem(104), (x0, top))
     word = lato(88, semibold=True)
-    end = text_spaced(d, (x0 + 128, 178), "BG3RTX", word, TEXT, tracking=3)
-    # beta tag
+    end = text_spaced(d, (x0 + 128, top + 86), "BG3RTX", word, TEXT, tracking=3)
     tag_f = lato(15, semibold=True)
     tw = spaced_width("BETA", tag_f, 2.5)
-    tx, ty = end + 18, 112
+    tx, ty = end + 18, top + 20
     d.rounded_rectangle((tx, ty, tx + tw + 20, ty + 26), radius=4, outline=GOLD, width=1)
     text_spaced(d, (tx + 10, ty + 19), "BETA", tag_f, GOLD_HI, tracking=2.5)
 
-    d.text((x0 + 2, 252), "Ray-traced lighting for Baldur's Gate 3", font=display(36), fill=TEXT, anchor="ls")
-    # divider under the tagline
+    d.text((x0 + 2, top + 158), "Ray-traced lighting for Baldur's Gate 3", font=display(36), fill=TEXT, anchor="ls")
     div = render_svg(os.path.join(ORN, "divider.svg"), 0.9)
-    img.alpha_composite(div, (x0 - 4, 272))
+    img.alpha_composite(div, (x0 - 4, top + 176))
     small = lato(16, semibold=True)
-    text_spaced(d, (x0 + 2, 338), "VULKAN LAYER   \u00b7   DLSS RAY RECONSTRUCTION   \u00b7   NVIDIA RTX",
+    text_spaced(d, (x0 + 2, top + 238), "VULKAN LAYER   ·   DLSS RAY RECONSTRUCTION   ·   NVIDIA RTX",
                 small, GOLD_HI, tracking=2.2)
     save(img.convert("RGB"), "banner.png")
 
