@@ -37,3 +37,5 @@ because no S6 publication run exists yet.
 
 Final fake negative/positive queue dryrun passed all checks at 11:34; compact
 generator regression passed 1/1. Offline receipts are in `s6-lint.json`.
+
+Final outcome (2026-11-04): cp5 S6 rejected for release: 185,373 attempts, 16,616 unique candidates, 0 published; all rejected by shader_pair (HLOD), with 146,875 missing UV. See [publication outcome](../../../docs/TRACK_D_REFLECTIONS.md) and [backlog](../../../docs/BACKLOG_20261104.md).

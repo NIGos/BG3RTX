@@ -13,3 +13,5 @@ Every ON must preserve post-water float energy and composition/tier coverage wit
 Run the shading qualification first; bit jobs measure optimization equivalence, not the correctness of mode 2. Predictions were written before validation; the coordinator must commit them before live runs because this workspace's Git metadata is read-only. Final phases and queue restoration clear overrides. No live qualification is claimed by a synthetic receipt.
 
 Finite cold-start wait is 180 s; subsequent key/producer waits are capped at 30 s (producer sanity 11.428 s). Including every timeout plus 120 s load, each launch is bounded by 799.428 s (13.33 min). Timeout is INVALID, never evidence to reject rendering.
+
+Final outcome (2026-11-04): off-screen hit shading rejected for release; compose refused 60/60 passes for light binding 21-22 (input lifetime 57-60/60), despite 2.37 M diagnostic hidden hits per period. Bit 1 remains blocked; bits 2/4/7 rejected. Bit 4: 2.107 -> 2.100 ms, inconsistent compose saving; bits 7: 2.105 -> 0.529 ms without an energy pass. See [final water outcomes](../../../docs/TRACK_D_REFLECTIONS.md) and [backlog](../../../docs/BACKLOG_20261104.md).
