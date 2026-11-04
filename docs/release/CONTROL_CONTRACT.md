@@ -1,0 +1,60 @@
+# Release control contract (stream A, 2026-11-04)
+
+Release means effective `dev=0`; `dev=1` exposes developer controls. Metadata is in
+`common/settings.h`; schema retains hidden metadata with `developer: true`.
+Bridge must use `knob_visible` / `choice_visible` for rendering AND set requests.
+Presets: Low / Medium / High / Ultra, plus Custom indicator; values below are L/M/H/U.
+Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legacy index 2 is hidden.
+
+| Page | Label (`knob id`) | Raw keys | Choices / range | Presets | Apply |
+|---|---|---|---|---|---|
+| Lighting | Ray Reconstruction (`rr`) | `rr` | Off / On | Off / On / On / On | hitch |
+| Lighting | Ray-traced geometry (`rt_geometry`) | `rt_build`, `rt_alpha` | Off / Opaque / Full | Off / Opaque / Full / Full | restart |
+| Lighting | Sun shadows (`sun_shadows`) | `rt_shadows`, `contact_shadows`, `rt_cascade_casters` | Screen-space / Ray-traced / Ray-traced + hidden roofs | Screen-space / Ray-traced / Ray-traced / Ray-traced + hidden roofs | live |
+| Lighting | Global illumination (`gi`) | `gi`, `gi_rt`, `gi_rays`, `gi_steps`, `gi_rr_rays` | Off / Screen-space / Ray-traced / Ray-traced High | Screen-space / Ray-traced / Ray-traced / Ray-traced High | live |
+| Lighting | Local light shadows (`local_shadows`) | `rt_local_shadows`, `ls_samples`, `ls_shadowed` | Off / Fast / Full | Off / Fast / Full / Full | live |
+| Lighting | RT lighting strength (`rt_intensity`) | `gi_strength`, `ls_strength`, `rf_strength` | 50-100%, step 5% | 100 / 100 / 100 / 100 | live |
+| Lighting | Off-screen bounce light (`exp_hidden_surface`) | `rt_hit_material`, `rt_hit_material_instanced`, `rt_hit_material_wind_rgb`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`, `rf_hit_gi`, `rt_hit_emission`, `rt_emissive`, `gi_far`, `gi_far_m` | Off / Near / Far (6 m) | Off / Off / Off / Far (6 m) | restart |
+| Lighting | Box light shadows (`box_lights`) | `ls_box`, `ls_box_honour_shadow` | Off / On | Off / Off / Off / On | live |
+| Lighting | Temporal depth of field and bloom (`rr_post_temporal`) | `rr_post_temporal` | Off / On | Off / Off / Off / On | live |
+| Lighting | Hair shadows and occlusion (`exp_native_coverage`) | `rt_native_hair`, `rt_native_scalp`, `rt_native_tileset` | Off / Stock hair + scalp | Off / Off / Off / Stock hair + scalp | restart |
+| Surfaces | Reflections (`reflections`) | `rt_reflections`, `rf_max_rough` | Off / Glossy / Standard / Rough | Off / Glossy / Standard / Rough | live |
+| Surfaces | Water lighting (`exp_water`) | `rt_water_geometry`, `rt_water_reflections`, `rt_water_compose`, `rt_water_shadows`, `rt_water_ls_shadows`, `rt_water_game_shadow`, `rt_water_refraction` | Off / Reflections / + Shadows / + Refraction | Off / Off / Off / + Refraction | restart |
+| Performance | Frame generation (`frame_generation`) | `fg` | Off / 2x / 3x / 4x | 2x / 2x / 2x / 2x | restart |
+| Performance | Rendered frame limit (`fps_cap`) | `fps_cap` | Off / 30-240 fps, step 1 | 0 / 0 / 0 / 58 | live |
+| Performance | NVIDIA Reflex (`reflex`) | `reflex` | Off / On / On + Boost | On / On / On / On | live |
+
+Apply exceptions: FG Off/on restarts; 2x/3x/4x live. Water and stock-hair Off live;
+water/stock-hair enable restarts. Bounce capture first enable/disable restarts.
+RT strength affects indirect light, local shadows and reflections. Frame limit counts rendered frames.
+Capability/dependency previews, startup prerequisites and existing hardware/local-mask fallback remain.
+
+Advanced has no release controls; omit its navigation and Experimental disclosure.
+Help & support owns compatibility, memory, overlay help and local reports. Keep Ctrl+Shift+F9;
+omit experimental F10 instructions. Stream B owns navigation/copy and native/WebView parity.
+
+Automatic release policies (also after stale user INI layering):
+- `rr_post=1`; `rt_trace_scale=1.0` in all presets. Half is developer only.
+- `rt_hair_pool_trim=1` whenever stock hair capture is selected; otherwise 0.
+- OMM/dynamic OMM/fine LOD and offline masks On only for Ultra + Full geometry.
+  High stays Off until its gate passes. Unsupported hardware/missing masks retain native fallback.
+- Water camera correction follows water; wf9 is still a release blocker, not a qualification claim.
+- Near/Far writes material/instanced/wind capture, direct/sun bounce and emission mode 1.
+- Box On writes `ls_box=2`, `ls_box_honour_shadow=1`; obsolete mode 1 migrates to On.
+- Stale Far + reflections migrates to Far, Tilesets to stock hair, Full + shadowed lights to Full.
+- Hidden candidates and perf_* overrides are reset; unknown unrelated keys remain preserved.
+- Release profile no longer pins `ls_box` or `rt_emissive` Off.
+
+Hidden knob ids (developer mode retains them):
+- `rt_trace_scale`, `water_surface_fresnel`, `exp_omm`, `exp_vt_alpha_masks`
+- `exp_water_hit_shade`, `exp_water_hit_cost`, `rr_post`, `exp_compact_hit_state`
+- `exp_alpha_metadata_cache`, `exp_water_empty_tiles`, `exp_water_compose_shift`, `exp_hair_groom`
+- `exp_hair_groom_primary`, `exp_hair_fibre`, `exp_hair_fibre_gi`, `exp_hair_groom_crowd`
+- `exp_hair_groom_shadow_t`, `exp_hair_primary_passes`, `exp_hair_primary_order`, `exp_hair_groom_tips`
+- `exp_hair_pool_trim`, `exp_hair_physical_origin`, `exp_alpha_spill`, `exp_hit_paks`
+- `exp_hit_reference`, `exp_ls_exact_k`, `exp_current_sun`
+Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed;
+exp_hidden_surface Far + reflections; exp_native_coverage + Tilesets.
+Fresnel remains Off pending user verdict. Three GPU candidates remain rejected/Off (08:12).
+No shader source, define, specialization ID or variants request change; request delta 0.
+Bridge tests need stream B updates; renderer references to retired water keys remain outside A ownership.
