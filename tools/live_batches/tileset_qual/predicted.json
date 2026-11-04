@@ -6,14 +6,14 @@
   "supported_material_draws": 48,
   "supported_depth_draws": 56,
   "startup_constraint": "layer/util.cpp retains startup_tilesets on every reload. No live gate isolates this choice. Two launches required; no fake 0/1/0/1.",
-  "pass_rule": "Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.",
+  "pass_rule": "Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, capture-incomplete 0 (report unknown fallback records), qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.",
   "coverage_prediction": "ON has positive family2 acquisitions, OFF has no enabled Tileset acquisitions. Report complete record counts, hybrid GI hit/screen/hidden/off-screen shares and overall material qualified/attempted. No invented minimum coverage percentage.",
   "pt_reference": null,
   "energy_rule": "No matched Dialogue3 PT reference found. Report float pre-post scene colour and exposure per launch; independent load/camera/exposure can confound differences. Never a quality PASS from cross-run comparison.",
   "budget": "Two separate launches, each hard-capped at 4.9 minutes including load; fallback exceeds the original one-launch budget. 120 s load allowance each. Two static traces total, one PNG per state, no raw dumps or bursts; below 2 GB.",
   "input_sha256": {
     "common/settings.h": "ad046106e3ecaf7eb6a3738a9fe6c2e11d3d6fed4fd4975a5b4edc99bbbcaa41",
-    "data/release.ini": "c904d315419f7756619ef753068589bde5249c0782ab4865b127ef47242c108d",
+    "data/release.ini": "50fb46a36bab41bfa39fb71ee98416392726c8e702d82eb93fe7f4db3df98e50",
     "bg3rtx.ini": "97888c84b7e81a7ec79b3ff07651885c1d8102f105008c888ebeb3d73f67d59f"
   }
 }

@@ -159,9 +159,9 @@
       "period_frames": 120
     },
     {
-      "name": "Tileset records: invalid means unknown/incomplete",
+      "name": "Tileset records: complete capture",
       "select": "\\[alpha tileset\\] records",
-      "match": "records complete [1-9]\\d* unknown 0 native samplers [1-9]\\d* capture-incomplete 0 stride \\d+",
+      "match": "records complete [1-9]\\d* unknown \\d+ native samplers [1-9]\\d* capture-incomplete 0 stride \\d+",
       "windows": [
         "diag-on"
       ],

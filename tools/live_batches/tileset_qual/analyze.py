@@ -15,6 +15,12 @@ from tools.m4_promotion_gate import Run
 HERE = Path(__file__).resolve().parent
 
 
+def producer_lines(lines, window, rx):
+    """Accept the first acknowledged period; skip straddling legacy periods."""
+    return queue_gates.complete_period_lines(
+        [(t, line) for t, line in lines if re.search(rx, line)], window)
+
+
 def extract(state, log, runner):
     job = json.loads((HERE / 'jobs' / f'ts1-native-tileset-{state}.json').read_text())
     plan_path = HERE / 'plans' / f'ts1-native-tileset-{state}.json'
@@ -35,11 +41,10 @@ def extract(state, log, runner):
     windows = queue_gates.windows(motion, plan, lines)
     costs, coverage = {}, []
     for w in windows:
-        selected = [line for t, line in lines if w['applied'] <= t < w['end']]
         if w['label'].startswith('cost-'):
             for key, rx in [('rt_ms', r'rt passes: GPU cost ([0-9.]+) ms/frame'),
                             ('gi_ms', r'gi: GPU cost ([0-9.]+) ms/frame')]:
-                samples = [float(m[1]) for line in selected if (m := re.search(rx, line))][1:]
+                samples = [float(re.search(rx, line)[1]) for line in producer_lines(lines, w, rx)]
                 costs[key] = statistics.median(samples) if samples else None
                 if not samples:
                     failures.append('missing complete cost samples: ' + key)
@@ -47,13 +52,14 @@ def extract(state, log, runner):
             # Retain complete producer lines; include both coverage numerator and denominator.
             for rx in [r'\[alpha tileset\] records', r'hit material tileset \(',
                        r'rt stats \(\d+ frames\): hybrid GI', r'hit material \(\d+ frames\): attempted']:
-                coverage += [line for line in selected if re.search(rx, line)][1:]
+                coverage += producer_lines(lines, w, rx)
     coverage_metrics = {}
     for key, rx in [('gi_hit_pct', r'hybrid GI [0-9.]+M rays/frame, ([0-9.]+)% hit'),
                     ('gi_screen_pct', r'of the hits ([0-9.]+)% shaded from the screen'),
                     ('gi_hidden_pct', r'([0-9.]+)% on screen but hidden'),
                     ('gi_offscreen_pct', r'([0-9.]+)% off screen'),
                     ('tileset_complete_records', r'records complete (\d+)'),
+                    ('tileset_unknown_records', r'records complete \d+ unknown (\d+)'),
                     ('tileset_family2_acquisitions', r'qualified family2 (\d+)')]:
         values = [float(m[1]) for line in coverage if (m := re.search(rx, line))]
         if values:
