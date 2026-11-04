@@ -15,15 +15,20 @@ groupshared uint gsRefused[64];
 groupshared uint gsOther[64];
 groupshared uint gsTraced;
 groupshared uint gsHit;
+groupshared uint gsTagCount[256];   // 4 tags (tag - j) x 64 grooms: common/hair_primary.h kTagCountOffset
 
 [numthreads(256, 1, 1)]
 void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u, gsOther[gi] = 0u;
   if (gi == 0u) gsTraced = 0u, gsHit = 0u;
+  gsTagCount[gi] = 0u;
   GroupMemoryBarrierWithGroupSync();
   const uint64_t rec = (uint64_t(pc.header_hi) << 32) | uint64_t(pc.header_lo);
   if (id.x < pc.n) {
     const uint4 e = Pixels.Load4(id.x * 16u);
+    if (e.x != 0xFFFFFFFFu && (e.x >> 24) < 64u)   // strand entries of the four newest tags, per groom
+      for (uint j = 0u; j < 4u; ++j)
+        if (e.w == hp_seal(e.xyz, pc.tag - j)) { InterlockedAdd(gsTagCount[j * 64u + (e.x >> 24)], 1u); break; }
     if (e.w == hp_seal(e.xyz, pc.tag)) {   // diagnostics: entries the strand variant traced this frame, and with a strand
       InterlockedAdd(gsTraced, 1u);
       if (e.x != 0xFFFFFFFFu) InterlockedAdd(gsHit, 1u);
@@ -48,6 +53,7 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   if (gi < 64u && gsCount[gi] != 0u) Counts.InterlockedAdd(gi * 4u, gsCount[gi]);
   if (gi < 64u && gsRefused[gi] != 0u) Counts.InterlockedAdd(256u + gi * 4u, gsRefused[gi]);
   if (gi < 64u && gsOther[gi] != 0u) Counts.InterlockedAdd(512u + gi * 4u, gsOther[gi]);
+  if (gsTagCount[gi] != 0u) Counts.InterlockedAdd(1872u + gi * 4u, gsTagCount[gi]);
   if (gi == 0u && gsTraced != 0u) Counts.InterlockedAdd(1792u, gsTraced);   // common/hair_primary.h kTracedOffset
   if (gi == 0u && gsHit != 0u) Counts.InterlockedAdd(1796u, gsHit);
   if (id.x == 0u && rec != 0u)   // the sampled ray (kRaySampleOffset 1808 <- header kRayDebugOffset 3168)

@@ -352,6 +352,17 @@ int main() {
     g.observe(0xA, 26, 93085, 237443);
     CHECK(!g.allow(0xA, 26));
   }
+  {   // The count may run on the GPU before the last G-buffer passes: the record holds an older tag's entries (hv7
+      // 2026-11-04: tag - 2). The evidence comes from the newest tag with entries, never from an empty newest tag.
+    using namespace hair_primary;
+    const uint32_t two_behind[kCountTags] = {0, 0, 166019, 0};
+    CHECK(newest_counted_tag(two_behind) == 2);
+    const uint32_t current[kCountTags] = {120, 90, 0, 0};
+    CHECK(newest_counted_tag(current) == 0);
+    const uint32_t none[kCountTags] = {0, 0, 0, 0};
+    CHECK(newest_counted_tag(none) == -1);
+    CHECK(kTagCountOffset == 1872 && kCountBytes == kTagCountOffset + kCountTags * kMaxGrooms * 4);
+  }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
 }

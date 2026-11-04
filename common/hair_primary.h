@@ -41,7 +41,18 @@ constexpr uint32_t kTransmitOffset = kOtherOffset + kMaxGrooms * 4;   // 768
 // entry) and those with a strand, and one sampled ray of the strand G-buffer variant (kRayDebugOffset, 64 bytes).
 constexpr uint32_t kTracedOffset = kTransmitOffset + kMaxGrooms * 16;   // 1792
 constexpr uint32_t kRaySampleOffset = kTracedOffset + 16;
-constexpr uint32_t kCountBytes = kRaySampleOffset + 64;
+// Then strand pixels per groom for the four newest applied tags (tag, tag - 1, tag - 2, tag - 3): the count is recorded
+// after this frame's G-buffer pass but may run on the GPU before the last G-buffer passes (hv7 2026-11-04: the record
+// held tag - 2 when the count looked for tag; every count read 0). The layer takes the newest tag with entries.
+constexpr uint32_t kCountTags = 4;
+constexpr uint32_t kTagCountOffset = kRaySampleOffset + 64;   // 1872
+constexpr uint32_t kCountBytes = kTagCountOffset + kCountTags * kMaxGrooms * 4;
+// The newest of the kCountTags tags (j = 0 newest) whose entries were found; -1 none.
+inline int newest_counted_tag(const uint32_t totals[kCountTags]) {
+  for (int j = 0; j < int(kCountTags); ++j)
+    if (totals[j]) return j;
+  return -1;
+}
 // Strand colour samples (C2 shadow transmittance), after the header in the same buffer, never written by the layer's
 // update: per groom k 32 bytes, float4 (albedo rgb, fibre roughness) then the frame tag that wrote it. The strand
 // G-buffer variant stores one fragment's values per 8 x 8 pixel block (last writer wins: a sample of the groom's
