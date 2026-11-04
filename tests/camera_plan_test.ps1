@@ -216,6 +216,24 @@ foreach ($bad in @(@{wait_logs=@('ready')}, @{wait_log=@('ready')},
   try { Assert-CameraPlanFields $bad } catch { $rejected=$true }
   Check $rejected 'unknown or invalid readiness/recenter fields fail closed'
 }
+# Cached/no-op transitions need cfg values, not synthetic build announcements.
+$resident=@{set='rr_post_temporal=1,gi_strength=1';wait_log=@('gi: gi/test.hlsl generation ', '\[watch\].*pipelines 0');wait_log_fresh=@('\[watch\].*pipelines 0')}
+$ack="[cfg] settings read`n[cfg] keys: rr_post_temporal=1 gi_strength=1.00"
+Check (Test-CameraPlanReady $resident $ack $ack) 'resident variant releases at matching cfg without watch or generation'
+Check (-not (Test-CameraPlanReady $resident $ack '[cfg] settings read')) 'settings read alone does not acknowledge values'
+Check (-not (Test-CameraPlanReady $resident $ack "[cfg] settings read`n[cfg] keys: rr_post_temporal=0")) 'wrong cfg value blocks resident transition'
+$start="$ack`ngi: gi/test.hlsl building in the background"
+Check (-not (Test-CameraPlanReady $resident $start $start)) 'post-ack build requires completion'
+$crlfStart=($ack+"`nunrelated.hlsl other_pass: building in the background").Replace("`n","`r`n")
+Check (-not (Test-CameraPlanReady $resident $crlfStart $crlfStart)) 'CRLF logs retain all new outstanding build records'
+
+Check (@(Get-CameraPlanMissing $resident $start $start)[0] -eq 'gi: gi/test.hlsl generation ') 'missing reason names outstanding completion'
+Check (Test-CameraPlanReady $resident "$start`ngi: gi/test.hlsl generation 2" $start) 'completion of actual build releases resident wait'
+$water="$ack`nrt/water_compose.hlsl water_compose: building in the background"
+Check (-not (Test-CameraPlanReady $resident $water $water)) 'outstanding water build blocks'
+Check (Test-CameraPlanReady $resident "$water`n[water] rt/water_compose.hlsl water_compose: built" $water) 'water completion resolves outstanding build'
+$resident.wait_log += 'explicit producer'
+Check (-not (Test-CameraPlanReady $resident $ack $ack)) 'conditional pipeline witnesses preserve explicit producer wait'
 # Execute the actual runtime wait block with a synthetic log and clock, no game.
 $begin=$runner.IndexOf('      if ($step.wait_log -and -not $phaseReady)')
 $end=$runner.IndexOf('      if ($step.recenter', $begin)
@@ -231,6 +249,6 @@ while ($true) { . $waitBlock; $after=$true; break }
 Check ($after -and $phaseReady -and $elapsed -eq 0 -and $phaseStartMs -eq 20000) 'cached readiness resumes phase clock at zero'
 $step.wait_log=@('missing');$phaseReady=$false;$phaseWaitAt=10;$after=$false;$result=''
 while ($true) { . $waitBlock; $after=$true; break }
-Check (-not $after -and $result -eq 'pipeline readiness timed out: cached') 'actual runtime timeout exits before downstream capture'
+Check (-not $after -and $result -eq 'pipeline readiness timed out: cached; missing: missing') 'actual runtime timeout exits before downstream capture'
 Check ($runner -match '(?s)if \(\$step.recenter.*?Send-PlanMouse 0x0200 0.*?\[motion-recenter\]') 'recenter posts pointer centre and emits marker'
 Write-Host "$count camera-input and permission checks passed"
