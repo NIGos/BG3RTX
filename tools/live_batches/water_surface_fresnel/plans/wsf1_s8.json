@@ -12,7 +12,7 @@
     "motion_end": 25.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0",
+    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0,dump_preview_f32=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -26,11 +26,11 @@
     "seconds": 1.1,
     "capture_at": 0,
     "serial": 0,
-    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0",
+    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0,dump_preview_f32=0",
     "wait_log": [
       "\\[water\\] compose GPU"
     ],
-    "wait_log_timeout": 9.447999999996682
+    "wait_log_timeout": 9.464000000007218
   },
   {
     "label": "prefetch-interface-on",
@@ -45,7 +45,7 @@
     "motion_end": 5.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=1",
+    "set": "rt_water_surface_fresnel=1,dump_preview_f32=1",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -62,16 +62,16 @@
     "label": "partition-static-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.9,
+    "seconds": 12.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.9,
-    "motion_end": 11.9,
+    "motion_start": 12.0,
+    "motion_end": 12.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=1",
+    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=1,dump_preview_f32=1",
     "trace_at": [
       6,
       9
@@ -84,22 +84,22 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "partition-static-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.9,
+    "seconds": 12.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.9,
-    "motion_end": 11.9,
+    "motion_start": 12.0,
+    "motion_end": 12.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=1,qa_exposure_hold=1",
+    "set": "rt_water_surface_fresnel=1,qa_exposure_hold=1,dump_preview_f32=1",
     "trace_at": [
       6,
       9
@@ -112,22 +112,22 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "partition-static-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.9,
+    "seconds": 12.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.9,
-    "motion_end": 11.9,
+    "motion_start": 12.0,
+    "motion_end": 12.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=1",
+    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=1,dump_preview_f32=1",
     "trace_at": [
       6,
       9
@@ -140,22 +140,22 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "partition-static-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 11.9,
+    "seconds": 12.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 11.9,
-    "motion_end": 11.9,
+    "motion_start": 12.0,
+    "motion_end": 12.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=1,qa_exposure_hold=1",
+    "set": "rt_water_surface_fresnel=1,qa_exposure_hold=1,dump_preview_f32=1",
     "trace_at": [
       6,
       9
@@ -168,7 +168,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-turn-0",
@@ -183,7 +183,7 @@
     "motion_end": 12.0,
     "pixels_per_second": 1,
     "direction": 1,
-    "set": "rt_water_surface_fresnel=0",
+    "set": "rt_water_surface_fresnel=0,dump_preview_f32=0",
     "turn_mode": "keys",
     "wait_log": [
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,",
@@ -208,7 +208,7 @@
     "motion_end": 12.0,
     "pixels_per_second": 1,
     "direction": 1,
-    "set": "rt_water_surface_fresnel=1",
+    "set": "rt_water_surface_fresnel=1,dump_preview_f32=0",
     "turn_mode": "keys",
     "wait_log": [
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
@@ -218,7 +218,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-turn-2",
@@ -233,7 +233,7 @@
     "motion_end": 12.0,
     "pixels_per_second": 1,
     "direction": -1,
-    "set": "rt_water_surface_fresnel=0",
+    "set": "rt_water_surface_fresnel=0,dump_preview_f32=0",
     "turn_mode": "keys",
     "wait_log": [
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,",
@@ -243,7 +243,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-turn-3",
@@ -258,7 +258,7 @@
     "motion_end": 12.0,
     "pixels_per_second": 1,
     "direction": -1,
-    "set": "rt_water_surface_fresnel=1",
+    "set": "rt_water_surface_fresnel=1,dump_preview_f32=0",
     "turn_mode": "keys",
     "wait_log": [
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
@@ -268,7 +268,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "restore",
@@ -283,7 +283,7 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0,dump_raw=0,fg_snap=0",
+    "set": "rt_water_surface_fresnel=0,qa_exposure_hold=0,dump_raw=0,fg_snap=0,dump_preview_f32=0",
     "wait_log": [
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -292,6 +292,6 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]
