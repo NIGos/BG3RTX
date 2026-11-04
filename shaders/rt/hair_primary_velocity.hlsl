@@ -54,7 +54,10 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint tag = ld(rec), width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
   // The card fragment's camera-relative point, as in the G-buffer variant (derivatives before any discard).
   const float4 view = asfloat(vk::RawBufferLoad<uint4>(rec + 40u, 8));
-  const float2 ndc = (pos.xy - view.xy) / view.zw * 2.0 - 1.0;
+  // The clip position of the vp matrix: the game's vertex shaders write gl_Position.y = -clip.y (rt/xfb_to_world.hlsl,
+  // the groom points' space; b70cadc5's motion vector maps clip y with -0.5), so clip y is minus the Vulkan NDC y
+  // (hv6 2026-11-04: rays mirrored vertically, x and z on the groom, y 0.66 m off: every strand ray missed).
+  const float2 ndc = ((pos.xy - view.xy) / view.zw * 2.0 - 1.0) * float2(1.0, -1.0);
   const float4x4 inv = hp_inverse4(gCam.vp);
   const float4 h = mul(float4(ndc, pos.z, 1.0), inv);
   const float3 pc = h.xyz / h.w;

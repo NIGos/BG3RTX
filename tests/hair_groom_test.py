@@ -617,6 +617,33 @@ def test_publish_lock():
           "rt_this_build_camera(" in src and "rt_build_camera(" not in src)
 
 
+def test_ndc_ray():
+    # rt/hair_primary_gbuffer.hlsl and _velocity.hlsl: a card fragment's camera-relative point from its pixel. The game's
+    # vertex shaders write gl_Position = (W, 1) vp with y negated (rt/xfb_to_world.hlsl, the groom points' space), so
+    # the shader's NDC y must be negated before the inverse vp (hv6 2026-11-04: mirrored rays missed every strand).
+    rng = np.random.default_rng(5)
+    f, n_, fa = 1.2, 0.1, 1000.0
+    proj = np.array([[f / 1.5, 0, 0, 0], [0, f, 0, 0], [0, 0, n_ / (fa - n_), 1], [0, 0, fa * n_ / (fa - n_), 0]])
+    view = np.eye(4)
+    view[:3, :3] = np.linalg.qr(rng.normal(size=(3, 3)))[0]
+    vp = view @ proj                                   # row vectors: clip = (W, 1) @ vp
+    w_, h_ = 2560.0, 1067.0
+    ok = True
+    for _ in range(50):
+        d = rng.normal(size=3)
+        P = (d / np.linalg.norm(d)) * rng.uniform(1, 20)
+        clip = np.append(P, 1.0) @ vp
+        if clip[3] <= 0.1:
+            continue
+        glpos = clip * np.array([1, -1, 1, 1])        # the game's y negation
+        ndc_vk = glpos[:2] / glpos[3]
+        pix = (ndc_vk + 1) / 2 * np.array([w_, h_])   # Vulkan viewport (0, 0, w, h)
+        ndc = ((pix - 0) / np.array([w_, h_]) * 2 - 1) * np.array([1, -1])   # the shaders' formula
+        hh = np.array([ndc[0], ndc[1], glpos[2] / glpos[3], 1.0]) @ np.linalg.inv(vp)
+        ok = ok and np.allclose(hh[:3] / hh[3], P, rtol=1e-6, atol=1e-6)
+    check("strand ray: pixel -> negated NDC y -> inverse vp returns the camera-relative point", ok)
+
+
 def test_primary():
     rng = np.random.default_rng(5)
     v = rng.normal(size=(20000, 3))
@@ -988,7 +1015,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)
