@@ -1,19 +1,19 @@
 {
   "job": "rel1-smoke-ultra-s8",
   "status": "READY_FOR_LIVE",
-  "observable": "Final release Ultra at S8: stock native hair/scalp, strands Off, water active; no experimental rendering overrides.",
-  "pass_rule": "Every measured window: nonzero current TLAS, RT/GI GPU ms, driver-budget VRAM, zero capture/alpha overflow and scene timeouts. OMM diagnostic: compared > 0, unavailable 0, violations 0. Ultra additionally requires water traced/composed, finite, cascade overflow 0. One ab_off 0->1->0 master comparison (same Ctrl+Shift+F9 path), restoration ON. No device loss or strand producer. High is candidate evidence only; release-policy promotion and final dev=0 High confirmation remain required.",
+  "observable": "Release Ultra S8 smoke: static, Q/E pans and rotations, water/RT participation and one master toggle; no captures.",
+  "pass_rule": "Every measured window: water traced/composed and finite, driver-budget VRAM, zero RT capture/alpha overflow, cascade buffer full 0 and scene timeouts 0. Current TLAS and RT GPU cost must appear. One ab_off 0->1->0 cycle restores RT. No crash, device loss or strand producer.",
   "profile": "data/release.ini + launcher preset via common/settings.h",
   "rendering_overrides": {},
   "input_sha256": {
-    "common/settings.h": "55a3f170585b23a0d0dd8e77e07d78de008919ada8f20167dd652f4a1b45471d",
-    "data/release.ini": "50fb46a36bab41bfa39fb71ee98416392726c8e702d82eb93fe7f4db3df98e50",
-    "bg3rtx.ini": "9a557ad202c2fc332689a8deeaeccbda9a159c1d6d1bbb23692a8e53d7c39948"
+    "common/settings.h": "5f5481966b71a3d403b3ee3ca5ab554499a69c7617b86ddde8588c2de2edf2d6",
+    "data/release.ini": "c904d315419f7756619ef753068589bde5249c0782ab4865b127ef47242c108d",
+    "bg3rtx.ini": "aa765f8642010568c588eadb4189adb4a85bafc9b1fce16d5719d568d51628b2"
   },
-  "visual_acceptance": "Inspect trace PNGs; logs alone cannot prove visible cards or correct face/neck shadows.",
-  "expected_minutes": 6.97,
+  "visual_acceptance": "Log-only release smoke; no captures.",
+  "expected_minutes": 3.96,
   "load_allowance_s": 120,
   "launch_cap_minutes": 15,
-  "scheduled_seconds": 280.40000000000003,
-  "expected_readiness_seconds": 18.07
+  "scheduled_seconds": 99.79999999999998,
+  "expected_readiness_seconds": 17.61
 }

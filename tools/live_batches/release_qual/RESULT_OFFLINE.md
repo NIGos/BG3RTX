@@ -1,35 +1,26 @@
-# Offline preparation receipt, 2026-11-04
+# Lean release offline receipt, 2026-11-04
 
-Status: READY_FOR_LIVE preparation only. No game launched and no real pending
-inbox written. No live authorization, rendering quality pass or release approval.
+Status: READY_FOR_LIVE preparation only. No game launched or queue inbox written.
 
-| Job | live_flow preflight | lean_dryrun negative / positive | Expected minutes |
-| --- | --- | --- | --- |
-| rel1-smoke-ultra-s8 | PASS | INVALID as expected / valid completed | 6.97 |
-| rel2-smoke-high-s8 | PASS | INVALID as expected / valid completed | 6.97 |
-| rel3-stock-hair-dialogue1 | PASS | INVALID as expected / valid completed | 5.41 |
+| Job | Expected minutes including 120 s load | Captures |
+| --- | --- | --- |
+| rel1-smoke-ultra-s8 | 3.96 | None |
+| rel3-stock-hair-dialogue1 | 4.76 | One static PNG for visible cards and face/neck shadows |
 
-All three pass shared camera sampling, diagnostic roles, scene-wait and capacity
-lints, trace markers, 512 MB batch budgets (130 MB each), unfocused mode and
-15-minute launch limits. `batch_jobs_lint_test.py`: 6/6 existing regression tests
-pass; the new prepared jobs are checked individually by live_flow/lean_dryrun,
-not added to the active authorized inventory. `git diff --check` passes.
+High was dropped: it keeps OMM/masks off. Ultra retains static, Q/E pans,
+both rotations, capacity/scene-wait/budget/RT-water gates and one master OFF/ON
+cycle. The twice-qualified OMM same-ray diagnostic and smoke captures are removed.
 
-Profile comparison: zero rendering differences from the exported launcher Ultra
-in rel1/rel3. Rel2 differs only in dev=1 plus the four documented OMM/mask keys.
-The run-wide strand exclusion gate accepts no strand producer and rejects a
-synthetic primary-publish line, including before measured windows.
+Regenerated with --profile-exe "$env:TEMP/bg3rtx-release-profile.exe", the
+existing exporter path documented in README.md. Rendering overrides remain empty.
+Shared live_flow preflight passes both jobs; batch_jobs_lint_test.py passes 6/6.
+The older synthetic dryrun receipts predate this edit and were not rerun.
 
-Final shared dryrun completed at 10:12:45 local time: each job's negative and
-positive fake-queue paths passed. Scratch roots and full outputs are in TEMP;
-the final output is `bg3rtx-release-qual-final-dryrun.txt`. An earlier concurrent
-regeneration copied a transient timeout into the synthetic High job; freezing
-the generated files and rerunning all jobs resolved it.
-Dialogue was rerun after requiring a fresh startup watch and retaining the 180 s
-cold-build allowance; both fake-queue paths pass in
-`bg3rtx-release-dialogue-final.txt` in TEMP. Its final estimate is 5.41 minutes.
+The 12:19 rel3 live failed on the occ-stats expectation while its diagnostic
+key was off. Removed that expectation, both occ diagnostic phases and the
+face/neck counter gate. The remaining gates and single static PNG are retained.
+Total expected time is 8.72 minutes including both 120 s load allowances.
 
-Historical replay has missing evidence for all three jobs. Readiness estimates
-also retain unproven same-save/key transitions. Neither is a live failure or a
-qualification receipt. High policy promotion/final dev=0 confirmation and the
-dialogue PNG visual checks remain required, as documented in README.md.
+Historical replay evidence is incomplete and some readiness transitions have no
+same-save/key timing samples. Estimates are not hard runtime guarantees or live
+qualification. The dialogue PNG still needs the user's visual check.

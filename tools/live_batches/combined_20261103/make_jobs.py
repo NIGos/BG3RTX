@@ -11,6 +11,8 @@ SOURCES = [
     "gpu_opt1/jobs/go2-s8.json",
     "gpu_opt2/jobs/go2-s8-medium.json",
     "water_offscreen/jobs/wo1-s8-hit-shade.json",
+    "water_offscreen/jobs/wo1-s8-bit2.json",
+    "water_offscreen/jobs/wo1-s8-bit4.json",
     "water_flicker_wf9/jobs/wf9-s8-compose-shift.json",
     "cov_paks_compact/jobs/cp4-compact-camp-join.json",
     "gpu_opt1/jobs/go1-camp.json",
@@ -22,4 +24,4 @@ SOURCES = [
 
 if __name__ == "__main__":
     base = ROOT / "tools/live_batches"
-    sys.exit(main([str(base / p) for p in SOURCES] + ["--out", str(Path(__file__).resolve().parent), "--split-seconds", "900"]))
+    sys.exit(main([str(base / p) for p in SOURCES] + ["--out", str(Path(__file__).resolve().parent), "--split-seconds", "780"]))

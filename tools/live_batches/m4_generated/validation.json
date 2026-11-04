@@ -1,0 +1,19 @@
+{
+  "status": "PASS_OFFLINE_STRUCTURAL_ONLY",
+  "date": "2026-11-04",
+  "game_launched": false,
+  "queue_written": false,
+  "live_flow": "PASS 2/2",
+  "dryrun": "shared lean_dryrun structural, fake negative/positive queue paths; final wait cap separately rechecked by live_flow",
+  "batch_jobs_lint_test": "4/6 pass; 2 global active/combined inventory failures during concurrent water/pak edits; parent owns shared refresh",
+  "planning_minutes": [
+    6.57,
+    5.39
+  ],
+  "full_timeout_seconds": [
+    704,
+    633
+  ],
+  "qualification": "READY_FOR_LIVE generated rows; GI guard screen decides fix/reject only, never promotion",
+  "historical_replay": "unproven new transitions; not rendering evidence"
+}

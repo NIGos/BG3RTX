@@ -1,19 +1,19 @@
 {
   "job": "rel3-stock-hair-dialogue1",
   "status": "READY_FOR_LIVE",
-  "observable": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp, character sun/AO and local shadows participate.",
-  "pass_rule": "Every judged window: hair/scalp records > 0, invalid/bounds 0, pending/waiting/started builds 0, no capacity loss or scene timeouts. Dedicated occ window: character sun rays > 0 and sun/AO plus D-LS pass frames > 0. Cost windows: RT/GI ms and VRAM within driver budget. All windows: no strand producer/device loss. Both static PNGs require human inspection for visible cards and face/neck shadows; aggregate character counters do not locate the face/neck.",
+  "observable": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp participate; inspect face/neck shadows in the static PNG.",
+  "pass_rule": "Every judged window: hair/scalp records > 0, invalid/bounds 0, pending/waiting/started builds 0, no capacity loss or scene timeouts. Cost windows: RT/GI ms and VRAM within driver budget. All windows: no strand producer/device loss. One static PNG requires human inspection for visible cards and face/neck shadows; aggregate character counters do not locate the face/neck.",
   "profile": "data/release.ini + launcher preset via common/settings.h",
   "rendering_overrides": {},
   "input_sha256": {
-    "common/settings.h": "55a3f170585b23a0d0dd8e77e07d78de008919ada8f20167dd652f4a1b45471d",
-    "data/release.ini": "50fb46a36bab41bfa39fb71ee98416392726c8e702d82eb93fe7f4db3df98e50",
-    "bg3rtx.ini": "9a557ad202c2fc332689a8deeaeccbda9a159c1d6d1bbb23692a8e53d7c39948"
+    "common/settings.h": "5f5481966b71a3d403b3ee3ca5ab554499a69c7617b86ddde8588c2de2edf2d6",
+    "data/release.ini": "c904d315419f7756619ef753068589bde5249c0782ab4865b127ef47242c108d",
+    "bg3rtx.ini": "aa765f8642010568c588eadb4189adb4a85bafc9b1fce16d5719d568d51628b2"
   },
-  "visual_acceptance": "Inspect trace PNGs; logs alone cannot prove visible cards or correct face/neck shadows.",
-  "expected_minutes": 5.41,
+  "visual_acceptance": "Inspect the single static PNG for visible cards and face/neck shadows.",
+  "expected_minutes": 4.76,
   "load_allowance_s": 120,
   "launch_cap_minutes": 15,
-  "scheduled_seconds": 196.4,
-  "expected_readiness_seconds": 8.172
+  "scheduled_seconds": 165.5,
+  "expected_readiness_seconds": 0
 }

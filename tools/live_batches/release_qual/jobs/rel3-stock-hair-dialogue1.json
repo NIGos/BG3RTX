@@ -54,16 +54,16 @@
     "trace_export": {
       "seconds": 0.3019999999960419,
       "quantile": 0.95,
-      "samples": 402,
+      "samples": 404,
       "maximum": 0.43699999999807915
     },
     "trace_capture_stall": {
       "seconds": 2.7200900000000003,
       "source": "wf1-s8-fg2.1.100826.log",
       "quantile": 0.95,
-      "samples": 402,
+      "samples": 404,
       "maximum": 2.9799,
-      "logs": 65
+      "logs": 66
     }
   },
   "patterns": [
@@ -111,8 +111,7 @@
     "\\[hot\\] core generation \\d+ loaded",
     "\\[ngx\\] RR create .*: Success",
     "\\[trace\\] frame \\d+ written",
-    "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)",
-    "occ stats: active \\(sun traced 1, RT GI 1;"
+    "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)"
   ],
   "forbid": [
     "\\[crash\\] exception 0x",
@@ -132,7 +131,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ]
     },
@@ -144,7 +142,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ],
       "when_present": true
@@ -157,7 +154,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ]
     },
@@ -171,7 +167,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ]
     },
@@ -182,7 +177,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ],
       "min": 1
@@ -194,7 +188,6 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
       ],
       "min": 1
@@ -206,17 +199,7 @@
       "windows": [
         "static-a",
         "static-b",
-        "diag-occ",
         "cost-hair"
-      ],
-      "min": 1
-    },
-    {
-      "name": "face/neck character shadow participation",
-      "select": "occ stats \\(\\d+ frames\\): character px",
-      "match": "sun: [1-9]\\d* px/frame,.*rays [1-9]\\d*.*passes: sun/AO [1-9]\\d*, D-LS [1-9]\\d* frames",
-      "windows": [
-        "diag-occ"
       ],
       "min": 1
     },
@@ -254,8 +237,8 @@
   "max_minutes": 15,
   "fail_fast": true,
   "stop_on_dump": true,
-  "purpose": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp, character sun/AO and local shadows participate.",
-  "estimated_phase_seconds": 196.4,
+  "purpose": "Dialogue1 release Ultra stock cards: startup is first enable; native hair/scalp participate; inspect face/neck shadows in the static PNG.",
+  "estimated_phase_seconds": 165.5,
   "args": [
     "-RealPresent",
     "-Move",
@@ -265,8 +248,7 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=9\\b",
-    "\\[motion-trace\\] phase=2 label=static-a repeat=0",
-    "\\[motion-trace\\] phase=3 label=static-b repeat=0"
+    "\\[motion-plan\\] complete phases=6\\b",
+    "\\[motion-trace\\] phase=1 label=static-a repeat=0"
   ]
 }

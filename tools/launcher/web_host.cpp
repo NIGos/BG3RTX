@@ -1,7 +1,10 @@
 ﻿#include "web_host.h"
 #include "web_bridge.h"
 #include "ui_state.h"
+#include "version.h"
 #include <wrl.h>
+#include <windowsx.h>
+#include <dwmapi.h>
 #include <objbase.h>
 #include <WebView2.h>
 #include <WebView2EnvironmentOptions.h>
@@ -16,6 +19,7 @@
 #include <atomic>
 #include <commctrl.h>
 #include <shellapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 using Microsoft::WRL::ComPtr;
 using Microsoft::WRL::Callback;
@@ -52,7 +56,13 @@ struct Host {
   std::thread worker;
   std::atomic<bool> cancel{false};
   std::string reply, after_work;
-  ~Host() { cancel=true; if(worker.joinable())worker.join(); if(controller)controller->Close(); }
+  // Frameless window chrome (see window_proc): logical-pixel metrics scale with the window DPI.
+  int dpi=96, hover=HTNOWHERE, pressed=HTNOWHERE;
+  bool active=true;
+  HFONT caption_font{}, glyph_font{};
+  HICON caption_icon{};
+  ~Host() { cancel=true; if(worker.joinable())worker.join(); if(controller)controller->Close();
+    if(caption_font)DeleteObject(caption_font); if(glyph_font)DeleteObject(glyph_font); if(caption_icon)DestroyIcon(caption_icon); }
 };
 std::string session_token() {
   HANDLE snap=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
@@ -102,14 +112,126 @@ void capture(Host& h) {
       h.result=SUCCEEDED(hr)?0:2;DestroyWindow(h.window);return S_OK;
     }).Get());
 }
+// ---- Frameless window chrome ----
+// WM_NCCALCSIZE removes only the caption and top frame. The left, right and bottom
+// frames stay native (invisible resize borders, DWM shadow, rounded corners on
+// Windows 11). The parent paints a slim title bar above the WebView and answers
+// WM_NCHITTEST with caption, top-edge and caption-button codes, so dragging, Aero
+// snap, double-click maximise, the Windows 11 snap layouts flyout (HTMAXBUTTON) and
+// the system menu (right click, icon click, Alt+Space) behave as on a standard window.
+constexpr COLORREF kCaptionBg=RGB(0x13,0x15,0x18),kCaptionLine=RGB(0x2C,0x30,0x37),kCaptionText=RGB(0xF1,0xE7,0xD2),
+  kCaptionMuted=RGB(0xB2,0xAA,0x9A),kCaptionHover=RGB(0x2A,0x2E,0x35),kCaptionPressed=RGB(0x36,0x3B,0x43),
+  kCloseHover=RGB(0xC4,0x2B,0x1C),kClosePressed=RGB(0x9B,0x23,0x17);
+int px(const Host& h,int v){return MulDiv(v,h.dpi,96);}
+int caption_height(const Host& h){return px(h,32);}
+bool caption_button(WPARAM code){return code==HTMINBUTTON||code==HTMAXBUTTON||code==HTCLOSE;}
+RECT caption_button_rect(const Host& h,int code){
+  RECT r{};GetClientRect(h.window,&r);int width=px(h,46),index=code==HTCLOSE?0:code==HTMAXBUTTON?1:2;
+  r.right-=width*index;r.left=r.right-width;r.top=0;r.bottom=caption_height(h);return r;
+}
+RECT webview_bounds(const Host& h){RECT r{};GetClientRect(h.window,&r);r.top=std::min<LONG>(r.bottom,caption_height(h));return r;}
+void invalidate_caption(const Host& h){RECT r{};GetClientRect(h.window,&r);r.bottom=caption_height(h);InvalidateRect(h.window,&r,FALSE);}
+bool font_installed(const wchar_t* face){
+  HDC dc=GetDC(nullptr);LOGFONTW font{};font.lfCharSet=DEFAULT_CHARSET;wcsncpy_s(font.lfFaceName,face,_TRUNCATE);bool found=false;
+  EnumFontFamiliesExW(dc,&font,[](const LOGFONTW*,const TEXTMETRICW*,DWORD,LPARAM found)->int{*reinterpret_cast<bool*>(found)=true;return 0;},LPARAM(&found),0);
+  ReleaseDC(nullptr,dc);return found;
+}
+void chrome_resources(Host& h){
+  if(h.caption_font)DeleteObject(h.caption_font);if(h.glyph_font)DeleteObject(h.glyph_font);if(h.caption_icon)DestroyIcon(h.caption_icon);h.caption_icon=nullptr;
+  h.caption_font=CreateFontW(-px(h,12),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+  // Windows 11 caption glyphs; Windows 10 ships the same code points in Segoe MDL2 Assets.
+  static const bool fluent=font_installed(L"Segoe Fluent Icons");
+  h.glyph_font=CreateFontW(-px(h,10),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,fluent?L"Segoe Fluent Icons":L"Segoe MDL2 Assets");
+  LoadIconWithScaleDown(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1),px(h,16),px(h,16),&h.caption_icon);
+}
+void paint_caption(const Host& h,HDC target){
+  RECT client{};GetClientRect(h.window,&client);RECT bar{0,0,client.right,caption_height(h)};
+  if(bar.right<=0||bar.bottom<=0)return;
+  HDC dc=CreateCompatibleDC(target);HBITMAP bitmap=CreateCompatibleBitmap(target,bar.right,bar.bottom);HGDIOBJ old_bitmap=SelectObject(dc,bitmap);
+  auto fill=[dc](RECT r,COLORREF colour){HBRUSH brush=CreateSolidBrush(colour);FillRect(dc,&r,brush);DeleteObject(brush);};
+  fill(bar,kCaptionBg);fill({0,bar.bottom-std::max(1,px(h,1)),bar.right,bar.bottom},kCaptionLine);
+  int x=px(h,12),icon=px(h,16);
+  if(h.caption_icon)DrawIconEx(dc,x,(bar.bottom-icon)/2,h.caption_icon,icon,icon,0,nullptr,DI_NORMAL);
+  x+=icon+px(h,10);
+  SetBkMode(dc,TRANSPARENT);HGDIOBJ old_font=SelectObject(dc,h.caption_font);
+  const std::wstring name=L"BG3RTX",version=widen(BG3RTX_PRODUCT_VERSION);
+  RECT text{x,0,caption_button_rect(h,HTMINBUTTON).left-px(h,8),bar.bottom};
+  SetTextColor(dc,h.active?kCaptionText:kCaptionMuted);DrawTextW(dc,name.c_str(),int(name.size()),&text,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX|DT_END_ELLIPSIS);
+  SIZE extent{};GetTextExtentPoint32W(dc,name.c_str(),int(name.size()),&extent);text.left+=extent.cx+px(h,8);
+  SetTextColor(dc,kCaptionMuted);if(text.left<text.right)DrawTextW(dc,version.c_str(),int(version.size()),&text,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX|DT_END_ELLIPSIS);
+  SelectObject(dc,h.glyph_font);
+  for(int code:{HTMINBUTTON,HTMAXBUTTON,HTCLOSE}){
+    RECT r=caption_button_rect(h,code);r.bottom-=std::max(1,px(h,1));const bool hot=h.hover==code,down=hot&&h.pressed==code;
+    if(hot)fill(r,code==HTCLOSE?(down?kClosePressed:kCloseHover):(down?kCaptionPressed:kCaptionHover));
+    SetTextColor(dc,code==HTCLOSE&&hot?RGB(255,255,255):h.active?kCaptionText:kCaptionMuted);
+    const wchar_t* glyph=code==HTCLOSE?L"\xE8BB":code==HTMINBUTTON?L"\xE921":IsZoomed(h.window)?L"\xE923":L"\xE922";
+    DrawTextW(dc,glyph,1,&r,DT_SINGLELINE|DT_CENTER|DT_VCENTER|DT_NOPREFIX);
+  }
+  BitBlt(target,0,0,bar.right,bar.bottom,dc,0,0,SRCCOPY);
+  SelectObject(dc,old_font);SelectObject(dc,old_bitmap);DeleteObject(bitmap);DeleteDC(dc);
+}
+// Client-area part of the hit test: the painted title bar. Returns HTCLIENT below it.
+LRESULT caption_hit(const Host& h,LPARAM l){
+  POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h.window,&p);
+  RECT client{};GetClientRect(h.window,&client);
+  if(p.y<0||p.y>=caption_height(h)||p.x<0||p.x>=client.right)return HTCLIENT;
+  const int edge=GetSystemMetricsForDpi(SM_CYSIZEFRAME,h.dpi);
+  if(!IsZoomed(h.window)&&p.y<edge)return p.x<edge*2?HTTOPLEFT:p.x>=client.right-edge*2?HTTOPRIGHT:HTTOP;
+  for(int code:{HTCLOSE,HTMAXBUTTON,HTMINBUTTON}){RECT r=caption_button_rect(h,code);if(PtInRect(&r,p))return code;}
+  return p.x<px(h,40)?HTSYSMENU:HTCAPTION;
+}
+void system_menu(const Host& h,int x,int y){
+  HMENU menu=GetSystemMenu(h.window,FALSE);if(!menu)return;const bool zoomed=IsZoomed(h.window);
+  auto enable=[menu](UINT item,bool on){EnableMenuItem(menu,item,MF_BYCOMMAND|(on?MF_ENABLED:MF_GRAYED));};
+  enable(SC_RESTORE,zoomed);enable(SC_MOVE,!zoomed);enable(SC_SIZE,!zoomed);enable(SC_MINIMIZE,true);enable(SC_MAXIMIZE,!zoomed);enable(SC_CLOSE,true);
+  SetMenuDefaultItem(menu,UINT(-1),FALSE);
+  int command=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_RIGHTBUTTON|(GetSystemMetrics(SM_MENUDROPALIGNMENT)?TPM_RIGHTALIGN:TPM_LEFTALIGN),x,y,0,h.window,nullptr);
+  if(command)PostMessageW(h.window,WM_SYSCOMMAND,WPARAM(command),0);
+}
+void apply_window_frame(Host& h){
+  h.dpi=GetDpiForWindow(h.window);chrome_resources(h);
+  const BOOL dark=TRUE;DwmSetWindowAttribute(h.window,20/*DWMWA_USE_IMMERSIVE_DARK_MODE*/,&dark,sizeof dark);
+  const int round=2/*DWMWCP_ROUND*/;DwmSetWindowAttribute(h.window,33/*DWMWA_WINDOW_CORNER_PREFERENCE*/,&round,sizeof round);
+  const COLORREF border=RGB(0x3A,0x3F,0x47);DwmSetWindowAttribute(h.window,34/*DWMWA_BORDER_COLOR*/,&border,sizeof border);
+  SetWindowPos(h.window,nullptr,0,0,0,0,SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+}
 LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
   auto* h=reinterpret_cast<Host*>(GetWindowLongPtrW(window,GWLP_USERDATA));
   if(message==WM_NCCREATE){h=static_cast<Host*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);h->window=window;SetWindowLongPtrW(window,GWLP_USERDATA,LONG_PTR(h));}
   if(!h)return DefWindowProcW(window,message,w,l);
   switch(message){
+    case WM_NCCALCSIZE:if(w){
+        auto* p=reinterpret_cast<NCCALCSIZE_PARAMS*>(l);const LONG top=p->rgrc[0].top;
+        LRESULT r=DefWindowProcW(window,message,w,l);if(r)return r;
+        p->rgrc[0].top=top;  // keep the native left, right and bottom frame
+        if(IsZoomed(window)){UINT dpi=GetDpiForWindow(window);p->rgrc[0].top+=GetSystemMetricsForDpi(SM_CYFRAME,dpi)+GetSystemMetricsForDpi(SM_CXPADDEDBORDER,dpi);}
+        return 0;
+      }break;
+    case WM_NCHITTEST:{LRESULT r=DefWindowProcW(window,message,w,l);return r==HTCLIENT?caption_hit(*h,l):r;}
+    case WM_NCMOUSEMOVE:{
+        int hot=caption_button(w)?int(w):HTNOWHERE;if(hot!=h->hover){h->hover=hot;if(hot==HTNOWHERE)h->pressed=HTNOWHERE;invalidate_caption(*h);}
+        if(hot!=HTNOWHERE){TRACKMOUSEEVENT track{sizeof track,TME_LEAVE|TME_NONCLIENT,window,0};TrackMouseEvent(&track);}
+      }break;
+    case WM_NCMOUSELEAVE:h->hover=h->pressed=HTNOWHERE;invalidate_caption(*h);return 0;
+    case WM_NCLBUTTONDOWN:if(caption_button(w)){h->pressed=int(w);invalidate_caption(*h);return 0;}break;
+    case WM_NCLBUTTONDBLCLK:if(caption_button(w))return 0;break;
+    case WM_NCLBUTTONUP:if(caption_button(w)){
+        const bool clicked=h->pressed==int(w);h->pressed=HTNOWHERE;invalidate_caption(*h);
+        if(clicked)PostMessageW(window,WM_SYSCOMMAND,w==HTMINBUTTON?SC_MINIMIZE:w==HTCLOSE?SC_CLOSE:IsZoomed(window)?SC_RESTORE:SC_MAXIMIZE,0);
+        return 0;
+      }break;
+    case WM_NCRBUTTONUP:if(w==HTCAPTION||w==HTSYSMENU){system_menu(*h,GET_X_LPARAM(l),GET_Y_LPARAM(l));return 0;}break;
+    case WM_ACTIVATE:h->active=LOWORD(w)!=WA_INACTIVE;invalidate_caption(*h);break;
+    case WM_ERASEBKGND:return 1;
+    case WM_PAINT:{PAINTSTRUCT ps{};HDC dc=BeginPaint(window,&ps);paint_caption(*h,dc);EndPaint(window,&ps);return 0;}
+    case WM_DPICHANGED:{
+        h->dpi=HIWORD(w);chrome_resources(*h);const RECT* r=reinterpret_cast<const RECT*>(l);
+        SetWindowPos(window,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);
+        invalidate_caption(*h);return 0;
+      }
     case WM_SETFOCUS:if(h->controller)h->controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);return 0;
-    case WM_SIZE:if(h->controller){RECT r{};GetClientRect(window,&r);h->controller->put_Bounds(r);}return 0;
-    case WM_GETMINMAXINFO:reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={736,620};return 0;
+    case WM_SIZE:if(h->controller&&w!=SIZE_MINIMIZED)h->controller->put_Bounds(webview_bounds(*h));invalidate_caption(*h);return 0;
+    case WM_GETMINMAXINFO:reinterpret_cast<MINMAXINFO*>(l)->ptMinTrackSize={px(*h,736),px(*h,620)};return 0;
     case WM_TIMER:if(w==2)capture(*h);else if(w==3){h->result=2;DestroyWindow(window);}else refresh(*h);return 0;
     case work_done:if(h->worker.joinable())h->worker.join();h->busy=false;
       if(!h->after_work.empty()){h->reply=h->bridge->handle(h->after_work);h->after_work.clear();}
@@ -135,6 +257,9 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
   if(!file_exists(ui+L"\\index.html"))return screenshot.empty()?-1:2;
   HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
   if(FAILED(com))return -1;
+  // Per-monitor v2 for this window only: the title bar and WebView follow monitor DPI changes.
+  // The native fallback (ui_product.h) keeps the process's system-DPI scaling.
+  const DPI_AWARENESS_CONTEXT previous_dpi=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   int rc=0;
   {
     Host h;h.no_game=no_game||report||!screenshot.empty();h.report=report;h.result=report?3:0;h.shot=screenshot;h.shot_view=shot_view;
@@ -187,9 +312,14 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
       h.bridge->set_status(valid_game_dir(h.game)?"Settings loaded.":"Choose the game folder containing bin\\bg3.exe. Settings remain available.");
     }
-    WNDCLASSW cls{};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));RegisterClassW(&cls);
-    RECT r{0,0,width>0?width:1180,760};AdjustWindowRect(&r,WS_OVERLAPPEDWINDOW,FALSE);
+    WNDCLASSEXW cls{sizeof cls};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+    cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));cls.hIconSm=HICON(LoadImageW(inst,MAKEINTRESOURCEW(1),IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),0));
+    cls.hbrBackground=CreateSolidBrush(kCaptionBg);RegisterClassExW(&cls);
+    // Client size in logical pixels: 32 for the title bar plus the 760 the page was designed for.
+    const UINT system_dpi=GetDpiForSystem();RECT r{0,0,MulDiv(width>0?width:1180,system_dpi,96),MulDiv(760+32,system_dpi,96)};
+    AdjustWindowRectExForDpi(&r,WS_OVERLAPPEDWINDOW,FALSE,0,system_dpi);r.top+=GetSystemMetricsForDpi(SM_CYCAPTION,system_dpi);
     CreateWindowW(cls.lpszClassName,L"BG3RTX",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,inst,&h);
+    if(h.window)apply_window_frame(h);
     PWSTR local{};std::wstring profile;
     if(!screenshot.empty())profile=exe_dir()+L"\\webview-review-profile";
     else if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local))){profile=std::wstring(local)+L"\\BG3RTX\\WebView2";CoTaskMemFree(local);}
@@ -238,7 +368,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
               if(!h.shot.empty())SetTimer(h.window,2,1600,nullptr);
               else {refresh(h);if(h.report)send(h,h.bridge->handle("{\"type\":\"report\"}"));SetTimer(h.window,1,2000,nullptr);}return S_OK;
             }).Get(),&token);
-            RECT bounds{};GetClientRect(h.window,&bounds);controller->put_Bounds(bounds);controller->put_IsVisible(TRUE);
+            controller->put_Bounds(webview_bounds(h));controller->put_IsVisible(TRUE);
             std::wstring url=L"https://app.bg3rtx.local/index.html";
             if(!h.shot.empty())url+=L"?sample=1&view="+h.shot_view;
             h.view->Navigate(url.c_str());return S_OK;
@@ -250,6 +380,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
     rc=h.failed?(screenshot.empty()?-1:2):h.result;
   }
   if(rc==-1){MSG quit{};PeekMessageW(&quit,nullptr,WM_QUIT,WM_QUIT,PM_REMOVE);}
+  if(previous_dpi)SetThreadDpiAwarenessContext(previous_dpi);
   CoUninitialize();return rc;
 }
 

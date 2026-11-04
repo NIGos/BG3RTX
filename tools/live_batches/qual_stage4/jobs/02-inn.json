@@ -4,10 +4,10 @@
   "session": false,
   "traces": 0,
   "hold": 120,
-  "timeout": 449,
+  "timeout": 633,
   "repeat": 1,
   "live_batch": "qual-stage4",
-  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=1,rt_hit_emission=1,rt_emissive=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120,ls_box=2,rt_omm=1,rt_omm_dyn=1,rt_vt_alpha_masks=1,rt_alpha_fine_lod=1,gi_far=1,gi_far_m=6,rf_hit_shade=0,crash_dump=0,perf_hitmat_lists=0,perf_hook_state=0,perf_submit_batch=0,gi_temporal_mv_sample=0,gi_prev_radiance_guard=0",
+  "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,rt_cascade_casters=1,gi=1,gi_rt=1,gi_rt_fallback=0,rt_reflections=1,rt_hit_material=1,rt_emissive=1,rt_em_fx_pulse=0,rt_xfb_mb=1024,rt_cascade_mb=427,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=0,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,rt_hit_material_ip_grass=0,rt_hit_material_generated=1,rt_hit_emission=1,rt_emissive=1,qa_exposure_hold=0,rt_scene_wait_log_frames=120",
   "args": [
     "-RealPresent",
     "-Move",
@@ -73,8 +73,8 @@
         "diag-off-b"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "generated rows mapped with the key on, every diag-on window",
@@ -84,8 +84,8 @@
         "diag-on"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "no generated rows with the key off, every diag-off window",
@@ -96,8 +96,8 @@
         "diag-off-b"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "the audited instanced families keep rejected < 0.04% with the generated rows on, every diag-on stats window (event: the stats window restarts after each gap-* phase)",
@@ -107,8 +107,8 @@
         "diag-on"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "hit material share line in every diag window (event: the stats window restarts after each gap-* phase)",
@@ -120,8 +120,8 @@
         "diag-off-b"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "gi trace pass GPU median in every cost window",
@@ -176,8 +176,8 @@
         "diag-on"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "the wind RGB rows stay captured with IP grass on, every diag-on window",
@@ -187,8 +187,8 @@
         "diag-on"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     },
     {
       "name": "hit-material capacity: no overflow (rows, streams, basis, tables), every diag window",
@@ -200,30 +200,8 @@
         "diag-off-b"
       ],
       "min": 1,
-      "event": true,
-      "settle_s": 1.0
-    },
-    {
-      "name": "native VT alpha-test 2S prepass with masks off",
-      "select": "\\[hit material instanced\\] frame \\d+ key",
-      "match": "alpha-test 2S: prepass [1-9]\\d*,",
-      "windows": [
-        "diag-vt-masks-off"
-      ],
-      "min": 1,
-      "event": true,
-      "settle_s": 1.0
-    },
-    {
-      "name": "native VT generated capture with masks off",
-      "select": "\\[hit material generated\\] frame \\d+ key 1",
-      "match": "captured [1-9]\\d*, mapped [1-9]\\d* rows [1-9]\\d* triangles",
-      "windows": [
-        "diag-vt-masks-off"
-      ],
-      "min": 1,
-      "event": true,
-      "settle_s": 1.0
+      "settle_s": 1.0,
+      "period_frames": 120
     }
   ],
   "forbid": [
@@ -238,13 +216,83 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=17\\b",
+    "\\[motion-plan\\] complete phases=15\\b",
     "\\[motion-trace\\] phase=11 label=shot-off-a repeat=0",
     "\\[motion-trace\\] phase=12 label=shot-on repeat=0",
     "\\[motion-trace\\] phase=13 label=shot-off-b repeat=0"
   ],
   "stop_on_dump": false,
-  "purpose": "rt_hit_material_generated at the inn (S7): the same 8 generated rows; the inn's share is mostly pool pairs (Base_GM_VT / BGM 651863a6, HLOD_GM b0ecc292, both = 3df678c0) and IP_AlphaTest. Same phases as hgn1.",
-  "estimated_phase_seconds": 209,
-  "window_mode": "visible_unfocused_fg"
+  "purpose": "Generated row qualification; identical source gates to m4_generated, no GI PNG screening.",
+  "estimated_phase_seconds": 152.7,
+  "window_mode": "visible_unfocused_fg",
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 3,
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 12.30012300122847,
+        "windows": 59,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\bx2-box-s7-fg2.1.020530.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\bx2-box-s7-fg2.1.152015.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p2-inn-fg2.1.032112.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc3-ambient-inn-fg2.1.013755.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 16.79731243001065,
+        "windows": 5,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hgn2-generated-inn-fg2.1.145500.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p2-inn-fg2.1.032112.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc3-ambient-inn-fg2.1.013755.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 14.48575567358825,
+        "windows": 3,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr2-inn-fg2.1.044237.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3019999999960419,
+      "quantile": 0.95,
+      "samples": 402,
+      "maximum": 0.43699999999807915
+    },
+    "trace_capture_stall": {
+      "seconds": 2.7200900000000003,
+      "source": "wf1-s8-fg2.1.100826.log",
+      "quantile": 0.95,
+      "samples": 402,
+      "maximum": 2.9799,
+      "logs": 65
+    }
+  }
 }

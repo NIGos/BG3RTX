@@ -872,7 +872,7 @@ static void test_product_policy() {
     Map preset;
     for (const auto& kv : expand_preset(p)) preset[kv.first] = kv.second;
     for (const char* key : {"rt_omm", "rt_omm_dyn", "rt_vt_alpha_masks", "rt_alpha_fine_lod"})
-      CHECK_EQ(get(preset, key), p == kUltra ? "1" : "0");
+      CHECK_EQ(get(preset, key), (p == kHigh || p == kUltra) ? "1" : "0");
     CHECK_EQ(get(preset, "rt_omm_reference"), "0");
     auto values = preset_values(p); CHECK(enforce_needs(values).empty());
   }
@@ -1077,7 +1077,7 @@ static void test_retired_rejected_controls() {
   }
   const Map defaults=code_defaults();
   const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
-  CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(defaults));
+  CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(merge_layers({&defaults})));
 }
 
 static void test_retired_hair_ini() {
@@ -1123,6 +1123,25 @@ static void test_release_migration() {
     }
   }
   CHECK(visible == expected);
+  // Release opt-in (experimental_options=1): listed unqualified knobs only, never rejected ones.
+  for (const char* id : kOptInKnobs) {
+    const Knob* k = find_knob(id);
+    CHECK(k && k->dev_only && !knob_visible(*k, false) && knob_visible(*k, false, true));
+    if (k) CHECK(choice_available(*k, 1, false, true, ~0u, true) && !choice_available(*k, 1, false, true, ~0u));
+  }
+  for (const char* id : {"exp_compact_hit_state", "exp_alpha_metadata_cache", "exp_water_empty_tiles", "rt_trace_scale",
+       "exp_omm", "exp_vt_alpha_masks", "rr_post", "exp_water_compose_shift", "exp_hair_pool_trim", "exp_ls_exact_k",
+       "exp_hit_reference", "exp_current_sun", "exp_hair_primary_passes", "exp_hair_primary_order"})
+    CHECK(find_knob(id) && !opt_in_knob(*find_knob(id)) && !knob_visible(*find_knob(id), false, true));
+  {
+    Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nrt_compact_hit_state=1\nperf_submit_batch=1\n");
+    Map m = code_defaults(); apply_layer(m, opt);
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
+    opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "1");
+    CHECK_EQ(get(m, "rt_compact_hit_state"), "0"); CHECK_EQ(get(m, "perf_submit_batch"), "0");
+    Map again = m; enforce_release_policy(again); CHECK(again == m);
+  }
   Map stale;
   // A realistic old user file: every hidden candidate selected, including diagnostics.
   for (const auto& k : kKnobs) if (k.dev_only) {
@@ -1139,8 +1158,8 @@ static void test_release_migration() {
       int want = 0;
       std::string id = k.id;
       if (id == "rt_trace_scale") want = 1;
-      if ((id == "exp_omm" || id == "exp_vt_alpha_masks" ||
-           id == "exp_water_compose_shift" || id == "exp_hair_pool_trim" ||
+      if ((id == "exp_omm" || id == "exp_vt_alpha_masks") && (p == kHigh || p == kUltra)) want = 1;
+      if ((id == "exp_water_compose_shift" || id == "exp_hair_pool_trim" ||
            id == "exp_ls_exact_k") && p == kUltra) want = 1;
       CHECK(knob_value(k, m) == want);
     }
@@ -1154,9 +1173,15 @@ static void test_release_migration() {
   }
   Map m = code_defaults();
   apply_layer(m, parse_ini("preset=high\nrt_native_hair=1\nrt_native_scalp=1\nrt_hair_pool_trim=0\n"));
-  CHECK_EQ(get(m, "rt_hair_pool_trim"), "1"); CHECK_EQ(get(m, "rt_omm"), "0");
-  apply_layer(m, parse_ini("preset=ultra\nrt_alpha=0\n"));
-  CHECK_EQ(get(m, "rt_omm"), "0"); CHECK_EQ(get(m, "rt_vt_alpha_masks"), "0");
+  CHECK_EQ(get(m, "rt_hair_pool_trim"), "1"); CHECK_EQ(get(m, "rt_omm"), "1");
+  CHECK_EQ(get(m, "rt_vt_alpha_masks"), "1");
+  for (const char* preset : {"high", "ultra"}) {
+    for (const char* override : {"rt_alpha=0\n", "rt_build=0\n"}) {
+      m = code_defaults();
+      apply_layer(m, parse_ini(std::string("preset=") + preset + "\n" + override));
+      CHECK_EQ(get(m, "rt_omm"), "0"); CHECK_EQ(get(m, "rt_vt_alpha_masks"), "0");
+    }
+  }
   for (int level : {1, 2}) {
     m = code_defaults();
     KVList pairs; knob_kvs(*find_knob("exp_hidden_surface"), level, pairs);

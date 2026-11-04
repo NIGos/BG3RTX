@@ -43,7 +43,7 @@
   {
     "label": "settle-off-a",
     "kind": "static",
-    "seconds": 3.7,
+    "seconds": 3.6,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -59,7 +59,7 @@
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 50.6,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -76,7 +76,7 @@
   {
     "label": "settle-on",
     "kind": "static",
-    "seconds": 3.7,
+    "seconds": 3.6,
     "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -92,7 +92,7 @@
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 50.6,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -109,7 +109,7 @@
   {
     "label": "settle-off-b",
     "kind": "static",
-    "seconds": 3.7,
+    "seconds": 3.6,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -125,7 +125,7 @@
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 50.6,
+    "seconds": 49.5,
     "set": "qa_exposure_hold=1"
   },
   {

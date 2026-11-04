@@ -12,7 +12,7 @@
         "session": false,
         "traces": 0,
         "hold": 90,
-        "timeout": 1280,
+        "timeout": 1280.0,
         "repeat": 1,
         "live_batch": "gpu-opt2",
         "window_mode": "visible_unfocused_fg",
@@ -166,15 +166,14 @@
                 0,
                 0
               ],
-              "fps": 12.106537530270467,
-              "windows": 110,
+              "fps": 12.39669421487566,
+              "windows": 102,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
@@ -215,29 +214,28 @@
                 0
               ],
               "fps": 6.949270326617158,
-              "windows": 2,
+              "windows": 1,
               "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log"
               ]
             }
           ],
           "trace_export": {
-            "seconds": 0.31900000000041473,
+            "seconds": 0.3019999999960419,
             "quantile": 0.95,
-            "samples": 411,
+            "samples": 402,
             "maximum": 0.43699999999807915
           },
           "trace_capture_stall": {
-            "seconds": 2.71857,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.7200900000000003,
+            "source": "wf1-s8-fg2.1.100826.log",
             "quantile": 0.95,
-            "samples": 428,
+            "samples": 402,
             "maximum": 2.9799,
-            "logs": 73
+            "logs": 65
           }
         },
-        "estimated_phase_seconds": 244.6
+        "estimated_phase_seconds": 241.0
       },
       "plan": [
         {
@@ -284,7 +282,7 @@
         {
           "label": "settle-off-a",
           "kind": "static",
-          "seconds": 3.7,
+          "seconds": 3.6,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -300,7 +298,7 @@
         {
           "label": "cost-off-a",
           "kind": "static",
-          "seconds": 50.6,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -317,7 +315,7 @@
         {
           "label": "settle-on",
           "kind": "static",
-          "seconds": 3.7,
+          "seconds": 3.6,
           "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -333,7 +331,7 @@
         {
           "label": "cost-on",
           "kind": "static",
-          "seconds": 50.6,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -350,7 +348,7 @@
         {
           "label": "settle-off-b",
           "kind": "static",
-          "seconds": 3.7,
+          "seconds": 3.6,
           "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
           "wait_log": [
             "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -366,7 +364,7 @@
         {
           "label": "cost-off-b",
           "kind": "static",
-          "seconds": 50.6,
+          "seconds": 49.5,
           "set": "qa_exposure_hold=1"
         },
         {
@@ -428,7 +426,7 @@
     {
       "label": "b1-go2-camp-high--settle-off-a",
       "kind": "static",
-      "seconds": 3.7,
+      "seconds": 3.6,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -444,7 +442,7 @@
     {
       "label": "b1-go2-camp-high--cost-off-a",
       "kind": "static",
-      "seconds": 50.6,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
@@ -461,7 +459,7 @@
     {
       "label": "b1-go2-camp-high--settle-on",
       "kind": "static",
-      "seconds": 3.7,
+      "seconds": 3.6,
       "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -477,7 +475,7 @@
     {
       "label": "b1-go2-camp-high--cost-on",
       "kind": "static",
-      "seconds": 50.6,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
@@ -494,7 +492,7 @@
     {
       "label": "b1-go2-camp-high--settle-off-b",
       "kind": "static",
-      "seconds": 3.7,
+      "seconds": 3.6,
       "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
       "wait_log": [
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -510,7 +508,7 @@
     {
       "label": "b1-go2-camp-high--cost-off-b",
       "kind": "static",
-      "seconds": 50.6,
+      "seconds": 49.5,
       "set": "qa_exposure_hold=1"
     },
     {
