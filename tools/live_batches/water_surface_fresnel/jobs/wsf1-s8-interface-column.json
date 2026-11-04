@@ -91,8 +91,8 @@
           0,
           0
         ],
-        "fps": 26.881720430064064,
-        "windows": 593,
+        "fps": 18.66832607347135,
+        "windows": 565,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
@@ -104,21 +104,14 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
@@ -137,10 +130,12 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.085931.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.043141.log"
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.043141.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.064436.log"
         ]
       },
       {
@@ -152,7 +147,7 @@
           0
         ],
         "fps": 22.93577981649794,
-        "windows": 15,
+        "windows": 14,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
@@ -161,7 +156,6 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log"
@@ -199,18 +193,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.30399999999644933,
+      "seconds": 0.3019999999960419,
       "quantile": 0.95,
-      "samples": 437,
+      "samples": 402,
       "maximum": 0.43699999999807915
     },
     "trace_capture_stall": {
-      "seconds": 2.71857,
-      "source": "wf7a-s8-fg2.1.164300.log",
+      "seconds": 2.7200900000000003,
+      "source": "wf1-s8-fg2.1.100826.log",
       "quantile": 0.95,
-      "samples": 437,
+      "samples": 402,
       "maximum": 2.9799,
-      "logs": 75
+      "logs": 65
     }
   },
   "name": "wsf1-s8-interface-column",
@@ -226,7 +220,7 @@
     "-MovePlan",
     "captures/live_batches/water_surface_fresnel/plans/wsf1_s8.json"
   ],
-  "estimated_phase_seconds": 141.8,
+  "estimated_phase_seconds": 157.0,
   "expect": [
     "\\[auto\\] scene ready",
     "\\[hot\\] core generation \\d+ loaded",

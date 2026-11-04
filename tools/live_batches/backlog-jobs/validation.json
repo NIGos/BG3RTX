@@ -1,0 +1,42 @@
+{
+  "status": "PREPARED_NOT_LIVE_QUALIFIED",
+  "date": "2026-11-04",
+  "branch": "backlog-jobs",
+  "commit": null,
+  "no_game_launched": true,
+  "no_live_queue_submission": true,
+  "git_metadata_read_only": true,
+  "corpus_readable_valid_logs": 78,
+  "scoped_jobs_lint": {
+    "jobs": 12,
+    "failures": 0,
+    "aliases": 2,
+    "distinct_launches": 10
+  },
+  "synthetic_dryruns": {
+    "jobs": 12,
+    "failures": 0,
+    "negative_missing_evidence": "INVALID",
+    "positive_stripped_gates": "VALID; synthetic only"
+  },
+  "global_active_preflight": {
+    "jobs": 31,
+    "failures": 0
+  },
+  "batch_jobs_lint_test": {
+    "tests": 6,
+    "failures": 0,
+    "exit_code": 0
+  },
+  "expected_minutes": 53.6,
+  "maximum_requested_launch_minutes_with_all_cold_waits": 13.39,
+  "variants_request_delta": 0,
+  "limitations": [
+    "Historical replay and new readiness transitions remain unproven.",
+    "Current Sun aggregates cannot identify the failed readiness conjunct.",
+    "GI guard PNG screen cannot promote original K16 transient gate.",
+    "SHaRC requires provenance-matched PT and cache-history outputs.",
+    "Predictions remain uncommitted per task; coordinator must record candidate revision before live energy post gates."
+  ],
+  "files_changed": "files_changed.json"
+}

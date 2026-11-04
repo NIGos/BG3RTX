@@ -9,7 +9,9 @@
       "cost_source": "Measure reflections GPU and compose GPU medians vs OFF. Full-frame rf shade 2.3-2.7 ms is context, not a water estimate.",
       "coverage": "Native shaded hidden > 0 in every ON cost window. Off-screen may stay zero: native_hit_cluster rejects outside the frustum. Unsupported rows/light sources retain probes.",
       "visual": "Static and matched forward turns: reflected hidden geometry appears while native lighting supports the hit. Full outside-frustum shading requires later world-light provider.",
-      "written": "2026-11-03"
+      "written": "2026-11-04",
+      "deciding_observable": "Within-run rt_water_hit_shade 0/2/0: hidden qualified participation, post-water float energy, tier coverage, image and GPU reflections/compose ms",
+      "pass_rule": "Require hidden shaded >0 every ON cost window, no loss of composed/hidden coverage beyond OFF-repeat noise and no new invalid/truncation. Report energy against OFF-repeat band; a shading-model energy change needs a PT reference explanation, never rescaling. Reject unsupported/no-benefit appearance; missing data INVALID."
     }
   }
 }

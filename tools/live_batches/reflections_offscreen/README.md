@@ -1,42 +1,11 @@
-# S8 water hit shading draft
+# S8 hidden water shading qualification
 
-Not queued. No game has been launched. `predicted.json` was written before testing.
-Git metadata is read-only for this task, so the prediction is uncommitted.
+Prepared offline; no game launch or queue submission. Run `python -m tools.live_batches.reflections_offscreen.make_jobs` and `dryrun.ps1` to reproduce.
 
-`wos1-s8-fg2` uses one Water Queens House launch in `visible_unfocused_fg` mode.
-The 183 s plan toggles `rt_water_hit_shade` OFF/ON/OFF on a static camera, then
-repeats the same forward turn and return for each state. Ultra and its qualified
-water effects stay on. There are 12 trace samples, no float bursts, and an estimated
-730 MB output budget. The runner supports seconds rather than frame-count phase
-termination; 20 s cost windows allow several 120-frame stats windows at 18 fps.
+One Water Queens House launch, Ultra, visible_unfocused_fg, shading mode 0/2/0 on a static view and matching held-Q/E turns. Mode 2 is the baseline needed by the independent water-cost-bit jobs. Shared timing/readiness retimes every window; cost phases have diagnostics and captures off. Twelve PNG/float-mean traces, no float bursts. Estimated 4.8 minutes including 120 s load and measured readiness; 730 MB. A runtime 15-minute cap rejects readiness stalls, whose exact medians are unproven.
 
-The static energy comparison uses `energy_fs: water-compose`: the float pre-water
-scene plus the in-frame water delta, divided by exposure. PNG brightness is not an
-energy gate. Run the existing `tools/m4_promotion_gate.py` on the completed run with
-this batch's predictions. Require ON mean within the OFF repeat noise band. Do not
-rescale the hit radiance to pass. Inspect both water GPU median/p90 lines and the
-geometric tier histogram. Every ON cost window must contain qualified hidden-hit
-shading; a run with no supported shading is not evidence for the feature.
+Deciding observations: every ON cost window has attempted and hidden qualified shading; full captured draw/triangle coverage, no world truncation/roof overflow/capacity loss; tier histogram, reflections and compose GPU ms. Compare static post-water float energy (`water-compose`, divided by exposure) with same-run OFF-repeat noise using the existing gated `tools/m4_promotion_gate.py --pool run`. Inspect paired reflected-object images and matching turns; reject unsupported/no visible improvement or physically wrong shading. Energy is a shading-model diagnostic: an energy change needs a matching offline PT reference explanation before promotion; it must never be normalized away. This job alone cannot grant full off-screen reference correctness. Missing observations are INVALID, never a pass.
 
-True outside-frustum hits currently fail the shared shader's light-grid check.
-Their probe stays. This batch cannot qualify full off-screen reflections, sky
-replacement, or the separate `rf_hit_shade` bias gate. Those remain in
-`docs/REFLECTIONS_PLAN.md`.
+Predictions are uncommitted because Git metadata is read-only here. The coordinator must commit them before live use; the existing energy gate rejects post-hoc predictions. `offline_coverage.json` records why the retained GI-only replay cannot validate water shading. Run wos1 before any water-cost launch; keep failed candidate keys off.
 
-Offline pack coverage is recorded in `offline_coverage.json`: S8 pack
-`replay-20261101-142819-1` is a GI-direct capture without the water TLAS or forward
-records. It cannot replay the new water path.
-
-Offline preparation checks:
-
-```powershell
-python scripts/queue_gates.py --lint-exposure-hold tools/live_batches/reflections_offscreen
-python scripts/queue_gates.py --lint-scene-wait tools/live_batches/reflections_offscreen
-python scripts/queue_gates.py --lint-capacity tools/live_batches/reflections_offscreen
-& tools/live_batches/lean_dryrun.ps1 -Batch reflections_offscreen -Independent -Unfocused -MaxMinutes 6 -MaxMB 2048
-```
-
-The last command uses only a synthetic scratch queue and a fake game. It grants no
-live authorization. Complete the candidate's offline checks before requesting or
-queueing this batch. The final restore phase turns the key and exposure hold off;
-the queue restores its run overrides.
+Finite waits: 180 s cold start, at most 30 s per later key wait, 11.667 s producer sanity. Full phases + every wait timeout + 120 s load = 652.967 s (10.89 min). Timeout is INVALID.

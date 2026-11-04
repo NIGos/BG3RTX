@@ -1,0 +1,782 @@
+{
+  "prepared": "2026-11-04",
+  "no_game_launched": true,
+  "no_queue_submission": true,
+  "valid_corpus_logs": 78,
+  "jobs": {
+    "wo1-s8-bit2.json": {
+      "problems": [],
+      "duration": {
+        "seconds": 188.00000000000006,
+        "minimum_seconds": 188.0,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "prefetch-cone",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "shot-cone-off-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-cone-on-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-cone-off-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-cone-on-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-cone-0",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-cone-1",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-cone-2",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-cone-3",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "restore",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          }
+        ],
+        "expected_readiness_seconds": 8.428,
+        "readiness_timeout_seconds": 491.42799999998533,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 20.0,
+            "minimum_seconds": 20.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "expected_readiness_seconds": 0.0,
+            "readiness_samples": 32,
+            "readiness_source": "VALID same-save/key median",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 11.427999999985332,
+            "expected_readiness_seconds": 8.427999999985332,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 8.427999999985332
+          },
+          {
+            "window": "prefetch-cone",
+            "seconds": 5.0,
+            "minimum_seconds": 5.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-cone-off-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-cone-on-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-cone-off-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-cone-on-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-cone-0",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-cone-1",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-cone-2",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-cone-3",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      }
+    },
+    "wo1-s8-bit4.json": {
+      "problems": [],
+      "duration": {
+        "seconds": 188.00000000000006,
+        "minimum_seconds": 188.0,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "prefetch-order",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "shot-order-off-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-order-on-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-order-off-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-order-on-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-order-0",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-order-1",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-order-2",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-order-3",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "restore",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          }
+        ],
+        "expected_readiness_seconds": 8.428,
+        "readiness_timeout_seconds": 491.42799999998533,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 20.0,
+            "minimum_seconds": 20.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "expected_readiness_seconds": 0.0,
+            "readiness_samples": 32,
+            "readiness_source": "VALID same-save/key median",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 11.427999999985332,
+            "expected_readiness_seconds": 8.427999999985332,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 8.427999999985332
+          },
+          {
+            "window": "prefetch-order",
+            "seconds": 5.0,
+            "minimum_seconds": 5.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-order-off-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-order-on-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-order-off-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-order-on-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-order-0",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-order-1",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-order-2",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-order-3",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      }
+    },
+    "wo1-s8-hit-shade.json": {
+      "problems": [],
+      "duration": {
+        "seconds": 188.00000000000006,
+        "minimum_seconds": 188.0,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "prefetch-sparse",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          },
+          {
+            "window": "shot-sparse-off-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-sparse-on-a",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-sparse-off-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "shot-sparse-on-b",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-sparse-0",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-sparse-1",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-sparse-2",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "cost-sparse-3",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          },
+          {
+            "window": "restore",
+            "reasons": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ]
+          }
+        ],
+        "expected_readiness_seconds": 8.428,
+        "readiness_timeout_seconds": 491.42799999998533,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 20.0,
+            "minimum_seconds": 20.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "expected_readiness_seconds": 0.0,
+            "readiness_samples": 32,
+            "readiness_source": "VALID same-save/key median",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "producer-sanity-warmup",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 11.427999999985332,
+            "expected_readiness_seconds": 8.427999999985332,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 8.427999999985332
+          },
+          {
+            "window": "prefetch-sparse",
+            "seconds": 5.0,
+            "minimum_seconds": 5.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-sparse-off-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-sparse-on-a",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-sparse-off-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-sparse-on-b",
+            "seconds": 20.9,
+            "minimum_seconds": 20.9,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-sparse-0",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-sparse-1",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-sparse-2",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-sparse-3",
+            "seconds": 19.3,
+            "minimum_seconds": 19.3,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [
+              "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+            ],
+            "readiness_timeout_seconds": 30.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "unproven; no VALID same-save/key observation",
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      }
+    }
+  },
+  "historical_replay": "UNPROVEN: no complete historical same-key/state observations; no rendering qualification claimed.",
+  "synthetic_dryrun": {
+    "status": "PASS",
+    "checks": "camera sampling, roles, trace markers, scene-wait/capacity lint, fake-queue missing-expect INVALID and stripped-gates VALID paths",
+    "scratch": "%TEMP%/bg3rtx-backlog-wo/{wo1-s8-hit-shade,wo1-s8-bit2,wo1-s8-bit4}"
+  }
+}
