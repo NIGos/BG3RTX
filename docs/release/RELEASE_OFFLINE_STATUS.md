@@ -6,7 +6,7 @@ PASS means only the named offline check. This is not release approval or final h
 ## Settled direction and open decisions
 
 - GPL-3.0-or-later plus NVIDIA exception is chosen. No NVIDIA notification is planned.
-- May the game-derived asset database be redistributed under Larian's terms?
+- User decision 2026-11-04: the release ships the game-derived asset database (8 MB) at the user's own risk on game-data rights; this supersedes the 2026-11-02 plan to generate it on the player's PC.
 - Microsoft runtime uses static CRT. No VC runtime installer or DLL ships.
 - SHaRC is rejected unless matched injection/resolve inputs exist; keep Off and headers excluded meanwhile.
 - Fresnel stays Experimental, Off in presets: invisible on open water to the user.
