@@ -1,5 +1,7 @@
 # ef3: static S8 RR post-order decision
 
+Retired 2026-11-04: rr_hair_resolve removed; use post_temporal for the retained post investigation. Do not run the preserved jobs; the generator stops before writing files.
+
 Historical: superseded by `post_temporal`. The user rejected `rr_hair_resolve`; this attribution job must not enter the next live series. Its original job, gates and predictions remain as history.
 
 Prepared outside every watched inbox. No game launch or queue staging is part

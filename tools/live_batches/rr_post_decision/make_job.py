@@ -11,6 +11,7 @@ WINDOWS = [('base-a', {}), ('post-late-a', {'rr_post': 0}),
 
 
 def make():
+    raise SystemExit("Retired 2026-11-04: rr_hair_resolve removed; use post_temporal for the retained post investigation. Historical jobs must not be regenerated.")
     old = json.loads((HERE.parent/'edge_flicker/jobs/ef1-dialogue3-attribution.json').read_text())
     plan, every, traces = [], [], []
     def step(label, seconds, keys, **extra):

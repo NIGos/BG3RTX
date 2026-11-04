@@ -167,18 +167,10 @@ leave a second pose of the same character in the legacy F-1/F-2 soup
 (`layer/rtscene.cpp`, `rt_add_cascade`). This is a proven admission defect, not
 identification of the particular ray hit in the user's dialogue.
 
-`rt_cascade_static_only=0` is the new off-by-default CPU filter, exposed as
-Developer / Static roof casters only, with Live apply modes for both choices.
-It requires Sun shadows / Ray-traced + hidden roofs. ON admits only the existing class-A affine
-instance position path with a known vertex buffer without STORAGE_BUFFER usage.
-Skinning SSBO, wind/cloth displacement, per-draw transforms and unknown paths are
-excluded. Known static roofs use the same existing conversion and origin rebase.
-Unknown static roofs can also be omitted. Class A proves no VS deformation, not
-an immutable instance transform or CPU-uploaded vertex stream; those remain limits.
-Camera capture and the raw Current Sun proof stream are unchanged. When Current
-Sun also captures the legacy layer, only the compacted legacy ranges are filtered.
-Allow two frames after toggles for old captures to drain. No ABI or shader edits;
-variant request delta 0. No hysteresis without evidence of static membership churn.
+`exp_cascade_static_only` / `rt_cascade_static_only` retired 2026-11-04: ON removed every caster, equivalent to cascade off; superseded by the default identity fix. GUI, INI and runtime filter removed.
+
+Historical classification and membership counters remain diagnostic; they do not
+filter casters. The camera capture and raw Current Sun proof stream are unchanged.
 
 The `[cascade] casters` line adds legacy dynamic/unclassified added/excluded per
 frame and set changes per window. Membership ignores draw order; identities include
@@ -201,7 +193,7 @@ This preserves off-camera roofs and does not filter the raw Current Sun proof
 stream. Its compacted legacy soup uses the corrected duplicate policy.
 
 The `[cascade] casters` line reports `duplicates by mesh (offset differs)` per
-frame. `rt_cascade_static_only` remains an optional fallback. No ABI/shader change;
+frame. The rejected static-only fallback has been retired. No ABI/shader change;
 variant request delta 0, no new GPU pass. CPU regressions cover duplicate removal,
 distinct instances and differing origins. Visual roof coverage and dialogue
 confirmation remain pending; no game was launched. Validation details are in
@@ -216,12 +208,7 @@ camera VS layouts cannot supply the model identity. There is no captured
 skinning-source lineage, so index-buffer/range matching alone is unsafe.
 Matching now ignores material allocation but retains geometry and proven
 placement/instance constraints. Differing skinned output regions remain unmatched.
-The existing `rt_cascade_static_only=1` fallback excludes dynamic/unclassified
-legacy copies, including audited skin and storage-backed position paths; the
-camera copy is retained. Default 0 remains unchanged. Unknown static roofs can
-be omitted with this fallback. A key-0 counter exposes relaxed-identity coverage.
-Prepared dialogue pairs toggle the fallback in one run; exact zero image
-registration replaces the every-window camera-log gate. Predicted port character
-motion <=0.002 block luminance; nocascade gap must fall to camp level.
+The historical static-only fallback and its planned toggle pairs were rejected;
+the default identity fix supersedes them. A key-0 counter exposes identity coverage.
 No live run or measured GPU cost; no ABI/shader edits, variant request delta 0.
 Validation: [progress/fix-cascade-dialogue2.md](progress/fix-cascade-dialogue2.md).

@@ -6,12 +6,10 @@ Per i capelli usa Full RT geometry già attiva all'avvio; per RR attiva Ray Reco
 Per l'acqua prepara RT water e Off-screen bounce light all'avvio (preset Ultra).
 La nuova DLL host va caricata avviando il gioco una volta dopo l'aggiornamento.
 Tutti gli esperimenti partono spenti; RR order parte da Before post (default).
-Per provare After post spegni prima RR hair dither resolve.
 
 | Nome nella GUI / chiave | Save e punto da guardare | Cambiamento da confrontare | Costo noto RTX 5090 |
 |---|---|---|---|
 | Strand hair in ray-traced lighting / `rt_hair_groom` | Dialogue1; ombre dei capelli su viso e collo | Fili al posto delle card per ombre, AO, GI e riflessi; richiede Hair + scalp e groom disponibili | Rispetto alle card native: RT -1,1–1,5 ms, GI -1,6–1,8 ms; refit +0,57 ms |
-| RR hair dither resolve / `rr_hair_resolve` | Dialogue3; capelli sottili contro sfondo sfocato | Con Before post: confronta scintillio puntinato e dettaglio; può ammorbidire la sagoma | Non misurato |
 | RR order / `rr_post` | Dialogue3; stessi capelli e profondità di campo | Before post (default, 1) oppure After post (0); confronta scintillio e sfocatura | Delta non misurato |
 | Water camera correction / `rt_water_compose_shift` | S8; piscina, gira con Q/E | Controlla se i riflessi restano presenti durante la rotazione | Delta della correzione attuale non misurato |
 | Water: hidden-surface reflections / `rt_water_hit_shade` | S8; piscina, oggetti fuori schermo o nascosti | Confronta illuminazione degli oggetti riflessi | +0,8–2,4 ms |
@@ -29,3 +27,6 @@ Il log riporta una riga `A/B: <key>=<value>` con tutte le chiavi modificate.
 Non esiste un overlay di notifiche: nessun indicatore sullo schermo per 2 s.
 `rt_hair_gi_mean` resta escluso dalla prova e nascosto nella GUI normale.
 I costi sono riferimenti di scene diverse, non promesse; nessun nuovo test in gioco eseguito.
+
+
+`rr_hair_resolve` retired 2026-11-04: user verdict "ruins the hair"; removed from GUI, INI and runtime.

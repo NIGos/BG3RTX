@@ -21,7 +21,7 @@ def make(scene_filter=None):
                              scan=16,capture_at=0,serial=0,motion_start=seconds,motion_end=seconds,
                              pixels_per_second=0,direction=0,
                              set=','.join(f'{k}={v}' for k,v in state.items()),**extra))
-        base=dict(rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,
+        base=dict(rr=1,rr_post=1,rr_post_temporal=0,fg=2,
                   pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0)
         step('warmup',20,base);step('warmup-camera',20,dict(base,rr_post_temporal=1))
         for i,(label,on) in enumerate(D3_WINDOWS if scene == 'dialogue3' else WINDOWS):

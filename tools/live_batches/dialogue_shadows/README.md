@@ -1,5 +1,7 @@
 # Dialogue character shadows batch (live_batch dialogue-shadows), NOT authorized
 
+Retired 2026-11-04: rt_cascade_static_only removed; identity fix supersedes this attribution batch. Do not run the preserved jobs; the generator stops before writing files.
+
 Historical: Solved attribution: the dialogue shadow band is fixed and the user accepts AO self-occlusion. Native-hair and static-cascade attribution controls are not candidates for the next series. Preserve these jobs and predictions as the original investigation; do not queue them for qualification.
 
 Question (user, 2026-11-02): in dialogue scenes intrusive shadows appear on the characters themselves. Which RT

@@ -426,18 +426,11 @@ static void test_gui_levels() {
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
-  CHECK(user_exp == 13);   // native coverage, pool trim and temporal post graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, RR hair resolve, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
-  CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_passes", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
+  CHECK(user_exp == 12);   // native coverage, pool trim and temporal post graduated to Ultra; pak HLOD, water hit cost, three exact GPU candidates, strand hair on screen, physical strand shading, strand crowd budget and water Fresnel remain.
+  CHECK(dev == (std::vector<std::string>{"exp_hair_fibre_gi", "exp_hair_groom_shadow_t", "exp_hair_primary_passes", "exp_hair_primary_order", "exp_hair_groom_tips", "exp_hair_physical_origin", "exp_alpha_spill", "exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
-  const auto* submit_batch=find_knob("perf_submit_batch");CHECK(submit_batch!=nullptr);
-  if(submit_batch){
-    CHECK(submit_batch->apply==Apply::Live);CHECK(submit_batch->dev_only);
-    for(int p=0;p<kPresetCount;++p) CHECK(submit_batch->preset[p]==0);
-    CHECK_EQ(code_default("perf_submit_batch"),"0");
-    CHECK(knob_value(*submit_batch,parse_ini("perf_submit_batch=1\n"))==1);
-  }
   for (const char* id : {"exp_hit_reference", "exp_ls_exact_k", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
   CHECK(dev_mode("1"));
   CHECK(!dev_mode("0"));
@@ -484,7 +477,7 @@ static void test_gui_levels() {
   CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
   CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
-  for (const char* id : {"exp_cascade_static_only", "exp_hair_physical_origin", "exp_alpha_spill"}) {
+  for (const char* id : {"exp_hair_physical_origin", "exp_alpha_spill"}) {
     CHECK(!knob_visible(*find_knob(id), false)); CHECK(knob_visible(*find_knob(id), true));
   }
 
@@ -841,34 +834,10 @@ static void test_ultra_water() {
     CHECK_EQ(get(expanded, "rr_post_temporal"), preset == kUltra ? "1" : "0");
     CHECK_EQ(get(expanded, "rr_post"), "1");
   }
-  const Knob& hair_resolve = *find_knob("rr_hair_resolve");
-  CHECK(hair_resolve.experimental && !hair_resolve.dev_only);
-  CHECK(hair_resolve.apply == Apply::Live);
-  CHECK_EQ(hair_resolve.choices[1].need[0].knob, "rr");
-  CHECK_EQ(hair_resolve.required_on[0].key, "rr_post");
-  CHECK_EQ(hair_resolve.required_on[0].value, "1");
-  for (int preset = 0; preset < kPresetCount; ++preset) {
-    Map expanded;
-    for (const auto& kv : expand_preset(preset)) expanded[kv.first] = kv.second;
-    CHECK_EQ(get(expanded, "rr_hair_resolve"), "0");
-  }
 
 }
 
 static void test_product_policy() {
-  // CPU perf experiments remain hidden from players, including their Off choices.
-  for (const char* id : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
-    const Knob& k = *find_knob(id);
-    CHECK(k.dev_only);
-    CHECK(!knob_visible(k, false));
-    CHECK(knob_visible(k, true));
-    CHECK_EQ(code_default(id), "0");
-    for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
-    for (int c = 0; c < choice_count(k); ++c) {
-      CHECK(!choice_visible(k, c, false));
-      CHECK_EQ(choice_maturity(k, c), "developer");
-    }
-  }
   const auto& emission = *find_knob("exp_hit_emission");
   Map legacy = code_defaults();
   apply_layer(legacy, parse_ini("preset=ultra\ndev=0\nrt_hit_emission=2\nrt_emissive=1\nunknown_future_key=kept\n"));
@@ -1045,7 +1014,7 @@ static void test_apply_modes() {
   // Player trial toggles are visible, default-off and live in both directions.
   // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
   CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
-  for (const auto* id : {"rr_hair_resolve", "rr_post", "exp_water_hit_shade",
+  for (const auto* id : {"rr_post", "exp_water_hit_shade",
                          "exp_hair_groom"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && knob_visible(k,false) && !k.dev_only);
@@ -1064,15 +1033,6 @@ static void test_apply_modes() {
   CHECK(!key_change_needs_restart("rt_water_compose","0","0"));
   for (int c = 0; c < 4; ++c) CHECK(knob_apply(*find_knob("exp_hidden_surface"), c) == Apply::Restart);
   for (int c = 0; c < 3; ++c) CHECK(knob_apply(*find_knob("sun_shadows"), c) == Apply::Live);
-  const auto& static_casters = *find_knob("exp_cascade_static_only");
-  CHECK(static_casters.dev_only && static_casters.experimental);
-  CHECK_EQ(code_default("rt_cascade_static_only"), "0");
-  for (int c = 0; c < 2; ++c) {
-    CHECK(knob_apply(static_casters, c) == Apply::Live);
-    CHECK_EQ(get(on_map(static_casters, c), "rt_cascade_static_only"), std::to_string(c));
-  }
-  CHECK_EQ(static_casters.choices[1].need[0].knob, "sun_shadows");
-  CHECK(static_casters.choices[1].need[0].min_choice == 2);
   CHECK(knob_apply(*find_knob("exp_water"),0)==Apply::Live);
   CHECK(knob_apply(*find_knob("exp_water"),3)==Apply::Restart);
 }
@@ -1100,6 +1060,21 @@ static void test_master_ab_coverage() {
   CHECK(host_water.find("bool water_wanted() { return g_dd && rt_enabled() && cfg_hot(CfgHot::rt_water_geometry) != 0;") != std::string::npos);
   const auto hair = read_file(BG3RTX_SOURCE_DIR "/layer/hair_primary.cpp");
   CHECK(hair.find("return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0") != std::string::npos);
+}
+
+static void test_retired_rejected_controls() {
+  for (const char* id : {"rr_hair_resolve", "exp_cascade_static_only", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+    CHECK(find_knob(id) == nullptr);
+    CHECK(schema_json().find(id) == std::string::npos);
+  }
+  for (const char* key : {"rr_hair_resolve", "rt_cascade_static_only"}) CHECK(code_default(key) == nullptr);
+  for (const char* key : {"perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+    CHECK_EQ(code_default(key), "0");
+    for (int p=0;p<kPresetCount;++p) { Map preset; for (const auto& kv : expand_preset(p)) preset[kv.first]=kv.second; CHECK(preset.count(key) == 0); }
+  }
+  const Map defaults=code_defaults();
+  const Map legacy=parse_ini("rr_hair_resolve=1\nrt_cascade_static_only=1\nperf_hitmat_lists=1\nperf_hook_state=1\nperf_submit_batch=1\n");
+  CHECK(knob_values(merge_layers({&defaults,&legacy})) == knob_values(defaults));
 }
 
 static void test_retired_hair_ini() {
@@ -1139,6 +1114,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_retired_rejected_controls();
   test_retired_hair_ini();
   test_master_ab_coverage();
   test_gui_review_safety();

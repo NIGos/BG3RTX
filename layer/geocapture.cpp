@@ -321,7 +321,6 @@ struct Capture {
   uint64_t rec = 0;                                  // build record of its command buffer (submitted?)
   uint32_t c_seen = 0, c_dup = 0, c_mesh_dup = 0, c_key_zero = 0, c_alpha = 0, c_drop = 0, c_ubo = 0, c_full = 0, c_added = 0;
   uint32_t c_dynamic_added = 0, c_dynamic_excluded = 0;
-  bool c_static_only = false;
   std::unordered_set<uint64_t> c_legacy_keys;
   uint64_t c_over = 0;                       // cascade: bytes of the draws left out for a full buffer
   uint64_t c_sig = 1469598103934665603ull;   // cascade: the added draws in order (rt_cascade_refit)
@@ -1156,7 +1155,6 @@ Capture g_ccap[3];                  // the captured cascade pass of frame F is g
 struct CcMeta {
   uint64_t frame = 0; uint32_t tris = 0; uint64_t rec = 0;
   bool has_origin = false; float origin[3] = {}; uint64_t sig = 0;
-  bool static_only = false;
   SunCascadeCapture sun;
 };
 CcMeta g_cc_meta[3];                // what g_ccap[i] holds, converted (frame 0: nothing)
@@ -1315,7 +1313,6 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
   c.c_seen = c.c_dup = c.c_alpha = c.c_drop = c.c_ubo = c.c_full = c.c_added = 0;
   c.c_mesh_dup=c.c_key_zero=0;
   c.c_dynamic_added = c.c_dynamic_excluded = 0;
-  c.c_static_only = cfg_int("rt_cascade_static_only", 0) != 0;
   c.c_legacy_keys.clear();
   c.c_over = 0;
   c.c_sig = 1469598103934665603ull;
@@ -1440,12 +1437,9 @@ void cascade_pre_draw(VkCommandBuffer cmd, CmdState* s, Capture* c, const DrawAr
     cfg_int("rt_cascade_alpha_dedupe",1)!=0,mesh_duplicate,draw_duplicate);
   if(legacy==cascade::LegacyCaster::duplicate && offset_duplicate) ++c->c_mesh_dup;
   const bool static_candidate=cascade_static_candidate(s,pi);
-  const bool dynamic_excluded=legacy==cascade::LegacyCaster::keep &&
-    !cascade::keep_static_only(c->c_static_only,static_candidate);
-  const bool legacy_keep=legacy==cascade::LegacyCaster::keep && !dynamic_excluded;
+  const bool legacy_keep=legacy==cascade::LegacyCaster::keep;
   // Filter only the lagged legacy soup. Current Sun needs every native draw for
   // its coverage proof, including when the legacy soup is compacted alongside it.
-  if(dynamic_excluded) {++c->c_dynamic_excluded;if(!current_sun) return;}
   if(legacy==cascade::LegacyCaster::alpha_skip) {
     if(cutout) {++g_cc_alpha_known;if(alpha_fs.uv==pi.uv && pi.uv>=0) ++g_cc_alpha_uv;}
     if(!current_sun) {++c->c_alpha;return;}
@@ -1568,7 +1562,6 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     meta.sun.finite_native_clip=c->c_finite_sun_clip;
     meta.sun.fresh_depth=c->c_fresh_depth;meta.sun.native_raster_valid=c->c_native_raster_valid;meta.sun.native_viewport=c->c_native_viewport;
   }
-  meta.static_only=c->c_static_only;
   if(c==&g_ccap[f % 3]) g_cc_meta[f % 3] = meta;
   if(c->c_legacy_target) {
     CcMeta legacy=meta;
@@ -1585,7 +1578,7 @@ void cascade_pass_after(VkCommandBuffer cmd, Capture* c) {
     ++st.legacy_frames;
     st.dynamic_added += c->c_dynamic_added; st.dynamic_excluded += c->c_dynamic_excluded;
     if(c->layer>=0 && c->layer<kCcLayers)
-      st.set_changes += g_cc_set_changes[c->layer].observe(f,c->c_static_only,c->c_legacy_keys);
+      st.set_changes += g_cc_set_changes[c->layer].observe(f,false,c->c_legacy_keys);
   }
   ++st.frames;
   st.seen += c->c_seen, st.dup += c->c_dup, st.alpha += c->c_alpha, st.drop += c->c_drop, st.ubo += c->c_ubo;
@@ -2860,9 +2853,6 @@ int geo_cascade_soup(uint64_t frame, CascadeSoup* out) {
   const CcMeta& m = g_cc_meta[frame % 3];
   const Capture& c = g_ccap[frame % 3];
   if (m.frame != frame || !m.tris || !c.xfb.b) return 1;
-  // A policy toggle must not attach F-1/F-2 geometry captured under the
-  // opposite policy. Wait for its filtered soup rather than showing stale skin.
-  if (m.static_only != (cfg_int("rt_cascade_static_only",0)!=0)) return 1;
   if (bvh_rec_state(m.rec) != 1) return 2;   // its conversion has not run (yet) or never will
   *out = CascadeSoup{c.xfb.b, m.tris, g_stride, m.has_origin, {m.origin[0], m.origin[1], m.origin[2]}, m.sig,
                      m.rec, c.cmd};

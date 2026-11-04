@@ -331,13 +331,6 @@ inline constexpr Knob kKnobs[] = {
     {"all", "All", kCapRayQuery, {{"ls_box", "2"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 2}, false, {}, false, "Lighting", {"Measured", "+0.13 ms S6", "Unknown", "RTX 5090; ls_box=2, ls_box_honour_shadow=1; ba1 S6 Grymforge 2026-11-03 08:02 valid, user approved. Local-light pass 0.45 ms off -> 0.58 ms fixed; pixels > 8 levels 8.6% vs OFF/OFF 8.5%, mean signed difference 0.0; energy within noise; unshadowed traces 0 (old mode 369M/120 frames, -5.27% lit luminance)."}},
 
-  {"rr_hair_resolve", "RR hair dither resolve",
-   "Experimental: smooths dotted hair edges and may soften them.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rr_hair_resolve", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapDlss, {{"rr_hair_resolve", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}, "Smooths hair coverage before RR. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured; may soften edges."},
-
   {"rr_post", "RR order",
    "Experimental: changes how fine hair edges appear through depth of field.",
    Kind::Choice, Apply::Live, "live", false,
@@ -462,14 +455,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_pool_trim", "1"}}, {{"exp_native_coverage", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 1}, false, {}, false, "Performance", {"Measured", "Not measured", "Mesh pool -26-50%", "RTX 5090; hair_qual 2026-11-03"}, "Reclaims and packs unused native hair snapshots. Mesh pool reduction of 26-50% in the reference scenes; no numeric GPU timing available."},
 
-  {"exp_cascade_static_only", "Static roof casters only",
-   "Excludes animated and unclassified shadow-map copies from roof sun shadows. "
-   "May omit some roofs; dialogue motion and roof coverage are unqualified.",
-   Kind::Choice, Apply::Live, "live; allow two frames for capture replacement", true,
-   {{"off", "Off", 0, {{"rt_cascade_static_only", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_cascade_static_only", "1"}}, {{"sun_shadows", 2}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
-
   {"exp_hair_physical_origin", "Physical hair ray origins (advanced)",
    "Adjusts where light rays start on hair to improve secondary lighting. Quality and cost remain unqualified.",
    Kind::Choice, Apply::Restart, "Enable at startup to reserve ray-origin resources; then live A/B is available.", true,
@@ -483,30 +468,6 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"rt_alpha_spill", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}, true, "Developer", {}},
-
-  {"perf_hitmat_lists", "Hit material CPU batching",
-   "Tests recording-owned candidate lists, short query snapshots and batched material row uploads. "
-   "No measured gain: G-buffer hooks 1.16 ms in both states. Keep off. "
-   "Requires Hidden-surface shading at startup.",
-   Kind::Choice, Apply::Live, "live; native materials need startup", false,
-   {{"off", "Off", 0, {{"perf_hitmat_lists", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"perf_hitmat_lists", "1"}}, {{"exp_hidden_surface", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"}}, true},
-  {"perf_hook_state", "Reuse capture hook state",
-   "Reuses immutable pipeline eligibility and gathers repeated instance matrices once per submit. "
-   "REJECTED: submit CPU 20.2 -> 26.8 ms; matrix copies 0.31 -> 0.52 ms/build. Keep off.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"perf_hook_state", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", 0, {{"perf_hook_state", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true},
-
-  {"perf_submit_batch", "Batch descriptor and submit bookkeeping",
-   "Reuses CPU scratch and batches compatible descriptor updates and private completion signals. "
-   "Within noise: submit CPU 20.2/20.7 ms off versus 20.3/20.3 ms on. Keep off.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"perf_submit_batch", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", 0, {{"perf_submit_batch", "1"}}, {}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, false, {}, true},
 
   {"exp_hit_paks", "Pak material coverage",
    "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
@@ -623,7 +584,6 @@ inline constexpr KV kDefaults[] = {
     {"rr_preset", "6"},
     {"rr_post", "1"},
     {"rr_post_temporal", "0"},
-    {"rr_hair_resolve", "0"},
     {"rr_cbt", "1"},
     {"rr_post_quantise", "1"},
     {"rr_post_check", "0"},
@@ -686,7 +646,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_sun_ramp", "0.75"},
     {"rt_sun_near", "0"},
     {"rt_cascade_casters", "0"},
-    {"rt_cascade_static_only", "0"},
     {"rt_cascade_index", "2"},
     {"rt_cascade_mb", "160"},
     {"rt_cascade_origin", "1"},

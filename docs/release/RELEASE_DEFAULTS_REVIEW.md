@@ -53,12 +53,13 @@ Keep all three developer CPU experiments off in repository, release and every pr
 | `perf_hitmat_lists` | G-buffer hooks 1.16 ms both ways | **No gain**. Keep off. |
 | `perf_submit_batch` | Submit CPU OFF 20.2/20.7 ms versus ON 20.3/20.3 ms | **Within noise**. Keep off. |
 
-The settings option text records these reasons. `perf_hook_state` remains available
-only to developers because the requested S8 cost-hooks rerun depends on its toggle.
-The same implementation header contains matrix validation/scatter helpers used by
-the default uncached path, so wholesale deletion would also remove live dependencies.
-Retaining this diagnostic toggle does not qualify or promote its optimization.
-No defaults, shader requests or ABI change follows from these verdicts.
+The three controls retired 2026-11-04 from the GUI, including developer mode.
+They remain hidden developer INI keys, default 0: matrix validation/scatter helpers
+also serve the default path, and material snapshots and descriptor/submit paths
+share active capture code. No further qualification queue is implied.
+`rr_hair_resolve` is fully removed after the user verdict "ruins the hair";
+`rt_cascade_static_only` is fully removed because ON removed all casters.
+Shader request delta 0; ABI unchanged.
 
 ## Recommendation and load order
 

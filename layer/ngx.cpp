@@ -17,7 +17,6 @@
 // rr is read on every evaluate, so it switches without a restart; the first
 // evaluate after a switch carries Reset=1.
 #include "host.h"
-#include "../common/pipeline_async.h"
 
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_defs_dlssd.h>
@@ -268,9 +267,6 @@ static std::vector<SrFeature> g_feats;
 static GBuffer g_gbuf;
 static std::mutex g_gbuf_mu;
 
-static Guide g_hair;
-static uint64_t g_hair_frame = 0, g_hair_gen = 0;
-static VkPipeline g_hair_pipe = VK_NULL_HANDLE;
 static Guide g_guide[3];  // diffuse, specular, normal+roughness
 static uint32_t g_guide_w = 0, g_guide_h = 0;
 
@@ -549,13 +545,6 @@ bool ngx_diffuse_albedo(uint32_t w, uint32_t h, VkImageView* view) {
   return true;
 }
 
-bool ngx_hair_mask(uint32_t w, uint32_t h, VkImageView* view) {
-  if (!g_hair.initialized || g_hair_frame != frame_index() ||
-      g_hair.res.Resource.ImageViewInfo.Width != w || g_hair.res.Resource.ImageViewInfo.Height != h) return false;
-  *view = g_hair.view;
-  return true;
-}
-
 static bool ensure_guides(DeviceData* dd, uint32_t w, uint32_t h) {
   if (g_guide_w == w && g_guide_h == h && g_guide[0].image) return true;
   for (auto& g : g_guide) guide_destroy(dd, g);
@@ -621,32 +610,6 @@ static VkPipeline build_pipeline(DeviceData* dd, const char* entry, uint64_t& ge
   return p;
 }
 
-static bg3::pipe_async::Builds g_hair_builds(1,
-    [](const bg3::pipe_async::Result& r) { defer_destroy(BG3_DEFER_PIPELINE, r.pipeline); },
-    [] { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); });
-static bool g_hair_warmed = false;
-static bg3::pipe_async::Result compile_hair(DeviceData* dd) {
-  uint64_t gen = 0;
-  auto p = build_pipeline(dd, "capture", gen, VK_NULL_HANDLE, "rr_hair.hlsl");
-  return {uint64_t(p), gen, p != VK_NULL_HANDLE};
-}
-static void prewarm_hair(DeviceData* dd) {
-  if (!g_hair_warmed) {
-    g_hair_warmed = true;
-    g_hair_builds.prewarm("hair", uint64_t(g_pl), [dd] { return compile_hair(dd); });
-    log("[ngx] Experimental prewarm: 1 extra pipeline (RR hair capture, below normal priority)");
-  }
-  Bg3ShaderBlob blob{};
-  const bool reload = g_hair_pipe && shader_get("rr_hair.hlsl", "capture", "cs_6_0", &blob) && blob.generation != g_hair_gen;
-  if (!g_hair_pipe || reload) {
-    bg3::pipe_async::Result r;
-    if (g_hair_builds.poll("hair", uint64_t(g_pl), [dd] { return compile_hair(dd); }, &r) == bg3::pipe_async::State::kReady) {
-      if (g_hair_pipe) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(g_hair_pipe));
-      g_hair_pipe = VkPipeline(r.pipeline); g_hair_gen = r.generation;
-    }
-  }
-}
-void ngx_join_prewarm() { g_hair_builds.join(); g_hair_warmed = false; }
 
 static VkImageView view_of(DeviceData* dd, VkImage img, bool depth) {
   auto it = g_views.find(img);
@@ -898,7 +861,6 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     if (x.w == p.width && x.h == p.height && !x.rr_failed) f = &x;
   if (!f) return;
   if (!ensure_layouts(dd) || !ensure_guides(dd, p.width, p.height)) return;
-  prewarm_hair(dd);
   g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
   if (!g_pipe) return;
 
@@ -962,39 +924,6 @@ static void record_guides_at_gbuffer(VkCommandBuffer cmd, const Bg3PassInfo& p, 
     }
   }
   dispatch_guides(dd, cmd, set, guide_push(*f, p.width, p.height, cam));
-  // Snapshot while RT2 still contains the G-buffer. Binary surviving sample
-  // occupancy is all this buffer proves; it is NOT the discarded material alpha.
-  if (cfg_int("rr_post", 1) && cfg_int("rr_hair_resolve", 0)) {
-    if (g_hair.image && (g_hair.res.Resource.ImageViewInfo.Width != p.width ||
-                        g_hair.res.Resource.ImageViewInfo.Height != p.height)) {
-      guide_destroy(dd, g_hair);
-      g_hair_frame = 0;
-      retire_guide_pool();
-    }
-    if (!g_hair.image && !guide_create(dd, g_hair, VK_FORMAT_B10G11R11_UFLOAT_PACK32, p.width, p.height))
-      guide_destroy(dd, g_hair);
-    prewarm_hair(dd);
-    SetKey hk = key;
-    hk.out = g_hair.image;
-    VkDescriptorSet hs = g_hair.image ? get_set(dd, hk, g_hair.view) : VK_NULL_HANDLE;
-    if (hs && g_hair_pipe) {
-      if (!g_hair.initialized) {
-        VkImageMemoryBarrier init{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-        init.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; init.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        init.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        init.srcQueueFamilyIndex = init.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        init.image = g_hair.image; init.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                 0, 0, nullptr, 0, nullptr, 1, &init);
-        g_hair.initialized = true;
-      }
-      VkPipeline saved = g_pipe;
-      g_pipe = g_hair_pipe;
-      dispatch_guides(dd, cmd, hs, guide_push(*f, p.width, p.height, cam));
-      g_pipe = saved;
-      g_hair_frame = frame_index();
-    }
-  }
   if (known) {
     for (auto& x : b) {
       std::swap(x.oldLayout, x.newLayout);
@@ -1285,7 +1214,6 @@ static bool rr_evaluate(DeviceData* dd, VkCommandBuffer cmd, SrFeature& f, NVSDK
   const uint32_t w = f.w, h = f.h;
   if (!gb.rt[0] || gb.w != w || gb.h != h) return refuse("no G-buffer pass at the render resolution seen yet");
   if (!ensure_layouts(dd) || !ensure_guides(dd, w, h)) return refuse("guide resources unavailable");
-  prewarm_hair(dd);
   g_pipe = build_pipeline(dd, "main", g_pipe_gen, g_pipe);
   if (!g_pipe) return refuse("rr_guides.hlsl has not compiled");
 

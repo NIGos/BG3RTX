@@ -25,6 +25,20 @@ int main(int argc,char** argv){
   h.play=[&](std::string&){++plays;return true;};
   h.prepareReport=[&](const std::string& issue,bool logs,bool settings,bool system){++prepares;check(issue=="Line\n\"quoted\" \xe2\x98\x80");check(!logs&&settings&&system);launcher::diagnostics::Snapshot r;r.status=launcher::diagnostics::Status::Complete;r.files={{"ISSUE.txt",issue,""}};r.bytes=issue.size();return r;};
   h.exportReport=[&](const launcher::diagnostics::Snapshot& r,std::string&){++exports;check(r.files[0].text=="Line\n\"quoted\" \xe2\x98\x80");return true;};
+  // Retired controls stay absent even with developer/experimental access.
+  {
+    launcher::State retired; retired.caps=~0u; retired.base={{"dev","1"}};
+    retired.values=st::preset_values(st::kUltra);
+    launcher::web::Bridge rb(retired); rb.experimental=true;
+    check(rb.dev);
+    for (const char* id : {"rr_hair_resolve", "exp_cascade_static_only", "perf_hitmat_lists", "perf_hook_state", "perf_submit_batch"}) {
+      check(rb.state_json().find(id)==std::string::npos);
+      const auto before=retired.values;
+      rb.handle(std::string("{\"type\":\"set\",\"id\":\"")+id+"\",\"value\":1}");
+      check(retired.values==before);
+      check(rb.dirty()==0);
+    }
+  }
   launcher::web::Bridge bridge(s,h);
   s.values[st::knob_index("exp_native_coverage")]=2;
   auto coverage=bridge.state_json();auto pos=coverage.find("\"id\":\"exp_native_coverage\"");

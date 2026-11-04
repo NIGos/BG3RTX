@@ -38,3 +38,5 @@ Dryrun PASS: two jobs INVALID without evidence / two structurally valid;
 scene-wait/capacity lints pass. 499 s phases + <=240 s waits + loading,
 18 traces, 1,100 MB; 16.3 min upper estimate with 120 s loading per save.
 Pending inventory: [other ready items](../tools/live_batches/qual_stage4/pending_items.md).
+
+The rejected CPU controls and `rr_hair_resolve` retired 2026-11-04 from the GUI; CPU keys remain hidden developer INI only (default 0), hair resolve is fully removed.
