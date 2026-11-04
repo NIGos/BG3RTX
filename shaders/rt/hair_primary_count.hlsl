@@ -10,11 +10,14 @@
 struct Push { uint tag, n, header_lo, header_hi; };   // header: the record's address (0: no refusal count)
 [[vk::push_constant]] Push pc;
 
+static const uint hair_primary_card_count_offset = 2896u; // common/hair_primary.h kCardCountOffset
+
 groupshared uint gsCount[64];
 groupshared uint gsRefused[64];
 groupshared uint gsOther[64];
 groupshared uint gsTraced;
 groupshared uint gsHit;
+groupshared uint gsCardCount[256];
 groupshared uint gsTagCount[256];   // 4 tags (tag - j) x 64 grooms: common/hair_primary.h kTagCountOffset
 
 [numthreads(256, 1, 1)]
@@ -22,13 +25,20 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   if (gi < 64u) gsCount[gi] = 0u, gsRefused[gi] = 0u, gsOther[gi] = 0u;
   if (gi == 0u) gsTraced = 0u, gsHit = 0u;
   gsTagCount[gi] = 0u;
+  gsCardCount[gi] = 0u;
   GroupMemoryBarrierWithGroupSync();
   const uint64_t rec = (uint64_t(pc.header_hi) << 32) | uint64_t(pc.header_lo);
   if (id.x < pc.n) {
     const uint4 e = Pixels.Load4(id.x * 16u);
-    if (e.x != 0xFFFFFFFFu && (e.x >> 24) < 64u)   // strand entries of the four newest tags, per groom
-      for (uint j = 0u; j < 4u; ++j)
-        if (e.w == hp_seal(e.xyz, pc.tag - j)) { InterlockedAdd(gsTagCount[j * 64u + (e.x >> 24)], 1u); break; }
+    const uint2 mark = Pixels.Load2(pc.n * 16u + id.x * 8u);
+    const uint slot = mark.x & 255u;
+    for (uint j = 0u; j < 4u; ++j) {
+      const uint tag = pc.tag - j;
+      if (tag != 0u && slot < 16u && (mark.x >> 8u) == (tag & 0xFFFFFFu)) {
+        InterlockedAdd(gsCardCount[j * 64u + slot], 1u);
+        if (mark.y == mark.x) InterlockedAdd(gsTagCount[j * 64u + slot], 1u);
+      }
+    }
     if (e.w == hp_seal(e.xyz, pc.tag)) {   // diagnostics: entries the strand variant traced this frame, and with a strand
       InterlockedAdd(gsTraced, 1u);
       if (e.x != 0xFFFFFFFFu) InterlockedAdd(gsHit, 1u);
@@ -53,6 +63,7 @@ void main(uint3 id : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   if (gi < 64u && gsCount[gi] != 0u) Counts.InterlockedAdd(gi * 4u, gsCount[gi]);
   if (gi < 64u && gsRefused[gi] != 0u) Counts.InterlockedAdd(256u + gi * 4u, gsRefused[gi]);
   if (gi < 64u && gsOther[gi] != 0u) Counts.InterlockedAdd(512u + gi * 4u, gsOther[gi]);
+  if (gsCardCount[gi] != 0u) Counts.InterlockedAdd(hair_primary_card_count_offset + gi * 4u, gsCardCount[gi]);
   if (gsTagCount[gi] != 0u) Counts.InterlockedAdd(1872u + gi * 4u, gsTagCount[gi]);
   if (gi == 0u && gsTraced != 0u) Counts.InterlockedAdd(1792u, gsTraced);   // common/hair_primary.h kTracedOffset
   if (gi == 0u && gsHit != 0u) Counts.InterlockedAdd(1796u, gsHit);

@@ -361,22 +361,105 @@ int main() {
     CHECK(newest_counted_tag(current) == 0);
     const uint32_t none[kCountTags] = {0, 0, 0, 0};
     CHECK(newest_counted_tag(none) == -1);
-    CHECK(kTagCountOffset == 1872 && kCountBytes == kTagCountOffset + kCountTags * kMaxGrooms * 4);
+    CHECK(kTagCountOffset == 1872 && kCardCountOffset == kTagCountOffset + kCountTags * kMaxGrooms * 4 && kCountBytes == kCardCountOffset + kCountTags * kMaxGrooms * 4);
   }
-  {   // Pairing on the real ordering: prepass card slot C, then the G-buffer pass recorded after it; card samples of
-      // C..C+3 read back first, the strand count of the G-buffer after prepass C arrives later (two tags behind plus
-      // the count readback). The newest-only maps never met (hv7 2026-11-04: every draw 0/0).
+  { // Real ordering: prepass(N), G-buffer(N), readback three publishes later.
     using namespace hair_primary;
-    CoveragePairing p;
-    uint64_t c = 0, st = 0;
-    const uint64_t key = 0xABCDu, C = 1000;
-    for (uint64_t f = C; f < C + 4; ++f) CHECK(!p.add(true, key, f, 107431, &c, &st));
-    CHECK(p.add(false, key, C, 100004, &c, &st) && c == 107431 && st == 100004);
-    CHECK(!p.add(false, key, C + 20, 5, &c, &st));            // no card samples of that frame (yet)
-    CHECK(p.add(true, key, C + 20, 6, &c, &st) && c == 6 && st == 5);   // the card side arriving second also pairs
-    for (uint64_t f = 0; f < kPairHistory + 2; ++f) p.add(true, key, C + 100 + f, 1, &c, &st);
-    CHECK(!p.add(false, key, C + 100, 1, &c, &st));          // history bounded: too old to pair
-    CHECK(!p.add(false, 0, C, 1, &c, &st));
+    constexpr uint64_t key = 0xABCD;
+    GbFrame frames[8] = {};
+    CoverageGate gate;
+    DepthLatch latch;
+    bool ambiguous = false;
+    frames[0].frame = 100; frames[0].tag = 99; frames[0].keys[0] = key;
+    CHECK(unique_frame(frames, 8, 99, ambiguous) == frames && !ambiguous);
+    frames[1] = frames[0]; frames[1].frame = 101;
+    CHECK(!unique_frame(frames, 8, 99, ambiguous) && ambiguous);
+    CHECK(!unique_frame(frames, 8, 98, ambiguous) && !ambiguous);
+    gate.observe(key, 100, 1000, 1000); // arrives at publish 103
+    CHECK(gate.allow(key, 103));
+    for (uint64_t n = 104; n < 108; ++n) {
+      CHECK(latch.begin(n) == 0);
+      const bool prepass = gate.allow(key, n);
+      if (prepass) latch.prepass(key);
+      // G-buffer 104 refuses its header after a qualified prepass. The failed
+      // count from G-buffer 101 arrives only at publish 104, after this draw.
+      const bool strands = gate.allow(key, n) && n != 104;
+      CHECK(!strands);
+      const bool fallback = latch.needs_card_depth(n, key, strands);
+      CHECK(fallback == prepass);
+      if (fallback) {
+        CHECK(latch.needs_card_depth(n, key, false)); // all sibling draws need depth
+        latch.resolved(key);
+      }
+      if (n == 104) gate.observe(key, 101, 1000, 1944); // three publishes later, after G-buffer
+      CHECK(!gate.allow(key, n));
+    }
+    gate.observe(key, 100, 1000, 1000); // old success cannot override failure
+    CHECK(!gate.allow(key, 108));
+    CHECK(latch.begin(108) == 0); // no orphan
+  }
+  { // Compact draw keys: duplicates share, live slots survive reorder/removal, overflow keeps cards.
+    using namespace hair_primary;
+    DrawSlots slots;
+    uint64_t live[18];
+    for (uint32_t k = 0; k < 17; ++k) live[k] = 100 + k;
+    live[17] = live[0];
+    slots.publish(live, 18);
+    for (uint32_t k = 0; k < kDrawSlots; ++k) CHECK(slots.find(live[k]) == k);
+    CHECK(slots.find(live[16]) == kDrawSlots && slots.find(0) == kDrawSlots);
+    const auto snapshot = slots;
+    std::swap(live[0], live[15]);
+    slots.publish(live, 18);
+    CHECK(slots.find(100) == 0 && slots.find(115) == 15);
+    live[3] = 0;
+    slots.publish(live, 18);
+    CHECK(slots.find(116) == 3 && slots.find(103) == kDrawSlots);
+    CHECK(slots.find(100) == 0 && slots.find(115) == 15);
+    CHECK(snapshot.find(103) == 3 && snapshot.find(116) == kDrawSlots);
+  }
+  { // C++ model of the shader count: one packed pair per pixel, four newest masked tags.
+    using namespace hair_primary;
+    struct Marker { uint32_t card = 0, accepted = 0; };
+    CHECK(coverage_bytes(2560, 1067) == uint64_t(2560) * 1067 * 24);
+    Marker pixel[6] = {};
+    auto fragment = [&](uint32_t slot, uint32_t x, uint32_t tag, bool accepted) {
+      const uint32_t word = (tag << 8) | slot;
+      pixel[x].card = word;
+      if (accepted) pixel[x].accepted = word;
+    };
+    fragment(0, 0, 0x1000064, true);
+    fragment(0, 0, 0x1000064, false); // same-owner rejection retains acceptance
+    fragment(0, 1, 0x1000064, true);
+    fragment(1, 1, 0x1000064, false); // overlapping key owns card, old acceptance cannot count
+    fragment(0, 2, 0x1000063, true);
+    fragment(1, 3, 0x1000062, true);
+    fragment(1, 4, 0x1000061, false);
+    fragment(1, 5, 0x1000060, true); // outside four-tag window
+    uint32_t card[4][kDrawSlots] = {}, accepted[4][kDrawSlots] = {};
+    auto count = [&](uint32_t tag) {
+      for (const auto& m : pixel) for (uint32_t j = 0; j < 4; ++j) {
+        const uint32_t t = tag - j, slot = m.card & 255u;
+        if (t && slot < kDrawSlots && (m.card >> 8) == (t & 0xFFFFFFu)) {
+          ++card[j][slot];
+          accepted[j][slot] += m.accepted == m.card;
+        }
+      }
+    };
+    count(0x1000064);
+    CHECK(card[0][0] == 1 && accepted[0][0] == 1);
+    CHECK(card[0][1] == 1 && accepted[0][1] == 0);
+    CHECK(card[1][0] == 1 && accepted[1][0] == 1);
+    CHECK(card[2][1] == 1 && accepted[2][1] == 1);
+    CHECK(card[3][1] == 1 && accepted[3][1] == 0);
+    fragment(1, 1, 0x1000064, true);
+    CHECK(pixel[1].accepted == pixel[1].card); // both words follow last writer
+    fragment(0, 0, 0x1000065, false);
+    CHECK(pixel[0].accepted != pixel[0].card); // stale acceptance
+    for (auto& m : pixel) m = {};
+    fragment(15, 0, 0x1000000, true); // low 24 tag bits may legitimately wrap to zero
+    fragment(16, 1, 0x1000000, true); // invalid slot ignored
+    count(0x1000000);
+    CHECK(card[0][15] == 1 && accepted[0][15] == 1);
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;

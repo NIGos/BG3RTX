@@ -273,8 +273,7 @@ struct CmdState {
   std::array<VertexBinding, kMaxVertexBindings> vb{};
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
-  uint32_t hp_native_queries = 0;     // any game query active: never nest a probe query
-  uint32_t hp_coverage = UINT32_MAX;   // precise card/probe pair, begun outside XFB
+  uint32_t hp_coverage = UINT32_MAX;   // masked G-buffer probe scheduled after the native draw
   uint32_t hp_query = UINT32_MAX;      // rt_hair_groom_primary: the timestamp pair of the swapped draw
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
   // Game images, views and buffers this recording's work (ours or the game's
@@ -943,7 +942,6 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
 // pass's own command buffer.
 void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p);
 struct HairPrimarySubmit {
-  std::array<uint64_t, hair_primary::kCoverageLatency> queries{};
   std::array<uint64_t, 3> headers{}; // the three staged groom publishes
 };
 HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds);
