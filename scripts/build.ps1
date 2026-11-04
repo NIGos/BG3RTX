@@ -3,8 +3,9 @@
 #   .\scripts\build.ps1 -Core         rebuild only the hot-reloadable core
 #   .\scripts\build.ps1 -Watch        rebuild the core on every save under core/
 #   .\scripts\build.ps1 -Launcher     build only the player launcher, bin\BG3RTX.exe
+#   .\scripts\build.ps1 -ReleaseLayer build only the lean release layer, build-nodiag\bin\
 #   .\scripts\build.ps1 -Test         build everything, then run every registered CTest
-param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
+param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$ReleaseLayer, [switch]$Test, [string]$Config = "RelWithDebInfo")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "low-priority.ps1")
 . (Join-Path $PSScriptRoot "longrun.ps1")
@@ -32,6 +33,20 @@ function Invoke-Build([string]$target) {
 }
 
 Enter-VsShell
+if ($ReleaseLayer) {
+  if ($Core -or $Watch -or $Launcher -or $Test) { throw '-ReleaseLayer must be used alone (with optional -Config)' }
+  if (Get-Process -Name bg3, bg3_dx11 -ErrorAction SilentlyContinue) { throw 'game is running: build the release layer later' }
+  $build = Join-Path $root 'build-nodiag'
+  $layerBin = Join-Path $build 'bin'
+  Start-LongrunStep 'release layer'
+  # Reassert these settings on every invocation, including existing build trees.
+  cmake -S $root -B $build -G Ninja "-DCMAKE_BUILD_TYPE=$Config" '-DBG3RTX_DIAGNOSTICS=OFF' "-DBG3RTX_BIN=$layerBin"
+  if ($LASTEXITCODE) { throw 'configure of the lean layer failed' }
+  cmake --build $build --target VkLayer_bg3rtx
+  if ($LASTEXITCODE) { throw 'build of the lean layer failed' }
+  Stop-LongrunStep 'release layer'
+  return
+}
 if (-not $Watch) {
   if ($Test) { Start-LongrunStep 'build' }
   Invoke-Build $(if ($Core) { "bg3rtx_core" } elseif ($Launcher) { "bg3rtx_launcher" } else { "" })

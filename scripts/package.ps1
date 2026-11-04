@@ -10,7 +10,7 @@
 #   common\*.h                only the headers the shaders include (found by following #include)
 #   data\assetdb\bg3rtx_assetdb.bin   offline game data (lights, materials, roofs)
 #   bg3rtx.ini                repository bg3rtx.ini + data\release.ini (developer keys off)
-#   README.md, THIRD_PARTY.md, licences\, docs\USER_SETTINGS.md, VERSION.txt, files.txt
+#   README.md, LICENSE, LICENSE-EXCEPTION.md, THIRD_PARTY.md, licences\, docs\USER_SETTINGS.md, VERSION.txt, files.txt
 #   install.ps1, uninstall.ps1, Install.cmd, Uninstall.cmd   (scripts\release\)
 # Not shipped: SHaRC headers (licence, docs/release/THIRD_PARTY.md; -WithSharc adds them; sharc=0 in
 # every preset), Aftermath, the OMM SDK, development Streamline DLLs, tools, tests, PDBs.
@@ -58,6 +58,11 @@ foreach ($entry in $required) {
 }
 if ($missing.Count) { throw "missing required notices listed in THIRD_PARTY.md: $($missing -join ', ') (expected in $noticeDir)" }
 $noticeFiles = @([pscustomobject]@{ Source = $noticeDoc; Destination = "THIRD_PARTY.md" })
+foreach ($file in @('LICENSE', 'LICENSE-EXCEPTION.md')) {
+  $source = Join-Path $root $file
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "missing project licence: $file" }
+  $noticeFiles += [pscustomobject]@{ Source = $source; Destination = $file }
+}
 $noticeFiles += @(Get-ChildItem -LiteralPath $noticeDir -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
   [pscustomobject]@{ Source = $_.FullName; Destination = "licences\" + $_.FullName.Substring($noticeDir.Length + 1) }
 })
@@ -122,13 +127,7 @@ if (-not $Diagnostics) {
   $nodiag = Join-Path $root "build-nodiag"
   $layerBin = Join-Path $nodiag "bin"
   if (-not $NoBuild -and -not $DryRun) {
-    # build.ps1 entered the MSVC environment; same generator and configuration.
-    if (-not (Test-Path (Join-Path $nodiag "build.ninja"))) {
-      cmake -S $root -B $nodiag -G Ninja "-DCMAKE_BUILD_TYPE=RelWithDebInfo" "-DBG3RTX_DIAGNOSTICS=OFF" "-DBG3RTX_BIN=$layerBin"
-      if ($LASTEXITCODE) { throw "configure of the lean layer failed" }
-    }
-    cmake --build $nodiag --target VkLayer_bg3rtx
-    if ($LASTEXITCODE) { throw "build of the lean layer failed" }
+    & (Join-Path $PSScriptRoot "build.ps1") -ReleaseLayer
   }
   if (-not $DryRun -and -not (Test-Path (Join-Path $layerBin "VkLayer_bg3rtx.dll"))) { throw "no lean layer in $layerBin (run without -NoBuild)" }
 }

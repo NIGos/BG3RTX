@@ -17,6 +17,8 @@ class PackageLicencesTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        for name in ('LICENSE', 'LICENSE-EXCEPTION.md'):
+            shutil.copyfile(ROOT / name, self.root / name)
         (self.root / "scripts").mkdir()
         shutil.copyfile(ROOT / "scripts/package.ps1", self.root / "scripts/package.ps1")
         shutil.copyfile(ROOT / "scripts/package-third-party.json",
@@ -53,6 +55,7 @@ class PackageLicencesTest(unittest.TestCase):
         actual = {entry["Destination"].replace("\\", "/"): Path(entry["Source"])
                   for entry in payload}
         expected = {"THIRD_PARTY.md": self.release / "THIRD_PARTY.md"}
+        expected.update({name: self.root / name for name in ('LICENSE', 'LICENSE-EXCEPTION.md')})
         expected.update({"licences/" + path.relative_to(self.release / "licences").as_posix(): path
                          for path in (self.release / "licences").rglob("*") if path.is_file()})
         self.assertEqual(actual, expected)
@@ -150,6 +153,9 @@ class PackageLicencesTest(unittest.TestCase):
         self.assertFalse(any(name.endswith(('.pdb', '.py', '.spv')) for name in actual))
         self.assertIn('Diagnostics.cmd', actual)
         self.assertIn('diagnostics.ps1', actual)
+        for name in ('LICENSE', 'LICENSE-EXCEPTION.md'):
+            self.assertIn(name, actual)
+            self.assertEqual((package / name).read_bytes(), (ROOT / name).read_bytes())
 
     def test_missing_dxc_and_vulkan_fail_together(self):
         names = ["DirectXShaderCompiler-LICENSE.txt", "Vulkan-Headers-LICENSE.txt"]

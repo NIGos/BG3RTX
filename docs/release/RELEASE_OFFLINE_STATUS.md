@@ -5,7 +5,8 @@ PASS means only the named offline check. This is not release approval or final h
 
 ## Owner decisions (questions)
 
-- Which project licence is approved, and should NVIDIA be notified? No notification was sent.
+- Project licence approved by the user on 2026-11-04: GPL-3.0-or-later with the NVIDIA SDK exception.
+  Should NVIDIA be notified? No notification was sent.
 - May the game-derived asset database be redistributed under Larian's terms?
 - Are the Microsoft static CRT/WebView2 terms approved? No VC redistributable installer or DLL ships.
 - Keep SHaRC off and its headers excluded, or separately resolve its distribution terms?
@@ -23,6 +24,7 @@ Temporal promotion is already accepted on user visual verdict; it is not a pendi
 | Item | State |
 |---|---|
 | README / settings | UPDATED to the 15 final controls, three settings pages, stock visible hair, automatic Ultra OMM/masks, Full tracing and Ctrl+Shift+F9 master RT toggle. Removed obsolete player activation guidance. |
+| Project licence | PASS: root LICENSE and LICENSE-EXCEPTION.md are validated and packaged verbatim; README states GPL-3.0-or-later with the NVIDIA SDK exception in two lines. THIRD_PARTY.md references both. User decision 2026-11-04. |
 | Feature evidence | wf9 08:59 VALID on main 6a00b295: 17 every-window gates; static ON equals OFF; turning compose screen hits about 6.7% to 17%; final compose median 0.154 ms absolute. Receipt read from main checkout `tools/live_batches/water_flicker_wf9/RESULT_wf9_085908.md`, absent in this branch until qualification stream integration. Supersedes the contract/plan's older wf9 hold. |
 | Temporal post | PROMOTED by user verdict. RESULT_pairs_032335: isolated 0.152-0.153 ms; 12 primary sign tests p 0.17-0.83 and float energy +0.1492% did not pass. About 250 MiB reference memory comes from release plan, not that RESULT. No statistical pass claimed. |
 | Fresnel | NOT PROMOTED. RESULT_wsf1_064436: rim +43%, open water +1.8%, ON variation 13% versus OFF about 2%; surface FS 0.10-0.15 ms absolute; no PT reference. |
@@ -32,13 +34,16 @@ Temporal promotion is already accepted on user visual verdict; it is not a pendi
 
 ## Full payload audit
 
-Command: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -DryRun -NoBuild -NoZip -Version audit-20261104-final -OutDir .scratch/release-package`.
-Output: `.scratch/release-package/BG3RTX-audit-20261104-final/` (uncommitted audit artifacts only).
+Build: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -ReleaseLayer`.
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -DryRun -NoBuild -NoZip -Version audit-20261104-pack2 -OutDir .scratch/release-package`.
+Output: `.scratch/release-package/BG3RTX-audit-20261104-pack2/` (uncommitted audit artifacts only).
 
-- 227 planned files; zero differences between planned destinations plus files.txt and generated files.txt.
+- 229 planned files (previously 227); zero differences between planned destinations plus files.txt and generated files.txt.
   `payload-list.json`, `files.diff.json` and `audit.json` record the complete plan and availability.
-- **One missing input:** `build-nodiag/bin/VkLayer_bg3rtx.dll`. Current launcher/core outputs exist.
-  No substitute diagnostic layer was selected, no build was run, and no player payload was copied.
+- **Zero missing inputs** (previously one). `build-nodiag/bin/VkLayer_bg3rtx.dll` built in 23 s
+  at BelowNormal, RelWithDebInfo, diagnostics OFF. The new build switch reasserts configuration
+  on every invocation; packaging uses it. No player payload was copied by the real dry run.
+  Layer SHA-256: `2b987020f17997e94d955cc4cb5724487e5c5ad512eb73d2f57b3c9970605b66`.
 - Independent inventory check: no PDB/ILK, Python, developer EXEs/tools/tests, SDK payload directories,
   Aftermath DLL or development Streamline DLL. Runtime HLSL/common includes remain required.
 - 9/9 Streamline/DLSS DLL SHA-256 hashes match production Streamline 2.14.16 `bin/x64`.
@@ -55,9 +60,9 @@ Output: `.scratch/release-package/BG3RTX-audit-20261104-final/` (uncommitted aud
 
 | Check | Result |
 |---|---|
-| `python tests/package_licences_test.py` | 8/8 PASS, including complete dry-run versus materialized synthetic package |
-| `python tests/release_install_test.py` | 7/7 PASS; synthetic install/update/uninstall, original restoration, settings, manifest and path guards |
-| `python tests/diagnostics_package_test.py` | 5/5 PASS; local ZIP, default no-save, synthetic selected save unchanged, redaction, missing inputs and process refusal |
+| `python tests/package_licences_test.py` | 8/8 PASS rerun for release-pack2, including both verbatim root licences and complete dry-run versus materialized synthetic package |
+| `python tests/release_install_test.py` | 7/7 PASS rerun for release-pack2; synthetic install/update/uninstall, original restoration, settings, manifest and path guards |
+| `python tests/diagnostics_package_test.py` | 5/5 PASS rerun for release-pack2; local ZIP, default no-save, synthetic selected save unchanged, redaction, missing inputs and process refusal |
 | `python tests/release_lifecycle_test.py` | 15/15 PASS; synthetic transactional recovery, rollback and retention; not compiled Inno acceptance |
 | `python tests/launcher_diagnostics_test.py <absolute fixture exe> <worktree scratch>` | 55 checks PASS; independent ZIP CRC, exact preview bytes, Unicode destination and junction checks. Initial relative EXE path failed before execution; absolute-path rerun passed. |
 
@@ -66,7 +71,7 @@ No global cache, Start menu or real install was modified. Source diagnostics sta
 
 ## Still open
 
-Supply/rebuild the lean layer and establish final binary freshness/provenance; inspect a real final archive,
+Lean layer supplied; establish final payload binary freshness/provenance and inspect a real final archive,
 files.txt, private symbol separation and any installer hash manifest after owner decisions. ZIP still ships
 legacy install helpers; lifecycle/Inno integration, compiler pin/signing and portable/setup equivalence are
 not done. Complete disposable VM shortcuts, locked-file/low-space/interruption and IncludeSave dialog
