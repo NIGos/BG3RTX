@@ -6,7 +6,7 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 2747.0,
+  "timeout": 6785,
   "repeat": 1,
   "stop_on_dump": false,
   "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_ao=1.0,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
@@ -40,221 +40,850 @@
   ],
   "expect_every": [
     {
-      "name": "b1-pt-dialogue3--AC/EB K8 off-a",
-      "select": "\\[pan\\] burst 98700 complete",
-      "match": "\\[pan\\] burst 98700 complete: 8 frames, 36 samples, transport ok",
+      "name": "b1-pt-dialogue3--AC/EB K8 off-00",
+      "select": "\\[pan\\] burst 98800 complete",
+      "match": "\\[pan\\] burst 98800 complete: 8 frames, 36 samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--rendered-off-a"
+        "b1-pt-dialogue3--rendered-off-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--presented K8 off-a",
+      "name": "b1-pt-dialogue3--presented K8 off-00",
       "select": "\\[sl\\] present capture done",
       "match": "\\[sl\\] present capture done",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--presented-off-a"
+        "b1-pt-dialogue3--presented-off-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--float energy off-a",
+      "name": "b1-pt-dialogue3--float energy off-00",
       "select": "\\[trace\\] frame \\d+ written:",
       "match": "\\[trace\\] frame \\d+ written:",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--energy-off-a"
+        "b1-pt-dialogue3--energy-off-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--post GPU cost off-a",
-      "select": "\\[rrpost\\] gpu:",
-      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--timing-off-a"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--FG actually presenting off-a",
+      "name": "b1-pt-dialogue3--FG actually presenting off-00",
       "select": "\\[sl\\] DLSS-G frame",
       "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
       "event": true,
       "settle_s": 1,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--presented-off-a"
+        "b1-pt-dialogue3--presented-off-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--AC/EB K8 on-a",
-      "select": "\\[pan\\] burst 98701 complete",
-      "match": "\\[pan\\] burst 98701 complete: 8 frames, 36 samples, transport ok",
+      "name": "b1-pt-dialogue3--AC/EB K8 on-00",
+      "select": "\\[pan\\] burst 98801 complete",
+      "match": "\\[pan\\] burst 98801 complete: 8 frames, 36 samples, transport ok",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--rendered-on-a"
+        "b1-pt-dialogue3--rendered-on-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--presented K8 on-a",
+      "name": "b1-pt-dialogue3--presented K8 on-00",
       "select": "\\[sl\\] present capture done",
       "match": "\\[sl\\] present capture done",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--presented-on-a"
+        "b1-pt-dialogue3--presented-on-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--float energy on-a",
+      "name": "b1-pt-dialogue3--float energy on-00",
       "select": "\\[trace\\] frame \\d+ written:",
       "match": "\\[trace\\] frame \\d+ written:",
       "event": true,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--energy-on-a"
+        "b1-pt-dialogue3--energy-on-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--post GPU cost on-a",
-      "select": "\\[rrpost\\] gpu:",
-      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--timing-on-a"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--FG actually presenting on-a",
+      "name": "b1-pt-dialogue3--FG actually presenting on-00",
       "select": "\\[sl\\] DLSS-G frame",
       "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
       "event": true,
       "settle_s": 1,
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--presented-on-a"
+        "b1-pt-dialogue3--presented-on-00"
       ]
     },
     {
-      "name": "b1-pt-dialogue3--temporal GPU cost on-a",
+      "name": "b1-pt-dialogue3--AC/EB K8 on-01",
+      "select": "\\[pan\\] burst 98802 complete",
+      "match": "\\[pan\\] burst 98802 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-01",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-01",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-01",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-01",
+      "select": "\\[pan\\] burst 98803 complete",
+      "match": "\\[pan\\] burst 98803 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-01",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-01",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-01",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-01"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-02",
+      "select": "\\[pan\\] burst 98804 complete",
+      "match": "\\[pan\\] burst 98804 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-02",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-02",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-02",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-02",
+      "select": "\\[pan\\] burst 98805 complete",
+      "match": "\\[pan\\] burst 98805 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-02",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-02",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-02",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-02"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-03",
+      "select": "\\[pan\\] burst 98806 complete",
+      "match": "\\[pan\\] burst 98806 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-03",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-03",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-03",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-03",
+      "select": "\\[pan\\] burst 98807 complete",
+      "match": "\\[pan\\] burst 98807 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-03",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-03",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-03",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-03"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-04",
+      "select": "\\[pan\\] burst 98808 complete",
+      "match": "\\[pan\\] burst 98808 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-04",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-04",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-04",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-04",
+      "select": "\\[pan\\] burst 98809 complete",
+      "match": "\\[pan\\] burst 98809 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-04",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-04",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-04",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-04"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-05",
+      "select": "\\[pan\\] burst 98810 complete",
+      "match": "\\[pan\\] burst 98810 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-05",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-05",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-05",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-05",
+      "select": "\\[pan\\] burst 98811 complete",
+      "match": "\\[pan\\] burst 98811 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-05",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-05",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-05",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-05"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-06",
+      "select": "\\[pan\\] burst 98812 complete",
+      "match": "\\[pan\\] burst 98812 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-06",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-06",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-06",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-06",
+      "select": "\\[pan\\] burst 98813 complete",
+      "match": "\\[pan\\] burst 98813 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-06",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-06",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-06",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-06"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-07",
+      "select": "\\[pan\\] burst 98814 complete",
+      "match": "\\[pan\\] burst 98814 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-07",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-07",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-07",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-07",
+      "select": "\\[pan\\] burst 98815 complete",
+      "match": "\\[pan\\] burst 98815 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-07",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-07",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-07",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-07"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-08",
+      "select": "\\[pan\\] burst 98816 complete",
+      "match": "\\[pan\\] burst 98816 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-08",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-08",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-08",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-08",
+      "select": "\\[pan\\] burst 98817 complete",
+      "match": "\\[pan\\] burst 98817 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-08",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-08",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-08",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-08"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 on-09",
+      "select": "\\[pan\\] burst 98818 complete",
+      "match": "\\[pan\\] burst 98818 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-on-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 on-09",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy on-09",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-on-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting on-09",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-on-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--AC/EB K8 off-09",
+      "select": "\\[pan\\] burst 98819 complete",
+      "match": "\\[pan\\] burst 98819 complete: 8 frames, 36 samples, transport ok",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--rendered-off-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--presented K8 off-09",
+      "select": "\\[sl\\] present capture done",
+      "match": "\\[sl\\] present capture done",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--float energy off-09",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "event": true,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--energy-off-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--FG actually presenting off-09",
+      "select": "\\[sl\\] DLSS-G frame",
+      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--presented-off-09"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--post GPU cost timing-off-cost",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--timing-off-cost"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--post GPU cost timing-on-cost",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "min": 1,
+      "windows": [
+        "b1-pt-dialogue3--timing-on-cost"
+      ]
+    },
+    {
+      "name": "b1-pt-dialogue3--temporal GPU cost",
       "select": "\\[rrpost\\] gpu temporal:",
       "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
       "min": 1,
       "windows": [
-        "b1-pt-dialogue3--timing-on-a"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--AC/EB K8 off-b",
-      "select": "\\[pan\\] burst 98702 complete",
-      "match": "\\[pan\\] burst 98702 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--rendered-off-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--presented K8 off-b",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--presented-off-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--float energy off-b",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--energy-off-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--post GPU cost off-b",
-      "select": "\\[rrpost\\] gpu:",
-      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--timing-off-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--FG actually presenting off-b",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--presented-off-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--AC/EB K8 on-b",
-      "select": "\\[pan\\] burst 98703 complete",
-      "match": "\\[pan\\] burst 98703 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--rendered-on-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--presented K8 on-b",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--presented-on-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--float energy on-b",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--energy-on-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--post GPU cost on-b",
-      "select": "\\[rrpost\\] gpu:",
-      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--timing-on-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--FG actually presenting on-b",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--presented-on-b"
-      ]
-    },
-    {
-      "name": "b1-pt-dialogue3--temporal GPU cost on-b",
-      "select": "\\[rrpost\\] gpu temporal:",
-      "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
-      "min": 1,
-      "windows": [
-        "b1-pt-dialogue3--timing-on-b"
+        "b1-pt-dialogue3--timing-on-cost"
       ]
     },
     {
@@ -264,22 +893,68 @@
       "event": true,
       "min": 0,
       "windows": [
-        "b1-pt-dialogue3--rendered-off-a",
-        "b1-pt-dialogue3--presented-off-a",
-        "b1-pt-dialogue3--energy-off-a",
-        "b1-pt-dialogue3--timing-off-a",
-        "b1-pt-dialogue3--rendered-on-a",
-        "b1-pt-dialogue3--presented-on-a",
-        "b1-pt-dialogue3--energy-on-a",
-        "b1-pt-dialogue3--timing-on-a",
-        "b1-pt-dialogue3--rendered-off-b",
-        "b1-pt-dialogue3--presented-off-b",
-        "b1-pt-dialogue3--energy-off-b",
-        "b1-pt-dialogue3--timing-off-b",
-        "b1-pt-dialogue3--rendered-on-b",
-        "b1-pt-dialogue3--presented-on-b",
-        "b1-pt-dialogue3--energy-on-b",
-        "b1-pt-dialogue3--timing-on-b"
+        "b1-pt-dialogue3--rendered-off-00",
+        "b1-pt-dialogue3--presented-off-00",
+        "b1-pt-dialogue3--energy-off-00",
+        "b1-pt-dialogue3--rendered-on-00",
+        "b1-pt-dialogue3--presented-on-00",
+        "b1-pt-dialogue3--energy-on-00",
+        "b1-pt-dialogue3--rendered-on-01",
+        "b1-pt-dialogue3--presented-on-01",
+        "b1-pt-dialogue3--energy-on-01",
+        "b1-pt-dialogue3--rendered-off-01",
+        "b1-pt-dialogue3--presented-off-01",
+        "b1-pt-dialogue3--energy-off-01",
+        "b1-pt-dialogue3--rendered-off-02",
+        "b1-pt-dialogue3--presented-off-02",
+        "b1-pt-dialogue3--energy-off-02",
+        "b1-pt-dialogue3--rendered-on-02",
+        "b1-pt-dialogue3--presented-on-02",
+        "b1-pt-dialogue3--energy-on-02",
+        "b1-pt-dialogue3--rendered-on-03",
+        "b1-pt-dialogue3--presented-on-03",
+        "b1-pt-dialogue3--energy-on-03",
+        "b1-pt-dialogue3--rendered-off-03",
+        "b1-pt-dialogue3--presented-off-03",
+        "b1-pt-dialogue3--energy-off-03",
+        "b1-pt-dialogue3--rendered-off-04",
+        "b1-pt-dialogue3--presented-off-04",
+        "b1-pt-dialogue3--energy-off-04",
+        "b1-pt-dialogue3--rendered-on-04",
+        "b1-pt-dialogue3--presented-on-04",
+        "b1-pt-dialogue3--energy-on-04",
+        "b1-pt-dialogue3--rendered-on-05",
+        "b1-pt-dialogue3--presented-on-05",
+        "b1-pt-dialogue3--energy-on-05",
+        "b1-pt-dialogue3--rendered-off-05",
+        "b1-pt-dialogue3--presented-off-05",
+        "b1-pt-dialogue3--energy-off-05",
+        "b1-pt-dialogue3--rendered-off-06",
+        "b1-pt-dialogue3--presented-off-06",
+        "b1-pt-dialogue3--energy-off-06",
+        "b1-pt-dialogue3--rendered-on-06",
+        "b1-pt-dialogue3--presented-on-06",
+        "b1-pt-dialogue3--energy-on-06",
+        "b1-pt-dialogue3--rendered-on-07",
+        "b1-pt-dialogue3--presented-on-07",
+        "b1-pt-dialogue3--energy-on-07",
+        "b1-pt-dialogue3--rendered-off-07",
+        "b1-pt-dialogue3--presented-off-07",
+        "b1-pt-dialogue3--energy-off-07",
+        "b1-pt-dialogue3--rendered-off-08",
+        "b1-pt-dialogue3--presented-off-08",
+        "b1-pt-dialogue3--energy-off-08",
+        "b1-pt-dialogue3--rendered-on-08",
+        "b1-pt-dialogue3--presented-on-08",
+        "b1-pt-dialogue3--energy-on-08",
+        "b1-pt-dialogue3--rendered-on-09",
+        "b1-pt-dialogue3--presented-on-09",
+        "b1-pt-dialogue3--energy-on-09",
+        "b1-pt-dialogue3--rendered-off-09",
+        "b1-pt-dialogue3--presented-off-09",
+        "b1-pt-dialogue3--energy-off-09",
+        "b1-pt-dialogue3--timing-off-cost",
+        "b1-pt-dialogue3--timing-on-cost"
       ]
     },
     {
@@ -565,19 +1240,36 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-trace\\] phase=5 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-a repeat=0",
-    "\\[motion-trace\\] phase=10 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-a repeat=0",
-    "\\[motion-trace\\] phase=15 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-b repeat=0",
-    "\\[motion-trace\\] phase=20 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-b repeat=0",
-    "\\[motion-plan\\] complete phases=62\\b"
+    "\\[motion-trace\\] phase=5 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-00 repeat=0",
+    "\\[motion-trace\\] phase=9 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-00 repeat=0",
+    "\\[motion-trace\\] phase=13 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-01 repeat=0",
+    "\\[motion-trace\\] phase=17 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-01 repeat=0",
+    "\\[motion-trace\\] phase=21 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-02 repeat=0",
+    "\\[motion-trace\\] phase=25 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-02 repeat=0",
+    "\\[motion-trace\\] phase=29 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-03 repeat=0",
+    "\\[motion-trace\\] phase=33 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-03 repeat=0",
+    "\\[motion-trace\\] phase=37 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-04 repeat=0",
+    "\\[motion-trace\\] phase=41 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-04 repeat=0",
+    "\\[motion-trace\\] phase=45 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-05 repeat=0",
+    "\\[motion-trace\\] phase=49 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-05 repeat=0",
+    "\\[motion-trace\\] phase=53 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-06 repeat=0",
+    "\\[motion-trace\\] phase=57 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-06 repeat=0",
+    "\\[motion-trace\\] phase=61 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-07 repeat=0",
+    "\\[motion-trace\\] phase=65 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-07 repeat=0",
+    "\\[motion-trace\\] phase=69 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-08 repeat=0",
+    "\\[motion-trace\\] phase=73 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-08 repeat=0",
+    "\\[motion-trace\\] phase=77 label=b1\\-pt\\-dialogue3\\-\\-energy\\-on\\-09 repeat=0",
+    "\\[motion-trace\\] phase=81 label=b1\\-pt\\-dialogue3\\-\\-energy\\-off\\-09 repeat=0",
+    "\\[motion-plan\\] complete phases=126\\b"
   ],
+  "max_minutes": 15,
   "requires_success_of": [],
   "post_gate": true,
   "fail_fast": true,
   "fail_fast_slices": [
     {
       "offset": 0,
-      "count": 23,
+      "count": 87,
       "forbid": [
         "VK_ERROR_DEVICE_LOST",
         "\\[crash\\] exception 0x",
@@ -600,221 +1292,850 @@
       ],
       "expect_every": [
         {
-          "name": "b1-pt-dialogue3--AC/EB K8 off-a",
-          "select": "\\[pan\\] burst 98700 complete",
-          "match": "\\[pan\\] burst 98700 complete: 8 frames, 36 samples, transport ok",
+          "name": "b1-pt-dialogue3--AC/EB K8 off-00",
+          "select": "\\[pan\\] burst 98800 complete",
+          "match": "\\[pan\\] burst 98800 complete: 8 frames, 36 samples, transport ok",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--rendered-off-a"
+            "b1-pt-dialogue3--rendered-off-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--presented K8 off-a",
+          "name": "b1-pt-dialogue3--presented K8 off-00",
           "select": "\\[sl\\] present capture done",
           "match": "\\[sl\\] present capture done",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--presented-off-a"
+            "b1-pt-dialogue3--presented-off-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--float energy off-a",
+          "name": "b1-pt-dialogue3--float energy off-00",
           "select": "\\[trace\\] frame \\d+ written:",
           "match": "\\[trace\\] frame \\d+ written:",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--energy-off-a"
+            "b1-pt-dialogue3--energy-off-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--post GPU cost off-a",
-          "select": "\\[rrpost\\] gpu:",
-          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--timing-off-a"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--FG actually presenting off-a",
+          "name": "b1-pt-dialogue3--FG actually presenting off-00",
           "select": "\\[sl\\] DLSS-G frame",
           "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
           "event": true,
           "settle_s": 1,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--presented-off-a"
+            "b1-pt-dialogue3--presented-off-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--AC/EB K8 on-a",
-          "select": "\\[pan\\] burst 98701 complete",
-          "match": "\\[pan\\] burst 98701 complete: 8 frames, 36 samples, transport ok",
+          "name": "b1-pt-dialogue3--AC/EB K8 on-00",
+          "select": "\\[pan\\] burst 98801 complete",
+          "match": "\\[pan\\] burst 98801 complete: 8 frames, 36 samples, transport ok",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--rendered-on-a"
+            "b1-pt-dialogue3--rendered-on-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--presented K8 on-a",
+          "name": "b1-pt-dialogue3--presented K8 on-00",
           "select": "\\[sl\\] present capture done",
           "match": "\\[sl\\] present capture done",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--presented-on-a"
+            "b1-pt-dialogue3--presented-on-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--float energy on-a",
+          "name": "b1-pt-dialogue3--float energy on-00",
           "select": "\\[trace\\] frame \\d+ written:",
           "match": "\\[trace\\] frame \\d+ written:",
           "event": true,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--energy-on-a"
+            "b1-pt-dialogue3--energy-on-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--post GPU cost on-a",
-          "select": "\\[rrpost\\] gpu:",
-          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--timing-on-a"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--FG actually presenting on-a",
+          "name": "b1-pt-dialogue3--FG actually presenting on-00",
           "select": "\\[sl\\] DLSS-G frame",
           "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
           "event": true,
           "settle_s": 1,
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--presented-on-a"
+            "b1-pt-dialogue3--presented-on-00"
           ]
         },
         {
-          "name": "b1-pt-dialogue3--temporal GPU cost on-a",
+          "name": "b1-pt-dialogue3--AC/EB K8 on-01",
+          "select": "\\[pan\\] burst 98802 complete",
+          "match": "\\[pan\\] burst 98802 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-01",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-01",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-01",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-01",
+          "select": "\\[pan\\] burst 98803 complete",
+          "match": "\\[pan\\] burst 98803 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-01",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-01",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-01",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-01"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-02",
+          "select": "\\[pan\\] burst 98804 complete",
+          "match": "\\[pan\\] burst 98804 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-02",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-02",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-02",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-02",
+          "select": "\\[pan\\] burst 98805 complete",
+          "match": "\\[pan\\] burst 98805 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-02",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-02",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-02",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-02"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-03",
+          "select": "\\[pan\\] burst 98806 complete",
+          "match": "\\[pan\\] burst 98806 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-03",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-03",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-03",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-03",
+          "select": "\\[pan\\] burst 98807 complete",
+          "match": "\\[pan\\] burst 98807 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-03",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-03",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-03",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-03"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-04",
+          "select": "\\[pan\\] burst 98808 complete",
+          "match": "\\[pan\\] burst 98808 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-04",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-04",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-04",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-04",
+          "select": "\\[pan\\] burst 98809 complete",
+          "match": "\\[pan\\] burst 98809 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-04",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-04",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-04",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-04"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-05",
+          "select": "\\[pan\\] burst 98810 complete",
+          "match": "\\[pan\\] burst 98810 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-05",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-05",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-05",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-05",
+          "select": "\\[pan\\] burst 98811 complete",
+          "match": "\\[pan\\] burst 98811 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-05",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-05",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-05",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-05"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-06",
+          "select": "\\[pan\\] burst 98812 complete",
+          "match": "\\[pan\\] burst 98812 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-06",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-06",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-06",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-06",
+          "select": "\\[pan\\] burst 98813 complete",
+          "match": "\\[pan\\] burst 98813 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-06",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-06",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-06",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-06"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-07",
+          "select": "\\[pan\\] burst 98814 complete",
+          "match": "\\[pan\\] burst 98814 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-07",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-07",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-07",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-07",
+          "select": "\\[pan\\] burst 98815 complete",
+          "match": "\\[pan\\] burst 98815 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-07",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-07",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-07",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-07"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-08",
+          "select": "\\[pan\\] burst 98816 complete",
+          "match": "\\[pan\\] burst 98816 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-08",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-08",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-08",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-08",
+          "select": "\\[pan\\] burst 98817 complete",
+          "match": "\\[pan\\] burst 98817 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-08",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-08",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-08",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-08"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 on-09",
+          "select": "\\[pan\\] burst 98818 complete",
+          "match": "\\[pan\\] burst 98818 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-on-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 on-09",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy on-09",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-on-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting on-09",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-on-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--AC/EB K8 off-09",
+          "select": "\\[pan\\] burst 98819 complete",
+          "match": "\\[pan\\] burst 98819 complete: 8 frames, 36 samples, transport ok",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--rendered-off-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--presented K8 off-09",
+          "select": "\\[sl\\] present capture done",
+          "match": "\\[sl\\] present capture done",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--float energy off-09",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "event": true,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--energy-off-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--FG actually presenting off-09",
+          "select": "\\[sl\\] DLSS-G frame",
+          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--presented-off-09"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost timing-off-cost",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-off-cost"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--post GPU cost timing-on-cost",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "min": 1,
+          "windows": [
+            "b1-pt-dialogue3--timing-on-cost"
+          ]
+        },
+        {
+          "name": "b1-pt-dialogue3--temporal GPU cost",
           "select": "\\[rrpost\\] gpu temporal:",
           "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
           "min": 1,
           "windows": [
-            "b1-pt-dialogue3--timing-on-a"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--AC/EB K8 off-b",
-          "select": "\\[pan\\] burst 98702 complete",
-          "match": "\\[pan\\] burst 98702 complete: 8 frames, 36 samples, transport ok",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--rendered-off-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--presented K8 off-b",
-          "select": "\\[sl\\] present capture done",
-          "match": "\\[sl\\] present capture done",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--presented-off-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--float energy off-b",
-          "select": "\\[trace\\] frame \\d+ written:",
-          "match": "\\[trace\\] frame \\d+ written:",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--energy-off-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--post GPU cost off-b",
-          "select": "\\[rrpost\\] gpu:",
-          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--timing-off-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--FG actually presenting off-b",
-          "select": "\\[sl\\] DLSS-G frame",
-          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-          "event": true,
-          "settle_s": 1,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--presented-off-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--AC/EB K8 on-b",
-          "select": "\\[pan\\] burst 98703 complete",
-          "match": "\\[pan\\] burst 98703 complete: 8 frames, 36 samples, transport ok",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--rendered-on-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--presented K8 on-b",
-          "select": "\\[sl\\] present capture done",
-          "match": "\\[sl\\] present capture done",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--presented-on-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--float energy on-b",
-          "select": "\\[trace\\] frame \\d+ written:",
-          "match": "\\[trace\\] frame \\d+ written:",
-          "event": true,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--energy-on-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--post GPU cost on-b",
-          "select": "\\[rrpost\\] gpu:",
-          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--timing-on-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--FG actually presenting on-b",
-          "select": "\\[sl\\] DLSS-G frame",
-          "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-          "event": true,
-          "settle_s": 1,
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--presented-on-b"
-          ]
-        },
-        {
-          "name": "b1-pt-dialogue3--temporal GPU cost on-b",
-          "select": "\\[rrpost\\] gpu temporal:",
-          "match": "gpu temporal: [\\d.]+ ms/frame; active 1",
-          "min": 1,
-          "windows": [
-            "b1-pt-dialogue3--timing-on-b"
+            "b1-pt-dialogue3--timing-on-cost"
           ]
         },
         {
@@ -824,22 +2145,68 @@
           "event": true,
           "min": 0,
           "windows": [
-            "b1-pt-dialogue3--rendered-off-a",
-            "b1-pt-dialogue3--presented-off-a",
-            "b1-pt-dialogue3--energy-off-a",
-            "b1-pt-dialogue3--timing-off-a",
-            "b1-pt-dialogue3--rendered-on-a",
-            "b1-pt-dialogue3--presented-on-a",
-            "b1-pt-dialogue3--energy-on-a",
-            "b1-pt-dialogue3--timing-on-a",
-            "b1-pt-dialogue3--rendered-off-b",
-            "b1-pt-dialogue3--presented-off-b",
-            "b1-pt-dialogue3--energy-off-b",
-            "b1-pt-dialogue3--timing-off-b",
-            "b1-pt-dialogue3--rendered-on-b",
-            "b1-pt-dialogue3--presented-on-b",
-            "b1-pt-dialogue3--energy-on-b",
-            "b1-pt-dialogue3--timing-on-b"
+            "b1-pt-dialogue3--rendered-off-00",
+            "b1-pt-dialogue3--presented-off-00",
+            "b1-pt-dialogue3--energy-off-00",
+            "b1-pt-dialogue3--rendered-on-00",
+            "b1-pt-dialogue3--presented-on-00",
+            "b1-pt-dialogue3--energy-on-00",
+            "b1-pt-dialogue3--rendered-on-01",
+            "b1-pt-dialogue3--presented-on-01",
+            "b1-pt-dialogue3--energy-on-01",
+            "b1-pt-dialogue3--rendered-off-01",
+            "b1-pt-dialogue3--presented-off-01",
+            "b1-pt-dialogue3--energy-off-01",
+            "b1-pt-dialogue3--rendered-off-02",
+            "b1-pt-dialogue3--presented-off-02",
+            "b1-pt-dialogue3--energy-off-02",
+            "b1-pt-dialogue3--rendered-on-02",
+            "b1-pt-dialogue3--presented-on-02",
+            "b1-pt-dialogue3--energy-on-02",
+            "b1-pt-dialogue3--rendered-on-03",
+            "b1-pt-dialogue3--presented-on-03",
+            "b1-pt-dialogue3--energy-on-03",
+            "b1-pt-dialogue3--rendered-off-03",
+            "b1-pt-dialogue3--presented-off-03",
+            "b1-pt-dialogue3--energy-off-03",
+            "b1-pt-dialogue3--rendered-off-04",
+            "b1-pt-dialogue3--presented-off-04",
+            "b1-pt-dialogue3--energy-off-04",
+            "b1-pt-dialogue3--rendered-on-04",
+            "b1-pt-dialogue3--presented-on-04",
+            "b1-pt-dialogue3--energy-on-04",
+            "b1-pt-dialogue3--rendered-on-05",
+            "b1-pt-dialogue3--presented-on-05",
+            "b1-pt-dialogue3--energy-on-05",
+            "b1-pt-dialogue3--rendered-off-05",
+            "b1-pt-dialogue3--presented-off-05",
+            "b1-pt-dialogue3--energy-off-05",
+            "b1-pt-dialogue3--rendered-off-06",
+            "b1-pt-dialogue3--presented-off-06",
+            "b1-pt-dialogue3--energy-off-06",
+            "b1-pt-dialogue3--rendered-on-06",
+            "b1-pt-dialogue3--presented-on-06",
+            "b1-pt-dialogue3--energy-on-06",
+            "b1-pt-dialogue3--rendered-on-07",
+            "b1-pt-dialogue3--presented-on-07",
+            "b1-pt-dialogue3--energy-on-07",
+            "b1-pt-dialogue3--rendered-off-07",
+            "b1-pt-dialogue3--presented-off-07",
+            "b1-pt-dialogue3--energy-off-07",
+            "b1-pt-dialogue3--rendered-off-08",
+            "b1-pt-dialogue3--presented-off-08",
+            "b1-pt-dialogue3--energy-off-08",
+            "b1-pt-dialogue3--rendered-on-08",
+            "b1-pt-dialogue3--presented-on-08",
+            "b1-pt-dialogue3--energy-on-08",
+            "b1-pt-dialogue3--rendered-on-09",
+            "b1-pt-dialogue3--presented-on-09",
+            "b1-pt-dialogue3--energy-on-09",
+            "b1-pt-dialogue3--rendered-off-09",
+            "b1-pt-dialogue3--presented-off-09",
+            "b1-pt-dialogue3--energy-off-09",
+            "b1-pt-dialogue3--timing-off-cost",
+            "b1-pt-dialogue3--timing-on-cost"
           ]
         }
       ],
@@ -849,13 +2216,38 @@
         "expected_fps": 30,
         "settings_latency_s": 1,
         "trace_stall_s": 1,
+        "trace_dispatch_s": 4,
         "startup_only": [
           "rt_xfb_mb"
-        ]
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 25.684931506736675,
+            "windows": 76,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
       }
     },
     {
-      "offset": 24,
+      "offset": 88,
       "count": 38,
       "forbid": [
         "VK_ERROR_DEVICE_LOST",
@@ -1153,45 +2545,42 @@
         "trace_stall_s": 1,
         "startup_only": [
           "rt_xfb_mb"
-        ]
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 25.684931506736675,
+            "windows": 76,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
       }
     }
   ],
-  "estimated_phase_seconds": 291.9,
+  "estimated_phase_seconds": 544.5,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
     "trace_stall_s": 1,
+    "trace_dispatch_s": 4,
     "startup_only": [
       "rt_xfb_mb"
-    ],
-    "segments": [
-      {
-        "offset": 0,
-        "count": 23,
-        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
-        "live_flow": {
-          "expected_fps": 30,
-          "settings_latency_s": 1,
-          "trace_stall_s": 1,
-          "startup_only": [
-            "rt_xfb_mb"
-          ]
-        }
-      },
-      {
-        "offset": 24,
-        "count": 38,
-        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
-        "live_flow": {
-          "expected_fps": 30,
-          "settings_latency_s": 1,
-          "trace_stall_s": 1,
-          "startup_only": [
-            "rt_xfb_mb"
-          ]
-        }
-      }
     ],
     "fps_windows": [
       {
@@ -1209,6 +2598,89 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
         ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    },
+    "segments": [
+      {
+        "offset": 0,
+        "count": 87,
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "trace_dispatch_s": 4,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 25.684931506736675,
+              "windows": 76,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      },
+      {
+        "offset": 88,
+        "count": 38,
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=1000,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 25.684931506736675,
+              "windows": 76,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
       }
     ]
   },

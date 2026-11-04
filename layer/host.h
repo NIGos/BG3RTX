@@ -273,6 +273,8 @@ struct CmdState {
   std::array<VertexBinding, kMaxVertexBindings> vb{};
   VkBuffer ib = VK_NULL_HANDLE;
   VkDeviceSize ib_offset = 0;
+  uint32_t hp_native_queries = 0;     // any game query active: never nest a probe query
+  uint32_t hp_coverage = UINT32_MAX;   // precise card/probe pair, begun outside XFB
   uint32_t hp_query = UINT32_MAX;      // rt_hair_groom_primary: the timestamp pair of the swapped draw
   VkIndexType ib_type = VK_INDEX_TYPE_UINT16;
   // Game images, views and buffers this recording's work (ours or the game's
@@ -927,7 +929,7 @@ void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
-void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s);
+void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 // rt_hair_groom_shadow_t (docs/RTX_HAIR_PRIMARY.md C2): the draw's packed strand transmittance for its groom InstInfo
 // row (hair_primary::pack_transmit; 0: key off or not measured yet, the strands block as before).
 uint32_t hair_primary_transmit(uint64_t key);
@@ -938,6 +940,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
 // rt_hair_groom_primary_order: before a render pass begins (outside it); applies the groom header in the main G-buffer
 // pass's own command buffer.
 void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p);
+struct HairPrimarySubmit {
+  std::array<uint64_t, hair_primary::kCoverageLatency> queries{};
+  std::array<uint64_t, 3> headers{}; // the three staged groom publishes
+};
+HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds);
+void hair_primary_submit_end(const HairPrimarySubmit& recordings, bool success);
 // bvhsplit: a build record whose command buffer was submitted.
 bool bvh_rec_submitted(uint64_t id);
 // The render resolution and the viewport (x, y, width, height; 0 before the first) of the last main G-buffer pass.

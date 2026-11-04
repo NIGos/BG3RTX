@@ -457,6 +457,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer cmd, co
   s->ours_since_event = false;
   if (r == VK_SUCCESS) fault_checkpoint(cmd, kCkCmdBegin, uint32_t(s->recording));
   s->in_pass = false;
+  s->hp_native_queries = 0;
+  s->hp_coverage = s->hp_query = UINT32_MAX;
   s->pass_ordinal = 0;
   s->pipe[0] = s->pipe[1] = VK_NULL_HANDLE;
   s->pipe_id[0] = s->pipe_id[1] = 0;
@@ -709,7 +711,7 @@ static VKAPI_ATTR void VKAPI_CALL CmdDrawIndexed(VkCommandBuffer cmd, uint32_t n
   if (geo) { CpuTimer t(1); geo_pre_draw(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin}); count_cpu_draw(); }
   if (geo) { CpuTimer t(2); vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin); } else vk(cmd).CmdDrawIndexed(cmd, n, ic, fi, vo, fin);
   if (geo) { CpuTimer t(3); geo_post_draw(cmd, gs); }
-  if (hp) hair_primary_unswap(cmd, gs);
+  if (hp) hair_primary_unswap(cmd, gs, DrawArgs{1, n, ic, fi, vo, fin});
   note_draw(cmd, "draw", nullptr, cfg_hot(CfgHot::perf_hook_state) ? gs : nullptr);
 }
 
@@ -1046,6 +1048,42 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n
   }
 }
 
+// A game occlusion query cannot contain another occlusion query. Conservatively
+// suppress hair probes under any game query type (no extra query-pool registry).
+static VKAPI_ATTR void VKAPI_CALL CmdBeginQuery(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query, VkQueryControlFlags flags) {
+  if (auto* s = cmd_state(cmd)) ++s->hp_native_queries;
+  auto* dd = device_of(cmd);
+  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
+  static PFN_vkCmdBeginQuery fn = nullptr;
+  if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdBeginQuery>(dd->gdpa(dd->device, "vkCmdBeginQuery")), dev = dd->device;
+  fn(cmd, pool, query, flags);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdEndQuery(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query) {
+  auto* dd = device_of(cmd);
+  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
+  static PFN_vkCmdEndQuery fn = nullptr;
+  if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdEndQuery>(dd->gdpa(dd->device, "vkCmdEndQuery")), dev = dd->device;
+  fn(cmd, pool, query);
+  if (auto* s = cmd_state(cmd); s && s->hp_native_queries) --s->hp_native_queries;
+}
+static VKAPI_ATTR void VKAPI_CALL CmdBeginQueryIndexedEXT(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query,
+                                                         VkQueryControlFlags flags, uint32_t index) {
+  if (auto* s = cmd_state(cmd)) ++s->hp_native_queries;
+  auto* dd = device_of(cmd);
+  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
+  static PFN_vkCmdBeginQueryIndexedEXT fn = nullptr;
+  if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdBeginQueryIndexedEXT>(dd->gdpa(dd->device, "vkCmdBeginQueryIndexedEXT")), dev = dd->device;
+  fn(cmd, pool, query, flags, index);
+}
+static VKAPI_ATTR void VKAPI_CALL CmdEndQueryIndexedEXT(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query, uint32_t index) {
+  auto* dd = device_of(cmd);
+  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
+  static PFN_vkCmdEndQueryIndexedEXT fn = nullptr;
+  if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdEndQueryIndexedEXT>(dd->gdpa(dd->device, "vkCmdEndQueryIndexedEXT")), dev = dd->device;
+  fn(cmd, pool, query, index);
+  if (auto* s = cmd_state(cmd); s && s->hp_native_queries) --s->hp_native_queries;
+}
+
 void register_cmd_hooks(HookMap& m) {
   auto add = [&](const char* name, PFN_vkVoidFunction fn) {
     m[std::string("vk") + name] = fn;
@@ -1070,6 +1108,10 @@ void register_cmd_hooks(HookMap& m) {
   HOOK(CmdBindDescriptorSets);
   HOOK(CmdPushDescriptorSet);
   HOOK(CmdPushDescriptorSetWithTemplate);
+  HOOK(CmdBeginQuery);
+  HOOK(CmdEndQuery);
+  HOOK(CmdBeginQueryIndexedEXT);
+  HOOK(CmdEndQueryIndexedEXT);
   HOOK(CmdDraw);
   HOOK(CmdDrawIndexed);
   HOOK(CmdDrawIndirect);

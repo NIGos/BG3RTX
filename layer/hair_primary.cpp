@@ -34,6 +34,7 @@ DeviceData* g_dd = nullptr;
 bool g_startup_enabled = false;        // Restart safety gate; INI reload cannot enable strands.
 bool g_frag_stores = false;            // fragmentStoresAndAtomics enabled by the game
 std::mutex g_mu;
+HpBuf g_probe_header;
 HpBuf g_header, g_pixels;              // header: fixed (its address is in every variant); pixels: render size
 bool g_header_tried = false;
 bool g_pixels_fresh = false;           // just allocated: zero it before the next header update
@@ -46,6 +47,25 @@ std::unordered_map<VkPipeline, Pass> g_pass_of;               // variant -> its 
 // Index ranges of the grooms in the last two published TLASes: a draw is swapped only when its groom is in both, so
 // the prepass (recorded before this frame's build) and the G-buffer (after it) agree on a draw that just appeared.
 hair_primary::SwapGate g_gate;   // which draws are swapped (common/hair_primary.h SwapGate)
+// Precise coverage query pairs. Each slot belongs to one prepass command buffer: the
+// reset and every query it arms are ordered on the GPU in that very recording.
+hair_primary::CoverageGate g_coverage;
+bool g_precise = false;
+PFN_vkCmdBeginQuery g_begin_query = nullptr;
+PFN_vkCmdEndQuery g_end_query = nullptr;
+VkQueryPool g_coverage_qp = VK_NULL_HANDLE;
+constexpr uint32_t kCoverageSlots = uint32_t(hair_primary::kCoverageLatency), kProbeDraws = 128;
+struct ProbeSlot {
+  uint64_t frame = 0, cmd = 0, recording = 0, submitted_frame = 0;
+  uint32_t n = 0;
+  bool ready = false;
+  uint64_t keys[kProbeDraws] = {};
+  std::unordered_set<uint64_t> header_keys, incomplete_keys;
+};
+ProbeSlot g_probe_slots[kCoverageSlots];
+std::unordered_map<VkPipeline, VkPipeline> g_probe;
+struct CoveragePeriod { bool probed = false; uint32_t swapped = 0; uint64_t last_swap = UINT64_MAX; };
+std::unordered_map<uint64_t, CoveragePeriod> g_coverage_period;
 uint64_t g_published = 0;                                     // frame_index + 1 of the last publish with grooms
 struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, publishes = 0; } g_st;
 uint64_t g_logged_pipes = 0;
@@ -82,6 +102,8 @@ uint64_t g_adjacent_window = 0, g_adjacent_total = 0;   // counted frames with a
 // and what was applied. The header bytes of one publish and the per-groom keys/LODs the count of its frame needs.
 struct StagedHeader {
   hair_primary::Staged pick;
+  uint64_t recording = 0;
+  bool submitted = false;
   uint32_t n = 0, pixels = 0;
   uint8_t bytes[hair_primary::kHeaderBytes] = {};
   uint64_t keys[hair_primary::kMaxGrooms] = {};
@@ -227,24 +249,6 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
       log("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
           "against another publish): no strike (%llu such frames)", (unsigned long long)s.frame, other_total,
           (unsigned long long)g_misaligned_logged);
-    for (uint64_t key : g_gate.feedback_frame(s.keys, s.drew, s.map, other, hair_primary::kMaxGrooms)) {
-      // The reason, with what every groom of the counted frame got: 0 everywhere (no ray found a strand), refusals
-      // (the pool bound), or 0 next to grooms with pixels (off screen or behind another groom: retried later).
-      char per[512];
-      int at = 0;
-      uint32_t refused = 0, lod = 0;
-      for (uint32_t j = 0; j < hair_primary::kMaxGrooms && at < 470; ++j)
-        if (s.keys[j]) {
-          at += std::snprintf(per + at, sizeof per - at, " %u:%u+%u/LOD%u%s", j, s.map[j], other[j], unsigned(s.lods[j]),
-                              s.keys[j] == key ? "*" : "");
-          if (s.keys[j] == key) refused += g_seen.refused[j], lod = s.lods[j];
-        }
-      const auto& r = g_gate.failed[key];
-      log("[hair primary] draw %016llx: its strands drew no pixel in %u frames: its cards come back for %llu frames "
-          "(LOD %u, counted frame %llu: %u strand pixels in all, %u refused; per groom (counted+adjacent tag):%s)",
-          (unsigned long long)key, hair_primary::kStrikes, (unsigned long long)r.wait, lod, (unsigned long long)s.frame,
-          total, refused, at ? per : " none");
-    }
     s.valid = false;
   }
   if (!g_last_tag || g_pixels_fresh || g_last_n != g_px_w * g_px_h) return true;
@@ -310,12 +314,14 @@ void release(HpBuf& b) {
 
 // g_mu held. The header buffer, once per device: its address is baked into every variant.
 bool header_ready() {
-  if (g_header_tried) return g_header.b != VK_NULL_HANDLE;
+  if (!g_startup_enabled) return false;
+  if (g_header_tried) return g_header.b != VK_NULL_HANDLE && g_probe_header.b != VK_NULL_HANDLE;
   g_header_tried = true;
   const auto* info = static_cast<const Bg3DeviceInfo*>(persist(BG3_DEVICE_INFO_KEY, sizeof(Bg3DeviceInfo)));
   const char* why = !g_dd ? "no device" : !rt_enabled() ? "rt=0" : !hair_groom::lss_enabled() ? "no linear swept spheres"
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
-                  : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game" : nullptr;
+                  : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game"
+                  : !g_precise ? "occlusionQueryPrecise not enabled: no coverage proof, no swaps" : nullptr;
   if (!why && !make(g_header, hair_primary::kHeaderAlloc, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
@@ -323,6 +329,8 @@ bool header_ready() {
     log("[hair primary] UNAVAILABLE (%s): matched hair keeps its cards", why);
     return false;
   }
+  if (!make(g_probe_header, hair_primary::kHeaderBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            "hair primary probe header")) return false;
   log("[hair primary] header at 0x%llx: static hair pipelines get strand variants", (unsigned long long)g_header.addr);
   if (auto* p = static_cast<hair_primary::Persist*>(persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist))))
     *p = hair_primary::Persist{uint64_t(g_header.addr), 1u, 0u};   // gi/hair_fibre.hlsl (rt_hair_fibre)
@@ -335,7 +343,8 @@ const VkPipelineDepthStencilStateCreateInfo* depth_state(const VkGraphicsPipelin
     for (uint32_t d = 0; d < ci.pDynamicState->dynamicStateCount; ++d) {
       const VkDynamicState s = ci.pDynamicState->pDynamicStates[d];
       *dynamic_depth |= s == VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE || s == VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE ||
-                        s == VK_DYNAMIC_STATE_DEPTH_COMPARE_OP;
+                        s == VK_DYNAMIC_STATE_DEPTH_COMPARE_OP || s == VK_DYNAMIC_STATE_STENCIL_WRITE_MASK ||
+                        s == VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE || s == VK_DYNAMIC_STATE_STENCIL_OP;
     }
   return ci.pDepthStencilState;
 }
@@ -366,6 +375,117 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
     if (k) g_live_keys.insert(k);
 }
 
+// Detect the boundary before any camera prepass can trace an old scene's header.
+// The publish path also calls this for the first image / missing prepass metadata.
+void observe_depth(uint64_t image, uint64_t now) {
+  if (!g_load.observe(image, now)) return;
+  g_gate.clear();
+  g_coverage.clear();
+  for (auto& slot : g_probe_slots) { slot.ready = false; slot.n = 0; slot.header_keys.clear(); }
+  for (auto& st : g_staged) st.pick = {};
+  g_live_keys.clear();
+  g_last_tag = 0;
+  g_pixels_fresh = true;
+  g_transmit.clear();
+  log("[hair primary] level load (first or new G-buffer images): strand swaps paused for %llu frames, groom state reset",
+      (unsigned long long)hair_primary::kLoadQuietFrames);
+}
+
+// g_mu held. Read complete pairs only; unavailable queries never manufacture evidence.
+// Do not recycle an in-flight slot even if its query values happen to be available.
+void coverage_before_prepass(VkCommandBuffer cmd) {
+  const uint64_t now = frame_index();
+  ProbeSlot& slot = g_probe_slots[now % kCoverageSlots];
+  if (slot.frame == now + 1) return;
+  if (slot.frame) {
+    const bool still_recorded = cmd_recording(reinterpret_cast<VkCommandBuffer>(slot.cmd)) == slot.recording;
+    if (slot.submitted_frame && life_gpu_done() <= slot.submitted_frame + 1) return;
+    // Pending recordings may still be submitted; completed reusable recordings may
+    // be submitted again. Keep their query indices until reset/free invalidates them.
+    if (still_recorded) return;
+  }
+  if (!g_coverage_qp) {
+    VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+    qi.queryType = VK_QUERY_TYPE_OCCLUSION;
+    qi.queryCount = kCoverageSlots * kProbeDraws * 2;
+    if (g_dd->vk.CreateQueryPool(g_dd->device, &qi, nullptr, &g_coverage_qp) != VK_SUCCESS) return;
+  }
+  if (slot.frame && slot.submitted_frame && slot.n) {
+    struct Sum { uint64_t card = 0, strand = 0; bool available = true; };
+    std::unordered_map<uint64_t, Sum> sums;
+    uint64_t r[kProbeDraws * 4] = {};
+    const VkResult result = g_dd->vk.GetQueryPoolResults(g_dd->device, g_coverage_qp,
+        uint32_t(now % kCoverageSlots) * kProbeDraws * 2, slot.n * 2, sizeof r, r, 16,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+    if (result == VK_SUCCESS || result == VK_NOT_READY) {
+      for (uint32_t i = 0; i < slot.n; ++i) {
+        auto& sum = sums[slot.keys[i]];
+        sum.card += r[4*i]; sum.strand += r[4*i+2];
+        sum.available = sum.available && r[4*i+1] && r[4*i+3];
+      }
+      for (const auto& [key, sum] : sums)
+        if (sum.available && !slot.incomplete_keys.count(key)) g_coverage.observe(key, slot.frame, sum.card, sum.strand);
+    }
+  }
+  slot = ProbeSlot{};
+  slot.frame = now + 1;
+  slot.cmd = uint64_t(cmd);
+  slot.recording = cmd_recording(cmd);
+  const uint32_t first = uint32_t(now % kCoverageSlots) * kProbeDraws * 2;
+  g_dd->vk.CmdResetQueryPool(cmd, g_coverage_qp, first, kProbeDraws * 2);
+  // A separate immutable-for-this-pass record avoids the G-buffer header's adjacent-tag race.
+  hair_primary::Staged picks[kStaged];
+  for (int i = 0; i < kStaged; ++i) {
+    const auto& st = g_staged[i];
+    const bool submitted = st.submitted && bvh_rec_submitted(st.pick.rec);
+    const bool same_recording = st.pick.cmd == uint64_t(cmd) && st.recording == cmd_recording(cmd) &&
+                                bvh_rec_state(st.pick.rec) == 0;
+    picks[i] = submitted || same_recording ? st.pick : hair_primary::Staged{};
+  }
+  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  if (i < 0) return;
+  const auto& st = g_staged[i];
+  if (st.pick.tag + 2 < now + 1) return; // header lifetime, distinct from readback evidence freshness
+  VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+  mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  g_dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 1, &mb, 0, nullptr, 0, nullptr);
+  g_dd->vk.CmdUpdateBuffer(cmd, g_probe_header.b, 0, st.n, st.bytes);
+  mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
+  mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+  g_dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 1, &mb, 0, nullptr, 0, nullptr);
+  for (uint64_t key : st.keys) if (key) slot.header_keys.insert(key);
+  slot.ready = true;
+}
+
+void coverage_log(uint64_t now) {
+  if (now % 300) return;
+  char per[1200] = {};
+  size_t at = 0;
+  uint32_t shown = 0, probed = 0, swapped = 0, below = 0;
+  double minimum = 0.0;
+  bool first = true;
+  for (const auto& [key, period] : g_coverage_period) {
+    probed += period.probed;
+    swapped += period.swapped != 0;
+    const auto it = g_coverage.latest.find(key);
+    const hair_primary::CoverageGate::Evidence e = it == g_coverage.latest.end() ? hair_primary::CoverageGate::Evidence{} : it->second;
+    const double ratio = e.ratio();
+    if (first || ratio < minimum) minimum = ratio;
+    first = false;
+    below += !e.card || ratio < hair_primary::kCoverMin;
+    if (shown++ < 12) at += std::snprintf(per + at, sizeof per - at, " %04llx:%u/%u=%.3f,%u",
+        (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
+        unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
+  }
+  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u",
+      probed, swapped, per, minimum, hair_primary::kCoverMin, below);
+  g_coverage_period.clear();
+}
+
 }  // namespace
 
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args) {
@@ -388,6 +508,13 @@ void hair_primary_device_created(DeviceData* dd, const VkDeviceCreateInfo* ci) {
     if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
       stores |= reinterpret_cast<const VkPhysicalDeviceFeatures2*>(p)->features.fragmentStoresAndAtomics != VK_FALSE;
   g_frag_stores = stores;
+  g_precise = ci->pEnabledFeatures && ci->pEnabledFeatures->occlusionQueryPrecise;
+  for (auto p = static_cast<const VkBaseInStructure*>(ci->pNext); p; p = p->pNext)
+    if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
+      g_precise |= reinterpret_cast<const VkPhysicalDeviceFeatures2*>(p)->features.occlusionQueryPrecise != VK_FALSE;
+  g_begin_query = reinterpret_cast<PFN_vkCmdBeginQuery>(dd->gdpa(dd->device, "vkCmdBeginQuery"));
+  g_end_query = reinterpret_cast<PFN_vkCmdEndQuery>(dd->gdpa(dd->device, "vkCmdEndQuery"));
+  g_precise = g_precise && g_begin_query && g_end_query;
   VkPhysicalDeviceProperties props{};
   if (dd->inst && dd->inst->GetPhysicalDeviceProperties) dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
   g_ts_period = props.limits.timestampPeriod > 0 ? props.limits.timestampPeriod : 1.0f;
@@ -398,6 +525,20 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   for (auto& [game, v] : g_variant) dd->vk.DestroyPipeline(dd->device, v, nullptr);
   g_variant.clear();
+  for (auto& [game, v] : g_probe) dd->vk.DestroyPipeline(dd->device, v, nullptr);
+  g_probe.clear();
+  if (g_coverage_qp) dd->vk.DestroyQueryPool(dd->device, g_coverage_qp, nullptr);
+  g_coverage_qp = VK_NULL_HANDLE;
+  for (auto& slot : g_probe_slots) slot = ProbeSlot{};
+  g_coverage.clear();
+  g_coverage_period.clear();
+  for (auto& st : g_staged) st = StagedHeader{};
+  g_staged_next = 0;
+  g_live_keys.clear();
+  g_gate = hair_primary::SwapGate{};
+  g_load = hair_primary::LoadGuard{};
+  g_order = false;
+  g_applied_frame = g_published = 0;
   g_pass_of.clear();
   g_mods.clear();
   for (CountSlot& s : g_cnt) {
@@ -417,7 +558,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_last_tag = 0;
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   g_qp = VK_NULL_HANDLE;
-  for (HpBuf* b : {&g_header, &g_pixels}) {
+  for (HpBuf* b : {&g_header, &g_pixels, &g_probe_header}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
     if (b->m) dd->vk.FreeMemory(dd->device, b->m, nullptr);
     *b = HpBuf{};
@@ -518,11 +659,48 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
     if (it != g_variant.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(it->second));
     g_variant[out[i]] = v;
     g_pass_of[v] = pass;
+    if (pass == Pass::Prepass) {
+      Bg3ShaderBlob blob{};
+      if (!shader_get("rt/hair_primary_probe.hlsl", "main", "ps_6_6", &blob)) continue;
+      VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+      mi.codeSize = blob.size_bytes; mi.pCode = blob.code;
+      VkShaderModule pm = VK_NULL_HANDLE;
+      if (vk.CreateShaderModule(device, &mi, nullptr, &pm) != VK_SUCCESS) continue;
+      const uint32_t words[2] = {uint32_t(g_probe_header.addr), uint32_t(g_probe_header.addr >> 32)};
+      const VkSpecializationInfo pspec{2, spec_map, sizeof words, words};
+      stages[size_t(fs)].module = pm;
+      stages[size_t(fs)].pName = "main";
+      stages[size_t(fs)].pSpecializationInfo = &pspec;
+      // Preserve native depth test, sample count and culling. No depth, stencil or colour stores.
+      dsv.front.writeMask = dsv.back.writeMask = 0;
+      VkPipelineColorBlendStateCreateInfo blend{};
+      std::vector<VkPipelineColorBlendAttachmentState> attachments;
+      if (ci.pColorBlendState) {
+        blend = *ci.pColorBlendState;
+        if (blend.attachmentCount) attachments.assign(blend.pAttachments, blend.pAttachments + blend.attachmentCount);
+        for (auto& a : attachments) a.colorWriteMask = 0;
+        blend.pAttachments = attachments.data();
+        vci.pColorBlendState = &blend;
+      }
+      VkPipeline probe = VK_NULL_HANDLE;
+      const VkResult pr = vk.CreateGraphicsPipelines(device, cache, 1, &vci, nullptr, &probe);
+      vk.DestroyShaderModule(device, pm, nullptr);
+      if (pr == VK_SUCCESS && probe) {
+        auto old = g_probe.find(out[i]);
+        if (old != g_probe.end()) defer_destroy(BG3_DEFER_PIPELINE, uint64_t(old->second));
+        g_probe[out[i]] = probe;
+      }
+    }
   }
 }
 
 void hair_primary_forget_pipeline(VkPipeline p) {
   std::lock_guard<std::mutex> lock(g_mu);
+  auto probe = g_probe.find(p);
+  if (probe != g_probe.end()) {
+    defer_destroy(BG3_DEFER_PIPELINE, uint64_t(probe->second));
+    g_probe.erase(probe);
+  }
   auto it = g_variant.find(p);
   if (it == g_variant.end()) return;
   g_pass_of.erase(it->second);
@@ -539,110 +717,45 @@ uint32_t hair_primary_transmit(uint64_t key) {
   return w;
 }
 
-bool hair_primary_wanted() {
-  return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE;
-}
-
-void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
-  if (!g_order || !hair_primary_wanted()) return;
-  // The main G-buffer pass: its colour targets and the G-buffer depth image (the prepass writes the same image without
-  // colour targets), at the pixel record's size.
-  if (p.color_count < 4 || !p.depth_image || uint64_t(p.depth_image) != geo_gbuffer_depth_image()) return;
+HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds) {
+  HairPrimarySubmit recordings{};
+  if (!g_startup_enabled) return recordings;
   std::lock_guard<std::mutex> lock(g_mu);
-  if (!g_dd || p.width != g_px_w || p.height != g_px_h) return;
-  const uint64_t frame = frame_index() + 1;
-  if (g_applied_frame == frame) return;   // once per frame: every G-buffer pass of the frame reads one header
-  g_applied_frame = frame;
-  hair_primary::Staged picks[kStaged];
-  for (int i = 0; i < kStaged; ++i) picks[i] = g_staged[i].pick;
-  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
-  if (i < 0) {
-    g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
-    if (g_order_none++ % 300 == 0)
-      log("[hair primary] G-buffer pass with no groom publish ordered before it: cards this frame (%llu such passes)",
-          (unsigned long long)g_order_none);
-    return;
-  }
-  apply_header(cmd, g_staged[i]);   // a staged publish may serve again (no newer one ordered before)
-}
-
-bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
-  if (args.kind != 1 || !s->pipe[0] || !hair_primary_wanted()) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  const auto it = g_variant.find(s->pipe[0]);
-  // A groom published this or last frame (the build of this frame may still be recorded on another thread).
-  if (it == g_variant.end() || g_published + 2 < frame_index() + 1 || g_load.quiet(frame_index())) return false;
-  // Only the main camera's passes (portraits and other small passes keep their cards: the record is the main view's).
-  if (s->pass.width != g_px_w || s->pass.height != g_px_h) return false;
-  const uint64_t key = hair_primary_draw_key(s, args);
-  const Pass pass = g_pass_of[it->second];
-  if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
-                                                                                    : g_gate.allow_prepass(key)))
-    return false;
-  // Order mode: the G-buffer and velocity strands read the header their pass applied; its groom set must hold the draw
-  // (none applied this frame, or an older publish without it: the cards stay).
-  if (g_order && pass != Pass::Prepass && (g_applied_frame != frame_index() + 1 || !g_live_keys.count(key))) return false;
-  // Its prepass card depth goes only when the last G-buffer pass applied a header holding it (this frame's G-buffer
-  // then finds an equal or newer publish ordered before it).
-  if (g_order && pass == Pass::Prepass && (g_applied_frame != frame_index() || !g_live_keys.count(key))) return false;
-  if (pass == Pass::Gbuffer) g_gate.gbuffer_drew(key);
-  g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
-  ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
-  s->hp_query = UINT32_MAX;
-  const uint64_t now = frame_index();
-  const uint32_t slot = uint32_t(now % kTimeSlots);
-  // Timed only after this frame's publish reset the slot (GPU order: the reset is in the prepass's buffer).
-  if (pass == Pass::Gbuffer && g_qp && g_slot_frame[slot] == now + 1 && g_timed[slot] < kTimed) {
-    s->hp_query = (slot * kTimed + g_timed[slot]++) * 2u;
-    g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query);
-  }
-  return true;
-}
-
-void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s) {
-  if (!g_dd) return;
-  if (s->hp_query != UINT32_MAX) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query + 1);
-  s->hp_query = UINT32_MAX;
-  if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
-}
-
-void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
-                          const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,
-                          uint32_t width, uint32_t height, const float* viewport) {
-  if (!hair_primary_wanted()) return;
-  std::lock_guard<std::mutex> lock(g_mu);
-  DeviceData* dd = g_dd;
-  if (!dd) return;
-  const uint64_t now = frame_index();
-  if (g_load.observe(geo_gbuffer_depth_image(), now)) {
-    // A level load: nothing of the old scene is trusted (see LoadGuard).
-    g_gate.clear();
-    g_last_tag = 0;
-    g_pixels_fresh = true;
-    for (CountSlot& s : g_cnt) s.valid = false;
-    g_transmit.clear();
-    log("[hair primary] level load (new G-buffer images): strand swaps paused for %llu frames, groom state reset",
-        (unsigned long long)hair_primary::kLoadQuietFrames);
-  }
-  if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
-    g_gate.clear();
-    return;
-  }
-  if (width != g_px_w || height != g_px_h || !g_pixels.b) {
-    release(g_pixels);
-    g_px_w = g_px_h = 0;
-    if (!make(g_pixels, hair_primary::pixel_bytes(width, height),
-              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, "hair primary pixels")) {
-      log("[hair primary] pixel record %ux%u could not be allocated: hair keeps its cards", width, height);
-      g_gate.clear();
-      return;
+  for (VkCommandBuffer cmd : cmds) {
+    const uint64_t recording = cmd_recording(cmd);
+    for (uint32_t i = 0; i < kCoverageSlots; ++i) {
+      const auto& slot = g_probe_slots[i];
+      if (slot.frame && slot.cmd == uint64_t(cmd) && slot.recording == recording) recordings.queries[i] = recording;
     }
-    g_px_w = width;
-    g_px_h = height;
-    g_pixels_fresh = true;
-    log("[hair primary] pixel record %ux%u: %.1f MB", width, height, double(g_pixels.size) / 1048576.0);
+    for (int i = 0; i < kStaged; ++i) {
+      const auto& st = g_staged[i];
+      if (st.pick.tag && st.pick.cmd == uint64_t(cmd) && st.recording == recording) recordings.headers[i] = recording;
+    }
   }
-  // Timing: read the oldest slot (its frame is done: kTimeSlots - 1 frames back), then reset it for this frame.
+  return recordings;
+}
+
+void hair_primary_submit_end(const HairPrimarySubmit& recordings, bool success) {
+  if (!g_startup_enabled || !success) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  for (uint32_t i = 0; i < kCoverageSlots; ++i)
+    if (recordings.queries[i] && g_probe_slots[i].recording == recordings.queries[i])
+      g_probe_slots[i].submitted_frame = frame_index() + 1;
+  for (int i = 0; i < kStaged; ++i)
+    if (recordings.headers[i] && g_staged[i].recording == recordings.headers[i]) g_staged[i].submitted = true;
+}
+
+bool hair_primary_wanted() {
+  return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE && g_probe_header.b != VK_NULL_HANDLE;
+}
+
+// g_mu held, outside a render pass, in the main G-buffer pass's own command buffer (hair_primary_before_pass): read the
+// oldest timestamp slot (its frame is done: kTimeSlots - 1 frames back), then reset it for this frame. Reset here, not
+// in the publish's command buffer: a G-buffer recorded before the publish was never timed (hc2 2026-11-04: strand
+// draws every period, no 'strand G-buffer draws GPU' line).
+static void timing_before_gbuffer(VkCommandBuffer cmd, uint64_t now) {
+  DeviceData* dd = g_dd;
+  if (g_slot_frame[now % kTimeSlots] == now + 1) return;   // once per frame
   if (!g_qp) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -670,6 +783,159 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_timed[slot] = 0;
     g_slot_frame[slot] = now + 1;
   }
+}
+
+void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
+  if (!hair_primary_wanted()) return;
+  if (p.depth_image && uint64_t(p.depth_image) == geo_gbuffer_depth_image()) {
+    std::lock_guard<std::mutex> lock(g_mu);
+    if (g_dd) {
+      observe_depth(uint64_t(p.depth_image), frame_index());
+      if (!p.color_count && p.width == g_px_w && p.height == g_px_h && g_precise) coverage_before_prepass(cmd);
+      if (p.color_count >= 4 && p.width == g_px_w && p.height == g_px_h) timing_before_gbuffer(cmd, frame_index());
+    }
+  }
+  if (!g_order) return;
+  // The main G-buffer pass: its colour targets and the G-buffer depth image (the prepass writes the same image without
+  // colour targets), at the pixel record's size.
+  if (p.color_count < 4 || !p.depth_image || uint64_t(p.depth_image) != geo_gbuffer_depth_image()) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd || p.width != g_px_w || p.height != g_px_h) return;
+  const uint64_t frame = frame_index() + 1;
+  if (g_applied_frame == frame) return;   // once per frame: every G-buffer pass of the frame reads one header
+  g_applied_frame = frame;
+  hair_primary::Staged picks[kStaged];
+  for (int i = 0; i < kStaged; ++i) {
+    const auto& st = g_staged[i];
+    const bool same_recording = st.pick.cmd == uint64_t(cmd) && st.recording == cmd_recording(cmd) &&
+                                bvh_rec_state(st.pick.rec) == 0;
+    picks[i] = st.submitted || same_recording ? st.pick : hair_primary::Staged{};
+  }
+  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  if (i < 0) {
+    g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
+    if (g_order_none++ % 300 == 0)
+      log("[hair primary] G-buffer pass with no groom publish ordered before it: cards this frame (%llu such passes)",
+          (unsigned long long)g_order_none);
+    return;
+  }
+  apply_header(cmd, g_staged[i]);   // a staged publish may serve again (no newer one ordered before)
+}
+
+bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  if (args.kind != 1 || !s->pipe[0] || !hair_primary_wanted()) return false;
+  std::lock_guard<std::mutex> lock(g_mu);
+  s->hp_coverage = s->hp_query = UINT32_MAX;
+  const uint64_t now = frame_index();
+  if (s->pass.width != g_px_w || s->pass.height != g_px_h ||
+      uint64_t(s->pass.depth_image) != geo_gbuffer_depth_image()) return false;
+  const auto it = g_variant.find(s->pipe[0]);
+  const uint64_t key = hair_primary_draw_key(s, args);
+  ProbeSlot& slot = g_probe_slots[now % kCoverageSlots];
+  if (it == g_variant.end()) {
+    // An unsupported sibling material sharing the same index range must not be
+    // omitted from a key's denominator while its supported siblings qualify it.
+    if (!s->pass.color_count && (g_gate.published.count(key) || slot.header_keys.count(key))) {
+      if (slot.frame == now + 1) slot.incomplete_keys.insert(key);
+      g_coverage.invalidate(key, now + 1);
+    }
+    return false;
+  }
+  const Pass pass = g_pass_of[it->second];
+  // Probe before any swap is allowed. The card query wraps the real native draw or its
+  // no-depth-write clone; the duplicate trace draw follows after transform feedback ends.
+  if (pass == Pass::Prepass && !s->pass.color_count && g_probe.count(s->pipe[0]) &&
+      slot.ready && slot.frame == now + 1 && slot.cmd == uint64_t(cmd) &&
+      slot.recording == cmd_recording(cmd) && slot.header_keys.count(key)) {
+    if (slot.n >= kProbeDraws || s->hp_native_queries) {
+      // Never qualify a key from a partial set of its draws in this frame.
+      slot.incomplete_keys.insert(key);
+      g_coverage.invalidate(key, now + 1);
+      return false;
+    }
+    s->hp_coverage = (uint32_t(now % kCoverageSlots) * kProbeDraws + slot.n) * 2;
+    slot.keys[slot.n++] = key;
+    g_coverage_period[key].probed = true;
+    g_begin_query(cmd, g_coverage_qp, s->hp_coverage, VK_QUERY_CONTROL_PRECISE_BIT);
+  }
+  if (pass == Pass::Prepass && s->hp_coverage == UINT32_MAX) {
+    // Another prepass recording / refused probe / exhausted slot cannot contribute
+    // only the successful subset of draws that share this index-range key.
+    if (slot.frame == now + 1) slot.incomplete_keys.insert(key);
+    g_coverage.invalidate(key, now + 1);
+    return false;
+  }
+  const bool probing = s->hp_coverage != UINT32_MAX;
+  if (g_published + 2 < now + 1 || g_load.quiet(now) ||
+      !g_coverage.allow(key, now + 1)) return probing;
+  if (!(pass == Pass::Gbuffer ? g_gate.allow_gbuffer(key) : pass == Pass::Velocity ? g_gate.allow_velocity(key)
+                                                                                    : g_gate.allow_prepass(key))) return probing;
+  // Header order prepass (rt_hair_groom_primary_order 0): the G-buffer may read another frame's header than the probe
+  // proved (hc2 2026-11-04: adjacent tags in 296 of 300 counted frames, the player half bald). Cards, fail closed.
+  if (!g_order && pass != Pass::Prepass) return probing;
+  if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) return probing;
+  if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) return probing;
+  if (pass == Pass::Gbuffer) {
+    g_gate.gbuffer_drew(key);
+    auto& period = g_coverage_period[key];
+    if (period.last_swap != now) { ++period.swapped; period.last_swap = now; }
+  }
+  g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
+  ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
+  const uint32_t ts = uint32_t(now % kTimeSlots);
+  if (pass == Pass::Gbuffer && g_qp && g_slot_frame[ts] == now + 1 && g_timed[ts] < kTimed) {
+    s->hp_query = (ts * kTimed + g_timed[ts]++) * 2u;
+    g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query);
+  }
+  return true;
+}
+
+void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  if (!g_dd) return;
+  if (s->hp_query != UINT32_MAX) g_dd->vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, s->hp_query + 1);
+  s->hp_query = UINT32_MAX;
+  if (s->hp_coverage != UINT32_MAX) {
+    g_end_query(cmd, g_coverage_qp, s->hp_coverage);
+    const auto it = g_probe.find(s->pipe[0]);
+    if (it != g_probe.end()) {
+      g_begin_query(cmd, g_coverage_qp, s->hp_coverage + 1, VK_QUERY_CONTROL_PRECISE_BIT);
+      g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
+      g_dd->vk.CmdDrawIndexed(cmd, args.count, args.instances, args.first, args.vertex_offset, args.first_instance);
+      g_end_query(cmd, g_coverage_qp, s->hp_coverage + 1);
+    }
+    s->hp_coverage = UINT32_MAX;
+  }
+  if (s->pipe[0]) g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s->pipe[0]);
+}
+
+void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint64_t pool, uint64_t pool_bytes,
+                          const hair_primary::Row* rows, const uint64_t* keys, const uint8_t* lods, uint32_t count,
+                          uint32_t width, uint32_t height, const float* viewport) {
+  if (!hair_primary_wanted()) return;
+  std::lock_guard<std::mutex> lock(g_mu);
+  DeviceData* dd = g_dd;
+  if (!dd) return;
+  const uint64_t now = frame_index();
+  observe_depth(geo_gbuffer_depth_image(), now);
+  if (!count || !tlas || !width || !height || !viewport || viewport[2] == 0.0f || viewport[3] == 0.0f) {
+    g_gate.clear();
+    return;
+  }
+  if (width != g_px_w || height != g_px_h || !g_pixels.b) {
+    release(g_pixels);
+    g_px_w = g_px_h = 0;
+    if (!make(g_pixels, hair_primary::pixel_bytes(width, height),
+              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, "hair primary pixels")) {
+      log("[hair primary] pixel record %ux%u could not be allocated: hair keeps its cards", width, height);
+      g_gate.clear();
+      return;
+    }
+    g_px_w = width;
+    g_px_h = height;
+    g_pixels_fresh = true;
+    log("[hair primary] pixel record %ux%u: %.1f MB", width, height, double(g_pixels.size) / 1048576.0);
+  }
   if (!count_feedback(cmd, now)) {
     if (g_st.refused++ < 8) log("[hair primary] strand feedback unavailable: hair keeps its cards");
     g_gate.clear();
@@ -691,14 +957,15 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
   StagedHeader st;
   st.pick = {h.tag, rec, uint64_t(cmd)};
+  st.recording = cmd_recording(cmd);
   st.n = hair_primary::pack(h, rows, count, st.bytes);
   st.pixels = width * height;
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) st.keys[k] = k < count ? keys[k] : 0;
   for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) st.lods[k] = k < count ? lods[k] : 0;
+  g_staged[g_staged_next] = st;
+  g_staged_next = (g_staged_next + 1) % kStaged;
   if (cfg_int("rt_hair_groom_primary_order", 0) != 0) {
     // Applied in the G-buffer's own command buffer (hair_primary_before_pass); kept in the ring until then.
-    g_staged[g_staged_next] = st;
-    g_staged_next = (g_staged_next + 1) % kStaged;
     g_order = true;
   } else {
     g_order = false;
@@ -707,6 +974,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   g_gate.publish(keys, (std::min)(count, hair_primary::kMaxGrooms), now);
   g_published = now + 1;
   ++g_st.publishes;
+  coverage_log(now);
   if (now % 300 == 0 && g_seen.frame) {
     char per[640];
     int at = 0;

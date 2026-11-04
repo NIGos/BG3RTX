@@ -1,0 +1,2213 @@
+{
+  "name": "combined-Water-Queens-House-part1",
+  "save": "Water Queens House",
+  "session": false,
+  "traces": 0,
+  "hold": 120,
+  "timeout": 4932,
+  "repeat": 1,
+  "live_batch": "combined",
+  "set": "ab_off=0,crash_dump=1,dump_images=1,dump_png_width=1280,dump_preview_f32=0,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_far=1,gi_hit_direct=1,gi_hit_sun=1,gi_rr_rays=2,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_samples=0,ls_shadowed=3,ls_stats=0,pan_capture=0,pan_inputs=0,pan_prepare=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_max_rough=0.8,rf_stats=0,rr=1,rr_post=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_fine_lod=1,rt_alpha_metadata_cache=0,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_compact_hit_state=0,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hair_pool_trim=1,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_occ_stats=0,rt_omm=1,rt_omm_dyn=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_rebuild_frames=600,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_scene_wait_ms=12,rt_stability_log=0,rt_stats=0,rt_sun_cascade_current=0,rt_timing_frames=120,rt_trace_scale=1.0,rt_vt_alpha_masks=1,rt_water_compose=1,rt_water_compose_shift=1,rt_water_empty_tiles=0,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1",
+  "args": [
+    "-RealPresent",
+    "-Move",
+    "-MovePlan",
+    "tools/live_batches/combined_20261103/plans/combined-Water-Queens-House-part1.json"
+  ],
+  "patterns": [
+    "\\[hot\\]",
+    "\\[ngx\\] RR create",
+    "\\[sl\\] DLSS-G frame",
+    "\\[pace\\]",
+    "\\[watch\\]",
+    "rt passes: GPU cost",
+    "\\[rt\\] scene wait",
+    "\\[rt\\] scene build GPU",
+    "\\[trace\\]",
+    "\\[shaders\\].*\\?",
+    "\\[crash\\]",
+    "FAILED",
+    "\\[water\\]",
+    "gi: GPU cost",
+    "\\[rrpost\\] exposure (held|probe)",
+    "\\[geo\\] RT capture",
+    "\\[cascade\\] casters",
+    "\\[hit material\\] buffer reuse",
+    "\\[sl\\] fg_letterbox",
+    "sun stats",
+    "^\\S+\\s+\\[core\\] sun:",
+    "\\[core\\] guard:",
+    "skipped: no variant for",
+    "\\[bvh\\] mesh pool",
+    "\\[hit material pool basis\\]",
+    "\\[cascade\\] buffer full",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[ab\\]",
+    "\\[mem\\] ours \\(",
+    "\\[omm",
+    "omm check",
+    "gi: trace pass",
+    "gi: background builds",
+    "building in the background",
+    "\\[em\\]",
+    "\\[geo\\]",
+    "\\[rrpost\\] exposure",
+    "rf: reflection pass",
+    "ls: local-light shadow pass",
+    "\\[ngx\\] RR",
+    "gi: resources"
+  ],
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+    "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+    "\\[cfg\\] settings read",
+    "\\[trace\\] frame \\d+ written",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
+    "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+    "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+    "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+    "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+    "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+    "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+    "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[ab\\] ab_off: ray tracing OFF",
+    "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+    "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+    "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+    "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+    "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+    "gi: GPU cost [0-9.]+ ms/frame",
+    "gi: trace pass .*GPU median",
+    "gi: GPU cost .*average of 300 frames",
+    "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+    "\\[rrpost\\] exposure hold released after [1-9]\\d* writes",
+    "rf: reflection pass GPU median",
+    "\\[rrpost\\] exposure held"
+  ],
+  "expect_every": [
+    {
+      "name": "b1-su1-ultra-s8-fg2--water reflections traced in every window with the casters on",
+      "select": "\\[water\\] reflections \\(\\d+ frames, ",
+      "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--one trace written in each static window",
+      "select": "\\[trace\\] frame \\d+ written: ",
+      "match": "\\[trace\\] frame \\d+ written: ",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ],
+      "min": 1,
+      "event": true
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ]
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ]
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "; non-finite terms 0 \\(",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--VRAM: process usage stays within the driver's real budget in every smoke window",
+      "select": "\\[mem\\] ours \\(",
+      "match": "\\(within budget\\); guard (normal|LOW)",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b"
+      ]
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+      "select": "omm check \\(\\d+ frames\\):",
+      "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--diag-omm"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--OMM diagnostic: scene wait has zero timeouts",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "b1-su1-ultra-s8-fg2--diag-omm"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b",
+        "b1-su1-ultra-s8-fg2--diag-warm-omm",
+        "b1-su1-ultra-s8-fg2--diag-omm"
+      ]
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--no roof overflow in measured windows",
+      "select": "sun: WARNING \\d+ roof volumes within",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b",
+        "b1-su1-ultra-s8-fg2--diag-warm-omm",
+        "b1-su1-ultra-s8-fg2--diag-omm"
+      ]
+    },
+    {
+      "name": "b1-su1-ultra-s8-fg2--no roof overflow in measured windows",
+      "select": "over kSunMaxVolumes on [1-9]",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "b1-su1-ultra-s8-fg2--static-a",
+        "b1-su1-ultra-s8-fg2--pan-q",
+        "b1-su1-ultra-s8-fg2--pan-e",
+        "b1-su1-ultra-s8-fg2--rotate-r",
+        "b1-su1-ultra-s8-fg2--rotate-l",
+        "b1-su1-ultra-s8-fg2--static-b",
+        "b1-su1-ultra-s8-fg2--diag-warm-omm",
+        "b1-su1-ultra-s8-fg2--diag-omm"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b2-go2-s8--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "b2-go2-s8--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b2-go2-s8--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "; non-finite terms 0 \\(",
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b2-go2-s8--no pipeline builds in every measured window",
+      "select": "gi: background builds \\(\\d+ frames\\):",
+      "match": ": 0 frames waiting, 0 pending, 0 started",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--shot-off-a",
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--shot-compact",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--shot-off-b",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--shot-alpha",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--shot-off-c",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--shot-water",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--shot-off-d",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--no skipped background pass in measured windows",
+      "select": "building in the background",
+      "match": "(?!)",
+      "min": 0,
+      "event": true,
+      "windows": [
+        "b2-go2-s8--shot-off-a",
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--shot-compact",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--shot-off-b",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--shot-alpha",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--shot-off-c",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--shot-water",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--shot-off-d",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--complete trace timer every cost state",
+      "select": "gi: trace pass",
+      "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--complete GI timer every cost state",
+      "select": "gi: GPU cost",
+      "match": "average of 300 frames",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--rf: reflection pass complete timer per cost state",
+      "select": "rf: reflection pass",
+      "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--ls: local-light shadow pass complete timer per cost state",
+      "select": "ls: local-light shadow pass",
+      "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+      "period_frames": 300,
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--enclosing RT cost complete timer",
+      "select": "rt passes: GPU cost",
+      "match": "average of 300 frames",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--water compose GPU timer present",
+      "select": "\\[water\\] compose GPU",
+      "match": "\\([1-9]\\d* timed frames:",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b2-go2-s8--water reflection GPU timer present",
+      "select": "\\[water\\] reflections GPU",
+      "match": "\\([1-9]\\d* timed;",
+      "min": 1,
+      "windows": [
+        "b2-go2-s8--cost-off-a",
+        "b2-go2-s8--cost-compact",
+        "b2-go2-s8--cost-off-b",
+        "b2-go2-s8--cost-alpha",
+        "b2-go2-s8--cost-off-c",
+        "b2-go2-s8--cost-water",
+        "b2-go2-s8--cost-off-d"
+      ]
+    },
+    {
+      "name": "b3-go2-s8-medium--GI timing",
+      "select": "gi: trace pass .*GPU median [\\d.]+ ms",
+      "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, ",
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--cost-off-b"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b3-go2-s8-medium--reflection timing",
+      "select": "rf: reflection pass GPU median [\\d.]+ ms",
+      "match": "rf: reflection pass GPU median [\\d.]+ ms",
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--cost-off-b"
+      ],
+      "min": 1,
+      "period_frames": 300
+    },
+    {
+      "name": "b3-go2-s8-medium--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--cost-off-b"
+      ]
+    },
+    {
+      "select": "\\[trace\\] frame \\d+ written",
+      "match": "\\[trace\\] frame \\d+ written",
+      "windows": [
+        "b3-go2-s8-medium--shot-off-a",
+        "b3-go2-s8-medium--shot-on",
+        "b3-go2-s8-medium--shot-off-b"
+      ],
+      "event": true,
+      "settle_s": 1,
+      "min": 3,
+      "name": "b3-go2-s8-medium--\\[trace\\] frame \\d+ written"
+    },
+    {
+      "name": "b3-go2-s8-medium--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--cost-off-b"
+      ]
+    },
+    {
+      "name": "b3-go2-s8-medium--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--cost-off-b"
+      ],
+      "when_present": true
+    },
+    {
+      "name": "b3-go2-s8-medium--scaled GI actually applied",
+      "select": "gi: trace pass",
+      "match": "1 rays/sample, half res, spatial resolve \\+ RR",
+      "windows": [
+        "b3-go2-s8-medium--cost-on"
+      ],
+      "min": 1
+    },
+    {
+      "name": "b3-go2-s8-medium--no mesh pool exhaustion in measured windows (load excluded)",
+      "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+      "match": "(?!)",
+      "event": true,
+      "min": 0,
+      "windows": [
+        "b3-go2-s8-medium--cost-off-a",
+        "b3-go2-s8-medium--shot-off-a",
+        "b3-go2-s8-medium--cost-on",
+        "b3-go2-s8-medium--shot-on",
+        "b3-go2-s8-medium--cost-off-b",
+        "b3-go2-s8-medium--shot-off-b"
+      ]
+    }
+  ],
+  "forbid": [
+    "VK_ERROR_DEVICE_LOST"
+  ],
+  "expect_runner": [
+    "\\[window-mode\\].*visible_unfocused",
+    "^Run ended: done",
+    "\\[motion-trace\\] phase=4 label=b1\\-su1\\-ultra\\-s8\\-fg2\\-\\-static\\-a repeat=0",
+    "\\[motion-trace\\] phase=9 label=b1\\-su1\\-ultra\\-s8\\-fg2\\-\\-static\\-b repeat=0",
+    "\\[motion-trace\\] phase=21 label=b2\\-go2\\-s8\\-\\-shot\\-off\\-a repeat=0",
+    "\\[motion-trace\\] phase=23 label=b2\\-go2\\-s8\\-\\-shot\\-compact repeat=0",
+    "\\[motion-trace\\] phase=25 label=b2\\-go2\\-s8\\-\\-shot\\-off\\-b repeat=0",
+    "\\[motion-trace\\] phase=27 label=b2\\-go2\\-s8\\-\\-shot\\-alpha repeat=0",
+    "\\[motion-trace\\] phase=29 label=b2\\-go2\\-s8\\-\\-shot\\-off\\-c repeat=0",
+    "\\[motion-trace\\] phase=31 label=b2\\-go2\\-s8\\-\\-shot\\-water repeat=0",
+    "\\[motion-trace\\] phase=33 label=b2\\-go2\\-s8\\-\\-shot\\-off\\-d repeat=0",
+    "\\[motion-trace\\] phase=42 label=b3\\-go2\\-s8\\-medium\\-\\-shot\\-off\\-a repeat=0",
+    "\\[motion-trace\\] phase=45 label=b3\\-go2\\-s8\\-medium\\-\\-shot\\-on repeat=0",
+    "\\[motion-trace\\] phase=48 label=b3\\-go2\\-s8\\-medium\\-\\-shot\\-off\\-b repeat=0",
+    "\\[motion-plan\\] complete phases=49\\b"
+  ],
+  "stop_on_dump": true,
+  "window_mode": "visible_unfocused_fg",
+  "requires_success_of": [],
+  "post_gate": true,
+  "fail_fast": true,
+  "fail_fast_slices": [
+    {
+      "offset": 0,
+      "count": 14,
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed",
+        "\\[water\\] water geometry UNAVAILABLE",
+        "\\[water\\] build submission failed",
+        "\\[water\\] reflections unavailable",
+        "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+        "\\[water\\] compose UNAVAILABLE",
+        "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+        "\\[water\\] compose: variant pipeline creation failed",
+        "\\[water\\] compose: a water pipeline blends",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[cascade\\] could not allocate",
+        "skipped: no variant for",
+        "set 1 [1-9]\\d* out-of-range reads skipped",
+        "\\[hit material pool basis\\] over kBasisCapBytes",
+        "\\[omm\\] VK_EXT_opacity_micromap unavailable",
+        "\\[omm\\] producer disabled after EXT record failure",
+        "\\[omm dyn\\] WARNING"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+        "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+        "\\[cfg\\] settings read",
+        "\\[trace\\] frame \\d+ written",
+        "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+",
+        "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+        "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts",
+        "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+        "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
+        "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+        "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+        "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+        "\\[ab\\] ab_off: ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+        "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+        "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+        "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+        "gi: GPU cost [0-9.]+ ms/frame"
+      ],
+      "expect_every": [
+        {
+          "name": "b1-su1-ultra-s8-fg2--water reflections traced in every window with the casters on",
+          "select": "\\[water\\] reflections \\(\\d+ frames, ",
+          "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--one trace written in each static window",
+          "select": "\\[trace\\] frame \\d+ written: ",
+          "match": "\\[trace\\] frame \\d+ written: ",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ]
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ]
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b"
+          ]
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+          "select": "omm check \\(\\d+ frames\\):",
+          "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--diag-omm"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--OMM diagnostic: scene wait has zero timeouts",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "windows": [
+            "b1-su1-ultra-s8-fg2--diag-omm"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--no mesh pool exhaustion in measured windows (load excluded)",
+          "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b",
+            "b1-su1-ultra-s8-fg2--diag-warm-omm",
+            "b1-su1-ultra-s8-fg2--diag-omm"
+          ]
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--no roof overflow in measured windows",
+          "select": "sun: WARNING \\d+ roof volumes within",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b",
+            "b1-su1-ultra-s8-fg2--diag-warm-omm",
+            "b1-su1-ultra-s8-fg2--diag-omm"
+          ]
+        },
+        {
+          "name": "b1-su1-ultra-s8-fg2--no roof overflow in measured windows",
+          "select": "over kSunMaxVolumes on [1-9]",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b1-su1-ultra-s8-fg2--static-a",
+            "b1-su1-ultra-s8-fg2--pan-q",
+            "b1-su1-ultra-s8-fg2--pan-e",
+            "b1-su1-ultra-s8-fg2--rotate-r",
+            "b1-su1-ultra-s8-fg2--rotate-l",
+            "b1-su1-ultra-s8-fg2--static-b",
+            "b1-su1-ultra-s8-fg2--diag-warm-omm",
+            "b1-su1-ultra-s8-fg2--diag-omm"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 1,
+        "startup_only": [
+          "rt_xfb_mb"
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 26.978417266207174,
+            "windows": 610,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 22.93577981649794,
+            "windows": 19,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              1,
+              0,
+              0
+            ],
+            "fps": 15.59251559252314,
+            "windows": 3,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              1,
+              0,
+              0,
+              0
+            ],
+            "fps": 20.949720670434065,
+            "windows": 5,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
+      }
+    },
+    {
+      "offset": 15,
+      "count": 21,
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed",
+        "\\[water\\] water geometry UNAVAILABLE",
+        "\\[water\\] build submission failed",
+        "\\[water\\] reflections unavailable",
+        "\\[water\\] rt/water_\\w+\\.hlsl\\S* \\w+: pipeline creation failed",
+        "\\[water\\] compose UNAVAILABLE",
+        "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+        "\\[water\\] compose: variant pipeline creation failed",
+        "\\[water\\] compose: a water pipeline blends",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[cascade\\] could not allocate",
+        "skipped: no variant for"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "gi: trace pass .*GPU median",
+        "gi: GPU cost .*average of 300 frames",
+        "\\[trace\\] frame \\d+ written",
+        "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+",
+        "\\[rrpost\\] exposure hold released after [1-9]\\d* writes"
+      ],
+      "expect_every": [
+        {
+          "name": "b2-go2-s8--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-go2-s8--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "b2-go2-s8--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-go2-s8--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-go2-s8--no pipeline builds in every measured window",
+          "select": "gi: background builds \\(\\d+ frames\\):",
+          "match": ": 0 frames waiting, 0 pending, 0 started",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--shot-off-a",
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--shot-compact",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--shot-off-b",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--shot-alpha",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--shot-off-c",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--shot-water",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--shot-off-d",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--no skipped background pass in measured windows",
+          "select": "building in the background",
+          "match": "(?!)",
+          "min": 0,
+          "event": true,
+          "windows": [
+            "b2-go2-s8--shot-off-a",
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--shot-compact",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--shot-off-b",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--shot-alpha",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--shot-off-c",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--shot-water",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--shot-off-d",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--complete trace timer every cost state",
+          "select": "gi: trace pass",
+          "match": "GPU median [0-9.]+ ms, p10 [0-9.]+, p90 [0-9.]+ \\(300 frames\\)",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--complete GI timer every cost state",
+          "select": "gi: GPU cost",
+          "match": "average of 300 frames",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--rf: reflection pass complete timer per cost state",
+          "select": "rf: reflection pass",
+          "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+          "period_frames": 300,
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--ls: local-light shadow pass complete timer per cost state",
+          "select": "ls: local-light shadow pass",
+          "match": "GPU median [0-9.]+ ms, .*\\(300 frames;",
+          "period_frames": 300,
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--enclosing RT cost complete timer",
+          "select": "rt passes: GPU cost",
+          "match": "average of 300 frames",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--water compose GPU timer present",
+          "select": "\\[water\\] compose GPU",
+          "match": "\\([1-9]\\d* timed frames:",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        },
+        {
+          "name": "b2-go2-s8--water reflection GPU timer present",
+          "select": "\\[water\\] reflections GPU",
+          "match": "\\([1-9]\\d* timed;",
+          "min": 1,
+          "windows": [
+            "b2-go2-s8--cost-off-a",
+            "b2-go2-s8--cost-compact",
+            "b2-go2-s8--cost-off-b",
+            "b2-go2-s8--cost-alpha",
+            "b2-go2-s8--cost-off-c",
+            "b2-go2-s8--cost-water",
+            "b2-go2-s8--cost-off-d"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 1,
+        "startup_only": [
+          "rt_xfb_mb"
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 26.978417266207174,
+            "windows": 610,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 22.93577981649794,
+            "windows": 19,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              1,
+              0,
+              0
+            ],
+            "fps": 15.59251559252314,
+            "windows": 3,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              1,
+              0,
+              0,
+              0
+            ],
+            "fps": 20.949720670434065,
+            "windows": 5,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
+      }
+    },
+    {
+      "offset": 37,
+      "count": 12,
+      "forbid": [
+        "VK_ERROR_DEVICE_LOST",
+        "\\[crash\\] exception 0x[0-9a-f]+",
+        "skipped: no variant",
+        "query basis overflow",
+        "RR (creation|evaluate) failed"
+      ],
+      "expect": [
+        "\\[auto\\] scene ready",
+        "gi: trace pass .*GPU median",
+        "rf: reflection pass GPU median",
+        "\\[rrpost\\] exposure held",
+        "\\[ngx\\] RR create .*: Success"
+      ],
+      "expect_every": [
+        {
+          "name": "b3-go2-s8-medium--GI timing",
+          "select": "gi: trace pass .*GPU median [\\d.]+ ms",
+          "match": "gi: trace pass \\(ray-traced, gi_rt=1, 1 rays/sample, ",
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--cost-off-b"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b3-go2-s8-medium--reflection timing",
+          "select": "rf: reflection pass GPU median [\\d.]+ ms",
+          "match": "rf: reflection pass GPU median [\\d.]+ ms",
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--cost-off-b"
+          ],
+          "min": 1,
+          "period_frames": 300
+        },
+        {
+          "name": "b3-go2-s8-medium--scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--cost-off-b"
+          ]
+        },
+        {
+          "select": "\\[trace\\] frame \\d+ written",
+          "match": "\\[trace\\] frame \\d+ written",
+          "windows": [
+            "b3-go2-s8-medium--shot-off-a",
+            "b3-go2-s8-medium--shot-on",
+            "b3-go2-s8-medium--shot-off-b"
+          ],
+          "event": true,
+          "settle_s": 1,
+          "min": 3,
+          "name": "b3-go2-s8-medium--\\[trace\\] frame \\d+ written"
+        },
+        {
+          "name": "b3-go2-s8-medium--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--cost-off-b"
+          ]
+        },
+        {
+          "name": "b3-go2-s8-medium--capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--cost-off-b"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "b3-go2-s8-medium--scaled GI actually applied",
+          "select": "gi: trace pass",
+          "match": "1 rays/sample, half res, spatial resolve \\+ RR",
+          "windows": [
+            "b3-go2-s8-medium--cost-on"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b3-go2-s8-medium--no mesh pool exhaustion in measured windows (load excluded)",
+          "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
+          "match": "(?!)",
+          "event": true,
+          "min": 0,
+          "windows": [
+            "b3-go2-s8-medium--cost-off-a",
+            "b3-go2-s8-medium--shot-off-a",
+            "b3-go2-s8-medium--cost-on",
+            "b3-go2-s8-medium--shot-on",
+            "b3-go2-s8-medium--cost-off-b",
+            "b3-go2-s8-medium--shot-off-b"
+          ]
+        }
+      ],
+      "fail_fast": true,
+      "set": "preset=medium,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+      "live_flow": {
+        "expected_fps": 30,
+        "settings_latency_s": 1,
+        "trace_stall_s": 4,
+        "startup_only": [
+          "rt_xfb_mb"
+        ],
+        "fps_windows": [
+          {
+            "state": [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 26.978417266207174,
+            "windows": 610,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            "fps": 22.93577981649794,
+            "windows": 19,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              0,
+              1,
+              0,
+              0
+            ],
+            "fps": 15.59251559252314,
+            "windows": 3,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+            ]
+          },
+          {
+            "state": [
+              1,
+              1,
+              0,
+              0,
+              0
+            ],
+            "fps": 20.949720670434065,
+            "windows": 5,
+            "logs": [
+              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+            ]
+          }
+        ],
+        "trace_export": {
+          "seconds": 0.3169999999954598,
+          "quantile": 0.95,
+          "samples": 439,
+          "maximum": 0.43699999999807915
+        }
+      }
+    }
+  ],
+  "estimated_phase_seconds": 629.7,
+  "live_flow": {
+    "expected_fps": 30,
+    "settings_latency_s": 1,
+    "trace_stall_s": 1,
+    "startup_only": [
+      "rt_xfb_mb"
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 26.978417266207174,
+        "windows": 610,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 22.93577981649794,
+        "windows": 19,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "fps": 15.59251559252314,
+        "windows": 3,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+        ]
+      },
+      {
+        "state": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "fps": 20.949720670434065,
+        "windows": 5,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    },
+    "segments": [
+      {
+        "offset": 0,
+        "count": 14,
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 26.978417266207174,
+              "windows": 610,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 22.93577981649794,
+              "windows": 19,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                1,
+                0,
+                0
+              ],
+              "fps": 15.59251559252314,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 20.949720670434065,
+              "windows": 5,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      },
+      {
+        "offset": 15,
+        "count": 21,
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,rt_cascade_casters=1,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,dump_preview_f32=1,rt_compact_hit_state=0,rt_alpha_metadata_cache=0,rt_water_empty_tiles=0,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,rt_xfb_mb=1024",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 1,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 26.978417266207174,
+              "windows": 610,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 22.93577981649794,
+              "windows": 19,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                1,
+                0,
+                0
+              ],
+              "fps": 15.59251559252314,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 20.949720670434065,
+              "windows": 5,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      },
+      {
+        "offset": 37,
+        "count": 12,
+        "set": "preset=medium,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+        "live_flow": {
+          "expected_fps": 30,
+          "settings_latency_s": 1,
+          "trace_stall_s": 4,
+          "startup_only": [
+            "rt_xfb_mb"
+          ],
+          "fps_windows": [
+            {
+              "state": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 26.978417266207174,
+              "windows": 610,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.070556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.083038.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.093137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.121215.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.131237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w2-water-reflections-s8-fg2.1.140754.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.070927.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.083416.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.093518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w3-water-compose-s8-fg2.1.121606.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.121950.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w4-water-shadows-s8-fg2.1.141148.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w5-water-ls-shadows-s8-fg2.1.122327.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5w6-water-refraction-s8-fg2.1.131651.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "fps": 22.93577981649794,
+              "windows": 19,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010209.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.010752.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4r1-gi-rf-s8-fg2.1.030749.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.043533.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.055618.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rc1-replay-s8-fg2.1.071801.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                0,
+                1,
+                0,
+                0
+              ],
+              "fps": 15.59251559252314,
+              "windows": 3,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
+              ]
+            },
+            {
+              "state": [
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              "fps": 20.949720670434065,
+              "windows": 5,
+              "logs": [
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
+              ]
+            }
+          ],
+          "trace_export": {
+            "seconds": 0.3169999999954598,
+            "quantile": 0.95,
+            "samples": 439,
+            "maximum": 0.43699999999807915
+          }
+        }
+      }
+    ]
+  },
+  "post": "py -3 tools/live_batches/combine.py --extract \"tools/live_batches/combined_20261103/combined-Water-Queens-House-part1.manifest.json\" --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --out \"{log}.batches\" --run-post"
+}

@@ -1,10 +1,5 @@
+# Offline only: shared fake queue writes exclusively below -Out.
 param([string]$Out = '')
 $ErrorActionPreference = 'Stop'
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-  $shim = Join-Path $env:TEMP 'bg3rtx-hair-python-shim'
-  New-Item -ItemType Directory -Force -Path $shim | Out-Null
-  Set-Content -LiteralPath (Join-Path $shim 'py.ps1') '& python @($args | Where-Object { $_ -ne ''-3'' })'
-  $env:PATH = "$shim;$env:PATH"
-}
-& (Join-Path $PSScriptRoot '..\lean_dryrun.ps1') -Batch hair_validation -Out $Out -MaxMinutes 65 -MaxMB 2048 -TraceMB 30 -MaxBursts 6 -BurstMB 165 -Independent -Unfocused
+& (Join-Path $PSScriptRoot '..\lean_dryrun.ps1') -Batch hair_validation -Out $Out -MaxMinutes 31 -MaxMB 2048 -TraceMB 30 -MaxBursts 8 -BurstMB 165 -Independent -Unfocused -ScratchOnly -JobNames @('hv5-reload-bisect','hv6-strand-diagnostic')
 exit $LASTEXITCODE

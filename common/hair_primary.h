@@ -111,6 +111,7 @@ inline bool soup_update_ok(bool captured, bool held, uint64_t soup_off, uint32_t
 // in the last completed frame. A matched draw whose G-buffer pipeline has no variant (another material permutation,
 // refused clone) keeps its cards in every pass (2026-11-03: the player's hair vanished: prepass hidden, the G-buffer
 // card then failed its EQUAL depth test).
+// Historical pixel-strike helper (retained for regression tests; the layer no longer calls feedback):
 // GPU feedback (shaders/rt/hair_primary_count.hlsl): the strand pixels of each groom in a frame whose G-buffer variant
 // ran for it. kStrikes such frames in a row with no strand pixel at all retire the draw: its cards come back (the
 // strands are not where the cards are: wrong groom, wrong frame, or a ray bug), logged. Not for the session: a draw off
@@ -188,6 +189,44 @@ struct SwapGate {
   }
 };
 
+// Coverage evidence is independent of publication and pixel-record strikes. Query pairs are read
+// after 4 frames; two more frames permit CPU/GPU scheduling jitter, never an indefinite lease.
+constexpr uint64_t kCoverageLatency = 4, kFreshFrames = kCoverageLatency + 2;
+// Batch-4, 877 passing styles / 2631 views, regenerated from unchanged cached geometry:
+// minimum S/C = 8556.228538087944 / 9396.798707214493 = 0.9105471772550376
+// (HAIR_HUM_F_Minthara_Mesh_LOD1, side). One-frame sample-count noise, first-order
+// ratio propagation: sigma <= (sqrt(S) + (S/C)*sqrt(C))/C = 0.01923694227747121.
+// This allows unknown covariance between counts, with per-count variance <= mean
+// under independent spatial Bernoulli sampling. It is modeled, not measured dither
+// noise. kCoverMin = min ratio - sigma; no fitted tolerance. See docs/RTX_HAIR_PRIMARY.md
+// 5b and docs/progress/claude-hair-coverage-bound.json (input state SHA-256, full provenance).
+constexpr double kCoverMin = 0.8913102349775665;
+struct CoverageGate {
+  struct Evidence {
+    uint64_t frame = 0, card = 0, strand = 0;
+    double ratio() const { return card ? double(strand) / double(card) : 0.0; }
+  };
+  std::unordered_map<uint64_t, Evidence> latest;
+  std::unordered_map<uint64_t, uint64_t> incomplete;
+  void invalidate(uint64_t key, uint64_t frame) {
+    if (key && frame > incomplete[key]) incomplete[key] = frame;
+  }
+  void observe(uint64_t key, uint64_t frame, uint64_t card, uint64_t strand) {
+    if (!key) return;
+    auto& e = latest[key];
+    if (frame >= e.frame) e = {frame, card, strand};
+  }
+  bool allow(uint64_t key, uint64_t now, double bound = kCoverMin) const {
+    const auto it = latest.find(key);
+    if (it == latest.end()) return false;
+    const auto& e = it->second;
+    const auto bad = incomplete.find(key);
+    if (bad != incomplete.end() && e.frame <= bad->second) return false;
+    return e.frame && now >= e.frame && now - e.frame <= kFreshFrames && e.card && e.ratio() >= bound;
+  }
+  void clear() { latest.clear(); incomplete.clear(); }
+};
+
 // rt_hair_groom_primary_order: the header is written in the G-buffer's own command buffer, right before its render
 // pass, instead of in the prepass's (where the groom build is recorded). The game may submit the two in either order;
 // the G-buffer then read an adjacent frame's header (hv5 2026-11-03: every groom struck at once). The header applied
@@ -209,16 +248,18 @@ inline int pick_publish(const Staged* staged, int n, uint64_t gbuffer_cmd, Submi
 // G-buffer proof and feedback is dropped and no draw is swapped for kLoadQuietFrames frames: the scene's draws,
 // buffers and descriptors are all new (hv1 2026-11-03 18:40: device lost 3 s after the selected-save reload, with
 // the strand variants active). After it the usual rule holds again (two publishes, then the G-buffer, then the rest).
+// The first image seen is a boundary too: with rt_hair_groom_primary latched at startup the menu publishes no groom, so
+// the first publish comes in the middle of the first level load (hc1 2026-11-04 00:25: device lost 10 frames after the
+// first publish, the level still streaming; strands enabled live after a load had survived).
 constexpr uint64_t kLoadQuietFrames = 300;
 struct LoadGuard {
   uint64_t image = 0, quiet_until = 0;
-  // The G-buffer depth image of this frame; true at a boundary (a different image after a first one).
+  // The G-buffer depth image of this frame; true at a boundary (the first image, or a different one).
   bool observe(uint64_t depth_image, uint64_t now) {
     if (!depth_image || depth_image == image) return false;
-    const bool boundary = image != 0;
     image = depth_image;
-    if (boundary) quiet_until = now + kLoadQuietFrames;
-    return boundary;
+    quiet_until = now + kLoadQuietFrames;
+    return true;
   }
   bool quiet(uint64_t now) const { return now < quiet_until; }
 };

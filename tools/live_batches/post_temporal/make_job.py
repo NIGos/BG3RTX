@@ -4,7 +4,9 @@ from pathlib import Path
 from tools.live_batches.edge_flicker.make_job import write
 from tools.live_batches.live_flow import repair_known_forbids
 HERE = Path(__file__).resolve().parent
-PAIRS = 12
+# Minimum ceil(log2(12/.05)) = 8; retain ten counterbalanced pairs.
+# Shared preflight accounts for energy exports, dispatch and median readiness.
+PAIRS = 10
 D3_WINDOWS = [(f'{"on" if on else "off"}-{i:02d}', on)
               for i in range(PAIRS) for on in ((0,1) if i % 2 == 0 else (1,0))]
 WINDOWS = [('off-a',0),('on-a',1),('off-b',0),('on-b',1)]
@@ -76,8 +78,12 @@ def make(scene_filter=None):
                  purpose='READY_FOR_LIVE only after offline checks. Static same-run temporal post 0/1/0/1 on real Ultra. K8 rendered includes AC.a/C.rgb and EB.rgb/exposure. Presented K8 separate. No game launch authorized.')
         if scene == 'dialogue3':
             job.update(timeout=900,max_minutes=15,hold=90,
-                       purpose='READY_FOR_LIVE: 12 adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.')
+                       purpose=f'READY_FOR_LIVE: {PAIRS} adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.')
         job['live_flow'] = dict(expected_fps=30,settings_latency_s=1,trace_stall_s=1)
+        if scene == 'dialogue3':
+            # 004032 phase 25: 00:43:37.562 -> 00:43:41.365, no dispatch.
+            # Round the observed missed scheduling interval upward, not the gate.
+            job['live_flow']['trace_dispatch_s'] = 4
         startup_state=dict(v.split('=',1) for v in job['set'].split(','))
         for key in ['rt_water_fg_mv', 'rt_water_glint_aa', 'rt_water_rr_mv']: startup_state.pop(key,None)
         for key,value in {'dump_png_width': 1280, 'fg_log_presents': 6, 'fg_snap': 0, 'fg_snap_any': 0, 'fg_snap_delay': 0, 'fg_snap_delay_ms': 0, 'fg_state_every': 60, 'rt_xfb_mb': 1024}.items(): startup_state.setdefault(key,str(value))

@@ -63,23 +63,25 @@ $env:BG3RTX_FAKE_LOAD_SEC='.1'
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts/test-queue.ps1') -DryRun -Root $runRoot -PermissionSession fake-runner
 Check ($LASTEXITCODE -eq 0) 'actual fake runner exits cleanly'
 $records=@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl') | ConvertFrom-Json)
-Check ($records.Count -eq 4) 'command single and two session paths ran'
-Check ((Test-Path $blocked) -and (Test-Path $malformed)) 'blocked and malformed heads preserved while later authorized jobs run'
+Check ($records.Count -eq 6) 'four runs and two terminal refusals recorded'
+Check (@($records | Where-Object {$_.outcome -match '^REFUSED'}).Count -eq 2) 'permission and malformed refusals recorded'
+$records=@($records | Where-Object {$_.outcome -notmatch '^REFUSED'})
+Check (-not(Test-Path $blocked) -and -not(Test-Path $malformed)) 'terminal refusals exit pending while later authorized jobs run'
 Check ($records[2].session -and ($records[2].session -split '#')[0] -eq ($records[3].session -split '#')[0]) 'same session reuse exercised'
 Check ((Get-Content (Join-Path $runRoot 'bg3rtx_user.ini') -Raw).Trim() -eq 'USER_PREFERENCE=preserve') 'user settings preserved'
 Check (-not((Get-Content (Join-Path $runRoot 'captures/auto.ini') -Raw) -match '(?m)^gi=[23]$')) 'session settings restored'
 Check (Test-Path (Join-Path $runRoot 'docs/live-test-drafts/M0/unauthorized.json')) 'nonwatched draft untouched'
-Check (@(Get-ChildItem (Join-Path $runRoot 'captures/queue/done') -Filter '*.json').Count -eq 4) 'draft was not consumed'
+Check (@(Get-ChildItem (Join-Path $runRoot 'captures/queue/done') -Filter '*.json').Count -eq 6) 'refused jobs archived and draft untouched'
 # Re-delivery after runner exit cannot reuse the consumed grant/session.
 $replay=Join-Path $runRoot 'captures/queue/pending/replay.json';$jobs[0] | ConvertTo-Json | Set-Content $replay
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts/test-queue.ps1') -DryRun -Root $runRoot -PermissionSession fake-runner
-Check ((@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl'))).Count -eq 4 -and (Test-Path $replay)) 'consumed batch rejected after real runner restart'
-Remove-Item -LiteralPath $replay
+Check ((@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl'))).Count -eq 7 -and -not(Test-Path $replay)) 'consumed batch archived with refusal after runner restart'
+Check (Test-Path (Join-Path $runRoot 'captures/queue/done/replay.json')) 'replay refusal retained job'
 # Runtime game marker simulates a foreign game without querying/launching one.
 $jobs[0].live_batch='fresh';$file=Join-Path $runRoot 'captures/queue/pending/foreign.json';$jobs[0] | ConvertTo-Json | Set-Content $file
 $grant.jobs=@(@{hash=(Get-QueueJobHash $jobs[0] $runRoot);tree=$runRoot;build=$build;runs=1});$grant | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $runRoot 'captures/queue/authorizations/fresh.json')
 Set-Content (Join-Path $runRoot 'fake_unowned_game') 'synthetic foreign process'
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'scripts/test-queue.ps1') -DryRun -Root $runRoot -PermissionSession fake-runner
-Check ((@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl'))).Count -eq 4) 'unowned process blocks actual release path'
+Check ((@(Get-Content (Join-Path $runRoot 'captures/queue/results.jsonl'))).Count -eq 7) 'unowned process blocks actual release path'
 Check (-not(Test-Path (Join-Path $runRoot 'captures/queue/authorizations/fresh.json.state.json'))) 'unowned process did not consume scope or execute'
 Write-Host "$count queue permission/fake-runner checks passed; scratch $root"

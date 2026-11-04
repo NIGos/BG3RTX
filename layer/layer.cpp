@@ -351,7 +351,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice phys, const 
     if (rt_on && rt_enabled()) bvh_device_created(dd);
     if (rt_on && rt_enabled()) em_device_created(dd);
     if (rt_on && rt_enabled()) water_device_created(dd);   // M5.1: allocates only once rt_water_geometry=1
-    if (rt_on && rt_enabled()) hair_primary_device_created(dd, ci_orig);   // allocates with the first hair pipeline
+    if (rt_on && rt_enabled()) hair_primary_device_created(dd, &patched);   // allocates with the first hair pipeline
   }
   sl_device_post(sl_scratch, dd, VK_SUCCESS);
   watchdog_start();
@@ -511,7 +511,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit(VkQueue queue, uint32_t count,
   if(completion.attached) {
     signal.append(work.legacy,submits,count);submits=work.legacy.data();++count;
   }
+  const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit(queue, count, submits, fence);
+  hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit");
@@ -572,7 +574,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueueSubmit2(VkQueue queue, uint32_t count
   if(completion.attached) {
     signal.append(work.modern,submits,count);submits=work.modern.data();++count;
   }
+  const auto hairSubmit = hair_primary_submit_begin(cmds);
   VkResult r = dd->vk.QueueSubmit2(queue, count, submits, fence);
+  hair_primary_submit_end(hairSubmit, r == VK_SUCCESS);
   omm::finish_completion(ommWork,completion,r==VK_SUCCESS);
   if(completion.attached && r==VK_SUCCESS) diag(DIAG_AUX_COALESCED);
   fault_on_result(dd, r, "vkQueueSubmit2");

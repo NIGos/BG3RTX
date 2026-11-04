@@ -15,6 +15,7 @@
     "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
       "\\[auto\\] scene ready"
     ],
     "wait_log_timeout": 180.0
@@ -35,9 +36,15 @@
     "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "settle-off-a",
@@ -52,7 +59,14 @@
     "motion_end": 2.2,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-a",
@@ -121,16 +135,25 @@
     "label": "settle-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 5.0,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.0,
-    "motion_end": 5.0,
+    "motion_start": 5.1,
+    "motion_end": 5.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-a",
@@ -208,7 +231,14 @@
     "motion_end": 2.2,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-off-b",
@@ -277,16 +307,25 @@
     "label": "settle-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 5.0,
+    "seconds": 5.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 5.0,
-    "motion_end": 5.0,
+    "motion_start": 5.1,
+    "motion_end": 5.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-on-b",
@@ -364,6 +403,13 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

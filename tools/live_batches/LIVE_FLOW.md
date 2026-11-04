@@ -200,3 +200,49 @@ cannot borrow samples after an old toggle. Missing states, producers, complete
 samples and attributable trend windows are reported as unproven. Replay exits 1
 when any job lacks evidence. This is an offline coverage check, never a new live
 PASS. See fps_windows_report.md for before/after lengths and remaining blockers.
+
+Changed rendering settings require a pipeline readiness wait in every changed
+window. The shared retime hook adds known key signals plus a fresh zero-build
+watch interval after the current settings acknowledgement. The signal table is
+in `pipeline_readiness.py`: VALID `pt-dialogue3.1.210703.log` supplies both temporal
+pipeline-built records; `su1-ultra-s8-fg2.1.004527.log` supplies the cascade
+specialization records. No current VALID corpus entry contains a Fresnel state
+record: its signature is taken from the supplied failed wsf1 log and the
+producer in layer/water.cpp, and remains unqualified timing evidence.
+Surface state must be fresh,
+so an earlier enabled record cannot release a later toggle. Cached immutable
+pipeline records remain reusable, but outstanding asynchronous build-start
+records must have matching completion records before release. Unknown keys
+without an explicit key-specific wait fail lint; a quiet driver alone is not
+proof of completion. Non-pipeline capture/log controls are listed separately.
+Final gates attribute samples after `[motion-ready]`; fail-fast defers them
+while readiness is pending. A closed window without its marker is invalid.
+
+Regenerate the active queue with `python -m tools.live_batches.regenerate_active`.
+Every generator reaches `pipeline_readiness.apply` through the shared retime
+hook; combine also applies it after inserting settings resets. Active jobs are
+explicitly marked in `duration_lint.json`; historical artifacts remain inactive.
+`python tools/live_batches/live_flow.py --active --preflight` and the
+`batch_jobs_lint_test` CTest gate the current active inventory. Direct preflight
+of an inactive job still checks all rules; inactive does not authorize a launch.
+`readiness_report.json` records before/after scheduled seconds, median readiness
+seconds and their preflight sum. Missing VALID readiness samples remain unproven.
+
+Additional mappings use VALID `su1-ultra-s8-fg2.1.004527.log` completion records:
+GI AO -> gi_ao_apply, strength -> gi_composite, shadows -> rt_shadow,
+roughness -> rt_reflections, local sample/shadow policy -> rt_local_shadows,
+CBT -> rr_post resolve, alpha -> GI query families, water -> compose/reflect.
+`core/gi.cpp` push-constant construction and refresh calls, `layer/rrpost.cpp`
+CBT use, and `core/water.cpp` pipeline selection identify their consumers.
+These scalar controls reuse pipelines; they do not each select a shader define.
+
+The explicit `CONSERVATIVE` table uses successful generic `[shaders]` compiled,
+cache-read or prefetch completion plus fresh quiet for fibre, primary ordering,
+crowd LOD, pak publication, water geometry, RR, FG, preset and A/B reset.
+Fibre selects `gi/hair_fibre.hlsl` in `core/gi.cpp`; primary ordering is CPU
+publication in `layer/hair_primary.cpp`, crowd is host LOD, paks/geometry are
+host data, and RR/FG include vendor pipelines. No authoritative VALID pipeline
+witness establishes those transitions here. This fallback is deliberately
+conservative preparation evidence, not a key-specific completion or timing
+qualification. Unlisted unknown keys still fail closed. See the report's
+`conservative_keys`; no rendering gate or expected sample count is relaxed.

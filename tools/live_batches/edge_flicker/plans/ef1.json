@@ -59,9 +59,14 @@
     "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-ao-off",
@@ -80,9 +85,15 @@
     "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation "
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-sun-off",
@@ -101,9 +112,15 @@
     "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/rt_shadow\\.hlsl[^ ]* generation "
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-gi-off",
@@ -122,9 +139,15 @@
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/rt_shadow\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/gi_composite\\.hlsl[^ ]* generation "
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-rr-off",
@@ -143,9 +166,15 @@
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/gi_composite\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-cbt-off",
@@ -164,9 +193,15 @@
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-post-late",
@@ -185,9 +220,14 @@
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "warm-base-return",
@@ -206,9 +246,14 @@
     "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "settle-base-a",
@@ -272,7 +317,15 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=0,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-fg-off",
@@ -320,7 +373,16 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=0,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation "
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-ao-off",
@@ -368,7 +430,16 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=0,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/rt_shadow\\.hlsl[^ ]* generation "
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-sun-off",
@@ -416,7 +487,16 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=0,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/rt_shadow\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "gi: gi/gi_composite\\.hlsl[^ ]* generation "
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-gi-off",
@@ -464,7 +544,16 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=0,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/gi_composite\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-rr-off",
@@ -512,7 +601,16 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=0,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-cbt-off",
@@ -560,7 +658,15 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=0,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-post-late",
@@ -608,7 +714,15 @@
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
-    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1"
+    "set": "fg=2,gi_ao=1,rt_shadows=1,gi_strength=1,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,fg_snap=0,pan_capture=0,qa_exposure_hold=1",
+    "wait_log": [
+      "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "rendered-base-b",

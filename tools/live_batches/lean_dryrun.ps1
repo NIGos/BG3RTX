@@ -12,7 +12,7 @@
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
+      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force, [string[]]$JobNames = @(), [switch]$ScratchOnly)
 # Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
 # but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
 # queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
@@ -38,7 +38,8 @@ $flowPython = 'py'
 $flowArgs = @(); if ($flowPython -eq 'py') { $flowArgs += '-3' }
 $flowReport = Join-Path $Out 'live-flow.json'
 New-Item -ItemType Directory -Force $Out | Out-Null
-& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here --preflight --report $flowReport
+$flowSelection = @(); if ($JobNames.Count) { $flowSelection = @('--job-names', ($JobNames -join ',')) }
+& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here --preflight --report $flowReport --cache (Join-Path $Out 'flow-corpus.json') @flowSelection
 if ($LASTEXITCODE -ne 0) { throw 'live-flow design lint failed; fix before fake queue dryrun' }
 $flow = Get-Content -LiteralPath $flowReport -Raw | ConvertFrom-Json
 $flowDurations = @{}
@@ -50,9 +51,10 @@ foreach ($entry in $flow.jobs.PSObject.Properties) {
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
 . (Join-Path $scripts 'longrun.ps1')
+if ($ScratchOnly) { function Get-LongrunCacheDir { Join-Path $Out 'cache' } }
 $inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
   @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
-$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB|$($JobNames -join ',')")
 $reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
 if ($reuse) {
   foreach ($l in @($reuse.lines)) { Write-Host $l }
@@ -71,11 +73,12 @@ function Apply-Set($state, [string]$set) {
 function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug', 'rt_occ_stats') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
+if ($JobNames.Count) { $jobFiles = @($jobFiles | Where-Object { $_.BaseName -in $JobNames }) }
 $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }
 Check "$($jobs.Count) job files, all one live_batch ($($jobs[0].live_batch))" ($jobs.Count -ge 1 -and @($jobs.live_batch | Select-Object -Unique).Count -eq 1)
-$totalWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
+$totalWaitSec = 0; $totalExpectedWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
@@ -83,7 +86,7 @@ foreach ($job in $jobs) {
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
   $budget = $flowDurations[$n]
   if (-not $budget) { throw "live-flow duration missing for $n" }
-  $sec = $budget.seconds; $waitSec = $budget.readiness_timeout_seconds; $totalSec += $sec; $totalWaitSec += $waitSec
+  $sec = $budget.seconds; $waitSec = $budget.readiness_timeout_seconds; $totalSec += $sec; $totalWaitSec += $waitSec; $totalExpectedWaitSec += $budget.expected_readiness_seconds
   $state = @{}; $ok = Apply-Set $state $job.set
   $sampled = $true; $roles = $true; $bursts = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
@@ -148,9 +151,9 @@ $lint = @(& $flowPython @flowArgs (Join-Path $scripts 'queue_gates.py') --lint-c
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
-$min = ($totalSec + $totalWaitSec + $jobs.Count * $LoadSec) / 60.0
+$min = ($totalSec + $totalExpectedWaitSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $totalBursts * $BurstMB + $jobs.Count * $LogMB
-Say ("estimate: plans {0} s + readiness waits <={7} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec)
+Say ("estimate: plans {0} s + expected readiness {8} s (timeout allowance {7} s), {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec, $totalExpectedWaitSec)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 

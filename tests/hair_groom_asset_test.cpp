@@ -258,7 +258,10 @@ int main() {
       g.publish(&k, 1);
       ++frame;
     };
-    publish(0xA);
+    publish(0xA);   // the first image (startup latch: the first publish is inside the first level load)
+    CHECK(load.quiet(frame) && load.quiet(frame + hair_primary::kLoadQuietFrames - 2));
+    frame += hair_primary::kLoadQuietFrames;
+    CHECK(!load.quiet(frame));
     publish(0xA);
     g.gbuffer_drew(k);
     publish(0xA);
@@ -274,6 +277,58 @@ int main() {
     publish(0xB);
     CHECK(g.allow_prepass(k));
     CHECK(!load.observe(0, frame) && !load.observe(0xB, frame));   // no image or the same image: no boundary
+  }
+  { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.
+    using namespace hair_primary;
+    CoverageGate g;
+    const uint64_t a = 0xA, b = 0xB;
+    CHECK(kFreshFrames == kCoverageLatency + 2);
+    CHECK(!g.allow(a, 10));
+    g.observe(a, 10, 1000, 900);
+    CHECK(g.allow(a, 10, 0.9));
+    CHECK(g.allow(a, 10 + kFreshFrames, 0.9));
+    CHECK(!g.allow(a, 11 + kFreshFrames, 0.9));
+    CHECK(!g.allow(a, 9, 0.9));
+    CHECK(!g.allow(b, 10, 0.9));
+    g.observe(a, 11, 1000, 899);
+    CHECK(!g.allow(a, 11, 0.9)); // newest failure immediately brings cards back
+    g.observe(a, 9, 1000, 1000);
+    CHECK(!g.allow(a, 11, 0.9)); // late older success cannot replace newest failure
+    g.observe(a, 12, 0, 1000);
+    CHECK(!g.allow(a, 12, 0.9));
+    g.observe(a, 13, 1000, 901);
+    CHECK(g.allow(a, 13, 0.9)); // recovery has no strike/retry delay
+    g.invalidate(a, 14);
+    CHECK(!g.allow(a, 14, 0.9));
+    CHECK(g.latest.at(a).card == 1000 && g.latest.at(a).strand == 901); // logs retain actual query counts
+    g.observe(a, 14, 1000, 1000);
+    CHECK(!g.allow(a, 14, 0.9)); // partial same-frame successes cannot qualify an invalidated key
+    g.observe(a, 15, 1000, 901);
+    CHECK(g.allow(a, 15, 0.9));
+    g.clear();
+    CHECK(!g.allow(a, 15, 0.9));
+  }
+  { // Derived bound: minimum-ratio batch view, minus one-frame count uncertainty.
+    using namespace hair_primary;
+    const double c = 9396.798707214493, s = 8556.228538087944;
+    const double ratio = s / c;
+    const double noise = (std::sqrt(s) + ratio * std::sqrt(c)) / c;
+    CHECK(std::abs(ratio - 0.9105471772550376) < 1e-14);
+    CHECK(std::abs(noise - 0.01923694227747121) < 1e-14);
+    CHECK(std::abs(kCoverMin - (ratio - noise)) < 1e-14);
+    CHECK(kCoverMin > 0.0 && kCoverMin < ratio);
+    CoverageGate g;
+    const uint64_t card = 1000000, below = uint64_t(kCoverMin * card);
+    g.observe(0xA, 20, card, below);
+    CHECK(!g.allow(0xA, 20));
+    g.observe(0xA, 21, card, below + 1);
+    CHECK(g.allow(0xA, 21));
+    g.observe(0xA, 22, card, 0);
+    CHECK(!g.allow(0xA, 22));
+    g.observe(0xA, 23, card, below + 1);
+    CHECK(g.allow(0xA, 23));
+    g.observe(0, 23, card, card);
+    CHECK(!g.allow(0, 23));
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;
