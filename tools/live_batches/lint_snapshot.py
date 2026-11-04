@@ -27,6 +27,7 @@ def freeze(index, paths):
         fps=[dict(save=save, state=list(sig), fps=v['fps'], windows=v['windows'])
              for (save, sig), v in sorted(flow.fps_windows.MODEL.items())],
         trace_export=dict(flow.TRACE_EXPORT),
+        trace_capture_stall=dict(flow.TRACE_STALL),
         readiness=[dict(save=k[0], patterns=k[1], fresh=k[2], changed=k[3], first=k[4], estimate=v)
                    for k, v in flow.readiness_budget.CACHE.items()],
         matches={rx: [count, [Path(first[0]).name, 'frozen VALID match'] if first else None]
@@ -42,6 +43,8 @@ def load(path=PATH):
         dict(fps=v['fps'], windows=v['windows']) for v in data['fps']})
     flow.TRACE_EXPORT.clear()
     flow.TRACE_EXPORT.update(data['trace_export'])
+    flow.TRACE_STALL.clear()
+    flow.TRACE_STALL.update(data.get('trace_capture_stall', {}))
     flow.readiness_budget.configure([])
     flow.readiness_budget.CACHE.update({(v['save'], tuple(v['patterns']), tuple(v['fresh']),
         tuple(tuple(pair) for pair in v['changed']), v['first']): v['estimate'] for v in data['readiness']})
