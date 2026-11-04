@@ -723,7 +723,11 @@ while ((Get-Date) -lt $deadline) {
     if ($panIndex -ge 0) {
       $step = $panPlan[$panIndex]
       $elapsed = ($planClock.Elapsed.TotalMilliseconds-$phaseStartMs)/1000.0
-      if ($elapsed -ge $step.seconds -and (-not $step.wait_log -or $phaseReady)) {
+      # A slow guard/log poll must not skip a phase's settings or trace requests.
+      # Keep serialized requests in this phase until the existing request clears.
+      if ($panCaptureSent -and $elapsed -ge $step.seconds -and
+          ($null -eq $step.trace_at -or $phaseTraceIndex -ge @($step.trace_at).Count) -and
+          (-not $step.wait_log -or $phaseReady)) {
         # Let the final closed window settle and be checked before normal exit.
         if($panIndex -eq $panPlan.Count-1 -and $env:BG3RTX_QUEUE_CONTEXT_FILE){
           if(-not $guardFinalAt){
@@ -746,6 +750,7 @@ while ((Get-Date) -lt $deadline) {
         $hairReload = $null
       }
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
+        $phaseReadyOffset=if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
         $iniLines += "pan_capture=$($step.serial)"
         if ($step.set) {
@@ -759,6 +764,9 @@ while ((Get-Date) -lt $deadline) {
         }
         if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
         $iniLines | Set-Content -LiteralPath $ini
+        # Measure from the actual apply, retaining any intentional capture_at delay.
+        $phaseStartMs=$planClock.Elapsed.TotalMilliseconds-1000.0*$step.capture_at
+        $elapsed=[double]$step.capture_at
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) hover=$($step.hover_x),$($step.hover_y) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex set=$($step.set)"
         $panCaptureSent = $true
@@ -803,13 +811,18 @@ while ((Get-Date) -lt $deadline) {
         # Apply the phase's settings at capture_at before awaiting their pipelines.
         if (-not $panCaptureSent) { Start-Sleep -Milliseconds 100; continue }
         if ($null -eq $phaseWaitAt) { $phaseWaitAt=$planClock.Elapsed.TotalSeconds }
-        $readyText=''
+        $readyText=''; $freshText=''
         if (Test-Path -LiteralPath $log) {
           $readyStream=[IO.File]::Open($log,'Open','Read','ReadWrite,Delete')
-          try { $readyReader=New-Object IO.StreamReader($readyStream); $readyText=$readyReader.ReadToEnd() }
+          try {
+            $readyReader=New-Object IO.StreamReader($readyStream); $readyText=$readyReader.ReadToEnd()
+            $readyReader.DiscardBufferedData()
+            [void]$readyStream.Seek([Math]::Min([long]$phaseReadyOffset,$readyStream.Length),[IO.SeekOrigin]::Begin)
+            $freshText=$readyReader.ReadToEnd()
+          }
           finally { $readyStream.Dispose() }
         }
-        $phaseReady=Test-CameraPlanReady $step $readyText
+        $phaseReady=Test-CameraPlanReady $step $readyText $freshText
         if (-not $phaseReady) {
           if ($planClock.Elapsed.TotalSeconds-$phaseWaitAt -ge $step.wait_log_timeout) {
             $result="pipeline readiness timed out: $($step.label)"
@@ -836,12 +849,16 @@ while ((Get-Date) -lt $deadline) {
       }
       # Optional static-view diagnostics use the existing trace path, never a
       # second game launch. Requests and resulting capture paths retain clocks.
-      if ($step.trace_at -and $phaseTraceIndex -lt @($step.trace_at).Count -and
+      if ($null -ne $step.trace_at -and $phaseTraceIndex -lt @($step.trace_at).Count -and
           $elapsed -ge @($step.trace_at)[$phaseTraceIndex]) {
         $request=Tagged $root 'trace' '.request'
         if (-not (Test-Path -LiteralPath $request)) {
           Set-Content -LiteralPath $request "phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
           Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-trace] phase=$panIndex label=$($step.label) repeat=$phaseTraceIndex"
+          # A late poll or a previous pending request cannot consume the planned
+          # completion tail. Keep settings stable for the full remaining interval.
+          $elapsed=[double]@($step.trace_at)[$phaseTraceIndex]
+          $phaseStartMs=$planClock.Elapsed.TotalMilliseconds-1000.0*$elapsed
           $phaseTraceIndex++
         }
       }

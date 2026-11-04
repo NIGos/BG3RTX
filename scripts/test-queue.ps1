@@ -87,13 +87,14 @@ $md = Join-Path $q "results.md"
 # Appends to a results file, retrying while a reader holds it open (an editor, an agent's
 # Select-String): a locked file must never stop the queue.
 function Write-Record {
-  param([Parameter(Mandatory = $true)][string]$Path, [Parameter(ValueFromPipeline = $true)]$Line)
+  param([Parameter(Mandatory = $true)][string]$Path, [Parameter(ValueFromPipeline = $true)]$Line, [switch]$Required)
   begin { $buf = New-Object System.Collections.Generic.List[string] }
   process { if ($null -ne $Line) { $buf.Add([string]$Line) } }
   end {
     for ($try = 0; $try -lt 40; $try++) {
       try { [IO.File]::AppendAllLines($Path, $buf); return } catch { Start-Sleep -Milliseconds 250 }
     }
+    if($Required){throw "could not write required refusal record $Path after 10 s"}
     Write-Warning "could not write $Path after 10 s"
   }
 }
@@ -665,7 +666,7 @@ $script:blockedQueueMessages=@{}
 $script:refusedQueueRecords=@{}
 $script:lastRefusal=$null
 function Get-QueuePreflightBlock($file, $job) {
-  $script:preflightDuration=@{expected_seconds=$null;cap_seconds=$(if($null -ne $job.max_minutes){[double]$job.max_minutes*60}else{900.0})}
+  $script:preflightDuration=@{expected_seconds=$null;expected_readiness_seconds=$null;readiness_timeout_seconds=$null;cap_seconds=$(if($null -ne $job.max_minutes){[double]$job.max_minutes*60}else{900.0})}
   # Non-plan commands have only their deadline as a bound. A session also needs
   # its per-run trace waits (60 s write + 30 s completion), gaps and hold.
   if (@($job.args) -notcontains '-MovePlan') {
@@ -696,8 +697,10 @@ function Get-QueuePreflightBlock($file, $job) {
     $exit = $LASTEXITCODE
   } finally { $ErrorActionPreference = $eap }
   foreach ($line in $output) {
-    if ([string]$line -match 'expected duration ([\d.eE+-]+) s after load;.*readiness timeout allowance ([\d.eE+-]+) s') {
+    if ([string]$line -match 'expected duration ([\d.eE+-]+) s after load;.*expected readiness ([\d.eE+-]+) s; readiness timeout allowance ([\d.eE+-]+) s') {
       $script:preflightDuration.expected_seconds=[double]::Parse($Matches[1],[cultureinfo]::InvariantCulture)+[double]::Parse($Matches[2],[cultureinfo]::InvariantCulture)
+      $script:preflightDuration.expected_readiness_seconds=[double]::Parse($Matches[2],[cultureinfo]::InvariantCulture)
+      $script:preflightDuration.readiness_timeout_seconds=[double]::Parse($Matches[3],[cultureinfo]::InvariantCulture)
     }
   }
   if ($exit -ne 0) { return 'live-flow preflight: ' + ($output -join ' | ') }
@@ -706,14 +709,15 @@ function Get-QueuePreflightBlock($file, $job) {
 }
 
 function Write-QueueRefusal($file, $job, $reason) {
+  if (-not $script:preflightDuration) { $script:preflightDuration=@{expected_seconds=$null;cap_seconds=900} }
   $signature="$($file.LastWriteTimeUtc.Ticks)|$reason"
   if ($script:refusedQueueRecords[$file.FullName] -eq $signature) { return }
   $name=if($job.name){$job.name}else{$file.BaseName}
   $duration=$script:preflightDuration
   $expected=if($null -ne $duration.expected_seconds){"$($duration.expected_seconds) s"}else{'unavailable'}
   $outcome="REFUSED (preflight): $reason; expected duration $expected; cap $($duration.cap_seconds) s"
-  [ordered]@{job=$name;run=0;start=(Get-Date -Format s);sec=0;valid=$false;completed=$false;outcome=$outcome;expected_seconds=$duration.expected_seconds;cap_seconds=$duration.cap_seconds} |
-    ConvertTo-Json -Compress | Write-Record $jsonl
+  [ordered]@{job=$name;run=0;start=(Get-Date -Format s);sec=0;valid=$false;completed=$false;outcome=$outcome;expected_seconds=$duration.expected_seconds;expected_readiness_seconds=$duration.expected_readiness_seconds;readiness_timeout_seconds=$duration.readiness_timeout_seconds;cap_seconds=$duration.cap_seconds} |
+    ConvertTo-Json -Compress | Write-Record $jsonl -Required
   "- ${name}: $outcome" | Write-Record $md
   $script:refusedQueueRecords[$file.FullName]=$signature
   $script:lastRefusal="${name}: $outcome"
@@ -724,6 +728,7 @@ function Get-NextJob {
   $candidates=@(Get-InboxDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "*.json" -ErrorAction SilentlyContinue } | Sort-Object LastWriteTime)
   $shown=0
   foreach($next in $candidates) {
+    $job=$null; $script:preflightDuration=$null
     try {
       $job = ConvertTo-QueueWindowJob (Get-Content -LiteralPath $next.FullName -Raw | ConvertFrom-Json)
       $tree=Get-JobTree $job
@@ -732,18 +737,25 @@ function Get-NextJob {
       if(-not $blocked){
         try { $blocked=Get-QueuePreflightBlock $next $job }
         catch { $blocked='live-flow preflight: '+$_.Exception.Message }
-        if($blocked){Write-QueueRefusal $next $job $blocked}
       }
     } catch {$blocked='Invalid queued job: '+$_.Exception.Message}
     if(-not $blocked){return $next}
-    # Leave blocked files untouched. At most one message per unchanged reason in
-    # each polling minute, with a bounded cache and bounded text.
+    # An unfinished prerequisite may still become ready in this runner. All
+    # terminal refusals leave the inbox after their durable invalid record.
+    $terminal=$blocked -notmatch '^waiting for (?:successful )?prerequisite|USER_PLAYING'
+    if ($terminal) {
+      Write-QueueRefusal $next $job $blocked
+      $archive=Join-Path $done $next.Name
+      if(Test-Path -LiteralPath $archive){$archive=Join-Path $done ($next.BaseName+'.refused.'+[guid]::NewGuid().ToString('N')+'.json')}
+      Move-Item -LiteralPath $next.FullName -Destination $archive
+    }
+    # At most one message per unchanged transient reason in each polling minute.
     $message=($next.Name+': '+$blocked);$key=$next.FullName
     if($message.Length -gt 400){$message=$message.Substring(0,400)}
     $previous=$script:blockedQueueMessages[$key]
     if($shown -lt 4 -and (-not $previous -or $previous.message -ne $message -or ((Get-Date)-$previous.at).TotalSeconds -ge 60)) {
       ++$shown
-      Write-Host "Queued, not launched: $message"
+      if(-not $terminal){Write-Host "Queued, not launched: $message"}
       if($script:blockedQueueMessages.Count -ge 128){$script:blockedQueueMessages.Clear()}
       $script:blockedQueueMessages[$key]=@{message=$message;at=Get-Date}
     }

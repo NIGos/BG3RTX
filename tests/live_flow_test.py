@@ -19,13 +19,54 @@ def phase(label, seconds=12, values="rr=0"):
 
 
 def fixture(name="one"):
-    return dict(name=name, save="same", window_mode="visible_unfocused_fg", set="preset=ultra,rr=0",
+    job, plan = dict(name=name, save="same", window_mode="visible_unfocused_fg", set="preset=ultra,rr=0",
                 args=["-Move", "-MovePlan", "unused.json"], expect=[r"scene ready"], patterns=["gpu"],
                 forbid=[r"exception 0x"], expect_every=[dict(select=r"\[rrpost\] gpu:", match="good", min=1,
                                                           windows=["cost-off", "cost-on"])],
                 expect_runner=[r"\[motion-plan\] complete phases=4\b"]), [
                     phase("warm-off"), phase("warm-on", values="rr=1"),
                     phase("cost-off"), phase("cost-on", values="rr=1")]
+    for row in plan[1:]:
+        row["wait_log"] = ["rr pipeline ready"]
+    f.pipeline_readiness.apply(job, plan)
+    return job, plan
+
+
+class PipelineReadinessTests(unittest.TestCase):
+    def test_each_changed_key_requires_its_completion_even_after_prefetch(self):
+        j = dict(set="rt_water_surface_fresnel=0", live_flow={})
+        p = [phase("warm"), phase("on", values="rt_water_surface_fresnel=1"),
+             phase("off", values="rt_water_surface_fresnel=0")]
+        self.assertEqual(len(f.pipeline_readiness.problems(j, p)), 2)
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+        self.assertIn("enabled 1,", p[1]["wait_log"][0])
+        self.assertIn("enabled 0,", p[2]["wait_log"][0])
+        self.assertEqual(set(p[1]["wait_log"]), set(p[1]["wait_log_fresh"]))
+        before = deepcopy(p)
+        f.pipeline_readiness.apply(j, p)
+        self.assertEqual(p, before)
+
+    def test_unknown_mapping_fails_closed_despite_quiet_driver(self):
+        j = dict(set="new_shading_key=0")
+        p = [phase("before"), phase("on", values="new_shading_key=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertIn("unknown pipeline mapping", f.pipeline_readiness.problems(j, p)[0])
+        p[1]["wait_log"].append("new_shading_key pipeline ready")
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+
+    def test_control_changes_need_no_pipeline_wait(self):
+        j = dict(set="rt_stats=0,qa_exposure_hold=0")
+        p = [phase("before", values="rt_stats=0"), phase("diag", values="rt_stats=1,qa_exposure_hold=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(any(row.get("wait_log") for row in p))
+
+    def test_temporal_wait_uses_cached_pipeline_and_fresh_quiescence(self):
+        j = dict(set="rr_post_temporal=0")
+        p = [phase("before"), phase("on", values="rr_post_temporal=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertIn("temporal", p[1]["wait_log"][0])
+        self.assertEqual(p[1]["wait_log_fresh"], [f.pipeline_readiness.QUIET])
 
 
 class FlowTests(unittest.TestCase):
@@ -636,6 +677,42 @@ class WindowFpsTests(unittest.TestCase):
         result = fw.replay(j, [phase("observe", 41.1, j["set"])], [entry])
         self.assertTrue(any("line(s) fail" in problem for problem in result["problems"]), result)
 
+
+
+class ReadinessBudgetTests(unittest.TestCase):
+    def tearDown(self):
+        f.readiness_budget.configure([])
+
+    def test_same_save_changed_key_median_and_fresh_pattern(self):
+        entries = []
+        for delay in (2, 4, 30):
+            entries.append(dict(save="same", runner=(
+                "12:00:00.000 [pan-plan] window 0 set=rt=0\n"
+                "12:00:10.000 [pan-plan] window 1 set=rt=1\n"
+                "12:01:00.000 [motion-plan] complete phases=2"), lines=[
+                "12:00:01.000 [watch] ready", f"12:00:{10+delay:02d}.000 [watch] ready"]))
+        entries.append(dict(save="other", runner=entries[0]["runner"], lines=["12:00:50.000 [watch] ready"]))
+        f.readiness_budget.configure(entries)
+        step = dict(wait_log=[r"\[watch\] ready"], wait_log_fresh=[r"\[watch\] ready"])
+        result = f.readiness_budget.estimate(dict(save="same"), step, {"rt": "1"})
+        self.assertEqual(result["seconds"], 4)
+        self.assertEqual(result["samples"], 3)
+        step.pop("wait_log_fresh")
+        self.assertEqual(f.readiness_budget.estimate(dict(save="same"), step, {"rt": "1"})["seconds"], 0)
+        self.assertIn("unproven", f.readiness_budget.estimate(dict(save="unknown"), step, {"rt": "1"})["source"])
+
+    def test_expected_wait_cap_and_full_allowance_deadline_are_distinct(self):
+        j, p = fixture()
+        p = [phase("warm", 102.9)]
+        p[0].update(wait_log=["ready"], wait_log_timeout=800.9)
+        with patch.object(f.readiness_budget, "estimate", return_value=dict(seconds=7, samples=3, source="VALID median")):
+            budget = f.duration_budget(j, p)
+        self.assertEqual(budget["expected_readiness_seconds"], 7)
+        self.assertEqual(budget["readiness_timeout_seconds"], 800.9)
+        self.assertEqual(f.launch_problems(j, budget), [])
+        self.assertTrue(f.launch_problems(dict(max_minutes=1), budget))
+        j["timeout"] = 900
+        self.assertIn("duration: timeout does not cover plan + readiness allowance", f.lint(j, p, [dict(path="synthetic", lines=[])])["problems"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ function python {
   $script:lintCalls++
   if($args -notcontains '--preflight'){throw 'preflight flag missing'}
   $global:LASTEXITCODE=$script:lintExit
-  'synthetic: expected duration 749.5 s after load; minimum 700 s; readiness timeout allowance 360 s'
+  'synthetic: expected duration 749.5 s after load; minimum 700 s; expected readiness 20 s; readiness timeout allowance 360 s'
   if($script:lintExit){'windows: impossible gate'}
 }
 # A py launcher, if installed elsewhere, must use this same harmless stand-in.
@@ -38,17 +38,18 @@ $run=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinit
 $status=$run.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text -match '^if \(\(Test-Path -LiteralPath \$statusFile\)'},$true)
 $scratch=Join-Path $env:TEMP ('bg3-status-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $scratch | Out-Null
-# Real result writers, scratch paths only. Refusals remain pending and are not
-# duplicated on polling; edited jobs and changed reasons get their own record.
+# Real result writers, scratch paths only. Refusals exit pending with one row.
 foreach($name in @('Write-Record','Write-QueueRefusal')) {
  Invoke-Expression ($ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true).Extent.Text)
 }
 $jsonl=Join-Path $scratch 'results.jsonl';$md=Join-Path $scratch 'results.md'
 $script:refusedQueueRecords=@{};$script:lastRefusal=$null
-$file=New-Item -ItemType File (Join-Path $scratch 'synthetic.json')
+$pending=New-Item -ItemType Directory (Join-Path $scratch 'pending')
+$done=New-Item -ItemType Directory (Join-Path $scratch 'done')
+$file=New-Item -ItemType File (Join-Path $pending 'synthetic.json')
 $job=[pscustomobject]@{name='hv5-reload-bisect';args=@('-MovePlan','synthetic-plan.json')}
 $job | ConvertTo-Json | Set-Content $file.FullName
-function Get-InboxDirs { $scratch }
+function Get-InboxDirs { $pending.FullName }
 function ConvertTo-QueueWindowJob($job) { $job }
 function Get-QueuePermissionBlock { $null }
 function Get-QueueDependencyBlock { $null }
@@ -60,18 +61,38 @@ $script:lintExit=1
 if(Get-NextJob){throw 'refused lint selected a job'}
 if(Get-NextJob){throw 'refused lint selected a job on repeated poll'}
 $records=@(Get-Content $jsonl | ForEach-Object {$_ | ConvertFrom-Json})
-if($records.Count -ne 1 -or $records[0].valid -or $records[0].completed -or $records[0].expected_seconds -ne 1109.5 -or $records[0].cap_seconds -ne 900){throw 'lint refusal record/dedup/duration failed'}
-if($records[0].outcome -notmatch '^REFUSED \(preflight\): .*impossible gate' -or (Get-Content $md -Raw) -notmatch '1109.5 s; cap 900 s'){throw 'refusal outcome missing evidence'}
+if($records.Count -ne 1 -or $records[0].valid -or $records[0].completed -or $records[0].expected_seconds -ne 769.5 -or $records[0].cap_seconds -ne 900){throw 'lint refusal record/dedup/duration failed'}
+if($records[0].expected_readiness_seconds -ne 20 -or $records[0].readiness_timeout_seconds -ne 360){throw 'expected readiness and allowance conflated'}
+if($records[0].outcome -notmatch '^REFUSED \(preflight\): .*impossible gate' -or (Get-Content $md -Raw) -notmatch '769.5 s; cap 900 s'){throw 'refusal outcome missing evidence'}
 $block=Get-QueuePreflightBlock $file ([pscustomobject]@{timeout=901})
 Write-QueueRefusal $file $job $block
 if(@(Get-Content $jsonl).Count -ne 2 -or $script:lastRefusal -notmatch 'expected duration 901 s; cap 900 s'){throw 'duration refusal not recorded'}
-if(-not(Test-Path $file.FullName)){throw 'refusal consumed job'}
+if((Test-Path $file.FullName) -or -not(Test-Path (Join-Path $done 'synthetic.json'))){throw 'refusal did not exit pending with archived job'}
+$job | ConvertTo-Json | Set-Content $file.FullName
+# A player marker and unfinished prerequisite are transient, preserving the job.
+$script:lintExit=1
+function Get-QueuePermissionBlock { 'USER_PLAYING exists: synthetic' }
+if(Get-NextJob){throw 'player-blocked job selected'}
+if(-not(Test-Path $file.FullName)){throw 'player block consumed pending job'}
+function Get-QueuePermissionBlock { $null }
+function Get-QueueDependencyBlock { 'waiting for successful prerequisite synthetic' }
+if(Get-NextJob){throw 'dependency-blocked job selected'}
+if(-not(Test-Path $file.FullName)){throw 'unfinished dependency consumed pending job'}
+function Get-QueueDependencyBlock { $null }
+# Failed durable recording must not archive the pending file.
+$originalJsonl=$jsonl;$jsonl=$scratch
+function Start-Sleep {}
+$writeFailed=$false
+try { [void](Get-NextJob) } catch { $writeFailed=$_.Exception.Message -match 'required refusal record' }
+Remove-Item Function:Start-Sleep
+$jsonl=$originalJsonl
+if(-not $writeFailed -or -not(Test-Path $file.FullName)){throw 'failed refusal record lost pending job'}
 $script:lintExit=0
 if(-not(Get-NextJob)){throw 'accepted job not selected'}
 $startLine=$ast.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.Extent.Text -like 'Write-Host*expected duration*cap*'},$true)
 $name=$job.name
 $startOutput=Invoke-Expression ($startLine.Extent.Text+' 6>&1')
-if("$startOutput" -notmatch 'hv5-reload-bisect: expected duration 1109.5 s; cap 900 s'){throw 'accepted start duration not printed'}
+if("$startOutput" -notmatch 'hv5-reload-bisect: expected duration 769.5 s; cap 900 s'){throw 'accepted start duration not printed'}
 $last=$ast.EndBlock.Statements[-1]
 $lastOutput=Invoke-Expression $last.Extent.Text
 if($lastOutput -cne $script:lastRefusal){throw 'last stdout line hides refusal'}

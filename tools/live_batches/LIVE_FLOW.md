@@ -200,3 +200,20 @@ cannot borrow samples after an old toggle. Missing states, producers, complete
 samples and attributable trend windows are reported as unproven. Replay exits 1
 when any job lacks evidence. This is an offline coverage check, never a new live
 PASS. See fps_windows_report.md for before/after lengths and remaining blockers.
+
+Changed rendering settings require a pipeline readiness wait in every changed
+window. The shared retime hook adds known key signals plus a fresh zero-build
+watch interval after the current settings acknowledgement. The signal table is
+in `pipeline_readiness.py`: VALID `pt-dialogue3.1.210703.log` supplies both temporal
+pipeline-built records; `su1-ultra-s8-fg2.1.004527.log` supplies the cascade
+specialization records. No current VALID corpus entry contains a Fresnel state
+record: its signature is taken from the supplied failed wsf1 log and the
+producer in layer/water.cpp, and remains unqualified timing evidence.
+Surface state must be fresh,
+so an earlier enabled record cannot release a later toggle. Cached immutable
+pipeline records remain reusable, but outstanding asynchronous build-start
+records must have matching completion records before release. Unknown keys
+without an explicit key-specific wait fail lint; a quiet driver alone is not
+proof of completion. Non-pipeline capture/log controls are listed separately.
+Final gates attribute samples after `[motion-ready]`; fail-fast defers them
+while readiness is pending. A closed window without its marker is invalid.

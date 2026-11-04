@@ -291,6 +291,7 @@ def main(argv=None):
     groups = {}
     for path in a.jobs:
         job, plan, _ = flow.load_job(path)
+        flow.pipeline_readiness.apply(job, plan)
         groups.setdefault(job["save"], []).append((path, job, plan))
     names = {j["name"] for sources in groups.values() for _, j, _ in sources}
     if any(names.intersection(j.get("requires_success_of", []))

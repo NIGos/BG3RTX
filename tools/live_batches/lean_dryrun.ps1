@@ -75,7 +75,7 @@ $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFro
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }
 Check "$($jobs.Count) job files, all one live_batch ($($jobs[0].live_batch))" ($jobs.Count -ge 1 -and @($jobs.live_batch | Select-Object -Unique).Count -eq 1)
-$totalWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
+$totalWaitSec = 0; $totalExpectedWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
@@ -83,7 +83,7 @@ foreach ($job in $jobs) {
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
   $budget = $flowDurations[$n]
   if (-not $budget) { throw "live-flow duration missing for $n" }
-  $sec = $budget.seconds; $waitSec = $budget.readiness_timeout_seconds; $totalSec += $sec; $totalWaitSec += $waitSec
+  $sec = $budget.seconds; $waitSec = $budget.readiness_timeout_seconds; $totalSec += $sec; $totalWaitSec += $waitSec; $totalExpectedWaitSec += $budget.expected_readiness_seconds
   $state = @{}; $ok = Apply-Set $state $job.set
   $sampled = $true; $roles = $true; $bursts = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
@@ -148,9 +148,9 @@ $lint = @(& $flowPython @flowArgs (Join-Path $scripts 'queue_gates.py') --lint-c
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
-$min = ($totalSec + $totalWaitSec + $jobs.Count * $LoadSec) / 60.0
+$min = ($totalSec + $totalExpectedWaitSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $totalBursts * $BurstMB + $jobs.Count * $LogMB
-Say ("estimate: plans {0} s + readiness waits <={7} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec)
+Say ("estimate: plans {0} s + expected readiness {8} s (timeout allowance {7} s), {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec, $totalExpectedWaitSec)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 

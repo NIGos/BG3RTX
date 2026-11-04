@@ -117,9 +117,12 @@ def stamped_lines(text):
 def windows(runner_text, plan, game_lines):
     """[{label, index, start, applied, end, set}] from the runner's [pan-plan] lines."""
     clock = _Clock(game_lines[0][0] if game_lines else None)
-    starts, complete = [], None
+    starts, complete, ready = [], None, {}
     for line in runner_text.splitlines():
         timestamp = clock(_sec(line))
+        rm = re.search(r"\[motion-ready\] phase=(\d+)", line)
+        if rm:
+            ready[int(rm[1])] = timestamp
         m = _WINDOW.search(line)
         if m:
             sm = _SET.search(line)
@@ -133,7 +136,11 @@ def windows(runner_text, plan, game_lines):
         end = starts[k + 1][0] if k + 1 < len(starts) else (complete if complete is not None else float("inf"))
         label = plan[index].get("label", str(index)) if 0 <= index < len(plan) else str(index)
         applied = next((t for t, l in game_lines if start <= t < end and _CFG.search(l)), start)
-        out.append({"label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
+        settings_applied = applied
+        waiting = 0 <= index < len(plan) and bool(plan[index].get("wait_log"))
+        if waiting:
+            applied = max(applied, ready.get(index, float("inf")))
+        out.append({"settings_applied": settings_applied, "ready": not waiting or index in ready, "label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
     return out
 
 
@@ -244,6 +251,9 @@ def check(gates, game_text, runner_text="", plan=None):
                 failures.append(f"every-window {name}: window '{label}' not found in the runner log")
                 continue
             for w in hits:
+                if not w.get("ready", True):
+                    failures.append(f"every-window {name}: window '{label}' missing motion-ready completion")
+                    continue
                 if g.get("when_present") and not any(w["applied"] <= t < w["end"] for t, _ in picked):
                     continue   # the pass did not run in this window (docstring)
                 judged = []

@@ -26,6 +26,7 @@
     "wheel",
     "wheel_ms",
     "wait_log",
+    "wait_log_fresh",
     "wait_log_timeout",
     "recenter",
     "reload_selected"

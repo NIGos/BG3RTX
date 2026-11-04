@@ -79,6 +79,8 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
     # Only closed windows are final. Reuse final gate checking, including cfg,
     # skipped straddling samples, event settling, min=0 and when_present.
     for w in wins:
+        if not w.get("ready", True) and not math.isfinite(w["end"]):
+            continue  # readiness timeout belongs to the runner, not an early sample
         segment = next((s for s in slices if s["offset"] <= w["index"] < s["offset"] + s["count"]), None)
         if segment and (segment["offset"] in failed or segment.get("fail_fast", True) is False):
             continue
@@ -110,7 +112,7 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
         for pattern in requested:
             dt = producer_period(pattern, states[phase], flow.fps_windows.expected(job, states[phase])["fps"], job)
             if window and dt is not None and not re.search(pattern, local, re.I | re.M):
-                deadline = window["applied"] + dt + margin + float(source.get("live_flow", {}).get("settings_latency_s", 1))
+                deadline = window["settings_applied"] + dt + margin + float(source.get("live_flow", {}).get("settings_latency_s", 1))
                 if now >= deadline:
                     return failure("producer silent: " + pattern)
     for pattern in source.get("expect", []):
