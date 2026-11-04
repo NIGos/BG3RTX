@@ -99,7 +99,7 @@ job = {
             "ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,"
             "pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,"
             "fg_state_every=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rf_hit_shade=1,"
-            "rf_hit_gi=1,rt_alpha_spill=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,"
+            "rf_hit_gi=1,ls_box=2,gi_far=1,ls_k=0,rt_hit_reference=0,sharc=0,rt_vram_guard=0,rt_vram_compact=0,rt_capture_elastic=0,"
             f"qa_exposure_hold=0,rt_vram_guard_budget_mb={TEST_BUDGET_MB}"),
     "args": ["-Move", "-MovePlan", f"captures/live_batches/vram_guard/plans/{PLAN}"],
     "patterns": [r"\[hot\]", r"\[ngx\] RR create", r"\[sl\] DLSS-G frame", r"\[sl\] warn", r"\[pace\]", r"\[mem\]",

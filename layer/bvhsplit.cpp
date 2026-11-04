@@ -670,13 +670,6 @@ const uint32_t* g_omm_mapped_stamp[kSceneSlots]={};
 struct OmmPipeline {VkDescriptorSetLayout dsl{};VkPipelineLayout layout{};VkPipeline pipeline{};uint64_t generation{};};
 OmmPipeline g_omm_clone,g_omm_validate;
 std::vector<VkPipeline> g_omm_old_pipelines;
-struct SunCloneSlot {
-  Buf instances, scratch;
-  AsAlloc cascade[4];
-  TlasSlot tlas;
-  uint64_t base_record = 0, cascade_record[4] = {}, build_record = 0;
-};
-SunCloneSlot g_sun_clone[kSceneSlots];
 uint32_t g_tlas_cap_hint = 0;   // instances the newest TLAS storage was sized for
 int g_tlas_prev = -1;           // slot of the last TLAS build (the refit source)
 uint64_t g_tlas_prev_rec = 0;   // its build record (refit only once submitted)
@@ -1147,7 +1140,7 @@ uint64_t groom_join(const BvhDraw& d, uint64_t identity, hair_groom::JoinMiss* m
 }
 
 bool ensure_ring(uint32_t inst, uint32_t mats) {
-  const bool transfer=omm::available_for(g_dd) || cfg_hot(CfgHot::rt_sun_cascade_current)!=0;
+  const bool transfer=omm::available_for(g_dd);
   if (g_ring.b && inst <= g_ring_inst && mats <= g_ring_mats && (!transfer || g_ring_transfer_source)) return true;
   uint32_t ni = (std::max)({inst + inst / 2, g_ring_inst, 4096u}), nm = (std::max)({mats + mats / 2, g_ring_mats, 1024u});
   VkDeviceSize ib = VkDeviceSize(ni) * 64, fb = VkDeviceSize(ni) * 16, mb = VkDeviceSize(nm) * 48;
@@ -1822,12 +1815,6 @@ void bvh_device_destroyed(DeviceData* dd) {
     if (s.groom && s.groom->readback.b) free_buf(s.groom->readback);
   }
   as_destroy(g_casc_as);
-  for (SunCloneSlot& s : g_sun_clone) {
-    for(auto& cascade:s.cascade) as_destroy(cascade);
-    if (s.tlas.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE, uint64_t(s.tlas.as));
-    for (Buf* b : {&s.instances, &s.scratch, &s.tlas.buf}) if (b->b) free_buf(*b);
-    s = SunCloneSlot{};
-  }
   for (JobBatch& b : g_batches)
     for (Swap& s : b.swaps) as_destroy(s.c);
   g_batches.clear();
@@ -2904,7 +2891,6 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     if(alpha && alpha_test)g_st.omm_alpha_dyn_tris+=fd.prims;
     ++g_st.dyn_draws;
   }
-  const uint32_t sun_base_instances = n;
   // rt_cascade_casters: last frame's cascade-only soup (camera-relative to last frame's
   // camera), translated into this frame's space; mask 0x02 (only the sun's rays see it) and
   // not opaque, so the sun's variant can ignore its hits near the ray origin (rt_common.hlsli
@@ -3615,7 +3601,6 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
     g_pool_snapshots = true;native_hit::pool_compact_scene(slot);
   }
   out->rec = rec;
-  out->sun_base = {g_ring.b, rbase, g_ring.size, sun_base_instances, rec, g_ring_transfer_source};
 
   if (cfg_int("rt_stability_log", 0) && now % 300 == 0) {
     uint32_t held = 0;
@@ -3745,115 +3730,6 @@ bool bvh_omm_use(VkCommandBuffer cmd,uint32_t slot,VkAccelerationStructureKHR se
   for(const auto& source:g_omm_ranges[slot])if(!omm::register_ticket_use(cmd,source.baked.ticket))return false;
   for(const uint64_t ticket:g_omm_dyn_tickets[slot])if(!omm::register_ticket_use(cmd,ticket))return false;
   *identity=g_omm_records[slot];return true;
-}
-
-// A sun-only clone of an immutable camera scene. This function deliberately does
-// not collect draws, mutate the camera TLAS, or treat old cascade geometry as a
-// current-frame certificate. The caller must establish native epoch/dependencies.
-bool bvh_build_sun_clone(VkCommandBuffer cmd,uint32_t slot,const BvhSunBase& base,
-                         std::span<const SunCascadeCapture> cascades,const float camera_origin[3],
-                         VkPipeline validate_pipeline,VkPipelineLayout validate_layout,VkBuffer stamp,VkBuffer parameters,
-                         BvhSunCloneResult* out) {
-  if(!out) return false;*out={};
-  if(!g_on || slot>=kSceneSlots || !cmd || !base.instances || !base.record || !base.transfer_source || cascades.size()!=4 ||
-     !validate_pipeline || !validate_layout || !stamp || !parameters || base.count>65535u*256u) return false;
-  const VkDeviceSize prefix=VkDeviceSize(base.count)*sizeof(VkAccelerationStructureInstanceKHR);
-  if(base.offset>base.buffer_bytes || prefix>base.buffer_bytes-base.offset || base.count>UINT32_MAX-4) return false;
-  for(unsigned layer=0;layer<4;++layer) {
-    const auto& c=cascades[layer];
-    if(c.layer!=layer || !c.soup.xfb || !c.soup.tris || c.soup.stride<16 || !c.soup.record ||
-       c.soup.tris>65535u*256u) return false;
-  }
-  std::lock_guard<std::mutex> lock(g_mu);
-  if(rec_state(base.record)==kRecDropped) return false;
-  for(const auto& c:cascades) if(rec_state(c.soup.record)==kRecDropped) return false;
-  SunCloneSlot& s=g_sun_clone[slot];
-  if(s.base_record==base.record) {
-    if(!s.tlas.as || rec_state(s.build_record)==kRecDropped) return false;
-    for(unsigned layer=0;layer<4;++layer) if(s.cascade_record[layer]!=cascades[layer].soup.record) return false;
-    *out={s.tlas.as,s.build_record};return true;
-  }
-  for(auto& c:s.cascade) as_destroy(c);
-  if(s.tlas.as) defer_destroy(BG3_DEFER_ACCELERATION_STRUCTURE,uint64_t(s.tlas.as));
-  for(Buf* b:{&s.instances,&s.scratch,&s.tlas.buf}) if(b->b) free_buf(*b);
-  s=SunCloneSlot{};
-  const uint32_t count=base.count+4;
-  const auto flags=VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-  VkAccelerationStructureBuildSizesInfoKHR bsz[4]{};
-  VkDeviceSize scratch_bytes=0;
-  for(unsigned layer=0;layer<4;++layer) {
-    const auto& soup=cascades[layer].soup;
-    bsz[layer]=blas_sizes(soup.tris,soup.stride,false,flags);
-    scratch_bytes=(std::max)(scratch_bytes,bsz[layer].buildScratchSize);
-    if(!as_create(bsz[layer].accelerationStructureSize,s.cascade[layer],nullptr,2)) return false;
-  }
-  const VkDeviceSize instance_bytes=VkDeviceSize(count)*sizeof(VkAccelerationStructureInstanceKHR);
-  if(!make_buf(s.instances,instance_bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|
-       VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,true,"sun four-cascade instances")) return false;
-  for(unsigned layer=0;layer<4;++layer) {
-    VkAccelerationStructureInstanceKHR in{};
-    in.transform.matrix[0][0]=in.transform.matrix[1][1]=in.transform.matrix[2][2]=1;
-    // GPU validation derives the actual shader-space transform before TLAS build.
-    in.instanceCustomIndex=cascade::kCustomIndex-layer;in.mask=uint32_t(cascade::kMask)<<layer;
-    in.flags=VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-    in.accelerationStructureReference=s.cascade[layer].addr;
-    std::memcpy(s.instances.map+prefix+layer*sizeof in,&in,sizeof in);
-  }
-  VkAccelerationStructureGeometryKHR tg{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
-  tg.geometryType=VK_GEOMETRY_TYPE_INSTANCES_KHR;
-  tg.geometry.instances.sType=VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-  tg.geometry.instances.data.deviceAddress=s.instances.addr;
-  VkAccelerationStructureBuildGeometryInfoKHR ti{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
-  ti.type=VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;ti.flags=flags;ti.geometryCount=1;ti.pGeometries=&tg;
-  VkAccelerationStructureBuildSizesInfoKHR tsz{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
-  g_dd->vk.GetAccelerationStructureBuildSizesKHR(g_dd->device,VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,&ti,&count,&tsz);
-  if(!make_buf(s.tlas.buf,tsz.accelerationStructureSize,VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-       false,"sun four-cascade TLAS")) return false;
-  VkAccelerationStructureCreateInfoKHR ci{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
-  ci.buffer=s.tlas.buf.b;ci.size=tsz.accelerationStructureSize;ci.type=VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-  if(g_dd->vk.CreateAccelerationStructureKHR(g_dd->device,&ci,nullptr,&s.tlas.as)!=VK_SUCCESS) return false;
-  s.tlas.cap=count;
-  const VkDeviceSize align=rt_scratch_alignment();
-  scratch_bytes=(std::max)(scratch_bytes,tsz.buildScratchSize);
-  if(!align || !make_buf(s.scratch,scratch_bytes+align,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,false,"sun private scratch")) return false;
-  const VkDeviceAddress scratch=(s.scratch.addr+align-1)/align*align;
-  const VkPipelineStageFlags as=VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,xf=VK_PIPELINE_STAGE_TRANSFER_BIT;
-  barrier(cmd,as|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
-      VK_ACCESS_MEMORY_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,as|xf,VK_ACCESS_MEMORY_READ_BIT|VK_ACCESS_MEMORY_WRITE_BIT);
-  if(prefix) {VkBufferCopy cp{base.offset,0,prefix};g_dd->vk.CmdCopyBuffer(cmd,base.instances,s.instances.b,1,&cp);}
-  for(unsigned layer=0;layer<4;++layer) {
-    const auto& soup=cascades[layer].soup;
-    barrier(cmd,xf|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
-        VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT);
-    VkDescriptorBufferInfo buffers[4]={{stamp,0,512},{soup.xfb,0,VkDeviceSize(soup.tris)*3*soup.stride},
-      {s.instances.b,0,instance_bytes},{parameters,0,1232}};
-    VkWriteDescriptorSet writes[4]{};
-    for(unsigned i=0;i<4;++i) {
-      writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstBinding=i;writes[i].descriptorCount=1;
-      writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];
-    }
-    g_dd->vk.CmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,validate_pipeline);
-    g_dd->vk.CmdPushDescriptorSet(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,validate_layout,0,4,writes);
-    const uint32_t push[4]={soup.tris,soup.stride,base.count,layer};
-    g_dd->vk.CmdPushConstants(cmd,validate_layout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof push,push);
-    g_dd->vk.CmdDispatch(cmd,((std::max)(soup.tris,push[2])+255u)/256u,1,1);
-    barrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,as,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
-    VkAccelerationStructureGeometryKHR bg=tri_geometry(rt_buffer_address(soup.xfb),soup.tris,soup.stride,false);
-    VkAccelerationStructureBuildGeometryInfoKHR bi{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
-    bi.type=VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;bi.flags=flags;bi.mode=VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    bi.dstAccelerationStructure=s.cascade[layer].as;bi.geometryCount=1;bi.pGeometries=&bg;bi.scratchData.deviceAddress=scratch;
-    VkAccelerationStructureBuildRangeInfoKHR br{soup.tris,0,0,0};const auto* bp=&br;
-    g_dd->vk.CmdBuildAccelerationStructuresKHR(cmd,1,&bi,&bp);
-    barrier(cmd,as,VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,as,
-        VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR|VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
-  }
-  ti.mode=VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;ti.dstAccelerationStructure=s.tlas.as;ti.scratchData.deviceAddress=scratch;
-  VkAccelerationStructureBuildRangeInfoKHR tr{count,0,0,0};const auto* tp=&tr;
-  g_dd->vk.CmdBuildAccelerationStructuresKHR(cmd,1,&ti,&tp);
-  barrier(cmd,as,VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR);
-  s.base_record=base.record;for(unsigned layer=0;layer<4;++layer)s.cascade_record[layer]=cascades[layer].soup.record;
-  s.build_record=bvh_rec_register(cmd);*out={s.tlas.as,s.build_record};return true;
 }
 
 // The matrices of this frame's TLAS instances and jobs, read from the game's
@@ -3988,7 +3864,6 @@ void bvh_forget_buffer(VkBuffer b) {
 }
 
 void bvh_buffer_written(VkBuffer b, VkDeviceSize offset, VkDeviceSize size) {
-  native_hit::pak_uv_forget_buffer(b);
   if (!g_any_mesh.load(std::memory_order_relaxed)) return;
   std::lock_guard<std::mutex> lock(g_mu);
   auto it = g_buf_meshes.find(b);

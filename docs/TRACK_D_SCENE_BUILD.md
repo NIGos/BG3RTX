@@ -781,6 +781,8 @@ The log reports `[bvh] last N builds ...` (draws, instances, triangles, refits),
 
 2026-11-04: Alpha overflow spill REJECTED. as1 S8 15:13 had no overflow in the OFF control (alpha made opaque 0.00); no rescue case.
 
+code removed 2026-11-05, evidence above
+
 Key rt_alpha_spill=0 is Experimental and live; OFF in defaults/presets. Existing
 alpha overflow captured a draw as opaque even when the opaque storage range had
 room. Exact triangle-list split captures with a direct record now may use that

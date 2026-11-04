@@ -33,7 +33,7 @@ static unsigned key_flags(const std::string& k) {
   if (k == "rt_native_scalp" || k == "rt_native_hair") return sv::kScalp;
   if (k == "rt_hair_physical_origin") return sv::kScalp | sv::kHairOrigin;
   if (k == "rt_omm") return sv::kOmm;
-  if (k == "rt_native_tileset" || k == "rt_hit_material_paks") return sv::kTileset;
+  if (k == "rt_native_tileset") return sv::kTileset;
   if (k == "rt_hit_material_instanced") return sv::kHitInstanced;
   if (k == "rt_hit_material_wind_rgb") return sv::kHitInstanced | sv::kHitWindRgb;
   if (k == "gi_far") return sv::kGiFar;
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
       "rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows",
       "rt_water_refraction", "rt_hit_material", "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
       "rt_hit_material_recycle", "rt_hit_emission", "rt_emissive", "gi_hit_direct", "gi_hit_sun", "gi_far",
-      "rf_hit_gi", "rf_hit_shade", "ls_box", "ls_k", "rt_cascade_casters", "rt_sun_cascade_current",
+      "rf_hit_gi", "rf_hit_shade", "ls_box", "ls_k", "rt_cascade_casters",
       "rt_omm", "rt_native_tileset", "rt_native_scalp", "rt_native_hair", "rt_hair_physical_origin"};
   for (const char* k : kExtra) keys.insert(k);
   CHECK(keys.size() >= 20);

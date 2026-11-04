@@ -176,7 +176,7 @@ try {Get-CameraPlanSample $keys 1 1920 1080 | Out-Null} catch {$rejected=$true}
 Check $rejected 'key mode requires a signed direction'
 Check ($runner.Contains("`$MoveScan = if (`$sample.kind -eq 'key_turn') { [byte]`$sample.scan }")) 'runner uses Q/E scan from sample'
 Check ($runner -match 'if \(\$sample.kind -eq ''rotate'' -and \$step.frame_delta_pixels\)') 'key mode bypasses frame mouse sampler'
-foreach ($batch in 'water_flicker_wf9','water_offscreen') {
+foreach ($batch in @('water_flicker_wf9')) {
   $batchTurns=0
   foreach ($file in Get-ChildItem (Join-Path $repo "tools/live_batches/$batch/plans") -Filter '*.json') {
     $turns=@(Get-Content $file.FullName -Raw | ConvertFrom-Json | ForEach-Object {$_} | Where-Object kind -eq 'rotate')

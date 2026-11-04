@@ -55,14 +55,7 @@
 //   rejections (in tier 2), 23 shift applied (cam2 bound and the build camera known).
 // Key off: nothing of this runs (no ordinary shader includes this file).
 #include "../gi/gi_common.hlsli"
-#ifdef WATER_HIT_SHADE_LAYOUT
-#define RT_HIT_MATERIAL 1
-#define RT_CASCADE_SUN_HIT 1
-#define RT_HIT_INSTANCED 1
-#define RT_HIT_WIND_RGB 1
-#endif
 #include "rt_common.hlsli"
-#include "water_hit_shade.hlsli"
 
 struct WaterParams {
   float4 cam_build;   // xyz the build's absolute camera, w F0
@@ -74,11 +67,7 @@ struct Camera2 { float4 v[14]; };   // the lighting's set 0 b2: v[13].xyz = abso
 [[vk::binding(62, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> wOut;
 [[vk::binding(63, 0)]] [[vk::image_format("rg32f")]] RWTexture2D<float2> wT;
 [[vk::binding(64, 0)]] RaytracingAccelerationStructure waterTlas;
-#ifdef WATER_HIT_SHADE_LAYOUT
-#define WATER_CAMERA waterCam2
-#else
 #define WATER_CAMERA cam2
-#endif
 [[vk::binding(65, 0)]] ConstantBuffer<Camera2> WATER_CAMERA;
 #ifdef WATER_RR_HIT
 // rt_water_rr_hitdist (core/water.cpp): RR's specular hit distance (core/gi.cpp g_rf_hit, DLSSD.SpecularHitDistance)
@@ -95,11 +84,7 @@ static const float kNoHit = -1.0;
 // count into gsStat, wstat_flush (after a group barrier, every thread reaches it) adds the
 // group's non-zero words to wStats.
 static const uint kGroup = 16u;   // core/water.cpp kGroup: the dispatch size
-#ifdef WATER_HIT_SHADE_LAYOUT
-static const uint kGsWords = 32u;
-#else
 static const uint kGsWords = 23u;
-#endif
 groupshared uint gsStat[kGsWords];
 void wstat_begin(uint gi) {
   if (gi < kGsWords) gsStat[gi] = 0u;
@@ -211,10 +196,6 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   bool fallback = false, skin = false;
   float E = 0.0, hit_t = -1.0;
   float3 L = 0.0.xxx;
-#ifdef WATER_HIT_SHADE_LAYOUT
-  bool shaded=false, shade_attempt=false;
-  uint shade_reason=0;
-#endif
   if (water) {
     // Geometric normal: per axis the neighbour whose water hit continues the surface best.
     float3 Pl, Pr, Pu, Pd;
@@ -245,12 +226,7 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (!all(isfinite(o)) || !all(isfinite(R))) {
       tier = 6u;
     } else {
-      #ifdef WATER_HIT_SHADE_LAYOUT
-      RtHit hh=rt_closest_hit(o,R,tmax,cone);
-      const float th=hh.t; aborted=hh.aborted;
-#else
       const float th = rt_closest(o, R, tmax, cone, aborted);
-#endif
       if (aborted) tier = 5u;
       else if (th < 0.0) tier = 4u;
       else {
@@ -279,13 +255,6 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
             }
           }
         }
-#ifdef WATER_HIT_SHADE_LAYOUT
-        if(kWaterHitShade!=0u && (wp.flags.y & 1u)!=0u && (tier==2u || tier==3u)) {
-          shade_attempt=true;
-          shade_reason=water_hit_shade(hh,H,R,cone,fp,L);
-          shaded=shade_reason==0u;
-        }
-#endif
       }
     }
   }
@@ -293,20 +262,11 @@ void water_reflect(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   [unroll] for (uint k = 1u; k <= 6u; ++k) wstat(8u + k, water && tier == k);
   wstat(15, water && fallback);
   wstat(22, water && tier == 2u && skin);
-#ifdef WATER_HIT_SHADE_LAYOUT
-  if(kWaterHitShade==2u)wstat(31,g_water_truncated);
-  wstat(24,shade_attempt); wstat(25,shaded && tier==2u); wstat(26,shaded && tier==3u);
-  [unroll] for(uint reason=1u;reason<=4u;++reason) wstat(26u+reason,shade_attempt && shade_reason==reason);
-#endif
   wstat_flush(gi);
   wsum64(16, E, 65536.0, water && tier != 6u);
   wsum64(18, lum(L), 4096.0, tier == 1u);
   wsum64(20, lum(E * L), 4096.0, tier == 1u);
-#ifdef WATER_HIT_SHADE_LAYOUT
-  const bool resolved=tier==1u || shaded;
-#else
 #define resolved tier == 1u
-#endif
   // wT is only read here (the neighbours' hits): the tier goes into wOut.a.
   if (inside) wOut[fp] = resolved ? float4(L, E) : float4(0, 0, 0, -float(tier));
 #ifdef WATER_RR_HIT

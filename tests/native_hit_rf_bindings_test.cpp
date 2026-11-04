@@ -18,7 +18,7 @@ static unsigned checks;
 static void check(bool ok,const char* reason){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",reason);std::exit(1);}}
 struct Instruction{uint32_t op;std::vector<uint32_t> a;};
 
-static void module(const char* file,bool sharc,bool tileset,bool hair,bool cascade,bool em,bool gi,bool half){
+static void module(const char* file,bool sharc,bool tileset,bool hair,bool cascade,bool em,bool gi){
  std::ifstream f(file,std::ios::binary|std::ios::ate);check(bool(f),file);auto bytes=f.tellg();
  check(bytes>=20 && bytes%4==0,"SPIR-V byte range");f.seekg(0);
  std::vector<uint32_t> w(size_t(bytes)/4);f.read(reinterpret_cast<char*>(w.data()),bytes);check(bool(f) && w[0]==0x07230203u,"SPIR-V header");
@@ -82,10 +82,8 @@ static void module(const char* file,bool sharc,bool tileset,bool hair,bool casca
  // The roof rule (native_hit_sun.hlsli NATIVE_HIT_SUN_ROOF) reads the roof volumes unless the cascade
  // casters (RT_CASCADE_MASKS, --cascade) hold the cut-away roofs.
  check(seen.contains({kSetSun,8u})!=cascade,"roof volumes read exactly without the cascade casters");
- // Half-grid traces pack delta + distance into b8; the full-grid resolve writes b7/b30.
- check(half ? !seen.contains({kSetPush,30u})
-            : seen.contains({kSetPush,7u}) && seen.contains({kSetPush,30u}),"D-RF direct outputs retained only at full resolution");
- check(seen.contains({kSetPush,8u})==half,"half-grid reflection output reuses GI raw binding 8 only with RT_TRACE_HALF");
+ check(seen.contains({kSetPush,7u}) && seen.contains({kSetPush,30u}),"full-resolution D-RF outputs retained");
+ check(!seen.contains({kSetPush,8u}),"D-RF does not write GI raw output");
  if(sharc)check(seen.contains({kSetSharc,0u}) || seen.contains({kSetSharc,1u}),"SHaRC set used by the SHaRC variant");
  check(seen.contains({kSetRfGi,0u})==gi,"rf_hit_gi variants (and only they) count into set 6");
  if(em)for(uint32_t slot:bg3::hit_emission::required)check(seen.contains({kSetEmissive,slot}),"rt_hit_emission variants read the emissive TLAS, InstInfo, soup, records and header");
@@ -105,7 +103,7 @@ int main(int argc,char** argv){
  check(find_in(sun,8)->type==VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,"sun set b8: the roof volumes (sun trust image)");
  check(kSetEmissive==5 && kSetEmissive>=set_count(true),"rt_hit_emission: the emissive set after SHaRC's");
  check(kSetRfGi==kSetEmissive+1,"rf_hit_gi: the counter set after the emissive one");
- bool sharc=false,tileset=false,hair=false,cascade=false,em=false,gi=false,half=false;
+ bool sharc=false,tileset=false,hair=false,cascade=false,em=false,gi=false;
  for(int i=1;i<argc;++i){
   if(std::strcmp(argv[i],"--sharc")==0){sharc=true;continue;}
   if(std::strcmp(argv[i],"--plain")==0){sharc=false;continue;}
@@ -119,9 +117,7 @@ int main(int argc,char** argv){
   if(std::strcmp(argv[i],"--noem")==0){em=false;continue;}
   if(std::strcmp(argv[i],"--gi")==0){gi=true;continue;}
   if(std::strcmp(argv[i],"--nogi")==0){gi=false;continue;}
-  if(std::strcmp(argv[i],"--half")==0){half=true;continue;}
-  if(std::strcmp(argv[i],"--full")==0){half=false;continue;}
-  module(argv[i],sharc,tileset,hair,cascade,em,gi,half);
+  module(argv[i],sharc,tileset,hair,cascade,em,gi);
  }
  std::printf("PASS %u rf hit shade interface checks\n",checks);
 }

@@ -2,897 +2,8 @@
   "version": 1,
   "slices": [
     {
-      "prefix": "b1-wo1-s8-bit4--",
+      "prefix": "b1-wf9-s8-compose-shift--",
       "offset": 0,
-      "count": 12,
-      "source": "tools/live_batches/water_offscreen/jobs/wo1-s8-bit4.json",
-      "job": {
-        "name": "wo1-s8-bit4",
-        "save": "Water Queens House",
-        "session": false,
-        "traces": 0,
-        "hold": 90,
-        "timeout": 2203,
-        "repeat": 1,
-        "live_batch": "water-offscreen",
-        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=0,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=1,rt_water_ls_shadows=1,rt_water_refraction=1,rt_water_game_shadow=1,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,rt_hit_material_wind_rgb=1,rt_water_hit_shade=0,rf_hit_shade=0,rf_hit_gi=0,rt_water_compose_shift=1,rt_water_hit_cost=0,rt_stats_period_frames=60",
-        "args": [
-          "-RealPresent",
-          "-Move",
-          "-MovePlan",
-          "captures/live_batches/water_offscreen/plans/wo1-s8-bit4.json"
-        ],
-        "patterns": [
-          "\\[hot\\]",
-          "\\[ngx\\] RR create",
-          "\\[sl\\] DLSS-G frame",
-          "\\[pace\\]",
-          "\\[watch\\]",
-          "rt passes: GPU cost",
-          "\\[rt\\] scene wait",
-          "\\[rt\\] scene build GPU",
-          "\\[trace\\]",
-          "\\[shaders\\].*\\?",
-          "\\[crash\\]",
-          "FAILED",
-          "\\[water\\]",
-          "gi: GPU cost",
-          "\\[rrpost\\] exposure (held|probe)",
-          "\\[geo\\] RT capture",
-          "\\[cascade\\] casters",
-          "\\[hit material\\] buffer reuse",
-          "\\[sl\\] fg_letterbox",
-          "sun stats",
-          "^\\S+\\s+\\[core\\] sun:",
-          "\\[core\\] guard:",
-          "skipped: no variant for",
-          "\\[bvh\\] mesh pool",
-          "\\[hit material pool basis\\]",
-          "\\[cascade\\] buffer full",
-          "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
-          "\\[water\\]",
-          "rf: reflection pass",
-          "gi: GPU cost",
-          "\\[pan\\]",
-          "\\[sl\\] capturing \\d+ presented frames",
-          "\\[sl\\] present capture done",
-          "slDLSSGSetOptions",
-          "\\[sl\\] DLSS-G gets",
-          "\\[pan\\] burst",
-          "\\[pan\\].*water",
-          "\\[pan\\].*REFUSED",
-          "PNG write failed",
-          "capture writer backlog"
-        ],
-        "expect": [
-          "\\[auto\\] scene ready",
-          "\\[hot\\] core generation \\d+ loaded",
-          "\\[ngx\\] RR create .*: Success",
-          "\\[cfg\\] settings read",
-          "\\[trace\\] frame \\d+ written",
-          "\\[water\\] compose stability",
-          "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\)",
-          "\\[water\\] compose energy"
-        ],
-        "forbid": [
-          "\\[crash\\] exception 0x",
-          "VK_ERROR_DEVICE_LOST",
-          "\\[hot\\] core (rejected|faulted)",
-          "FAILED, keeping previous",
-          "compile call failed",
-          "RR creation failed",
-          "RR evaluate failed",
-          "\\[water\\] water geometry UNAVAILABLE",
-          "\\[water\\] build submission failed",
-          "\\[water\\] reflections unavailable",
-          "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
-          "\\[water\\] compose UNAVAILABLE",
-          "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
-          "\\[water\\] compose: variant pipeline creation failed",
-          "\\[water\\] compose: a water pipeline blends",
-          "\\[rrpost\\] exposure hold REFUSED",
-          "\\[cascade\\] could not allocate",
-          "skipped: no variant for",
-          "set 1 [1-9]\\d* out-of-range reads skipped",
-          "\\[hit material pool basis\\] over kBasisCapBytes",
-          "\\[pan\\].*(REFUSED|failed|dropped)",
-          "\\[sl\\].*(capture.*(failed|dropped)|writer queue full)",
-          "\\[pan\\].*transport INVALID",
-          "\\[pan\\].*refused",
-          "PNG write failed",
-          "capture writer backlog"
-        ],
-        "expect_runner": [
-          "\\[window-mode\\].*visible_unfocused",
-          "^Run ended: done",
-          "\\[motion-plan\\] complete phases=12\\b",
-          "\\[motion-trace\\] phase=3 label=shot-order-off-a repeat=0",
-          "\\[motion-trace\\] phase=3 label=shot-order-off-a repeat=1",
-          "\\[motion-trace\\] phase=4 label=shot-order-on-a repeat=0",
-          "\\[motion-trace\\] phase=4 label=shot-order-on-a repeat=1",
-          "\\[motion-trace\\] phase=5 label=shot-order-off-b repeat=0",
-          "\\[motion-trace\\] phase=5 label=shot-order-off-b repeat=1",
-          "\\[motion-trace\\] phase=6 label=shot-order-on-b repeat=0",
-          "\\[motion-trace\\] phase=6 label=shot-order-on-b repeat=1"
-        ],
-        "stop_on_dump": false,
-        "purpose": "Decide water hit cost bit 4 independently: OFF/ON/OFF/ON energy, coverage, zero truncation and GPU cost.",
-        "estimated_phase_seconds": 93.2,
-        "expect_every": [
-          {
-            "name": "scene wait: every cost window traces its own frame's scene (0 timeouts; stale shadows otherwise)",
-            "select": "\\[rt\\] scene wait: \\d+ frames",
-            "match": "got this frame's scene, 0 timeouts",
-            "min": 1,
-            "windows": [
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
-            "select": "\\[geo\\] RT capture, last \\d+ frames:",
-            "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every traced cost window with the casters on",
-            "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
-            "match": ", buffer full 0\\.0, added ",
-            "min": 1,
-            "when_present": true,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "continuity",
-            "select": "\\[core\\] \\[water\\] compose stability",
-            "match": "uncomposed 0 \\(on/off flips 0\\)",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "reflection stats",
-            "select": "\\[core\\] \\[water\\] reflections \\(",
-            "match": "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "compose tiers",
-            "select": "\\[core\\] \\[water\\] compose \\(",
-            "match": "screen hit \\(composed\\) [0-9.]+%, hidden [0-9.]+%.*aborted 0, invalid 0",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "compose GPU ms",
-            "select": "\\[core\\] \\[water\\] compose GPU",
-            "match": "compose GPU [0-9.]+ ms median.*compose dispatches [0-9.]+ ms median",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "compose hidden and offscreen hit shading in every ON window",
-            "select": "\\[water\\] compose \\(",
-            "match": "hit shade attempted [1-9]\\d*, hidden [1-9]\\d*, offscreen [1-9]\\d*, rejected material/light/sun/invalid \\d+/\\d+/\\d+/0",
-            "min": 1,
-            "windows": [
-              "shot-order-on-a",
-              "shot-order-on-b",
-              "cost-order-1",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "reflections hidden and offscreen hit shading in every ON window",
-            "select": "\\[water\\] reflections \\(",
-            "match": "hit shade attempted [1-9]\\d*, hidden [1-9]\\d*, offscreen [1-9]\\d*, rejected material/light/sun/invalid \\d+/\\d+/\\d+/0",
-            "min": 1,
-            "windows": [
-              "shot-order-on-a",
-              "shot-order-on-b",
-              "cost-order-1",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "static float energy inputs",
-            "select": "\\[trace\\] frame \\d+ written:",
-            "match": "\\[trace\\] frame \\d+ written:",
-            "event": true,
-            "settle_s": 1,
-            "min": 2,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b"
-            ]
-          },
-          {
-            "name": "reflection GPU in every cost window",
-            "select": "\\[water\\] reflections GPU",
-            "match": "reflections GPU [0-9.]+ ms median, p90 [0-9.]+",
-            "min": 1,
-            "windows": [
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "world query never truncates in comparisons",
-            "select": "\\[water\\] (reflections|compose) \\(",
-            "match": "world truncated 0\\b",
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "no mesh pool exhaustion in measured windows (load excluded)",
-            "select": "\\[(?:rt|bvh)\\] mesh.*pool full",
-            "match": "(?!)",
-            "event": true,
-            "min": 0,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "no roof overflow in measured windows (load excluded)",
-            "select": "sun: WARNING \\d+ roof volumes within",
-            "match": "(?!)",
-            "event": true,
-            "min": 0,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "no roof overflow in measured windows (load excluded)",
-            "select": "over kSunMaxVolumes on [1-9]",
-            "match": "(?!)",
-            "event": true,
-            "min": 0,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          },
-          {
-            "name": "water geometry coverage",
-            "select": "\\[water\\] coverage \\(",
-            "match": "captured [1-9]\\d* of [1-9]\\d* water draws \\(100\\.0%\\).*triangles [1-9]\\d* of [1-9]\\d* supported \\(100\\.0%\\).*non-finite 0, collapsed 0",
-            "period_frames": 120,
-            "min": 1,
-            "windows": [
-              "shot-order-off-a",
-              "shot-order-on-a",
-              "shot-order-off-b",
-              "shot-order-on-b",
-              "cost-order-0",
-              "cost-order-1",
-              "cost-order-2",
-              "cost-order-3"
-            ]
-          }
-        ],
-        "energy_fs": "water-compose",
-        "window_mode": "visible_unfocused_fg",
-        "post": "py -3 tools/m4_promotion_gate.py \"{log}\" --pool run",
-        "post_gate": true,
-        "live_flow": {
-          "expected_fps": 30,
-          "settings_latency_s": 1,
-          "trace_stall_s": 4,
-          "startup_only": [
-            "rt_xfb_mb"
-          ],
-          "fps_windows": [
-            {
-              "state": [
-                0,
-                0,
-                0,
-                0,
-                0
-              ],
-              "fps": 18.66832607347135,
-              "windows": 487,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel1-smoke-ultra-s8.1.134708.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel2-smoke-high-s8.1.121305.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\scc1-spec-cascade-s8-fg2.1.034003.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.010846.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.012454.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.040556.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041708.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sw3-motion-s8-fg2.1.221354.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\vg3-s8-low-long-view-fg2.1.221959.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf1-s8-fg2.1.100826.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf2-s8-fg2.1.110212.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf3-s8-fg2.1.141227.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf4-s8-fg2.1.143137.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7a-s8-fg2.1.164300.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf7b-s8-fg2.1.164518.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf8-s8-reflection-flicker.1.021859.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.085931.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.115633.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.131013.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wf9-s8-compose-shift.1.151625.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.043141.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\wsf1-s8-interface-column.1.064436.log"
-              ]
-            },
-            {
-              "state": [
-                1,
-                0,
-                1,
-                0,
-                0
-              ],
-              "fps": 15.59251559252314,
-              "windows": 6,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\rel2-smoke-high-s8.1.121305.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.115049.log"
-              ]
-            },
-            {
-              "state": [
-                1,
-                0,
-                0,
-                0,
-                0
-              ],
-              "fps": 22.93577981649794,
-              "windows": 13,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p1-s8-fg2.1.213849.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\sh1-s8-fg2.1.043322.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.004527.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\su1-ultra-s8-fg2.1.041744.log"
-              ]
-            },
-            {
-              "state": [
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              "fps": 20.949720670434065,
-              "windows": 5,
-              "logs": [
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log"
-              ]
-            }
-          ],
-          "trace_export": {
-            "seconds": 0.2930000000014843,
-            "quantile": 0.95,
-            "samples": 359,
-            "maximum": 0.49399999999877764
-          },
-          "trace_capture_stall": {
-            "seconds": 2.6511199999999997,
-            "source": "hmm1-mask-s8-fg2.1.083713.log",
-            "quantile": 0.95,
-            "samples": 359,
-            "maximum": 2.90531,
-            "logs": 58
-          }
-        },
-        "max_minutes": 15
-      },
-      "plan": [
-        {
-          "label": "warmup",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 20.0,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 20.0,
-          "motion_end": 20.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_hit_shade=2,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-          "wait_log": [
-            "\\[shaders\\] cache: prefetched ",
-            "\\[auto\\] scene ready"
-          ],
-          "wait_log_timeout": 180.0
-        },
-        {
-          "label": "producer-sanity-warmup",
-          "kind": "static",
-          "seconds": 1.1,
-          "capture_at": 0,
-          "serial": 0,
-          "set": "rt_water_hit_shade=2,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-          "wait_log": [
-            "\\[water\\] compose stability",
-            "\\[water\\] compose energy"
-          ],
-          "wait_log_timeout": 9.464000000007218
-        },
-        {
-          "label": "prefetch-order",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 5.0,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 5.0,
-          "motion_end": 5.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_hit_shade=2,rt_water_hit_cost=4,qa_exposure_hold=1",
-          "wait_log": [
-            "\\[shaders\\] cache: prefetched ",
-            "gi: gi/[^ ]+ generation ",
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ]
-        },
-        {
-          "label": "shot-order-off-a",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 13.2,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 18.0,
-          "motion_end": 18.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-          "trace_at": [
-            4,
-            9
-          ],
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "shot-order-on-a",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 13.2,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 18.0,
-          "motion_end": 18.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-          "trace_at": [
-            4,
-            9
-          ],
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] compose \\(",
-            "\\[water\\] reflections \\(",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "shot-order-off-b",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 13.2,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 18.0,
-          "motion_end": 18.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-          "trace_at": [
-            4,
-            9
-          ],
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "shot-order-on-b",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 13.2,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 18.0,
-          "motion_end": 18.0,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-          "trace_at": [
-            4,
-            9
-          ],
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] compose \\(",
-            "\\[water\\] reflections \\(",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "cost-order-0",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 3.3,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 14.4,
-          "motion_end": 14.4,
-          "pixels_per_second": 1,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[rt\\] scene wait: \\d+ frames",
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] reflections GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "cost-order-1",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 3.3,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 14.4,
-          "motion_end": 14.4,
-          "pixels_per_second": 1,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[rt\\] scene wait: \\d+ frames",
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] compose \\(",
-            "\\[water\\] reflections \\(",
-            "\\[water\\] reflections GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "cost-order-2",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 3.3,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 14.4,
-          "motion_end": 14.4,
-          "pixels_per_second": 1,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[rt\\] scene wait: \\d+ frames",
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] reflections GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "cost-order-3",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 3.3,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 14.4,
-          "motion_end": 14.4,
-          "pixels_per_second": 1,
-          "direction": 0,
-          "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0,
-          "frames": 60,
-          "settle_frames": 0,
-          "stats_reset": true,
-          "wait_stats": [
-            "\\[rt\\] scene wait: \\d+ frames",
-            "\\[geo\\] RT capture, last \\d+ frames:",
-            "\\[core\\] \\[water\\] compose stability",
-            "\\[core\\] \\[water\\] reflections \\(",
-            "\\[core\\] \\[water\\] compose \\(",
-            "\\[core\\] \\[water\\] compose GPU",
-            "\\[water\\] compose \\(",
-            "\\[water\\] reflections \\(",
-            "\\[water\\] reflections GPU",
-            "\\[water\\] (reflections|compose) \\(",
-            "\\[water\\] coverage \\("
-          ]
-        },
-        {
-          "label": "restore",
-          "kind": "static",
-          "speed": "static",
-          "seconds": 1.1,
-          "repeat_ms": 0,
-          "scan": 16,
-          "capture_at": 0,
-          "serial": 0,
-          "motion_start": 1.1,
-          "motion_end": 1.1,
-          "pixels_per_second": 0,
-          "direction": 0,
-          "set": "rt_water_hit_shade=0,rt_water_compose_shift=0,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-          "wait_log": [
-            "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_fresh": [
-            "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-          ],
-          "wait_log_timeout": 180.0
-        }
-      ]
-    },
-    {
-      "prefix": "b2-wf9-s8-compose-shift--",
-      "offset": 13,
       "count": 25,
       "source": "tools/live_batches/water_flicker_wf9/jobs/wf9-s8-compose-shift.json",
       "job": {
@@ -904,7 +15,7 @@
         "timeout": 2393.0,
         "repeat": 1,
         "live_batch": "water-flicker-wf9",
-        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=1,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=0,rt_water_game_shadow=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,pan_water=1,pan_water_frames=8,pan_delay_ms=2000,rt_water_compose_shift=0,rt_stats_period_frames=60",
+        "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=0,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=1,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_omm=0,rt_native_tileset=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=120,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_xfb_mb=1024,rt_cascade_mb=427,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_water_geometry=1,rt_water_reflections=1,rt_water_compose=1,rt_water_shadows=0,rt_water_ls_shadows=0,rt_water_refraction=0,rt_water_game_shadow=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_log_presents=0,pan_water=1,pan_water_frames=8,pan_delay_ms=2000,rt_water_compose_shift=0,rt_stats_period_frames=60",
         "args": [
           "-RealPresent",
           "-Move",
@@ -1983,8 +1094,8 @@
       ]
     },
     {
-      "prefix": "b3-pt-s8--",
-      "offset": 39,
+      "prefix": "b2-pt-s8--",
+      "offset": 26,
       "count": 23,
       "source": "tools/live_batches/post_temporal/jobs/pt-s8.json",
       "job": {
@@ -2918,420 +2029,7 @@
   ],
   "plan": [
     {
-      "label": "b1-wo1-s8-bit4--warmup",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 20.0,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 20.0,
-      "motion_end": 20.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_hit_shade=2,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-      "wait_log": [
-        "\\[shaders\\] cache: prefetched ",
-        "\\[auto\\] scene ready"
-      ],
-      "wait_log_timeout": 180.0
-    },
-    {
-      "label": "b1-wo1-s8-bit4--producer-sanity-warmup",
-      "kind": "static",
-      "seconds": 1.1,
-      "capture_at": 0,
-      "serial": 0,
-      "set": "rt_water_hit_shade=2,rt_water_compose_shift=1,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-      "wait_log": [
-        "\\[water\\] compose stability",
-        "\\[water\\] compose energy"
-      ],
-      "wait_log_timeout": 9.464000000007218
-    },
-    {
-      "label": "b1-wo1-s8-bit4--prefetch-order",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 5.0,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 5.0,
-      "motion_end": 5.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_hit_shade=2,rt_water_hit_cost=4,qa_exposure_hold=1",
-      "wait_log": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--shot-order-off-a",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 13.2,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 18.0,
-      "motion_end": 18.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-      "trace_at": [
-        4,
-        9
-      ],
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--shot-order-on-a",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 13.2,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 18.0,
-      "motion_end": 18.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-      "trace_at": [
-        4,
-        9
-      ],
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] compose \\(",
-        "\\[water\\] reflections \\(",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--shot-order-off-b",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 13.2,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 18.0,
-      "motion_end": 18.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-      "trace_at": [
-        4,
-        9
-      ],
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--shot-order-on-b",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 13.2,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 18.0,
-      "motion_end": 18.0,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-      "trace_at": [
-        4,
-        9
-      ],
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] compose \\(",
-        "\\[water\\] reflections \\(",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--cost-order-0",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 3.3,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 14.4,
-      "motion_end": 14.4,
-      "pixels_per_second": 1,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[rt\\] scene wait: \\d+ frames",
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] reflections GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--cost-order-1",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 3.3,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 14.4,
-      "motion_end": 14.4,
-      "pixels_per_second": 1,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[rt\\] scene wait: \\d+ frames",
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] compose \\(",
-        "\\[water\\] reflections \\(",
-        "\\[water\\] reflections GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--cost-order-2",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 3.3,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 14.4,
-      "motion_end": 14.4,
-      "pixels_per_second": 1,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[rt\\] scene wait: \\d+ frames",
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] reflections GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--cost-order-3",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 3.3,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 14.4,
-      "motion_end": 14.4,
-      "pixels_per_second": 1,
-      "direction": 0,
-      "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0,
-      "frames": 60,
-      "settle_frames": 0,
-      "stats_reset": true,
-      "wait_stats": [
-        "\\[rt\\] scene wait: \\d+ frames",
-        "\\[geo\\] RT capture, last \\d+ frames:",
-        "\\[core\\] \\[water\\] compose stability",
-        "\\[core\\] \\[water\\] reflections \\(",
-        "\\[core\\] \\[water\\] compose \\(",
-        "\\[core\\] \\[water\\] compose GPU",
-        "\\[water\\] compose \\(",
-        "\\[water\\] reflections \\(",
-        "\\[water\\] reflections GPU",
-        "\\[water\\] (reflections|compose) \\(",
-        "\\[water\\] coverage \\("
-      ]
-    },
-    {
-      "label": "b1-wo1-s8-bit4--restore",
-      "kind": "static",
-      "speed": "static",
-      "seconds": 1.1,
-      "repeat_ms": 0,
-      "scan": 16,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 1.1,
-      "motion_end": 1.1,
-      "pixels_per_second": 0,
-      "direction": 0,
-      "set": "rt_water_hit_shade=0,rt_water_compose_shift=0,qa_exposure_hold=0,rt_debug=0,pan_capture=0,fg_snap=0,rt_water_hit_cost=0",
-      "wait_log": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0
-    },
-    {
-      "label": "b2-wf9-s8-compose-shift--settings-reset",
-      "kind": "static",
-      "seconds": 1.1,
-      "repeat_ms": 0,
-      "capture_at": 0,
-      "serial": 0,
-      "motion_start": 1.1,
-      "motion_end": 1.1,
-      "set": "crash_dump=0,dump_images=1,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=0,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=2000,fg_state_every=1,fps_cap=0,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=0,ls_stats=0,pan_capture=0,pan_delay_ms=2000,pan_edge=0,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=1,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rt=1,rt_alpha=1,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=427,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=0,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_scene_wait=1,rt_scene_wait_log_frames=120,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_sun_cascade_current=0,rt_timing_frames=120,rt_water_compose=1,rt_water_compose_shift=0,rt_water_game_shadow=0,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=0,rt_water_reflections=1,rt_water_refraction=0,rt_water_shadows=0,rt_xfb_mb=1024,sharc=0,sharc_device=1",
-      "wait_log": [
-        "gi: gi/rt_local_shadows_box\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0
-    },
-    {
-      "label": "b2-wf9-s8-compose-shift--warmup",
+      "label": "b1-wf9-s8-compose-shift--warmup",
       "kind": "static",
       "speed": "static",
       "seconds": 20.0,
@@ -3351,7 +2049,7 @@
       "wait_log_timeout": 180.0
     },
     {
-      "label": "b2-wf9-s8-compose-shift--producer-sanity-warmup",
+      "label": "b1-wf9-s8-compose-shift--producer-sanity-warmup",
       "kind": "static",
       "seconds": 1.1,
       "capture_at": 0,
@@ -3363,7 +2061,7 @@
       "wait_log_timeout": 11.427999999985332
     },
     {
-      "label": "b2-wf9-s8-compose-shift--prefetch-shift-on",
+      "label": "b1-wf9-s8-compose-shift--prefetch-shift-on",
       "kind": "static",
       "speed": "static",
       "seconds": 5.0,
@@ -3388,7 +2086,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--energy-static-0",
+      "label": "b1-wf9-s8-compose-shift--energy-static-0",
       "kind": "static",
       "speed": "static",
       "seconds": 8.8,
@@ -3424,7 +2122,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--energy-static-1",
+      "label": "b1-wf9-s8-compose-shift--energy-static-1",
       "kind": "static",
       "speed": "static",
       "seconds": 8.8,
@@ -3460,7 +2158,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--energy-static-2",
+      "label": "b1-wf9-s8-compose-shift--energy-static-2",
       "kind": "static",
       "speed": "static",
       "seconds": 8.8,
@@ -3496,7 +2194,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--energy-static-3",
+      "label": "b1-wf9-s8-compose-shift--energy-static-3",
       "kind": "static",
       "speed": "static",
       "seconds": 8.8,
@@ -3532,7 +2230,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--diag-view-static",
+      "label": "b1-wf9-s8-compose-shift--diag-view-static",
       "kind": "static",
       "speed": "static",
       "seconds": 6.3,
@@ -3555,7 +2253,7 @@
       "wait_log_timeout": 2.0
     },
     {
-      "label": "b2-wf9-s8-compose-shift--cost-turn-0",
+      "label": "b1-wf9-s8-compose-shift--cost-turn-0",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 13.9,
@@ -3583,7 +2281,7 @@
       "wait_log_timeout": 30
     },
     {
-      "label": "b2-wf9-s8-compose-shift--snap-turn-0",
+      "label": "b1-wf9-s8-compose-shift--snap-turn-0",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3599,7 +2297,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--diag-view-turn-0",
+      "label": "b1-wf9-s8-compose-shift--diag-view-turn-0",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3615,7 +2313,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--return-0",
+      "label": "b1-wf9-s8-compose-shift--return-0",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 24.0,
@@ -3631,7 +2329,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--cost-turn-1",
+      "label": "b1-wf9-s8-compose-shift--cost-turn-1",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 12.9,
@@ -3666,7 +2364,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--snap-turn-1",
+      "label": "b1-wf9-s8-compose-shift--snap-turn-1",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3682,7 +2380,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--diag-view-turn-1",
+      "label": "b1-wf9-s8-compose-shift--diag-view-turn-1",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3698,7 +2396,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--return-1",
+      "label": "b1-wf9-s8-compose-shift--return-1",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 24.0,
@@ -3714,7 +2412,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--cost-turn-2",
+      "label": "b1-wf9-s8-compose-shift--cost-turn-2",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 12.9,
@@ -3749,7 +2447,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--snap-turn-2",
+      "label": "b1-wf9-s8-compose-shift--snap-turn-2",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3765,7 +2463,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--diag-view-turn-2",
+      "label": "b1-wf9-s8-compose-shift--diag-view-turn-2",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3781,7 +2479,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--return-2",
+      "label": "b1-wf9-s8-compose-shift--return-2",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 24.0,
@@ -3797,7 +2495,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--cost-turn-3",
+      "label": "b1-wf9-s8-compose-shift--cost-turn-3",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 12.9,
@@ -3832,7 +2530,7 @@
       ]
     },
     {
-      "label": "b2-wf9-s8-compose-shift--snap-turn-3",
+      "label": "b1-wf9-s8-compose-shift--snap-turn-3",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3848,7 +2546,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--diag-view-turn-3",
+      "label": "b1-wf9-s8-compose-shift--diag-view-turn-3",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 8.0,
@@ -3864,7 +2562,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--return-3",
+      "label": "b1-wf9-s8-compose-shift--return-3",
       "kind": "rotate",
       "speed": "slow",
       "seconds": 24.0,
@@ -3880,7 +2578,7 @@
       "turn_mode": "keys"
     },
     {
-      "label": "b2-wf9-s8-compose-shift--restore",
+      "label": "b1-wf9-s8-compose-shift--restore",
       "kind": "static",
       "speed": "static",
       "seconds": 1.1,
@@ -3903,7 +2601,7 @@
       "wait_log_timeout": 2.0
     },
     {
-      "label": "b3-pt-s8--settings-reset",
+      "label": "b2-pt-s8--settings-reset",
       "kind": "static",
       "seconds": 1.1,
       "repeat_ms": 0,
@@ -3911,22 +2609,10 @@
       "serial": 0,
       "motion_start": 1.1,
       "motion_end": 1.1,
-      "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=1,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_hit_gi=0,rf_hit_shade=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_alpha_spill=0,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_material_wind_rgb=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_scene_wait=1,rt_scene_wait_log_frames=600,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_sun_cascade_current=0,rt_timing_frames=120,rt_water_compose=1,rt_water_compose_shift=1,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_hit_cost=0,rt_water_hit_shade=0,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1",
-      "wait_log": [
-        "gi: gi/rt_local_shadows[^ ]*_k\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
-        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
-        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
-        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
-      ],
-      "wait_log_fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "wait_log_timeout": 180.0
+      "set": "crash_dump=0,dump_images=0,dump_png_width=384,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=30,fps_cap=0,gi_debug=0,gi_hit_direct=1,gi_hit_sun=1,headless=0,ls_box=2,ls_check=0,ls_debug=0,ls_k=1,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=1,pan_prepare=1,pan_water=0,pan_water_frames=8,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=0,rr_show=0,rt=1,rt_alpha=1,rt_bvh_split=1,rt_cascade_casters=1,rt_cascade_mb=160,rt_debug=0,rt_emissive=1,rt_hair_physical_origin=0,rt_hit_emission=1,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_recycle=1,rt_hit_reference=0,rt_native_hair=0,rt_native_scalp=0,rt_native_tileset=0,rt_omm=1,rt_order_trace=0,rt_primary_check=0,rt_primary_epoch=0,rt_primary_identity=0,rt_scene_wait=1,rt_scene_wait_log_frames=600,rt_stability_log=0,rt_stats=0,rt_stats_period_frames=60,rt_timing_frames=120,rt_water_compose=1,rt_water_compose_shift=1,rt_water_game_shadow=1,rt_water_geometry=1,rt_water_ls_shadows=1,rt_water_reflections=1,rt_water_refraction=1,rt_water_shadows=1,rt_xfb_mb=1024,sharc=0,sharc_device=1"
     },
     {
-      "label": "b3-pt-s8--warmup",
+      "label": "b2-pt-s8--warmup",
       "kind": "static",
       "speed": "static",
       "seconds": 20.0,
@@ -3947,7 +2633,7 @@
       "wait_log_timeout": 180.0
     },
     {
-      "label": "b3-pt-s8--warmup-camera",
+      "label": "b2-pt-s8--warmup-camera",
       "kind": "static",
       "speed": "static",
       "seconds": 20.0,
@@ -3973,7 +2659,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--settle-off-a",
+      "label": "b2-pt-s8--settle-off-a",
       "kind": "static",
       "speed": "static",
       "seconds": 2.8,
@@ -3999,7 +2685,7 @@
       "wait_stats": []
     },
     {
-      "label": "b3-pt-s8--rendered-off-a",
+      "label": "b2-pt-s8--rendered-off-a",
       "kind": "static",
       "speed": "static",
       "seconds": 4.4,
@@ -4014,7 +2700,7 @@
       "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98710,fg_snap=0,qa_exposure_hold=1"
     },
     {
-      "label": "b3-pt-s8--presented-off-a",
+      "label": "b2-pt-s8--presented-off-a",
       "kind": "static",
       "speed": "static",
       "seconds": 4.9,
@@ -4036,7 +2722,7 @@
       "wait_log_timeout": 30
     },
     {
-      "label": "b3-pt-s8--energy-off-a",
+      "label": "b2-pt-s8--energy-off-a",
       "kind": "static",
       "speed": "static",
       "seconds": 3.8,
@@ -4054,7 +2740,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--timing-off-a",
+      "label": "b2-pt-s8--timing-off-a",
       "kind": "static",
       "speed": "static",
       "seconds": 3.3,
@@ -4076,7 +2762,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--settle-on-a",
+      "label": "b2-pt-s8--settle-on-a",
       "kind": "static",
       "speed": "static",
       "seconds": 6.8,
@@ -4104,7 +2790,7 @@
       "wait_stats": []
     },
     {
-      "label": "b3-pt-s8--rendered-on-a",
+      "label": "b2-pt-s8--rendered-on-a",
       "kind": "static",
       "speed": "static",
       "seconds": 4.4,
@@ -4119,7 +2805,7 @@
       "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98711,fg_snap=0,qa_exposure_hold=1"
     },
     {
-      "label": "b3-pt-s8--presented-on-a",
+      "label": "b2-pt-s8--presented-on-a",
       "kind": "static",
       "speed": "static",
       "seconds": 4.9,
@@ -4141,7 +2827,7 @@
       "wait_log_timeout": 30
     },
     {
-      "label": "b3-pt-s8--energy-on-a",
+      "label": "b2-pt-s8--energy-on-a",
       "kind": "static",
       "speed": "static",
       "seconds": 3.8,
@@ -4159,7 +2845,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--timing-on-a",
+      "label": "b2-pt-s8--timing-on-a",
       "kind": "static",
       "speed": "static",
       "seconds": 3.3,
@@ -4182,7 +2868,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--settle-off-b",
+      "label": "b2-pt-s8--settle-off-b",
       "kind": "static",
       "speed": "static",
       "seconds": 2.8,
@@ -4208,7 +2894,7 @@
       "wait_stats": []
     },
     {
-      "label": "b3-pt-s8--rendered-off-b",
+      "label": "b2-pt-s8--rendered-off-b",
       "kind": "static",
       "speed": "static",
       "seconds": 4.4,
@@ -4223,7 +2909,7 @@
       "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98712,fg_snap=0,qa_exposure_hold=1"
     },
     {
-      "label": "b3-pt-s8--presented-off-b",
+      "label": "b2-pt-s8--presented-off-b",
       "kind": "static",
       "speed": "static",
       "seconds": 4.9,
@@ -4245,7 +2931,7 @@
       "wait_log_timeout": 30
     },
     {
-      "label": "b3-pt-s8--energy-off-b",
+      "label": "b2-pt-s8--energy-off-b",
       "kind": "static",
       "speed": "static",
       "seconds": 3.8,
@@ -4263,7 +2949,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--timing-off-b",
+      "label": "b2-pt-s8--timing-off-b",
       "kind": "static",
       "speed": "static",
       "seconds": 3.3,
@@ -4285,7 +2971,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--settle-on-b",
+      "label": "b2-pt-s8--settle-on-b",
       "kind": "static",
       "speed": "static",
       "seconds": 6.8,
@@ -4313,7 +2999,7 @@
       "wait_stats": []
     },
     {
-      "label": "b3-pt-s8--rendered-on-b",
+      "label": "b2-pt-s8--rendered-on-b",
       "kind": "static",
       "speed": "static",
       "seconds": 4.4,
@@ -4328,7 +3014,7 @@
       "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98713,fg_snap=0,qa_exposure_hold=1"
     },
     {
-      "label": "b3-pt-s8--presented-on-b",
+      "label": "b2-pt-s8--presented-on-b",
       "kind": "static",
       "speed": "static",
       "seconds": 4.9,
@@ -4350,7 +3036,7 @@
       "wait_log_timeout": 30
     },
     {
-      "label": "b3-pt-s8--energy-on-b",
+      "label": "b2-pt-s8--energy-on-b",
       "kind": "static",
       "speed": "static",
       "seconds": 3.8,
@@ -4368,7 +3054,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--timing-on-b",
+      "label": "b2-pt-s8--timing-on-b",
       "kind": "static",
       "speed": "static",
       "seconds": 3.3,
@@ -4391,7 +3077,7 @@
       ]
     },
     {
-      "label": "b3-pt-s8--restore",
+      "label": "b2-pt-s8--restore",
       "kind": "static",
       "speed": "static",
       "seconds": 1.1,

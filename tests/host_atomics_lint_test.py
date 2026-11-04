@@ -50,9 +50,6 @@ ATOMIC_TARGETS = {
          H, "g_stats_buf bound at set 0 binding 20 for every gi.cpp pipeline (rt_stats=1)"),
         ("core/water.cpp", "!make_device_buffer(kRtStatsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, g_rts, g_rts_mem) ||",
          D, "water pipelines bind g_rts at binding 20")],
-    "shaders/rt/water_light_prepare.hlsl:worldLights": [
-        ("core/water.cpp", "make_device_buffer(kWorldBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_world_lights, g_world_memory)",
-         D, "current-frame membership union in device-local memory")],
     "shaders/gi/rt_local_shadows.hlsl:lsBoxStats": [
         ("core/gi.cpp", "bci.size = kLsBoxXBytes;", D,
          "g_bx_buf (ensure_bx: DEVICE_LOCAL memory type; set 4 b0 of the box layout, group-reduced, copied to rtStats 385..416)")],
@@ -110,18 +107,10 @@ ATOMIC_TARGETS = {
         ("layer/omm_content.cpp", "(mem.memoryTypes[i].propertyFlags&(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))==(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)){type=i;break;}",
          H, "alpha set binding 11: omm content counters when present (BAR VRAM preferred, system memory fallback; guard atomics once per wave and invocation)"),
         ("layer/alphatest.cpp", "ok = ok && make_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, g_dummy_buf,",
-         D, "g_dummy_buf fallback and the Sun clone set")],
+         D, "g_dummy_buf fallback")],
     "shaders/rt/rt_common.hlsli:gSceneStamp": [
         ("layer/alphatest.cpp", "VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)",
-         H, "g_stamp_buf (alpha set binding 9; atomics only in RT_OMM_SCENE variants)"),
-        ("layer/alphatest.cpp", "if (!alloc_host_buffer(kStampStride,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,",
-         H, "s.stamp (Sun clone set)")],
-    "shaders/rt/sun_caster_validate.hlsl:Stamp": [
-        ("layer/alphatest.cpp", "if (!alloc_host_buffer(kStampStride,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,",
-         H, "s.stamp")],
-    "shaders/rt/sun_receiver_packet.hlsl:parameters": [
-        ("layer/alphatest.cpp", "if(!make_buffer(bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,buffer,memory)) return false;",
-         D, "s.parameters")],
+         H, "g_stamp_buf (alpha set binding 9; atomics only in RT_OMM_SCENE variants)")],
     "shaders/rt/water_compose.hlsl:cStats": [("core/water.cpp", "if (!make_device_buffer(kCDevBytes,", D, "g_cdev")],
     "shaders/rt/water_reflect.hlsl:wStats": [("core/water.cpp", "!make_device_buffer(kStatBytes,", D, "g_dev")],
 }
@@ -141,7 +130,6 @@ KNOWN_HOST_ATOMICS = {
     ("shaders/rt/omm_scene_validate.hlsl:epochs", "layer/omm_content.cpp"): "OMM content epochs",
     ("shaders/rt/omm_scene_guard.hlsli:gOmmContentEpochs", "layer/omm_content.cpp"): "OMM content epochs",
     ("shaders/rt/rt_common.hlsli:gSceneStamp", "layer/alphatest.cpp"): "scene stamp (RT_OMM_SCENE)",
-    ("shaders/rt/sun_caster_validate.hlsl:Stamp", "layer/alphatest.cpp"): "Sun caster stamp",
 }
 
 # Host-visible STORAGE allocations: (file, substring of the call) -> ("atomic", [targets]) or
@@ -151,12 +139,10 @@ HOST_STORAGE = {
     ("core/gi.cpp", "&g_stats_buf"): ("atomic", ["shaders/rt/rt_common.hlsli:rtStats"]),
     ("core/ls_lights.cpp", "&g_buf"): ("plain", ["shaders/gi/rt_local_shadows_match.hlsl:lsKnown"]),
     ("core/water.cpp", "&g_host"): ("plain", ["shaders/rt/water_reflect.hlsl:wp"]),
-    ("layer/alphatest.cpp", "&s.stamp"): ("atomic", ["shaders/rt/rt_common.hlsli:gSceneStamp", "shaders/rt/sun_caster_validate.hlsl:Stamp"]),
     ("layer/bvhsplit.cpp", '"instance/InstInfo ring"'): ("plain", ["shaders/rt/rt_common.hlsli:gInstInfo", "shaders/rt/mesh_extract.hlsl:Mats", "shaders/rt/hold_pack.hlsl:Jobs"]),
     ("layer/bvhsplit.cpp", '"OMM scene replacements"'): ("plain", ["shaders/rt/omm_scene_clone.hlsl:replacements"]),
     ("layer/bvhsplit.cpp", '"OMM scene source stamps"'): ("plain", ["shaders/rt/omm_scene_validate.hlsl:rows"]),
     ("layer/bvhsplit.cpp", '"split status"'): ("atomic", ["shaders/rt/mesh_extract.hlsl:Status"]),
-    ("layer/bvhsplit.cpp", '"sun four-cascade instances"'): ("plain", ["shaders/rt/sun_caster_validate.hlsl:Instances"]),
     ("layer/emissive.cpp", "g_host"): ("atomic", ["shaders/rt/em_sanitize.hlsl:Header"]),
     ("layer/emissive.cpp", "g_inst"): ("plain", ["shaders/rt/em_common.hlsli:emInfo", "shaders/rt/em_lights.hlsl:instances"]),
     ("layer/emissive.cpp", "g_globals"): ("plain", ["shaders/rt/em_common.hlsli:emGlobal", "shaders/rt/em_copy.hlsl:Dst"]),

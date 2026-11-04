@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 // GI shader requests and specialization constants (replaces the per-flag wrapper trees that were
-// shaders/{native_tileset,hair_origin,omm,sun_current,native_scalp}/.../gi/{cascade/}).
+// shaders/{native_tileset,hair_origin,omm,native_scalp}/.../gi/{cascade/}).
 // A request is "<file>?NAME=VALUE;NAME=VALUE": Bg3HostApi::get_shader (ABI 23) passes each
 // pair to DXC as -D after BG3RTX/SHaRC, the cache key is the whole string, and hot reload
 // recompiles it when anything under shaders/ changes. shaders/variants.txt lists every
@@ -13,26 +13,23 @@
 #include "native_hair_origin.h"
 
 namespace bg3::shader_variant {
-// Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase). kSunCurrent selects
-// a different Pipe (the current-caster sun), not a slot.
-enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kSunCurrent = 64, kHitInstanced = 128,
-                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kHitIpGrass = 2048, kHitPool2s = 4096, kOccStats = 1u << 13, kTraceHalf = 1u << 17, kSpecCascade = 1u << 16, kHairFibreGi = 1u << 18 };
-// kSpecCascade sits at bit 16; generated pool rows use bit 12 and the occ diagnostic uses bit 13.
+// Variant bits of core/gi.cpp's Pipe::variants (1 was rt_scene_rebase; 64 retired).
+enum : unsigned { kCascade = 2, kScalp = 4, kOmm = 8, kHairOrigin = 16, kTileset = 32, kHitInstanced = 128,
+                  kGiFar = 256, kRfHitGi = 512, kHitWindRgb = 1024, kOccStats = 1u << 13, kSpecCascade = 1u << 16, kHairFibreGi = 1u << 18 };
+// Bits 11/12 are retired; the occ diagnostic uses bit 13 and kSpecCascade bit 16.
 // rt_spec_cascade (docs/BUILD_AND_PACKAGE_EFFICIENCY.md 1, S1): with kSpecCascade a cascade_entry file's request
 // carries RT_SPEC_CASCADE=1 (rt_shadow.hlsl also RT_SPEC_CASCADE_SUN=1) instead of RT_CASCADE_MASKS (and
 // RT_CASCADE_SUN), whatever kCascade says: kCascade then only sets specialization constant 1000
-// (kSpecCascadeId, spec_cascade_value) at pipeline creation. Not with kSunCurrent (that pipe keeps its defines).
+// (kSpecCascadeId, spec_cascade_value) at pipeline creation.
 inline constexpr unsigned kSpecCascadeId = 1000;
 // Specialization constant ids, one per on/off key (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): the one
 // registry, so branches never pick the same id. Reserved for the steps that are not merged yet; an id is never reused.
 enum SpecId : unsigned {
+  // Retired: 1001 GI motion sample, 1002 previous-radiance guard. Never reuse.
   kSpecIdCascade = kSpecCascadeId,   // GI and water cascade masks, including sun-ray selection
-  kSpecIdTemporalMv = 1001,          // G   GI_TEMPORAL_MV_SAMPLE  (branch gi-reproj-guards)
-  kSpecIdPrevRadiance = 1002,        // G   GI_PREV_RADIANCE_GUARD (branch gi-reproj-guards)
   kSpecIdHitInstanced = 1003,        // S2  RT_HIT_INSTANCED
   kSpecIdWindRgb = 1004,             // S2  RT_HIT_WIND_RGB
-  kSpecIdIpGrass = 1005,             // S2  RT_HIT_IP_GRASS
-  kSpecIdPool2s = 1006,              // S2  RT_HIT_POOL_2S (branch hm-recipe-rows)
+  // Retired: 1005 IP grass, 1006 generated two-sided pool rows. Never reuse.
   kSpecIdGiFar = 1007,               // S2  RT_GI_FAR
   kSpecIdTileset = 1008,             // S3  RT_NATIVE_TILESET
   kSpecIdHairOrigin = 1009,          // S3  RT_HAIR_PHYSICAL_ORIGIN
@@ -42,22 +39,15 @@ enum SpecId : unsigned {
   kSpecIdRfHitGi = 1013,             // S5  RF_HIT_GI
   kSpecIdWaterRfEdge = 1014,         // S5  WATER_RF_EDGE
   kSpecIdWaterComposeShift = 1015,   // wf9 compose scene camera rebase
-  kSpecWaterHitShade = 1016,         // water hidden-hit radiance (layout capability stays a define)
   // Retired: 1017 rt_hair_gi_cull, 1018 rt_hair_cheap, 1019 rt_hair_gi_mean. Never reuse.
-  kSpecIdWaterHitCost = 1021,        // rt_water_hit_cost: sparse scan / zero incident / unordered K
-  kSpecIdCompactHitState = 1024,     // gpu-opt1: exact hit-state lifetime
-  kSpecIdAlphaMetadataCache = 1022,  // gpu-opt1: query-local immutable alpha metadata
+  // Retired: 1016 water hit shading, 1021 water hit cost. Never reuse.
+  // Retired: 1022 alpha metadata cache, 1023 empty water tiles, 1024 compact hit state. Never reuse.
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
-  kSpecIdWaterEmptyTiles = 1023,     // gpu-opt1: exact empty compose tiles
   kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
-// rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1
-// compiles the pool consumer's N flip for rows with h2.w = 5 (shaders/rt/native_hit_material.hlsli). Only in the Ultra-like
-// instanced configuration (wind RGB on; no IP grass, OMM, native tileset, scalp or hair origin) to keep the request set
-// small (+15 spec requests): elsewhere the define is dropped and those rows are rejected (fail closed, reason `row`).
 // S3: full-box counters always bind set 4 b1; constant 1011 selects the diagnostic.
-inline constexpr unsigned kHairGroomSlot = 2048u, kCompactHitStateSlot = 4096u, kAlphaMetadataCacheSlot = 8192u, kTraceHalfSlot = 16384u, kPipelineSlots = 32768u;
+inline constexpr unsigned kHairGroomSlot = 2048u, kPipelineSlots = 32768u;
 // rt_hair_groom (constant 1020 on every gi/ file): its own installed slots, so a live A/B toggles between two
 // warmed pipelines instead of rebuilding (a pass waiting for its build is skipped).
 inline unsigned hair_groom_slot(const char* file, bool enabled) {
@@ -65,8 +55,6 @@ inline unsigned hair_groom_slot(const char* file, bool enabled) {
 }
 inline bool occ_stats_entry(const char* file) { return std::strcmp(file, "gi/rt_local_shadows_full_box.hlsl") == 0; }
 
-// rt_hit_material_ip_grass at startup (with kHitInstanced only): RT_HIT_IP_GRASS=1 compiles the fourth instanced family's
-// 3-bit family field and clip counters (rtStats 435..442); without it the instanced variants are unchanged.
 // rt_hit_material_wind_rgb at startup (with kHitInstanced only): RT_HIT_WIND_RGB=1 compiles the third
 // instanced family's clip counters (rtStats 427..434); without it the instanced variants are unchanged.
 
@@ -140,7 +128,7 @@ inline bool cascade_entry(const char* file) {
 // with the 96-byte records and the local-light rays (WATER_LS on top of WATER_SHADOWS), and M5.5's with
 // the 104-byte records and the refraction ray (WATER_REFR on top of both); M5.4c's WATER_GSH on top of each
 // (the records + 8 bytes: the game's sun shadow replaced on the FS that sample it).
-inline constexpr const char* kFixedRequests[] = {"rt/water_light_prepare.hlsl",
+inline constexpr const char* kFixedRequests[] = {
                                                  // rt_water_rr_hitdist (core/water.cpp): the reflection writes RR's hit distance
                                                  "rt/water_reflect.hlsl?WATER_RR_HIT=1",
                                                  // rt_water_rf_edge (core/water.cpp water_rf_edge_request): each compose
@@ -151,16 +139,7 @@ inline constexpr const char* kFixedRequests[] = {"rt/water_light_prepare.hlsl",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
                                                  "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1",
-                                                 "rt/water_reflect.hlsl?WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1",
-                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_HIT_SHADE_LAYOUT=1"};
+                                                 "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1"};
 
 // rt_water_rf_edge: both values share WATER_SPEC_RF_EDGE; core/water.cpp supplies constant 1014.
 inline std::string water_rf_edge_request(const char* req, bool on) {
@@ -178,11 +157,6 @@ inline std::string water_rf_edge_request(const char* req, bool on) {
 // water rays see hair as the gi/ passes do. The physical hair origin (RT_HAIR_PHYSICAL_ORIGIN) is a
 // launch-point image of the gi/ receivers (binding 50): water rays start on the water, so it adds nothing.
 inline constexpr const char* kWaterBases[] = {"rt/water_reflect.hlsl", "rt/water_compose.hlsl"};
-inline std::string water_hit_request(const char* req,bool capable) {
-  std::string out=req;
-  if(capable)out += out.find('?')==std::string::npos ? "?WATER_HIT_SHADE_LAYOUT=1" : ";WATER_HIT_SHADE_LAYOUT=1";
-  return out;
-}
 inline std::string water_request(const char* req, bool cascade, bool scalp = false) {
   std::string out = req;
   (void)cascade;
@@ -195,19 +169,6 @@ inline std::string water_request(const char* req, bool cascade, bool scalp = fal
   return out;
 }
 
-// The current-caster sun pipe (core/gi.cpp g_rt_shadow_current) runs this file only.
-inline bool sun_current_entry(const char* file) { return std::strcmp(file, "gi/rt_shadow.hlsl") == 0; }
-
-// Variant migration step G (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): gi_temporal_mv_sample and
-// gi_prev_radiance_guard are specialization constants 1001 / 1002 (core/gi.cpp refresh), never request defines: their
-// files always carry GI_SPEC_GUARDS=1. gi_temporal reads the motion vector at the rotating sample; the prev-radiance
-// guard covers screen-space GI, every ray-traced GI trace and every D-RF file (shaders/gi/gi_prev_guard.hlsli).
-inline bool temporal_mv_entry(const char* file) { return std::strcmp(file, "gi/gi_temporal.hlsl") == 0; }
-inline bool prev_radiance_entry(const char* file) {
-  return std::strcmp(file, "gi/gi_trace.hlsl") == 0 || std::strncmp(file, "gi/gi_trace_rt", 14) == 0 ||
-         std::strncmp(file, "gi/rt_reflections", 17) == 0;
-}
-inline bool guard_entry(const char* file) { return temporal_mv_entry(file) || prev_radiance_entry(file); }
 
 // The flags that may apply to `file` (scalp/OMM/tileset: every gi/ entry).
 inline unsigned allowed(const char* file) {
@@ -215,12 +176,10 @@ inline unsigned allowed(const char* file) {
   unsigned f = kScalp | kOmm | kTileset;
   if (cascade_entry(file)) f |= kCascade | kSpecCascade;
   if (hair_origin::alternate_entry(file)) f |= kHairOrigin;
-  if (sun_current_entry(file)) f |= kSunCurrent;
-  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb | kHitIpGrass | kHitPool2s;
+  if (hit_material_entry(file)) f |= kHitInstanced | kHitWindRgb;
   if (gi_far_entry(file)) f |= kGiFar;
   if (rf_hit_gi_entry(file)) f |= kRfHitGi;
   if (occ_stats_entry(file)) f |= kOccStats;
-  if (std::strncmp(file,"gi/rt_reflections",17)==0) f |= kTraceHalf;
   if (std::strcmp(file, "gi/gi_composite.hlsl") == 0) f |= kHairFibreGi;
   return f;
 }
@@ -232,17 +191,14 @@ inline constexpr std::array<NoVariant, 0> kWaterNoVariant{};
 
 // The request string for `file` with `flags` (bits outside allowed(file) are ignored; the
 // Hair origin needs the scalp). Defines are in the old wrapper nesting order, outer first,
-// each name once: native markers, OMM, current sun, instanced, cascade, gi_far, then rf_hit_gi.
+// each name once: native markers, OMM, instanced, cascade, gi_far, then rf_hit_gi.
 inline std::string request(const char* file, unsigned flags) {
   flags &= allowed(file);
   if (!(flags & kScalp)) flags &= ~unsigned(kHairOrigin);
-  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb | kHitIpGrass);
-  // rt_spec_cascade is the only cascade path (qualified): every cascade pass but the current-caster sun gets the spec build.
-  if (cascade_entry(file) && !(flags & kSunCurrent)) flags |= kSpecCascade;
-  if (flags & kSunCurrent) flags &= ~unsigned(kSpecCascade);
+  if (!(flags & kHitInstanced)) flags &= ~unsigned(kHitWindRgb);
+  // rt_spec_cascade is the only cascade path (qualified): every cascade pass gets the spec build.
+  if (cascade_entry(file)) flags |= kSpecCascade;
   if (flags & kSpecCascade) flags &= ~unsigned(kCascade);   // the constant, not the request, carries it
-  if (!(flags & kHitInstanced) || !(flags & kHitWindRgb) || (flags & (kHitIpGrass | kOmm | kTileset | kScalp | kHairOrigin)))
-    flags &= ~unsigned(kHitPool2s);
   std::string out = file;
   char sep = '?';
   auto add = [&](const char* def) {
@@ -258,17 +214,9 @@ inline std::string request(const char* file, unsigned flags) {
   if (std::strncmp(file, "gi/", 3) == 0) add("RT_SPEC_NATIVE=1");
   if (hair_origin::alternate_entry(file)) add("RT_SPEC_HAIR_ORIGIN=1");
   if (flags & kOmm) add("RT_OMM_SCENE=1");
-  if (flags & kSunCurrent) {
-    add("RT_SUN_CURRENT=1");
-    add("RT_CASCADE_SUN=1");
-    add("RT_CASCADE_MASKS=1");
-    add("RT_CASCADE_TMIN=0.0");
-    add("RT_CASCADE_TMIN_REL=0.0");
-  }
-  // Steps S2a + S2c: rt_hit_material_instanced (1003), wind RGB (1004) and IP grass (1005) are constants of one module
+  // Steps S2a + S2c: rt_hit_material_instanced (1003) and wind RGB (1004) are constants of one module
   // per hit-material file (core/gi.cpp refresh): RT_SPEC_HIT_INST=1 always, never RT_HIT_INSTANCED or its sub-defines.
   if (hit_material_entry(file)) add("RT_SPEC_HIT_INST=1");
-  if (flags & kHitPool2s) add("RT_HIT_POOL_2S=1");
   if (flags & kCascade) {
     add("RT_CASCADE_MASKS=1");
     if (std::strcmp(file, "gi/rt_shadow.hlsl") == 0) add("RT_CASCADE_SUN=1");  // the sun ray 0xFF
@@ -281,22 +229,13 @@ inline std::string request(const char* file, unsigned flags) {
   if (gi_far_entry(file)) add("RT_SPEC_GI_FAR=1");
   if (rf_hit_gi_entry(file)) add("RF_SPEC_HIT_GI=1");
   if (occ_stats_entry(file)) add("RT_SPEC_OCC_STATS=1");
-  if (flags & kTraceHalf) add("RT_TRACE_HALF=1"); // extra storage binding 31: layout variant
   // Adds shaderInt64 and physical storage buffer reads: keep those capabilities out of the base request.
   if (flags & kHairFibreGi) add("RT_HAIR_FIBRE_GI_REFERENCE=1");
-  if (guard_entry(file)) add("GI_SPEC_GUARDS=1");   // step G: always (the constants carry the two keys)
   return out;
 }
 
 // The value of specialization constant kSpecCascadeId for a request built with kSpecCascade: 1 when the
 // pass would have had RT_CASCADE_MASKS (kCascade allowed for the file), else 0.
-// Consumers of rt_common, including the reference passes outside the cascade set.
-inline bool gpu_opt_entry(const char* file) {
-  return cascade_entry(file) || std::strcmp(file, "gi/rt_hit_two_bounce.hlsl") == 0 ||
-         std::strcmp(file, "gi/rt_local_shadows_match.hlsl") == 0 ||
-         std::strcmp(file, "gi/rt_local_shadows_native_full.hlsl") == 0;
-}
-
 inline unsigned spec_cascade_value(const char* file, unsigned flags) {
   return (flags & kCascade) && (allowed(file) & kCascade) ? 1u : 0u;
 }

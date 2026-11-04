@@ -365,48 +365,6 @@ static void wind_rgb_tests() {
   CHECK(kFamilies == 5 && sizeof kFamilyName / sizeof kFamilyName[0] == kFamilies && kRemapPermBase >= 16 * kFamilies);
   CHECK(uint32_t(WindRgb) < kFamilies && uint32_t(WindRgb) <= 3u);   // word 220 bits 8..9
 }
-// ---- The fourth family, IP grass (rt_hit_material_ip_grass, startup) ----
-static void ip_grass_tests() {
-  using namespace instanced;
-  constexpr uint64_t kDepth = 0x05d39f7537219e12ull, kVs = 0x105e47e448736d89ull, kFs = 0x35a18400f9654d9dull;
-  // 1. Gate: key off -> None everywhere; on -> IpGrass; wind RGB independent of it.
-  CHECK(depth_family(kDepth) == None && deferred_family(kVs, kFs) == None && !frame_vs(kVs) && recipe(kVs, kFs) == nullptr);
-  CHECK(depth_family(kDepth, false, true) == IpGrass && deferred_family(kVs, kFs, false, true) == IpGrass && frame_vs(kVs, false, true));
-  CHECK(!frame_vs(kDepth, true, true) && deferred_family(kVs, kStiFs, true, true) == None);
-  for (bool rgb : {false, true}) for (bool grass : {false, true}) {
-    CHECK(depth_family(kWindDepth, rgb, grass) == Wind && depth_family(k2sDepth, rgb, grass) == AlphaTest2s);
-    CHECK(deferred_family(kWindVs, kWindFs, rgb, grass) == Wind && deferred_family(k2sVs, k2sFs, rgb, grass) == AlphaTest2s);
-    CHECK(depth_family(0x633929ef4f08b8aeull, rgb, grass) == (rgb ? WindRgb : None));
-  }
-  // 2. Recipe: CaptureDraw, LayoutVt4 (VT layers at 1:4..1:7), engine UBO as the 2S family, reflectance at 1:1 byte 16;
-  //    its frame patch puts N at location 2 (UV at 1, W at 0).
-  const auto* r = recipe(kVs, kFs, false, true);
-  CHECK(r && r->capture == vt::CaptureDraw && r->layout == vt::LayoutVt4 && !r->two_sided);
-  CHECK(r->transform_offset == 0 && r->tileset_index_offset == 44 && r->channel_offset == 48 && r->reflectance_offset == 16);
-  CHECK(vt::material_bytes(*r) == 20 && pool::pool_recipe(kVs, kFs) == nullptr);
-  CHECK(frame_location(kVs) == 2 && frame_location(kWindVs) == 1 && frame_location(k2sVs) == 1);
-  unsigned char staged[kStageBytes];uint32_t engine[16]{}, material[8]{};
-  for (uint32_t i = 0; i < 16; ++i) engine[i] = 100 + i;
-  material[4] = 0x3e800000u;   // 0.25 at byte 16
-  CHECK(stage(*r, engine, 16, material, 8, staged));
-  uint32_t idx, ch, refl;std::memcpy(&idx, staged + 100, 4);std::memcpy(&ch, staged + 104, 4);std::memcpy(&refl, staged + kStagePhysical, 4);
-  CHECK(idx == 111 && ch == 112 && refl == 0x3e800000u);
-  // 3. Pairing: the same certificate as wind (time, camera, scene and material words) plus the 2S translation.
-  WindInputs a;a.ok = true;a.time = 3.f;a.scene[0] = .5f;a.material[1] = 2.f;a.camera[0] = 10.f;a.viewproj[0] = 1.f;a.translation[1] = 4.f;
-  WindInputs b = a;
-  CHECK(pair_check(IpGrass, a, b) == PairSame);
-  b = a;b.translation[1] += 64.f;CHECK(pair_check(IpGrass, a, b) == PairPlacement);
-  b = a;b.scene[0] += .01f;CHECK(pair_check(IpGrass, a, b) == PairWind);
-  b = a;b.material[1] += .01f;CHECK(pair_check(IpGrass, a, b) == PairWind);
-  b = a;b.time += 1.f / 30.f;CHECK(pair_check(IpGrass, a, b) == PairOtherFrame);
-  b = a;b.camera[2] += .1f;CHECK(pair_check(IpGrass, a, b) == PairCamera);
-  // 4. Word 220: the family needs bit 10; bits 8..9 of an IP grass row read 0 (a consumer without RT_HIT_IP_GRASS then
-  //    checks the row with the plain bit-exact rule), and every older family reads the same under both masks.
-  const uint32_t flags = row_flags(*r) | family_flags(IpGrass);
-  CHECK(((flags >> 8) & 7u) == 4u && ((flags >> 8) & 3u) == 0u && (flags & 3u) == 0u);
-  for (Family f : {Wind, AlphaTest2s, WindRgb}) CHECK(((family_flags(f) >> 8) & 7u) == ((family_flags(f) >> 8) & 3u));
-  CHECK(kRemapPermBase == 80 && 16u * IpGrass + 16u <= kRemapPermBase);
-}
 int main() {
   using namespace instanced;
   // 1. Families: depth by VS only, G-buffer by the exact pair; the class A STI pair is none of them.
@@ -478,7 +436,6 @@ int main() {
   wind_tests();
   pairing_tests();
   wind_rgb_tests();
-  ip_grass_tests();
   // 7. Stats window lines: the first query of each 120-frame window logs, even when frame % 120 == 0 had none.
   {
     uint64_t logged = UINT64_MAX;

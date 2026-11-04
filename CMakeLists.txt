@@ -39,7 +39,7 @@ add_library(VkLayer_bg3rtx SHARED
   layer/rrpost.cpp
   layer/geocapture.cpp
   layer/rtscene.cpp
-  layer/sun_scene.cpp
+
   layer/omm_backend.cpp
   layer/hair_groom.cpp
   layer/omm_submit.cpp
@@ -331,8 +331,6 @@ add_test(NAME omm_sampler_bindings_test COMMAND omm_sampler_bindings_test)
 add_executable(omm_native_plain_test tests/omm_native_plain_test.cpp layer/omm_native_plain.cpp)
 target_include_directories(omm_native_plain_test PRIVATE ${VULKAN_SDK}/Include)
 add_test(NAME omm_native_plain_test COMMAND omm_native_plain_test)
-add_executable(native_sun_math_test tests/native_sun_math_test.cpp)
-add_test(NAME native_sun_math_test COMMAND native_sun_math_test)
 # Explicit synthetic GPU probe only. Never registered in routine CTest and never
 # launched by a build. No game, presentation or global loader settings changes.
 option(BG3RTX_OMM_GPU_SMOKE "Build the opt-in synthetic EXT OMM console probe" OFF)
@@ -342,8 +340,6 @@ if(BG3RTX_OMM_GPU_SMOKE)
 endif()
 add_executable(spirv_visibility_test tests/spirv_visibility_test.cpp)
 add_test(NAME spirv_visibility_test COMMAND spirv_visibility_test)
-add_executable(alpha_metadata_cache_test tests/alpha_metadata_cache_test.cpp)
-add_test(NAME alpha_metadata_cache_test COMMAND alpha_metadata_cache_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
@@ -373,7 +369,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom gpu_opt1_water mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint water_surface_shader water_surface_gate)
+  foreach(py_test core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_diagnostic batch_jobs_lint water_surface_shader water_surface_gate)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -427,8 +423,6 @@ add_test(NAME box_light_test COMMAND box_light_test)
 # rf_hit_gi: the hit's composition against the screen's chain (common/hit_gi_compose.h).
 add_executable(hit_gi_compose_test tests/hit_gi_compose_test.cpp)
 add_test(NAME hit_gi_compose_test COMMAND hit_gi_compose_test)
-add_executable(native_sun_packets_test tests/native_sun_packets_test.cpp)
-add_test(NAME native_sun_packets_test COMMAND native_sun_packets_test)
 add_executable(native_hit_qualify_test tests/native_hit_qualify_test.cpp)
 add_test(NAME native_hit_qualify_test COMMAND native_hit_qualify_test)
 add_executable(native_hit_pool_test tests/native_hit_pool_test.cpp)
@@ -446,8 +440,6 @@ add_test(NAME native_vt_recipes_test COMMAND native_vt_recipes_test)
 # rt_hit_material_instanced (common/native_hit_instanced.h): per-draw rows of instanced wind / 2S draws.
 add_executable(native_hit_instanced_test tests/native_hit_instanced_test.cpp)
 add_test(NAME native_hit_instanced_test COMMAND native_hit_instanced_test)
-add_executable(native_hit_generated_test tests/native_hit_generated_test.cpp)
-add_test(NAME native_hit_generated_test COMMAND native_hit_generated_test)
 add_executable(emissive_policy_test tests/emissive_policy_test.cpp)
 add_test(NAME emissive_policy_test COMMAND emissive_policy_test)
 # M5.1 water policy (common/water_policy.h): classes of the asset-DB water families, records.
@@ -610,8 +602,6 @@ set_target_properties(bg3rtx_core PROPERTIES PDB_NAME "bg3rtx_core_$<CONFIG>")
 add_executable(native_hit_recording_test tests/native_hit_recording_test.cpp)
 add_test(NAME native_hit_recording_test COMMAND native_hit_recording_test)
 
-add_executable(water_world_lights_test tests/water_world_lights_test.cpp)
-add_test(NAME water_world_lights_test COMMAND water_world_lights_test)
 
 add_executable(rr_post_temporal_test tests/rr_post_temporal_test.cpp)
 add_test(NAME rr_post_temporal_test COMMAND rr_post_temporal_test)

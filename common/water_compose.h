@@ -367,55 +367,6 @@ inline LightingUse lighting_use(uint64_t stash_frame, uint64_t now) {
   if (stash_frame == now) return LightingUse::kThisFrame;
   return stash_frame + kLightingLagFrames >= now ? LightingUse::kEarlier : LightingUse::kNone;
 }
-// Borrowed lights, TLAS and camera must describe one lighting frame. The immediately
-// previous frame is usable only when compose shifts the ray into that frame's space.
-// Failure selects ordinary composition, preserving shadows and refraction.
-// Scene/material retention does not retain the game's lighting buffers, views or
-// descriptor sets. Same-frame inputs are safe; F-1 requires this frame's DEFERRED
-// pass to bind the same complete tuple, including the borrowed game set. Forward
-// bindings are a separate contract: they only control the shared WATER_LS slots.
-inline constexpr bool hit_shade_lighting_seen(uint64_t observed, uint64_t now, bool same_game, bool same_inputs) {
-  return observed && observed == now && same_game && same_inputs;
-}
-template<class Binding, class Set> struct HitLightingObservation {
-  uint64_t frame = 0;
-  Binding lights[9]{};
-  Set game{};
-  void note(uint64_t now, const Binding* inputs, Set set) {
-    *this = {};
-    if (!inputs || set == Set{}) return;
-    frame = now; game = set;
-    for (unsigned i=0; i<9; ++i) lights[i] = inputs[i];
-  }
-  template<class Equal>
-  bool seen(uint64_t now, const Binding* inputs, Set set, Equal equal, int& mismatch) const {
-    mismatch = -1;
-    for (unsigned i=0; i<9; ++i) if (!equal(lights[i],inputs[i])) {
-      mismatch = int(i); break;
-    }
-    return hit_shade_lighting_seen(frame,now,game == set,mismatch < 0);
-  }
-};
-inline constexpr bool hit_shade_inputs_alive(uint64_t lighting_frame, uint64_t now, bool seen_this_frame) {
-  return lighting_frame && (lighting_frame == now || seen_this_frame);
-}
-inline constexpr bool hit_shade_frame_ok(uint64_t lighting_frame, uint64_t now, bool same_tlas,
-                                         bool same_lights, bool shifted) {
-  return lighting_frame && same_tlas && same_lights &&
-      (lighting_frame == now || (shifted && now > lighting_frame && now - lighting_frame == 1));
-}
-// F-1 must select the lighting stash, even if this frame already has a newer
-// TLAS. Validate/retain that exact generation before replacing the ordinary pair.
-inline constexpr bool hit_shade_previous_frame(uint64_t lighting_frame,uint64_t now,bool enabled,bool shift) {
-  return enabled && shift && lighting_frame && now>lighting_frame && now-lighting_frame==1;
-}
-// WATER_LS and hit shading share b22..28. A borrowed lighting list can replace
-// the forward list only if its identity matches; otherwise keep native LS energy.
-inline constexpr bool hit_shade_local_shadows(bool shade,bool same_lights) {
-  return !shade || same_lights;
-}
-inline constexpr uint32_t kCsHitAttempt=57,kCsHitHidden=58,kCsHitOffscreen=59,kCsHitReject=60,kCsHitEnd=64;
-
 // Why lighting_use refused (the "[water] compose stability" line): the stash cleared, too old, ahead.
 enum class LightingRefusal : uint32_t { kCleared = 0, kOld, kAhead };
 inline LightingRefusal lighting_refusal(uint64_t stash_frame, uint64_t now) {
@@ -448,17 +399,6 @@ bool reference_scene(Handle selected,uint64_t expected,Handle& reference,uint64_
   }
   return true;
 }
-// Publish a borrowed hit-shading tuple only after both providers validate the
-// lighting generation. A failed query must not partially replace ordinary compose.
-template<class Handle,class Set,class Reference,class Material>
-bool reference_hit_scene(Handle selected,Set alpha,uint64_t expected,Handle& reference,Set& materials,
-                         Reference query,Material material){
-  reference={};materials={};Handle candidate{};Set candidate_material{};uint64_t identity=0;
-  if(!expected || alpha==Set{} || !reference_scene(selected,expected,candidate,identity,query) ||
-     !material(candidate,alpha,identity,&candidate_material) || candidate_material==Set{})return false;
-  reference=candidate;materials=candidate_material;return true;
-}
-
 template <class TakeNewer, class KeepStash>
 ScenePick pick_scene(LightingUse use, bool cur_ok, bool cur_is_stash, uint64_t built, uint64_t now, TakeNewer take_newer,
                      KeepStash keep_stash) {
@@ -561,7 +501,7 @@ inline constexpr uint32_t kCsSlotWordsLs = 128;   // core/water.cpp kCStatBytes 
 // water draw's colour copy).
 // Bit 4 the game's sun shadow replaced (rt_water_game_shadow, WATER_GSH variants only: with bit 1, a
 // game-shadowed record lit by the traced ray gets C + Dg; clear, the game's Vg stays where the ray is lit).
-inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u, kFlagSceneShift = 32u, kFlagHitShade = 64u;
+inline constexpr uint32_t kFlagRf = 1u, kFlagSun = 2u, kFlagLs = 4u, kFlagRefr = 8u, kFlagGsh = 16u, kFlagSceneShift = 32u;
 inline uint32_t ratio_bin(float al, float b) {   // 0 none (B = 0), else the word
   if (!(b > 0.0f)) return 0;
   const float r = al / b;
@@ -620,7 +560,7 @@ inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, Co
 inline constexpr bool compose_plain_counter(uint32_t i) {
   return (i>=kCsSurfaceClean && i<=kCsSurfaceFsOff) || (i>=kCsSurfaceComposeOff && i<=kCsSurfaceEdge) || i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
       (i>=kCsLsRec && i<kCsLsSumL) || i==kCsLsChkShWithin || i==kCsNonFinite ||
-      (i==55 || (i>=kCsHitAttempt && i<kCsHitEnd)) || (i>=kCsRrRec && i<kCsRrSumGame);
+      (i>=kCsRrRec && i<kCsRrSumGame);
 }
 
 }  // namespace bg3::water

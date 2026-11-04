@@ -144,11 +144,6 @@ struct SceneSlot {
   VkDeviceSize camera_offset = 0;
   float camera_pose[56] = {};
   bool camera_pose_valid = false;
-  BvhSunBase sun_base;
-  VkCommandBuffer producer = VK_NULL_HANDLE;
-  sun_coverage::NativeEpoch native_epoch;
-  VkBuffer native_frame_buffer = VK_NULL_HANDLE;
-  VkDeviceSize native_frame_offset = 0;
 };
 uint64_t g_legacy_rec = 0;   // the legacy BLAS's last build: refit only once it was submitted
 SceneSlot g_scene[kSceneSlots];
@@ -840,7 +835,6 @@ void rt_device_created(DeviceData* dd, bool enabled) {
 void rt_device_destroyed(DeviceData* dd) {
   if (dd != g_dd) return;
   native_hit::device_destroyed(dd);
-  sun_device_destroyed(dd);
   omm::device_destroyed(dd);
   omm::bake_device_destroyed(dd);
   omm::submit_device_destroyed(dd);
@@ -1123,8 +1117,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
   float source_camera[56]{};
   const bool source_camera_valid = read_mapped(cap.ubo, cap.ubo_offset, source_camera, sizeof source_camera);
   scene.pose_valid = false;
-  scene.sun_base = {}; scene.producer = VK_NULL_HANDLE;
-  scene.native_epoch = {}; scene.native_frame_buffer=VK_NULL_HANDLE;scene.native_frame_offset=0;
   if (cfg_int("pan_capture", 0) > 0 || cfg_int("pan_prepare", 0)) {
     void* mapped = nullptr;
     if (!scene.pose) alloc_host_buffer(256, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1222,9 +1214,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     std::memcpy(scene.camera_pose, source_camera, sizeof source_camera);
     scene.camera_pose_valid = source_camera_valid;
     publish_water_build_camera(cmd, scene, source_camera, source_camera_valid);
-    scene.sun_base=res.sun_base;scene.producer=cmd;
-    scene.native_epoch=cap.native_epoch;
-    scene.native_frame_buffer=cap.native_frame_buffer;scene.native_frame_offset=cap.native_frame_offset;
     fault_checkpoint(cmd, kCkSceneCommitted, uint32_t(scene_slot));
     ++g_n_frames;
     ++g_n_split;
@@ -1546,29 +1535,6 @@ bool rt_hit_material_use(VkCommandBuffer cmd,VkAccelerationStructureKHR selected
     if(!native_hit::register_use(cmd,i,query_alpha))return false;
     s.last_use=(std::max)(s.last_use,frame_index());alpha_slot_in_use(i,s.last_use);return true;
   }return false;
-}
-
-bool rt_sun_base_capture(VkAccelerationStructureKHR selected_tlas, VkDescriptorSet selected_alpha, SunBaseCapture* out) {
-  if(!out) return false;
-  *out={};
-  if(!g_rt || !selected_tlas || !selected_alpha) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  for(uint32_t i=0;i<kSceneSlots;++i) {
-    SceneSlot& s=g_scene[i];
-    if(!s.used || !s.split || (s.tlas!=selected_tlas && s.omm_reference!=selected_tlas) || s.set!=selected_alpha || !s.camera_pose_valid ||
-       !s.sun_base.record || !sun_coverage::valid(s.native_epoch) ||
-       slot_retired(s,life_gpu_done(),frame_index()) || bvh_rec_state(s.rec)==2) continue;
-    out->base=s.sun_base;out->slot=i;out->producer=s.producer;
-    out->native_epoch=s.native_epoch;out->native_frame_buffer=s.native_frame_buffer;
-    out->native_frame_offset=s.native_frame_offset;
-    out->camera_buffer=s.camera;out->camera_offset=s.camera_offset;
-    std::memcpy(out->camera,s.camera_pose,sizeof out->camera);
-    // The late clone keeps precisely these mesh/alpha references alive.
-    s.last_use=(std::max)(s.last_use,frame_index());
-    alpha_slot_in_use(i,s.last_use);update_oldest_live();
-    return true;
-  }
-  return false;
 }
 
 void rt_log_state(const char* prefix) {

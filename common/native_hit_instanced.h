@@ -18,7 +18,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include "native_hit_generated.h"
 #include "native_hit_join.h"
 #include "native_hit_qualify.h"
 #include "native_vt_surface.h"
@@ -30,82 +29,32 @@ namespace bg3::native_hit::instanced {
 // all inside the precise _26 = _25 + offset * fade). No clip tolerance is derived for the flutter term: the rows
 // are checked bit for bit (the wind rows were 100% bit-exact live, m4i 2026-11-01), fail closed. Off unless
 // rt_hit_material_wind_rgb (startup; gate() below), so the two other families are unchanged with it off.
-// IpGrass (4): IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT (rt_hit_material_ip_grass, startup). Asset DB: depth
-// 05d39f75/73849471, G-buffer 105e47e4/35a18400. Both VSs place the vertex with the same wind arithmetic (dumped GLSL: frame
-// 0:0 _m0, scene 0:1 _m1/_m3/_m5, camera 0:2 _m2/_m6, the 1:0 translation _m1 @32 as 2S, 1:1 _m1/_m2, the 1:3 noise texture);
-// its rows are checked bit for bit (no tolerance). Word 220 bits 8..10 hold the family: a consumer without RT_HIT_IP_GRASS
-// reads bits 8..9 = 0 and checks the row bit for bit with the plain per-draw rule (fail closed, uncounted).
-enum Family : uint32_t { None = 0, Wind = 1, AlphaTest2s = 2, WindRgb = 3, IpGrass = 4 };
-inline constexpr uint32_t kFamilies = 5;   // per-family counter arrays (index 0 unused); word 220 bits 8..10 hold 0..4
+enum Family : uint32_t { None = 0, Wind = 1, AlphaTest2s = 2, WindRgb = 3 };
+inline constexpr uint32_t kFamilies = 5;   // Preserve the retired fifth counter slot and remap offsets (index 0 unused).
 struct Pair { uint64_t depth_vs, vs, fs; Family family; };
 inline constexpr Pair kPairs[] = {
     {0x1719e9d0d14390f5ull, 0x50fbfceb06192473ull, 0x8e49cde81b680054ull, Wind},
     {0x106a055077bc19d6ull, 0x1e9145e4b621a5e0ull, 0x923131c7039f33daull, AlphaTest2s},
-    {0x633929ef4f08b8aeull, 0x735d5a19130262bdull, 0x838318119b2f43d8ull, WindRgb},
-    {0x05d39f7537219e12ull, 0x105e47e448736d89ull, 0x35a18400f9654d9dull, IpGrass}};
-inline constexpr const char* kFamilyName[] = {"none", "wind", "alpha-test 2S", "wind RGB 2S", "IP grass"};
-// A family the startup keys leave off is None: WindRgb needs rt_hit_material_wind_rgb, IpGrass rt_hit_material_ip_grass.
-inline Family gate(Family f, bool wind_rgb, bool ip_grass = false) {
-  return (f == WindRgb && !wind_rgb) || (f == IpGrass && !ip_grass) ? None : f;
-}
-// Generated rows (rt_hit_material_generated, common/native_hit_generated.h): instanced pairs proven offline to compute the
-// same positions as an audited bit-exact family (same depth VS + the same G-buffer gl_Position statements, or depth and
-// G-buffer VS equal to each other with the family's bindings), so they take that family's pairing certificate, key and
-// remap; their rows are checked bit for bit at the hit like the family's. Only with `generated` (the key): with it off
-// every lookup below is exactly the audited one. They are not gated by the wind RGB / IP grass keys: those gate the
-// audited pairs of their families, while a generated row only borrows the family's certificate.
-inline const generated::Row* generated_draw(uint64_t vs, uint64_t fs) {
-  const auto* g = generated::row(vs, fs);
-  return g && g->recipe.capture == native_vt::CaptureDraw && g->family > uint32_t(None) && g->family < kFamilies ? g : nullptr;
-}
-inline const generated::Row* generated_depth(uint64_t depth_vs) {
-  for (uint32_t i = 0; i < generated::kRowCount; ++i) {
-    const auto& g = generated::kRows[i];
-    if (g.recipe.capture == native_vt::CaptureDraw && g.depth_vs == depth_vs && g.family > uint32_t(None) && g.family < kFamilies) return &g;
-  }
-  return nullptr;
-}
-inline const generated::Row* generated_vs(uint64_t vs) {
-  for (uint32_t i = 0; i < generated::kRowCount; ++i)
-    if (generated::kRows[i].recipe.capture == native_vt::CaptureDraw && generated::kRows[i].recipe.vs == vs) return &generated::kRows[i];
-  return nullptr;
-}
-// The family of a depth-prepass draw (by its VS: the depth FS is any alpha-table VT FS).
-inline Family depth_family(uint64_t vs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
-  for (const auto& p : kPairs) if (p.depth_vs == vs) {
-    const Family f = gate(p.family, wind_rgb, ip_grass);
-    // An audited depth VS whose family is off still pairs with that family's generated G-buffer pairs.
-    if (f != None || !generated || !generated_depth(vs)) return f;
-    return p.family;
-  }
-  if (const auto* g = generated ? generated_depth(vs) : nullptr) return Family(g->family);
+    {0x633929ef4f08b8aeull, 0x735d5a19130262bdull, 0x838318119b2f43d8ull, WindRgb}};
+inline constexpr const char* kFamilyName[] = {"none", "wind", "alpha-test 2S", "wind RGB 2S", "reserved"};
+// WindRgb requires its startup key. The other audited families are always available.
+inline Family gate(Family f, bool wind_rgb) { return f == WindRgb && !wind_rgb ? None : f; }
+inline Family depth_family(uint64_t vs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.depth_vs == vs) return gate(p.family, wind_rgb);
   return None;
 }
-// The family of a G-buffer draw (the exact audited pair).
-inline Family deferred_family(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
-  for (const auto& p : kPairs) if (p.vs == vs && p.fs == fs) return gate(p.family, wind_rgb, ip_grass);
-  if (const auto* g = generated ? generated_draw(vs, fs) : nullptr) return Family(g->family);
+inline Family deferred_family(uint64_t vs, uint64_t fs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.vs == vs && p.fs == fs) return gate(p.family, wind_rgb);
   return None;
 }
-// The G-buffer VSs whose UV/N/B/T outputs get the XFB frame patch (locations 0/1/2/3 as 2d2ac3c3; IpGrass 1/2/3/4:
-// frame_location below). generated: the startup value of rt_hit_material_generated (the patch is made at pipeline creation).
-inline bool frame_vs(uint64_t vs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
-  for (const auto& p : kPairs) if (p.vs == vs && gate(p.family, wind_rgb, ip_grass) != None) return true;
-  return generated && generated_vs(vs);
+inline bool frame_vs(uint64_t vs, bool wind_rgb = false) {
+  for (const auto& p : kPairs) if (p.vs == vs && gate(p.family, wind_rgb) != None) return true;
+  return false;
 }
-// The N location of an instanced G-buffer VS (spirv_xfb.h native_vt_location; UV one below; the frame lands at 24/36/48).
-// A generated VS: the location the generator read from its interface (0de1b186: 2, as 105e47e4).
-inline uint32_t frame_location(uint64_t vs, bool generated = false) {
-  if (vs == 0x105e47e448736d89ull) return 2u;
-  const auto* g = generated ? generated_vs(vs) : nullptr;
-  return g ? g->frame_location : 1u;
-}
-// The recipe of an instanced pair (native_vt_surface.h CaptureDraw rows; generated: common/native_hit_generated.h).
-inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs, bool wind_rgb = false, bool ip_grass = false, bool generated = false) {
+inline uint32_t frame_location(uint64_t) { return 1u; }
+inline const native_vt::Recipe* recipe(uint64_t vs, uint64_t fs, bool wind_rgb = false) {
   const auto* r = native_vt::recipe(fs);
-  if (deferred_family(vs, fs, wind_rgb, ip_grass) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw) return r;
-  const auto* g = generated && !r ? generated_draw(vs, fs) : nullptr;
-  return g ? &g->recipe : nullptr;
+  return deferred_family(vs, fs, wind_rgb) != None && r && r->vs == vs && r->capture == native_vt::CaptureDraw ? r : nullptr;
 }
 // Draw key shared by the depth and the G-buffer draw: the draw words (kind, count, instances, first,
 // vertex offset) and the index binding of the ordinary key, the family; no vertex-buffer words (the two
@@ -131,20 +80,6 @@ inline DeferredQualify deferred_qualify(bool exact_pipeline, uint32_t kind, uint
   if (!exact_pipeline || kind > 1 || !instances || stride < kStaticMinStride) return DeferredQualify::PipelineDeclined;
   return DeferredQualify::Accept;
 }
-// IP_Base_VT shares IP_AlphaTest's deferred pair but has no alpha record. This
-// lookup is a recording-time hint, not a certificate: depth can record later.
-// The caller supplies only current-frame sources; the final pairing certificate
-// and GPU clip/UV checks remain mandatory. Other audited families are unchanged.
-inline bool capture_source_ok(Family family, bool generated, const DrawJoin* source, const DrawKey& key) {
-  if (!generated && family != IpGrass) return true;
-  uint32_t record = UINT32_MAX;
-  return source && source->unique_source(key, record);
-}
-// Generated 2S G-buffer and depth packets record in parallel. Capture speculatively
-// when depth has not arrived; join_packets still rejects missing/duplicate sources.
-inline bool capture_without_source_ok(Family family, bool generated) {
-  return generated && family == AlphaTest2s;
-}
 // The gather (shaders/rt/hit_material_gather.hlsl) reads the 8995 engine layout: v[4] p0 @64, v[5] p1
 // @80, words.y tile-set index @100, words.z channel @104, and the 1:1 x @0 of a separate binding. The
 // STI engine bytes (p0 @transform, p1 @+16, index and channel at the recipe's offsets) and the 1:1
@@ -157,18 +92,13 @@ inline bool stage(const native_vt::Recipe& r, const uint32_t* engine, uint32_t e
   std::memset(out, 0, sizeof out);
   const uint32_t t = r.transform_offset / 4u, index = r.tileset_index_offset / 4u, channel = r.channel_offset / 4u,
                  refl = r.reflectance_offset / 4u;
-  // ReflectanceConstant of a per-draw row (generated rows only, e.g. e4ade329 = 3da860be: RT2.y is 0.5 and there is no
-  // 1:1 UBO): the gather's 1:1 float is staged as 0.5. No audited CaptureDraw recipe is constant and pool recipes are
-  // never staged, so every audited staging is unchanged (a constant pool recipe is still refused).
-  const bool constant = r.reflectance == native_vt::ReflectanceConstant && r.capture == native_vt::CaptureDraw;
-  if ((r.reflectance != native_vt::ReflectanceUbo && !constant) || (r.layout != native_vt::LayoutBase && r.layout != native_vt::LayoutVt4) ||
-      t + 8u > engine_words || index >= engine_words || channel >= engine_words || (!constant && refl >= material_words))
+  if (r.reflectance != native_vt::ReflectanceUbo || (r.layout != native_vt::LayoutBase && r.layout != native_vt::LayoutVt4) ||
+      t + 8u > engine_words || index >= engine_words || channel >= engine_words || refl >= material_words)
     return false;
   std::memcpy(out + 64, engine + t, 32);
   std::memcpy(out + 100, engine + index, 4);
   std::memcpy(out + 104, engine + channel, 4);
-  const float half = 0.5f;
-  std::memcpy(out + kStagePhysical, constant ? static_cast<const void*>(&half) : static_cast<const void*>(material + refl), 4);
+  std::memcpy(out + kStagePhysical, material + refl, 4);
   return true;
 }
 // Row word 220 of a per-draw row: flags, bit 0 = two-sided (the consumer scales the N column by
@@ -305,9 +235,9 @@ inline PairOutcome pair_check(Family family, const WindInputs& pre, const WindIn
   if (family == None || !pre.ok || !def.ok) return PairUnread;
   if (std::memcmp(&pre.time, &def.time, 4)) return PairOtherFrame;
   if (std::memcmp(pre.viewproj, def.viewproj, sizeof pre.viewproj) || std::memcmp(pre.camera, def.camera, sizeof pre.camera)) return PairCamera;
-  if ((family == AlphaTest2s || family == IpGrass) && std::memcmp(pre.translation, def.translation, sizeof pre.translation))
+  if (family == AlphaTest2s && std::memcmp(pre.translation, def.translation, sizeof pre.translation))
     return PairPlacement;
-  if ((family == Wind || family == WindRgb || family == IpGrass) &&
+  if ((family == Wind || family == WindRgb) &&
       (std::memcmp(pre.scene, def.scene, sizeof pre.scene) || std::memcmp(pre.material, def.material, sizeof pre.material)))
     return PairWind;
   if (family == WindRgb && std::memcmp(&pre.flutter, &def.flutter, 4)) return PairWind;
@@ -351,7 +281,7 @@ inline void remap_instances(const unsigned char* pre, const unsigned char* def, 
 }
 // The remap buffer (host-visible, per query): 4 counters per family at 16 x family bytes, then the
 // permutation words of each remapped row.
-inline constexpr uint32_t kRemapPermBase = 16 * kFamilies;   // 80 with the fifth counter block (IpGrass)
+inline constexpr uint32_t kRemapPermBase = 16 * kFamilies;   // 80; retired fifth counter slot stays reserved.
 static_assert(kRemapPermBase >= 16 * kFamilies, "remap counters (16 B per family) before the permutations");
 // The layer's "[hit material instanced]" lines (rt_stats): the first query that reaches the log in each 120-frame
 // window prints them, not only a query on frame % 120 == 0: that one query is often rejected (source epoch one frame

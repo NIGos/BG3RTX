@@ -1,9 +1,5 @@
 #include "hit_material.h"
 #include "assetdb.h"
-#include "../common/mesh_paks.h"
-#include "../common/pak_uv_join.h"
-#include "shader_cache.h"
-#include <map>
 #include "omm_sampler.h"
 #include "../common/native_hit_capability.h"
 #include "../common/native_hit_join.h"
@@ -27,8 +23,6 @@
 #include <cmath>
 #include <memory>
 #include <set>
-#include <fstream>
-#include <filesystem>
 namespace bg3 {bool geo_native_tileset_enabled();bool geo_native_tileset_material_inputs(VkPipeline,native_hit::TilesetInputs*);}
 namespace bg3::native_hit {
 namespace {
@@ -75,8 +69,6 @@ struct Material {uint32_t source_raw{},deferred_raw{},snapshot{},chunk{},reflect
  // The VS inputs at record (native_hit_instanced.h pair_check; wind: wind_clip_tolerance) and the
  // draw's instance count (the instance blocks of rt/hit_material_instanced_remap.hlsl).
  uint32_t family{},instances{};bool staged{};instanced::WindInputs inputs;
- bool pak_color{}; // COLOR_0 certified against a joined local GR2; native XFB publishes all four channels
- bool generated{}; // rt_hit_material_generated: the row's recipe is a generated one (common/native_hit_generated.h)
 };
 struct Deferred {
  std::vector<Buffer> chunks;Buffer rows;uint64_t command{},recording{},frame{};VkBuffer camera{};VkDeviceSize camera_offset{},cursor{},total{};
@@ -86,7 +78,6 @@ struct Deferred {
  FamilyCensus declined; // G-buffer draws of other native pairs (what to qualify next)
  uint32_t uncaptured_draws{},uncaptured_instanced{};uint64_t uncaptured_vertices{}; // audited FS, no geometry path (native_vt::CaptureNone)
  Buffer staged;InstancedCount instanced[instanced::kFamilies]; // rt_hit_material_instanced: staged gather inputs (host, 512 B per row)
- InstancedCount generated; // rt_hit_material_generated: its instanced G-buffer draws (also counted in their family)
 };
 struct SourceSnapshot {DrawJoin join;std::vector<Pre> pre;};
 struct Slot {
@@ -118,136 +109,12 @@ bool instanced_live(){return instanced_on && cfg_hot(CfgHot::rt_hit_material_ins
 // rt_hit_material_wind_rgb (startup, needs rt_hit_material_instanced): the third instanced family (wind RGB 2S
 // translucency, native_hit_instanced.h WindRgb). Off: every instanced:: lookup below sees only wind and 2S.
 bool wind_rgb_on{};
-// rt_hit_material_ip_grass (startup, needs rt_hit_material_instanced): the fourth instanced family (IP_Wind_GrassFlowers,
-// native_hit_instanced.h IpGrass). Off: every instanced:: lookup below sees it as None.
-bool ip_grass_on{};
-// Then live: the key's current value (read once per frame in pool_rollover) turns its rows on and off; the frame patch
-// and the shader variant stay as started.
-std::atomic<bool> ip_grass_key{true};
-bool ip_grass_rows(){return ip_grass_on && ip_grass_key.load(std::memory_order_relaxed);}
 // rt_hit_material_mask (live, read once per frame in pool_rollover): the Base_MSK_VT pool pair (native_vt_surface.h
 // LayoutMask). Off: pool_recipe_on never returns it, so its draws stay "other pair" exactly as before.
 std::atomic<bool> pool_mask_on{false};
-// rt_hit_material_generated (common/native_hit_generated.h, tools/material_families/recipe_rows.py): its startup value
-// patches the generated instanced G-buffer VSs (the XFB frame outputs), then the live key (read once per frame in
-// pool_rollover) turns the generated pool and instanced rows on and off. Off at startup: every lookup is the audited one.
-bool generated_on{};
-bool paks_on{};
-std::atomic<bool> paks_key{false};
-bool paks_rows(){return paks_on&&paks_key.load(std::memory_order_relaxed);}
-const native_vt::Recipe* paks_recipe(uint64_t vs,uint64_t fs){
- if(vs!=0x2d2ac3c38992b7f0ull||fs!=0xb0ecc292e8661561ull)return nullptr;
- const auto* r=generated::row(vs,fs);return r?&r->recipe:nullptr;
-}
-std::atomic<bool> generated_key{true};
-bool generated_rows(){return generated_on && generated_key.load(std::memory_order_relaxed);}
-bool generated_recipe(const native_vt::Recipe* r){return r && generated::row_of(r)!=nullptr;}
 const native_vt::Recipe* pool_recipe_on(uint64_t vs,uint64_t fs){
- const auto* r=pool::pool_recipe(vs,fs,generated_rows());
- if(!r&&paks_rows())r=paks_recipe(vs,fs);
+ const auto* r=pool::pool_recipe(vs,fs);
  return r && r->layout==native_vt::LayoutMask && !pool_mask_on.load(std::memory_order_relaxed)?nullptr:r;
-}
-std::vector<mesh_paks::Row> pak_meshes;
-std::atomic<uint64_t> pak_attempts{0},pak_matches{0},pak_color_matches{0};
-// Candidate counts and publication rejections are separate: UV is not proof.
-std::atomic<uint64_t> pak_uv_attempts{0},pak_uv_unique{0},pak_missing{0},pak_ambiguous{0},pak_invalid{0},pak_witness{0},pak_recipe{0},pak_inputs{0},pak_id_equal{0},pak_id_different{0};
-std::atomic<uint64_t> pak_missing_count{0},pak_missing_uv{0};
-std::atomic<uint64_t> pak_witness_ok{0},pak_witness_mismatch{0},pak_budget_deferred{0};
-std::atomic<uint64_t> pak_recipe_reasons[size_t(mesh_paks::RecipeGate::Count)]{};
-bool paks_recipe_accept(const mesh_paks::Row& row,const CmdState& state,const InstPipe& ip){
- const auto reason=mesh_paks::hlod_recipe_gate(row,state.vs,state.fs,ip.paks_cull_known,ip.paks_two_sided);
- if(reason==mesh_paks::RecipeGate::Ready)return true;
- ++pak_recipe;++pak_recipe_reasons[size_t(reason)];return false;
-}
-// A count absent from the immutable catalogue is terminal, not an input wait.
-bool paks_count_missing(uint32_t count){
- if(mesh_paks::has_candidates(pak_meshes,count))return false;
- ++pak_uv_attempts;++pak_missing;++pak_missing_count;return true;
-}
-struct PakInputAttempt {bool candidate{};~PakInputAttempt(){if(!candidate)++pak_inputs;}};
-mesh_paks::Result paks_candidate(uint32_t count,const float* uv){
- ++pak_uv_attempts;
- const auto first=std::lower_bound(pak_meshes.begin(),pak_meshes.end(),count,[](const auto& row,uint32_t n){return row.index_count<n;});
- const auto last=std::upper_bound(first,pak_meshes.end(),count,[](uint32_t n,const auto& row){return n<row.index_count;});
- auto r=mesh_paks::lookup(std::span<const mesh_paks::Row>(first,last),count,nullptr,uv);
- switch(r.status){case mesh_paks::Match::Unique:++pak_uv_unique;break;
- case mesh_paks::Match::Missing:++pak_missing;++pak_missing_uv;break;case mesh_paks::Match::Ambiguous:++pak_ambiguous;break;
- case mesh_paks::Match::Invalid:++pak_invalid;break;}return r;
-}
-void paks_load(){
- pak_meshes.clear();if(!paks_on)return;
- const auto dir=std::filesystem::path(assetdb_file()).parent_path();
- std::vector<std::string> names;std::error_code ec;
- const auto compact_manifest=dir/"mesh_paks_cov_paks2_compact_20261103.manifest";
- const auto manifest=std::filesystem::exists(compact_manifest,ec)?compact_manifest:dir/"mesh_paks_cov_paks2.manifest";
- if(std::filesystem::exists(manifest,ec)){
-  if(ec || std::filesystem::file_size(manifest,ec)>1024*1024 || ec)return;
-  std::ifstream list(manifest);const std::string text((std::istreambuf_iterator<char>(list)),std::istreambuf_iterator<char>());
-  if(list.bad() || !mesh_paks::shard_names(text,names)){log("[hit material paks] invalid shard manifest; no rows published");return;}
-
- }else names.push_back("mesh_paks_cov_paks.bin");
- uint64_t total=0;std::vector<mesh_paks::Row> staged;
- for(const auto& name:names){
-  const auto path=dir/name;const auto size=std::filesystem::file_size(path,ec);
-  if(ec || !mesh_paks::shard_size(size,total)){log("[hit material paks] missing/oversized shard %s; no rows published",name.c_str());return;}total+=size;
-  std::ifstream file(path,std::ios::binary);std::vector<uint8_t> bytes(static_cast<size_t>(size));
-  if(!file.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size())))return;
-  std::vector<mesh_paks::Row> rows;
-  if(!mesh_paks::parse(bytes,rows)){log("[hit material paks] rejected malformed table %s; no rows published",path.string().c_str());return;}
-  for(auto& row:rows)staged.push_back(std::move(row));
- }
- pak_meshes=std::move(staged);
- std::stable_sort(pak_meshes.begin(),pak_meshes.end(),[](const auto& a,const auto& b){return a.index_count<b.index_count;});
- log("[hit material paks] loaded %llu candidates from %zu shards; HLOD full geometry/UV and native Tileset COLOR verification required",(unsigned long long)pak_meshes.size(),names.size());
-}
-
-bool pak_uv_get(const CmdState&,const DrawArgs&,const InstPipe&,std::array<float,64>&);
-bool pak_witness_get(const CmdState&,const DrawArgs&,const InstPipe&,const mesh_paks::Row*,std::shared_ptr<std::atomic<bool>>*);
-void pak_uv_live_owners(std::set<uint64_t>&);
-const mesh_paks::Row* paks_match(const CmdState& state,const DrawArgs& args,const InstPipe& ip,std::shared_ptr<std::atomic<bool>>* proof=nullptr){
- PakInputAttempt attempt;
- if(!paks_rows()||!ip.ok||ip.pos_binding>=CmdState::kMaxVertexBindings||args.kind!=1)return nullptr;
- if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
- // Raw layout restrictions apply only to CPU sampling, not to decoded XFB.
- if(ip.pos_float3 && ip.uv_ok && ip.uv_binding<CmdState::kMaxVertexBindings){
-  const auto& pb=state.vb[ip.pos_binding];const auto& ub=state.vb[ip.uv_binding];
-  const uint64_t ps=geo_buffer_size(pb.buffer),us=geo_buffer_size(ub.buffer),is=geo_buffer_size(state.ib);
-  std::shared_lock lock(tracker().mu);
-  auto bytes=[&](VkBuffer b,uint64_t size,uint64_t offset)->mesh_content::Bytes{
-   const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end()||offset>=size||bm->second.second>UINT64_MAX-offset)return {};
-   const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);const uint64_t start=bm->second.second+offset;
-   if(mp==tracker().mapped.end()||range==tracker().mapped_ranges.end()||start<range->second.first||start>=range->second.second)return {};
-   return {mp->second+start,(std::min)(size-offset,range->second.second-start)};
-  };
-  if(pb.offset>UINT64_MAX-ip.pos_offset||ub.offset>UINT64_MAX-ip.uv_offset)return nullptr;
-  mesh_content::Input in{};in.positions=bytes(pb.buffer,ps,pb.offset+ip.pos_offset);in.stride=ip.pos_stride?ip.pos_stride:uint32_t(pb.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
-  in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
-  if(!in.index_bytes||state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
-  in.indices=bytes(state.ib,is,state.ib_offset+uint64_t(args.first)*in.index_bytes);
-  const auto uv=bytes(ub.buffer,us,ub.offset+ip.uv_offset);
-  mesh_content::Sample sample;const bool sampled=mesh_content::sample(in,sample);
-  if(sampled && uv.data){
-   std::array<float,64> got{};const auto stride=ip.uv_stride?ip.uv_stride:uint32_t(ub.stride);
-   if(!mesh_paks::uv_sample(in,uv,stride,got)){return nullptr;}
-   attempt.candidate=true;auto match=paks_candidate(args.count,got.data());
-   if(match.status!=mesh_paks::Match::Unique)return nullptr;
-   if(sample==match.row->sample)++pak_id_equal;else ++pak_id_different;
-   if(!paks_recipe_accept(*match.row,state,ip))return nullptr;
-   if(!mesh_paks::full_match(*match.row,in,uv,stride,shader_cache::sha256_hex)){++pak_witness;return nullptr;}
-   return match.row;
-  }
- }
- // Unmapped or packed inputs use decoded XFB UVs. A UV candidate cannot
- // authorize publication without the full geometry witness.
- std::array<float,64> got{};
- if(pak_uv_get(state,args,ip,got)){
-  attempt.candidate=true;const auto candidate=paks_candidate(args.count,got.data());
-  if(candidate.status!=mesh_paks::Match::Unique)return nullptr;
-  if(!paks_recipe_accept(*candidate.row,state,ip))return nullptr;
-  if(pak_witness_get(state,args,ip,candidate.row,proof))return candidate.row;
-  ++pak_witness;
- }
- return nullptr;
 }
 // The VS inputs of an instanced draw (native_hit_instanced.h WindInputs), read from the game's mapped UBOs
 // at record: frame 0:0 word 0, camera 0:2 _m2/_m6; wind: scene 0:1 wind words, material 1:1 _m0.._m3;
@@ -260,8 +127,7 @@ instanced::WindInputs read_inputs(VkCommandBuffer cmd,CmdState* state,instanced:
   read_mapped(camera.buffer,camera.offset+instanced::kCameraViewProjOffset,w.viewproj,64) &&
   read_mapped(camera.buffer,camera.offset+instanced::kCameraPositionOffset,w.camera,12);
  // IP grass: the wind words (scene 0:1, material 1:1 _m0.._m3) and the 1:0 translation, both VSs read them.
- if(family==instanced::IpGrass)ok=ok && bound(1,0,engine) && read_mapped(engine.buffer,engine.offset+instanced::kTranslationOffset,w.translation,12);
- if(family==instanced::Wind || family==instanced::WindRgb || family==instanced::IpGrass){
+ if(family==instanced::Wind || family==instanced::WindRgb){
   ok=ok && bound(0,1,scene) && bound(1,1,material) && read_mapped(material.buffer,material.offset,w.material,16);
   // Wind RGB: also 1:1 _m4 (the flutter amplitude both VSs read).
   if(family==instanced::WindRgb)ok=ok && read_mapped(material.buffer,material.offset+16,&w.flutter,4);
@@ -343,7 +209,7 @@ bool mark_owner(VkCommandBuffer cmd,Slot& slot){
  if(std::find(slot.owners.begin(),slot.owners.end(),id)==slot.owners.end())slot.owners.push_back(id);return true;
 }
 uint64_t current_recording(uint64_t command){return cmd_recording(reinterpret_cast<VkCommandBuffer>(uintptr_t(command)));}
-bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_hot(CfgHot::rt_native_tileset)!=0 || paks_rows());}
+bool tileset_active(){return tileset_material_enabled(geo_native_tileset_enabled(),cfg_hot(CfgHot::rt_native_tileset)!=0);}
 DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  DrawKey k;size_t i=0;for(uint64_t v:{uint64_t(a.kind),uint64_t(a.count),uint64_t(a.instances),uint64_t(a.first),uint64_t(uint32_t(a.vertex_offset)),uint64_t(a.first_instance)})k.words[i++]=v;
  k.words[i++]=uint64_t(s.ib);k.words[i++]=s.ib_offset;k.words[i++]=uint64_t(s.ib_type);
@@ -365,7 +231,7 @@ DrawKey key_impl(VkCommandBuffer cmd,const CmdState& s,const DrawArgs& a){
  }
  // rt_hit_material_instanced: the depth draw (by VS) and the G-buffer draw (exact pair) of one
  // instanced wind / 2S mesh share the draw-word + index-range key (native_hit_instanced.h).
- if(instanced_live()){const auto f=instanced::deferred_family(s.vs,s.fs,wind_rgb_on,ip_grass_rows(),generated_rows()),d=instanced::depth_family(s.vs,wind_rgb_on,ip_grass_rows(),generated_rows());
+ if(instanced_live()){const auto f=instanced::deferred_family(s.vs,s.fs,wind_rgb_on),d=instanced::depth_family(s.vs,wind_rgb_on);
   if(f!=instanced::None || d!=instanced::None)return instanced::key(k,f!=instanced::None?f:d);}
  const bool depth=static_depth_family(s.vs,s.fs),deferred=audited_static_family(s.vs,s.fs);
  if(!depth && !deferred)return k;
@@ -524,58 +390,8 @@ bool current(const View& v){
  return i->second.image==v.image && i->second.creation.id==v.id && image!=tracker().images.end() && image->second.id==v.image_id;
 }
 bool material_current(const Material& m){
- if(m.pak_color && !paks_rows() && !cfg_hot(CfgHot::rt_native_tileset))return false;
  if(m.row.reserved==2){for(const auto& v:m.tileset_views)if(!current(v))return false;return true;}
  return current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical);
-}
-// Only the exact audited Tileset pair may turn joined GR2 COLOR into a
-// material row. Position/UV and every COLOR corner are independently checked;
-// the existing XFB path publishes the same native RGBA at NtsColorOffset.
-const mesh_paks::Row* paks_tileset_color(const CmdState& state,const DrawArgs& args){
- PakInputAttempt attempt;
- if(!paks_rows() || !tileset_deferred(state.vs,state.fs) || args.kind!=1)return nullptr;
- if(paks_count_missing(args.count)){attempt.candidate=true;return nullptr;}
- TilesetInputs inputs{};if(!geo_native_tileset_material_inputs(state.pipe[0],&inputs)||!inputs.valid)return nullptr;
- const auto& pa=inputs.attributes[0];const auto& ca=inputs.attributes[4];const auto& ua=inputs.attributes[5];
- if(pa.format!=VK_FORMAT_R32G32B32_SFLOAT || ua.format!=VK_FORMAT_R32G32_SFLOAT)return nullptr;
- const auto encoding=ca.format==VK_FORMAT_R32G32B32A32_SFLOAT?mesh_paks::ColorEncoding::Float4:
-  ca.format==VK_FORMAT_R8G8B8A8_UNORM?mesh_paks::ColorEncoding::Unorm8Rgba:mesh_paks::ColorEncoding::Unknown;
- if(encoding==mesh_paks::ColorEncoding::Unknown)return nullptr;
- uint64_t stream_sizes[6]{};for(uint32_t i:{0u,4u,5u}){
-  const auto binding=inputs.attributes[i].binding;if(binding>=CmdState::kMaxVertexBindings)return nullptr;
-  stream_sizes[i]=geo_buffer_size(state.vb[binding].buffer);
- }
- const uint64_t index_size=geo_buffer_size(state.ib);
- std::shared_lock lock(tracker().mu);
- auto bytes=[&](VkBuffer b,uint64_t offset)->mesh_content::Bytes{
-  const auto bm=tracker().buffer_mem.find(b);if(bm==tracker().buffer_mem.end() || bm->second.second>UINT64_MAX-offset)return {};
-  const auto mp=tracker().mapped.find(bm->second.first);const auto range=tracker().mapped_ranges.find(bm->second.first);
-  const uint64_t start=bm->second.second+offset;
-  if(mp==tracker().mapped.end() || range==tracker().mapped_ranges.end() || start<range->second.first || start>=range->second.second)return {};
-  // Mapping is bounded below by the underlying buffer in stream().
-  return {mp->second+start,range->second.second-start};
- };
- auto stream=[&](uint32_t location,uint32_t& stride)->mesh_content::Bytes{
-  const auto& a=inputs.attributes[location];
-  if(a.binding>=CmdState::kMaxVertexBindings)return {};const auto& vb=state.vb[a.binding];
-  stride=a.dynamic_stride?uint32_t(vb.stride):a.stride;if(!stride || vb.offset>UINT64_MAX-a.offset)return {};
-  const uint64_t at=vb.offset+a.offset,size=stream_sizes[location];if(at>=size)return {};
-  auto b=bytes(vb.buffer,at);b.size=(std::min)(b.size,size-at);return b;
- };
- mesh_content::Input in{};in.positions=stream(0,in.stride);in.count=args.count;in.vertex_offset=args.vertex_offset;
- in.index_bytes=state.ib_type==VK_INDEX_TYPE_UINT32?4:state.ib_type==VK_INDEX_TYPE_UINT16?2:state.ib_type==VK_INDEX_TYPE_UINT8_EXT?1:0;
- if(!in.index_bytes || state.ib_offset>UINT64_MAX-uint64_t(args.first)*in.index_bytes)return nullptr;
- const uint64_t at=state.ib_offset+uint64_t(args.first)*in.index_bytes,size=index_size;if(at>=size)return nullptr;
- in.indices=bytes(state.ib,at);in.indices.size=(std::min)(in.indices.size,size-at);
- mesh_content::Sample sample;if(!mesh_content::sample(in,sample))return nullptr;
- uint32_t uv_stride{},color_stride{};const auto uv=stream(5,uv_stride),color=stream(4,color_stride);
- std::array<float,64> got{};if(!mesh_paks::uv_sample(in,uv,uv_stride,got)){return nullptr;}
- attempt.candidate=true;const auto found=paks_candidate(args.count,got.data());if(found.status!=mesh_paks::Match::Unique)return nullptr;
- if(sample==found.row->sample)++pak_id_equal;else ++pak_id_different;
- const bool joined=mesh_paks::full_match(*found.row,in,uv,uv_stride,shader_cache::sha256_hex) && mesh_paks::color_match(*found.row,in,color,color_stride,encoding,shader_cache::sha256_hex);
- if(!joined)++pak_witness;
- else if(!inputs.cull_known||inputs.two_sided!=bool(found.row->flags&1u))++pak_recipe;
- return mesh_paks::tileset_color_publication(found.row,paks_rows(),joined,inputs.cull_known,inputs.two_sided)?found.row:nullptr;
 }
 bool capture_tileset(VkCommandBuffer cmd,CmdState* resolved,Material& material){
  auto* state=cfg_hot(CfgHot::perf_hook_state)?resolved:cmd_state(cmd);if(!state || !tileset_deferred(state->vs,state->fs))return false;
@@ -604,7 +420,7 @@ bool capture_tileset(VkCommandBuffer cmd,CmdState* resolved,Material& material){
 // recipe of an instanced pair (native_hit_instanced.h): the same LayoutBase bindings, per-draw row.
 bool capture(VkCommandBuffer cmd,CmdState* resolved,Material& material,const native_vt::Recipe* recipe=nullptr,uint32_t* failures=nullptr){
  auto* state=cfg_hot(CfgHot::perf_hook_state)?resolved:cmd_state(cmd);
- if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows())==recipe):audited_static_family(state->vs,state->fs)))return false;
+ if(!state || !(recipe?(pool_recipe_on(state->vs,state->fs)==recipe || instanced::recipe(state->vs,state->fs,wind_rgb_on)==recipe):audited_static_family(state->vs,state->fs)))return false;
  omm::OrdinaryBindingFacts buffer_facts[3]{};bool queried[3]{};uint32_t failed=0;
  auto buffer=[&](uint32_t n,uint32_t set,uint32_t slot,VkDeviceSize minimum,Bg3Binding& out){
   queried[n]=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,set,slot,0,&out,cfg_hot(CfgHot::perf_hook_state)?state:nullptr);
@@ -693,16 +509,11 @@ void collect(bool force=false){
  // Only slots whose frame can still get a query (or whose owners still run) keep their source copy (source_releasable).
  for(auto& s:slots)if(source_releasable(bool(s.data.b),s.frame,now,std::all_of(s.owners.begin(),s.owners.end(),[&](uint64_t id){return retired(id);}))){
   destroy(s.data);s.data_bytes=0;}
- std::set<uint64_t> live;pak_uv_live_owners(live);for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
+ std::set<uint64_t> live;for(const auto& slot:slots)live.insert(slot.owners.begin(),slot.owners.end());
  for(const auto& [id,p]:packets)live.insert(id);for(const auto& [id,q]:queries){live.insert(q->users.ids.begin(),q->users.ids.end());live.insert(id);live.insert(q->source);live.insert(q->deferred->recording);}
  for(auto i=owners.begin();i!=owners.end();)if(!live.contains(i->first) && retired(i->first)){submitted_queues.erase(i->first);i=owners.erase(i);}else ++i;
  for(auto i=marked.begin();i!=marked.end();)if(!owners.contains(i->second))i=marked.erase(i);else ++i;
 }
-bool pak_raw_mutable(VkBuffer b){
- std::shared_lock lock(tracker().mu);const auto i=tracker().buffer_mem.find(b);
- return i!=tracker().buffer_mem.end() && tracker().mapped.contains(i->second.first);
-}
-#include "pak_uv_readback.inl"
 std::shared_ptr<Deferred> packet_for(const Slot& slot){
  std::shared_ptr<Deferred> found;
  for(const auto& [id,p]:packets)if(p->frame==slot.frame && p->camera==slot.camera && p->camera_offset==slot.camera_offset){
@@ -717,10 +528,8 @@ void publish_word(Query& query,uint32_t value){
 // the BVH build lock (pool_lookup, pool_evicted) and never held while calling out, except the
 // tracker/sampler currency checks (their own leaf locks).
 struct PoolMaterial {
- std::shared_ptr<std::atomic<bool>> pak_valid;
  View table,normal,albedo,physical;omm::BoundSampler sampler;uint32_t engine[12]{},reflectance{};
  const native_vt::Recipe* recipe{}; // the record's pair (offsets of engine[], reflectance mode)
- bool pak{},pak_two_sided{}; // full verified HLOD fallback, current captured resources
  View detail_normal,detail_mask;omm::BoundSampler detail_sampler;uint32_t detail[4]{}; // LayoutDetail only
  bool detail_layout() const {return recipe && recipe->layout==native_vt::LayoutDetail;}
  std::array<View,5> plain{};uint32_t plain_floats[6]{}; // LayoutIridescent only (sampler 0:7 in `sampler`)
@@ -763,16 +572,6 @@ PoolObserved& pool_observed(uint64_t frame){
  return pool_obs[0];
 }
 void pool_log(uint64_t frame){
- if(paks_on){
-  uint64_t records=0,ready=0;pool_table.for_each([&](uint64_t,const auto& r){if(r.payload.pak && (!r.payload.pak_valid || r.payload.pak_valid->load(std::memory_order_relaxed))){++records;ready+=r.payload.basis.state==pool::Basis::Ready;}});
-  log("[hit material paks join] attempts %llu unique %llu missing %llu ambiguous %llu invalid %llu witness %llu recipe_cull %llu inputs_pending %llu id_equal %llu id_different %llu draws %llu witness_ok %llu witness_mismatch %llu budget_deferred %llu published_records %llu",(unsigned long long)pak_uv_attempts.load(),(unsigned long long)pak_uv_unique.load(),(unsigned long long)pak_missing.load(),(unsigned long long)pak_ambiguous.load(),(unsigned long long)pak_invalid.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_recipe.load(),(unsigned long long)pak_inputs.load(),(unsigned long long)pak_id_equal.load(),(unsigned long long)pak_id_different.load(),(unsigned long long)pak_attempts.load(),(unsigned long long)pak_witness_ok.load(),(unsigned long long)pak_witness_mismatch.load(),(unsigned long long)pak_budget_deferred.load(),(unsigned long long)records);
-  log("[hit material paks reasons] cumulative draw observations: missing_count %llu missing_uv %llu witness_rejected %llu inputs_unavailable %llu; inputs_pending is not queue depth",(unsigned long long)pak_missing_count.load(),(unsigned long long)pak_missing_uv.load(),(unsigned long long)pak_witness.load(),(unsigned long long)pak_inputs.load());
-  log("[hit material paks recipe] cumulative HLOD first rejection: shader_pair %llu template %llu vertex_color %llu cull_unknown %llu cull_mismatch %llu",
-   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::ShaderPair)].load(),(unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::Template)].load(),
-   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::VertexColor)].load(),(unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::CullUnknown)].load(),
-   (unsigned long long)pak_recipe_reasons[size_t(mesh_paks::RecipeGate::CullMismatch)].load());
-  log("[hit material paks] frame %llu enabled %u: exact %llu/%llu attempts; records %llu basis ready %llu; native Tileset COLOR joins included; unsupported lava recipes remain unknown",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_matches.load(std::memory_order_relaxed),(unsigned long long)pak_attempts.load(std::memory_order_relaxed),(unsigned long long)records,(unsigned long long)ready);
-  log("[hit material paks COLOR] frame %llu enabled %u: native Tileset certified captures %llu; RG blend from full COLOR_0; lava shading unsupported",(unsigned long long)frame,unsigned(paks_rows()),(unsigned long long)pak_color_matches.load(std::memory_order_relaxed));}
  const auto& c=pool_table.counters();const auto& t=pool_table.totals();uint64_t draws=0,instances=0;
  for(size_t i=0;i<size_t(pool::Status::Count);++i){draws+=c.draws[i];instances+=c.instances[i];}
  const PoolObserved empty{};
@@ -803,8 +602,6 @@ void pool_log(uint64_t frame){
   pool_table.for_each([&](uint64_t,const auto& e){if(e.payload.recipe!=&r)return;++records;with_basis+=e.payload.basis.state==pool::Basis::Ready;});
   k+=snprintf(pairs+k,sizeof pairs-k,"%s%08llx/%08llx%s %llu/%llu",k?"; ":"",(unsigned long long)(r.vs>>32),(unsigned long long)(r.fs>>32),tag,(unsigned long long)records,(unsigned long long)with_basis);};
  for(const auto& r:native_vt::recipes)pair(r,"");
- // rt_hit_material_generated: its pool rows, tagged "(gen)".
- if(generated_rows())for(uint32_t i=0;i<generated::kRowCount;++i)pair(generated::kRows[i].recipe,"(gen)");
  log("[hit material pool pairs] frame %llu records/ready UV-basis by pair (VS/FS): %s",(unsigned long long)frame,k>0?pairs:"none");
 }
 void pool_release_slot(PoolMaterial& m){if(m.basis.slot<nh_pool_rows)pool_slots.release(m.basis.slot);m.basis.slot=UINT32_MAX;}
@@ -840,13 +637,9 @@ void pool_rollover(uint64_t frame,uint64_t epoch){
  if(pool_counter_frame && due && cfg_hot(CfgHot::rt_stats))pool_log(pool_counter_frame);
  pool_table.end_frame();pool_counter_frame=frame;pool_basis.rows=pool_basis.row_instances=0;
  pool_mask_on.store(cfg_int("rt_hit_material_mask",0)!=0,std::memory_order_relaxed);
- ip_grass_key.store(cfg_int("rt_hit_material_ip_grass",0)!=0,std::memory_order_relaxed);
- generated_key.store(cfg_int("rt_hit_material_generated",0)!=0,std::memory_order_relaxed);
- paks_key.store(cfg_int("rt_hit_material_paks",0)!=0,std::memory_order_relaxed);
  pool_jobs_poll(frame,epoch);
 }
 bool pool_current(PoolMaterial& m,uint64_t frame){
- if(m.pak && m.pak_valid && !m.pak_valid->load(std::memory_order_relaxed))return false;
  if(m.checked!=frame){m.checked=frame;
   if(m.plain_layout()){m.current=omm::ordinary_sampler_current(m.sampler);for(const auto& v:m.plain)m.current=m.current&&current(v);return m.current;}
   m.current=current(m.table)&&current(m.normal)&&current(m.albedo)&&current(m.physical)&&omm::ordinary_sampler_current(m.sampler)&&
@@ -869,22 +662,16 @@ void cpu_report(uint64_t frames){
   double(cpu_alloc_mb.exchange(0))/double(n),ms[CpuFree],double(cpu_frees.exchange(0))/double(n),double(cpu_reuses.exchange(0))/double(n),
   double(retained)/1048576.0,count,cfg_hot(CfgHot::rt_hit_material_recycle),cfg_hot(CfgHot::rt_hit_material_lean_hooks),ms[CpuLockWait],ms[CpuQueryRecord],int(perf_lists()));
 }
-bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on,ip_grass_on,generated_on);}
-uint32_t instanced_frame_location(uint64_t vs){return instanced::frame_location(vs,instanced_on && generated_on);}
+bool instanced_patch_vs(uint64_t vs){return instanced_on && instanced::frame_vs(vs,wind_rgb_on);}
+uint32_t instanced_frame_location(uint64_t vs){return instanced::frame_location(vs);}
 void device_created(DeviceData* device){std::lock_guard lock(mutex);if(dd)return;dd=device;on=cfg_hot(CfgHot::rt_hit_material)!=0 && cfg_int("rt_alpha",1)!=0 && cfg_int("rt_bvh_split",1)!=0;
  instanced_on=on && cfg_int("rt_hit_material_instanced",0)!=0;
  wind_rgb_on=instanced_on && cfg_int("rt_hit_material_wind_rgb",0)!=0;
- ip_grass_on=instanced_on && cfg_int("rt_hit_material_ip_grass",0)!=0;
- generated_on=on && cfg_int("rt_hit_material_generated",0)!=0;
- paks_on=on && instanced_on && cfg_int("rt_hit_material_paks",0)!=0;paks_key.store(paks_on,std::memory_order_relaxed);paks_load();
  capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),wind_rgb_on);
- capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),ip_grass_on);
- {bool pool_2s=false;for(uint32_t i=0;i<generated::kRowCount;++i)pool_2s=pool_2s||(generated::kRows[i].recipe.capture==native_vt::CapturePool && generated::kRows[i].recipe.two_sided);
-  capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),paks_on || (instanced_on && generated_on && pool_2s));}
  capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),instanced_on);}
-void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(ip_grass_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(pool_2s_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
+void device_destroyed(DeviceData* device){std::lock_guard lock(mutex);std::lock_guard pl(pending_mutex);if(dd!=device)return;capability(static_cast<uint32_t*>(persist(instanced_capability_key,sizeof(uint32_t))),false);capability(static_cast<uint32_t*>(persist(wind_rgb_capability_key,sizeof(uint32_t))),false);if(on)dd->vk.DeviceWaitIdle(dd->device);
  for(auto& [id,q]:queries)destroy_query(*q);queries.clear();
- for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();pak_uv_destroy();
+ for(auto& [id,p]:packets)destroy_packet(*p);packets.clear();
  for(auto& s:slots){destroy(s.data);s={};}
  for(auto pipeline:{gather_pipeline,join_pipeline,tileset_gather_pipeline,basis_pipeline,remap_pipeline})if(pipeline)dd->vk.DestroyPipeline(dd->device,pipeline,nullptr);
  for(auto layout:{gather_layout,join_layout,basis_layout,remap_layout})if(layout)dd->vk.DestroyPipelineLayout(dd->device,layout,nullptr);
@@ -920,7 +707,7 @@ void note_prepass(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,uint3
  if(!on || !state || args.kind>1 || record>=max_records)return;CpuTimer timer(CpuPrepass);
  const bool tileset=tileset_depth(state->vs,state->fs);if(tileset && !tileset_active())return;uint32_t vertices=0;
  // rt_hit_material_instanced: an instanced wind / 2S depth draw keeps all its instances' rows.
- const auto family=!tileset && instanced_live()?instanced::depth_family(state->vs,wind_rgb_on,ip_grass_rows(),generated_rows()):instanced::None;
+ const auto family=!tileset && instanced_live()?instanced::depth_family(state->vs,wind_rgb_on):instanced::None;
  if(!tileset_vertex_count(args.count,args.instances,vertices) ||
     !(family!=instanced::None?instanced::prepass_geometry_ok(vertices,args.instances,triangles,stride):prepass_geometry_ok(tileset,vertices,args.instances,triangles,stride)))return;
  AlphaSnapshot snapshot{};if(!alpha_snapshot_native(record,&snapshot))return;
@@ -1036,8 +823,8 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // rt_hit_material_lean_hooks: the key (bindings, mapped reads, buffer sizes) only for a draw that qualifies.
  const bool lean_key=lean_hooks();bool keyed=false;DrawKey draw{};
  {const bool ts=tileset_deferred(state->vs,state->fs);
-  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows()):instanced::None;
-  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows()):nullptr;
+  const auto fam=!ts && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
+  const auto* ir=fam!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
   const auto q=ir?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):
    deferred_qualify(audited_static_family(state->vs,state->fs)||ts||ir,ts,exactPipeline,args.kind,args.instances,stride);
   if(!lean_key || (q!=DeferredQualify::FamilyDeclined && q!=DeferredQualify::PipelineDeclined)){draw=key(cmd,*state,args);keyed=true;}}
@@ -1058,39 +845,16 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  if(p.finalized || p.frame!=frame_index() || p.camera!=camera.buffer || p.camera_offset!=camera.offset){p.valid=false;return false;}
  const bool tileset=tileset_deferred(state->vs,state->fs);
  // rt_hit_material_instanced: the instanced wind / 2S pairs take the per-draw path, any instance count.
- const auto family=!tileset && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows()):instanced::None;
- const auto* irecipe=family!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on,ip_grass_rows(),generated_rows()):nullptr;
+ const auto family=!tileset && instanced_live()?instanced::deferred_family(state->vs,state->fs,wind_rgb_on):instanced::None;
+ const auto* irecipe=family!=instanced::None?instanced::recipe(state->vs,state->fs,wind_rgb_on):nullptr;
  const bool audited=audited_static_family(state->vs,state->fs)||tileset||irecipe;
  const auto qualify=irecipe?instanced::deferred_qualify(exactPipeline,args.kind,args.instances,stride):deferred_qualify(audited,tileset,exactPipeline,args.kind,args.instances,stride);
  if(qualify==DeferredQualify::FamilyDeclined){++p.family_declined;
   if(pool::uncaptured_recipe(state->vs,state->fs)){++p.uncaptured_draws;p.uncaptured_instanced+=args.instances>1;p.uncaptured_vertices+=uint64_t(args.count)*args.instances;}
   if(cfg_hot(CfgHot::rt_stats) && p.frame%120==0)p.declined.add(state->vs,state->fs,args.instances,uint64_t(args.count)*args.instances);return false;}++p.seen;
  auto* counts=irecipe?&p.instanced[family]:nullptr;if(counts)++counts->seen;
- auto* gen=generated_recipe(irecipe)?&p.generated:nullptr;if(gen)++gen->seen;
- if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;if(counts)++counts->pipeline;if(gen)++gen->pipeline;return false;}
+ if(qualify==DeferredQualify::PipelineDeclined){++p.pipeline_declined;if(counts)++counts->pipeline;return false;}
  if(!keyed)draw=key(cmd,*state,args); // unreachable when lean (declined above); kept exact
- // A generated pair can also be used by opaque IP_Base_VT draws, which never
- // map: no alpha depth record exists. Generated 2S packets can record before
- // depth, so a missing source is counted but cannot veto their capture. The
- // final scene join drops unpairable captures, including opaque IP_Base_VT.
- if(irecipe && !instanced::capture_source_ok(family,gen!=nullptr,nullptr,draw)){
-  bool source=false;
-  for(const auto& s:slots)if(s.prepared && s.frame==p.frame && s.camera==p.camera && s.camera_offset==p.camera_offset &&
-      instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
-      std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}
-  if(!source){std::lock_guard pl(pending_mutex);
-   for(const auto& [id,s]:pending)if(s.frame==p.frame && current_recording(s.command)==s.recording &&
-       instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
-       std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
-  if(!source){std::lock_guard pl(pending_mutex);
-   for(const auto& [id,list]:recording_pending){std::lock_guard local(list->mutex);const auto& s=list->value;
-    if(s.frame==p.frame && current_recording(s.command)==s.recording &&
-       instanced::capture_source_ok(family,gen!=nullptr,&s.join,draw) &&
-       std::any_of(s.pre.begin(),s.pre.end(),[&](const auto& pre){return !pre.opaque && pre.family==family && pre.key==draw;})){source=true;break;}}
-  }
-  if(!source){if(counts)++counts->no_source;if(gen)++gen->no_source;
-   if(!instanced::capture_without_source_ok(family,gen!=nullptr))return false;}
- }
  bool unique=p.join.note(p.command,p.recording,draw,UINT32_MAX);
  if(!unique){++p.audited_duplicate;return false;}++p.audited_unique;
  // Count real audited duplicates even beyond the storage bound. Unrelated
@@ -1100,25 +864,20 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  // finalized (other threads read finalized packets only), so the binding reads run unlocked.
  const bool unlocked=capture_unlocked();if(unlocked)lock.unlock();
  Material material{};
- if(tileset && paks_rows() && !cfg_hot(CfgHot::rt_native_tileset)){
-  ++pak_attempts;const auto* pak=paks_tileset_color(*state,args);
-  if(pak){material.pak_color=true;material.row.padding[7]=1u;material.row.padding[6]=3u;++pak_matches;++pak_color_matches;} // local RGBA; Tileset reads R/G
-  else{++p.binding_declined;return false;} // paks-only never certifies an unmatched/ambiguous COLOR source
- }
  const bool captured=tileset?capture_tileset(cmd,state,material):capture(cmd,state,material,irecipe);
  if(unlocked)lock.lock();
- if(!captured){++p.binding_declined;if(counts)++counts->bindings;if(gen)++gen->bindings;return false;}
+ if(!captured){++p.binding_declined;if(counts)++counts->bindings;return false;}
  // Instanced pairs: the record-time engine (STI layout) and 1:1 bytes staged in the gather's layout.
  unsigned char stage[instanced::kStageBytes];
  if(irecipe){uint32_t engine[16]{},ubo[8]{};const uint32_t eb=pool::engine_bytes(*irecipe),mb=native_vt::material_bytes(*irecipe);
   if(eb>sizeof engine || mb>sizeof ubo || !read_mapped(material.engine.buffer,material.engine.offset,engine,eb) || (mb && !read_mapped(material.physical_ubo.buffer,material.physical_ubo.offset,ubo,mb)) ||
-     !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage)){++p.binding_declined;++counts->bindings;if(gen)++gen->bindings;return false;}
-  material.family=family;material.staged=true;material.instances=args.instances;material.inputs=read_inputs(cmd,state,family);material.generated=gen!=nullptr;
+     !instanced::stage(*irecipe,engine,eb/4u,ubo,mb/4u,stage)){++p.binding_declined;++counts->bindings;return false;}
+  material.family=family;material.staged=true;material.instances=args.instances;material.inputs=read_inputs(cmd,state,family);
   const uint32_t flags=instanced::row_flags(*irecipe)|instanced::family_flags(family);std::memcpy(&material.row.parameters[3],&flags,4); // row word 220
  }
  uint32_t vertices=0;if(!tileset_vertex_count(args.count,args.instances,vertices))return false;
  *bytes=VkDeviceSize(vertices)*stride;ChunkPlacement place{};
- if(!place_in_chunks(uint32_t(p.chunks.size()),p.cursor,*bytes,stream_bytes,deferred_chunks,place)){++p.stream_overflow;if(counts)++counts->stream;if(gen)++gen->stream;return false;}
+ if(!place_in_chunks(uint32_t(p.chunks.size()),p.cursor,*bytes,stream_bytes,deferred_chunks,place)){++p.stream_overflow;if(counts)++counts->stream;return false;}
  if(irecipe && !create(p.staged,VkDeviceSize(material_slots)*instanced::kStageBytes,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,true))return false;
  if(!own(cmd))return false;
  auto identity=[](const View& v){return CacheIdentity{uint64_t(v.view),v.id,uint64_t(v.image),v.image_id,uint64_t(v.layout)};};
@@ -1137,12 +896,12 @@ bool deferred_begin(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,boo
  p.resources.commit(plan);const auto& indices=plan.indices;uint32_t local=uint32_t(p.materials.size());
  material.key=draw;material.chunk=place.chunk;material.row.valid=local+1;material.row.triangles=vertices/3;material.row.deferred=uint32_t(place.offset);material.row.stride=stride;material.row.frame=uint32_t(p.frame);
  material.row.sampler=indices.sampler;material.row.normal=indices.normal;material.row.albedo=indices.albedo;material.row.physical=indices.physical;
- if(material.staged){std::memcpy(static_cast<unsigned char*>(p.staged.mapped)+VkDeviceSize(local)*instanced::kStageBytes,stage,sizeof stage);++counts->captured;if(gen)++gen->captured;}
+ if(material.staged){std::memcpy(static_cast<unsigned char*>(p.staged.mapped)+VkDeviceSize(local)*instanced::kStageBytes,stage,sizeof stage);++counts->captured;}
  p.join.assign(p.command,p.recording,draw,local);p.materials.push_back(material);*buffer=p.chunks[place.chunk].b;*offset=place.offset;p.cursor=place.offset+*bytes;p.total+=*bytes;return true;
 }
 void pool_jobs_record(VkCommandBuffer,CmdState*);
 void deferred_finish(VkCommandBuffer cmd,bool readonly){
- if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuMaterial);pool_jobs_record(cmd,state);std::lock_guard lock(mutex);pak_uv_record(cmd,state);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
+ if(!on)return;auto* state=cmd_state(cmd);if(!one_time(state))return;CpuTimer timer(CpuMaterial);pool_jobs_record(cmd,state);std::lock_guard lock(mutex);auto i=packets.find(state->recording);if(i==packets.end())return;auto& p=*i->second;
  if(p.finalized){p.valid=false;return;}p.finalized=true;p.valid=p.valid && readonly && cfg_hot(CfgHot::rt_hit_material)!=0 && compute_ready(false);
  if(!own(cmd)){p.valid=false;return;}
  barrier(cmd,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_ACCESS_MEMORY_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -1181,11 +940,6 @@ void deferred_finish(VkCommandBuffer cmd,bool readonly){
   (unsigned long long)p.frame,p.uncaptured_draws,p.uncaptured_instanced,(unsigned long long)p.uncaptured_vertices);
 }
 void slot_in_use(uint32_t index,uint64_t frame){if(!on || index>=kSceneSlots)return;std::lock_guard lock(mutex);for(auto h:slots[index].handles)life_extend(h,frame);}
-void pak_uv_forget_buffer(VkBuffer b){
- if(!paks_on)return;
- std::lock_guard lock(mutex);
- pak_uv_forget_cached_buffer(b);
-}
 bool pool_keys(const InstPipe& inst,const CmdState& s,const DrawArgs& args,uint64_t* geometry,uint64_t* position){
  *geometry=*position=0;if(!inst.ok || args.kind>1)return false;
  pool::Geometry g;g.indexed=args.kind==1;g.count=args.count;g.first=args.first;g.vertex_offset=g.indexed?args.vertex_offset:0;
@@ -1237,23 +991,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  if(!on || !state || !cfg_hot(CfgHot::rt_hit_material))return false;const auto frame=frame_index();CpuTimer timer(CpuMaterial);
  uint64_t geometry=0,position=0;const bool keyed=pool_keys(inst,*state,args,&geometry,&position);
  const auto* recipe=pool_recipe_on(state->vs,state->fs);
- const bool pak_fallback=recipe && !pool::pool_recipe(state->vs,state->fs,generated_rows());
  pool::Observation o{pool::mix(state->vs,state->fs),position,pool::Status::Family};PoolMaterial payload{};uint32_t failures=0;
- // Revalidate full raw bytes before the refresh throttle. A same-handle host
- // write must not retain a previously witnessed pak material assignment.
- // Candidate discovery covers the class-A draws actually present in the scene,
- // not only the HLOD publication fallback. Ordinary recipes remain authoritative.
- const bool pak_probe=paks_rows() && keyed;
- // Per-draw instanced recipes own their deferred XFB stream. Only pooled
- // recipes may spend an otherwise idle draw on the candidate readback.
- const bool pak_readback=pak_probe && recipe && recipe->capture==native_vt::CapturePool;
- if(pak_probe){
-  ++pak_attempts;
-  std::shared_ptr<std::atomic<bool>> proof;const auto* pak=paks_match(*state,args,inst,&proof);
-  if(pak_fallback && !pak)recipe=nullptr;
-  else if(pak_fallback){++pak_matches;payload.pak=true;payload.pak_valid=std::move(proof);payload.pak_two_sided=(pak->flags&1u)!=0;o.identity=pool::mix(o.identity,pak->flags);
-   for(char c:pak->material)o.identity=pool::mix(o.identity,uint8_t(c));}
- }
  bool due=false,throttled=false;
  if(keyed && recipe && poolPipeline){
   Bg3Binding tilesets{};const bool table=query_binding_resolved(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,0,12,0,&tilesets,cfg_hot(CfgHot::perf_hook_state)?state:nullptr) && tilesets.buffer;
@@ -1265,7 +1003,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
  }
  if(throttled){
   if(due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes))return true;
-  return pak_readback && poolPipeline && basisPipeline && pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
+  return false;
  }
  if(keyed && recipe){
   if(!poolPipeline)o.status=pool::Status::Pipeline;
@@ -1313,7 +1051,7 @@ bool pool_observe(VkCommandBuffer cmd,CmdState* state,const DrawArgs& args,const
   due=recipe && basisPipeline && pool_job_due(geometry,frame,args,stride);
  }
  if(due && pool_job(cmd,state,args,inst,geometry,frame,stride,xfb,offset,bytes))return true;
- return pak_readback && poolPipeline && basisPipeline && pak_uv_capture(cmd,state,args,inst,stride,xfb,offset,bytes);
+ return false;
 }
 PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const PoolMesh& mesh){
  PoolUse use{uint32_t(pool::Status::NoDeferred),UINT32_MAX,false};
@@ -1325,7 +1063,7 @@ PoolUse pool_lookup(uint64_t geometry,uint64_t position,uint32_t instances,const
  auto& m=r->payload;
  if(const uint32_t old=pool::basis_rebind(m.basis,mesh.gen);old<nh_pool_rows)pool_slots.release(old);
  m.mesh=mesh;
- if(status!=pool::Status::Qualified || (m.mask_layout() && !pool_mask_on.load(std::memory_order_relaxed)) || (m.pak?!paks_rows():(generated_recipe(m.recipe) && !generated_rows())))return use;
+ if(status!=pool::Status::Qualified || (m.mask_layout() && !pool_mask_on.load(std::memory_order_relaxed)))return use;
  use.wants_basis=!mesh.basis_bytes;
  if(m.basis.state==pool::Basis::Ready){
   if(m.basis.slot>=nh_pool_rows)m.basis.slot=pool_slots.acquire();
@@ -1497,15 +1235,6 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
      (unsigned long long)slot.frame,(unsigned long long)r[instanced::PairSame],(unsigned long long)r[instanced::PairOtherFrame],(unsigned long long)r[instanced::PairCamera],
      (unsigned long long)r[instanced::PairWind],(unsigned long long)r[instanced::PairUnread],(unsigned long long)o[instanced::OrderRows],(unsigned long long)o[instanced::OrderSame],
      (unsigned long long)o[instanced::OrderPermuted],(unsigned long long)o[instanced::OrderUnmatched]);}
-   // rt_hit_material_ip_grass: the fourth family's pairing and instance order (bit-exact check, no tolerance).
-   // rt_hit_material_generated: also its rows in the IP grass family (the wind bushes 27ef2b49/2e34c667; hgn1 camp 2026-11-02:
-   // 9 such draws captured, none mapped: the pairing outcome says why).
-   if(ip_grass_on || generated_on){const auto& r=pair_window[instanced::IpGrass];const auto& o=order_window[instanced::IpGrass];
-    log("[hit material instanced] frame %llu IP grass since the last line: pairs same frame %llu, other frame (time) %llu, camera %llu, placement %llu, wind inputs %llu, unread %llu; "
-        "instance order (retired queries): rows %llu, same order %llu, permuted %llu, unmatched %llu",
-     (unsigned long long)slot.frame,(unsigned long long)r[instanced::PairSame],(unsigned long long)r[instanced::PairOtherFrame],(unsigned long long)r[instanced::PairCamera],
-     (unsigned long long)r[instanced::PairPlacement],(unsigned long long)r[instanced::PairWind],(unsigned long long)r[instanced::PairUnread],(unsigned long long)o[instanced::OrderRows],
-     (unsigned long long)o[instanced::OrderSame],(unsigned long long)o[instanced::OrderPermuted],(unsigned long long)o[instanced::OrderUnmatched]);}
    for(auto& f:pair_window)for(auto& c:f)c=0;for(auto& f:order_window)for(auto& c:f)c=0;tolerant_window=0;
   }
   InstancedCount c[instanced::kFamilies]{};for(uint32_t f=1;f<instanced::kFamilies;++f){c[f]=packet->instanced[f];c[f].prepass=slot.instanced_prepass[f];}
@@ -1516,12 +1245,6 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    c[2].prepass,c[2].seen,c[2].pipeline,c[2].bindings,c[2].stream,c[2].captured,c[2].mapped,(unsigned long long)c[2].triangles,c[1].no_source,c[2].no_source);
   if(wind_rgb_on)log("[hit material instanced] frame %llu wind RGB 2S: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; no source %u",
    (unsigned long long)slot.frame,c[3].prepass,c[3].seen,c[3].pipeline,c[3].bindings,c[3].stream,c[3].captured,c[3].mapped,(unsigned long long)c[3].triangles,c[3].no_source);
-  if(ip_grass_on || generated_on)log("[hit material instanced] frame %llu IP grass: prepass %u, G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; no source %u",
-   (unsigned long long)slot.frame,c[4].prepass,c[4].seen,c[4].pipeline,c[4].bindings,c[4].stream,c[4].captured,c[4].mapped,(unsigned long long)c[4].triangles,c[4].no_source);
-  // rt_hit_material_generated: its instanced rows alone (they are also in their family's numbers above).
-  if(generated_on){InstancedCount g=packet->generated;for(const auto& m:q.materials)if(m.generated){++g.mapped;g.triangles+=m.row.triangles;}
-   log("[hit material generated] frame %llu key %u: instanced G-buffer %u (pipeline %u, bindings %u, stream %u) captured %u, mapped %u rows %llu triangles; pairs %u; no source %u",
-    (unsigned long long)slot.frame,unsigned(generated_rows()),g.seen,g.pipeline,g.bindings,g.stream,g.captured,g.mapped,(unsigned long long)g.triangles,generated::kRowCount,g.no_source);}
  };
  // Snapshot acquisition is two shared-pointer pins; finalized packet join/material
  // metadata is immutable (late hooks may revoke valid, checked after relocking).
@@ -1604,11 +1327,10 @@ bool register_use(VkCommandBuffer cmd,uint32_t index,VkDescriptorSet* query_alph
    if(m.detail_layout()){x.layout=native_vt::LayoutDetail;x.detail_normal=m.detail_normal;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;
     std::memcpy(x.detail,m.detail,16);}
    if(m.plain_layout()){x.layout=native_vt::LayoutIridescent;x.plain=m.plain;std::memcpy(x.plain_floats,m.plain_floats,24);}
-   if(m.pak?!paks_rows():(generated_recipe(recipe) && !generated_rows()))return;
    if(m.mask_layout()){if(!pool_mask_on.load(std::memory_order_relaxed))return;
     x.layout=native_vt::LayoutMask;x.detail_mask=m.detail_mask;x.detail_sampler=m.detail_sampler;std::memcpy(x.colours,m.colours,36);}
    x.row.valid=m.basis.slot+1;x.row.triangles=mesh.tris;x.row.pre=uint32_t(mesh.pool_off);x.row.deferred=uint32_t(mesh.basis_off);
-   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=(m.pak?m.pak_two_sided:recipe->two_sided)?5:3;
+   x.row.stride=nh_pool_basis_vertex;x.row.frame=uint32_t(slot.frame);x.row.reserved=3;
    const uint32_t gen=uint32_t(m.mesh.gen);std::memcpy(&x.row.parameters[2],&gen,4);
    // Row word 220: reflectance mode (rt_hit_material_pool: 2 mixes the normal layer's x).
    std::memcpy(&x.row.parameters[3],&recipe->reflectance,4);

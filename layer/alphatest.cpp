@@ -142,19 +142,6 @@ VkDeviceMemory g_stamp_mem = VK_NULL_HANDLE;
 uint32_t* g_stamp_map = nullptr;
 uint32_t g_stamp_gen = 0;
 constexpr VkDeviceSize kStampStride = 512, kStampCameraOffset = 256;
-struct SunAlphaSlot {
-  VkDescriptorPool pool = VK_NULL_HANDLE;
-  VkDescriptorSet set = VK_NULL_HANDLE;
-  VkBuffer stamp = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
-  uint32_t* mapped = nullptr;
-  VkBuffer records=VK_NULL_HANDLE, dispatch=VK_NULL_HANDLE, parameters=VK_NULL_HANDLE;
-  VkDeviceMemory records_memory=VK_NULL_HANDLE, dispatch_memory=VK_NULL_HANDLE, parameters_memory=VK_NULL_HANDLE;
-  VkDeviceSize record_bytes=0, dispatch_bytes=0, parameter_bytes=0;
-  std::vector<std::shared_ptr<NativeTilesetSampler>> native_samplers;
-};
-SunAlphaSlot g_sun_alpha[kRing];
-VkDescriptorSetLayout g_sun_dsl=VK_NULL_HANDLE;
 uint32_t g_set_records[kRing]={};
 VkBuffer g_legacy_buf = VK_NULL_HANDLE;   // alpha_legacy_info
 VkDeviceMemory g_legacy_mem = VK_NULL_HANDLE;
@@ -689,15 +676,6 @@ void alpha_device_destroyed(DeviceData* dd) {
     if(sampler->handle)vk.DestroySampler(dd->device,sampler->handle,nullptr);sampler->handle=VK_NULL_HANDLE;}
    g_native_sampler_cache.clear();}
   g_native_samplers.clear();for(auto& list:g_slot_native_samplers)list.clear();
-  for (SunAlphaSlot& s : g_sun_alpha) {
-    if (s.pool) vk.DestroyDescriptorPool(dd->device,s.pool,nullptr);
-    if (s.stamp) vk.DestroyBuffer(dd->device,s.stamp,nullptr);
-    if (s.memory) vk.FreeMemory(dd->device,s.memory,nullptr);
-    for(auto [b,m]:{std::pair{s.records,s.records_memory},std::pair{s.dispatch,s.dispatch_memory},std::pair{s.parameters,s.parameters_memory}}) {
-      if(b) vk.DestroyBuffer(dd->device,b,nullptr);if(m) vk.FreeMemory(dd->device,m,nullptr);
-    }
-    s = SunAlphaSlot{};
-  }
   for (VtMask& m : g_vt_masks) {
     if (m.img.view) vk.DestroyImageView(dd->device, m.img.view, nullptr);
     if (m.fine) vk.DestroyImageView(dd->device, m.fine, nullptr);
@@ -708,8 +686,6 @@ void alpha_device_destroyed(DeviceData* dd) {
   if (g_vt_staging) vk.DestroyBuffer(dd->device, g_vt_staging, nullptr);
   if (g_vt_staging_mem) vk.FreeMemory(dd->device, g_vt_staging_mem, nullptr);
   g_vt_staging = VK_NULL_HANDLE; g_vt_staging_mem = VK_NULL_HANDLE;
-  if(g_sun_dsl) vk.DestroyDescriptorSetLayout(dd->device,g_sun_dsl,nullptr);
-  g_sun_dsl=VK_NULL_HANDLE;
   if (g_pool) vk.DestroyDescriptorPool(dd->device, g_pool, nullptr);
   if (g_dsl) vk.DestroyDescriptorSetLayout(dd->device, g_dsl, nullptr);
   for (VkSampler s : {g_wrap, g_clamp})
@@ -737,15 +713,6 @@ void alpha_device_destroyed(DeviceData* dd) {
   g_on = false;
   g_current = -1;
   g_dd = nullptr;
-}
-
-// Only the rich current-Sun stream has per-draw material records. Do not add
-// these hashes to global alpha_lookup: legacy F-1 would merely skip cutouts.
-bool alpha_lookup_native_tileset_shadow(uint64_t fs,AlphaFs* out){
- if(!g_on || !g_tileset_layout || !native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0))return false;
- const auto* recipe=native_tileset_coverage::lookup_shadow(fs);if(!recipe)return false;
- *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe->uv;out->tex_set=1;out->tex_bind=recipe->green_binding;
- out->ubo_set=1;out->ubo_bind=recipe->material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
 }
 
 bool camera_fade_draw(VkCommandBuffer cmd, uint64_t fs, uint64_t tris, bool* enabled) {
@@ -784,10 +751,10 @@ void camera_fade_marked(uint32_t instances, uint64_t tris) {
 
 bool alpha_lookup(uint64_t fs, AlphaFs* out) {
   if (!g_on) return false;
-  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0)){
+  if(!g_tileset_layout && native_tileset_coverage::lookup_camera(fs)!=nullptr && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0)){
     static std::atomic<bool> warned{false};if(!warned.exchange(true))log("[alpha tileset] enable rejected: restart with rt_alpha=1 rt_bvh_split=1 and supported sampler limits");
   }
-  if(g_tileset_layout && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0,cfg_hot(CfgHot::rt_hit_material_paks)!=0) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
+  if(g_tileset_layout && native_tileset::requested(cfg_hot(CfgHot::rt_native_tileset)!=0) && native_tileset_coverage::lookup_camera(fs)!=nullptr) {
     const auto& recipe=*native_tileset_coverage::lookup_camera(fs);
     *out=AlphaFs{};out->kind=5;out->hash=fs;out->uv=recipe.uv;out->tex_set=1;out->tex_bind=recipe.green_binding;
     out->ubo_set=1;out->ubo_bind=recipe.material_binding;out->cut=out->cut_first=.5f;out->k=1;return true;
@@ -1552,218 +1519,6 @@ bool alpha_omm_commit(VkCommandBuffer cmd,uint32_t slot){
     stamp=g_stamp_buf;mapped=g_stamp_map+VkDeviceSize(slot)*kStampStride/4;generation=mapped[0];
   }
   return bvh_omm_commit(cmd,slot,stamp,VkDeviceSize(slot)*kStampStride,generation,mapped);
-}
-
-bool alpha_prepare_sun_clone(VkCommandBuffer cmd, uint32_t slot, VkDescriptorSet selected_alpha,
-                             std::span<const SunCascadeCapture> cascades, AlphaSunClone* out) {
-  if (!out) return false;
-  *out = {};
-  if (!g_on || !cmd || slot >= kRing || !selected_alpha || cascades.size()!=4) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  if (selected_alpha != g_sets[slot] || !g_set_init[slot] || !g_stamp_map) return false;
-  const uint32_t expected=g_stamp_map[VkDeviceSize(slot)*kStampStride/4];
-  if (!expected) return false;
-  SunAlphaSlot& s=g_sun_alpha[slot];
-  const auto& vk=g_dd->vk;
-  if(!g_sun_dsl) {
-    std::vector<VkDescriptorSetLayoutBinding> bindings={
-      {0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {2,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {3,VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kCaches,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {4,VK_DESCRIPTOR_TYPE_SAMPLER,1,VK_SHADER_STAGE_COMPUTE_BIT,&g_wrap},
-      {5,VK_DESCRIPTOR_TYPE_SAMPLER,1,VK_SHADER_STAGE_COMPUTE_BIT,&g_clamp},
-      {6,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {7,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {8,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {9,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {12,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {13,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {17,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {18,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {14,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {10,VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr},
-      {11,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_COMPUTE_BIT,nullptr}};
-    VkDescriptorSetLayoutCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    if(g_tileset_binding)bindings.push_back({19,VK_DESCRIPTOR_TYPE_SAMPLER,kNativeSamplers,VK_SHADER_STAGE_COMPUTE_BIT,nullptr});
-    ci.bindingCount=uint32_t(bindings.size());ci.pBindings=bindings.data();
-    if(vk.CreateDescriptorSetLayout(g_dd->device,&ci,nullptr,&g_sun_dsl)!=VK_SUCCESS) return false;
-  }
-  auto native_samplers=g_slot_native_samplers[slot];
-  std::vector<AlphaRec> extra;
-  std::vector<std::pair<VkImageView,VkImageLayout>> textures,caches;
-  std::vector<uint32_t> dispatch(16,0);
-  for(unsigned layer=0;layer<4;++layer) {
-  const auto& cascade=cascades[layer];
-  if(cascade.layer!=layer || !sun_coverage::contiguous_triangle_ranges(std::span<const SunCascadeDraw>(cascade.draws),cascade.soup.tris)) return false;
-  dispatch[4*layer]=uint32_t(dispatch.size()*4);
-  dispatch[4*layer+1]=uint32_t(cascade.draws.size());dispatch[4*layer+2]=cascade.soup.stride;dispatch[4*layer+3]=cascade.soup.tris;
-  uint32_t next=0;
-  for(const auto& draw:cascade.draws) {
-    if(draw.first_triangle!=next || draw.triangles>cascade.soup.tris-next) return false;
-    next+=draw.triangles;
-    uint32_t record=0,state=draw.material==0?0u:2u;
-    if(draw.material && draw.material!=UINT32_MAX && draw.material<=cascade.materials.size()) {
-      const auto& snapshot=cascade.materials[draw.material-1];
-      const auto& source=snapshot.rec;
-      if(snapshot.tex_id && snapshot.tex_id==view_image_id(snapshot.tex) &&
-         ((source.kind!=1 && source.kind!=4 && !(source.kind==5 && source.p0[2]==1.f)) || (snapshot.cache_id && snapshot.cache_id==view_image_id(snapshot.cache)))) {
-        AlphaRec r=source;
-        if(source.kind==5){r.cache=native_sampler_slot(native_samplers,snapshot.native_sampler);
-          if(!r.cache)r.p0[1]=float(native_tileset_coverage::NtcMissing);}
-
-        const uint32_t t=slot_of(textures,kTextures-g_set_tex[slot],snapshot.tex,snapshot.tex_layout);
-        uint32_t c=0;
-        if(source.kind==1) c=slot_of(caches,kCaches-g_set_cache[slot],snapshot.cache,snapshot.cache_layout);
-        if(source.kind==4 || (source.kind==5 && source.p0[2]==1.f)) c=slot_of(textures,kTextures-g_set_tex[slot],snapshot.cache,snapshot.cache_layout);
-        if(t && ((source.kind!=1 && source.kind!=4 && !(source.kind==5 && source.p0[2]==1.f)) || c)) {
-          r.tex=g_set_tex[slot]+t;
-          if(source.kind==5 && source.p0[2]==1.f)r.channel=g_set_tex[slot]+c;
-          r.cache=source.kind==1?g_set_cache[slot]+c:source.kind==4?g_set_tex[slot]+c:source.kind==5?r.cache:0;
-          record=16u+uint32_t((uint64_t(g_set_records[slot])+extra.size())*sizeof(AlphaRec));
-          extra.push_back(r);state=1;
-          const uint64_t until=frame_index()+kRing+uint64_t((std::clamp)(cfg_int("rt_dyn_hold",0),0,120));
-          for(auto view:{snapshot.tex,snapshot.cache}) if(view) {
-            uint64_t image_handle=0;
-            {std::shared_lock<std::shared_mutex> lock(tracker().mu);
-             auto image=tracker().views.find(view);
-             if(image!=tracker().views.end()) image_handle=uint64_t(image->second.image);}
-            life_extend(uint64_t(view),until);if(image_handle) life_extend(image_handle,until);
-          }
-        }
-      }
-    }
-    dispatch.insert(dispatch.end(),{draw.first_triangle,draw.triangles,record,state});
-  }
-  if(next!=cascade.soup.tris) return false;
-  }
-  if(uint64_t(g_set_records[slot])+extra.size()>kMaxRecords) return false;
-  const uint32_t total_records=uint32_t(g_set_records[slot]+extra.size());
-  auto ensure=[&](VkBuffer& buffer,VkDeviceMemory& memory,VkDeviceSize& capacity,VkDeviceSize bytes) {
-    if(buffer && capacity>=bytes) return true;
-    if(buffer) defer_destroy(BG3_DEFER_BUFFER,uint64_t(buffer));
-    if(memory) defer_destroy(BG3_DEFER_MEMORY,uint64_t(memory));
-    buffer=VK_NULL_HANDLE;memory=VK_NULL_HANDLE;capacity=0;
-    if(!make_buffer(bytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,buffer,memory)) return false;
-    capacity=bytes;return true;
-  };
-  const VkDeviceSize record_bytes=16+VkDeviceSize(total_records)*sizeof(AlphaRec);
-  if(!ensure(s.records,s.records_memory,s.record_bytes,record_bytes) ||
-     !ensure(s.dispatch,s.dispatch_memory,s.dispatch_bytes,dispatch.size()*4ull) ||
-     !ensure(s.parameters,s.parameters_memory,s.parameter_bytes,1232)) return false;
-  if (!s.pool) {
-    VkDescriptorPoolSize sizes[4]={{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,13},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,kTextures+kCaches},{VK_DESCRIPTOR_TYPE_SAMPLER,2+(g_tileset_binding?kNativeSamplers:0u)},
-      {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,1}};
-    VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    pi.maxSets=1;pi.poolSizeCount=4;pi.pPoolSizes=sizes;
-    if (vk.CreateDescriptorPool(g_dd->device,&pi,nullptr,&s.pool)!=VK_SUCCESS) return false;
-  }
-  if(!s.set) {
-    VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    ai.descriptorPool=s.pool;ai.descriptorSetCount=1;ai.pSetLayouts=&g_sun_dsl;
-    if (vk.AllocateDescriptorSets(g_dd->device,&ai,&s.set)!=VK_SUCCESS) return false;
-  }
-  if (!s.set) return false;
-  if (!s.stamp) {
-    void* mapped=nullptr;
-    if (!alloc_host_buffer(kStampStride,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                           &s.stamp,&s.memory,&mapped)) return false;
-    s.mapped=static_cast<uint32_t*>(mapped);
-  }
-  if (!s.mapped) return false;
-  // This slot's previous consumer is retired. Without an approved private build
-  // none of these zero words can authorize traversal of an unbuilt clone TLAS.
-  std::memset(s.mapped,0,size_t(kStampStride));
-  VkCopyDescriptorSet copies[6]{};
-  const uint32_t bindings[6]={1,2,3,6,7,8};
-  for(unsigned i=0;i<6;++i) {
-    copies[i]={VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
-    copies[i].srcSet=selected_alpha;copies[i].srcBinding=bindings[i];
-    copies[i].dstSet=s.set;copies[i].dstBinding=bindings[i];
-    copies[i].descriptorCount=bindings[i]==2?kTextures:bindings[i]==3?kCaches:1u;
-  }
-  // Copy first: Vulkan applies descriptor copies AFTER writes in one call.
-  clone_descriptor_update(0,nullptr,6,copies);
-  const bool batch=cfg_int("perf_submit_batch",0)!=0;
-  std::optional<submit_batch::DescriptorWrites> pending;
-  if(batch) pending.emplace();
-  if(g_tileset_binding){
-    s.native_samplers=native_samplers;VkDescriptorImageInfo samplers[kNativeSamplers]{};
-    for(uint32_t i=0;i<kNativeSamplers;++i)samplers[i].sampler=i && i<=native_samplers.size()?native_samplers[i-1]->handle:g_wrap;
-    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=19;
-    write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLER;write.descriptorCount=kNativeSamplers;write.pImageInfo=samplers;
-    if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
-    else clone_descriptor_update(1,&write,0,nullptr);
-  }
-  VkDescriptorBufferInfo buffers[9]={{s.stamp,0,kStampStride},{s.records,0,record_bytes},{s.dispatch,0,dispatch.size()*4ull}};
-  for(unsigned layer=0;layer<4;++layer) {
-    const auto& soup=cascades[layer].soup;buffers[3+layer]={soup.xfb,0,VkDeviceSize(soup.tris)*3*soup.stride};
-  }
-  buffers[7]={s.parameters,0,1232};
-  buffers[8]={g_dummy_buf,0,256};
-  const uint32_t bindings_out[9]={9,0,12,13,16,17,18,14,11};
-  VkWriteDescriptorSet writes[9]{};
-  for(unsigned i=0;i<9;++i) {
-    writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=s.set;writes[i].dstBinding=bindings_out[i];
-    writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&buffers[i];
-  }
-  if(batch) pending->writes.insert(pending->writes.end(),writes,writes+9);
-  else clone_descriptor_update(9,writes,0,nullptr);
-  auto images=[&](uint32_t binding,uint32_t base,const auto& views) {
-    std::vector<VkDescriptorImageInfo> info;
-    for(auto [view,layout]:views) info.push_back({VK_NULL_HANDLE,view,layout});
-    if(info.empty()) return;
-    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=s.set;write.dstBinding=binding;
-    write.dstArrayElement=base+1;write.descriptorCount=uint32_t(info.size());write.descriptorType=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    write.pImageInfo=info.data();if(batch) pending->add_images(write,write.pImageInfo,write.descriptorCount);
-    else clone_descriptor_update(1,&write,0,nullptr);
-  };
-  images(2,g_set_tex[slot],textures);images(3,g_set_cache[slot],caches);
-  if(batch) clone_descriptor_update(uint32_t(pending->writes.size()),pending->writes.data(),0,nullptr);
-  VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-  barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT|VK_ACCESS_TRANSFER_WRITE_BIT|VK_ACCESS_HOST_WRITE_BIT;
-  barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_HOST_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
-  VkBufferCopy cp{VkDeviceSize(slot)*kStampStride,0,kStampStride};
-  vk.CmdCopyBuffer(cmd,g_stamp_buf,s.stamp,1,&cp);
-  VkBufferCopy records{VkDeviceSize(slot)*kRegion,0,16+VkDeviceSize(g_set_records[slot])*sizeof(AlphaRec)};
-  vk.CmdCopyBuffer(cmd,g_rec_buf,s.records,1,&records);
-  barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
-  vk.CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
-  vk.CmdUpdateBuffer(cmd,s.records,0,4,&total_records);
-  auto upload=[&](VkBuffer buffer,VkDeviceSize offset,const void* data,VkDeviceSize bytes) {
-    const auto* src=static_cast<const uint8_t*>(data);
-    for(VkDeviceSize copied=0;copied<bytes;) {
-      const VkDeviceSize count=(std::min)(VkDeviceSize(65536),bytes-copied);
-      vk.CmdUpdateBuffer(cmd,buffer,offset+copied,count,src+copied);copied+=count;
-    }
-  };
-  if(!extra.empty()) upload(s.records,16+VkDeviceSize(g_set_records[slot])*sizeof(AlphaRec),extra.data(),extra.size()*sizeof(AlphaRec));
-  upload(s.dispatch,0,dispatch.data(),dispatch.size()*4ull);
-  // byte12 belongs to Hair, and must survive the source stamp copy.
-  vk.CmdFillBuffer(cmd,s.stamp,16,8,0);
-  vk.CmdFillBuffer(cmd,s.stamp,128,32,0); // no micromaps in this dedicated Sun scene
-  out->set=s.set;out->layout=g_sun_dsl;out->stamp=s.stamp;out->parameters=s.parameters;out->expected_generation=expected;
-  return true;
-}
-
-bool alpha_sun_bind_scene(uint32_t slot,VkAccelerationStructureKHR tlas,VkBuffer epochs,VkDeviceSize bytes) {
-  if(!g_on || slot>=kRing || !tlas) return false;
-  std::lock_guard<std::mutex> lock(g_mu);
-  auto& s=g_sun_alpha[slot];if(!s.set) return false;
-  VkWriteDescriptorSetAccelerationStructureKHR as{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
-  as.accelerationStructureCount=1;as.pAccelerationStructures=&tlas;
-  VkWriteDescriptorSet writes[2]{};
-  writes[0]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[0].pNext=&as;writes[0].dstSet=s.set;
-  writes[0].dstBinding=10;writes[0].descriptorCount=1;writes[0].descriptorType=VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-  VkDescriptorBufferInfo epoch{epochs?epochs:g_dummy_buf,0,epochs?bytes:256};
-  if(epochs && !bytes) return false;
-  writes[1]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[1].dstSet=s.set;writes[1].dstBinding=11;
-  writes[1].descriptorCount=1;writes[1].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[1].pBufferInfo=&epoch;
-  g_dd->vk.UpdateDescriptorSets(g_dd->device,2,writes,0,nullptr);return true;
 }
 
 }  // namespace bg3

@@ -39,9 +39,6 @@
 // b11 − local − Tp must be 0 where no projector light is listed.
 #include "gi_common.hlsli"
 #include "../rt/spec_rf_gi.hlsli"
-#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
-#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
-#endif
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"
@@ -107,11 +104,6 @@
 
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
 
-#if RT_TRACE_HALF
-// Reflections do not use GI's raw output. Reuse its RGBA16F slot so D-RF stays
-// within maxPushDescriptors (32), including hit-shade, SHaRC and emission.
-#define rfRaw giRaw
-#endif
 static const float kNoHit = 65504.0;
 
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
@@ -179,21 +171,12 @@ void rf_pixel(uint3 tid) {
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
 #endif
-#if RT_TRACE_HALF
-  if (any(tid.xy >= (pc.full+1u)/2u)) return;
-  uint2 fp = min(tid.xy*2u + uint2(pc.frame&1u,(pc.frame>>1)&1u),pc.full-1u);
-#else
   uint2 fp = tid.xy;
-#endif
   if (any(fp >= pc.full)) return;
   g_rt_pass = kRtPassRefl;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
-#if RT_TRACE_HALF
-    rfRaw[tid.xy] = float4(0,0,0,kNoHit);
-#else
     rfHitDist[fp] = kNoHit;
-#endif
     return;
   }
 
@@ -502,15 +485,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // Never hand the game a non-finite value.
   if (any(!isfinite(os))) os = gs;
   if (any(!isfinite(od))) od = gd;
-#if RT_TRACE_HALF
-  rfRaw[tid.xy] = float4(all(isfinite(delta)) ? delta : 0.0.xxx,
-#if RF_HIT_SHADE
-    (tier == 1 || cached || shaded)
-#else
-    (tier == 1 || cached)
-#endif
-    && w > 0.0 ? min(hit_t,kNoHit) : kNoHit);
-#else
   gSpecular[fp] = os;
   if (pc.rf_debug != 0) gDiffuse[fp] = od;
 #if RF_HIT_SHADE
@@ -519,7 +493,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   rfHitDist[fp] = (tier == 1 || cached) && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
 #endif
 
-  #endif // RT_TRACE_HALF
 
   if (pc.rf_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;

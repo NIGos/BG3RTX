@@ -3,8 +3,9 @@
 The compile-time REFERENCE=0 form proves dormant arithmetic matches the baseline
 for every compose request. This is separate from raw ordinary request identity:
 capability modules gain a specialization branch and therefore change raw bytes.
-Raw differences must pass selective hair-retirement equivalence for that same
-request/reference, with only retired SpecIds 1017-1019 fixed at zero.
+Raw differences must pass selective retired-feature equivalence for that same
+request/reference, with only removed SpecIds 1001/1002/1005/1006/1016-1019/1021-1024 fixed at zero.
+The separate C2 default comparison fixes 1026 on both sides; other live IDs remain variable.
 The production module uses specialization 1025; no reference define is requested
 at runtime. All compilation uses the serial cached BelowNormal shared helper.
 """
@@ -73,7 +74,8 @@ def main():
     parser.add_argument("--json")
     args = parser.parse_args()
     tool, cache, base, new = gate_setup(args.baseline, args.dxc, args.sharc, args.spirv_val)
-    old = [r for r in base.requests() if split_request(r)[0] == "rt/water_compose.hlsl"]
+    old = [r for r in base.requests() if split_request(r)[0] == "rt/water_compose.hlsl"
+           and "WATER_HIT_SHADE_LAYOUT=1" not in split_request(r)[1]]
     current = set(new.requests())
     missing = [r for r in old if r not in current]
     requests = [r for r in old if r in current]

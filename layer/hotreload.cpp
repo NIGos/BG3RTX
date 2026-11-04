@@ -209,7 +209,7 @@ void core_init(DeviceData* dd) {
   g_host.rt_emissive = &em_scene;
   g_host.rt_scene_set = &rt_scene_set;
   g_host.rt_omm_scene_reference=&rt_omm_scene_reference;
-  g_host.rt_sun_scene = &rt_sun_scene;
+  g_host.rt_sun_scene = nullptr; // Retired current-sun callback; ABI slot remains reserved.
   g_host.rt_hit_material_use=&rt_hit_material_use;
   g_host.read_bound = &host_read_bound;
 #if BG3RTX_DIAGNOSTICS

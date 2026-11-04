@@ -445,6 +445,7 @@ along the view ray by at most
 ### gpu-opt1: exact state and immutable metadata candidate (2026-11-03)
 
 2026-11-04: Three GPU candidates REJECTED by the image gate: compact hit state / alpha metadata cache / empty water tiles saved 0.53/0.11/0.19 ms; no release promotion.
+code removed 2026-11-05, evidence above
 
 `rt_compact_hit_state` is off by default (specialization constant 1024). Closest-hit
 transform retrieval moves after traversal, groom selection and barycentric extraction.
@@ -466,6 +467,7 @@ Key-off gate: all 173 requests/194 entries match HEAD after specialization; SPIR
 ## Lower-preset spatial budget (gpu-opt2, 2026-11-03)
 
 2026-11-04: Medium Half is not shipped: about 0.25 ms saving without quality acceptance. Full trace resolution remains selected everywhere; this supersedes the candidate defaults below.
+code removed 2026-11-05, evidence above
 `rt_trace_scale` is 0.5 in Low/Medium, 1.0 in High/Ultra. High is unchanged because
 PERF_AUDIT_GPU supplies an experiment, not quality evidence for promoting half resolution.
 Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-sample temporal
@@ -489,3 +491,10 @@ Each has 1.0/0.5/1.0 cost windows and static energy repeats; no live run is auth
 Expected saving 0.4-1.3 ms is the audit's hypothesis; actual pass cost is UNMEASURED.
 Synthetic corrected 32-frame GI trace check: mean -3.94% within +/-10.16% (4 paired SE),
 matched trace pixels exact; the wide band does not qualify composed or reflection energy.
+
+## Reprojection guards release outcome (2026-11-05)
+
+Both motion-sample and previous-radiance guards were rejected for release.
+Key-off identity passed 2,987/2,987, but the approximately 11 GiB transient/energy
+gate remained unqualified; PNG screens did not replace that evidence.
+code removed 2026-11-05, evidence above

@@ -10,7 +10,7 @@ Set-Content (Join-Path $fake 'bin/bg3rtx_core.dll') synthetic-core
 New-Item -ItemType Directory (Join-Path $fake 'common'),(Join-Path $fake 'scripts') | Out-Null
 foreach($file in @('common/native_hair.h','common/native_hair_math.h','scripts/game-minimizer.ps1','scripts/gamelock.ps1')){Set-Content (Join-Path $fake $file) synthetic}
 $job=[pscustomobject]@{name='child';live_batch='test';timeout=10;session=$false;repeat=1;traces=0;tree='.';save='Test1';
- set='rt=1,fg=2,rt_native_hair=1,rt_native_scalp=1,rt_omm=0,rt_sun_cascade_current=0,rt_xfb_mb=1408';
+ set='rt=1,fg=2,rt_native_hair=1,rt_native_scalp=1,rt_omm=0,rt_xfb_mb=1408';
  args=@('-Foreground','-RealPresent','-Move','-MovePlan',(Join-Path $fake 'captures/motion.json').Replace('\','\\'),'-UserIni',(Join-Path $fake 'bg3rtx_user.ini').Replace('\','\\'),'-AcceptModWarning','off');
  patterns=@('\\[geo\\] RT capture','\\[alpha hair\\]','primary-ray check');expect=@('\\[sl\\] DLSS-G frame','\\[alpha hair\\] native coverage records [1-9]');expect_runner=@('\\[rotation-input\\]','\\[motion-plan\\] complete phases=7','foreground=True real_present=True')}
 $build=Get-QueueBuildIdentity $fake

@@ -38,7 +38,7 @@
   "gpu": "Report existing compose GPU ms per state, capture-free cost windows; wf8 baseline 0.10-0.15 ms. No new pass.",
   "motion": "turn_mode=keys holds E (+1) or Q (-1) throughout motion interval, no mouse deltas. Q/E moved in 120/120 samples in the 10:08 live probe; invalidate if water leaves view or presented frames jump.",
   "quality": "Pending live evidence; no quality pass.",
-  "remaining_hidden": "If hits remain hidden, rt_water_hit_shade (F-1 consistent) shades tiers 2/3; do not add hysteresis.",
+  "remaining_hidden": "Hidden/off-screen hits retain the native water probe; rejected off-screen hit shading was removed during release cleanup.",
   "static_camera_delta": {
     "average_max_exclusive_m": 0.01,
     "windows": [

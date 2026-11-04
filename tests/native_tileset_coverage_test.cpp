@@ -149,10 +149,8 @@ int main(int argc,char** argv){
  emit({(3u<<16)|71,30,14}); // flat COLOR is not advertised as native smooth data.
  std::vector<uint32_t> patched;uint32_t color=1;
  check(bg3::patch_vs(code.data(),code.size(),patched,40,nullptr,nullptr,false,nullptr,true,&color));check(color==0);
- check(!bg3::native_tileset::requested(false,false));
- check(bg3::native_tileset::requested(false,true));
- check(bg3::native_tileset::requested(true,false));
- check(bg3::native_tileset::requested(true,true));
+ check(!bg3::native_tileset::requested(false));
+ check(bg3::native_tileset::requested(true));
  uint32_t capability=0;check(!bg3::native_tileset::enabled(&capability));
  bg3::native_tileset::publish(&capability);check(bg3::native_tileset::enabled(&capability));
  bg3::native_tileset::publish(&capability);check(capability==1); // held/core reload never clears it.

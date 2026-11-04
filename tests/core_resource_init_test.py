@@ -40,15 +40,6 @@ class CoreResourceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             print(result.stdout.strip())
 
-    def test_water_hit_setup_requires_request(self):
-        text = (ROOT / "core/water.cpp").read_text(encoding="utf-8")
-        for call in ("hit_ready = ensure_compose", "hit_ready = ensure_layouts"):
-            prefix = text[:text.index(call)]
-            self.assertTrue(prefix.rsplit("if (", 1)[1].startswith("want_hit) {"))
-        self.assertIn('g_hit=host->cfg_int("rt_water_hit_shade",0)?in.hit:WaterHitInputs{};', text)
-        gi = (ROOT / "core/gi.cpp").read_text(encoding="utf-8")
-        self.assertIn('if (host->cfg_int("rt_water_hit_shade", 0) && s.ls_ok && s.boxes_bound', gi)
-
     def test_water_shared_state_read_is_locked(self):
         text = (ROOT / "core/water.cpp").read_text(encoding="utf-8")
         body = text[text.index("void water_on_pass_end("):text.index("void water_release(")]
