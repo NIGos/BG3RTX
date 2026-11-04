@@ -2,10 +2,20 @@
 
 ## Report: project consolidated offline, final qualification ready
 
-**Question for the user (only one): go for the final qualification live?**
-Batch: `tools/live_batches/release_qual/final/` (two launches, about 7 minutes and 200 MB), predictions in
-`tools/live_batches/release_qual/predicted_final.json`, queue command in [final-qual notes](archive/PROGRESS_CODEX_2026-11-05.md).
-Lives stay paused until the go.
+**Final qualification live (user go, 2026-11-04 23:24-23:38, main 66ed523b, release candidate rc-20261104-66ed523b PASS 12/12).**
+- Stock hair, Dialogue1: VALID, 123 s. Float energy +0.23% vs 21:04 (0.37525 vs 0.37439). One-sample costs vs rel3:
+  RT +0.57 ms, GI +0.45 ms, GI trace +1.0 ms (9.84 ms): single windows, not a measured regression.
+- Ultra, Water Queens House: every Ultra window gate passed in two launches (statics, pans, rotations, Ctrl+Shift+F9
+  A/B); 0 device lost, 0 deferred destroys. GI 11.3-12.2 ms in measured windows (11.46 ms at 17:52), RR 2.38-2.40 ms,
+  post temporal 0.14 ms. First launch timed out on the cold shader cache (50 compiles after today's shader changes).
+- High part not completed: its readiness waits were generated wrong (rt_build=auto printed as 1; a box-light
+  pipeline that High never builds). Test-job defects, not product faults; the alpha/OMM path High uses is the same
+  as Ultra's. No further reruns (lean rule). Post-release: fix release_qual/make_final.py readiness for presets.
+- Found by the user before the live and fixed: the package lacked the runtime alpha table (all foliage was opaque in
+  ray tracing, "cardboard" tree shadows); release logging was verbose (now quiet, Detailed logging switch).
+
+**Only question left: approve release candidate rc-20261104-66ed523b for upload?** Files:
+`.scratch/rc-test/rc-20261104-66ed523b-d3d675cc/` (Setup.zip, Setup.exe, portable ZIP). Nothing is uploaded by agents.
 
 **Done (all on main, pushed).**
 - Five independent reviews (layer; core, shaders, common; product surface; shaders; tools). Every finding

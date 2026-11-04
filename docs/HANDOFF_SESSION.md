@@ -8,7 +8,7 @@ and [RC_CHECK](release/RC_CHECK.md). ABI 26.
 
 - Consolidation done offline and merged: reviews, fixes, cleanup, UI/UX, installer, tooling. Every table row closed.
 - Release candidate verified PASS 12/12 (ZIP and Inno setup, 219 files).
-- Final qualification batch READY_FOR_LIVE: `tools/live_batches/release_qual/final/` (Ultra + High at Water
+- Final qualification run 2026-11-04 23:24-23:38: stock hair VALID, Ultra S8 gates all pass twice, High part blocked by job readiness defects (post-release fix). See PROGRESS top.
   Queens House, stock hair in Dialogue1). Lives are paused: queue it only after the user's explicit go.
 - After the live: analyse `<log>.final.json` against `predicted_final.json`, write the outcome here and in
   PROGRESS, then the user approves the release. Nothing is uploaded by agents.
