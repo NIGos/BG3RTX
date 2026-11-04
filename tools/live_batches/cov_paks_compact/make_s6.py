@@ -12,7 +12,8 @@ def main():
                purpose='S6 publication and same-run image/energy/cost qualification. Zero compatible publication rejects this candidate; UV matches alone never qualify.',
                args=['-RealPresent','-Move','-MovePlan','captures/live_batches/cov_paks_compact/plans/compact_s6.json'])
     state=dict(x.split('=',1) for x in job['set'].split(','))
-    state.update(rt_hit_material_paks='0',dump_preview_f32='1',rt_native_tileset='1',rt_stats='0',rt_timing_frames='300')
+    # Provision the device-created catalogue; phases toggle its live paks_key publication gate.
+    state.update(rt_hit_material_paks='1',dump_preview_f32='1',rt_native_tileset='1',rt_stats='0',rt_timing_frames='300')
     job['set']=','.join(k+'='+v for k,v in state.items())
     job['live_flow']=dict(expected_fps=30,settings_latency_s=1,trace_stall_s=3,startup_only=['rt_xfb_mb'])
     def phase(label,seconds,on=0,stats=0,shot=False):
