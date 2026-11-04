@@ -154,11 +154,17 @@ function Copy-To([string]$src, [string]$rel) {
 
 # Binaries.
 Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.dll") "bin\VkLayer_bg3rtx.dll"
-foreach ($f in @("VkLayer_bg3rtx.json", "bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
+Copy-To (Join-Path $layerBin "VkLayer_bg3rtx.json") "bin\VkLayer_bg3rtx.json"
+foreach ($f in @("bg3rtx_core.dll", "BG3RTX.exe")) { Copy-To (Join-Path $bin $f) "bin\$f" }
 foreach ($entry in $launcherFiles) { Copy-To $entry.Source $entry.Destination }
 # Only the manifest can add a third-party binary to the payload.
 foreach ($entry in $thirdParty.binaries) {
   $source = Join-Path $root $entry.destination
+  # -ReleaseLayer copies production Streamline beside the lean layer, including
+  # on a fresh worktree where the ordinary layer target has never been built.
+  if (-not $Diagnostics -and $entry.destination.StartsWith('bin/sl/')) {
+    $source = Join-Path $layerBin $entry.destination.Substring(4)
+  }
   if ($entry.destination -eq "bin/dxcompiler.dll" -and -not (Test-Path $source)) {
     $source = Join-Path "$env:VULKAN_SDK" "Bin\dxcompiler.dll"
   }

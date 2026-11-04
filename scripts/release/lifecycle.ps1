@@ -41,7 +41,7 @@ function Under([string]$root, [string]$rel) {
   return $p
 }
 function PayloadPath([string]$root, [string]$rel) {
-  if ($rel -match '^(?i:\.bg3rtx[^\\/]*|install_manifest\.txt|setup-support|unins[^\\/]*|bg3rtx_user\.ini|bg3rtx_launcher\.ini)([\\/]|$)') { throw "Reserved payload path: $rel" }
+  if ($rel -match '^(?i:\.bg3rtx[^\\/]*|install_manifest\.txt|setup-support|unins\d{3}\.(?:exe|dat|msg)|bg3rtx_user\.ini|bg3rtx_launcher\.ini)([\\/]|$)') { throw "Reserved payload path: $rel" }
   return Under $root $rel
 }
 function ReadJson([string]$p) { $null = Safe $p; return ([IO.File]::ReadAllText($p) | ConvertFrom-Json) }

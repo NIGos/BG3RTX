@@ -48,17 +48,23 @@ TRACK/native-hair documents; no RESULT file for those historical costs is presen
   symbols separation after owner decisions. Approve upload separately; no upload was performed.
 - [x] Run disposable package, legacy release_install, diagnostics and lifecycle fixtures.
   They use synthetic files, child-only process mocks and test scratch; no game or payload EXE runs.
-- [ ] Resolve installer route: the ZIP still wires legacy Install.cmd/install.ps1; transactional
-  lifecycle/Inno support exists separately and requires explicit package integration/equivalence.
-- [ ] Compile/pin/sign Inno if selected; complete standard-user disposable VM setup/update/abort,
-  Apps uninstall, shortcuts, locked files, low space and interruption acceptance.
+- [x] Wire Inno to the same 229-file ZIP payload; external SHA256 metadata, combined licence
+  page, original icon, per-user install, shortcuts and optional finish launch. Pin Inno 6.7.3
+  and its distribution hash in `scripts/release/SETUP.md`.
+- [x] Add an actual silent setup/update/uninstall RC stage on a throwaway destination:
+  229 hashes, settings keep/remove, shader-cache deletion and HKCU Apps-entry cleanup.
+  Qualification outcome: see RC_CHECK.md and `docs/progress/inno-setup.md`; adding the stage
+  does not itself qualify the compiled installer.
+- [ ] Pass compiled Setup RC gate; sign Inno and complete standard-user disposable VM
+  wizard/shortcuts/finish-launch, abort, locked-file, low-space and interruption acceptance.
 - [ ] Complete fresh-PC/no-VULKAN_SDK and Steam launch acceptance separately. Runtime DXC ships
   in bin; no compiler SDK, Python or browser runtime should be required on the player's PC.
 
 Legacy scripts preserve user settings on update and back up original collisions once to
 `.bg3rtx_backup`. Uninstall restores originals; missing/unsafe manifests fail before deletion.
 The legacy uninstaller removes runtime logs/captures and shader cache by default. Copy needed
-capture evidence elsewhere first. Lifecycle/Inno has a different retention policy; do not describe it as the ZIP's behaviour.
+capture evidence elsewhere first. Inno also removes shader cache by default, but keeps settings unless explicitly selected;
+reports and previous-version lifecycle backups remain. Direct lifecycle calls keep cache by default.
 
 ## Diagnostics and launcher acceptance
 

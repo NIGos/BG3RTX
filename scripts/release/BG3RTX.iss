@@ -1,11 +1,18 @@
-; Targets Inno Setup 6.x. Release owner must pin and validate the compiler.
-; ISCC.exe /DPayloadDir="C:\release\payload" /DProductVersion="0.1.0" BG3RTX.iss
+; Pinned to Inno Setup 6.7.3; compile through build_setup.ps1.
+; build_setup.ps1 supplies payload, version, hash metadata and combined licence.
 ; Payload contract and integration handoff: SETUP.md. Uses B1 original branding.
 #ifndef PayloadDir
   #error PayloadDir must point to a verified release payload
 #endif
 #ifndef ProductVersion
   #error ProductVersion must be supplied by the release owner
+#endif
+
+#ifndef HashManifest
+  #error HashManifest must point to payload.sha256.json
+#endif
+#ifndef LicensePath
+  #error LicensePath must contain LICENSE and LICENSE-EXCEPTION.md
 #endif
 
 [Setup]
@@ -18,16 +25,18 @@ DefaultDirName={localappdata}\Programs\BG3RTX
 PrivilegesRequired=lowest
 Uninstallable=yes
 CreateUninstallRegKey=yes
-UninstallDisplayIcon={app}\bin\BG3RTX.exe
+UninstallDisplayIcon={app}\bin\ui\branding\bg3rtx.ico
 UninstallFilesDir={app}\setup-support
 DisableProgramGroupPage=yes
 DisableDirPage=no
 UsePreviousAppDir=yes
 OutputBaseFilename=BG3RTX-{#ProductVersion}-Setup
-OutputDir=output
+OutputDir=..\..\.scratch\setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile={#LicensePath}
+DisableWelcomePage=no
 CloseApplications=no
 RestartApplications=no
 SetupLogging=yes
@@ -40,6 +49,7 @@ Name: "startmenu"; Description: "Create a Start menu shortcut"; Flags: checkedon
 Name: "desktop"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
+Source: "{#HashManifest}"; DestDir: "{tmp}\bg3rtx-payload"; DestName: "payload.sha256.json"; Flags: dontcopy
 Source: "lifecycle.ps1"; DestDir: "{tmp}"; DestName: "bg3rtx-lifecycle.ps1"; Flags: dontcopy
 Source: "{#PayloadDir}\*"; DestDir: "{tmp}\bg3rtx-payload"; Flags: dontcopy recursesubdirs createallsubdirs
 ; Recursive payload above includes bin\ui\{index.html,app.css,app.js}, fonts and
@@ -95,13 +105,19 @@ Source: "lifecycle.ps1"; DestDir: "{app}\setup-support"; Flags: ignoreversion
 #endif
 
 [Icons]
-Name: "{autoprograms}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; Tasks: startmenu
-Name: "{autodesktop}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; Tasks: desktop
+Name: "{autoprograms}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; IconFilename: "{app}\bin\ui\branding\bg3rtx.ico"; Tasks: startmenu
+Name: "{autodesktop}\BG3RTX"; Filename: "{app}\bin\BG3RTX.exe"; WorkingDir: "{app}\bin"; IconFilename: "{app}\bin\ui\branding\bg3rtx.ico"; Tasks: desktop
+
+[Run]
+Filename: "{app}\bin\BG3RTX.exe"; Description: "Start BG3RTX"; WorkingDir: "{app}\bin"; Flags: nowait postinstall skipifsilent
+
+[Messages]
+WelcomeLabel2=The game folder is not changed; set the game to Vulkan + DLSS.
 
 [Code]
 var
   Applied, Completed: Boolean;
-  RemoveSettings, RemoveCache: Boolean;
+  RemoveSettings: Boolean;
 
 function Lifecycle(Action, Extra, Script: String): Boolean;
 var Code: Integer;
@@ -158,7 +174,6 @@ begin
 end;
 
 function InitializeUninstall: Boolean;
-var CacheSize: AnsiString;
 begin
   { Check processes and ownership before prompting or Inno removes anything. }
   Result := Lifecycle('Inspect', '', ExpandConstant('{app}\setup-support\lifecycle.ps1'));
@@ -166,25 +181,18 @@ begin
     MsgBox('Close the game and settings app before uninstalling. If setup was interrupted, recover it first. No process was stopped.', mbError, MB_OK);
     exit;
   end;
-  RemoveSettings := False;
-  RemoveCache := False;
-  if not UninstallSilent then begin
-    RemoveSettings := MsgBox('Remove your BG3RTX settings too? Choose No to keep settings and reports (recommended). Reports are always kept.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
-    if Lifecycle('CacheInfo', '-SummaryPath "' + ExpandConstant('{tmp}\bg3rtx-cache-size.txt') + '"', ExpandConstant('{app}\setup-support\lifecycle.ps1')) and
-       LoadStringFromFile(ExpandConstant('{tmp}\bg3rtx-cache-size.txt'), CacheSize) then
-      RemoveCache := MsgBox('Remove the compiled shader cache (' + String(CacheSize) + ')? It will be rebuilt if BG3RTX is installed again.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES
-    else
-      MsgBox('Cache size could not be checked safely. The shader cache will be kept.', mbInformation, MB_OK);
-  end;
+  { Silent removal retains settings unless the caller explicitly opts out. }
+  RemoveSettings := ExpandConstant('{param:REMOVESETTINGS|0}') = '1';
+  if not UninstallSilent then
+    RemoveSettings := MsgBox('Remove your BG3RTX settings too? Choose No to keep settings (recommended). Reports are always kept.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Extra: String;
 begin
   if CurUninstallStep = usUninstall then begin
-    Extra := '';
+    Extra := '-RemoveShaderCache';
     if RemoveSettings then Extra := Extra + ' -RemoveSettings';
-    if RemoveCache then Extra := Extra + ' -RemoveShaderCache';
     { A previous attempt may have completed our transaction before Inno itself failed.
       Inspect above still rejects a pending journal; do not delete the payload twice. }
     if FileExists(ExpandConstant('{app}\.bg3rtx-state.json')) then
