@@ -234,19 +234,51 @@ Check (-not (Test-CameraPlanReady $resident $water $water)) 'outstanding water b
 Check (Test-CameraPlanReady $resident "$water`n[water] rt/water_compose.hlsl water_compose: built" $water) 'water completion resolves outstanding build'
 $resident.wait_log += 'explicit producer'
 Check (-not (Test-CameraPlanReady $resident $ack $ack)) 'conditional pipeline witnesses preserve explicit producer wait'
+# Explicit state observations cannot be replaced by settings acknowledgement.
+$fresnel=@{set='rt_water_surface_fresnel=1';wait_log=@('surface Fresnel.*enabled 1', '\[watch\].*pipelines 0');wait_log_fresh=@('\[watch\].*pipelines 0')}
+$fack="[cfg] settings read`n[cfg] keys: rt_water_surface_fresnel=1"
+Check (-not (Test-CameraPlanReady $fresnel $fack $fack)) 'Fresnel needs observed state'
+Check (-not (Test-CameraPlanReady $fresnel "surface Fresnel enabled 1`n$fack" $fack)) 'stale Fresnel state cannot release toggle'
+Check (Test-CameraPlanReady $fresnel "$fack`nsurface Fresnel enabled 1" "$fack`nsurface Fresnel enabled 1") 'fresh Fresnel state releases'
+$rr=@{set='rr_post_temporal=1';wait_log=@('\[rrpost\] rr_post\.hlsl:temporal pipeline built','\[rrpost\] rr_post\.hlsl:temporal_final pipeline built','\[watch\].*pipelines 0');wait_log_fresh=@('\[watch\].*pipelines 0')}
+$rack="[cfg] settings read`n[cfg] keys: rr_post_temporal=1"
+$completed="[rrpost] rr_post.hlsl:temporal pipeline built`n[rrpost] rr_post.hlsl:temporal_final pipeline built"
+Check (-not (Test-CameraPlanReady $rr $rack $rack)) 'cold RR cannot pass cfg alone'
+Check (-not (Test-CameraPlanReady $rr "$rack`n[rrpost] rr_post.hlsl:temporal pipeline built" $rack)) 'both RR completions required'
+Check (Test-CameraPlanReady $rr "$completed`n$rack" $rack) 'cached RR completion evidence releases'
+foreach ($event in 'building in the background','creation failed (-2)') {
+ $rrlog="$completed`n$rack`n[rrpost] rr_post.hlsl:temporal pipeline $event"
+ Check (-not (Test-CameraPlanReady $rr $rrlog $rack)) 'later RR build/failure invalidates cached readiness'
+ Check (Test-CameraPlanReady $rr "$rrlog`n[rrpost] rr_post.hlsl:temporal pipeline built" $rack) 'new completion resolves RR build/failure'
+}
+Check (-not (Test-CameraPlanReady $rr "$rack`n[rrpost] rr_post.hlsl:temporal pipeline creation failed (-2)" $rack)) 'explicit RR failure without completion blocks'
 # Execute the actual runtime wait block with a synthetic log and clock, no game.
+# Execute the actual settings write: no burst before readiness.
+$applyBegin=$runner.IndexOf('        $phaseReadyOffset=if (Test-Path')
+$applyEnd=$runner.IndexOf('      # Optional selected-save reload', $applyBegin)
+$applyBlock=[scriptblock]::Create($runner.Substring($applyBegin,$applyEnd-$applyBegin).TrimEnd().TrimEnd('}'))
+$ini=Join-Path $scratch 'arm.ini';Set-Content $ini 'pan_capture=123'
+$guardRunner=Join-Path $scratch 'arm.runner.txt';$log=Join-Path $scratch 'arm.log'
+$step=@{wait_log=@('ready');serial=98603;capture_at=0;set='rt=1'}
+$planClock=@{Elapsed=@{TotalMilliseconds=1000}};$NoActivate=$false;$panIndex=0
+. $applyBlock
+Check ((Get-Content $ini -Raw) -match 'pan_capture=0') 'settings write defers burst until readiness'
 $begin=$runner.IndexOf('      if ($step.wait_log -and -not $phaseReady)')
 $end=$runner.IndexOf('      if ($step.recenter', $begin)
 $waitBlock=[scriptblock]::Create($runner.Substring($begin,$end-$begin))
 $log=Join-Path $scratch 'ready.log'
 $guardRunner=Join-Path $scratch 'guard.runner.txt'
 $phaseReadyOffset=0
+$ini=Join-Path $scratch 'auto.ini'
+Set-Content $ini 'pan_capture=0'
+$phaseBurstArmed=$false
 [IO.File]::WriteAllText($log, "ready cached in an earlier phase`nunrelated latest line")
-$step=@{label='cached';wait_log=@('ready cached');wait_log_timeout=5}
+$step=@{label='cached';wait_log=@('ready cached');wait_log_timeout=5;serial=98603}
 $planClock=@{Elapsed=@{TotalSeconds=20;TotalMilliseconds=20000}}
 $phaseReady=$false;$phaseWaitAt=$null;$panCaptureSent=$true;$panIndex=3;$elapsed=4;$after=$false
 while ($true) { . $waitBlock; $after=$true; break }
 Check ($after -and $phaseReady -and $elapsed -eq 0 -and $phaseStartMs -eq 20000) 'cached readiness resumes phase clock at zero'
+Check ((Get-Content $ini -Raw) -match 'pan_capture=98603') 'actual runner arms burst after readiness'
 $step.wait_log=@('missing');$phaseReady=$false;$phaseWaitAt=10;$after=$false;$result=''
 while ($true) { . $waitBlock; $after=$true; break }
 Check (-not $after -and $result -eq 'pipeline readiness timed out: cached; missing: missing') 'actual runtime timeout exits before downstream capture'

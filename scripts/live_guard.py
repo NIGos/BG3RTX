@@ -72,7 +72,7 @@ def evaluate(job, plan, game, runner, phase, now, failed=()):
     for gate in job.get("expect_every", []):
         if not gate.get("windows") and not gate.get("trend"):
             selected = [line for _, line in lines if re.search(gate["select"], line)]
-            if any(not re.search(gate.get("match", ""), line) for line in selected):
+            if any(not gates.line_matches(gate, line) for line in (selected[:1] if gate.get("first_only") else selected)):
                 return failure("every-window " + gate.get("name", gate["select"]) + ": nonmatching line")
 
     margin = float(job.get("live_flow", {}).get("settling_margin_s", 1))
