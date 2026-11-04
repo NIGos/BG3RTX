@@ -178,9 +178,26 @@
       ]
     },
     {
-      "name": "strands drawn after every strand-stage reload",
+      "name": "strands drawn after every strand-stage reload when draws swapped",
       "select": "\\[hair primary\\] frame \\d+:",
       "match": "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
+      "min": 1,
+      "period_frames": 300,
+      "windows": [
+        "survive-c-strands-2",
+        "survive-c-strands-3",
+        "survive-d-fibre-2",
+        "survive-d-fibre-3"
+      ],
+      "required_if": {
+        "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+        "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+      }
+    },
+    {
+      "name": "strand shaders run after every strand-stage reload (draws probed)",
+      "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+      "match": "coverage \\(last 300 frames\\): [1-9]\\d* draws probed",
       "min": 1,
       "period_frames": 300,
       "windows": [

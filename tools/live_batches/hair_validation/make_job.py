@@ -119,7 +119,7 @@ def job(name, save, plan, validation=False):
     j["set"] = j["set"].replace("dump_png_width=0", "dump_png_width=960")
     # Keep actual Ultra qualified keys: the inherited diagnostic jobs disabled OMM.
     j["set"] = j["set"].replace("rt_omm=0", "rt_omm=1")
-    j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read", hp.STRANDS]
+    j["expect"] = [r"\[auto\] scene ready", r"\[cfg\] settings read"]   # strand draws: per-window, once swapped
     j["forbid"] = [p for p in j["forbid"] if p not in
                    (r"\[hair primary\] .*refused", r"\[bvh\] mesh pool full at")]
     j["forbid"] += [r"\[hair primary\].*\b[1-9]\d* pipelines refused", r"(?i)device (?:was )?lost", r"\[fault\]\s+(read|write|execute) invalid",
@@ -135,7 +135,7 @@ def job(name, save, plan, validation=False):
     gates.append(dict(name="hair guards zero in every judged window", select=r"\[alpha hair\] native coverage records",
                       match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1, windows=judged))
     gates.append(dict(name="strands participate in each ON cost window", select=r"\[hair primary\] frame \d+:",
-                      match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
+                      match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES, required_if=hp.WHEN_SWAPPED,
                       windows=["validation-strands", "validation-after-reload"] if validation else ["cost-strands", "cost-after-reload"]))
     if not validation:
         for label, serial in (("cards",98410),("strands",98411)):
@@ -167,12 +167,16 @@ def bisect_job(name, save, plan):
     j["expect_every"].append(dict(name="hair guards zero after every reload", select=r"\[alpha hair\] native coverage records",
                                   match=r"invalid/missing native state 0;.*retired bounds-invalid primitives 0;", min=1,
                                   windows=[l for l in survive if l.endswith("-3")]))
-    # A strand stage is only proven with strands on screen (hv5 2026-11-03: every draw struck, 0 strand draws, yet
-    # "stable"): G-buffer and velocity strand draws in its survival windows after the 300-frame swap pause.
-    j["expect_every"].append(dict(name="strands drawn after every strand-stage reload", select=r"\[hair primary\] frame \d+:",
-                                  match=hp.STRANDS, min=1, period_frames=PRIMARY_LOG_FRAMES,
-                                  windows=[l for l in survive if any(l.startswith("survive-" + s) for s in STRAND_STAGES)
-                                           and not l.endswith("-1")]))
+    # A strand stage is only proven with the strand shaders running (hv5 2026-11-03: every draw struck, 0 strand draws, yet
+    # "stable"): the coverage line with probed draws in its survival windows after the 300-frame swap pause (the strand
+    # G-buffer variant counts strand samples there, writes off); G-buffer and velocity strand draws once draws swapped.
+    strand_windows = [l for l in survive if any(l.startswith("survive-" + s) for s in STRAND_STAGES) and not l.endswith("-1")]
+    j["expect_every"].append(dict(name="strand shaders run after every strand-stage reload (draws probed)",
+                                  select=hp.COVERAGE, match=r"coverage \(last 300 frames\): [1-9]\d* draws probed",
+                                  min=1, period_frames=PRIMARY_LOG_FRAMES, windows=strand_windows))
+    j["expect_every"].append(dict(name="strands drawn after every strand-stage reload when draws swapped",
+                                  select=r"\[hair primary\] frame \d+:", match=hp.STRANDS, min=1,
+                                  period_frames=PRIMARY_LOG_FRAMES, required_if=hp.WHEN_SWAPPED, windows=strand_windows))
     j["expect_runner"] = [r"window-mode.*visible_unfocused", rf"\[motion-plan\] complete phases={len(plan)}\b", "^Run ended: done",
                           r"\[hair-reload\] selected save reload complete"]
     j["purpose"] = ("Reload bisect (hv1 device lost after F8): four F8 reloads in one launch with rt_hair_groom_primary "
