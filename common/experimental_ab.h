@@ -2,6 +2,12 @@
 #include "settings.h"
 
 namespace bg3::experimental_ab {
+// F9 always selects the master switch, independent of the saved target.
+enum class HotkeyAction { None, Master, Experimental };
+inline HotkeyAction hotkey_action(bool master_edge, bool target_edge, bool enabled) {
+  return !enabled ? HotkeyAction::None : master_edge ? HotkeyAction::Master :
+         target_edge ? HotkeyAction::Experimental : HotkeyAction::None;
+}
 // Only normal Experimental choices with live transitions can become a target.
 inline bool eligible(const settings::Knob& k, int c) {
   return k.experimental && !k.dev_only && k.kind == settings::Kind::Choice &&

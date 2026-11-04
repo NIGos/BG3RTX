@@ -94,7 +94,7 @@ std::string Bridge::handle(const std::string& message){
     if(preview_kind_=="preset"){state_.values=preview_values_;state_.preset=preview_preset_;preview_kind_.clear();}
     else if(preview_kind_=="save"&&blocked_.empty()){
       State candidate=state_;candidate.values=preview_values_;std::string error;
-      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.";}
+      if(hooks_.save&&hooks_.save(candidate,preview_keys_,error)){state_=std::move(candidate);ab_selection_.pending=false;saved_=state_.values;saved_preset_=state_.preset;preview_kind_.clear();status_=restart_count_?"Saved; restart required.":"Saved. Live settings apply automatically; Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.";}
       else status_=error.empty()?"Settings could not be saved. Your edits are kept.":error;
     }return state_json();
   }

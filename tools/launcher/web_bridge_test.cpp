@@ -104,6 +104,17 @@ int main(int argc,char** argv){
   reject=false;tb.handle("{\"type\":\"save\",\"policy\":\"enable\"}");tb.handle("{\"type\":\"confirm\"}");
   st::Map ab=st::code_defaults();for(auto& kv:written)ab[kv.first]=kv.second;
   check(st::lookup(ab,"ab_target")=="exp_hair_groom");
+  // Both hotkeys share the gate; F9 wins even with a saved Experimental target
+  // or when both edges arrive together. Target validity never routes F9 to flip.
+  using Action=bg3::experimental_ab::HotkeyAction;
+  for(bool enabled:{false,true})for(bool master:{false,true})for(bool target:{false,true})
+    check(bg3::experimental_ab::hotkey_action(master,target,enabled)==
+          (!enabled?Action::None:master?Action::Master:target?Action::Experimental:Action::None));
+  check(tb.state_json().find("Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice.")!=std::string::npos);
+  const auto before_master=ab;
+  check(bg3::experimental_ab::hotkey_action(true,false,true)==Action::Master);
+  check(ab==before_master);
+  check(bg3::experimental_ab::hotkey_action(false,true,true)==Action::Experimental);
   std::string line;check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="1");
   check(line.find("A/B: rt_hair_groom=1") == 0);
   check(bg3::experimental_ab::flip(ab,line));check(ab["rt_hair_groom"]=="0");
@@ -113,6 +124,9 @@ int main(int argc,char** argv){
   ab["ab_target"]="rr_post";ab["ab_choice"]="1";ab["rr_post"]="1";
   check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="0");
   check(bg3::experimental_ab::flip(ab,line)&&ab["rr_post"]=="1");
+  ab.erase("ab_target");const auto no_target=ab;
+  check(!bg3::experimental_ab::flip(ab,line));check(ab==no_target);
+  check(bg3::experimental_ab::hotkey_action(true,false,true)==Action::Master);
   ab["ab_target"]="exp_hair_gi_mean";check(!bg3::experimental_ab::flip(ab,line));
   ab["ab_target"]="rr";check(!bg3::experimental_ab::flip(ab,line));
   ab["ab_target"]="exp_native_coverage";ab["ab_choice"]="2";check(!bg3::experimental_ab::flip(ab,line));   // qualified (non-experimental) knobs are never A/B targets

@@ -212,7 +212,7 @@ static bool save(bool) {
   g.ab_selection.pending=false;
   g.st.user_text=text;g.st.user=after;g.st.values=preview.values;g.st.loaded=preview.values;
   save_game_dir(g.dir);g.saved=g.st.values;g.saved_preset=g.st.preset;g.saved_dir=g.dir;
-  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved. Live settings apply automatically; Ctrl+Shift+F9 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.");rebuild();return true;
+  status(g.pending?L"Saved; restart required. The game will not be restarted automatically.":L"Saved. Live settings apply automatically; Ctrl+Shift+F9 toggles all ray tracing; Ctrl+Shift+F10 flips the last saved Experimental choice. A/B feedback is in bg3rtx.log.");rebuild();return true;
 }
 static void select_preset(int p) {
   auto v=st::preset_values_for(p,g.st.caps);
