@@ -218,28 +218,41 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   groom's triangles <= the captured ones, stride >= 24) gates the update in bvhsplit (the slot is kept, no groom
   instance that frame: cards in every pass), and hair_groom_update.hlsl bounds every read by the draw's triangle
   count and the buffer size (a point outside keeps last frame's position).
-- Bald player (hc2, 2026-11-04): publication and absence of strikes did not prove coverage. A tiny band of strand
-  tips could hide the entire draw. `CoverageGate` now requires fresh positive card samples and a strand/card ratio
-  at least `kCoverMin`, in addition to `SwapGate` publication/pass rules. The prepass and velocity retain their
-  previous-G-buffer requirement. A failed ratio brings cards back at the next readback, without strikes or a
-  600-frame retry delay; probes continue while cards are visible. Pixel-record counts are diagnostic only.
-- Coverage acquisition (2026-11-04, second form): per matched draw a precise occlusion query of its card samples in
-  the camera prepass (native draw or no-depth-write clone), and one of its strand samples in the G-buffer pass: the
-  strand G-buffer variant itself with no colour or depth writes, drawn after the native card draw (or the swapped
-  strand draw, counted directly). Same shader, ray, rebase, pool bound and ownership band as the strands drawn.
-  The first form (a prepass probe shader at the card's own depth) counted 0 strand samples in every live run:
-  the native prepass depth test rejects equal depth where the card adds no depth offset; it was also the only
-  strand shader running when hv5 lost the device. Strand queries only in order mode with this frame's applied header,
-  the prepass recording ordered before (same recording or submitted), no game query open; else no evidence (cards).
-- Query resets run in the game's prepass command buffer at `hair_primary_before_pass`, outside the render pass.
-  Each ring slot is restricted to the exact recording that reset it. Readback requires its successful submission,
-  GPU completion and query availability. Unsubmitted/discarded results are never evidence; indices are retained
-  until reset/free invalidates the previous recording, including reusable command buffers. Four-frame readback
-  latency plus two frames gives `kFreshFrames = 6`. A private probe header is written in the same command buffer
-  from a staged publish whose groom build is ordered before it; no ordered publish means no probe evidence.
-  Query overflow, another recording for the same key, active native queries or a refused pipeline fail closed.
-  `occlusionQueryPrecise` is checked in the actual device create info: if absent, no primary variants/resources
-  are created and one UNAVAILABLE line explains why. No optional device feature is forced on.
+- Coverage repair (2026-11-04, branch claude/hair-coverage-accept, READY_FOR_LIVE): the ratio is now
+  unique accepted strand pixels / unique card pixels from one G-buffer draw set and one applied tag.
+  A card marker is written before ray/rebase/ownership/UV/tip rejection; a separate accepted marker is
+  written after the last rejection. Rejected fragments never clear acceptance. Sealed hit entries remain
+  reusable by velocity and other strand consumers; refused/other/traced diagnostics retain their meaning.
+- Native FS inputs contain material, transform and UV, but no index-range draw key. A ray miss cannot
+  supply groom attribution. Specialization constant 1102 supplies a compact draw-key slot in [0, 16).
+  The layer assigns distinct live keys at publish, retains their slots while live, and stages the groom-to-slot
+  map with that header. Crowds sharing a key share a slot; overflow keeps cards (no probe or swap) and logs
+  `draws without a slot N`. Each supported G-buffer pipeline gets 16 strand and 16 masked-probe
+  specializations, down from 64 + 64 (shaders/variants.txt request delta 0).
+  One 8 B/pixel marker pair stores `(tag << 8) | slot` in each word; the count compares low 24 tag bits
+  for four newest tags and accepts only identical card/accepted words. Including the 16 B cache,
+  allocation is width * height * 24 B: 65,556,480 B (65.6 MB, 62.5 MiB) at 2560 x 1067, independent of grooms.
+  In unswapped frames prepass depth admits only the front card layer (one owner); swapped overlapping keys use last-writer attribution for both words.
+  GPU count/probe cost remains unmeasured; allocations beyond 32-bit count offsets keep cards.
+- Card occlusion queries, precise-query feature requirement, private prepass probe header and cross-pass
+  CoveragePairing are removed. Native-card draws get the masked G-buffer replay; swapped draws write the
+  identical markers themselves. Both sides therefore remain valid without prepass card depth.
+- A tag applied by multiple recorded G-buffer frames is ambiguous: invalidate prior evidence immediately,
+  reject its readback, and log `ambiguous tags N`. Evidence retains its bounded lifetime and unchanged
+  kCoverMin/kCoverMax. Counts with card pixels and zero accepted pixels are failures, not missing evidence.
+- The old period log mixed newer failed ratios with swaps using earlier fresh evidence. Each key now logs
+  `key:accepted/card=latest,swapped_frames,used=min..max` for all successful pass decisions. Every
+  swapped key also has an untruncated `coverage used` line with its ratio range and decision count. New failed
+  evidence prevents subsequent swaps; old late successes cannot replace it. Probes continue with cards.
+- A frame/key latch records dropped prepass depth. Refused G-buffer strands use a native-material fallback
+  with reversed-Z GREATER_OR_EQUAL plus depth writes, including when the applied header loses the key.
+  All sibling draws retain the depth obligation through that frame. Only keys with a known fallback may
+  drop prepass depth. Remaining unresolved obligations are true orphans in the existing 300-frame log;
+  the coverage line also reports native depth fallback draws. Synthetic ordering tests cover delayed
+  readback, ambiguity, failed coverage, fallback and zero orphans on the supported path.
+- Offline validation: final build and all 149 CTests passed, including host atomics lint and the corrected
+  prepass -> G-buffer -> delayed-publish ordering regression. Revision CTests took 121.24 s. G-buffer, velocity and count requests
+  compiled and passed spirv-val (3/3; 2 rebuilt, velocity cached); no shared shader include changed. Cache: worktree build/shader_cache.
 - Derived bound: `kCoverMin = 0.8913102349775665`. The unchanged batch-4 state has 877 passing styles
   (2,631 front/side/back views). It stores rounded `coverage_delta = mean(strands) - mean(cards)`, not ratios.
   `tools.hair_groom.coverage_bound` regenerates only opacity from the existing groom/card cache and DDS masks;
@@ -250,17 +263,12 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   the bound is `r - sigma`. This uses independent spatial Bernoulli samples (each count's variance <= its mean),
   and permits arbitrary covariance between card and strand totals. It is a model of one frame's count noise,
   not measured temporal/dither noise. The offline composited-opacity ratio models visible coverage; precise
-  GPU queries count surviving raster samples, including overlapping layers. This distinction remains for live
-  confirmation. No tolerance was tuned against the failed hc2 run. Full reproducible artifact:
+  live markers count unique pixels rather than overlapping raster layers; live qualification remains open. No tolerance was tuned against the failed hc2 run. Full reproducible artifact:
   `captures/hair_groom_batch/coverage_bound.json`; compact provenance and unchanged state SHA-256:
   `docs/progress/claude-hair-coverage-bound.json`. Regenerate with
   `python -m tools.hair_groom.coverage_bound --report-dir <main>/captures/hair_groom_batch` (cached, BelowNormal).
-- Cost estimate: duplicate vertex/raster work plus one uncached groom trace per card fragment. The existing LSS
-  bench model is 0.25 ns/ray: about 0.025 ms per 100k fragments, or 0.4 ms for 1.6M, before vertex/raster/query
-  overhead. Relative to `strand G-buffer draws GPU`, the probe omits material evaluation and attachment stores but
-  traces per fragment rather than reusing the per-pixel cache, so it can exceed that draw group's cost at high
-  overdraw. The supplied hc1/hc2 logs contain no numeric `strand G-buffer draws GPU` lines; a measured comparison
-  is unavailable. No game was launched for this change.
+- Cost: no game was launched. Marker memory is given above; GPU ms is unmeasured. Use the existing
+  strand G-buffer timestamp line and a dedicated live cost window for the count/probe overhead before promotion.
 - Device lost after the F8 reload (hv1 18:40, cause not confirmed): a new level reuses Vulkan handles for other
   objects. The native hair FS module map is erased on vkDestroyShaderModule and on reuse (a reused handle could give
   a non-hair pipeline a strand variant). `hair_primary::LoadGuard`: a new G-buffer depth image marks a level load;
@@ -282,7 +290,7 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
 
 - The former zero-pixel strike/retry rule is superseded by measured per-key coverage. Adjacent pixel-record
   tags remain diagnostic and cannot qualify a swap. Grooms sharing an index-range key are measured together;
-  every queried draw of that key must have both results available before its frame is accepted.
+  shader draw attribution uses their compact draw-key slot in both packed marker words.
 - Rebase (2026-11-04): the scene build is recorded after the G-buffer pass, so the strand passes of frame N read
   frame N-1's publish. The publish carries its build camera; rays start at camera_N - camera_build in its frame
   (shaders/rt/hair_primary_rebase.hlsli). Publishes up to one frame old are accepted; no build camera: no strand.

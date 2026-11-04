@@ -16,6 +16,9 @@
 
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
+[[vk::constant_id(1102)]] const uint kDrawSlot = 16u;
+
+static const uint hair_primary_key_map_offset = 3248u; // common/hair_primary.h kKeyMapOffset
 
 struct Camera {               // set 0 binding 2 (FRAME_MAP "Frame generation")
   row_major float4x4 view;    // world -> view
@@ -96,6 +99,15 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   const float2 dx = ddx(card_uv), dy = ddy(card_uv);   // before the first return (quad neighbours)
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) { discard; return o; }
+  // A compact draw slot identifies the draw key, including misses and rejected hits.
+  // Separate scalar words are idempotent across stacked fragments; rejected lanes never erase acceptance.
+  if (kDrawSlot >= 16u || pos.x < 0 || pos.y < 0 || pos.x >= width || pos.y >= height) { discard; return o; }
+  const uint64_t marker_pixels = addr2(ld2(rec + 32u));
+  const uint marker_index = uint(pos.y) * width + uint(pos.x);
+  const uint64_t marker = marker_pixels + uint64_t(width) * height * 16u +
+                          uint64_t(marker_index) * 8u;
+  const uint packed_marker = (tag << 8u) | kDrawSlot;
+  vk::RawBufferStore<uint>(marker, packed_marker, 4);
   float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
   if (!hp_rebase(rec, gCam.position, org)) { discard; return o; }
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));
@@ -150,7 +162,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   }
   if (e.x == hair_primary_no_strand) { discard; return o; }
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;
-  if (k >= grooms) { discard; return o; }   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
+  if (k >= grooms || ld(rec + hair_primary_key_map_offset + k * 4u) != kDrawSlot) { discard; return o; }   // the cached entry is validated like a fresh hit (stores of a pixel are not atomic)
   const float v = asfloat(e.y);
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
@@ -177,6 +189,7 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float4 mb = tex(gMask, uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
   const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
   if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u && !hp_tips_keep(M.w, pos.xy, tag, aux.x)) { discard; return o; }
+  vk::RawBufferStore<uint>(marker + 4u, packed_marker, 4); // after every rejection, cache remains reusable
   const float m18 = F(18u);
   const float3 c279 = lerp(V(4u), V(6u), m18);
   const float f281 = frac(uv.y);

@@ -13,7 +13,7 @@
 namespace hair_primary {
 
 // Specialization constants of the variant fragment shaders (ids next to the RT spec range, unused elsewhere).
-constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101;
+constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101, kSpecDrawSlot = 1102;
 // Header (the fixed buffer whose address is baked), little-endian uint32 words:
 //  0 frame tag (frame index + 1 of the groom build; a pixel entry with another tag is stale)
 //  1 render width, 2 render height, 3 groom instance count (rows of the table below)
@@ -25,6 +25,7 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101;
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
 constexpr uint32_t kFlagTips = 1u << 0, kFlagCamera = 1u << 1, kFlagPrevCamera = 1u << 2;
 constexpr uint32_t kHeaderWords = 16;
+constexpr uint32_t kDrawSlots = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
 constexpr uint32_t kRowBytes = 16;
@@ -41,12 +42,13 @@ constexpr uint32_t kTransmitOffset = kOtherOffset + kMaxGrooms * 4;   // 768
 // entry) and those with a strand, and one sampled ray of the strand G-buffer variant (kRayDebugOffset, 64 bytes).
 constexpr uint32_t kTracedOffset = kTransmitOffset + kMaxGrooms * 16;   // 1792
 constexpr uint32_t kRaySampleOffset = kTracedOffset + 16;
-// Then strand pixels per groom for the four newest applied tags (tag, tag - 1, tag - 2, tag - 3): the count is recorded
+// Then accepted strand pixels per compact draw-key slot for the four newest applied tags (tag, tag - 1, tag - 2, tag - 3): the count is recorded
 // after this frame's G-buffer pass but may run on the GPU before the last G-buffer passes (hv7 2026-11-04: the record
 // held tag - 2 when the count looked for tag; every count read 0). The layer takes the newest tag with entries.
 constexpr uint32_t kCountTags = 4;
 constexpr uint32_t kTagCountOffset = kRaySampleOffset + 64;   // 1872
-constexpr uint32_t kCountBytes = kTagCountOffset + kCountTags * kMaxGrooms * 4;
+constexpr uint32_t kCardCountOffset = kTagCountOffset + kCountTags * kMaxGrooms * 4;
+constexpr uint32_t kCountBytes = kCardCountOffset + kCountTags * kMaxGrooms * 4;
 // The newest of the kCountTags tags (j = 0 newest) whose entries were found; -1 none.
 inline int newest_counted_tag(const uint32_t totals[kCountTags]) {
   for (int j = 0; j < int(kCountTags); ++j)
@@ -71,11 +73,14 @@ static_assert(kCameraOffset == 3136 && kPrevCameraOffset == 3152, "shaders/rt/ha
 // float4 (this camera's position, 0). Copied into the counts by rt/hair_primary_count.hlsl and logged.
 constexpr uint32_t kRayDebugOffset = kHeaderTotal, kRayDebugBytes = 64;
 static_assert(kRayDebugOffset == 3168, "shaders/rt/hair_primary_rebase.hlsli hair_primary_ray_debug_offset");
+// Key map at kKeyMapOffset: groom -> compact draw-key slot (kDrawSlots means no slot).
 // Breadcrumbs (diagnostics, hv6/hv7 2026-11-04 device lost once strand rays hit): the device address of a small
 // host-visible buffer of the layer. The strand G-buffer variant checks each explicit buffer access against its range
 // and records a violation there (site, address; the access is skipped), and notes the last TLAS / pool / pixel
 // addresses it used. Read every 300 frames and after a device loss (kCrumbSites sites x 16 bytes, then the notes).
-constexpr uint32_t kCrumbAddrOffset = kRayDebugOffset + kRayDebugBytes, kHeaderAllocAll = kCrumbAddrOffset + 16;   // 3232, 3248
+constexpr uint32_t kCrumbAddrOffset = kRayDebugOffset + kRayDebugBytes, kKeyMapOffset = kCrumbAddrOffset + 16, kHeaderAllocAll = kKeyMapOffset + kMaxGrooms * 4;   // 3232, 3248, 3504
+static_assert(kKeyMapOffset == 3248, "hair_primary_gbuffer.hlsl hair_primary_key_map_offset");
+static_assert(kCardCountOffset == 2896, "hair_primary_count.hlsl hair_primary_card_count_offset");
 constexpr uint32_t kCrumbSites = 16, kCrumbBytes = kCrumbSites * 16 * 2;
 static_assert(kCrumbAddrOffset == 3232, "shaders/rt/hair_primary_rebase.hlsli hair_primary_crumb_offset");
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
@@ -225,10 +230,8 @@ struct SwapGate {
   }
 };
 
-// Coverage evidence is independent of publication and pixel-record strikes. Query pairs are read
-// after 4 frames; two more frames permit CPU/GPU scheduling jitter, never an indefinite lease.
-// Evidence age: the card readback latency, plus the strand count's (up to kCountTags - 1 tags behind, read back
-// kCountSlots = 3 publishes later), plus 2 frames of scheduling jitter.
+// Coverage evidence is independent of publication and pixel-record strikes. Keep the existing conservative
+// latency budget: up to three older tags, three publishes of readback, plus scheduling slack.
 constexpr uint64_t kCoverageLatency = 4, kStrandLatency = 3 + 3, kFreshFrames = kCoverageLatency + kStrandLatency + 2;
 // Batch-4, 877 passing styles / 2631 views, regenerated from unchanged cached geometry:
 // minimum S/C = 8556.228538087944 / 9396.798707214493 = 0.9105471772550376
@@ -241,34 +244,35 @@ constexpr uint64_t kCoverageLatency = 4, kStrandLatency = 3 + 3, kFreshFrames = 
 constexpr double kCoverMin = 0.8913102349775665;
 // Upper side (2026-11-04: the strands may not cover more than the cards either: hv7 measured 2.55 with overdrawn
 // occlusion samples): the maximum offline ratio 1.0752640637962045 (2631 views) plus the same modelled noise. The live
-// ratio is unique strand pixels of the pixel record over the prepass card samples.
+// ratio is unique accepted strand pixels over unique card pixels in the same G-buffer pass.
 constexpr double kCoverMax = 1.0752640637962045 + 0.01923694227747121;
-// Pairs the card samples of a prepass slot (frame C = the slot's frame) with the strand pixels of the G-buffer pass
-// recorded after that prepass (counted later, with another latency). Each side keeps its last kPairHistory frames per
-// key: the newest-only maps never met (hv7 2026-11-04: every draw 0/0, the card side ahead by the time the strand
-// count arrived). add() returns true and fills the pair when the other side has the same frame.
-constexpr uint32_t kPairHistory = 16;
-struct CoveragePairing {
-  struct Entry { uint64_t frame = 0, value = 0; };
-  std::unordered_map<uint64_t, std::vector<Entry>> card, strand;
-  bool add(bool is_card, uint64_t key, uint64_t frame, uint64_t value, uint64_t* card_out, uint64_t* strand_out) {
-    if (!key || !frame) return false;
-    auto& mine = (is_card ? card : strand)[key];
-    mine.push_back({frame, value});
-    if (mine.size() > kPairHistory) mine.erase(mine.begin());
-    const auto it = (is_card ? strand : card).find(key);
-    if (it == (is_card ? strand : card).end()) return false;
-    for (const Entry& e : it->second)
-      if (e.frame == frame) {
-        *card_out = is_card ? value : e.value;
-        *strand_out = is_card ? e.value : value;
-        return true;
-      }
-    return false;
+// A tag applied by two G-buffer frames cannot identify a measured frame.
+struct GbFrame { uint64_t frame = 0; uint32_t tag = 0; uint64_t keys[kMaxGrooms] = {}, draw_keys[kDrawSlots] = {}; };
+inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t tag, bool& ambiguous) {
+  const GbFrame* found = nullptr;
+  ambiguous = false;
+  for (uint32_t i = 0; i < n; ++i) if (frames[i].frame && frames[i].tag == tag) {
+    if (found) { ambiguous = true; return nullptr; }
+    found = frames + i;
   }
-  void clear() { card.clear(); strand.clear(); }
+  return found;
+}
+// Per-frame depth obligation: refused strands must restore native card depth.
+struct DepthLatch {
+  uint64_t frame = 0;
+  std::unordered_set<uint64_t> keys;
+  uint64_t begin(uint64_t f) {
+    if (f == frame) return 0;
+    const uint64_t orphan = keys.size(); keys.clear(); frame = f; return orphan;
+  }
+  void prepass(uint64_t key) { keys.insert(key); }
+  bool needs_card_depth(uint64_t f, uint64_t key, bool strands) {
+    if (f != frame || !keys.count(key)) return false;
+    // Keep the obligation for sibling draws of this key throughout the frame.
+    return !strands;
+  }
+  void resolved(uint64_t key) { keys.erase(key); }
 };
-
 struct CoverageGate {
   struct Evidence {
     uint64_t frame = 0, card = 0, strand = 0;
@@ -334,6 +338,26 @@ struct LoadGuard {
 
 inline uint32_t key(uint32_t groom, uint32_t segment) {
   return groom < 255u && segment <= kMaxSegment ? (groom << 24) | segment : kNoStrand;
+}
+// Retain slots for live keys before assigning newly seen keys to free slots.
+struct DrawSlots {
+  uint64_t keys[kDrawSlots] = {};
+  uint32_t find(uint64_t key) const {
+    for (uint32_t i = 0; i < kDrawSlots; ++i) if (key && keys[i] == key) return i;
+    return kDrawSlots;
+  }
+  void publish(const uint64_t* live, uint32_t count) {
+    for (auto& key : keys) {
+      bool present = false;
+      for (uint32_t k = 0; k < count; ++k) present |= key && key == live[k];
+      if (!present) key = 0;
+    }
+    for (uint32_t k = 0; k < count; ++k) if (live[k] && find(live[k]) == kDrawSlots)
+      for (auto& key : keys) if (!key) { key = live[k]; break; }
+  }
+};
+inline uint64_t coverage_bytes(uint32_t width, uint32_t height) {
+  return uint64_t(width) * height * (kPixelBytes + 8); // packed card and accepted words
 }
 inline uint64_t pixel_bytes(uint32_t width, uint32_t height) { return uint64_t(width) * height * kPixelBytes; }
 
