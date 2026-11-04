@@ -61,6 +61,12 @@ judged = shots + cost   # warm-ups are never judged (hc1 2026-11-03: a build gat
 traced = [p["label"] for p in plan if p.get("trace_at")]
 seconds = sum(p["seconds"] for p in plan)
 STRANDS = r"\[hair primary\] frame \d+: [1-9]\d* grooms published; last 300 frames: \d+ publishes, \d+ prepass, [1-9]\d* G-buffer and [1-9]\d* velocity strand draws, 0 pipelines refused"
+# The coverage gate (layer/hair_primary.cpp) swaps a draw only after fresh strand/card evidence: a strands-on window may
+# honestly have no strand draw (hc2 2026-11-04: fail-fast "producer silent" in the first strand window). The strand draw
+# and cost gates hold only in windows whose complete coverage periods report swapped frames (queue_gates required_if).
+COVERAGE = r"\[hair primary\] coverage \(last 300 frames\):"
+SWAPPED = r"[0-9a-fA-F]{4}:\d+/\d+=[0-9.]+,[1-9]\d*"
+WHEN_SWAPPED = {"select": COVERAGE, "match": SWAPPED}
 
 
 def expect_every():
@@ -81,11 +87,16 @@ def expect_every():
          "min": 1, "windows": judged},
         # Participation: strands drawn in the G-buffer and velocity passes while on (else INVALID: nothing replaced).
         {"name": "strand participation: G-buffer and velocity strand draws > 0 in the strands-on cost window",
-         "select": r"\[hair primary\] frame \d+: \d+ grooms published", "match": STRANDS, "min": 1,
+         "select": r"\[hair primary\] frame \d+: \d+ grooms published", "match": STRANDS, "min": 1, "required_if": WHEN_SWAPPED,
          "windows": ["cost-strands", "cost-fibre"]},
+        # Not vacuous: the strand shaders ran (draws probed) in the strands-on cost windows even when no draw swapped
+        # (a run whose coverage never yields evidence must not pass the conditional strand gates with zero strands).
+        {"name": "strand shaders ran: a draw with strand and card samples in every strands-on cost window",
+         "select": COVERAGE, "match": r"coverage \(last 300 frames\): [1-9]\d* draws probed, \d+ swapped; per draw [^:]*:.*[0-9a-fA-F]{4}:[1-9]\d*/[1-9]\d*=",
+         "min": 1, "period_frames": 300, "windows": ["cost-strands", "cost-fibre"]},
         {"name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
          "select": r"\[hair primary\] strand G-buffer draws GPU", "match": r"GPU [0-9.]+ ms/frame \(average of \d+ frames",
-         "min": 1, "windows": ["cost-strands"]},
+         "min": 1, "required_if": WHEN_SWAPPED, "windows": ["cost-strands"]},
         {"name": "fibre pass: dispatched in the fibre cost window",
          "select": r"\[hair fibre\] strand pixels lit", "match": r"\[hair fibre\] strand pixels lit", "event": True,
          "min": 1, "windows": ["shot-fibre-a", "cost-fibre"]},
@@ -116,7 +127,6 @@ def job(name, save):
         r"\[hair primary\] G-buffer hair pipeline: native depth test \d write \d compare \d+",
         r"\[hair primary\] velocity hair pipeline: native depth test \d write \d compare \d+",
         r"\[hair primary\] pixel record \d+x\d+: [0-9.]+ MB",
-        STRANDS,
         r"\[hair primary\] strand G-buffer draws GPU [0-9.]+ ms/frame",
         r"\[hair fibre\] strand pixels lit by the fibre BSDF after D-LS",
         r"rt passes: GPU cost [0-9.]+ ms/frame \(average of 300 frames\)",
