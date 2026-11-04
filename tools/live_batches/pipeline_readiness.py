@@ -38,6 +38,9 @@ for key in ("rt_water_hit_cost", "rt_water_hit_shade", "rt_water_compose_shift",
             "rt_water_empty_tiles", "rt_water_shadows", "rt_water_ls_shadows",
             "rt_water_refraction", "rt_water_game_shadow"):
     TABLE[key] = [WATER_COMPOSE]
+# rt_hair_groom_shadow_t: specialization 1026 of every rt_visibility consumer (core/gi.cpp refresh, core/water.cpp):
+# the shadow, local-shadow, reflection and trace pipelines are recreated (driver compile, no DXC).
+TABLE["rt_hair_groom_shadow_t"] = list(GI_QUERY) + [r"gi: gi/rt_shadow\.hlsl[^ ]* generation "]
 TABLE["ls_box"] = [r"gi: gi/rt_local_shadows_box\.hlsl[^ ]* generation "]
 TABLE["rr_post"] = [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"]
 
