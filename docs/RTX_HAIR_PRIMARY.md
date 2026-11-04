@@ -128,7 +128,19 @@ reachable: 368 (247 LOD0), first reason: coverage 132, silhouette 81, radiance 6
   LOD1 cards merge several LOD0 cards (63 of 205).
 - Root channel (38): 32 use one mask, HAIR_Afro_B_MSKA, whose curls do not run along the atlas rows: the row tracer
   cannot follow them (needs a 2-D curve tracer).
-- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only. Trace cost follows the hair pixels and only logarithmically the segments; refit and
+- Roots away from the head (45 alone): hat hair hanging from a hat rim and buns; root/tip shading only.
+- Companions and orientation (2026-11-03, user: companions first). Companion hair through their templates and the
+  origin presets: Shadowheart, Astarion, Lae'zel, Gale, Karlach, Jaheira, Minthara and the generic origin pass;
+  Halsin was reviewed only for "roots away from the head" (369 of 842 cards) with images within 1-3% of the cards:
+  strands lying along the scalp (radial share 0.20) decided it. The orientation test now counts only strands more
+  radial than tangential (|d_tip - d_root| > chord cos 45, tested); rerun of the 109 reachable styles with that
+  reason: 26 now pass (Halsin LOD0 and LOD1 among them), 63 still have radial reversed cards (hat hair, buns).
+  Gale's beard stays in review (LOD0: coverage +0.11, IoU 0.76; LOD1 reject IoU 0.55): unchanged under six atlas
+  grids (IoU 0.755-0.759), the alpha-weighted width and the texel-size mip. Short beards share it (26 player, 13
+  named NPC): a systematic card/strand difference the reference does not explain; to pass: a card reference that
+  averages the game's dithered alpha test (C5), or an explicit visual review (batch --accept-review).
+  Now: 745 pass, 346 review, 126 reject (reachable: 718 / 244 / 98). Player 354 / 49 / 29, companion 4 / 1 / 1
+  (Gale's beard), named NPC 153 / 32 / 26, generic NPC 8 / 7 / 10, hat variant 167 / 138 / 32, item 32 / 17 / 0. Trace cost follows the hair pixels and only logarithmically the segments; refit and
 memory follow the segments: so the crowd budget is in segments.
 `rt_hair_groom_crowd_ksegments` (off; GUI Performance "Strand hair crowd budget": 3500 / 1800 k): each frame the
 groom instances of the last frame share the budget, largest on screen first, each at its screen-size LOD or the
@@ -144,13 +156,47 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   groom's triangles <= the captured ones, stride >= 24) gates the update in bvhsplit (the slot is kept, no groom
   instance that frame: cards in every pass), and hair_groom_update.hlsl bounds every read by the draw's triangle
   count and the buffer size (a point outside keeps last frame's position).
-- Bald player: the prepass clone dropped the card depth for every matched static draw, also when its G-buffer
-  pipeline had no strand variant (another material permutation), whose card then failed its EQUAL depth test.
-  `hair_primary::SwapGate`: the G-buffer swaps a groom published twice; the prepass and velocity passes only a draw
-  whose G-buffer strand variant ran in the last completed frame. GPU feedback (`rt/hair_primary_count.hlsl`):
-  strand pixels per groom of the last frame's pixel record, read back 3 publishes later; 2 counted frames in a row
-  with the variant and no strand pixel fail that draw for the session (logged: "its strands drew no pixel"): its
-  cards stay. Regression tests: hair_groom_asset_test (the crash's offsets, the no-variant draw, the strikes).
+- Bald player (hc2, 2026-11-04): publication and absence of strikes did not prove coverage. A tiny band of strand
+  tips could hide the entire draw. `CoverageGate` now requires fresh positive card samples and a strand/card ratio
+  at least `kCoverMin`, in addition to `SwapGate` publication/pass rules. The prepass and velocity retain their
+  previous-G-buffer requirement. A failed ratio brings cards back at the next readback, without strikes or a
+  600-frame retry delay; probes continue while cards are visible. Pixel-record counts are diagnostic only.
+- Coverage acquisition: two precise occlusion queries per matched indexed main-camera prepass draw: the real card
+  draw (native or no-depth-write clone), followed after XFB ends by `rt/hair_primary_probe.hlsl`. The probe clones
+  native depth testing, rasterization and sample count, disables depth/colour/stencil writes, and uses the same
+  camera ray, `hp_segment` bounds and `hp_on_card` band as the G-buffer reader. No pixel-record reads or stores.
+  Strict native depth comparisons can reject equal-depth probe fragments after the card draw; this is conservative
+  (cards remain), and the requested depth test is deliberately preserved.
+- Query resets run in the game's prepass command buffer at `hair_primary_before_pass`, outside the render pass.
+  Each ring slot is restricted to the exact recording that reset it. Readback requires its successful submission,
+  GPU completion and query availability. Unsubmitted/discarded results are never evidence; indices are retained
+  until reset/free invalidates the previous recording, including reusable command buffers. Four-frame readback
+  latency plus two frames gives `kFreshFrames = 6`. A private probe header is written in the same command buffer
+  from a staged publish whose groom build is ordered before it; no ordered publish means no probe evidence.
+  Query overflow, another recording for the same key, active native queries or a refused pipeline fail closed.
+  `occlusionQueryPrecise` is checked in the actual device create info: if absent, no primary variants/resources
+  are created and one UNAVAILABLE line explains why. No optional device feature is forced on.
+- Derived bound: `kCoverMin = 0.8913102349775665`. The unchanged batch-4 state has 877 passing styles
+  (2,631 front/side/back views). It stores rounded `coverage_delta = mean(strands) - mean(cards)`, not ratios.
+  `tools.hair_groom.coverage_bound` regenerates only opacity from the existing groom/card cache and DDS masks;
+  all 2,631 differences reproduced within rounding (0 failures, 920.5 s). Expected sample totals are sums of
+  composited opacity over the batch's shared foreground union. The minimum ratio is Minthara LOD1 side:
+  `S = 8556.228538087944`, `C = 9396.798707214493`, `r = S/C = 0.9105471772550376`.
+  First-order one-frame count uncertainty is `sigma = (sqrt(S) + r * sqrt(C)) / C = 0.01923694227747121`;
+  the bound is `r - sigma`. This uses independent spatial Bernoulli samples (each count's variance <= its mean),
+  and permits arbitrary covariance between card and strand totals. It is a model of one frame's count noise,
+  not measured temporal/dither noise. The offline composited-opacity ratio models visible coverage; precise
+  GPU queries count surviving raster samples, including overlapping layers. This distinction remains for live
+  confirmation. No tolerance was tuned against the failed hc2 run. Full reproducible artifact:
+  `captures/hair_groom_batch/coverage_bound.json`; compact provenance and unchanged state SHA-256:
+  `docs/progress/claude-hair-coverage-bound.json`. Regenerate with
+  `python -m tools.hair_groom.coverage_bound --report-dir <main>/captures/hair_groom_batch` (cached, BelowNormal).
+- Cost estimate: duplicate vertex/raster work plus one uncached groom trace per card fragment. The existing LSS
+  bench model is 0.25 ns/ray: about 0.025 ms per 100k fragments, or 0.4 ms for 1.6M, before vertex/raster/query
+  overhead. Relative to `strand G-buffer draws GPU`, the probe omits material evaluation and attachment stores but
+  traces per fragment rather than reusing the per-pixel cache, so it can exceed that draw group's cost at high
+  overdraw. The supplied hc1/hc2 logs contain no numeric `strand G-buffer draws GPU` lines; a measured comparison
+  is unavailable. No game was launched for this change.
 - Device lost after the F8 reload (hv1 18:40, cause not confirmed): a new level reuses Vulkan handles for other
   objects. The native hair FS module map is erased on vkDestroyShaderModule and on reuse (a reused handle could give
   a non-hair pipeline a strand variant). `hair_primary::LoadGuard`: a new G-buffer depth image marks a level load;
@@ -158,11 +204,29 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   verdicts, UV joins and UV readbacks in flight at the same boundary (their identities are built from handles).
   Live bisect: hair_validation hv5 (one F8 per stage: native + scalp, + physical origin, + groom, + primary, 60 s
   each); hv4 repeats the reload under GPU-AV.
+- Device lost in the first level load with rt_hair_groom_primary latched at startup (hair_crowd hc1 2026-11-04
+  00:25: first publish at frame 1479 while the level streamed, two strikes at 1482, device lost at 1489; the read at
+  0x2270524000 is in no buffer of ours, cause not confirmed). The menu publishes no groom, so LoadGuard first saw the
+  in-level image and opened no quiet window. Now the first image is a boundary too: no swap for 300 frames after the
+  first publish. bvhsplit publishes a groom's draw key only from the second update of its points range (a new LOD or
+  upload keeps the cards for that frame). Test: hair_groom_asset_test (level reload block, first image).
 - Overlapping grooms (review of f5b339eb): the pixel's closest strand of all grooms is cached once per pixel; a card
   fragment writes it only when it lies on its own card (`hp_on_card`: strand points lie on their card triangles, so
   within (radius bound 10 mm + segment length / 2) / |cos| of the card surface along the ray, plus the pixel's spread).
   The velocity variant applies the same test. Entries are sealed (`hp_seal`: word 3 mixes the tag with the other
   words), so a torn 16-byte store never pairs this frame's tag with an older key.
+
+- The former zero-pixel strike/retry rule is superseded by measured per-key coverage. Adjacent pixel-record
+  tags remain diagnostic and cannot qualify a swap. Grooms sharing an index-range key are measured together;
+  every queried draw of that key must have both results available before its frame is accepted.
+- Coverage gate (2026-11-04): G-buffer and velocity strand swaps need header order G-buffer
+  (`rt_hair_groom_primary_order=1`) and fresh per-draw coverage evidence; header order prepass keeps the cards (hc2:
+  the G-buffer read an adjacent frame's header in 296 of 300 counted frames; the player was half bald).
+- `rt_hair_groom_primary_order` (off, live): the header is written in the G-buffer pass's own command buffer (cmd.cpp
+  pass_ready, before the game's begin) from the newest staged publish whose build is recorded earlier in that command
+  buffer or already submitted (`hair_primary::pick_publish`); none: no strand swap that frame, and the next prepass
+  keeps its card depth. The G-buffer and velocity swaps need the draw in the applied header's groom set. Prototype for
+  the case the live run confirms ('carry an adjacent frame's tag' lines); not run live.
 
 ## 6. Open items
 1. Resolved: the native G-buffer FS (captures/alpha_cache/42a95e17ec3adc51.glsl) is ported; its tangent is
@@ -226,3 +290,17 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   (bench: LSS 0.25 ns per ray) + hd_shade (~200 ALU): estimate +0.1-0.3 ms at a close-up.
 - **4:** DoF/RR post check with the pending `rr_post_temporal` fix. **5:** LOD by screen size (exists), ms per
   character, VRAM.
+
+## 8. Closure plan (2026-11-03, user: "close the implementation properly")
+Order = what blocks shipping first, then visible quality per effort. Every step behind its key, off by default,
+key-off identity, then the smoke_ultra job with the other qualified keys on. Gates are named per step.
+| # | Step | Offline / live | Gate |
+|---|---|---|---|
+| C1 | Stability: hv4 (GPU-AV) + hv5 reload bisect + hair_crowd, all with df2b9567 | live (user batch) | no device loss, no GPU-AV error, frames in every survival window; GPU ms per pass logged |
+| C2 | Strand shadows with transmittance: a shadow ray crossing n fibres passes with a_f^n (forward-scattered fraction of the fibre, tools/hair_groom/dual.py), stochastic per crossing on the existing binary visibility (unbiased mean) | offline, then live | PT reference vs shader on the bench fixture (mean visibility within noise); live: skin/neck under hair not black, energy key-on vs key-off on a static camera |
+| C3 | Sub-pixel coverage and tips: dithered tip opacity from the root channel (the game's own dithered alpha test), DLSS RR hair guides (RR hair resolve candidate) | offline, then live | edge-flicker detector on hair pixels lower than cards in one run; no energy change |
+| C4 | Indirect light on strands: GI irradiance on strand pixels through the dual-scattering multiple-scattering term instead of the Lambert response | offline, then live | furnace test (white fibre, uniform sky: albedo within 3%); live A/B energy |
+| C5 | Style coverage: card reference averaged over the game's dither phases (coverage/radiance gates then meaningful), 2-D curve tracer for curly atlases (HAIR_Afro_B), LOD1 from the LOD0 groom | offline | rerun: pass count up with unchanged gates; 368 reachable left today |
+| C6 | Every view: portraits and small passes, instanced hair (0ca5ee93), reflections/water secondary hits shade strands with the fibre BSDF | offline, then live | per-pass strand participation lines; no card-only pass left in the smoke run |
+| C7 | Qualify: Ultra preset entry, GUI, cost table, user check notes (what to look at, which save) | live | smoke_ultra clean; cost within the user's budget |
+Strand dynamics of their own (collision, wind per strand) stay out: strands follow the game's simulated cards.

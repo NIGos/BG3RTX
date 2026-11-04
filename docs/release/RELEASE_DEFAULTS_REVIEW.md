@@ -4,6 +4,25 @@ Original Stage 6 review, followed by the 2026-11-03 OMM and box-shadow promotion
 HEAD `855c99d`. No INI, code, preset, Git metadata or shared asset was changed. No build,
 CMake, CTest, DXC, package operation or game was run. Shader request delta: **0**.
 
+## Card cleanup verdict (2026-11-03, hq1-hq4 13:32-14:10)
+
+User-supplied live verdicts cover S8 and Test Dialogue1-3. RTX Hair groom
+supersedes the native card optimization candidates; native coverage itself
+remains available, off by default. No new live run is required for this cleanup.
+
+| Key | Observed result | Disposition |
+|---|---|---|
+| `rt_hair_visibility` | 0 eligible draws in every scene | Removed: null. |
+| `rt_hair_cheap` | Up to about 1 ms saved in two dialogues; S8 character light +36% | Removed: energy fail. |
+| `rt_hair_gi_mean` | Device loss; root cause unknown; quarantined | Removed with its precompute: superseded card path. |
+| `rt_hair_gi_cull` | Character light +9..20% | Removed: energy fail. |
+| `rt_hair_pool_trim` | Used mesh pool -26-50%; no measured cost or light change | Kept, default 1 in all presets; effective with native hair. |
+
+SpecIds 1017, 1018 and 1019 are retired permanently. No host ABI change.
+The historical hair_qual batch has no executable jobs/plans; groom batch helpers remain.
+Older candidate sections below describe historical implementations, not current controls.
+
+
 ## OMM promotion update (2026-11-03)
 
 User-confirmed om3/om4 qualification supersedes this review's original OMM hold.

@@ -1,10 +1,10 @@
 # Offline check of a lean live batch (tools/live_batches/<Batch>): no game, no real queue.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\live_batches\lean_dryrun.ps1 -Batch lean_regression [-Out <scratch dir>]
-# 1. Static checks per job: plan parses and samples, foreground FG 2 single launch, timeout covers the
-#    plan, expect_runner names the phase count and every trace, no float bursts, diagnostics
+# 1. Shared live_flow duration/preflight checks, then plan sampling, foreground FG 2 single launch,
+#    expect_runner names the phase count and every trace, no float bursts, diagnostics
 #    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug, rt_occ_stats) on
 #    exactly in "diag-*" phases, cost windows diag-off and without traces (debug-view traces only in
-#    "diag-view-*"), phases 5-25 s (2 s static fg_snap rearm allowed). Batch totals against -MaxMinutes / -MaxMB.
+#    "diag-view-*"). Shared duration totals against -MaxMinutes; disk estimate against -MaxMB.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
 #    dependent jobs stay in pending (stop-on-failure). With -Independent (no requires_success_of):
 #    every job runs and every one is INVALID.
@@ -12,7 +12,7 @@
 # Scratch root only (outside any checkout); the receipt written there is fake and has no authority.
 param([Parameter(Mandatory)][string]$Batch, [string]$Receipt = '',
       [string]$Out = '', [double]$MaxMinutes = 20, [double]$MaxMB = 2048,
-      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force)
+      [switch]$Independent, [switch]$Unfocused, [int]$MaxBursts = 0, [double]$BurstMB = 2300, [double]$LoadSec = 120, [double]$TraceMB = 60, [double]$LogMB = 10, [switch]$Force, [string[]]$JobNames = @(), [switch]$ScratchOnly)
 # Reuse: a passed check whose inputs (this script, the batch folder, scripts\*.ps1 / *.py, the parameters
 # but -Out) are byte-identical to a previous pass prints that pass's lines and exits 0 without the fake
 # queue runs (captures\.cache\lean_dryrun-<batch>.json). -Force always reruns.
@@ -36,15 +36,25 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
 }
 $flowPython = 'py'
 $flowArgs = @(); if ($flowPython -eq 'py') { $flowArgs += '-3' }
-& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here
+$flowReport = Join-Path $Out 'live-flow.json'
+New-Item -ItemType Directory -Force $Out | Out-Null
+$flowSelection = @(); if ($JobNames.Count) { $flowSelection = @('--job-names', ($JobNames -join ',')) }
+& $flowPython @flowArgs (Join-Path $PSScriptRoot 'live_flow.py') $here --preflight --report $flowReport --cache (Join-Path $Out 'flow-corpus.json') @flowSelection
 if ($LASTEXITCODE -ne 0) { throw 'live-flow design lint failed; fix before fake queue dryrun' }
+$flow = Get-Content -LiteralPath $flowReport -Raw | ConvertFrom-Json
+$flowDurations = @{}
+foreach ($entry in $flow.jobs.PSObject.Properties) {
+  $flowJob = Get-Content -LiteralPath $entry.Name -Raw | ConvertFrom-Json
+  $flowDurations[$flowJob.name] = $entry.Value.duration
+}
 . (Join-Path $scripts 'camera-plan.ps1')
 . (Join-Path $scripts 'queue-permission.ps1')
 . (Join-Path $scripts 'queue-window-mode.ps1')
 . (Join-Path $scripts 'longrun.ps1')
+if ($ScratchOnly) { function Get-LongrunCacheDir { Join-Path $Out 'cache' } }
 $inputs = @($PSCommandPath) + @(Get-ChildItem $here -Recurse -File | ForEach-Object FullName) +
   @(Get-ChildItem $scripts -File -Include '*.ps1', '*.py' -Recurse | ForEach-Object FullName)
-$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB")
+$inputHash = Get-LongrunInputHash $repo $inputs ("$Batch|$Receipt|$MaxMinutes|$MaxMB|$Independent|$LoadSec|$TraceMB|$LogMB|$($JobNames -join ',')")
 $reuse = if ($Force) { $null } else { Get-LongrunReuse "lean_dryrun-$Batch" $inputHash }
 if ($reuse) {
   foreach ($l in @($reuse.lines)) { Write-Host $l }
@@ -63,19 +73,22 @@ function Apply-Set($state, [string]$set) {
 function Test-Diag($s) { foreach ($k in 'rt_stats', 'rt_primary_check', 'rt_primary_identity', 'ls_stats', 'ls_check', 'rt_debug', 'rf_stats', 'rf_debug', 'rt_occ_stats') { if ($s[$k] -and $s[$k] -ne '0') { return $true } }; $false }
 
 $jobFiles = @(Get-ChildItem (Join-Path $here 'jobs') -Filter '*.json' | Sort-Object Name)
+if ($JobNames.Count) { $jobFiles = @($jobFiles | Where-Object { $_.BaseName -in $JobNames }) }
 $jobs = @($jobFiles | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })
 $first = $jobs[0].name
 if (-not $Receipt) { $Receipt = "$($jobs[0].live_batch).json" }
 Check "$($jobs.Count) job files, all one live_batch ($($jobs[0].live_batch))" ($jobs.Count -ge 1 -and @($jobs.live_batch | Select-Object -Unique).Count -eq 1)
-$totalWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
+$totalWaitSec = 0; $totalExpectedWaitSec = 0; $totalSec = 0; $totalTraces = 0; $totalBursts = 0
 foreach ($job in $jobs) {
   $n = $job.name
   $planRel = $job.args[[array]::IndexOf([string[]]$job.args, '-MovePlan') + 1]
   Check "${n}: plan path is captures/live_batches/$Batch/plans/" ($planRel -like "captures/live_batches/$Batch/plans/*")
   $plan = @(Get-Content (Join-Path $here ('plans\' + (Split-Path $planRel -Leaf))) -Raw | ConvertFrom-Json | ForEach-Object { $_ })
-  $sec = ($plan | Measure-Object seconds -Sum).Sum; $waitSec = ($plan | ForEach-Object { [double]$_.wait_log_timeout } | Measure-Object -Sum).Sum; $totalSec += $sec; $totalWaitSec += $waitSec
+  $budget = $flowDurations[$n]
+  if (-not $budget) { throw "live-flow duration missing for $n" }
+  $sec = $budget.seconds; $waitSec = $budget.readiness_timeout_seconds; $totalSec += $sec; $totalWaitSec += $waitSec; $totalExpectedWaitSec += $budget.expected_readiness_seconds
   $state = @{}; $ok = Apply-Set $state $job.set
-  $sampled = $true; $roles = $true; $bursts = $true; $sizes = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
+  $sampled = $true; $roles = $true; $bursts = $true; $burstCount = 0; $traceLines = @(); $traceAll = @(); $roleNote = ''
   for ($i = 0; $i -lt $plan.Count; $i++) {
     $step = $plan[$i]
     try { Assert-CameraPlanFields $step } catch { $ok=$false; Say "FAIL ${n}: phase $i $($_.Exception.Message)" }
@@ -86,11 +99,6 @@ foreach ($job in $jobs) {
     if ($step.serial -and $step.capture_at) { $burstCount++ }
     elseif ($step.serial -or $step.capture_at) { $bursts = $false }
     if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
-    $rearm = $step.label -like 'rearm-*' -and $step.kind -eq 'static' -and $step.seconds -eq 2 -and $step.set -eq 'fg_snap=0'
-    $prefetch = $step.label -eq 'warmup' -and $step.kind -eq 'static' -and $step.seconds -ge 5 -and $step.seconds -le 45 -and -not $step.trace_at -and -not $step.serial -and -not $step.capture_at
-    # 300-frame CPU intervals at 30 fps need three lines (two full intervals) after a toggle.
-    $cpuSample = $Batch -eq 'qual_stage4' -and $step.label -match '^cost-(hooks|submit)-(off|on)-[ab]$' -and $step.kind -eq 'static' -and $step.seconds -eq 35 -and -not $step.trace_at -and -not $step.serial -and -not $step.capture_at
-    if (-not $rearm -and -not $prefetch -and -not $cpuSample -and ($step.seconds -lt 5 -or $step.seconds -gt 25)) { $sizes = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
     if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
     if ($label.StartsWith('cost-') -and $diag) { $roles = $false }
@@ -109,8 +117,6 @@ foreach ($job in $jobs) {
   if ($burstCount -gt $MaxBursts) { $bursts = $false }
   $totalBursts += $burstCount
   Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts
-  Check "${n}: phases 5-25 s (static rearm 2 s; warmup <=45 s; qual_stage4 CPU samples 35 s)" $sizes
-  Check "${n}: timeout $($job.timeout) >= plan + readiness waits + 240 s load" ($job.timeout -ge $sec + $waitSec + 240)
   $er = @($job.expect_runner)
   Check "${n}: expect_runner names phases=$($plan.Count), the foreground pointer line and $($traceLines.Count) traces" (
     [bool]($er -match "phases=$($plan.Count)\\b") -and
@@ -145,9 +151,9 @@ $lint = @(& $flowPython @flowArgs (Join-Path $scripts 'queue_gates.py') --lint-c
 $ErrorActionPreference = $eap
 foreach ($l in $lint) { if ($lintExit) { Write-Host "  $l" } }
 Check "capacity gate lint (queue_gates.py --lint-capacity): $(if ($lintExit) { "$($lint.Count) problem(s)" } else { 'ok' })" ($lintExit -eq 0)
-$min = ($totalSec + $totalWaitSec + $jobs.Count * $LoadSec) / 60.0
+$min = ($totalSec + $totalExpectedWaitSec + $jobs.Count * $LoadSec) / 60.0
 $mb = $totalTraces * $TraceMB + $totalBursts * $BurstMB + $jobs.Count * $LogMB
-Say ("estimate: plans {0} s + readiness waits <={7} s, {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec)
+Say ("estimate: plans {0} s + expected readiness {8} s (timeout allowance {7} s), {1} launches x {2} s load -> {3:N1} min; {4} PNG traces x {5} MB + logs -> {6:N0} MB" -f $totalSec, $jobs.Count, $LoadSec, $min, $totalTraces, $TraceMB, $mb, $totalWaitSec, $totalExpectedWaitSec)
 Check "batch within $MaxMinutes min" ($min -le $MaxMinutes)
 Check "batch within $MaxMB MB" ($mb -le $MaxMB)
 

@@ -17,11 +17,25 @@ class LiveGuardTest(unittest.TestCase):
                      dict(label="reset", seconds=1, set="rt_stats=0"),
                      dict(label="next", seconds=10, set="rt_stats=1")]
         self.job = dict(set="rt_stats=1", window_mode="visible_unfocused_fg", forbid=["BROKEN"], expect=[],
-                        expect_every=[dict(select="stats", match="good", windows=["diag"])])
+                        expect_every=[dict(select="stats", match="good", windows=["diag"])],
+                        live_flow=dict(fps_windows=[dict(state=[1,0,0,0,0], fps=30, windows=1, logs=["synthetic"])]))
         self.runner = stamp(1, "[pan-plan] window 0 set=rt_stats=1")
 
     def run_guard(self, game="", now=5, phase=0, runner=None, failed=()):
         return evaluate(self.job, self.plan, game, self.runner if runner is None else runner, phase, now, failed)
+
+    def test_readiness_excludes_bad_samples_until_complete(self):
+        self.plan[0].update(wait_log=["ready"], wait_log_timeout=30)
+        game = stamp(2, "[cfg] settings read") + stamp(3, "stats bad") + stamp(5, "stats bad")
+        self.assertIsNone(self.run_guard(game, now=8))
+        runner = self.runner + stamp(8, "[motion-ready] phase=0")
+        game += stamp(9, "stats good") + stamp(10, "stats good")
+        self.assertIsNone(self.run_guard(game, now=10, runner=runner))
+        from scripts.queue_gates import check
+        end = runner + stamp(11, "[motion-plan] complete phases=1")
+        self.assertEqual(check(self.job["expect_every"], game, end, self.plan), [])
+        missing = self.runner + stamp(11, "[motion-plan] complete phases=1")
+        self.assertIn("missing motion-ready", check(self.job["expect_every"], game, missing, self.plan)[0])
 
     def test_forbid_and_optout(self):
         r = self.run_guard(stamp(2, "BROKEN"))

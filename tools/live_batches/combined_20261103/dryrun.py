@@ -17,10 +17,10 @@ def stamp(seconds):
 
 def main():
     here = Path(__file__).resolve().parent
-    if f.main([str(here)]):
+    if f.main([str(here), "--preflight", "--active"]):
         return 1
-    manifests = sorted(here.glob("*.manifest.json"))
-    assert len(manifests) == 3, "expected exactly three saves"
+    manifests = sorted(here / (p.stem + ".manifest.json") for p in f.active_job_files() if p.parent.parent == here)
+    assert manifests, "expected active combined manifests"
     with tempfile.TemporaryDirectory(prefix="bg3rtx-combined-offline-") as scratch:
         scratch = Path(scratch)
         for path in manifests:

@@ -177,9 +177,11 @@ Check $rejected 'key mode requires a signed direction'
 Check ($runner.Contains("`$MoveScan = if (`$sample.kind -eq 'key_turn') { [byte]`$sample.scan }")) 'runner uses Q/E scan from sample'
 Check ($runner -match 'if \(\$sample.kind -eq ''rotate'' -and \$step.frame_delta_pixels\)') 'key mode bypasses frame mouse sampler'
 foreach ($batch in 'water_flicker_wf9','water_offscreen') {
+  $batchTurns=0
   foreach ($file in Get-ChildItem (Join-Path $repo "tools/live_batches/$batch/plans") -Filter '*.json') {
     $turns=@(Get-Content $file.FullName -Raw | ConvertFrom-Json | ForEach-Object {$_} | Where-Object kind -eq 'rotate')
-    Check ($turns.Count -gt 0) "$batch contains turn windows"
+    $batchTurns += $turns.Count
+    if (-not $turns.Count) { continue } # Static quality plans have no camera turns.
     foreach ($turn in $turns) {Check ($turn.turn_mode -eq 'keys') "$batch uses held-key turns"}
     $jobFile=Get-ChildItem (Join-Path $repo "tools/live_batches/$batch/jobs") -Filter '*.json' | Select-Object -First 1
     $job=Get-Content $jobFile.FullName -Raw | ConvertFrom-Json
@@ -189,12 +191,21 @@ foreach ($batch in 'water_flicker_wf9','water_offscreen') {
       Check (@($job.expect_runner | Where-Object {$line -match $_}).Count -eq 1) "$batch key log satisfies cost window gate"
     }
   }
+  if ($batch -eq 'water_flicker_wf9') { Check ($batchTurns -gt 0) "$batch contains turn windows" }
 }
+$freshStep=@{wait_log=@('ready enabled 1', 'quiet');wait_log_fresh=@('ready enabled 1','quiet')}
+Check (-not (Test-CameraPlanReady $freshStep "ready enabled 1`nquiet" 'quiet')) 'cached ON cannot release a new toggle'
+Check (-not (Test-CameraPlanReady $freshStep "ready enabled 1`nquiet" "ready enabled 1`nquiet")) 'fresh watch before settings acknowledgement cannot release'
+$fresh="[cfg] settings read`nready enabled 1`nquiet"
+Check (Test-CameraPlanReady $freshStep $fresh $fresh) 'fresh state and completion release after cfg'
+$building="gi: gi/test.hlsl building in the background (the previous pipeline meanwhile)`n$fresh"
+Check (-not (Test-CameraPlanReady $freshStep $building $fresh)) 'empty driver interval cannot hide queued shader build'
+Check (Test-CameraPlanReady $freshStep "$building`ngi: gi/test.hlsl generation 1, pipeline 1 ms" $fresh) 'generation completion clears queued build'
 $readyStep=@{wait_log=@('temporal spec mv=1 pg=0, pipeline', 'trace spec mv=0 pg=0, pipeline')}
 Check (-not (Test-CameraPlanReady $readyStep 'temporal spec mv=1 pg=0, pipeline')) 'partial pipeline readiness blocks capture'
 Check (-not (Test-CameraPlanReady $readyStep "temporal spec mv=0 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline")) 'wrong specialization blocks capture'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline") 'all matching specializations release capture'
-Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($step.trace_at -and')) 'runner checks readiness before any phase trace'
+Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($null -ne $step.trace_at -and')) 'runner checks readiness before any phase trace'
 Check ($runner -match '(?s)phaseWaitAt -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline`nunrelated later line") 'unchanged cached spec releases a later phase'
 Check (-not (Test-CameraPlanReady @{wait_log=@('temporal.*trace')} "temporal`ntrace")) 'readiness cannot match across log lines'
@@ -205,11 +216,31 @@ foreach ($bad in @(@{wait_logs=@('ready')}, @{wait_log=@('ready')},
   try { Assert-CameraPlanFields $bad } catch { $rejected=$true }
   Check $rejected 'unknown or invalid readiness/recenter fields fail closed'
 }
+# Cached/no-op transitions need cfg values, not synthetic build announcements.
+$resident=@{set='rr_post_temporal=1,gi_strength=1';wait_log=@('gi: gi/test.hlsl generation ', '\[watch\].*pipelines 0');wait_log_fresh=@('\[watch\].*pipelines 0')}
+$ack="[cfg] settings read`n[cfg] keys: rr_post_temporal=1 gi_strength=1.00"
+Check (Test-CameraPlanReady $resident $ack $ack) 'resident variant releases at matching cfg without watch or generation'
+Check (-not (Test-CameraPlanReady $resident $ack '[cfg] settings read')) 'settings read alone does not acknowledge values'
+Check (-not (Test-CameraPlanReady $resident $ack "[cfg] settings read`n[cfg] keys: rr_post_temporal=0")) 'wrong cfg value blocks resident transition'
+$start="$ack`ngi: gi/test.hlsl building in the background"
+Check (-not (Test-CameraPlanReady $resident $start $start)) 'post-ack build requires completion'
+$crlfStart=($ack+"`nunrelated.hlsl other_pass: building in the background").Replace("`n","`r`n")
+Check (-not (Test-CameraPlanReady $resident $crlfStart $crlfStart)) 'CRLF logs retain all new outstanding build records'
+
+Check (@(Get-CameraPlanMissing $resident $start $start)[0] -eq 'gi: gi/test.hlsl generation ') 'missing reason names outstanding completion'
+Check (Test-CameraPlanReady $resident "$start`ngi: gi/test.hlsl generation 2" $start) 'completion of actual build releases resident wait'
+$water="$ack`nrt/water_compose.hlsl water_compose: building in the background"
+Check (-not (Test-CameraPlanReady $resident $water $water)) 'outstanding water build blocks'
+Check (Test-CameraPlanReady $resident "$water`n[water] rt/water_compose.hlsl water_compose: built" $water) 'water completion resolves outstanding build'
+$resident.wait_log += 'explicit producer'
+Check (-not (Test-CameraPlanReady $resident $ack $ack)) 'conditional pipeline witnesses preserve explicit producer wait'
 # Execute the actual runtime wait block with a synthetic log and clock, no game.
 $begin=$runner.IndexOf('      if ($step.wait_log -and -not $phaseReady)')
 $end=$runner.IndexOf('      if ($step.recenter', $begin)
 $waitBlock=[scriptblock]::Create($runner.Substring($begin,$end-$begin))
 $log=Join-Path $scratch 'ready.log'
+$guardRunner=Join-Path $scratch 'guard.runner.txt'
+$phaseReadyOffset=0
 [IO.File]::WriteAllText($log, "ready cached in an earlier phase`nunrelated latest line")
 $step=@{label='cached';wait_log=@('ready cached');wait_log_timeout=5}
 $planClock=@{Elapsed=@{TotalSeconds=20;TotalMilliseconds=20000}}
@@ -218,6 +249,6 @@ while ($true) { . $waitBlock; $after=$true; break }
 Check ($after -and $phaseReady -and $elapsed -eq 0 -and $phaseStartMs -eq 20000) 'cached readiness resumes phase clock at zero'
 $step.wait_log=@('missing');$phaseReady=$false;$phaseWaitAt=10;$after=$false;$result=''
 while ($true) { . $waitBlock; $after=$true; break }
-Check (-not $after -and $result -eq 'pipeline readiness timed out: cached') 'actual runtime timeout exits before downstream capture'
+Check (-not $after -and $result -eq 'pipeline readiness timed out: cached; missing: missing') 'actual runtime timeout exits before downstream capture'
 Check ($runner -match '(?s)if \(\$step.recenter.*?Send-PlanMouse 0x0200 0.*?\[motion-recenter\]') 'recenter posts pointer centre and emits marker'
 Write-Host "$count camera-input and permission checks passed"

@@ -39,7 +39,7 @@
       "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
       "gi: GPU cost [0-9.]+ ms/frame"
     ],
-    "wait_log_timeout": 15.0
+    "wait_log_timeout": 16.119999999991705
   },
   {
     "label": "warmup-diagnostic-settings",
@@ -59,7 +59,7 @@
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "warmup-cost-settings",
@@ -79,7 +79,7 @@
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation "
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0
   },
   {
     "label": "static-a",
@@ -196,13 +196,13 @@
     "label": "diag-omm",
     "kind": "static",
     "speed": "static",
-    "seconds": 9.1,
+    "seconds": 16.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 9.1,
-    "motion_end": 9.1,
+    "motion_start": 16.4,
+    "motion_end": 16.4,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=1,rt_primary_check=0,ab_off=0,rt_scene_wait_ms=100,rt_scene_wait_log_frames=60"
@@ -220,7 +220,15 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=1,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120"
+    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=1,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "ab-on",
@@ -235,6 +243,14 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=0"
+    "set": "qa_exposure_hold=0,rt_debug=0,rt_stats=0,ab_off=0",
+    "wait_log": [
+      "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   }
 ]

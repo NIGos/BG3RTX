@@ -6,14 +6,38 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 480,
+  "timeout": 3519,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
     "trace_stall_s": 1,
     "startup_only": [
       "rt_xfb_mb"
-    ]
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 25.684931506736675,
+        "windows": 76,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    }
   },
   "repeat": 1,
   "stop_on_dump": false,
@@ -330,6 +354,6 @@
     "^Run ended: done",
     "\\[motion-plan\\] complete phases=38\\b"
   ],
-  "estimated_phase_seconds": 155.8,
+  "estimated_phase_seconds": 158.5,
   "purpose": "Offline prepared only. No supported dialogue pause key. Register every captured frame; exclude cuts, never warp. Attribution only; retain default native hair. See predicted.json."
 }

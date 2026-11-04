@@ -749,6 +749,23 @@ const VkDeviceCreateInfo* rt_device_create_info(InstanceData* id, VkPhysicalDevi
   bool core_features = false;
   if (sharc && cfg_int("sharc_device", 1)) next = sharc_features(id, phys, ci, next, &core_features);
   else log("[rt] SHaRC device features not requested (%s)", sharc ? "sharc_device=0" : "retry without them");
+  // rt_hair_groom_primary's coverage gate (layer/hair_primary.cpp): precise occlusion queries count the card and strand
+  // probe samples per draw; without the feature no draw is ever swapped. Core 1.0 feature, no cost when unused.
+  if (cfg_int("rt_hair_groom_primary", 0) != 0 && id->GetPhysicalDeviceFeatures2) {
+    VkPhysicalDeviceFeatures2 sup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    id->GetPhysicalDeviceFeatures2(phys, &sup);
+    if (sup.features.occlusionQueryPrecise) {
+      if (auto* f2 = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(find_in(next, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2))) {
+        auto* f = const_cast<VkBool32*>(&f2->features.occlusionQueryPrecise);
+        if (!*f) { g_feature_edits.emplace_back(f, *f); *f = VK_TRUE; }
+      } else {
+        if (!core_features) g_f_core = ci->pEnabledFeatures ? *ci->pEnabledFeatures : VkPhysicalDeviceFeatures{};
+        g_f_core.occlusionQueryPrecise = VK_TRUE;
+        core_features = true;
+      }
+      log("[rt] + occlusionQueryPrecise (strand hair coverage gate)");
+    }
+  }
   next = omm::device_features(id, phys, next, g_ext_names);
   next = hair_groom::device_features(id, phys, next, g_ext_names);
   g_f_rq = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
@@ -1163,7 +1180,6 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
     ab.groom_first = res.groom_first;
     const VkDescriptorSet set = alpha_commit(cmd, ab, uint32_t(scene_slot));
     if(set)alpha_omm_commit(cmd,uint32_t(scene_slot));
-    if(geo_native_hair_enabled() && cfg_int("rt_hair_gi_mean",0))timestamp(cmd,slot,3);
     restore_bindings(cmd,VK_PIPELINE_BIND_POINT_COMPUTE);
     if (cpu_t) {
       const double t2 = qpc_ms();

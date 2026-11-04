@@ -1,0 +1,15 @@
+## Native hair card cleanup (branch hair-cards-retire, VERIFIED, 2026-11-03)
+- Retired visibility (null), cheap and GI cull (energy failures), quarantined mean; retained settings/presets match main exactly.
+- Main 71f92bd3: 139/260 surviving requests byte-identical; all other 121 requests / 140 modules equivalent with retired SpecIds 1017-1019 fixed at 0, other constants preserved (shared spec_cascade_check canonical comparator).
+- Both sides: 297/297 module entries validated, zero errors; retired IDs never reused, ABI unchanged.
+- shaders/variants.txt: 165 -> 165 requests (delta 0); total unique requests 261 -> 260 only because rt/hair_mean.hlsl was deleted.
+- Defaults regenerated and checked; retired keys absent from defaults/GUI/schema; legacy INIs with all four keys 0 or 1 load unchanged in every preset (settings_test: 3,865 checks, 0 failed).
+- Full build passed; 145/145 CTests passed in 154.70 s, BelowNormal and serial; VS Installer directory added to PATH for vcvars discovery.
+- Evidence: build/hair-retire-identity.json, build/hair-retire-identity-current.log, build/hair-retire-final-build-test.log. No game launch, commit or git metadata writes; mean device-loss cause remains unknown.
+- Bundle10 22fd8ad008cc: resolved conflicts; kept surviving GUI review changes and water Fresnel cache key; regenerated all five hair-validation jobs/plans.
+- Retirement identity: 139/260 requests byte-identical; other 121 requests / 140 modules equivalent with only retired SpecIds 1017-1019 fixed at 0; 297 entries validated per side, zero errors. Variants 165 -> 165 (delta 0).
+- Full build passed; regenerated defaults/schema; settings 4,103 checks passed; live_flow hair-validation lint 5/5 passed. No game launch or Git metadata write commands.
+- CTests: 146/147 passed in 353.04 s; water_surface_shader_test fails raw identity against old merge-base 71f92bd3 (1/16 arithmetic-OFF, 1/2 ordinary identical; 16/16 production validated), which retains retired hair constants. Gate left unchanged; logs: build/hair-retire-bundle10-*.log.
+- Water gate now accepts raw differences only through the shared retired-zero comparator, preserving the same OFF reference and all surviving constants; 59 regression checks passed. Per-request paths: build/hair-retire-water-surface.json (OFF 1 raw + 15 equivalent; ordinary 1 raw + 1 equivalent; production 16/16 valid).
+- Main ea0674e0 retirement passed: 139/260 raw-identical; remaining 121 requests / 140 modules equivalent; 297 modules validated per side, 0 errors. Evidence: build/hair-retire-ea0674e0-identity.log; variants delta 0.
+- Full build + 148/148 CTests passed (562.24 s; build/hair-retire-gate-build-test.log). live_flow: hair_validation 5/5, hair_crowd 2/2; hair_primary 0/1 (existing forbid, foreground FPS and warmup issues). No game launch, commit or git metadata writes.

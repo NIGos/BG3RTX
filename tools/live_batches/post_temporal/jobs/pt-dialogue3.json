@@ -6,14 +6,39 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 900,
+  "timeout": 3205,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
     "trace_stall_s": 1,
+    "trace_dispatch_s": 4,
     "startup_only": [
       "rt_xfb_mb"
-    ]
+    ],
+    "fps_windows": [
+      {
+        "state": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "fps": 25.684931506736675,
+        "windows": 76,
+        "logs": [
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
+        ]
+      }
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    }
   },
   "repeat": 1,
   "stop_on_dump": false,
@@ -868,170 +893,6 @@
       ]
     },
     {
-      "name": "AC/EB K8 off-10",
-      "select": "\\[pan\\] burst 98820 complete",
-      "match": "\\[pan\\] burst 98820 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "rendered-off-10"
-      ]
-    },
-    {
-      "name": "presented K8 off-10",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "presented-off-10"
-      ]
-    },
-    {
-      "name": "float energy off-10",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "energy-off-10"
-      ]
-    },
-    {
-      "name": "FG actually presenting off-10",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "presented-off-10"
-      ]
-    },
-    {
-      "name": "AC/EB K8 on-10",
-      "select": "\\[pan\\] burst 98821 complete",
-      "match": "\\[pan\\] burst 98821 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "rendered-on-10"
-      ]
-    },
-    {
-      "name": "presented K8 on-10",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "presented-on-10"
-      ]
-    },
-    {
-      "name": "float energy on-10",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "energy-on-10"
-      ]
-    },
-    {
-      "name": "FG actually presenting on-10",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "presented-on-10"
-      ]
-    },
-    {
-      "name": "AC/EB K8 on-11",
-      "select": "\\[pan\\] burst 98822 complete",
-      "match": "\\[pan\\] burst 98822 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "rendered-on-11"
-      ]
-    },
-    {
-      "name": "presented K8 on-11",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "presented-on-11"
-      ]
-    },
-    {
-      "name": "float energy on-11",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "energy-on-11"
-      ]
-    },
-    {
-      "name": "FG actually presenting on-11",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "presented-on-11"
-      ]
-    },
-    {
-      "name": "AC/EB K8 off-11",
-      "select": "\\[pan\\] burst 98823 complete",
-      "match": "\\[pan\\] burst 98823 complete: 8 frames, 36 samples, transport ok",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "rendered-off-11"
-      ]
-    },
-    {
-      "name": "presented K8 off-11",
-      "select": "\\[sl\\] present capture done",
-      "match": "\\[sl\\] present capture done",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "presented-off-11"
-      ]
-    },
-    {
-      "name": "float energy off-11",
-      "select": "\\[trace\\] frame \\d+ written:",
-      "match": "\\[trace\\] frame \\d+ written:",
-      "event": true,
-      "min": 1,
-      "windows": [
-        "energy-off-11"
-      ]
-    },
-    {
-      "name": "FG actually presenting off-11",
-      "select": "\\[sl\\] DLSS-G frame",
-      "match": "status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames (?:1\\.(?:0[1-9]|[1-9]\\d)|[2-9]\\d*\\.\\d+).*api errors 0",
-      "event": true,
-      "settle_s": 1,
-      "min": 1,
-      "windows": [
-        "presented-off-11"
-      ]
-    },
-    {
       "name": "post GPU cost timing-off-cost",
       "select": "\\[rrpost\\] gpu:",
       "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
@@ -1125,18 +986,6 @@
         "rendered-off-09",
         "presented-off-09",
         "energy-off-09",
-        "rendered-off-10",
-        "presented-off-10",
-        "energy-off-10",
-        "rendered-on-10",
-        "presented-on-10",
-        "energy-on-10",
-        "rendered-on-11",
-        "presented-on-11",
-        "energy-on-11",
-        "rendered-off-11",
-        "presented-off-11",
-        "energy-off-11",
         "timing-off-cost",
         "timing-on-cost"
       ]
@@ -1158,7 +1007,7 @@
   "expect_runner": [
     "\\[window-mode\\].*visible_unfocused",
     "^Run ended: done",
-    "\\[motion-plan\\] complete phases=103\\b",
+    "\\[motion-plan\\] complete phases=87\\b",
     "\\[motion-trace\\] phase=5 label=energy-off-00 repeat=0",
     "\\[motion-trace\\] phase=9 label=energy-on-00 repeat=0",
     "\\[motion-trace\\] phase=13 label=energy-on-01 repeat=0",
@@ -1178,13 +1027,9 @@
     "\\[motion-trace\\] phase=69 label=energy-off-08 repeat=0",
     "\\[motion-trace\\] phase=73 label=energy-on-08 repeat=0",
     "\\[motion-trace\\] phase=77 label=energy-on-09 repeat=0",
-    "\\[motion-trace\\] phase=81 label=energy-off-09 repeat=0",
-    "\\[motion-trace\\] phase=85 label=energy-off-10 repeat=0",
-    "\\[motion-trace\\] phase=89 label=energy-on-10 repeat=0",
-    "\\[motion-trace\\] phase=93 label=energy-on-11 repeat=0",
-    "\\[motion-trace\\] phase=97 label=energy-off-11 repeat=0"
+    "\\[motion-trace\\] phase=81 label=energy-off-09 repeat=0"
   ],
-  "estimated_phase_seconds": 338.9,
-  "purpose": "READY_FOR_LIVE: 12 adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.",
+  "estimated_phase_seconds": 384.9,
+  "purpose": "READY_FOR_LIVE: 10 adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.",
   "max_minutes": 15
 }

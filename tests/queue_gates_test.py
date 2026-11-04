@@ -318,6 +318,26 @@ class MidnightTests(unittest.TestCase):
 
 
 
+class NumericItemsTests(unittest.TestCase):
+    def test_all_items_and_safe_fallback(self):
+        gate = dict(match='coverage', items=dict(pattern=r'x:(?P<value>[0-9.]+),(?P<active>\d+)', bound=r'bound ([0-9.]+)'))
+        for line, expected in [('coverage x:0.1,0 x:0.9,20 bound 0.8', True),
+                               ('coverage x:0.9,20 x:0.1,1 bound 0.8', False),
+                               ('coverage x:0.8,1 bound 0.8', True),
+                               ('coverage bound 0.8', False)]:
+            self.assertEqual(queue_gates.line_matches(gate,line), expected)
+
+    def test_required_if_uses_complete_trigger_not_straddle(self):
+        plan=[dict(label='on')]
+        runner='10:00:00.000 [pan-plan] window 0\n10:00:30.000 [motion-plan] complete'
+        gate=dict(select='cost', match='cost ok', min=1, windows=['on'], required_if=dict(select='coverage',match='swaps 1'))
+        log='09:59:59.000 coverage swaps 1\n10:00:00.100 [cfg] settings read\n10:00:02.000 coverage swaps 0'
+        self.assertFalse(queue_gates.check([gate],log,runner,plan))
+        self.assertTrue(queue_gates.check([gate],log+'\n10:00:12.000 coverage swaps 1',runner,plan))
+        log+='\n10:00:12.000 coverage swaps 1\n10:00:13.000 cost ok\n10:00:23.000 cost ok'
+        self.assertFalse(queue_gates.check([gate],log,runner,plan))
+
+
 if __name__ == "__main__":
     code = main()
     if code:

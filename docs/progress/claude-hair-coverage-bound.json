@@ -1,0 +1,75 @@
+{
+  "version": "hair-primary-coverage-bound-1",
+  "state_sha256": "6e2725ad25fe3126778c32c42ee6c397bac2e7cf8bf0614ee37b5edd7ed5333e",
+  "passing_styles": 877,
+  "measured_styles": 877,
+  "complete": true,
+  "min_ratio": 0.9105471772550376,
+  "min_style": "HAIR_HUM_F_Minthara:HAIR_HUM_F_Minthara_Mesh_LOD1",
+  "min_view": {
+    "view": "side",
+    "card_samples": 9396.798707214493,
+    "strand_samples": 8556.228538087944,
+    "ratio": 0.9105471772550376,
+    "lower_one_sample": 0.9103438799471492,
+    "coverage_delta": -0.069954241771517
+  },
+  "bound": 0.8913102349775665,
+  "bound_style": "HAIR_HUM_F_Minthara:HAIR_HUM_F_Minthara_Mesh_LOD1",
+  "bound_view": {
+    "view": "side",
+    "card_samples": 9396.798707214493,
+    "strand_samples": 8556.228538087944,
+    "ratio": 0.9105471772550376,
+    "lower_one_sample": 0.9103438799471492,
+    "coverage_delta": -0.069954241771517
+  },
+  "quantization_bound": 0.9103438799471492,
+  "quantization_style": "HAIR_HUM_F_Minthara:HAIR_HUM_F_Minthara_Mesh_LOD1",
+  "quantization_view": {
+    "view": "side",
+    "card_samples": 9396.798707214493,
+    "strand_samples": 8556.228538087944,
+    "ratio": 0.9105471772550376,
+    "lower_one_sample": 0.9103438799471492,
+    "coverage_delta": -0.069954241771517
+  },
+  "modeled_one_frame_sigma": 0.013606303292737435,
+  "noise_bound": 0.8969408739623002,
+  "covariance_sigma": 0.01923694227747121,
+  "covariance_noise_bound": 0.8913102349775665,
+  "min_per_view_covariance_bound": 0.8318129716159283,
+  "min_per_view_covariance_style": "BEARD_HUM_M_Short_N:BEARD_HUM_M_Short_N_Mesh",
+  "min_per_view_covariance_view": {
+    "view": "side",
+    "card_samples": 147.72125956059182,
+    "strand_samples": 147.10899817953018,
+    "ratio": 0.9958552927122145,
+    "lower_one_sample": 0.9824351851996159,
+    "coverage_delta": -0.002662006004615842
+  },
+  "noise_model": "first-order ratio propagation; per-count variance <= mean assumes independent Bernoulli samples; modeled_one_frame_sigma additionally assumes independent card/strand counts; covariance_sigma bounds unknown cross-count covariance under the same per-count variance assumption",
+  "source_path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\hair_groom_batch\\state.json",
+  "full_evidence_path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\hair_groom_batch\\coverage_bound.json",
+  "measured_views": 2631,
+  "batch_version": "hair-groom-batch-4",
+  "formulas": {
+    "ratio": "r = S / C",
+    "covariance_sigma": "sigma_r = (sqrt(S) + r * sqrt(C)) / C",
+    "bound": "max(0, min_ratio - covariance_sigma of that minimum-ratio view)",
+    "quantization_bound": "min_views max(0, S-1) / (C+1)"
+  },
+  "assumptions": [
+    "S and C sum composited per-pixel opacity over the same union used by batch.py: cov_c > 0.02 or cov_g > 0.02.",
+    "Expected covered-pixel counts use the offline fibre-card reference and are not overlapping Vulkan raster-fragment counts.",
+    "Modeled one-frame uncertainty assumes independent spatial Bernoulli samples within each count, hence Var(S)<=S and Var(C)<=C.",
+    "Triangle inequality of standard deviations allows unknown covariance between card and strand totals.",
+    "First-order ratio error propagation; no empirical temporal or correlated-dither noise measurement."
+  ],
+  "verification": {
+    "batch_delta_reproduction": "2631/2631 within 0.000501 of stored three-decimal coverage_delta",
+    "opacity_shortcut": "30/30 random cases match render.composite within 5e-15",
+    "cache_validation": "877/877 complete matching records accepted; 4/4 malformed/stale fixtures rejected",
+    "state_unchanged_sha256": "6e2725ad25fe3126778c32c42ee6c397bac2e7cf8bf0614ee37b5edd7ed5333e"
+  }
+}

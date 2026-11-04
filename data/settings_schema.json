@@ -373,19 +373,6 @@
        {"id": "hair", "label": "Hair + scalp", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "0"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_hair", "rt_native_scalp"], "developer": false, "maturity": "qualified"},
        {"id": "tilesets", "label": "+ Tilesets", "apply": "restart", "caps": ["ray_query"], "keys": {"rt_native_hair": "1", "rt_native_scalp": "1", "rt_native_tileset": "1"}, "needs": {"rt_geometry": 2}, "migrate_from": ["rt_native_tileset"], "developer": true, "maturity": "developer"}
      ]},
-    {"id": "exp_hair_gi_cull", "label": "Omit hair from indirect rays",
-     "description": "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Reduces native hair work in GI bounce rays. Hair sun and local shadows remain. Indirect brightness and cost are unqualified.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_gi_cull": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_gi_cull": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
-     ]},
     {"id": "exp_hair_groom", "label": "Strand hair in ray-traced lighting",
      "description": "Experimental: uses individual strands for hair shadows and reflected light.",
      "apply": "live", "apply_note": "live; supported LSS hardware and local groom files required", "advanced": false, "experimental": true, "developer": false,
@@ -439,18 +426,18 @@
        {"id": "large", "label": "3.5 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "3500"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"},
        {"id": "small", "label": "1.8 million segments", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_crowd_ksegments": "1800"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
      ]},
-    {"id": "exp_hair_visibility", "label": "Subpixel distant hair cards",
-     "description": "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
+    {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
+     "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
      "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Keeps game cards for proven distant subpixel static hair draws. Unsupported sources keep full native hair. Energy and cost are unqualified.",
+     "category": "Developer", "summary": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",
      "details": "",
      "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
      "required_on": {},
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_visibility": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_visibility": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_groom_primary_order": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_groom_primary_order": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_pool_trim", "label": "Retire unused hair snapshots",
      "description": "Reclaims unused hair capture memory.",
@@ -464,32 +451,6 @@
      "kind": "choice", "choices": [
        {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_pool_trim": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
        {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_pool_trim": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "qualified"}
-     ]},
-    {"id": "exp_hair_cheap", "label": "Single-sample hair coverage",
-     "description": "Experimental: simplifies hair shadows and contact shading.",
-     "apply": "live", "apply_note": "live", "advanced": false, "experimental": true, "developer": false,
-     "category": "Advanced", "summary": "Experimental: simplifies hair shadows and contact shading.",
-     "details": "Uses one secondary-ray coverage sample and early hit-AO exit. Dialogue1/Dialogue3: compare hair shadows. No measured speed gain; coverage/AO approximation unqualified.",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_cheap": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "qualified"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_cheap": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "experimental"}
-     ]},
-    {"id": "exp_hair_gi_mean", "label": "Mean hair coverage for GI",
-     "description": "Uses stored empirical strand coverage probabilities for GI bounce rays. Indirect energy and cost remain unqualified.",
-     "apply": "live", "apply_note": "live", "advanced": true, "experimental": true, "developer": true,
-     "category": "Developer", "summary": "Uses stored empirical strand coverage probabilities for GI bounce rays. Indirect energy and cost remain unqualified.",
-     "details": "",
-     "cost": {"status": "Unknown", "gpu": "Unknown", "vram": "Unknown", "provenance": "No qualified measurement available."},
-     "required_on": {},
-     "required_from_choice": {},
-     "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
-     "kind": "choice", "choices": [
-       {"id": "off", "label": "Off", "apply": "live", "caps": [], "keys": {"rt_hair_gi_mean": "0"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "on", "label": "On", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_gi_mean": "1"}, "needs": {"exp_native_coverage": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_cascade_static_only", "label": "Static roof casters only",
      "description": "Excludes animated and unclassified shadow-map copies from roof sun shadows. May omit some roofs; dialogue motion and roof coverage are unqualified.",

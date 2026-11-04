@@ -168,12 +168,13 @@ int main() {
     CHECK(g.allow_prepass(k) && g.allow_velocity(k));
     g.publish(&k, 1);   // a frame without the G-buffer variant: the prepass stops at once
     CHECK(!g.allow_prepass(k));
-    // Feedback: strand pixels keep it; kStrikes counted frames with the variant and no strand pixel fail it for good.
+    // Feedback: strand pixels keep it; kStrikes counted frames with the variant and no strand pixel retire it.
     CHECK(!g.feedback(k, true, 500));
     CHECK(!g.feedback(k, false, 0));   // the variant did not run that frame: no evidence
     CHECK(!g.feedback(k, true, 0));
     CHECK(!g.feedback(k, true, 7));    // a strand pixel resets the strikes
     CHECK(!g.feedback(k, true, 0));
+    CHECK(!g.feedback(k, true, 0, 900));   // hv5: the pixels carry an adjacent frame's tag: no evidence, no strike
     CHECK(g.feedback(k, true, 0));     // the second strike in a row
     g.gbuffer_drew(k);
     g.publish(&k, 1);
@@ -182,7 +183,16 @@ int main() {
     g.clear();
     g.publish(&k, 1);
     g.publish(&k, 1);
-    CHECK(!g.allow_gbuffer(k));   // failed for the session, also across a reset
+    CHECK(!g.allow_gbuffer(k));   // retired, also across a reset, until its retry frame
+    for (uint64_t f = 0; f < hair_primary::kRetryFrames; ++f) g.publish(&k, 1);
+    CHECK(g.allow_gbuffer(k));    // retried after kRetryFrames (a draw off screen or behind another groom comes back)
+    CHECK(!g.feedback(k, true, 0) && g.feedback(k, true, 0));
+    CHECK(g.failed[k].wait == 2 * hair_primary::kRetryFrames);   // a second failure waits twice as long
+    for (int i = 0; i < 8; ++i) {
+      for (uint64_t f = 0; f < g.failed[k].wait; ++f) g.publish(&k, 1);
+      CHECK(!g.feedback(k, true, 0) && g.feedback(k, true, 0));
+    }
+    CHECK(g.failed[k].wait == hair_primary::kRetryMaxFrames);   // capped
     // A key that leaves the published set stops at once in every pass.
     const uint64_t k2 = 0x99;
     g.publish(&k2, 1);
@@ -192,6 +202,37 @@ int main() {
     CHECK(g.allow_prepass(k2));
     g.publish(nullptr, 0);
     CHECK(!g.allow_gbuffer(k2) && !g.allow_prepass(k2));
+  }
+  {   // A whole counted frame (hv5 2026-11-03: every draw of a counted frame struck at once).
+    hair_primary::SwapGate g;
+    const uint64_t a = 0xA, b = 0xB;
+    const bool drew[3] = {true, true, true};
+    // Two characters with the same hairstyle share one index-range key: one on screen, one not. Summed: no strike.
+    const uint64_t shared[3] = {a, a, b};
+    const uint32_t px[3] = {0, 1200, 800}, none[3] = {0, 0, 0};
+    for (int f = 0; f < 4; ++f) CHECK(g.feedback_frame(shared, drew, px, none, 3).empty());
+    // Every groom 0 with the counted tag but pixels with an adjacent tag (the G-buffer ran against another publish).
+    const uint64_t keys[3] = {a, b, 0xC};
+    const uint32_t zero[3] = {0, 0, 0}, adjacent[3] = {700, 0, 300};
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3).empty());
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3) == std::vector<uint64_t>{b});   // only b: no pixel at all
+    CHECK(g.feedback_frame(keys, drew, zero, adjacent, 3).empty());
+    CHECK(g.retired(b) && !g.retired(a) && !g.retired(0xC));
+    // Genuinely no strand pixel anywhere, twice: every drawn key is retired.
+    hair_primary::SwapGate h;
+    CHECK(h.feedback_frame(keys, drew, zero, zero, 3).empty());
+    CHECK(h.feedback_frame(keys, drew, zero, zero, 3).size() == 3);
+  }
+  {   // rt_hair_groom_primary_order: the header the G-buffer pass applies (newest publish ordered before it on the GPU)
+    using hair_primary::Staged;
+    const Staged st[3] = {{10, 100, 0xA}, {11, 101, 0xB}, {12, 102, 0xC}};
+    auto none = [](uint64_t) { return false; };
+    auto upto101 = [](uint64_t r) { return r <= 101; };
+    CHECK(hair_primary::pick_publish(st, 3, 0xC, none) == 2);      // this frame's build recorded in the same command buffer
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, upto101) == 1);   // another buffer: the newest already submitted
+    CHECK(hair_primary::pick_publish(st, 3, 0xD, none) == -1);     // nothing ordered before it: no strand swap
+    const Staged empty[2] = {};
+    CHECK(hair_primary::pick_publish(empty, 2, 0, upto101) == -1);
   }
   {   // level reload (hv1 2026-11-03 18:40, device lost after F8): LoadGuard + SwapGate as hair_primary_publish uses them
     hair_primary::LoadGuard load;
@@ -203,7 +244,10 @@ int main() {
       g.publish(&k, 1);
       ++frame;
     };
-    publish(0xA);
+    publish(0xA);   // the first image (startup latch: the first publish is inside the first level load)
+    CHECK(load.quiet(frame) && load.quiet(frame + hair_primary::kLoadQuietFrames - 2));
+    frame += hair_primary::kLoadQuietFrames;
+    CHECK(!load.quiet(frame));
     publish(0xA);
     g.gbuffer_drew(k);
     publish(0xA);
@@ -219,6 +263,58 @@ int main() {
     publish(0xB);
     CHECK(g.allow_prepass(k));
     CHECK(!load.observe(0, frame) && !load.observe(0xB, frame));   // no image or the same image: no boundary
+  }
+  { // Per-draw coverage evidence: neither publication nor an unavailable/newer pair proves coverage.
+    using namespace hair_primary;
+    CoverageGate g;
+    const uint64_t a = 0xA, b = 0xB;
+    CHECK(kFreshFrames == kCoverageLatency + 2);
+    CHECK(!g.allow(a, 10));
+    g.observe(a, 10, 1000, 900);
+    CHECK(g.allow(a, 10, 0.9));
+    CHECK(g.allow(a, 10 + kFreshFrames, 0.9));
+    CHECK(!g.allow(a, 11 + kFreshFrames, 0.9));
+    CHECK(!g.allow(a, 9, 0.9));
+    CHECK(!g.allow(b, 10, 0.9));
+    g.observe(a, 11, 1000, 899);
+    CHECK(!g.allow(a, 11, 0.9)); // newest failure immediately brings cards back
+    g.observe(a, 9, 1000, 1000);
+    CHECK(!g.allow(a, 11, 0.9)); // late older success cannot replace newest failure
+    g.observe(a, 12, 0, 1000);
+    CHECK(!g.allow(a, 12, 0.9));
+    g.observe(a, 13, 1000, 901);
+    CHECK(g.allow(a, 13, 0.9)); // recovery has no strike/retry delay
+    g.invalidate(a, 14);
+    CHECK(!g.allow(a, 14, 0.9));
+    CHECK(g.latest.at(a).card == 1000 && g.latest.at(a).strand == 901); // logs retain actual query counts
+    g.observe(a, 14, 1000, 1000);
+    CHECK(!g.allow(a, 14, 0.9)); // partial same-frame successes cannot qualify an invalidated key
+    g.observe(a, 15, 1000, 901);
+    CHECK(g.allow(a, 15, 0.9));
+    g.clear();
+    CHECK(!g.allow(a, 15, 0.9));
+  }
+  { // Derived bound: minimum-ratio batch view, minus one-frame count uncertainty.
+    using namespace hair_primary;
+    const double c = 9396.798707214493, s = 8556.228538087944;
+    const double ratio = s / c;
+    const double noise = (std::sqrt(s) + ratio * std::sqrt(c)) / c;
+    CHECK(std::abs(ratio - 0.9105471772550376) < 1e-14);
+    CHECK(std::abs(noise - 0.01923694227747121) < 1e-14);
+    CHECK(std::abs(kCoverMin - (ratio - noise)) < 1e-14);
+    CHECK(kCoverMin > 0.0 && kCoverMin < ratio);
+    CoverageGate g;
+    const uint64_t card = 1000000, below = uint64_t(kCoverMin * card);
+    g.observe(0xA, 20, card, below);
+    CHECK(!g.allow(0xA, 20));
+    g.observe(0xA, 21, card, below + 1);
+    CHECK(g.allow(0xA, 21));
+    g.observe(0xA, 22, card, 0);
+    CHECK(!g.allow(0xA, 22));
+    g.observe(0xA, 23, card, below + 1);
+    CHECK(g.allow(0xA, 23));
+    g.observe(0, 23, card, card);
+    CHECK(!g.allow(0, 23));
   }
   std::printf("hair_groom_asset_test: all passed\n");
   return 0;

@@ -12,7 +12,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=1"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=1"
  },
  {
   "label": "settle-cam",
@@ -27,7 +27,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=1"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=1"
  },
  {
   "label": "toggle-off-a",
@@ -42,7 +42,7 @@
   "motion_end": 20,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0"
  },
  {
   "label": "toggle-off-b",
@@ -57,7 +57,7 @@
   "motion_end": 10,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0"
  },
  {
   "label": "warm-nohair",
@@ -72,7 +72,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0"
  },
  {
   "label": "warm-back",
@@ -87,7 +87,7 @@
   "motion_end": 15,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0"
  },
  {
   "label": "shot-off-a",
@@ -102,7 +102,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0",
   "trace_at": [
    5
   ]
@@ -120,7 +120,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=1",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1",
   "trace_at": [
    5
   ]
@@ -138,7 +138,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0",
   "trace_at": [
    5
   ]
@@ -156,7 +156,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=1",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1",
   "trace_at": [
    5
   ]
@@ -174,7 +174,7 @@
   "motion_end": 8,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0",
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0",
   "trace_at": [
    5
   ]
@@ -192,7 +192,7 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0"
  },
  {
   "label": "cost-off-a",
@@ -207,7 +207,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0"
  },
  {
   "label": "cost-groom",
@@ -222,7 +222,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=1"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1"
  },
  {
   "label": "cost-off-b",
@@ -237,7 +237,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0"
  },
  {
   "label": "cost-nohair",
@@ -252,7 +252,7 @@
   "motion_end": 25,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0"
  },
  {
   "label": "restore",
@@ -267,6 +267,6 @@
   "motion_end": 5,
   "pixels_per_second": 0,
   "direction": 0,
-  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_gi_cull=0,rt_hair_groom=0"
+  "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0"
  }
 ]

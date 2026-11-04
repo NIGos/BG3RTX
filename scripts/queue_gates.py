@@ -117,9 +117,12 @@ def stamped_lines(text):
 def windows(runner_text, plan, game_lines):
     """[{label, index, start, applied, end, set}] from the runner's [pan-plan] lines."""
     clock = _Clock(game_lines[0][0] if game_lines else None)
-    starts, complete = [], None
+    starts, complete, ready = [], None, {}
     for line in runner_text.splitlines():
         timestamp = clock(_sec(line))
+        rm = re.search(r"\[motion-ready\] phase=(\d+)", line)
+        if rm:
+            ready[int(rm[1])] = timestamp
         m = _WINDOW.search(line)
         if m:
             sm = _SET.search(line)
@@ -133,7 +136,11 @@ def windows(runner_text, plan, game_lines):
         end = starts[k + 1][0] if k + 1 < len(starts) else (complete if complete is not None else float("inf"))
         label = plan[index].get("label", str(index)) if 0 <= index < len(plan) else str(index)
         applied = next((t for t, l in game_lines if start <= t < end and _CFG.search(l)), start)
-        out.append({"label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
+        settings_applied = applied
+        waiting = 0 <= index < len(plan) and bool(plan[index].get("wait_log"))
+        if waiting:
+            applied = max(applied, ready.get(index, float("inf")))
+        out.append({"settings_applied": settings_applied, "ready": not waiting or index in ready, "label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
     return out
 
 
@@ -196,6 +203,29 @@ def trend_failures(g, name, picked, wins):
     return out
 
 
+def line_matches(gate, line):
+    """items: repeated named value/active groups, bound regex group 1.
+
+    Every active item must meet the bound. Empty inventories fail.
+    required_if requires this gate only with complete matching trigger periods in
+    the same window. A separate gate must require the trigger producer.
+    first_only judges the first selected startup line.
+    """
+    if not re.search(gate.get("match", ""), line):
+        return False
+    rule = gate.get("items")
+    if not rule:
+        return True
+    bound = re.search(rule["bound"], line)
+    items = list(re.finditer(rule["pattern"], line))
+    if not items and rule.get('empty') and re.search(rule['empty'], line):
+        return True
+    try:
+        return bool(bound and items) and all(float(m["active"]) == 0 or float(m["value"]) >= float(bound[1]) for m in items)
+    except ValueError:
+        return False
+
+
 def check(gates, game_text, runner_text="", plan=None):
     """Failure strings for the expect_every gates (empty list: every gate holds)."""
     plan = plan or []
@@ -220,7 +250,7 @@ def check(gates, game_text, runner_text="", plan=None):
             continue
         labels = g.get("windows")
         if not labels:
-            bad = [l for _, l in picked if not match.search(l)]
+            bad = [l for _, l in (picked[:1] if g.get("first_only") else picked) if not line_matches(g, l)]
             if len(picked) < need:
                 failures.append(f"every-window {name}: {len(picked)} line(s) in the run, need {need}")
             if bad:
@@ -244,8 +274,18 @@ def check(gates, game_text, runner_text="", plan=None):
                 failures.append(f"every-window {name}: window '{label}' not found in the runner log")
                 continue
             for w in hits:
+                if not w.get("ready", True):
+                    failures.append(f"every-window {name}: window '{label}' missing motion-ready completion")
+                    continue
                 if g.get("when_present") and not any(w["applied"] <= t < w["end"] for t, _ in picked):
                     continue   # the pass did not run in this window (docstring)
+                condition = g.get("required_if")
+                if condition:
+                    trigger = [(t, l) for t, l in lines if re.search(condition["select"], l)]
+                    complete = [l for (pt, _), (t, l) in zip(trigger, trigger[1:])
+                                if pt >= w["applied"] and t < w["end"]]
+                    if not any(re.search(condition["match"], l) for l in complete):
+                        continue
                 judged = []
                 prev = None
                 for t, l in picked:
@@ -257,7 +297,7 @@ def check(gates, game_text, runner_text="", plan=None):
                     elif prev is not None and prev >= w["applied"]:
                         judged.append(l)
                     prev = t
-                bad = [l for l in judged if not match.search(l)]
+                bad = [l for l in (judged[:1] if g.get("first_only") else judged) if not line_matches(g, l)]
                 where = f"window '{label}' (phase {w['index']})"
                 if len(judged) < need:
                     kind = "event line(s)" if event else "complete line(s)"

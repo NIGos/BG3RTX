@@ -20,7 +20,7 @@
     "wait_log": [
       "gi: trace pass .*GPU median"
     ],
-    "wait_log_timeout": 9.0
+    "wait_log_timeout": 9.447999999996682
   },
   {
     "label": "warmup-scaled",
@@ -29,20 +29,37 @@
     "set": "qa_exposure_hold=0,rt_trace_scale=0.5",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
-      "gi: gi/[^ ]+ generation "
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
   },
   {
     "label": "settle-off-a",
     "kind": "static",
-    "seconds": 2.1,
-    "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
+    "seconds": 2.2,
+    "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.3,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -59,13 +76,23 @@
   {
     "label": "settle-on",
     "kind": "static",
-    "seconds": 2.1,
-    "set": "rt_trace_scale=0.5,qa_exposure_hold=1"
+    "seconds": 2.2,
+    "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.3,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -82,13 +109,23 @@
   {
     "label": "settle-off-b",
     "kind": "static",
-    "seconds": 2.1,
-    "set": "rt_trace_scale=1.0,qa_exposure_hold=1"
+    "seconds": 2.2,
+    "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+      "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
   },
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 21.1,
+    "seconds": 23.3,
     "set": "qa_exposure_hold=1"
   },
   {

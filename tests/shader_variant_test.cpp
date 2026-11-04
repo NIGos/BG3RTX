@@ -87,21 +87,6 @@ int main(int argc, char** argv) {
   }
   CHECK(kOccStats != kHitPool2s);
   CHECK(kSpecIdOccStats == 1011);
-  CHECK(kSpecIdHairGiCull == 1017);
-  CHECK(kSpecIdHairCheap == 1018 && kSpecIdHairGiMean == 1019);
-  std::set<unsigned> hair_slots;
-  for(unsigned base=0;base<512u;++base)for(unsigned cheap=0;cheap<2u;++cheap)for(unsigned mean=0;mean<2u;++mean){
-    const unsigned slot=base|(cheap?kHairCheapSlot:0u)|(mean?kHairGiMeanSlot:0u);
-    CHECK(slot<kPipelineSlots && hair_slots.insert(slot).second);
-  }
-  // Every existing installed slot retains a distinct cull-on sibling; toggling
-  // back addresses the original pipeline instead of destroying/rebuilding it.
-  for (unsigned base = 0; base < kHairGiCullSlot; ++base) {
-    const auto off = base | hair_gi_cull_slot("gi/gi_trace_rt.hlsl", false);
-    const auto on = base | hair_gi_cull_slot("gi/gi_trace_rt.hlsl", true);
-    CHECK(off == base && on != off && on < kPipelineSlots);
-  }
-  CHECK(hair_gi_cull_slot("gi/rt_shadow.hlsl", true) == 0u);
   // rt_hair_groom (constant 1020): its own slot bit above every other, on every gi/ file only.
   CHECK(gpu_opt_entry("gi/rt_hit_two_bounce.hlsl") && gpu_opt_entry("gi/rt_shadow.hlsl"));
   CHECK(!gpu_opt_entry("gi/gi_temporal.hlsl") && !gpu_opt_entry("probe.hlsl"));
@@ -117,13 +102,6 @@ int main(int argc, char** argv) {
     CHECK((base | hair_groom_slot("gi/rt_shadow.hlsl", false)) == base && on != base && on < kPipelineSlots);
   }
   CHECK(hair_groom_slot("rt/water_reflect.hlsl", true) == 0u);
-  CHECK(hair_gi_cull_entry("gi/gi_trace_rt.hlsl"));
-  CHECK(hair_gi_cull_entry("gi/gi_trace_rt_sharc_hit_sun_em.hlsl"));
-  CHECK(!hair_gi_cull_entry("gi/gi_trace.hlsl"));
-  CHECK(!hair_gi_cull_entry("gi/rt_origin.hlsl"));
-  CHECK(!hair_gi_cull_entry("gi/rt_shadow.hlsl"));
-  CHECK(!hair_gi_cull_entry("gi/rt_local_shadows.hlsl"));
-  CHECK(!hair_gi_cull_entry("gi/rt_reflections.hlsl"));
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0).find("RT_SPEC_OCC_STATS=1") != std::string::npos);
   CHECK(request("gi/rt_local_shadows_full_box.hlsl", 0) == request("gi/rt_local_shadows_full_box.hlsl", kOccStats));
   CHECK(request("gi/rt_shadow.hlsl", kOccStats) == request("gi/rt_shadow.hlsl", 0));

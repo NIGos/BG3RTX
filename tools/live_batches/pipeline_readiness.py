@@ -1,0 +1,135 @@
+"""Changed-key readiness contracts for generators and offline lint.
+
+Build/status patterns in existing bundle13 plans are conditional witnesses in
+camera-plan.ps1: acknowledge settings, then reconcile starts and completions.
+Resident pipelines need neither a new completion nor a quiet watch interval.
+"""
+import re
+
+from scripts.queue_gates import phase_states
+
+QUIET = r"\[watch\].*\| pipelines 0 \(0 ms in driver\)"
+# Keep the legacy pattern registry so checked-in plans remain compatible.
+# These records are conditional on an actual build, not mandatory announcements.
+TABLE = {
+    "rt_water_surface_fresnel": [r"\[water\] surface Fresnel \(\d+ frames\): enabled {value},"],
+    "rr_post_temporal": [r"\[rrpost\] rr_post\.hlsl:temporal pipeline built",
+                         r"\[rrpost\] rr_post\.hlsl:temporal_final pipeline built"],
+    "rt_cascade_casters": [r"gi: gi/rt_shadow\.hlsl[^ ]* generation .*spec cascade={value}",
+                           r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation .*spec cascade={value}",
+                           r"gi: gi/rt_reflections\.hlsl[^ ]* generation .*spec cascade={value}"],
+}
+# VALID su1-ultra-s8-fg2.1.004527.log records these core pipeline families;
+# core/gi.cpp's specialization selection maps the keys to their consumers.
+# Completion records can be cached. Newly selected variants must additionally
+# clear the runner's outstanding build records after settings acknowledgement.
+GI_TRACE = r"gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\.hlsl[^ ]* generation "
+GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
+            r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
+for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
+            "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
+            "rt_compact_hit_state", "rt_alpha_metadata_cache", "rt_trace_scale",
+            "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
+    TABLE[key] = list(GI_QUERY)
+for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
+            "rt_hit_emission", "rt_emissive"):
+    TABLE[key] = [GI_TRACE]
+WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
+for key in ("rt_water_hit_cost", "rt_water_hit_shade", "rt_water_compose_shift",
+            "rt_water_empty_tiles", "rt_water_shadows", "rt_water_ls_shadows",
+            "rt_water_refraction", "rt_water_game_shadow"):
+    TABLE[key] = [WATER_COMPOSE]
+TABLE["ls_box"] = [r"gi: gi/rt_local_shadows_box\.hlsl[^ ]* generation "]
+TABLE["rr_post"] = [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"]
+
+# VALID su1-ultra-s8-fg2.1.004527.log: core/gi.cpp refresh() records;
+# these scalar settings are push constants / pass enables, not new variants.
+TABLE.update({
+    "gi_ao": [r"gi: gi/gi_ao_apply\.hlsl[^ ]* generation "],
+    "gi_strength": [r"gi: gi/gi_composite\.hlsl[^ ]* generation "],
+    "rt_shadows": [r"gi: gi/rt_shadow\.hlsl[^ ]* generation "],
+    "rf_max_rough": [r"gi: gi/rt_reflections\.hlsl[^ ]* generation "],
+    "ls_samples": [r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation "],
+    "ls_shadowed": [r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation "],
+    "rr_cbt": [r"\[rrpost\] rr_post\.hlsl:resolve pipeline built"],
+    "rt_alpha": list(GI_QUERY),
+    "rt_water_compose": [WATER_COMPOSE],
+    "rt_water_reflections": [r"\[water\] rt/water_reflect\.hlsl[^ ]* water_reflect: built"],
+})
+# No authoritative pipeline completion witness in the VALID corpus for these
+# paths. Explicitly opt them into the conservative generic shader completion
+# fallback requested for preparation. Quiet and outstanding-build reconciliation
+# are still required; this does not qualify their timing or rendering behaviour.
+# hair_fibre selects gi/hair_fibre.hlsl (core/gi.cpp); primary_order and crowd
+# change CPU publication/LOD; paks changes host data, geometry capture is host
+# side, and rr/fg use vendor pipelines. preset and ab_off affect many passes.
+GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: prefetched )"
+CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_hit_material_paks rt_water_geometry rr fg preset ab_off".split())
+for key in CONSERVATIVE:
+    TABLE[key] = [GENERIC]
+
+# Settings which schedule observations or change CPU/log policy, without
+# selecting pipelines. Unknown rendering keys require explicit completion evidence.
+CONTROL = set("qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
+
+
+def requirements(job, plan):
+    states = phase_states(job, plan)
+    out = []
+    for i, state in enumerate(states):
+        previous = states[i-1] if i else state
+        changed = {k: v for k, v in state.items() if previous.get(k) != v and k not in CONTROL}
+        wanted = {}
+        for key, value in changed.items():
+            patterns = [p.format(value=value) for p in TABLE.get(key, [])]
+            # Disabled post temporal bypasses its pass and needs no temporal pipeline.
+            if key == "rr_post_temporal" and str(value) == "0":
+                patterns = []
+            wanted[key] = patterns + [QUIET]
+        out.append(wanted)
+    return out
+
+
+def apply(job, plan):
+    for phase, wanted in zip(plan, requirements(job, plan)):
+        if not wanted:
+            continue
+        patterns = phase.get("wait_log", [])
+        patterns = [patterns] if isinstance(patterns, str) else list(patterns)
+        fresh = list(phase.get("wait_log_fresh", []))
+        for key, required in wanted.items():
+            patterns.extend(required)
+            fresh.append(QUIET)
+            if key == "rt_water_surface_fresnel":
+                fresh.extend(required)
+        phase["wait_log"] = list(dict.fromkeys(patterns))
+        phase["wait_log_fresh"] = list(dict.fromkeys(fresh))
+        phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout", 0)), 180)
+
+
+def problems(job, plan):
+    errors = []
+    for phase, wanted in zip(plan, requirements(job, plan)):
+        have = phase.get("wait_log", [])
+        have = [have] if isinstance(have, str) else have
+        fresh = phase.get("wait_log_fresh", [])
+        for key, patterns in wanted.items():
+            missing = [p for p in patterns if p not in have]
+            if key not in TABLE:
+                # Existing explicit key-specific waits remain supported. Never
+                # invent an authoritative completion from a quiet driver alone.
+                specific = [p for p in have if p != QUIET and
+                            key in p]
+                if not specific:
+                    missing.append("unknown pipeline mapping; declare key-specific wait_log")
+            if QUIET not in fresh or key == "rt_water_surface_fresnel" and any(p not in fresh for p in patterns):
+                missing.append("fresh completion after settings write")
+            if missing:
+                errors.append(f"readiness: {phase.get('label')}: changed {key} requires pipeline wait_log ({'; '.join(missing)})")
+    return errors
+
+
+def conditional(pattern):
+    """Keep aligned with Test-CameraPlanBuildPattern (legacy plan encoding)."""
+    return bool(re.search(
+        r'generation |pipeline built|: built|surface Fresnel|read from the cache|cache: prefetched |pipelines 0', pattern))

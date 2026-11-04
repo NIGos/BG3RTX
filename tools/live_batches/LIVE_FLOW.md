@@ -7,7 +7,8 @@ The current per-job findings are in [live_flow_audit.md](live_flow_audit.md).
 
 The corpus reads `captures/queue/results.jsonl` from this checkout, falling back
 to the main checkout for a linked worktree. Only rows with `valid: true` qualify.
-It selects the newest 3 readable logs per save; old rows resolve save names from
+FPS modelling uses all readable VALID logs by default; --newest can bound it.
+The forbid audit retains the newest 3 readable logs per save; old rows resolve save names from
 the exact job name in prepared jobs and queue `done` jobs. Unknown saves are
 reported and excluded. `--results`, `--newest` and `--cache` override these choices.
 The cache lives in this checkout's `captures/.cache`; result, job and log file
@@ -42,8 +43,8 @@ Jobs can declare these planning assumptions in a top-level `live_flow` object:
 }
 ```
 
-Foreground jobs must declare expected rendered FPS. Visible unfocused jobs use
-30 rendered FPS. Trace stall bounds must be declared for periodic gates in trace
+Foreground jobs must declare expected rendered FPS. Visible unfocused jobs have
+a ceiling of 30 rendered FPS; this is never assumed to be diagnostic throughput. Trace stall bounds must be declared for periodic gates in trace
 windows. Unknown producers must declare `period_frames` or `period_s` on their
 gate, with the source of the cadence recorded in the batch's documentation.
 The lint reports the minimum window length and guaranteed complete-line count.
@@ -102,7 +103,7 @@ The tool groups by save, writes one job/plan/manifest per save, and immediately
 runs the shared offline design checks. It rejects incompatible trees, window
 modes, runner args, declared startup keys and timing assumptions.
 Trace-write stall budgets may differ by source; each combined window uses its
-source segment's budget. Expected FPS and settings latency must still agree.
+source segment's budget. Expected FPS ceilings and settings latency must still agree.
 Only single MovePlan jobs are supported. It never writes a pending inbox.
 
 A reset before each later batch sets every key used by any batch to the next
@@ -148,3 +149,100 @@ Camera plan fields are shared by the runner and lint in `scripts/camera-plan-fie
 rr_post_decision; it does not schedule runner actions. Unknown fields fail before launch.
 Combined jobs retain external `requires_success_of` prerequisites; inputs depending
 on another input must run separately.
+
+## FPS windows and replay (tools-fps-windows)
+
+`fps_windows.py` groups frame-counter deltas by save and effective diagnostic state:
+rt_stats, rt_primary_check, OMM check (rt_stats + rt_omm), rt_omm_reference,
+and GPU-AV. It uses the lower nearest-rank tenth percentile within each window,
+then the same quantile across windows. Both counter endpoints must follow that
+window's settings read and precede its next boundary. Midnight rolls over. Only
+app counters (`input copy frame` / `DLSS-G frame`) count; displayed FG ratios do not.
+Historical runner settings are authoritative; implicit historical OMM is inferred
+from its actual check producer, rather than today's evolving Ultra preset.
+
+The model and source-log paths are embedded in each regenerated job's live_flow
+fps_windows table. Preflight, capture sizing, producer waits and live_guard use
+one model, including after the runner starts in a separate process. An explicit
+expected_fps is an upper bound. Cache signatures include runner and job files.
+
+Without a matching VALID save/state, the fallback is
+`1000 / (1000 / base_fps + sum(enabled cost_ms))`.
+Base FPS is that save's ordinary-state p10, capped by the declared ceiling.
+The additive table deliberately overestimates overlapping diagnostic work:
+
+| Key | Additional ms/frame | Evidence / bound |
+| --- | ---: | --- |
+| rt_stats | 100 | Camp VALID diagnostic p10 7.562 FPS: 132.2 ms/frame, about 99 ms above 30 FPS; rounded up. |
+| rt_primary_check | 80 | Dialogue1 VALID diagnostics about 9.59 FPS; combined stats/check overhead about 71 ms; round up to 80. |
+| OMM check | 80 | User's observed check cost (~80 ms/frame); su1 214253 confirms diagnostic slowdown. |
+| rt_omm_reference | 80 | Conservatively charge the same extra reference traversal as the OMM check; no isolated VALID reference state. |
+| GPU-AV | 200 | hv4-gpuav.1.211903: post-ready app-counter pairs reach 128.1 ms/frame; about 95 ms over 30 FPS, rounded to 100 and doubled for absent VALID window evidence. |
+
+Fallback bounds are planning estimates, not measured isolated costs or rendering
+qualification. The two failed runs are timing witnesses only, never VALID corpus
+samples. GPU-AV and reference fallback remain explicitly identifiable in budgets.
+Known frame-based producer cadences take precedence over stale period_s estimates
+(cp4's 9 s estimate cannot override the 120-frame pak producer).
+
+Regenerate active artifacts without queuing:
+`python tools/live_batches/live_flow.py --retime --batches smoke_ultra,cov_paks_compact,hair_validation,hair_crowd,water_surface_fresnel,post_temporal,combined_20261103 --replay-only --report captures/offline/fps_windows_replay.json`.
+Batch generators use the same retime path. Combined manifest timing copies are
+updated with their plans. No gates or gate counts are changed. lean_dryrun calls
+live_flow --preflight and uses its duration/readiness totals; it retains camera,
+role, trace, disk and fake-queue checks, with no 5-25 s or fixed +240 s rule.
+
+`--replay-only` checks every expect and expect_every against the newest readable
+VALID log of the same save, with target lengths derived by the duration model.
+Each target diagnostic state is mapped to the newest historical window in that
+state. Real timestamps/settings boundaries are retained: longer target windows
+cannot borrow samples after an old toggle. Missing states, producers, complete
+samples and attributable trend windows are reported as unproven. Replay exits 1
+when any job lacks evidence. This is an offline coverage check, never a new live
+PASS. See fps_windows_report.md for before/after lengths and remaining blockers.
+
+Changed rendering settings require a pipeline readiness wait in every changed
+window. The shared retime hook adds known key signals plus a fresh zero-build
+watch interval after the current settings acknowledgement. The signal table is
+in `pipeline_readiness.py`: VALID `pt-dialogue3.1.210703.log` supplies both temporal
+pipeline-built records; `su1-ultra-s8-fg2.1.004527.log` supplies the cascade
+specialization records. No current VALID corpus entry contains a Fresnel state
+record: its signature is taken from the supplied failed wsf1 log and the
+producer in layer/water.cpp, and remains unqualified timing evidence.
+Surface state must be fresh,
+so an earlier enabled record cannot release a later toggle. Cached immutable
+pipeline records remain reusable, but outstanding asynchronous build-start
+records must have matching completion records before release. Unknown keys
+without an explicit key-specific wait fail lint; a quiet driver alone is not
+proof of completion. Non-pipeline capture/log controls are listed separately.
+Final gates attribute samples after `[motion-ready]`; fail-fast defers them
+while readiness is pending. A closed window without its marker is invalid.
+
+Regenerate the active queue with `python -m tools.live_batches.regenerate_active`.
+Every generator reaches `pipeline_readiness.apply` through the shared retime
+hook; combine also applies it after inserting settings resets. Active jobs are
+explicitly marked in `duration_lint.json`; historical artifacts remain inactive.
+`python tools/live_batches/live_flow.py --active --preflight` and the
+`batch_jobs_lint_test` CTest gate the current active inventory. Direct preflight
+of an inactive job still checks all rules; inactive does not authorize a launch.
+`readiness_report.json` records before/after scheduled seconds, median readiness
+seconds and their preflight sum. Missing VALID readiness samples remain unproven.
+
+Additional mappings use VALID `su1-ultra-s8-fg2.1.004527.log` completion records:
+GI AO -> gi_ao_apply, strength -> gi_composite, shadows -> rt_shadow,
+roughness -> rt_reflections, local sample/shadow policy -> rt_local_shadows,
+CBT -> rr_post resolve, alpha -> GI query families, water -> compose/reflect.
+`core/gi.cpp` push-constant construction and refresh calls, `layer/rrpost.cpp`
+CBT use, and `core/water.cpp` pipeline selection identify their consumers.
+These scalar controls reuse pipelines; they do not each select a shader define.
+
+The explicit `CONSERVATIVE` table uses successful generic `[shaders]` compiled,
+cache-read or prefetch completion plus fresh quiet for fibre, primary ordering,
+crowd LOD, pak publication, water geometry, RR, FG, preset and A/B reset.
+Fibre selects `gi/hair_fibre.hlsl` in `core/gi.cpp`; primary ordering is CPU
+publication in `layer/hair_primary.cpp`, crowd is host LOD, paks/geometry are
+host data, and RR/FG include vendor pipelines. No authoritative VALID pipeline
+witness establishes those transitions here. This fallback is deliberately
+conservative preparation evidence, not a key-specific completion or timing
+qualification. Unlisted unknown keys still fail closed. See the report's
+`conservative_keys`; no rendering gate or expected sample count is relaxed.

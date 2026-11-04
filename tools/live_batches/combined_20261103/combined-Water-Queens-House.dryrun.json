@@ -1,5 +1,7 @@
 {
-  "problems": [],
+  "problems": [
+    "launch exceeds 15-minute/default max_minutes budget"
+  ],
   "launches_before": 6,
   "launches_after": 1
 }

@@ -24,8 +24,9 @@ SAVES = [("hp1-dialogue1-fg2", "Test Dialogue1")]   # Shadowheart's matched LOD1
 # so it is on from startup in every phase; the live cards/strands A/B is rt_hair_groom (off: no groom anywhere, the
 # native cards; on: strands in RT and on screen). There is no live "strands in RT only" mode any more.
 PRIMARY_START = "rt_hair_groom_primary=1"
-ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0")
-OFF = dict(hg.GROOM, rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0")
+# Header order G-buffer: the coverage gate (claude/hair-coverage-gate) keeps the cards in header order prepass.
+ON = dict(hg.GROOM, rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="1")
+OFF = dict(hg.GROOM, rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_primary_order="1")
 FIBRE = dict(ON, rt_hair_fibre="1")   # rt_hair_fibre: the strands lit by the fibre BSDF (3b-2b)
 
 
@@ -135,7 +136,7 @@ def job(name, save):
     return {
         "name": name, "save": save, "session": False, "traces": 0, "hold": 90, "timeout": seconds + 300, "repeat": 1,
         "live_batch": LIVE,
-        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},rt_hair_gi_cull=0,{hg.GROOM_START},"
+        "set": f"{hg.hq.ULTRA.replace('dump_png_width=1024', hg.FULL_RES)},{hg.hq.HAIR_START},{hg.GROOM_START},"
                f"{PRIMARY_START}",
         "live_flow": {"startup_only": ["rt_hair_groom_primary"]},
         "args": ["-RealPresent", "-Foreground", "-Move", "-MovePlan", f"captures/live_batches/{BATCH}/plans/hp_plan.json"],

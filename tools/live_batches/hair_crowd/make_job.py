@@ -22,7 +22,9 @@ BATCH = "hair_crowd"
 LIVE = "hair-crowd"
 SAVES = [("hc1-dialogue1-fg2", "Test Dialogue1"), ("hc2-campsite-fg2", "Campsite - 27h")]
 # rt_hair_groom_primary is latched on at startup (hair_primary make_job PRIMARY_START); the live A/B is rt_hair_groom.
-CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0")
+# Header order G-buffer in every phase: in header order prepass the coverage gate keeps the cards (no strand draws).
+CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0",
+             rt_hair_groom_primary_order="1")
 SCREEN = dict(CARDS, rt_hair_groom="1")
 CROWD = dict(SCREEN, rt_hair_groom_crowd_ksegments="1800")   # the GUI's "2 close characters"
 
@@ -63,7 +65,7 @@ GROOM_ON = ["cost-strands", "cost-crowd"]
 
 def job(name, save):
     j = hp.job(name, save)
-    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/hc_plan.json"
+    j["args"][-1] = f"captures/live_batches/{BATCH}/plans/" + ("hc_plan.json" if name == SAVES[0][0] else name + ".json")
     # The user may be at the PC: the game never takes focus (AGENTS.md). A full pool is a measured outcome here
     # (the crowd budget's point), not a failure; refusals are counted by the strand gates.
     j["window_mode"] = "visible_unfocused_fg"
@@ -109,9 +111,12 @@ def main():
     out = Path(a.out)
     (out / "jobs").mkdir(parents=True, exist_ok=True)
     (out / "plans").mkdir(parents=True, exist_ok=True)
-    (out / "plans" / "hc_plan.json").write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
     for name, save in SAVES:
+        filename = "hc_plan.json" if name == SAVES[0][0] else name + ".json"
+        (out / "plans" / filename).write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
         (out / "jobs" / f"{name}.json").write_text(json.dumps(job(name, save), indent=1) + "\n", encoding="utf-8")
+    from tools.live_batches.live_flow import tighten_files
+    tighten_files(out)
     print(f"{len(SAVES)} jobs; hc_plan {len(plan)} phases/{hp.seconds} s -> {out}")
 
 

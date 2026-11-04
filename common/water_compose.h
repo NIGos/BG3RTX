@@ -186,9 +186,10 @@ inline bool same_encoded(float c, float t, int mantissa_bits) {
 // term is Sp k). L = k Sp gives C' = C; the energy change is a T X E (L - k Sp): a darker traced
 // hit than the probe's radiance in that direction, never a unit factor.
 // M5.6: E is the interface DFG reflectance; opacity partitions only the column.
-struct SurfacePartition { float interface_weight, column_weight, transmission_weight; };
-inline SurfacePartition surface_partition(float e, float a) {
-  return {e, (1.0f - e) * a, (1.0f - e) * (1.0f - a)};
+struct SurfacePartition { float interface_weight, column_weight, transmission_weight; float foam_weight = 0.0f; };
+inline SurfacePartition surface_partition(float e, float a, float c = 0.0f) {
+  const float clean = 1.0f - c;
+  return {clean * e, clean * (1.0f - e) * a, clean * (1.0f - e) * (1.0f - a), c};
 }
 struct FsTerms {
   float refr, direct, kd, sp, e, k, x, ge, t, s, a;
@@ -312,7 +313,34 @@ inline constexpr uint32_t kCsRrHidden = 101, kCsRrOff = 102, kCsRrMiss = 103, kC
 inline constexpr uint32_t kCsRrClamped = 106, kCsRrNoCopy = 107;
 inline constexpr uint32_t kCsRrSumGame = 108, kCsRrSumNew = 110, kCsRrSumAll = 112, kCsRrSumShift = 114;
 inline constexpr uint32_t kCsRrSumRwHidden = 116, kCsRrSumRwTraced = 118;
+// w7 low half: exact marker plus independent rejection reasons; high half is roughness.
+inline constexpr uint32_t kSurfaceMarker = 0x8000u, kSurfaceReasonMask = 63u, kSurfaceRejectMask = 15u, kSurfaceNative = 0xffffu;
+inline constexpr uint32_t kSurfaceFoamColour = 1u, kSurfaceFoamF0 = 2u, kSurfaceFoamRough = 4u, kSurfaceFsOff = 8u, kSurfaceFlow = 16u, kSurfaceEdge = 32u;
+inline bool surface_marker_valid(uint32_t word) { return (word & 0xc000u) == kSurfaceMarker; }
+inline bool surface_clean(uint32_t word) { return (word & 0xc008u) == kSurfaceMarker; }
 inline constexpr uint32_t kCsSurfaceClean = 120, kCsSurfaceInvalid = 121;
+inline constexpr uint32_t kCsSurfaceFoamColour = 122, kCsSurfaceFoamF0 = 123, kCsSurfaceFoamRough = 124;
+inline constexpr uint32_t kCsSurfaceNative = 125, kCsSurfaceLayout = 126, kCsSurfaceFsOff = 127;
+// The two unused words between the local-light and refraction tables avoid growing the slot.
+inline constexpr uint32_t kCsSurfaceComposeOff = 91, kCsSurfaceMarked = 92, kCsSurfaceFlow = 93, kCsSurfaceEdge = 94, kCsSurfaceWords = 12;
+inline constexpr uint32_t kFlagSurfaceDiagnostics = 128u;
+// CPU mirror of the shader's independent per-owned reasons (bit index = gsSurface index).
+inline uint32_t surface_diagnostic_mask(bool own, bool requested, bool compose_on, uint32_t word,
+                                        bool valid = true, bool finite = true) {
+  if (!own || !requested) return 0;
+  const uint32_t marker = word & 0xffffu;
+  const bool marked = surface_marker_valid(word), clean = compose_on && surface_clean(word);
+  const uint32_t c = (word >> 6u) & 255u;
+  return (clean && c < 255u ? 1u : 0u) | (clean && (!valid || !finite || (marker & 1u)) ? 2u : 0u) |
+         (marked && c == 0u ? 1u << 2u : 0u) | (marked && c > 0u && c < 255u ? 1u << 3u : 0u) |
+         (marked && c == 255u ? 1u << 4u : 0u) |
+         (marker == kSurfaceNative ? 1u << 5u : 0u) |
+         (marker != kSurfaceNative && !marked ? 1u << 6u : 0u) |
+         (marked && (marker & kSurfaceFsOff) ? 1u << 7u : 0u) |
+         (!compose_on ? 1u << 8u : 0u) | (marked ? 1u << 9u : 0u) |
+         (marked && (marker & kSurfaceFlow) ? 1u << 10u : 0u) |
+         (marked && (marker & kSurfaceEdge) ? 1u << 11u : 0u);
+}
 inline constexpr uint32_t kCsRrWords = 120;
 static_assert(kCsRrWords <= 128, "the refraction words fit the 128-word slot");
 
@@ -550,7 +578,7 @@ inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, Co
 }
 
 inline constexpr bool compose_plain_counter(uint32_t i) {
-  return i==kCsSurfaceClean || i==kCsSurfaceInvalid || i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
+  return (i>=kCsSurfaceClean && i<=kCsSurfaceFsOff) || (i>=kCsSurfaceComposeOff && i<=kCsSurfaceEdge) || i<16 || (i>27 && i<kCsSunSumD) || (i>=kCsGshRec && i<kCsGshSumDg) ||
       (i>=kCsLsRec && i<kCsLsSumL) || i==kCsLsChkShWithin || i==kCsNonFinite ||
       (i==55 || (i>=kCsHitAttempt && i<kCsHitEnd)) || (i>=kCsRrRec && i<kCsRrSumGame);
 }

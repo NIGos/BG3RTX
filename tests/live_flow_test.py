@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.live_batches import live_flow as f
 from tools.live_batches import combine as c
+from tools.live_batches import fps_windows as fw
 
 
 def phase(label, seconds=12, values="rr=0"):
@@ -18,16 +19,100 @@ def phase(label, seconds=12, values="rr=0"):
 
 
 def fixture(name="one"):
-    return dict(name=name, save="same", window_mode="visible_unfocused_fg", set="preset=ultra,rr=0",
+    job, plan = dict(name=name, save="same", window_mode="visible_unfocused_fg", set="preset=ultra,rr=0",
                 args=["-Move", "-MovePlan", "unused.json"], expect=[r"scene ready"], patterns=["gpu"],
                 forbid=[r"exception 0x"], expect_every=[dict(select=r"\[rrpost\] gpu:", match="good", min=1,
                                                           windows=["cost-off", "cost-on"])],
                 expect_runner=[r"\[motion-plan\] complete phases=4\b"]), [
                     phase("warm-off"), phase("warm-on", values="rr=1"),
                     phase("cost-off"), phase("cost-on", values="rr=1")]
+    for row in plan[1:]:
+        row["wait_log"] = ["rr pipeline ready"]
+    f.pipeline_readiness.apply(job, plan)
+    return job, plan
+
+
+class PipelineReadinessTests(unittest.TestCase):
+    def test_explicit_conservative_mapping_keeps_generic_completion_and_quiet(self):
+        j = dict(set="rt_hair_fibre=0")
+        p = [phase("before"), phase("on", values="rt_hair_fibre=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+        self.assertIn(f.pipeline_readiness.GENERIC, p[1]['wait_log'])
+        p[1]['wait_log'].remove(f.pipeline_readiness.GENERIC)
+        self.assertTrue(f.pipeline_readiness.problems(j, p))
+
+    def test_each_changed_key_requires_its_completion_even_after_prefetch(self):
+        j = dict(set="rt_water_surface_fresnel=0", live_flow={})
+        p = [phase("warm"), phase("on", values="rt_water_surface_fresnel=1"),
+             phase("off", values="rt_water_surface_fresnel=0")]
+        self.assertEqual(len(f.pipeline_readiness.problems(j, p)), 2)
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+        self.assertIn("enabled 1,", p[1]["wait_log"][0])
+        self.assertIn("enabled 0,", p[2]["wait_log"][0])
+        self.assertEqual(set(p[1]["wait_log"]), set(p[1]["wait_log_fresh"]))
+        before = deepcopy(p)
+        f.pipeline_readiness.apply(j, p)
+        self.assertEqual(p, before)
+
+    def test_unknown_mapping_fails_closed_despite_quiet_driver(self):
+        j = dict(set="new_shading_key=0")
+        p = [phase("before"), phase("on", values="new_shading_key=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertIn("unknown pipeline mapping", f.pipeline_readiness.problems(j, p)[0])
+        p[1]["wait_log"].append("new_shading_key pipeline ready")
+        self.assertFalse(f.pipeline_readiness.problems(j, p))
+
+    def test_control_changes_need_no_pipeline_wait(self):
+        j = dict(set="rt_stats=0,qa_exposure_hold=0")
+        p = [phase("before", values="rt_stats=0"), phase("diag", values="rt_stats=1,qa_exposure_hold=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertFalse(any(row.get("wait_log") for row in p))
+
+    def test_temporal_wait_uses_cached_pipeline_and_fresh_quiescence(self):
+        j = dict(set="rr_post_temporal=0")
+        p = [phase("before"), phase("on", values="rr_post_temporal=1")]
+        f.pipeline_readiness.apply(j, p)
+        self.assertIn("temporal", p[1]["wait_log"][0])
+        self.assertEqual(p[1]["wait_log_fresh"], [f.pipeline_readiness.QUIET])
 
 
 class FlowTests(unittest.TestCase):
+    def test_trace_export_quantile_and_previous_phase_serialization(self):
+        entry = dict(runner='00:00:01.000 [motion-trace]\n00:00:02.000 [motion-trace]',
+                     lines=['00:00:01.500 [trace] frame 1 written:',
+                            '00:00:07.000 [trace] frame 2 written:'])
+        with patch.dict(f.TRACE_EXPORT, {}, clear=True):
+            f.configure_trace_exports([entry])
+            self.assertEqual(f.TRACE_EXPORT['seconds'], 5)
+            self.assertEqual(f.TRACE_EXPORT['samples'], 2)
+            j, _ = fixture()
+            j['live_flow'] = dict(trace_stall_s=0, trace_dispatch_s=1)
+            p = [phase('previous', 2), phase('event', 8)]
+            for row in p: row['trace_at'] = [1]
+            j['expect_every'] = [dict(select=r'\[trace\] frame', match='written',
+                                     event=True, min=1, windows=['event'])]
+            errors, budgets = f.window_problems(j, p)
+            # Previous finishes at 7; next at 13 absolute / 11 local.
+            self.assertTrue(errors)
+            self.assertEqual(budgets[0]['minimum_seconds_exclusive'], 11)
+            p[1]['seconds'] = 11.1
+            self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_trace_dispatch_stall_rejects_old_energy_window(self):
+        j, _ = fixture()
+        j['live_flow'] = dict(trace_stall_s=1, trace_dispatch_s=4,
+                              trace_export=dict(seconds=.319))
+        p = [phase('energy', 2.1)]
+        p[0]['trace_at'] = [1]
+        j['expect_every'] = [dict(select=r'\[trace\] frame', match='written',
+                                 event=True, min=1, windows=['energy'])]
+        self.assertTrue(f.window_problems(j, p)[0])
+        f.tighten(j, p)
+        self.assertGreater(p[0]['seconds'], 6)
+        self.assertFalse(f.window_problems(j, p)[0])
+
     def test_readiness_does_not_replace_scene_settle_or_failure_latency(self):
         j, p = fixture()
         p[0].update(seconds=45, wait_log=["pipelines ready"])
@@ -479,6 +564,200 @@ class FlowTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c.extract(manifest, log, run, t / "incomplete")
 
+
+class WindowFpsTests(unittest.TestCase):
+    def setUp(self):
+        fw.configure([])
+
+    def tearDown(self):
+        fw.configure([])
+
+    @staticmethod
+    def job(save="camp", stats=1):
+        return dict(name="fixture", save=save, window_mode="visible_unfocused_fg",
+                    set=f"rt_stats={stats},rt_primary_check=0,rt_omm=0,rt_omm_reference=0",
+                    expect=[], expect_every=[])
+
+    @staticmethod
+    def entry(path="valid", save="camp", stats=1, frames=60):
+        return dict(path=path, save=save, job=WindowFpsTests.job(save, stats),
+                    runner="00:00:00.000 [pan-plan] window 0 set=rt_stats=" + str(stats) +
+                           "\n00:00:20.000 [motion-plan] complete",
+                    lines=["00:00:00.100 [cfg] settings read",
+                           "00:00:01.000 [sl] DLSS-G frame 100: displayed/rendered 3.00",
+                           f"00:00:11.000 [sl] DLSS-G frame {100+frames}: displayed/rendered 3.00"])
+
+    def test_same_save_diagnostic_state_uses_slow_p10_and_app_frames(self):
+        fw.configure([self.entry(frames=60), self.entry("fast", frames=180),
+                      self.entry("off", stats=0, frames=300),
+                      self.entry("other-save", save="s8", frames=10)])
+        slow = fw.expected(self.job(), f.settings(self.job()["set"]))
+        self.assertEqual(slow["fps"], 6)  # Never multiply by the displayed FG ratio.
+        self.assertEqual(slow["source"], "VALID p10")
+        off = self.job(stats=0)
+        self.assertEqual(fw.expected(off, f.settings(off["set"]))["fps"], 30)
+
+    def test_counter_pairs_do_not_cross_settings_boundary_or_read_latency(self):
+        entry = self.entry()
+        entry["runner"] = ("00:00:00.000 [pan-plan] window 0 set=rt_stats=0\n"
+                           "00:00:10.000 [pan-plan] window 1 set=rt_stats=1\n"
+                           "00:00:20.000 [motion-plan] complete")
+        entry["lines"] = ["00:00:09.000 [sl] input copy frame 100:",
+                          "00:00:10.100 [sl] input copy frame 200:",
+                          "00:00:11.000 [cfg] settings read",
+                          "00:00:12.000 [sl] input copy frame 210:"]
+        self.assertEqual(fw.window_samples(entry), [])
+
+    def test_timestamp_rollover_keeps_rendered_counter_rate(self):
+        entry = self.entry()
+        entry["runner"] = ("23:59:58.000 [pan-plan] window 0 set=rt_stats=1\n"
+                           "00:00:12.000 [motion-plan] complete")
+        entry["lines"] = ["23:59:58.100 [cfg] settings read",
+                          "23:59:59.000 [sl] input copy frame 100:",
+                          "00:00:09.000 [sl] input copy frame 200:"]
+        self.assertEqual(fw.window_samples(entry)[0][1], 10)
+
+    def test_missing_app_counter_never_learns_presented_frame_throughput(self):
+        entry = self.entry()
+        entry["lines"] = ["00:00:01.000 displayed frame 100", "00:00:11.000 displayed frame 1000"]
+        fw.configure([entry])
+        result = fw.expected(self.job(), f.settings(self.job()["set"]))
+        self.assertEqual(result["source"], "per-key cost fallback")
+        self.assertEqual(result["cost_ms"], 100)
+
+    def test_per_key_cost_fallback_adds_enabled_diagnostic_costs(self):
+        j = self.job()
+        j["args"] = ["validate_sync=true,gpuav_enable=true"]
+        state = f.settings(j["set"] + ",rt_primary_check=1,rt_omm=1,rt_omm_reference=1")
+        result = fw.expected(j, state)
+        self.assertEqual(result["cost_ms"], 100 + 3 * 80 + 200)
+        self.assertAlmostEqual(result["fps"], 1000 / (1000 / 30 + 540))
+
+    def test_retime_grows_short_window_without_weakening_gate(self):
+        fw.configure([self.entry()])
+        j = self.job()
+        gate = dict(select=r"\[hit material paks join\]", match="draws 1", windows=["observe"], min=1)
+        j["expect_every"] = [gate]
+        p = [phase("observe", 9.1, j["set"])]
+        self.assertTrue(f.window_problems(j, p)[0])
+        before_gate = deepcopy(gate)
+        result = f.tighten(j, p)
+        self.assertEqual(p[0]["seconds"], 41.1)  # Apply + skipped interval + complete interval; exclusive end.
+        self.assertGreater(result["after_seconds"], result["before_seconds"])
+        self.assertEqual(j["expect_every"], [before_gate])
+        self.assertFalse(f.window_problems(j, p)[0])
+
+    def test_replay_reports_absent_expect_and_missing_same_state(self):
+        j = self.job()
+        j["expect"] = ["new producer"]
+        j["expect_every"] = [dict(select="stats", match="good", windows=["observe"])]
+        result = fw.replay(j, [phase("observe", 40, j["set"])], [self.entry(stats=0)])
+        self.assertTrue(any("expect missing" in problem for problem in result["problems"]))
+        self.assertTrue(any("no historical window" in problem for problem in result["problems"]))
+        self.assertIn("unproven", result["note"])
+
+    def test_guard_and_lint_use_persisted_same_state_fps(self):
+        from scripts.live_guard import evaluate_session, producer_period
+        j = self.job()
+        j["live_flow"] = dict(fps_windows=[dict(state=[1, 0, 0, 0, 0], fps=6)])
+        pattern = r"\[hit material paks join\].*draws 1"
+        j["expect"] = [pattern]
+        j["expect_every"] = [dict(select=r"\[hit material paks join\]", match=pattern, windows=["observe"])]
+        state = f.settings(j["set"])
+        _, windows = f.window_problems(j, [phase("observe", 41.1, j["set"])])
+        cadence = producer_period(pattern, state, fw.expected(j, state)["fps"], j)
+        self.assertEqual(windows[0]["period_s"], cadence)
+        self.assertIsNone(evaluate_session(j, "", cadence + 1.99))
+        self.assertIn("producer silent", evaluate_session(j, "", cadence + 2)["check"])
+
+    def test_replay_keeps_real_samples_and_does_not_borrow_after_state_change(self):
+        j = self.job()
+        j["expect_every"] = [dict(select="stats", match="good", windows=["observe"])]
+        entry = self.entry()
+        entry["runner"] = ("00:00:00.000 [pan-plan] window 0 set=rt_stats=1\n"
+                           "00:00:12.000 [pan-plan] window 1 set=rt_stats=0\n"
+                           "00:00:30.000 [motion-plan] complete")
+        # The new 41.1 s duration cannot borrow the second, now-OFF sample.
+        entry["lines"] += ["00:00:05.000 stats good", "00:00:15.000 stats good"]
+        result = fw.replay(j, [phase("observe", 41.1, j["set"])], [entry])
+        self.assertTrue(any("0 complete line" in problem for problem in result["problems"]), result)
+        fw.configure([])
+        entry["lines"][-1] = "00:00:10.000 stats bad"
+        result = fw.replay(j, [phase("observe", 41.1, j["set"])], [entry])
+        self.assertTrue(any("line(s) fail" in problem for problem in result["problems"]), result)
+
+
+
+class ReadinessBudgetTests(unittest.TestCase):
+    def tearDown(self):
+        f.readiness_budget.configure([])
+
+    def test_same_save_changed_key_median_and_fresh_pattern(self):
+        entries = []
+        for delay in (2, 4, 30):
+            entries.append(dict(save="same", runner=(
+                "12:00:00.000 [pan-plan] window 0 set=rt=0\n"
+                "12:00:10.000 [pan-plan] window 1 set=rt=1\n"
+                "12:01:00.000 [motion-plan] complete phases=2"), lines=[
+                "12:00:01.000 [watch] ready", f"12:00:{10+delay:02d}.000 [watch] ready"]))
+        entries.append(dict(save="other", runner=entries[0]["runner"], lines=["12:00:50.000 [watch] ready"]))
+        f.readiness_budget.configure(entries)
+        step = dict(wait_log=[r"\[watch\] ready"], wait_log_fresh=[r"\[watch\] ready"])
+        result = f.readiness_budget.estimate(dict(save="same"), step, {"rt": "1"})
+        self.assertEqual(result["seconds"], 4)
+        self.assertEqual(result["samples"], 3)
+        step.pop("wait_log_fresh")
+        self.assertEqual(f.readiness_budget.estimate(dict(save="same"), step, {"rt": "1"})["seconds"], 0)
+        self.assertIn("unproven", f.readiness_budget.estimate(dict(save="unknown"), step, {"rt": "1"})["source"])
+
+    def test_resident_and_outstanding_build_readiness_median(self):
+        step = dict(wait_log=[f.pipeline_readiness.GI_TRACE, f.pipeline_readiness.QUIET],
+                    wait_log_fresh=[f.pipeline_readiness.QUIET])
+        runner = ('12:00:00.000 [pan-plan] window 0 set=gi_strength=0\n'
+                  '12:00:10.000 [pan-plan] window 1 set=gi_strength=1\n'
+                  '12:00:30.000 [motion-plan] complete')
+        lines = ['12:00:01.000 gi: unrelated.hlsl building in the background',
+                 '12:00:10.100 [cfg] keys: gi_strength=1.00']
+        def estimate(extra):
+            f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines + extra)])
+            return f.readiness_budget.estimate(dict(save='same'), step, {'gi_strength': '1'})
+        self.assertEqual(estimate([])['seconds'], 0.1)
+        # A build queued before acknowledgement cannot be hidden by quiet.
+        lines.insert(1, '12:00:09.000 gi: gi/gi_trace_rt.hlsl building in the background')
+        self.assertEqual(estimate([])['samples'], 0)
+        self.assertEqual(estimate(['12:00:12.000 gi: gi/gi_trace_rt.hlsl generation 1'])['seconds'], 2)
+        lines[-1] = '12:00:10.100 [cfg] keys: gi_strength=0'
+        self.assertEqual(estimate([])['samples'], 0)
+
+    def test_retime_bounds_pipeline_timeout_by_median_plus_margin(self):
+        j, p = fixture()
+        j['live_flow'] = dict(settings_latency_s=1, settling_margin_s=2)
+        with patch.object(f.readiness_budget, 'estimate', return_value=dict(seconds=7, samples=3, source='VALID median')):
+            f.retime(j, p)
+        self.assertEqual(p[1]['wait_log_timeout'], 9)
+        with tempfile.TemporaryDirectory() as directory:
+            import subprocess
+            root = Path(directory)
+            for name, data in [('context', {'job': j}), ('plan', p), ('cache', {'entries': []})]:
+                (root / (name+'.json')).write_text(json.dumps(data))
+            run = subprocess.run([sys.executable, '-m', 'tools.live_batches.readiness_budget',
+                                  '--context', str(root/'context.json'), '--plan', str(root/'plan.json'),
+                                  '--cache', str(root/'cache.json')], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)[1], 9)
+
+    def test_expected_wait_cap_and_full_allowance_deadline_are_distinct(self):
+        j, p = fixture()
+        p = [phase("warm", 102.9)]
+        p[0].update(wait_log=["ready"], wait_log_timeout=800.9)
+        with patch.object(f.readiness_budget, "estimate", return_value=dict(seconds=7, samples=3, source="VALID median")):
+            budget = f.duration_budget(j, p)
+        self.assertEqual(budget["expected_readiness_seconds"], 7)
+        self.assertEqual(budget["readiness_timeout_seconds"], 800.9)
+        self.assertEqual(f.launch_problems(j, budget), [])
+        self.assertTrue(f.launch_problems(dict(max_minutes=1), budget))
+        j["timeout"] = 900
+        self.assertIn("duration: timeout does not cover plan + readiness allowance", f.lint(j, p, [dict(path="synthetic", lines=[])])["problems"])
 
 if __name__ == "__main__":
     unittest.main()
