@@ -125,7 +125,7 @@ static const uint kGiFarStatFirst = 372u, kGiFarStatCount = 11u;
 // the TLAS has no roof the camera cut away for GI rays (rt_cascade_casters puts them in mask 0x02, seen
 // by sun rays only), so a ray from a roofed room would reach sunlit surfaces through the missing roof.
 // A segment [0, t] through a padded roof volume (gi/sun_roof.hlsli's boxes from the sun set b8; any
-// ray from inside one) takes no far radiance from a hidden hit; nor does any hit while the volumes are
+// ray from inside one) takes no far radiance from a screen or hidden hit; nor does any hit while the volumes are
 // unknown (no trust slot: Push::ls_flags bit 25; no asset DB roofs: header flag 2). Conservative: the
 // native ambient stays for those rays.
 bool gi_far_roof_clear(float3 o, float3 d, float t) {
@@ -276,6 +276,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float qd;
     bool onscreen = !aborted && t >= 0.0 && project(inv, o + dir * t, quv, qd) && all(quv >= 0.0) && all(quv <= 1.0);
     bool visible = false;
+#if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
+    bool screen_roof_blocked = false;
+#endif
     if (onscreen) {
       int2 qp = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
       float sd = gDepth.Load(int3(qp, 0));
@@ -285,6 +288,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
       const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
       const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
       if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.gi_rt_tol)) {
+#if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
+        // As for hidden hits, a missing cut-away roof cannot supply far radiance.
+#if defined(RT_SPEC_GI_FAR)
+        if (kSpecGiFar != 0u)
+#endif
+          screen_roof_blocked = t > RB && !gi_far_roof_clear(o, dir, t);
+        if (!screen_roof_blocked) {
+#endif
         float3 L = prev_bounce_at(qp);
         if (all(isfinite(L))) {
           bounce += L * w;
@@ -303,6 +314,9 @@ void main(uint3 tid : SV_DispatchThreadID) {
           }
 #endif
         }
+#if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
+        }
+#endif
       }
     }
     if (pc.rt_stats != 0) {
@@ -316,6 +330,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
       stat_add(11, onscreen && !visible, bin);
       stat_add(12, t >= 0.0 && !aborted && !onscreen, bin);
     }
+#if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN
+    if (screen_roof_blocked) {
+      if (pc.rt_stats != 0u) g_far_stat[4] += 1u;
+      // t > RB: the old rule has zero bounce/occlusion. Do not resupply this ray
+      // through hit emission, SHaRC, hidden-hit shading or fallback2's screen mean.
+      continue;
+    }
+#endif
 #if RT_HIT_GI_DIRECT && RT_HIT_EMISSION
     if (visible && (HIT_EM_FLAGS & 1u) != 0u) {
       const HitEmission he = native_hit_emission(o, dir, t, o + dir * t, cone.f0 + cone.spread * t, cam2.c[13].xyz, HIT_EM_TOL);
