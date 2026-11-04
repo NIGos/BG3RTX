@@ -41,6 +41,20 @@ class GpuLoggingGateTest(unittest.TestCase):
                     self.assertIn("stats_enabled", prefix)
                     self.assertIn("return", prefix)
 
+    def test_gi_subpass_timers_are_detailed_only_and_nonblocking(self):
+        for name in ["pass_timestamp", "pass_timing_collect"]:
+            code = body("core/gi.cpp", name)
+            self.assertIn('if (!host->cfg_int("detailed_logging", 0)) return', code.split(";", 1)[0])
+            self.assertNotIn("VK_QUERY_RESULT_WAIT_BIT", code)
+            self.assertNotIn("DeviceWaitIdle", code)
+        # A failed query-pool creation at the start must never leave an end-only pair.
+        self.assertIn("if (edge != 0) return", body("core/gi.cpp", "pass_timestamp"))
+        self.assertIn("edge == 1 && dispatched", body("core/gi.cpp", "pass_timestamp"))
+        for name in ["hair_timing_update", "gi_on_frame", "gi_release"]:
+            self.assertIn("pass_timing_reset()", body("core/gi.cpp", name))
+        release = body("core/gi.cpp", "gi_release")
+        self.assertIn("defer_destroy(BG3_DEFER_QUERY_POOL, (uint64_t)g_pass_queries)", release)
+
     def test_render_slots_do_not_imply_valid_timestamps(self):
         water = source("core/water.cpp")
         self.assertRegex(water, r"g_timed\[slot\] = g_qp && .*stats_enabled")
