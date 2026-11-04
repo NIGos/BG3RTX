@@ -1,0 +1,101 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 19.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 19.0,
+    "motion_end": 19.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "qa_exposure_hold=0,rt_stats=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 180.0
+  },
+  {
+    "label": "settle-float",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 5.6,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "dump_preview_f32=1,qa_exposure_hold=1"
+  },
+  {
+    "label": "diag-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 54.5,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 54.5,
+    "motion_end": 54.5,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_stats=1"
+  },
+  {
+    "label": "cost-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 11.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 11.3,
+    "motion_end": 11.3,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_stats=0"
+  },
+  {
+    "label": "shot-on",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 8.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 8.1,
+    "motion_end": 8.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "",
+    "trace_at": [
+      5
+    ]
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "dump_preview_f32=0,qa_exposure_hold=0"
+  }
+]
