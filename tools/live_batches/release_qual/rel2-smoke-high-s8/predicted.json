@@ -1,0 +1,25 @@
+{
+  "job": "rel2-smoke-high-s8",
+  "status": "READY_FOR_LIVE",
+  "observable": "High extension candidate: release High plus OMM/dynamic OMM/fine LOD/offline masks; dev=1 solely bypasses the current High policy veto. High water/hair/bounce remain Off.",
+  "pass_rule": "Every measured window: nonzero current TLAS, RT/GI GPU ms, driver-budget VRAM, zero capture/alpha overflow and scene timeouts. OMM diagnostic: compared > 0, unavailable 0, violations 0. Ultra additionally requires water traced/composed, finite, cascade overflow 0. One ab_off 0->1->0 master comparison (same Ctrl+Shift+F9 path), restoration ON. No device loss or strand producer. High is candidate evidence only; release-policy promotion and final dev=0 High confirmation remain required.",
+  "profile": "data/release.ini + launcher preset via common/settings.h",
+  "rendering_overrides": {
+    "dev": "1",
+    "rt_alpha_fine_lod": "1",
+    "rt_omm": "1",
+    "rt_omm_dyn": "1",
+    "rt_vt_alpha_masks": "1"
+  },
+  "input_sha256": {
+    "common/settings.h": "55a3f170585b23a0d0dd8e77e07d78de008919ada8f20167dd652f4a1b45471d",
+    "data/release.ini": "50fb46a36bab41bfa39fb71ee98416392726c8e702d82eb93fe7f4db3df98e50",
+    "bg3rtx.ini": "9a557ad202c2fc332689a8deeaeccbda9a159c1d6d1bbb23692a8e53d7c39948"
+  },
+  "visual_acceptance": "Inspect trace PNGs; logs alone cannot prove visible cards or correct face/neck shadows.",
+  "expected_minutes": 6.97,
+  "load_allowance_s": 120,
+  "launch_cap_minutes": 15,
+  "scheduled_seconds": 280.40000000000003,
+  "expected_readiness_seconds": 18.07
+}
