@@ -177,7 +177,10 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
         }
         if ($seen -and -not $bad.Count) { $ack=$record }
       }
-      if ($null -eq $ack) { return '[cfg] keys: '+($bad -join ', ') }
+      # Keys never reported in the renderer's keys record (ab_off is a hotkey A/B, observation knobs)
+      # cannot be acknowledged there: the settings read is their acknowledgement.
+      $reported=@($values.Keys | Where-Object { $k=$_; @($keys | Where-Object { $_.Value -match ('(?:^|\s)'+[regex]::Escape($k)+'=') }).Count })
+      if ($null -eq $ack -and $reported.Count) { return '[cfg] keys: '+($bad -join ', ') }
       # Start/completion reconciliation below includes builds between settings
       # read and keys, and outstanding builds from earlier phases.
     }

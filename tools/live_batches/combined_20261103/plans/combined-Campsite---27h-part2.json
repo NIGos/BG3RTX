@@ -20,7 +20,7 @@
     "wait_log": [
       "gi: trace pass .*GPU median"
     ],
-    "wait_log_timeout": 14.680000000000291
+    "wait_log_timeout": 14.911999999996624
   },
   {
     "label": "b1-go2-camp-high--warmup-scaled",
@@ -43,7 +43,7 @@
   {
     "label": "b1-go2-camp-high--settle-off-a",
     "kind": "static",
-    "seconds": 3.6,
+    "seconds": 3.7,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -59,7 +59,7 @@
   {
     "label": "b1-go2-camp-high--cost-off-a",
     "kind": "static",
-    "seconds": 49.5,
+    "seconds": 50.6,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -76,7 +76,7 @@
   {
     "label": "b1-go2-camp-high--settle-on",
     "kind": "static",
-    "seconds": 3.6,
+    "seconds": 3.7,
     "set": "rt_trace_scale=0.5,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -92,7 +92,7 @@
   {
     "label": "b1-go2-camp-high--cost-on",
     "kind": "static",
-    "seconds": 49.5,
+    "seconds": 50.6,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -109,7 +109,7 @@
   {
     "label": "b1-go2-camp-high--settle-off-b",
     "kind": "static",
-    "seconds": 3.6,
+    "seconds": 3.7,
     "set": "rt_trace_scale=1.0,qa_exposure_hold=1",
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
@@ -125,7 +125,7 @@
   {
     "label": "b1-go2-camp-high--cost-off-b",
     "kind": "static",
-    "seconds": 49.5,
+    "seconds": 50.6,
     "set": "qa_exposure_hold=1"
   },
   {

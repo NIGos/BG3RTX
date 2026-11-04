@@ -519,8 +519,15 @@ add_custom_command(OUTPUT ${HAIR_DUAL_CHECK_SPV}
   COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
           -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_DUAL_CHECK_SPV}
   DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_dual_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual.hlsli
+          ${CMAKE_SOURCE_DIR}/shaders/rt/hair_volume_table.hlsli
           ${CMAKE_SOURCE_DIR}/shaders/rt/hair_dual_table.hlsli ${CMAKE_SOURCE_DIR}/shaders/rt/hair_bsdf.hlsli VERBATIM)
-add_custom_target(hair_primary_gpu_check_spv ALL DEPENDS ${HAIR_PRIMARY_CHECK_SPV} ${HAIR_BSDF_CHECK_SPV} ${HAIR_DUAL_CHECK_SPV})
+set(HAIR_SHADOW_CHECK_SPV ${CMAKE_BINARY_DIR}/hair_shadow_gpu_check.spv)
+add_custom_command(OUTPUT ${HAIR_SHADOW_CHECK_SPV}
+  COMMAND ${VULKAN_SDK}/Bin/dxc.exe ${CMAKE_SOURCE_DIR}/tools/hair_shadow_gpu_check.hlsl -spirv -fspv-target-env=vulkan1.3
+          -HV 2021 -T cs_6_6 -E main -O3 -Fo ${HAIR_SHADOW_CHECK_SPV}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/hair_shadow_gpu_check.hlsl ${CMAKE_SOURCE_DIR}/shaders/rt/hair_primary.hlsli VERBATIM)
+add_custom_target(hair_primary_gpu_check_spv ALL DEPENDS ${HAIR_PRIMARY_CHECK_SPV} ${HAIR_BSDF_CHECK_SPV} ${HAIR_DUAL_CHECK_SPV}
+                  ${HAIR_SHADOW_CHECK_SPV})
 add_executable(hair_primary_gpu_check tools/hair_primary_gpu_check.cpp)
 target_include_directories(hair_primary_gpu_check PRIVATE ${VULKAN_SDK}/Include)
 target_link_directories(hair_primary_gpu_check PRIVATE ${VULKAN_SDK}/Lib)
@@ -529,7 +536,7 @@ add_dependencies(hair_primary_gpu_check hair_primary_gpu_check_spv)
 if(Python3_Interpreter_FOUND)
   add_test(NAME hair_primary_gpu_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/hair_primary_gpu_test.py
            $<TARGET_FILE:hair_primary_gpu_check> ${HAIR_PRIMARY_CHECK_SPV} --bsdf-spv ${HAIR_BSDF_CHECK_SPV}
-           --dual-spv ${HAIR_DUAL_CHECK_SPV}
+           --dual-spv ${HAIR_DUAL_CHECK_SPV} --shadow-spv ${HAIR_SHADOW_CHECK_SPV}
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   set_tests_properties(hair_primary_gpu_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 endif()

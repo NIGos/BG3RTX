@@ -31,6 +31,7 @@ inline std::vector<PipelineSpecs> experimental_specs(const PipelineSpecs& base, 
       {"rt_native_scalp", kSpecIdScalpHair}, {"rt_native_hair", kSpecIdScalpHair},
       {"rt_native_tileset", kSpecIdTileset}, {"rt_water_compose_shift", kSpecIdWaterComposeShift},
       {"rt_water_hit_shade", kSpecWaterHitShade}, {"rt_hair_groom", kSpecIdHairGroom},
+      {"rt_hair_groom_shadow_t", kSpecIdHairGroomShadowT},
       {"rt_compact_hit_state", kSpecIdCompactHitState}, {"rt_alpha_metadata_cache", kSpecIdAlphaMetadataCache},
       {"rt_water_empty_tiles", kSpecIdWaterEmptyTiles}};
   std::vector<PipelineSpecs> out;

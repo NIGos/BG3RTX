@@ -92,6 +92,9 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {}; };
 CountSeen g_seen;
+// C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
+std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
+uint64_t g_transmit_rows = 0;   // groom rows given a measured transmittance since the last 300-frame line
 uint64_t g_refused_total = 0;
 uint64_t g_misaligned_logged = 0;   // counted frames whose strand pixels all carried an adjacent frame's tag
 uint64_t g_adjacent_window = 0, g_adjacent_total = 0;   // counted frames with any adjacent-tag strand pixel
@@ -109,6 +112,8 @@ struct StagedHeader {
 constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
+// Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
+uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0;
 bool g_order = false;                       // the last publish was staged (the key on)
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
@@ -234,6 +239,9 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
       other[k] = s.map[hair_primary::kOtherOffset / 4 + k];
       g_refused_total += g_seen.refused[k];
       total += s.map[k];
+      float t[4];
+      std::memcpy(t, s.map + hair_primary::kTransmitOffset / 4 + k * 4, sizeof t);
+      if (s.keys[k] && t[3] == 1.0f) g_transmit[s.keys[k]].add(t);
       other_total += other[k];
     }
     // A counted frame whose strand pixels all carry an adjacent frame's tag: the G-buffer ran against another publish
@@ -316,7 +324,7 @@ bool header_ready() {
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
                   : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game"
                   : !g_precise ? "occlusionQueryPrecise not enabled: no coverage proof, no swaps" : nullptr;
-  if (!why && !make(g_header, hair_primary::kHeaderBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!why && !make(g_header, hair_primary::kHeaderAlloc, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
@@ -380,6 +388,7 @@ void observe_depth(uint64_t image, uint64_t now) {
   g_live_keys.clear();
   g_last_tag = 0;
   g_pixels_fresh = true;
+  g_transmit.clear();
   log("[hair primary] level load (first or new G-buffer images): strand swaps paused for %llu frames, groom state reset",
       (unsigned long long)hair_primary::kLoadQuietFrames);
 }
@@ -388,6 +397,9 @@ void observe_depth(uint64_t image, uint64_t now) {
 // Do not recycle an in-flight slot even if its query values happen to be available.
 void coverage_before_prepass(VkCommandBuffer cmd) {
   const uint64_t now = frame_index();
+  // No strand tracing in the game's passes while a level streams (hv5 2026-11-04: device lost in the load with no
+  // strand swap; the probe was the only groom trace in the game's command buffers).
+  if (g_load.quiet(now)) { ++g_probe_quiet; return; }
   ProbeSlot& slot = g_probe_slots[now % kCoverageSlots];
   if (slot.frame == now + 1) return;
   if (slot.frame) {
@@ -436,9 +448,11 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
     picks[i] = submitted || same_recording ? st.pick : hair_primary::Staged{};
   }
   const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
-  if (i < 0) return;
+  if (i < 0) { ++g_probe_no_pick; return; }
   const auto& st = g_staged[i];
-  if (st.pick.tag + 2 < now + 1) return; // header lifetime, distinct from readback evidence freshness
+  // Only this frame's publish: the groom TLAS is camera-relative (an older one misses the strands: hv6 2026-11-04, 0
+  // strand samples next to 95670 card samples) and can reference a BLAS range already freed by a LOD change.
+  if (st.pick.tag != now + 1) { ++g_probe_stale; return; }
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -474,8 +488,10 @@ void coverage_log(uint64_t now) {
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
   }
-  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u",
-      probed, swapped, per, minimum, hair_primary::kCoverMin, below);
+  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
+      "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u",
+      probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet);
+  g_probe_no_pick = g_probe_stale = g_probe_quiet = 0;
   g_coverage_period.clear();
 }
 
@@ -701,6 +717,15 @@ void hair_primary_forget_pipeline(VkPipeline p) {
   g_variant.erase(it);
 }
 
+uint32_t hair_primary_transmit(uint64_t key) {
+  if (!key || cfg_int("rt_hair_groom_shadow_t", 0) == 0) return 0u;
+  std::lock_guard<std::mutex> lock(g_mu);
+  const auto it = g_transmit.find(key);
+  const uint32_t w = it == g_transmit.end() ? 0u : it->second.packed();
+  if (w) ++g_transmit_rows;
+  return w;
+}
+
 HairPrimarySubmit hair_primary_submit_begin(const std::vector<VkCommandBuffer>& cmds) {
   HairPrimarySubmit recordings{};
   if (!g_startup_enabled) return recordings;
@@ -795,7 +820,10 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
                                 bvh_rec_state(st.pick.rec) == 0;
     picks[i] = st.submitted || same_recording ? st.pick : hair_primary::Staged{};
   }
-  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  // Only this frame's publish: an older groom TLAS is camera-relative to another camera and may reference freed
+  // ranges (bvhsplit kGroomFreeLag covers 2 frames of age, not more).
+  if (i >= 0 && g_staged[i].pick.tag != frame) i = -1;
   if (i < 0) {
     g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
     if (g_order_none++ % 300 == 0)
@@ -803,7 +831,7 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
           (unsigned long long)g_order_none);
     return;
   }
-  apply_header(cmd, g_staged[i]);   // a staged publish may serve again (no newer one ordered before)
+  apply_header(cmd, g_staged[i]);
 }
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
@@ -927,10 +955,12 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   }
   if (g_pixels_fresh) {   // tag 0 is never a frame tag
     dd->vk.CmdFillBuffer(cmd, g_pixels.b, 0, VK_WHOLE_SIZE, 0u);
+    dd->vk.CmdFillBuffer(cmd, g_header.b, hair_primary::kColourOffset, hair_primary::kMaxGrooms * hair_primary::kColourBytes, 0u);
     g_pixels_fresh = false;
   }
   hair_primary::Header h{};
   h.tag = uint32_t(now + 1);
+  h.flags = cfg_int("rt_hair_groom_tips", 0) != 0 ? hair_primary::kFlagTips : 0u;
   h.width = width;
   h.height = height;
   h.tlas = tlas;
@@ -980,6 +1010,21 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         "G-buffer and %llu velocity strand draws, %llu pipelines refused",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused);
+  if (now % 300 == 0 && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
+    // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
+    float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
+    for (const auto& [key, t] : g_transmit) {
+      const float m = (t.a[0] + t.a[1] + t.a[2]) / 3.0f;
+      lo = (std::min)(lo, m), hi = (std::max)(hi, m);
+      for (int c = 0; c < 3; ++c) sum[c] += t.a[c];
+    }
+    const float n = g_transmit.empty() ? 1.0f : float(g_transmit.size());
+    log("[hair primary] shadow transmittance: %zu draws measured, a_f mean %.3f %.3f %.3f (per draw %.3f..%.3f); "
+        "last 300 frames: %llu groom rows with a_f",
+        g_transmit.size(), sum[0] / n, sum[1] / n, sum[2] / n, g_transmit.empty() ? 0.0f : lo, hi,
+        (unsigned long long)g_transmit_rows);
+    g_transmit_rows = 0;
+  }
   if (now % 300 == 0 && g_ms_frames)
     log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);

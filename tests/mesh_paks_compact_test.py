@@ -24,8 +24,11 @@ class CompactTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1]/'layer/hit_material.cpp').read_text()
         match = source.split('const mesh_paks::Row* paks_match(', 1)[1].split('// The VS inputs', 1)[0]
         self.assertIn('pak_witness_get(state,args,ip,candidate.row', match)
-        self.assertLess(match.index('mesh_paks::hlod_compatible(*candidate.row'),
+        self.assertLess(match.index('paks_recipe_accept(*candidate.row'),
                         match.index('pak_witness_get(state,args,ip,candidate.row'))
+        accept = source.split('bool paks_recipe_accept(', 1)[1].split('// A count absent', 1)[0]
+        self.assertIn('mesh_paks::hlod_recipe_gate(', accept)
+        self.assertIn('mesh_paks::RecipeGate::Ready', accept)
         observe = source.split('bool pool_observe(', 1)[1].split('PoolUse pool_lookup(', 1)[0]
         for call in ('paks_match(*state,args,inst,&proof)', 'payload.pak=true', 'payload.pak_valid=std::move(proof)',
                      'pool_table.observe(geometry,frame,o)', 'assign_material(', 'pool_job('):

@@ -685,12 +685,16 @@ def retime(job, plan):
     return changes
 
 
-def tighten_files(directory, cache=None, job_names=None):
+def tighten_files(directory, cache=None, job_names=None, frozen=False):
     """Refresh checked-in artifacts with the same model used by lint/preflight."""
-    index = corpus(default_results(), cache or ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
-    fps_windows.configure(index["entries"])
-    configure_trace_exports(index["entries"])
-    readiness_budget.configure(index["entries"])
+    if frozen:
+        from tools.live_batches import lint_snapshot
+        lint_snapshot.load()
+    else:
+        index = corpus(default_results(), cache or ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+        fps_windows.configure(index["entries"])
+        configure_trace_exports(index["entries"])
+        readiness_budget.configure(index["entries"])
     reports = []
     for path in job_files(directory):
         if job_names and path.stem not in job_names:

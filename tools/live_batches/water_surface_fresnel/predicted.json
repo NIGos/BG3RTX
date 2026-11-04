@@ -18,5 +18,14 @@
   "budget": "127.4 s scheduled phases (static windows 11.1 s, capture-free E/Q windows 12 s), plus one load; 8 traces, about 490 MB. Static cadence minimum >11 s = 1 s apply + 2 s trace stalls + two 120-frame intervals at 30 fps. Restore kept 5 s for existing fake-runner phase-size contract.",
   "restore": "Last phase resets candidate 0 and releases exposure hold; serial queue restores original INI after job. Startup candidate=1 provisions FS before live toggles, no restart within batch.",
   "reference_limit": "Runtime FS partition check independently checks c+(1-c)*(E+(1-E)*a+(1-E)*(1-a)); float post gate rejects missing or nonfinite full-resolution RR colour evidence. Algebra/log validity does not qualify image quality or prove a measured physical reference match. No additional diagnostic launch is needed to establish exact-zero impossibility.",
-  "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c."
+  "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c.",
+  "compose_abort_share": {
+    "max": 9.312175577061953e-06,
+    "samples": 2529,
+    "log": "hq1-s8-water-fg2.1.053911.log",
+    "frames": 60,
+    "rays_per_frame": 270256,
+    "aborted": 151,
+    "derivation": "Maximum aborted / (frames * (rays_per_frame - 0.5)) over VALID compose intervals with invalid 0; lower denominator accounts for rounded rays/frame. No added tolerance. Every selected interval must comply; invalid remains exactly zero."
+  }
 }

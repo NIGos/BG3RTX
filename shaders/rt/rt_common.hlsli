@@ -1171,6 +1171,42 @@ RtGroomHit rt_groom_trace(RayDesc r, bool first_hit) {
   g.prim = at + 4u <= pool_bytes ? gMeshPool.Load(at) : 0u;
   return g;
 }
+#include "hair_primary.hlsli"
+[[vk::constant_id(1026)]] const uint kRtGroomShadowT = 0;
+// Does a strand block this visibility ray? Groom row word 2 (InstInfo.rec; layer: hair_primary::pack_transmit,
+// key rt_hair_groom_shadow_t, docs/RTX_HAIR_PRIMARY.md C2) holds the groom's forward-scattered fraction a_f; the ray
+// passes its n crossings with d_f * prod(a_f) (luminance), the fibre pass's dual-scattering T_f = d_f a_f^n, drawn
+// once per crossing so the binary visibility is that probability on average. A strand's chained segments meet in a
+// joint both report: a candidate next to an already seen segment is the same crossing (hp_crossing; the GPU check
+// equals the CPU count on every ray). Row word 2 = 0 (key off, not measured yet): the first strand blocks, as the
+// first-hit query did.
+bool rt_groom_blocks(RayDesc r, float3 o) {
+  if (!rt_groom_live()) return false;
+  const uint first = gSceneStamp.Load(60u);
+  HpCrossings seen = hp_crossings_init();
+  uint n = 0u;
+  bool blocked = false;
+  RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> q;
+  q.TraceRayInline(rt_groom_scene(gSceneStamp.Load2(48u)), 0u, 0xFFu, r);
+  while (q.Proceed()) {
+    const uint k = q.CandidateInstanceIndex();
+    if (!hp_crossing(seen, k, q.CandidatePrimitiveIndex())) continue;
+    const uint t = inst_info(first + k).rec;
+    float pass = 0.0;
+    if ((t >> 31) != 0u) {
+      const float3 a_f = float3(t & 1023u, (t >> 10) & 1023u, (t >> 20) & 1023u) / 1023.0;
+      pass = dot(a_f, float3(0.2126, 0.7152, 0.0722)) * (n == 0u ? 0.7 : 1.0);   // d_f once (hair_dual.hlsli kHdDf)
+    }
+    const uint3 h = pcg3d(uint3(asuint(o.x) ^ asuint(r.Direction.y), asuint(o.y) ^ asuint(r.Direction.z),
+                                asuint(o.z) ^ (n * 0x9E3779B9u) ^ (pc.frame * 0x85EBCA6Bu)));
+    ++n;
+    if (float(h.x >> 8) * (1.0 / 16777216.0) >= pass) {
+      blocked = true;
+      q.Abort();
+    }
+  }
+  return blocked;
+}
 #else
 #ifdef RT_NATIVE_HAIR
 #include "native_hair_procedural.hlsli"
@@ -1386,7 +1422,11 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   if (RT_HAS_COMMITTED(q)) return kRtOccluded;
 #ifdef RT_SPEC_NATIVE
 #ifndef RT_VIS_NO_GROOM   // gi/hair_fibre.hlsl: the scene alone (it counts the strands on the ray itself)
-  if (RT_GROOM_ON && !aborted && rt_groom_trace(r, true).t >= 0.0) return kRtOccluded;
+  if (kRtGroomShadowT == 0u) {
+    if (RT_GROOM_ON && !aborted && rt_groom_trace(r, true).t >= 0.0) return kRtOccluded;
+  } else {
+    if (RT_GROOM_ON && !aborted && rt_groom_blocks(r, o)) return kRtOccluded;
+  }
 #endif
 #endif
   if (aborted) {

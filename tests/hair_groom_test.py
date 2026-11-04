@@ -590,6 +590,25 @@ def test_bsdf():
     w = bsdf.slab_albedo((1, 1, 1), 0.41, n=2000, bounces=4000)
     check("white fibre slab reflects nearly everything", np.all(w > 0.9), w)
 
+def test_tips_dither():
+    # Pixel centres over 4 x 5, all four frame phases, and a uniform sweep of
+    # the native per-draw jitter. Its 1/20 bin width bounds integration error;
+    # the spatial pattern alone is deliberately not a uniform random variable.
+    samples = np.array([(x + 0.5, y + 0.5, frame + 1, j / 20)
+                        for y in range(5) for x in range(4)
+                        for frame in range(4) for j in range(20)])
+    for alpha in (0, 0.25, 0.5, 0.75, 1):
+        kept = primary.tips_keep(alpha, samples[:, :2], samples[:, 2].astype(int), samples[:, 3])
+        share = float(kept.mean())
+        check(f"tips alpha {alpha:g}: {kept.sum()}/{len(kept)} = {share:.6f} (quantisation 0.05)",
+              abs(share - alpha) <= 1 / 20)
+        if alpha in (0, 1):
+            check(f"tips endpoint {alpha:g} exact", np.all(kept == bool(alpha)))
+    check("tips frame phase repeats every 4 tags",
+          np.array_equal(primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int), samples[:, 3]),
+                         primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int) + 4, samples[:, 3])))
+
+
 def test_primary():
     rng = np.random.default_rng(5)
     v = rng.normal(size=(20000, 3))
@@ -840,6 +859,49 @@ def test_batch_cache():
                 rec = batch.process(style, None, None, d / "out", d, False)
                 check("corrupt GR2 dump silently rebuilds", rec.get("iou") == [0.0] and dump.call_count == 2
                       and dump_path.read_bytes() == b"dump", rec)
+def test_volume():
+    from tools.hair_groom import volume_table, make_volume_table
+    generated = (ROOT / "shaders/rt/hair_volume_table.hlsli").read_text()
+    check("volume HLSL table is current", generated == make_volume_table.hlsl(volume_table.VOLUME_C, volume_table.VOLUME_A))
+    table = np.asarray(volume_table.VOLUME_A)
+    check("volume table is passive and monotonic in colour", np.all((table>=0)&(table<=1)) and np.all(np.diff(table,axis=0)>=0))
+    cells = json.loads((ROOT / "tools/hair_groom/volume_calibration.json").read_text())
+    for c in dual.TABLE_C:
+        for beta in dual.TABLE_BETA:
+            cell = cells[f"{c}/{beta}"]
+            a = cell['single']+cell['k_volume']*cell['multiple']
+            check("baked volume response equals S + k_volume M", abs(a-dual.volume_albedo((c,c,c),beta)[0])<1e-12)
+    # Independently check the analytic sampler against evaluate(), including directional moments.
+    # Four standard errors of the two independent estimators, per channel/moment.
+    rng = np.random.default_rng(103)
+    n = 200000
+    t = np.tile([0.,0.,1.], (n,1))
+    wo = np.tile([1.,0.,0.], (n,1))
+    h = rng.uniform(-1,1,n)
+    wi = bsdf._sphere(rng,n)
+    col, beta = (0.3,0.2,0.1), 0.5
+    uniform = bsdf.evaluate(t,wo,wi,h,col,beta)*4*np.pi
+    sampled, weight = bsdf.sample(t,wo,h,col,beta,rng)
+    def moments(w, d):
+        return w[:,:,None]*np.column_stack((np.ones(n), d[:,0], d[:,1], d[:,2]**2))[:,None,:]
+    a, b = moments(uniform,wi), moments(weight,sampled)
+    se = np.sqrt((a.var(0)+b.var(0))/n)
+    check("volume path sampler agrees with BSDF angular integrals within 4 sigma", np.all(np.abs(a.mean(0)-b.mean(0)) < 4*se),
+          (a.mean(0)-b.mean(0))/se)
+    for beta in (0.35,0.5,0.7):
+        white = dual.volume_albedo((1,1,1),beta)
+        print(f"volume furnace beta={beta}: {white}", flush=True)
+        check("volume white furnace within 3%", np.all(np.abs(white-1) < 0.03), white)
+    # Independent seeds, RGB walks and held-out colours, distinct from the grey calibration cells.
+    for col, beta in ((bsdf.CHAR_HAIR['color'],0.41), ((0.6,0.45,0.3),0.55), ((0.85,0.7,0.5),0.7)):
+        ref = bsdf.slab_albedo(col,beta,n=50000,bounces=4000,seed=91,diffuse=True)
+        got = dual.volume_albedo(col,beta)
+        error = np.abs(got/ref-1)
+        print(f"volume colour={col} beta={beta}: A={got} MC={ref} relative={error}", flush=True)
+        check("volume vs independent BSDF slab within 5%", np.all(error < 0.05), error)
+    white_ref = bsdf.slab_albedo((1,1,1),0.5,n=30000,bounces=20000,seed=93,diffuse=True)
+    print(f"volume white independent slab (finite 20000-bounce walk): {white_ref}", flush=True)
+    check("independent nonabsorbing slab returns unit energy within 3%", np.all(np.abs(white_ref-1)<0.03), white_ref)
 
 
 def test_cost():
@@ -918,7 +980,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

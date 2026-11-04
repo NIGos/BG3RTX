@@ -59,7 +59,7 @@
   "wait_log_fresh": [
    "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
   ],
-  "wait_log_timeout": 180.0
+  "wait_log_timeout": 2.0
  },
  {
   "label": "warm-strands",
@@ -83,7 +83,7 @@
    "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
    "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
   ],
-  "wait_log_timeout": 180.0,
+  "wait_log_timeout": 2.0,
   "wait_log_fresh": [
    "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
   ]
@@ -217,7 +217,7 @@
   "wait_log_fresh": [
    "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
   ],
-  "wait_log_timeout": 180.0
+  "wait_log_timeout": 2.0
  },
  {
   "label": "shot-crowd",
@@ -327,7 +327,7 @@
   "wait_log_fresh": [
    "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
   ],
-  "wait_log_timeout": 180.0
+  "wait_log_timeout": 2.0
  },
  {
   "label": "cost-crowd",

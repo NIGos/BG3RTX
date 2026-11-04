@@ -30,31 +30,73 @@ class BatchJobsLintTests(unittest.TestCase):
                 self.assertEqual(segment['plan'], plan)
         self.assertCountEqual(sources, SOURCES)
 
-    def test_active_inventory_passes_current_preflight(self):
+    @patch.object(flow, 'corpus', side_effect=AssertionError('CTest must not read live corpus'))
+    @patch.object(flow, 'default_results', side_effect=AssertionError('CTest must not find live results'))
+    def test_active_inventory_passes_current_preflight(self, *_):
         from tools.live_batches.regenerate_active import active_paths
         paths = set(active_paths())
         self.assertEqual(paths, flow.active_job_files())
         self.assertTrue(paths)
-        index = flow.corpus(flow.default_results(), ROOT / 'captures/.cache/live_flow_corpus.json', newest=100000)
-        self.assertTrue(index['entries'], 'no readable VALID corpus')
-        flow.fps_windows.configure(index['entries'])
-        flow.configure_trace_exports(index['entries'])
-        flow.readiness_budget.configure(index['entries'])
+        from tools.live_batches import lint_snapshot
+        index = lint_snapshot.load()
+        self.addCleanup(flow.readiness_budget.configure, [])
+        self.addCleanup(flow.fps_windows.configure, [])
+        self.addCleanup(flow.TRACE_EXPORT.clear)
         for path in sorted(paths):
             with self.subTest(job=path.name):
                 job, plan, _ = flow.load_job(path)
-                result = flow.lint(job, plan, index['entries'], index.get('matches', {}))
+                patterns = set(job.get('forbid', []) + job.get('expect', []))
+                self.assertFalse(patterns - index['matches'].keys(), 'refresh lint snapshot for new regexes')
+                result = flow.lint(job, plan, [], index['matches'])
                 self.assertEqual(result['problems'], [])
                 self.assertEqual(flow.launch_problems(job, result['duration']), [])
                 self.assertLessEqual(result['duration']['seconds'] + result['duration']['expected_readiness_seconds'], 900)
 
+    def test_compose_abort_share_preserves_invalid_and_rejects_excess(self):
+        from scripts.queue_gates import line_matches
+        from tools.live_batches.water_surface_fresnel.make_job import abort_bound
+        job = flow.read(ROOT / 'tools/live_batches/water_surface_fresnel/jobs/wsf1-s8-interface-column.json')
+        gate = next(g for g in job['expect_every'] if g['name'] == 'compose tiers')
+        line = ('compose (120 frames, 119 composed): rays 234155/frame: '
+                'screen hit (composed) 15.0%, hidden 6.5%, aborted 1, invalid 0')
+        self.assertTrue(line_matches(gate, line))
+        self.assertFalse(line_matches(gate, line.replace('aborted 1', 'aborted 1000')))
+        self.assertFalse(line_matches(gate, line.replace('invalid 0', 'invalid 1')))
+        self.assertFalse(line_matches(gate, line.replace('234155/frame', '0/frame')))
+        self.assertFalse(line_matches(gate, line.replace('rays ', 'missing ')))
+        bound = abort_bound([dict(path='valid.log', lines=[line, line.replace('invalid 0', 'invalid 1')])])
+        self.assertEqual(bound['samples'], 1)
+        self.assertEqual(bound['max'], 1 / (120 * (234155 - .5)))
+        equal = dict(gate, share=dict(gate['share'], max=bound['max']))
+        self.assertTrue(line_matches(equal, line))
+        self.assertFalse(line_matches(equal, line.replace('aborted 1', 'aborted 2')))
+
+    def test_frozen_readiness_rejects_unknown_queries(self):
+        from tools.live_batches import lint_snapshot
+        lint_snapshot.load()
+        self.addCleanup(flow.readiness_budget.configure, [])
+        self.addCleanup(flow.fps_windows.configure, [])
+        self.addCleanup(flow.TRACE_EXPORT.clear)
+        with self.assertRaisesRegex(ValueError, 'refresh lint snapshot'):
+            flow.readiness_budget.estimate(dict(save='unknown'), dict(wait_log=['new producer']), {}, True)
+
     def test_compact_generator_confines_stats_and_warms_both_values(self):
-        with tempfile.TemporaryDirectory() as folder, patch.object(compact, 'HERE', Path(folder)):
+        from functools import partial
+        self.addCleanup(flow.readiness_budget.configure, [])
+        self.addCleanup(flow.fps_windows.configure, [])
+        self.addCleanup(flow.TRACE_EXPORT.clear)
+        with tempfile.TemporaryDirectory() as folder, patch.object(compact, 'HERE', Path(folder)), \
+                patch.object(flow, 'tighten_files', partial(flow.tighten_files, frozen=True)), \
+                patch.object(flow, 'corpus', side_effect=AssertionError('CTest must not read live corpus')):
             (Path(folder) / 'plans').mkdir()
             (Path(folder) / 'jobs').mkdir()
             job, plan = compact.make()
         self.assertEqual(plan, flow.read(ROOT / 'tools/live_batches/cov_paks_compact/plans/compact_camp.json'))
-        self.assertEqual(job, flow.read(ROOT / 'tools/live_batches/cov_paks_compact/jobs/cp4-compact-camp-join.json'))
+        expected = flow.read(ROOT / 'tools/live_batches/cov_paks_compact/jobs/cp4-compact-camp-join.json')
+        # The fixture retains derived counts/rates, not machine-specific log paths.
+        for model in expected['live_flow'].get('fps_windows', []):
+            model.pop('logs', None)
+        self.assertEqual(job, expected)
         warm = []
         for phase in plan:
             state = dict(part.split('=', 1) for part in phase['set'].split(','))

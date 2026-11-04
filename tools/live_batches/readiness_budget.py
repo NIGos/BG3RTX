@@ -7,9 +7,12 @@ from tools.live_batches.pipeline_readiness import conditional
 
 ENTRIES = []
 CACHE = {}
+FROZEN = False
 
 
 def configure(entries):
+    global FROZEN
+    FROZEN = False
     ENTRIES.clear()
     CACHE.clear()
     for entry in entries:
@@ -41,6 +44,8 @@ def estimate(job, phase, changed, first=False):
     key = (job.get('save'), tuple(patterns), tuple(fresh), tuple(sorted(changed.items())), first)
     if key in CACHE:
         return CACHE[key]
+    if FROZEN:
+        raise ValueError('readiness query absent from frozen corpus; refresh lint snapshot')
     samples = []
     for save, lines, wins in ENTRIES:
         if save != job.get('save'):

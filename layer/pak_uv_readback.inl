@@ -84,6 +84,10 @@ void pak_witness_reject(PakUvEntry& e){destroy(e.host);e.stage=6;++pak_witness_m
 // No waits: both raw phases use the same recording-owner retirement as XFB.
 void pak_witness_capture(VkCommandBuffer cmd,CmdState* s,const DrawArgs& a,const InstPipe& ip,PakUvEntry& e){
  if(pak_active(e) || (e.stage!=1 && e.stage!=3))return;
+ // Discovery also sees ordinary pool recipes. Do not spend raw transfer or
+ // decode budget on a candidate that cannot pass the publication contract.
+ // Keep stage 1 retryable: a later compatible draw must still be able to run.
+ if(!e.witness || !mesh_paks::hlod_compatible(*e.witness,s->vs,s->fs,ip.paks_cull_known,ip.paks_two_sided))return;
  if(!ip.pos_float3 || ip.paks_uv_binding>=CmdState::kMaxVertexBindings){pak_witness_reject(e);return;}
  const auto& p=s->vb[ip.pos_binding];const auto& u=s->vb[ip.paks_uv_binding];
  e.layout={a.count,s->ib_type==VK_INDEX_TYPE_UINT32?4u:s->ib_type==VK_INDEX_TYPE_UINT16?2u:s->ib_type==VK_INDEX_TYPE_UINT8_EXT?1u:0u,

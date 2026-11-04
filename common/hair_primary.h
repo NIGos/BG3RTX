@@ -19,9 +19,10 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101;
 //  1 render width, 2 render height, 3 groom instance count (rows of the table below)
 //  4..5 groom TLAS device address (lo, hi), 6..7 mesh pool device address, 8..9 pixel array device address
 //  10..13 the G-buffer viewport x, y, width, height (float; a flipped viewport has a negative height)
-//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 reserved (0)
+//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 flags (bit 0: dithered strand tips)
 // Table at kTableOffset: per groom instance k (the groom TLAS instance index) four byte offsets into the mesh pool:
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
+constexpr uint32_t kFlagTips = 1u << 0;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
@@ -33,7 +34,15 @@ constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 10
 // frame ran against another publish (the game submitted the prepass, which records the build, and the G-buffer in
 // another order), so the counted tag says nothing about that groom's strands.
 constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kOtherOffset = kRefusedOffset + kMaxGrooms * 4;
-constexpr uint32_t kCountBytes = kOtherOffset + kMaxGrooms * 4;
+// Then (C2) per groom float4 (a_f rgb, 1 when measured) from its strand colour sample.
+constexpr uint32_t kTransmitOffset = kOtherOffset + kMaxGrooms * 4;   // 768
+constexpr uint32_t kCountBytes = kTransmitOffset + kMaxGrooms * 16;
+// Strand colour samples (C2 shadow transmittance), after the header in the same buffer, never written by the layer's
+// update: per groom k 32 bytes, float4 (albedo rgb, fibre roughness) then the frame tag that wrote it. The strand
+// G-buffer variant stores one fragment's values per 8 x 8 pixel block (last writer wins: a sample of the groom's
+// colour); rt/hair_primary_count.hlsl turns the entries of the counted frame into a_f at the next publish.
+constexpr uint32_t kColourOffset = kHeaderBytes, kColourBytes = 32;
+constexpr uint32_t kHeaderAlloc = kColourOffset + kMaxGrooms * kColourBytes;   // 3136
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;
@@ -50,9 +59,33 @@ struct Header {
   uint32_t tag, width, height, count;
   uint64_t tlas, pool, pixels;
   float viewport[4];
-  uint32_t pool_bytes, reserved;
+  uint32_t pool_bytes, flags;
 };
 static_assert(sizeof(Header) == kHeaderWords * 4, "header words");
+
+// Shadow transmittance of one strand crossing (docs/RTX_HAIR_PRIMARY.md C2), the groom InstInfo row's word 2: the
+// fibre's forward-scattered fraction a_f per channel in 10 bits each, bit 31 set when measured. 0: not measured (or
+// the key off): the strand blocks, as before. The visibility ray passes n crossings with d_f * prod(a_f) in luminance
+// (rt_common.hlsli rt_groom_blocks), the dual-scattering transmittance T_f = d_f a_f^n of the fibre pass.
+inline uint32_t pack_transmit(const float a[3]) {
+  uint32_t w = 1u << 31;
+  for (int c = 0; c < 3; ++c) {
+    const float v = a[c] != a[c] ? 0.0f : a[c] < 0.0f ? 0.0f : a[c] > 1.0f ? 1.0f : a[c];
+    w |= uint32_t(v * 1023.0f + 0.5f) << (10 * c);
+  }
+  return w;
+}
+// The groom's a_f over the measured frames: an exponential mean (each sample is one fragment's colour), weight 1/16.
+struct TransmitMean {
+  float a[3] = {0, 0, 0};
+  uint32_t n = 0;
+  void add(const float s[3]) {
+    const float w = n == 0 ? 1.0f : 1.0f / 16.0f;
+    for (int c = 0; c < 3; ++c) a[c] += (s[c] - a[c]) * w;
+    ++n;
+  }
+  uint32_t packed() const { return n ? pack_transmit(a) : 0u; }
+};
 
 // The bytes one vkCmdUpdateBuffer writes: header then `count` rows (the rest of the table is not read).
 inline uint32_t pack(const Header& h, const Row* rows, uint32_t count, uint8_t* out /* kHeaderBytes */) {

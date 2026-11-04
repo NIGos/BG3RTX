@@ -71,6 +71,8 @@ def main():
             print(f"Generating {i + 1}/{len(BATCHES)}: {batch}", flush=True)
             subprocess.run([sys.executable, str(generator)], env=env, check=True)
     index = flow.corpus(flow.default_results(), flow.ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+    # Share regex findings across jobs, including a newly rebuilt corpus index.
+    index.setdefault('matches', {})
     flow.fps_windows.configure(index["entries"])
     flow.configure_trace_exports(index["entries"])
     flow.readiness_budget.configure(index["entries"])

@@ -50,7 +50,20 @@ int main(int argc,char** argv){
   bytes.pop_back();CHECK(!mesh_paks::parse(bytes,rows)&&rows.empty());bytes=v2bytes;
   bytes.pop_back();CHECK(!mesh_paks::parse(bytes,rows)&&rows.empty());
   bytes.resize(16);word(12,1000000);CHECK(!mesh_paks::parse(bytes,rows)&&rows.empty());
-  row.flags=4;CHECK(mesh_paks::hlod_compatible(row,0x2d2ac3c38992b7f0ull,0xb0ecc292e8661561ull,true,false));
+  // Camp cp4: count 39408 uniquely selects native HLOD_VT material
+  // b5f71b80-9151-8d0c-fae7-8ee13a5357ba, flags 0 (GM bit is absent).
+  // UUID/texture keys and explicit COLOR layout cannot turn it into HLOD_GM.
+  using Gate=mesh_paks::RecipeGate;
+  const auto vs=0x2d2ac3c38992b7f0ull,fs=0xb0ecc292e8661561ull;
+  auto camp=row;camp.index_count=39408;camp.flags=0;camp.color_layout=1;
+  camp.material="b5f71b80-9151-8d0c-fae7-8ee13a5357ba";
+  CHECK(mesh_paks::hlod_recipe_gate(camp,vs,fs,true,false)==Gate::Template);
+  CHECK(mesh_paks::hlod_recipe_gate(camp,vs,0x14678345c10aefbcull,true,false)==Gate::ShaderPair);
+  camp.flags=6;CHECK(mesh_paks::hlod_recipe_gate(camp,vs,fs,true,false)==Gate::VertexColor);
+  camp.flags=4;CHECK(mesh_paks::hlod_recipe_gate(camp,vs,fs,false,false)==Gate::CullUnknown);
+  CHECK(mesh_paks::hlod_recipe_gate(camp,vs,fs,true,true)==Gate::CullMismatch);
+  CHECK(mesh_paks::hlod_recipe_gate(camp,vs,fs,true,false)==Gate::Ready);
+  row.flags=4;CHECK(mesh_paks::hlod_compatible(row,vs,fs,true,false));
   CHECK(!mesh_paks::hlod_compatible(row,0,0xb0ecc292e8661561ull,true,false));
   CHECK(!mesh_paks::hlod_compatible(row,0x2d2ac3c38992b7f0ull,0xb0ecc292e8661561ull,false,false));
   CHECK(!mesh_paks::hlod_compatible(row,0x2d2ac3c38992b7f0ull,0xb0ecc292e8661561ull,true,true));
