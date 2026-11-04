@@ -68,6 +68,9 @@ struct Stats { uint64_t prepass = 0, gbuffer = 0, velocity = 0, refused = 0, pub
 // Keys whose prepass card depth went (each G-buffer pass after it must swap them: else counted as orphan).
 hair_primary::DepthLatch g_depth;
 std::unordered_set<uint64_t> g_depth_resolved, g_depth_safe_keys, g_depth_failed;
+struct DepthOrphan { uint64_t key, prepass, drop; };
+DepthOrphan g_depth_orphans[4] = {};
+uint32_t g_depth_orphan_count = 0;
 uint64_t g_logged_pipes = 0;
 // Fail-safe feedback (SwapGate::feedback): strand pixels per groom of the last frame's pixel record, counted on the GPU
 // (rt/hair_primary_count.hlsl) at the next publish, copied to a host-visible ring and read kCountSlots - 1 publishes
@@ -444,7 +447,7 @@ void observe_depth(uint64_t image, uint64_t now) {
   g_gate.clear();
   g_coverage.clear();
   g_depth_safe_keys.clear();
-  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear();
+  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear(); g_depth_orphan_count = 0;
 
   for (auto& gf : g_gb_frames) gf = GbFrame{};
 
@@ -546,7 +549,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_depth_fallback_ready = true;
   g_coverage.clear();
   g_depth_safe_keys.clear();
-  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear();
+  g_depth = {}; g_depth_resolved.clear(); g_depth_failed.clear(); g_depth_orphan_count = 0;
   g_coverage_period.clear();
   for (auto& st : g_staged) st = StagedHeader{};
   g_staged_next = 0;
@@ -854,6 +857,10 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
       if (!p.color_count && p.width == g_px_w && p.height == g_px_h && g_depth.gbuffer_seen) {
         for (uint64_t key : g_depth_resolved) if (!g_depth_failed.count(key)) g_depth.resolved(key);
         g_depth_resolved.clear(); g_depth_failed.clear();
+        for (const auto& [key, frame] : g_depth.previous) {
+          if (g_depth_orphan_count == 4) break;
+          g_depth_orphans[g_depth_orphan_count++] = {key, frame, frame_index()};
+        }
         g_st.orphan += g_depth.begin();
       }
       if (p.color_count >= 4 && p.width == g_px_w && p.height == g_px_h) {
@@ -984,7 +991,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   decision.used_max = (std::max)(decision.used_max, used);
   g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pass == Pass::Gbuffer ? dv->second.strand[draw] : it->second);
   ++(pass == Pass::Gbuffer ? g_st.gbuffer : pass == Pass::Velocity ? g_st.velocity : g_st.prepass);
-  if (pass == Pass::Prepass) g_depth.prepass(key);
+  if (pass == Pass::Prepass) g_depth.prepass(key, now);
   if (probe) g_coverage_period[key].probed = true;   // the swapped strand draw writes its pixel entries itself
   const uint32_t ts = uint32_t(now % kTimeSlots);
   if (pass == Pass::Gbuffer && g_qp && g_slot_frame[ts] == now + 1 && g_timed[ts] < kTimed) {
@@ -1129,13 +1136,24 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
         (unsigned long long)g_adjacent_window, (unsigned long long)g_adjacent_total, g_order ? "G-buffer" : "prepass");
     g_adjacent_window = 0;
   }
-  if (now % 300 == 0)
+  if (now % 300 == 0) {
     log("[hair primary] frame %llu: %u grooms published; last 300 frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused; prepass card depth dropped without its G-buffer "
         "swap %llu",
         (unsigned long long)now, count, (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
         (unsigned long long)g_st.gbuffer, (unsigned long long)g_st.velocity, (unsigned long long)g_st.refused,
         (unsigned long long)g_st.orphan);
+    char per[320] = {};
+    size_t at = 0;
+    for (uint32_t i = 0; i < g_depth_orphan_count; ++i) {
+      const auto& o = g_depth_orphans[i];
+      at += std::snprintf(per + at, sizeof per - at, " %04llx:prepass=%llu,drop=%llu",
+          (unsigned long long)(o.key >> 48), (unsigned long long)o.prepass, (unsigned long long)o.drop);
+    }
+    log("[hair primary] depth orphans (last 300 frames, first 4; key prefix:prepass frame_index,drop frame_index):%s",
+        at ? per : " none");
+    g_depth_orphan_count = 0;
+  }
   if (now % 300 == 0 && cfg_int("rt_hair_groom_shadow_t", 0) != 0) {
     // rt_hair_groom_shadow_t participation: the draws with a measured a_f and the groom rows that carried one.
     float lo = 1.0f, hi = 0.0f, sum[3] = {0, 0, 0};
