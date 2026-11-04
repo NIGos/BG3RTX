@@ -3,10 +3,11 @@
 #
 #   .\scripts\test-tree.ps1            # create it (first time) or move it to main's HEAD, then build
 #   .\scripts\test-tree.ps1 -Status    # print the commit it is on
+#   .\scripts\test-tree.ps1 -SkipBuild # sync only, after a docs/tooling-only merge
 #
 # Location: .claude\worktrees\test-main (detached at a main commit). Don't sync it while a
 # queued job runs on it: the core would hot-reload mid-run (this script refuses).
-param([switch]$Status)
+param([switch]$Status, [switch]$SkipBuild)
 
 $ErrorActionPreference = "Continue"   # build.ps1 writes native stderr (vswhere) that is not an error
 $root = Split-Path $PSScriptRoot -Parent
@@ -28,7 +29,9 @@ if (-not (Test-Path $tree)) {
 } else {
   git -C $tree checkout --detach $head 2>&1 | Out-Null
 }
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tree "scripts\build.ps1") 2>&1 |
-  Select-String 'error|FAILED' | ForEach-Object { Write-Host "  $_" }
-if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED in the test tree"; exit 1 }
+if (-not $SkipBuild) {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tree "scripts\build.ps1") 2>&1 |
+    Select-String 'error|FAILED' | ForEach-Object { Write-Host "  $_" }
+  if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED in the test tree"; exit 1 }
+}
 Write-Host "test tree at $(git -C $tree log --oneline -1)"

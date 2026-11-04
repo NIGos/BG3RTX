@@ -1,5 +1,5 @@
-# Merge a checked phase into main, build it, run every CTest, compile every
-# runtime compute entry point and run the QA detector tests before committing.
+# Merge a checked phase into main with path-sized gates. Unknown paths use
+# the full build, every CTest, runtime shader compile and QA detector tests.
 # MainRoot permits using this updated gate for its first integration.
 param(
   [Parameter(Mandatory = $true)][string]$Ref,
@@ -97,6 +97,30 @@ if (git status --porcelain --untracked-files=no) { Fail 'main has uncommitted ch
 $head = (git rev-parse HEAD).Trim()
 $target = git rev-parse --verify "$Ref^{commit}" 2>$null
 if ($LASTEXITCODE -ne 0) { Fail "invalid merge ref: $Ref" }
+# Classify before merging; failure must never reduce gates. Use this gate's
+# helper for first integration with -MainRoot, too.
+$scope = 'full'
+$scopeHelper = Join-Path $PSScriptRoot 'merge_scope.py'
+$scopePython = 'py'
+$scopePythonArgs = @('-3')
+if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
+  $scopePython = 'python'
+  $scopePythonArgs = @()
+}
+$scopeReason = 'classifier unavailable or failed (safe default)'
+if (Test-Path -LiteralPath $scopeHelper) {
+  try {
+    $scopeJson = & $scopePython @scopePythonArgs $scopeHelper --root $root --ref "$target"
+    if ($LASTEXITCODE -eq 0) {
+      $selected = $scopeJson | ConvertFrom-Json
+      if ($selected.scope -in @('docs', 'tooling', 'shaders', 'full')) {
+        $scope = $selected.scope
+        $scopeReason = $selected.reason
+      }
+    }
+  } catch { $scopeReason = "classifier failed: $($_.Exception.Message) (safe default)" }
+}
+Write-Host "merge-green scope: $scope - $scopeReason"
 $owner = @{ head=$head; target="$target".Trim(); pid=$PID; started=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o') }
 # Write before invoking Git: a hard kill even during merge leaves a recovery receipt.
 $owner | ConvertTo-Json | Set-Content -LiteralPath $ownerPath
@@ -113,29 +137,44 @@ try {
   if ($mergeCode -ne 0) { Fail "merge failed: $($mergeOutput -join ' ')" }
   if (-not $script:mergeStarted) { Write-Host "ALREADY MERGED: $Ref"; exit 0 }
 
-  $build = Invoke-Gate 'build-ctest' { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test }
-  if ($script:gateCode -ne 0) {
-    $build | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
-    Fail 'build or unit tests failed'
-  }
-  $build | Select-Object -Last 6 | ForEach-Object { Write-Host "  $_" }
+  if ($scope -in @('docs', 'tooling')) {
+    $light = Invoke-Gate $scope { & $scopePython @scopePythonArgs $scopeHelper --root $root --ref "$target" --run $scope }
+    $light | ForEach-Object { Write-Host "  $_" }
+    if ($script:gateCode -ne 0) { Fail "$scope checks failed" }
+  } else {
+    $buildArgs = @()
+    if ($scope -eq 'shaders') {
+      $shaderTests = & $scopePython @scopePythonArgs $scopeHelper --root $root --ref "$target" --shader-tests
+      if ($LASTEXITCODE -ne 0 -or -not $shaderTests) { Fail 'shader test selection failed' }
+      Write-Host "shader CTest consumers: $shaderTests"
+      $buildArgs = @('-TestRegex', "$shaderTests")
+    }
+    $build = Invoke-Gate 'build-ctest' { powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Test @buildArgs }
+    if ($script:gateCode -ne 0) {
+      $build | Select-Object -Last 15 | ForEach-Object { Write-Host "  $_" }
+      Fail 'build or unit tests failed'
+    }
+    $build | Select-Object -Last 6 | ForEach-Object { Write-Host "  $_" }
 
-  # The shared compiler covers all entries (including multi-entry rr_post),
-  # honors source DXC options, and fails when DXC is absent or any compile fails.
-  # --pp-verify 4: four random requests compiled from scratch must match the cache (preprocessed-key self-check).
-  $shaders = Invoke-Gate 'shaders' { py -3 tools\compile_shaders.py --pp-verify 4 }
-  if ($script:gateCode -ne 0) {
-    $shaders | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" }
-    Fail 'runtime shader compilation failed'
+    # The shared compiler covers all entries (including multi-entry rr_post),
+    # honors source DXC options, and fails when DXC is absent or any compile fails.
+    # --pp-verify 4: four random requests compiled from scratch must match the cache (preprocessed-key self-check).
+    $shaders = Invoke-Gate 'shaders' { py -3 tools\compile_shaders.py --pp-verify 4 }
+    if ($script:gateCode -ne 0) {
+      $shaders | Select-Object -Last 20 | ForEach-Object { Write-Host "  $_" }
+      Fail 'runtime shader compilation failed'
+    }
+    $shaders | Select-Object -Last 1 | ForEach-Object { Write-Host "  $_" }
   }
-  $shaders | Select-Object -Last 1 | ForEach-Object { Write-Host "  $_" }
 
-  $qa = Invoke-Gate 'qa' { py -3 tests\qa_detectors_test.py }
-  if ($script:gateCode -ne 0) {
-    $qa | Select-Object -Last 8 | ForEach-Object { Write-Host "  $_" }
-    Fail 'QA detector tests failed'
+  if ($scope -eq 'full') {
+    $qa = Invoke-Gate 'qa' { py -3 tests\qa_detectors_test.py }
+    if ($script:gateCode -ne 0) {
+      $qa | Select-Object -Last 8 | ForEach-Object { Write-Host "  $_" }
+      Fail 'QA detector tests failed'
+    }
   }
-  git commit -q --no-edit -m "Merge $Ref (merge-green: build, all CTests, shaders, QA passed)"
+  git commit -q --no-edit -m "Merge $Ref (merge-green: $scope gates passed)"
   if ($LASTEXITCODE -ne 0) { Fail 'merge commit failed' }
   $script:mergeStarted = $false
   Write-LongrunSummary 'merge-green steps'
@@ -146,4 +185,6 @@ finally {
 }
 
 # Refresh the test checkout only after a successful integration.
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\test-tree.ps1')
+$syncArgs = @()
+if ($scope -in @('docs', 'tooling')) { $syncArgs += '-SkipBuild' }
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\test-tree.ps1') @syncArgs

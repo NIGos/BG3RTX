@@ -4,7 +4,8 @@
 #   .\scripts\build.ps1 -Watch        rebuild the core on every save under core/
 #   .\scripts\build.ps1 -Launcher     build only the player launcher, bin\BG3RTX.exe
 #   .\scripts\build.ps1 -Test         build everything, then run every registered CTest
-param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo")
+#   .\scripts\build.ps1 -Test -TestRegex <regex>  build, then run selected CTests
+param([switch]$Core, [switch]$Watch, [switch]$Launcher, [switch]$Test, [string]$Config = "RelWithDebInfo", [string]$TestRegex = "")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "low-priority.ps1")
 . (Join-Path $PSScriptRoot "longrun.ps1")
@@ -37,12 +38,15 @@ if (-not $Watch) {
   Invoke-Build $(if ($Core) { "bg3rtx_core" } elseif ($Launcher) { "bg3rtx_launcher" } else { "" })
   if ($Test) {
     Stop-LongrunStep 'build'
-    # merge-green relies on this being the complete configured suite. An empty
+    # The default is the complete configured suite; merge-green's shader scope
+    # supplies a source-consumer regex. An empty
     # test registry is a configuration failure, not a successful validation.
     # ctest prints one line per finished test (n/total, time); the slowest ones are summarised after it.
     Start-LongrunStep 'ctest'
     $times = New-Object System.Collections.Generic.List[object]
-    ctest --test-dir $build --output-on-failure --no-tests=error | ForEach-Object {
+    $testArgs = @()
+    if ($TestRegex) { $testArgs += @('-R', $TestRegex) }
+    ctest --test-dir $build --output-on-failure --no-tests=error @testArgs | ForEach-Object {
       if ($_ -match '^\s*\d+/\d+ Test\s+#\d+: (\S+) \.*\s*(.*?)\s+([0-9.]+) sec') { $times.Add([pscustomobject]@{ Name = $matches[1]; Sec = [double]$matches[3] }) }
       $_
     }
