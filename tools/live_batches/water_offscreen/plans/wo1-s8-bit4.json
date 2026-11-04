@@ -30,7 +30,7 @@
       "\\[water\\] compose stability",
       "\\[water\\] compose energy"
     ],
-    "wait_log_timeout": 11.427999999985332
+    "wait_log_timeout": 9.464000000007218
   },
   {
     "label": "prefetch-order",
@@ -52,7 +52,7 @@
       "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30,
+    "wait_log_timeout": 180.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -61,13 +61,13 @@
     "label": "shot-order-off-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.9,
+    "seconds": 13.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.9,
-    "motion_end": 20.9,
+    "motion_start": 18.0,
+    "motion_end": 18.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
@@ -82,19 +82,32 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "shot-order-on-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.9,
+    "seconds": 13.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.9,
-    "motion_end": 20.9,
+    "motion_start": 18.0,
+    "motion_end": 18.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
@@ -109,19 +122,34 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections \\(",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "shot-order-off-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.9,
+    "seconds": 13.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.9,
-    "motion_end": 20.9,
+    "motion_start": 18.0,
+    "motion_end": 18.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
@@ -136,19 +164,32 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "shot-order-on-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 20.9,
+    "seconds": 13.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 20.9,
-    "motion_end": 20.9,
+    "motion_start": 18.0,
+    "motion_end": 18.0,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
@@ -163,19 +204,34 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections \\(",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "cost-order-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.3,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.3,
-    "motion_end": 19.3,
+    "motion_start": 14.4,
+    "motion_end": 14.4,
     "pixels_per_second": 1,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
@@ -186,19 +242,33 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "cost-order-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.3,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.3,
-    "motion_end": 19.3,
+    "motion_start": 14.4,
+    "motion_end": 14.4,
     "pixels_per_second": 1,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
@@ -209,19 +279,35 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections \\(",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "cost-order-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.3,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.3,
-    "motion_end": 19.3,
+    "motion_start": 14.4,
+    "motion_end": 14.4,
     "pixels_per_second": 1,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=0",
@@ -232,19 +318,33 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "cost-order-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 19.3,
+    "seconds": 2.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 19.3,
-    "motion_end": 19.3,
+    "motion_start": 14.4,
+    "motion_end": 14.4,
     "pixels_per_second": 1,
     "direction": 0,
     "set": "rt_water_compose=1,rt_water_compose_shift=1,rt_water_hit_shade=2,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_hit_cost=4",
@@ -255,7 +355,23 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0,
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[core\\] \\[water\\] compose stability",
+      "\\[core\\] \\[water\\] reflections \\(",
+      "\\[core\\] \\[water\\] compose \\(",
+      "\\[core\\] \\[water\\] compose GPU",
+      "\\[water\\] compose \\(",
+      "\\[water\\] reflections \\(",
+      "\\[water\\] reflections GPU",
+      "\\[water\\] (reflections|compose) \\(",
+      "\\[water\\] coverage \\("
+    ]
   },
   {
     "label": "restore",
@@ -278,6 +394,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 30
+    "wait_log_timeout": 180.0
   }
 ]

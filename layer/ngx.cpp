@@ -986,8 +986,18 @@ void ngx_on_present() {
   rrpost_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   ULONGLONG now = GetTickCount64();
+  static int reset_token = 0;
+  static uint64_t stats_start = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    stats_start = frame_index(); g_acc_tick = now;
+    for (auto& pending : g_ts_pending) pending = false;
+    for (auto& v : g_acc_n) v = 0;
+    for (auto& v : g_acc_guides) v = 0;
+    for (auto& v : g_acc_eval) v = 0;
+  }
   if (!g_acc_tick) g_acc_tick = now;
-  if (now - g_acc_tick < 5000) return;
+  if (cfg_int("rt_stats_period_frames", 0) > 0 ? frame_index() - stats_start < stats_period(1) : now - g_acc_tick < 5000) return;
+  stats_start = frame_index();
   g_acc_tick = now;
   static const char* names[2] = {"SR", "RR"};
   for (int m = 0; m < 2; ++m) {

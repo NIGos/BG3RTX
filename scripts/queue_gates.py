@@ -20,8 +20,11 @@ starts (or at "[motion-plan] complete"). Its settings count as applied at the fi
 A stats line summarizes the frames since the previous line of its kind, so it is judged for a
 window only when that previous line was also printed after the window's settings were applied:
 then every frame it covers ran with the window's settings. The first line after a toggle
-straddles two windows and is skipped (not passed). This rule is derived from the log cadence,
-not tuned.
+straddles two windows and is skipped (not passed). A motion-ready record naming
+stats_reset=N plus the matching game `[stats] reset token=N frame=F` acknowledgment
+starts a fresh period instead, so its first complete line counts. Frame plans which
+request a reset fail if that acknowledgment is missing. Legacy logs retain the
+straddle rule.
 
 An entry with "event": true judges one-off lines instead (e.g. "[trace] frame N written" in each
 shot-* window): every selected line from the window's applied settings to its end counts, with
@@ -118,12 +121,15 @@ def stamped_lines(text):
 def windows(runner_text, plan, game_lines):
     """[{label, index, start, applied, end, set}] from the runner's [pan-plan] lines."""
     clock = _Clock(game_lines[0][0] if game_lines else None)
-    starts, complete, ready = [], None, {}
+    starts, complete, ready, reset_tokens = [], None, {}, {}
     for line in runner_text.splitlines():
         timestamp = clock(_sec(line))
         rm = re.search(r"\[motion-ready\] phase=(\d+)", line)
         if rm:
             ready[int(rm[1])] = timestamp
+            token = re.search(r" stats_reset=(\d+)", line)
+            if token:
+                reset_tokens[int(rm[1])] = int(token[1])
         m = _WINDOW.search(line)
         if m:
             sm = _SET.search(line)
@@ -138,10 +144,32 @@ def windows(runner_text, plan, game_lines):
         label = plan[index].get("label", str(index)) if 0 <= index < len(plan) else str(index)
         applied = next((t for t, l in game_lines if start <= t < end and _CFG.search(l)), start)
         settings_applied = applied
-        waiting = 0 <= index < len(plan) and bool(plan[index].get("wait_log"))
+        waiting = 0 <= index < len(plan) and bool(plan[index].get("wait_log") or plan[index].get("stats_reset"))
         if waiting:
             applied = max(applied, ready.get(index, float("inf")))
-        out.append({"settings_applied": settings_applied, "ready": not waiting or index in ready, "label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
+        # Only the exact reset acknowledged for this phase establishes a fresh
+        # producer period. Legacy logs keep the conservative straddle rule;
+        # reset-requesting plans require the matching acknowledgment.
+        token = reset_tokens.get(index)
+        reset = next((t for t, l in game_lines if token is not None and settings_applied <= t < end
+                      and re.search(r"\[stats\] reset token=" + str(token) + r" frame=\d+\b", l)), None)
+        out.append({"stats_reset": reset, "settings_applied": settings_applied, "ready": (not waiting or index in ready) and (not (0 <= index < len(plan) and plan[index].get("stats_reset")) or reset is not None), "label": label, "index": index, "start": start, "applied": applied, "end": end, "set": applied_set})
+    return out
+
+
+def complete_period_lines(picked, window):
+    boundary = window.get("stats_reset")
+    previous = boundary
+    if boundary is None:
+        boundary = window["applied"]
+    out = []
+    for t, line in picked:
+        if t >= window["end"]:
+            break
+        if t >= boundary and previous is not None and previous >= boundary:
+            out.append(line)
+        if t >= boundary:
+            previous = t
     return out
 
 
@@ -304,26 +332,19 @@ def check(gates, game_text, runner_text="", plan=None):
                 if not w.get("ready", True):
                     failures.append(f"every-window {name}: window '{label}' missing motion-ready completion")
                     continue
-                if g.get("when_present") and not any(w["applied"] <= t < w["end"] for t, _ in picked):
+                if g.get("when_present") and not any((w.get("stats_reset") if not event and w.get("stats_reset") is not None else w["applied"]) <= t < w["end"] for t, _ in picked):
                     continue   # the pass did not run in this window (docstring)
                 condition = g.get("required_if")
                 if condition:
                     trigger = [(t, l) for t, l in lines if re.search(condition["select"], l)]
-                    complete = [l for (pt, _), (t, l) in zip(trigger, trigger[1:])
-                                if pt >= w["applied"] and t < w["end"]]
+                    complete = complete_period_lines(trigger, w)
                     if not any(re.search(condition["match"], l) for l in complete):
                         continue
-                judged = []
-                prev = None
-                for t, l in picked:
-                    if t >= w["end"]:
-                        break
-                    if event:
-                        if t >= w["applied"] + settle:
-                            judged.append(l)
-                    elif prev is not None and prev >= w["applied"]:
-                        judged.append(l)
-                    prev = t
+                if event:
+                    judged = [l for t, l in picked
+                              if w["applied"] + (0 if w.get("stats_reset") is not None else settle) <= t < w["end"]]
+                else:
+                    judged = complete_period_lines(picked, w)
                 bad = [l for l in (judged[:1] if g.get("first_only") else judged) if not line_matches(g, l)]
                 where = f"window '{label}' (phase {w['index']})"
                 if len(judged) < need:
@@ -456,14 +477,19 @@ def scene_wait_problems(job, plan):
     states = {str(p.get("label", "")): st for p, st in zip(plan, phase_states(job, plan))}
     seconds = {str(p.get("label", "")): float(p.get("seconds", 0)) for p in plan}
     for w in need:
-        frames = int(states[w].get("rt_scene_wait_log_frames", 600))
+        frames = int(states[w].get("rt_stats_period_frames", 0)) or int(states[w].get("rt_scene_wait_log_frames", 600))
+        step = next(p for p in plan if str(p.get("label", "")) == w)
+        if step.get("frames"):
+            if not step.get("stats_reset") or int(step["frames"])-int(step.get("settle_frames", 0)) < frames:
+                out.append(f"scene wait: cost window {w} needs a reset and one complete {frames}-frame period")
+            continue
         want = 2.0 * frames / SCENE_WAIT_MIN_FPS + SCENE_WAIT_SETTLE_S
         if seconds[w] < want:
             out.append(f"scene wait: cost window {w} ({seconds[w]:.0f} s) cannot hold two {frames}-frame lines at "
                        f"{SCENE_WAIT_MIN_FPS:.0f} fps (needs {want:.0f} s): set rt_scene_wait_log_frames=120")
             break
     exp = " ".join(job.get("expect", []))
-    cadence = {int(st.get("rt_scene_wait_log_frames", 600)) for st in states.values()}
+    cadence = {int(st.get("rt_stats_period_frames", 0)) or int(st.get("rt_scene_wait_log_frames", 600)) for st in states.values()}
     stale = [c for c in re.findall(r"scene wait: (\d+) frames", exp) if int(c) not in cadence]
     if stale:
         out.append(f"scene wait: expect names '{stale[0]} frames' lines but the job logs every {sorted(cadence)} frames")

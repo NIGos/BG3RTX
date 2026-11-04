@@ -149,7 +149,7 @@ void tick() {
     }
     g_ts_frame[s] = 0;
   }
-  const uint64_t every = uint64_t((std::max)(host->cfg_int("rt_timing_frames", 300), 30));
+  const uint64_t every = uint64_t(stats_period(unsigned((std::max)(host->cfg_int("rt_timing_frames", 300), 30))));
   if (!g_win.start) g_win.start = now;
   if (now < g_win.start + every) return;
   const uint64_t frames = now - g_win.start;
@@ -405,4 +405,9 @@ void em_release() {
   g_layout = VK_NULL_HANDLE;
   g_push = g_empty = g_em_layout = VK_NULL_HANDLE;
   g_logged = false;
+}
+
+void em_stats_reset() {
+  g_win = Window{}; g_win.start = host->frame_index();
+  std::fill_n(g_ts_frame, kTsRing, uint64_t(0));
 }

@@ -870,6 +870,8 @@ inline constexpr KV kDefaults[] = {
     {"rt_compact_hit_state", "0"},
     {"rt_alpha_metadata_cache", "0"},
     {"rt_water_empty_tiles", "0"},
+    {"rt_stats_period_frames", "0"},
+    {"rt_stats_reset", "0"},
 };
 // The keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {

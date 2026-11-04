@@ -188,6 +188,7 @@ struct SurfaceTs : water::SurfaceTimerState<VkCommandBuffer> {
 SurfaceTs g_surface_ts[kSurfaceSlots];
 std::map<uint64_t, double> g_surface_ms;
 uint64_t g_surface_timed_draws = 0, g_surface_timed_passes = 0, g_surface_dropped = 0;
+uint64_t g_surface_reset_frame = 0;
 
 void surface_harvest() {
   for (auto& t : g_surface_ts) {
@@ -201,6 +202,7 @@ void surface_harvest() {
           g_dd->vk.WaitForFences(g_dd->device, 1, &other.fence, VK_TRUE, 0) != VK_SUCCESS) complete = false;
     }
     if (!complete) continue; // never publish a partial multi-pass frame at a log boundary
+    if (g_surface_reset_frame && t.frame <= g_surface_reset_frame) { t.collected = true; continue; }
     uint64_t q[kSurfaceDraws * 4] = {};
     water::ComposeMs ms;
     if (cfg_int("rt_water_surface_fresnel", 0) && t.draws && !invalid &&
@@ -1098,6 +1100,14 @@ void water_on_present() {
   if (!g_dd) return;
   std::lock_guard<std::mutex> lock(g_mu);
   if (!g_ready) return;
+  static int reset_token = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    g_win = Window{};
+    g_surface_ms.clear(); g_surface_timed_draws = g_surface_timed_passes = g_surface_dropped = 0;
+    g_surface_swaps.exchange(0); g_surface_missing.exchange(0);
+    g_surface_reset_frame = frame_index();
+    for (auto& slot : g_slot) { slot.samples.clear(); slot.harvest = false; }
+  }
   surface_harvest();
   for (uint32_t i = 0; i < kOwn; ++i) {
     Slot& s = g_slot[i];
@@ -1110,7 +1120,7 @@ void water_on_present() {
   if (g_pending.size() > 256) g_pending.clear();   // command buffers the game never submitted
   const bool on = cfg_hot(CfgHot::rt_water_geometry) != 0;
   ++g_win.frames;
-  const uint64_t every = uint64_t((std::max)(cfg_int("rt_timing_frames", 300), 30));
+  const uint64_t every = uint64_t(stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30))));
   if (g_win.frames < every) return;
   Window& w = g_win;
   const Census& c = w.c;

@@ -37,6 +37,26 @@ void diag(DiagCounter c, uint64_t n) {
   if (c == DIAG_DRAW) g_draws.fetch_add(uint32_t(n), std::memory_order_relaxed);
 }
 
+static void watchdog_report() {
+        uint64_t d[DIAG_COUNT];
+        for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
+        log("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
+            "submits %llu | draws %llu | submit CPU %.3f ms | descriptor tracker CPU %.3f ms | alpha descriptors %.3f ms / %llu calls | auxiliary signals coalesced %llu",
+            d[DIAG_PRESENT], d[DIAG_DISPLAYED], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
+            d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW], d[DIAG_SUBMIT_US]/1000.0,
+            d[DIAG_DESCRIPTOR_US]/1000.0, d[DIAG_ALPHA_DESC_US]/1000.0, d[DIAG_ALPHA_DESC_CALLS], d[DIAG_AUX_COALESCED]);
+}
+void watchdog_stats_tick(uint64_t frame) {
+  if (cfg_int("rt_stats_period_frames", 0) <= 0) return;
+  static int reset_token = 0;
+  static uint64_t start = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    start = frame;
+    for (auto& count : g_watch) count.exchange(0);
+  }
+  if (frame - start >= stats_period(1)) { watchdog_report(); start = frame; }
+}
+
 // Logs activity every watchdog_s seconds from its own thread, so a stalled
 // render thread still leaves a record of what the process was doing.
 void watchdog_start() {
@@ -47,13 +67,7 @@ void watchdog_start() {
         int s = cfg_int("watchdog_s", 5);
         Sleep(DWORD((s > 0 ? s : 5) * 1000));
         if (cfg_int("watchdog_s", 5) <= 0) continue;
-        uint64_t d[DIAG_COUNT];
-        for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
-        log("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
-            "submits %llu | draws %llu | submit CPU %.3f ms | descriptor tracker CPU %.3f ms | alpha descriptors %.3f ms / %llu calls | auxiliary signals coalesced %llu",
-            d[DIAG_PRESENT], d[DIAG_DISPLAYED], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
-            d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW], d[DIAG_SUBMIT_US]/1000.0,
-            d[DIAG_DESCRIPTOR_US]/1000.0, d[DIAG_ALPHA_DESC_US]/1000.0, d[DIAG_ALPHA_DESC_CALLS], d[DIAG_AUX_COALESCED]);
+        if (cfg_int("rt_stats_period_frames", 0) <= 0) watchdog_report();
       }
     }).detach();
   });

@@ -1272,8 +1272,17 @@ void rrpost_on_present() {
         (unsigned long long)g_hold_writes, g_last_b0[2], g_probe_map ? g_probe_map[8] : 0.0f);
   }
   ULONGLONG now = GetTickCount64();
+  static int reset_token = 0;
+  static uint64_t stats_start = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    stats_start = frame_index(); g_ts_tick = now;
+    for (auto& pending : g_ts_pending) pending = false;
+    for (auto& v : g_ts_acc) v = 0;
+    for (auto& v : g_ts_frames) v = 0;
+  }
   if (!g_ts_tick) g_ts_tick = now;
-  if (now - g_ts_tick < 5000) return;
+  if (cfg_int("rt_stats_period_frames", 0) > 0 ? frame_index() - stats_start < stats_period(1) : now - g_ts_tick < 5000) return;
+  stats_start = frame_index();
   g_ts_tick = now;
   if (g_ts_frames[0] || g_ts_frames[1])
     log("[rrpost] gpu: render-res chain %.3f ms/frame, output-res grade %.3f ms/frame; chains completed %llu, fell back "

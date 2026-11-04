@@ -32,7 +32,7 @@
     "wait_log": [
       "\\[hit material paks join\\] attempts [1-9]\\d* unique \\d+ missing \\d+ ambiguous \\d+ invalid \\d+ witness \\d+ recipe_cull \\d+ inputs_pending \\d+ id_equal \\d+ id_different \\d+ draws [1-9]\\d*"
     ],
-    "wait_log_timeout": 20.86799999998766
+    "wait_log_timeout": 14.680000000000291
   },
   {
     "label": "warmup-off",
@@ -63,16 +63,20 @@
     "label": "observe-on",
     "kind": "static",
     "speed": "static",
-    "seconds": 31.8,
+    "seconds": 8.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 31.8,
-    "motion_end": 31.8,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -80,7 +84,9 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ]
   },
   {
     "label": "observe-off",
@@ -109,16 +115,20 @@
     "label": "observe-on-repeat",
     "kind": "static",
     "speed": "static",
-    "seconds": 31.8,
+    "seconds": 8.0,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 31.8,
-    "motion_end": 31.8,
+    "motion_start": 20,
+    "motion_end": 20,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_hit_material_paks=1,rt_mesh_content_id=1,rt_stats=1,qa_exposure_hold=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_log_timeout": 2.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -126,7 +136,9 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 2.0
+    "wait_stats": [
+      "\\[hit material paks join\\]"
+    ]
   },
   {
     "label": "restore",

@@ -21,70 +21,113 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180
+    "wait_log_timeout": 2.0
   },
   {
     "label": "static-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 28.7,
+    "seconds": 12.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 28.7,
-    "motion_end": 28.7,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
     "trace_at": [
       5
-    ]
+    ],
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[mem\\] ours \\(",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "\\[alpha scalp\\] native hard records \\d+;",
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "static-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 25.7,
+    "seconds": 9.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 25.7,
-    "motion_end": 25.7,
+    "motion_start": 24,
+    "motion_end": 24,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[mem\\] ours \\(",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "\\[alpha scalp\\] native hard records \\d+;",
+      "gi: background builds \\(\\d+ frames\\):"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "settle",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.2,
+    "seconds": 11.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12.2,
-    "motion_end": 12.2,
+    "motion_start": 11.9,
+    "motion_end": 11.9,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0",
+    "frames": 108,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-hair",
     "kind": "static",
     "speed": "static",
-    "seconds": 62.8,
+    "seconds": 9.1,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
+    "motion_start": 26,
+    "motion_end": 26,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0",
+    "frames": 90,
+    "settle_frames": 30,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[mem\\] ours \\(",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "\\[alpha scalp\\] native hard records \\d+;",
+      "gi: background builds \\(\\d+ frames\\):",
+      "rt passes: GPU cost",
+      "gi: GPU cost"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

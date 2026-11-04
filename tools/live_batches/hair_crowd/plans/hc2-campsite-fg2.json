@@ -30,11 +30,10 @@
     "wait_log": [
       "\\[hair groom\\] device with linear swept spheres",
       "\\[hair groom\\] [0-9a-f]{16} LOD \\d uploaded: [0-9.]+ MB in the mesh pool",
-      "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
-      "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
+      "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\)",
       "\\[hair groom\\] crowd plan: \\d+ instances, budget 1800 k segments"
     ],
-    "wait_log_timeout": 29.77999999999156
+    "wait_log_timeout": 29.200000000000728
   },
   {
     "label": "settle-cam",
@@ -59,7 +58,11 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 180.0,
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": []
   },
   {
     "label": "warm-strands",
@@ -149,9 +152,9 @@
     "serial": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
     "wait_log": [
-      "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)"
+      "gi: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\)"
     ],
-    "wait_log_timeout": 29.77999999999156
+    "wait_log_timeout": 29.200000000000728
   },
   {
     "label": "warm-back",
@@ -177,37 +180,57 @@
     "label": "shot-cards",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.5,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 13.5,
-    "motion_end": 13.5,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
     "trace_at": [
       5
-    ]
+    ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "shot-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.5,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12.5,
-    "motion_end": 12.5,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -216,52 +239,70 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "shot-crowd",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.5,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12.5,
-    "motion_end": 12.5,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=1800,rt_hair_groom_primary_order=1",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "shot-cards-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 12.5,
+    "seconds": 7.5,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 12.5,
-    "motion_end": 12.5,
+    "motion_start": 8,
+    "motion_end": 8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
     "trace_at": [
       5
     ],
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -271,8 +312,7 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "settle",
@@ -287,37 +327,70 @@
     "motion_end": 3.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
+    "frames": 32,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-cards",
     "kind": "static",
     "speed": "static",
-    "seconds": 49.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 49.5,
-    "motion_end": 49.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "cost-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 48.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 48.5,
-    "motion_end": 48.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
+      "\\[hair groom\\] frame \\d+: \\d+ groom instances; last \\d+ frames: at most",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -326,46 +399,73 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-crowd",
     "kind": "static",
     "speed": "static",
-    "seconds": 48.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 48.5,
-    "motion_end": 48.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=1800,rt_hair_groom_primary_order=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "\\[hair primary\\] coverage \\(last \\d+ frames\\):",
+      "\\[hair groom\\] frame \\d+: \\d+ groom instances; last \\d+ frames: at most",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU",
+      "\\[hair groom\\] crowd plan:"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "cost-cards-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 48.5,
+    "seconds": 4.9,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 48.5,
-    "motion_end": 48.5,
+    "motion_start": 25,
+    "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,rt_hair_groom_crowd_ksegments=0,rt_hair_groom_primary_order=1",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records \\d+;",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rt\\] scene build GPU"
+    ],
+    "wait_log_timeout": 180.0,
     "wait_log": [
       "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
       "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
@@ -375,8 +475,7 @@
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-    ],
-    "wait_log_timeout": 180.0
+    ]
   },
   {
     "label": "restore",

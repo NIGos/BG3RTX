@@ -16,7 +16,7 @@
         "repeat": 1,
         "live_batch": "gpu-opt2",
         "window_mode": "visible_unfocused_fg",
-        "set": "preset=high,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024",
+        "set": "preset=high,rt_trace_scale=1.0,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,gi_rr_rays=1,rt_stats=0,rt_primary_check=0,rt_occ_stats=0,ls_stats=0,ls_check=0,rf_stats=0,rf_debug=0,rt_debug=0,gi_debug=0,rt_scene_wait_log_frames=120,dump_images=1,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,qa_exposure_hold=0,rt_timing_frames=120,dump_png_width=1280,fg_log_presents=6,fg_snap=0,fg_snap_any=0,fg_snap_delay=0,fg_snap_delay_ms=0,fg_state_every=60,rt_xfb_mb=1024,rt_stats_period_frames=60",
         "args": [
           "-RealPresent",
           "-Move",
@@ -221,21 +221,21 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3019999999960419,
+            "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 0.43699999999807915
+            "samples": 370,
+            "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.7200900000000003,
-            "source": "wf1-s8-fg2.1.100826.log",
+            "seconds": 2.61315,
+            "source": "wf7a-s8-fg2.1.164300.log",
             "quantile": 0.95,
-            "samples": 402,
-            "maximum": 2.9799,
-            "logs": 65
+            "samples": 370,
+            "maximum": 2.90531,
+            "logs": 59
           }
         },
-        "estimated_phase_seconds": 241.0
+        "estimated_phase_seconds": 107.2
       },
       "plan": [
         {
@@ -293,13 +293,27 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 180.0,
+          "frames": 32,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": []
         },
         {
           "label": "cost-off-a",
           "kind": "static",
-          "seconds": 49.5,
-          "set": "qa_exposure_hold=1"
+          "seconds": 4.9,
+          "set": "qa_exposure_hold=1",
+          "frames": 60,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": [
+            "gi: trace pass .*GPU median [\\d.]+ ms",
+            "rf: reflection pass GPU median [\\d.]+ ms",
+            "\\[rt\\] scene wait: \\d+ frames",
+            "\\[geo\\] RT capture, last \\d+ frames:"
+          ],
+          "wait_log_timeout": 30
         },
         {
           "label": "shot-off-a",
@@ -326,13 +340,28 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 180.0,
+          "frames": 32,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": []
         },
         {
           "label": "cost-on",
           "kind": "static",
-          "seconds": 49.5,
-          "set": "qa_exposure_hold=1"
+          "seconds": 4.9,
+          "set": "qa_exposure_hold=1",
+          "frames": 60,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": [
+            "gi: trace pass .*GPU median [\\d.]+ ms",
+            "rf: reflection pass GPU median [\\d.]+ ms",
+            "\\[rt\\] scene wait: \\d+ frames",
+            "\\[geo\\] RT capture, last \\d+ frames:",
+            "gi: trace pass"
+          ],
+          "wait_log_timeout": 30
         },
         {
           "label": "shot-on",
@@ -359,13 +388,27 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 180.0,
+          "frames": 32,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": []
         },
         {
           "label": "cost-off-b",
           "kind": "static",
-          "seconds": 49.5,
-          "set": "qa_exposure_hold=1"
+          "seconds": 4.9,
+          "set": "qa_exposure_hold=1",
+          "frames": 60,
+          "settle_frames": 0,
+          "stats_reset": true,
+          "wait_stats": [
+            "gi: trace pass .*GPU median [\\d.]+ ms",
+            "rf: reflection pass GPU median [\\d.]+ ms",
+            "\\[rt\\] scene wait: \\d+ frames",
+            "\\[geo\\] RT capture, last \\d+ frames:"
+          ],
+          "wait_log_timeout": 30
         },
         {
           "label": "shot-off-b",
@@ -437,13 +480,27 @@
       "wait_log_fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
-      "wait_log_timeout": 180.0
+      "wait_log_timeout": 180.0,
+      "frames": 32,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": []
     },
     {
       "label": "b1-go2-camp-high--cost-off-a",
       "kind": "static",
-      "seconds": 49.5,
-      "set": "qa_exposure_hold=1"
+      "seconds": 4.9,
+      "set": "qa_exposure_hold=1",
+      "frames": 60,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": [
+        "gi: trace pass .*GPU median [\\d.]+ ms",
+        "rf: reflection pass GPU median [\\d.]+ ms",
+        "\\[rt\\] scene wait: \\d+ frames",
+        "\\[geo\\] RT capture, last \\d+ frames:"
+      ],
+      "wait_log_timeout": 30
     },
     {
       "label": "b1-go2-camp-high--shot-off-a",
@@ -470,13 +527,28 @@
       "wait_log_fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
-      "wait_log_timeout": 180.0
+      "wait_log_timeout": 180.0,
+      "frames": 32,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": []
     },
     {
       "label": "b1-go2-camp-high--cost-on",
       "kind": "static",
-      "seconds": 49.5,
-      "set": "qa_exposure_hold=1"
+      "seconds": 4.9,
+      "set": "qa_exposure_hold=1",
+      "frames": 60,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": [
+        "gi: trace pass .*GPU median [\\d.]+ ms",
+        "rf: reflection pass GPU median [\\d.]+ ms",
+        "\\[rt\\] scene wait: \\d+ frames",
+        "\\[geo\\] RT capture, last \\d+ frames:",
+        "gi: trace pass"
+      ],
+      "wait_log_timeout": 30
     },
     {
       "label": "b1-go2-camp-high--shot-on",
@@ -503,13 +575,27 @@
       "wait_log_fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
-      "wait_log_timeout": 180.0
+      "wait_log_timeout": 180.0,
+      "frames": 32,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": []
     },
     {
       "label": "b1-go2-camp-high--cost-off-b",
       "kind": "static",
-      "seconds": 49.5,
-      "set": "qa_exposure_hold=1"
+      "seconds": 4.9,
+      "set": "qa_exposure_hold=1",
+      "frames": 60,
+      "settle_frames": 0,
+      "stats_reset": true,
+      "wait_stats": [
+        "gi: trace pass .*GPU median [\\d.]+ ms",
+        "rf: reflection pass GPU median [\\d.]+ ms",
+        "\\[rt\\] scene wait: \\d+ frames",
+        "\\[geo\\] RT capture, last \\d+ frames:"
+      ],
+      "wait_log_timeout": 30
     },
     {
       "label": "b1-go2-camp-high--shot-off-b",

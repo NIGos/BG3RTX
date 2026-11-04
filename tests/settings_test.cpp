@@ -3,6 +3,7 @@
 //   bin/settings_test.exe                  run all tests (exit code = failures)
 //   bin/settings_test.exe --write-schema   regenerate data/settings_schema.json
 #include "../common/settings.h"
+#include "../common/stats_window.h"
 
 #include <cstdio>
 #include <fstream>
@@ -1242,6 +1243,25 @@ static void test_release_migration() {
   for (const auto& kv : stale) CHECK_EQ(get(m, kv.first.c_str()), kv.second);
 }
 
+static void test_stats_window() {
+  int period = 0, token = 0, seen = 0;
+  const auto cfg = [&](const char* key, int) { return std::string(key) == "rt_stats_period_frames" ? period : token; };
+  CHECK(bg3::stats_window::period(cfg, 120) == 120);
+  CHECK(bg3::stats_window::period(cfg, 300) == 300);
+  token = 9;
+  CHECK(!bg3::stats_window::reset(cfg, seen)); // release path ignores reset requests
+  period = 60;
+  CHECK(bg3::stats_window::period(cfg, 300) == 60);
+  CHECK(bg3::stats_window::reset(cfg, seen));
+  CHECK(!bg3::stats_window::reset(cfg, seen)); // one reset per acknowledged token
+  token = 10;
+  CHECK(bg3::stats_window::reset(cfg, seen));
+  token = 0;
+  CHECK(!bg3::stats_window::reset(cfg, seen)); // restoring defaults is not a request
+  CHECK_EQ(code_default("rt_stats_period_frames"), "0");
+  CHECK_EQ(code_default("rt_stats_reset"), "0");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1249,6 +1269,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_stats_window();
   test_release_migration();
   test_retired_rejected_controls();
   test_retired_hair_ini();

@@ -499,7 +499,7 @@ void collect(uint32_t slot) {
 double pct(double a, double b) { return b > 0 ? 100.0 * a / b : 0.0; }
 
 void maybe_log() {
-  const uint64_t every = uint64_t((std::max)(host->cfg_int("rt_timing_frames", 300), 30));
+  const uint64_t every = uint64_t(stats_period(unsigned((std::max)(host->cfg_int("rt_timing_frames", 300), 30))));
   if (++g_win.frames < every) return;
   Window& W = g_win;
   const uint64_t* w = W.w;
@@ -862,7 +862,7 @@ void collect_compose(uint32_t slot) {
 }
 
 void maybe_log_compose() {
-  const uint64_t every = uint64_t((std::max)(host->cfg_int("rt_timing_frames", 300), 30));
+  const uint64_t every = uint64_t(stats_period(unsigned((std::max)(host->cfg_int("rt_timing_frames", 300), 30))));
   if (++g_cwin.frames < every) return;
   CWindow& W = g_cwin;
   const uint64_t* w = W.w;
@@ -1727,4 +1727,11 @@ void water_release() {
   g_out_frame = 0;
   g_failed_logged = false;
   g_win = Window{};
+}
+
+void water_stats_reset() {
+  std::lock_guard<std::mutex> lock(g_mu);
+  g_win = Window{}; g_cwin = CWindow{};
+  std::fill_n(g_written, kRing, false); std::fill_n(g_cwritten, kRing, false);
+  std::fill_n(g_cpasses, kRing, uint32_t(0));
 }

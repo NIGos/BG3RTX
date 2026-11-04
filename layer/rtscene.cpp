@@ -1419,6 +1419,8 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   const int ms = cfg_int("rt_scene_wait_ms", 12);
   const uint64_t now = frame_index();
   auto current = [&] { return g_scene_cur >= 0 && g_scene[g_scene_cur].used && g_scene[g_scene_cur].built >= now; };
+  static int reset_token = 0;
+  if (stats_window::reset(cfg_int, reset_token)) g_wait = WaitStats{};
   ++g_wait.calls;
   if (!current()) {
     // Captures that resumed (a scene built in the last 2 frames) end the pause at once:
@@ -1450,7 +1452,7 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
     }
   }
   // rt_scene_wait_log_frames: lean jobs use 120 (complete lines in every cost window for the gate).
-  if (g_wait.calls >= uint64_t((std::clamp)(cfg_int("rt_scene_wait_log_frames", 600), 60, 6000))) {
+  if (g_wait.calls >= uint64_t(stats_period(unsigned((std::clamp)(cfg_int("rt_scene_wait_log_frames", 600), 60, 6000))))) {
     log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
         "wait mean %.3f ms, max %.3f ms",
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
@@ -1595,6 +1597,11 @@ void rt_on_present() {
   bvh_on_present();
   std::lock_guard<std::mutex> lock(g_mu);
   hair_timing_observe();
+  static int reset_token = 0;
+  if (stats_window::reset(cfg_int, reset_token)) {
+    g_hair_timing_reset = true;
+    for (auto& slot : g_slots) slot.frame = 0;
+  }
   if (g_hair_timing_reset) {
     for (auto& modes : g_acc) for (auto& acc : modes) acc = Acc{};
     g_n_frames = g_n_rebuild = g_n_refit = g_n_split = 0;
@@ -1630,7 +1637,7 @@ void rt_on_present() {
     a.tlas.push_back(ms(r[4], r[6]));
     a.total.push_back(ms(r[0], r[6]));
   }
-  int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (g_n_frames < uint32_t(every)) return;
   auto pct = [](std::vector<float>& v, double q) {
     if (v.empty()) return 0.0f;

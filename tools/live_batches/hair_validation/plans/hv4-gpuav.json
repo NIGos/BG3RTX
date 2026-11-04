@@ -55,7 +55,7 @@
     "serial": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0",
     "wait_log": [
-      "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused"
+      "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last \\d+ frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused"
     ],
     "wait_log_timeout": 95.8599999999933
   },
@@ -63,7 +63,7 @@
     "label": "validation-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 182.8,
+    "seconds": 18.038,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -72,7 +72,18 @@
     "motion_end": 182.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[rt\\] scene wait: \\d+ frames",
+      "\\[geo\\] RT capture, last \\d+ frames:",
+      "gi: background builds \\(\\d+ frames\\):",
+      "\\[alpha hair\\] native coverage records",
+      "\\[hair primary\\] frame \\d+:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "validation-reload",
@@ -94,7 +105,7 @@
     "label": "validation-after-reload",
     "kind": "static",
     "speed": "static",
-    "seconds": 182.8,
+    "seconds": 18.038,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
@@ -103,7 +114,14 @@
     "motion_end": 182.8,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0"
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
+    "frames": 60,
+    "settle_frames": 0,
+    "stats_reset": true,
+    "wait_stats": [
+      "\\[hair primary\\] frame \\d+:"
+    ],
+    "wait_log_timeout": 30
   },
   {
     "label": "restore",

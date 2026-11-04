@@ -1505,10 +1505,13 @@ void log_list(const char* head, const std::vector<std::string>& items) {
 void em_on_present() {
   if (!g_on) return;
   const uint64_t now = frame_index();
+  static int reset_token = 0;
+  const bool reset = stats_window::reset(cfg_int, reset_token);
   if (g_qp) {
     std::lock_guard<std::mutex> lock(g_ts_mu);
     for (uint32_t p = 0; p < kTsPairs; ++p) {
       TsPair& t = g_ts[p];
+      if (reset) t.frame = 0;
       if (!t.frame || t.frame + 4 > now) continue;
       uint64_t r[4] = {};
       VkResult res = g_dd->vk.GetQueryPoolResults(g_dd->device, g_qp, p * 2, 2, sizeof r, r, 16,
@@ -1525,6 +1528,7 @@ void em_on_present() {
   }
   const auto core = core_shared_lock();   // the calibration rule is the core's (before g_mu)
   std::lock_guard<std::mutex> lock(g_mu);
+  if (reset) { g_win = Window{}; g_win_frames = 0; g_fs_window.clear(); for (auto& slot : g_slots) slot.frame = 0; }
   // Command buffers the game never submitted (a dropped frame): their draws go.
   if (g_pending.size() > 256) g_pending.clear();
   for (uint32_t s = 0; s < kRing; ++s) {
@@ -1617,7 +1621,7 @@ void em_on_present() {
   }
   // Windows of rt_timing_frames presents, not builds: with rt_emissive=0 nothing is built,
   // and the effects passes' cost without the capture must still be logged.
-  const int every = (std::max)(cfg_int("rt_timing_frames", 300), 30);
+  const int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   Window& w = g_win;
   if (++g_win_frames < uint32_t(every)) return;
   g_win_frames = 0;

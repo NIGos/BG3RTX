@@ -274,6 +274,16 @@ def regex_problems(job, evidence, memo=None):
 
 
 def period(gate, state, fps):
+    native = native_period(gate, state, fps)
+    override = int(state.get("rt_stats_period_frames", 0))
+    # Unknown signatures must still fail closed. The native timer producers
+    # also use the frame override while qualification is enabled.
+    if native is not None and override > 0:
+        return override / fps
+    return native
+
+
+def native_period(gate, state, fps):
     if producer_requirements(gate["select"]):
         return 120 / fps
     if "period_frames" in gate:
@@ -465,6 +475,21 @@ def window_problems(job, plan):
                 continue
             if p.get("trace_at") and "trace_stall_s" not in window_meta:
                 errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
+            if p.get("frames") is not None:
+                frames = int(p["frames"])
+                settle = int(p.get("settle_frames", 0))
+                cadence = round(dt * fps)
+                if not p.get("stats_reset"):
+                    errors.append(f"windows: {label}: frame window requires stats_reset acknowledgement")
+                complete = max(0, (frames - settle) // cadence)
+                required = settle + need * cadence
+                budgets.append(dict(window=label, gate=name, complete=complete, required=need,
+                                    period_frames=cadence, minimum_frames=required,
+                                    minimum_seconds_exclusive=required/fps + len(p.get("trace_at", []))*trace_stall,
+                                    period_s=dt, fps=fps, fps_evidence=fps_windows.expected(job, state)))
+                if complete < need:
+                    errors.append(f"windows: {label}: {name}: {frames} frames provide {complete} complete periods, need {need} ({required} frames)")
+                continue
             # Endpoint is exclusive. Worst alignment puts the first line one full
             # period after apply; one further line is consumed by the straddle rule.
             skip = 0 if g.get("event") else 1
@@ -490,7 +515,7 @@ def window_problems(job, plan):
 CONTROL = {"qa_exposure_hold", "fg_snap", "pan_capture", "pan_prepare", "pan_post", "pan_edge", "pan_water",
            "rt_stats", "rt_primary_check", "rt_primary_identity", "rt_primary_epoch", "ls_stats", "ls_check",
            "rf_stats", "rt_debug", "ls_debug", "gi_debug", "rf_debug", "rt_occ_stats", "rr_show",
-           "fg_snap_any", "replay_pack", "rt_mesh_audit_frames", "rt_mesh_audits"}
+           "fg_snap_any", "replay_pack", "rt_mesh_audit_frames", "rt_mesh_audits", "rt_stats_period_frames", "rt_stats_reset"}
 
 
 def warmup_problems(job, plan):
@@ -635,7 +660,7 @@ def tighten(job, plan):
     budget = duration_budget(job, plan)
     for phase, window in zip(plan, budget["windows"]):
         old = float(phase["seconds"])
-        new = window["minimum_seconds"]
+        new = max(old, window["minimum_seconds"]) if phase.get("frames") is not None else window["minimum_seconds"]
         phase["seconds"] = new
         for key in ("motion_start", "motion_end"):
             if phase.get(key) == old:
@@ -705,6 +730,67 @@ def settings(text):
     return state
 
 
+def frame_windows(job, plan):
+    """Set sample counts before estimating seconds; FPS never selects a count."""
+    for target in [job] + job.get("live_flow", {}).get("segments", []):
+        values = settings(target.get("set", ""))
+        if int(values.get("rt_stats_period_frames", 0)) <= 0:
+            values["rt_stats_period_frames"] = "60"
+        target["set"] = ",".join(k+"="+v for k,v in values.items())
+    # Producer sample counts are structural gates, not independent statistical
+    # repeats. One reset-aligned period is sufficient unless a derivation names
+    # a larger sample_frames floor. Keep capture/event counts untouched.
+    for gate in job.get("expect_every", []):
+        if not gate.get("event") and int(gate.get("min", 1)) > 0 and not gate.get("trend") and not gate.get("sample_frames"):
+            gate["min"] = 1
+    def cadence_regex(value):
+        if isinstance(value, str):
+            return re.sub(r"(?<![\d])(?:120|300|600)(?= frames)", r"\\d+", value)
+        if isinstance(value, list):
+            return [cadence_regex(x) for x in value]
+        if isinstance(value, dict):
+            return {k: cadence_regex(v) if k in {"select", "match", "required_if", "wait_log", "wait_log_fresh", "expect", "patterns", "expect_every"} else v for k,v in value.items()}
+        return value
+    for key in ("expect", "patterns", "expect_every"):
+        if key in job:
+            job[key] = cadence_regex(job[key])
+    for phase in plan:
+        for key in ("wait_log", "wait_log_fresh"):
+            if key in phase:
+                phase[key] = cadence_regex(phase[key])
+    states = phase_states(job, plan)
+    for phase, state in zip(plan, states):
+        label = phase.get("label", "")
+        gates = [g for g in job.get("expect_every", []) if label in g.get("windows", [])
+                 and native_period(g, state, 30) is not None and int(g.get("min", 1)) > 0]
+        if not gates:
+            if label.rsplit("--", 1)[-1].startswith("settle"):
+                frames = 32
+                if state.get("rr_post_temporal") == "1":
+                    frames = max(frames, math.ceil(math.log(1/1024)/math.log(15/16)))
+                phase.update(frames=frames, settle_frames=0, stats_reset=True, wait_stats=[])
+                phase["wait_log_timeout"] = max(30, float(phase.get("wait_log_timeout", 0)))
+                phase["seconds"] = round(frames/fps_windows.expected(job, state)["fps"], 3)
+            continue
+        period_frames = int(state.get("rt_stats_period_frames", 60))
+        # Legacy settle_s was authored against the 30 FPS runner cap. Translate
+        # it once at that fixed reference, never with a scene's measured FPS.
+        settle = max([int(g.get("settle_frames", math.ceil(float(g.get("settle_s", 0))*30))) for g in gates] or [0])
+        samples = max([int(g.get("sample_frames", 0)) for g in gates] or [0])
+        if samples > period_frames:
+            period_frames = samples
+            values = settings(phase.get("set", ""))
+            values["rt_stats_period_frames"] = str(period_frames)
+            phase["set"] = ",".join(k+"="+v for k,v in values.items())
+        frames = settle + period_frames * max(int(g.get("min", 1)) for g in gates)
+        phase.update(frames=frames, settle_frames=settle, stats_reset=True,
+                     wait_stats=list(dict.fromkeys(g["select"] for g in gates if not g.get("when_present") and not g.get("required_if"))))
+        phase["wait_log_timeout"] = max(30, float(phase.get("wait_log_timeout", 0)))
+        # This is only a watchdog/cap estimate. The runner ends on frame count.
+        fps = fps_windows.expected(job, state)["fps"]
+        phase["seconds"] = round(frames/fps + len(phase.get("trace_at", []))*capture_stall(job.get("live_flow", {})), 3)
+
+
 def retime(job, plan):
     """One regeneration path for generators and the offline CLI."""
     job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
@@ -714,6 +800,7 @@ def retime(job, plan):
         job["live_flow"]["trace_capture_stall"] = dict(TRACE_STALL)
         for segment in job["live_flow"].get("segments", []):
             segment.setdefault("live_flow", {})["trace_capture_stall"] = dict(TRACE_STALL)
+    frame_windows(job, plan)
     pipeline_readiness.apply(job, plan)
     changes = tighten(job, plan)
     for phase, state in zip(plan, phase_states(job, plan)):
