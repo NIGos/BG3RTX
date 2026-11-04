@@ -81,7 +81,7 @@ def main(log, runner_path, plan_path, out):
   for k in ('depth','final','rr_post_ac','rr_post_eb'):
    b[k]=[translate(b[k][i],ef.scaled_shift(tuple(-v for v in r['frames'][i]['shift_px']),depth[0].shape,b[k][i].shape[:2])) for i in keep]
   for k in ('material','albedo'):b[k]=[translate(b[k][j],tuple(-v for v in r['frames'][i]['shift_px'])) for j,i in enumerate((0,7)) if i in keep]
-  files=sorted(paths[l]['presented'].glob('p*.png'));assert len(files)==8 and [int(p.stem[1:]) for p in files]==list(range(int(files[0].stem[1:]),int(files[0].stem[1:])+8));consumed.extend(map(str,files))
+  files=sorted(paths[l]['presented'].glob('p*.png'),key=lambda p:int(p.stem[1:]));assert len(files)==8 and [int(p.stem[1:]) for p in files]==list(range(int(files[0].stem[1:]),int(files[0].stem[1:])+8));consumed.extend(map(str,files))
   p=[np.asarray(Image.open(f).convert('RGB'),dtype='f4')/255 for f in files];pres[l]=p
   try:keep,pr=ef.registered_run(pres[anchor][0],p);pregs[l]=pr;pres[l]=ef.aligned_frames(p,pr)
   except ValueError as e:
