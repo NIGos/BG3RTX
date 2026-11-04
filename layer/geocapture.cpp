@@ -1101,28 +1101,37 @@ bool ubo_pipeline() {
   if (!g_dd->vk.CmdPushDescriptorSet) return false;
   Bg3ShaderBlob blob{};
   if (!shader_get("geo_ubo_copy.hlsl", "main", "cs_6_0", &blob)) return false;
+  auto failed = [&]() {
+    if (g_ubo_pipe) g_dd->vk.DestroyPipeline(g_dd->device, g_ubo_pipe, nullptr);
+    if (g_ubo_pl) g_dd->vk.DestroyPipelineLayout(g_dd->device, g_ubo_pl, nullptr);
+    if (g_ubo_dsl) g_dd->vk.DestroyDescriptorSetLayout(g_dd->device, g_ubo_dsl, nullptr);
+    g_ubo_pipe = VK_NULL_HANDLE;
+    g_ubo_pl = VK_NULL_HANDLE;
+    g_ubo_dsl = VK_NULL_HANDLE;
+    return false;
+  };
   VkDescriptorSetLayoutBinding b[2] = {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
                                        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
   VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
   dci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
   dci.bindingCount = 2;
   dci.pBindings = b;
-  if (g_dd->vk.CreateDescriptorSetLayout(g_dd->device, &dci, nullptr, &g_ubo_dsl) != VK_SUCCESS) return false;
+  if (g_dd->vk.CreateDescriptorSetLayout(g_dd->device, &dci, nullptr, &g_ubo_dsl) != VK_SUCCESS) return failed();
   VkPipelineLayoutCreateInfo pci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   pci.setLayoutCount = 1;
   pci.pSetLayouts = &g_ubo_dsl;
-  if (g_dd->vk.CreatePipelineLayout(g_dd->device, &pci, nullptr, &g_ubo_pl) != VK_SUCCESS) return false;
+  if (g_dd->vk.CreatePipelineLayout(g_dd->device, &pci, nullptr, &g_ubo_pl) != VK_SUCCESS) return failed();
   VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   mci.codeSize = blob.size_bytes;
   mci.pCode = blob.code;
   VkShaderModule mod = VK_NULL_HANDLE;
-  if (g_dd->vk.CreateShaderModule(g_dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return false;
+  if (g_dd->vk.CreateShaderModule(g_dd->device, &mci, nullptr, &mod) != VK_SUCCESS) return failed();
   VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   ci.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main"};
   ci.layout = g_ubo_pl;
   VkResult r = g_dd->vk.CreateComputePipelines(g_dd->device, VK_NULL_HANDLE, 1, &ci, nullptr, &g_ubo_pipe);
   g_dd->vk.DestroyShaderModule(g_dd->device, mod, nullptr);
-  if (r != VK_SUCCESS) g_ubo_pipe = VK_NULL_HANDLE;
+  if (r != VK_SUCCESS) return failed();
   log("[geo] camera UBO copy pipeline %s", g_ubo_pipe ? "built" : "FAILED");
   return g_ubo_pipe != VK_NULL_HANDLE;
 }

@@ -40,17 +40,27 @@ and `docs/evidence/native-hit-tileset-20261031.md` document the supported paths.
 Capture: post-VS clip/UV/COLOR plus basis (80 bytes, or existing Hair 88), native
 Green alpha and owned samplers for depth; nine real 2D views and tilings for the
 STI hit-material recipe. Runtime proof is `[alpha tileset] records complete > 0,
-unknown 0, capture-incomplete 0` and `hit material tileset: qualified family2 > 0;
-native primary matches > 0`. Unknown/incomplete are the capture-invalid indicators;
-there is no log field literally called "invalid Tileset records".
-Both producers run every 120 frames (`alphatest.cpp:1351`, `core/gi.cpp:1717`).
+capture-incomplete 0` (report unknown count) and `hit material tileset: qualified family2 > 0;
+native primary matches > 0`. The ON diagnostic sets `rt_debug=9` with
+`rt_stats=1`: only that debug dispatch writes the participation counters
+(`core/gi.cpp:3541`). Cost, shot and restore windows explicitly reset `rt_debug=0`.
+Unknown counts kind 5 records with nonzero completeness status (`alphatest.cpp:1352`):
+missing inputs, nonfinite values or unsupported SeeThrough modes. These keep
+UNKNOWN/aborted query fallback (`rt_common.hlsli`); they are reported, not gated
+as a capture loss. The separate capture-incomplete bit still must be zero.
+The layer record snapshot runs every 120 frames (`alphatest.cpp:1351`);
+core statistics use the job's reset-aligned producer period.
 Coverage reports include overall material qualified/attempted and hybrid GI shares.
 No threshold or direction for overall coverage/energy is invented.
 
 Warmup, warmed float capture control, diagnostic interval, capture-free RT/GI cost
 interval, one static trace and restoration. Shared flow retimes all producer
-windows. Two traces total form the PNG pair. Estimated plans: 99.6 seconds each;
-with 120 seconds load each: 7.32 minutes total, 3.66 per launch. Fallback replaces
+windows with a stats reset at motion-ready and one acknowledged period. The
+analyzer uses `queue_gates.complete_period_lines` for costs and coverage, so it
+accepts that first complete period and skips the first straddling legacy line.
+OFF 175623 already had RT 9.242 ms / GI 11.583 ms in its 60-frame cost period;
+the old unconditional `[1:]` discarded both and emptied diagnostic coverage. Two traces total form the PNG pair. Lint estimates 56.5 seconds each after load;
+with 120 seconds load each: 5.88 minutes total, 2.94 per launch. Fallback replaces
 the requested one-launch six-minute budget. Each launch has a hard 4.9-minute
 cap including load; slow cold compilation may therefore invalidate it.
 Dry-run disk estimate: 140 MB, no bursts/raw attachments.
@@ -80,3 +90,5 @@ python tools/live_batches/tileset_qual/analyze.py --compare <off.tileset.json> <
 
 No pending inbox is written. Historical replay has no ON Tileset evidence;
 successful lint/dry-run is preparation only. No release promotion is implied.
+
+Final outcome (2026-11-04): hidden and off, deferred after release. OFF VALID: RT 9.92 ms, GI 12.03 ms, float mean 0.295. ON INVALID twice: missing debug dispatch, then pipeline still building in the 60-frame diagnostic window. Complete records 19, unknown 33, capture-incomplete 0; cross-launch qualified hits 13.06 M -> 10.57 M, row rejects +6.3 M. No coverage gain is claimed. See [Tileset outcome](../../../docs/TRACK_D_SCENE_BUILD.md#native-tilesets-qualification-outcome-2026-11-04).

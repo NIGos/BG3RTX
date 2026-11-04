@@ -33,6 +33,8 @@ int main() {
   check(!parse_index_line("# comment", &e) && !parse_index_line("", &e), "comments and blank lines skipped");
   check(!parse_index_line("10 3e840000 3db00000 3c000000", &e), "short line rejected");
   check(!parse_index_line("10 1 2 3 4 ..\\x.vtalpha", &e) && !parse_index_line("10 1 2 3 4 c:x.vtalpha", &e), "paths rejected");
+  check(parse_index_line("10 1 2 3 4 " + std::string(259, 'a'), &e) && e.file.size() == 259,
+        "maximum index filename fits with its terminator");
 
   Mask m;
   auto d = file(512, 512, 3);

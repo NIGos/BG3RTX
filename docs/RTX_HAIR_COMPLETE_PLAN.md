@@ -14,6 +14,8 @@ Design detail stays in RTX_HAIR_PRIMARY.md, RTX_HAIR_ROADMAP.md and RTX_HAIR_INT
 - Gates are derived, never loosened without a reason derived from the data.
 
 ## Where it stands (updated 2026-11-04; this plan is the source of truth)
+
+2026-11-04: hv9 hair visual is in progress; strands remain a post-release Experimental update by user decision. Stock visible hair ships.
 Closure-plan steps (RTX_HAIR_PRIMARY.md section 8) inside the milestones: C1 = M0, C2 = M2.1, C3 = M3.1-3.3,
 C4 = M4.1, C5 = M1 (+ M7 content), C6 = M5, C7 = M8.
 

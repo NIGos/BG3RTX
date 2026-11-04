@@ -216,7 +216,7 @@ not made, endorsed or supported by NVIDIA or Larian Studios.
   no claim is made that NVIDIA or Vulkan licences cover Microsoft's runtime.
 - `data/assetdb/bg3rtx_assetdb.bin` contains lighting/material/roof data derived from the
   game's files. No third-party SDK licence here grants rights to redistribute game data.
-  The package script currently copies this database; game-data release policy is a separate open item.
+  The package script copies this database. User decision 2026-11-04: the release ships the game-derived asset database (8 MB) at the user's own risk on game-data rights; this supersedes the 2026-11-02 plan to generate it on the player's PC.
 
 ## Packaging audit update (2026-11-04)
 

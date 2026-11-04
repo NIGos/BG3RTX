@@ -49,7 +49,58 @@ static int g_fail = 0;
     }                                                               \
   } while (0)
 
-int main() {
+int main(int argc, char** argv) {
+  if (argc == 3 && (std::string(argv[1]) == "--expect-invalid" || std::string(argv[1]) == "--expect-valid")) {
+    SetEnvironmentVariableA("BG3RTX_ASSETDB", argv[2]);
+    return bg3::assetdb_api()->available() == (std::string(argv[1]) == "--expect-valid") ? 0 : 1;
+  }
+  if (argc == 2 && std::string(argv[1]) == "--malformed") {
+    // Minimal valid file and overflow/truncation mutations. Each process gets a fresh lazy loader.
+    std::vector<unsigned char> valid(97, 0);
+    memcpy(valid.data(), "BG3RTXDB", 8);
+    auto put = [](std::vector<unsigned char>& b, size_t at, uint64_t v, size_t n) {
+      memcpy(b.data() + at, &v, n);
+    };
+    put(valid, 8, 1, 4); put(valid, 12, 64, 4); put(valid, 16, 1, 4);
+    put(valid, 24, 64, 8); put(valid, 32, valid.size(), 8);
+    memcpy(valid.data() + 64, "STRS", 4); put(valid, 72, 96, 8); put(valid, 80, 1, 8);
+    char temp[MAX_PATH], file[MAX_PATH];
+    CHECK(GetTempPathA(MAX_PATH, temp));
+    CHECK(GetTempFileNameA(temp, "adb", 0, file));
+    for (unsigned test = 0; test < 8; ++test) {
+      auto bytes = valid;
+      switch (test) {
+        case 0: put(bytes, 24, UINT64_MAX - 15, 8); break; // TOC sum wraps
+        case 1: put(bytes, 24, 98, 8); break; // offset past EOF
+        case 2: put(bytes, 72, UINT64_MAX, 8); put(bytes, 80, 2, 8); break;
+        case 3: put(bytes, 72, 98, 8); break;
+        case 4: memcpy(bytes.data() + 64, "LVLS", 4);
+                put(bytes, 72, UINT64_MAX - 3, 8); put(bytes, 80, 80, 8);
+                put(bytes, 88, 1, 4); put(bytes, 92, 80, 4); break;
+        case 5: put(bytes, 80, 0, 8); break; // empty strings
+        case 6: bytes.back() = 'x'; break; // missing terminator
+      }
+      FILE* f = fopen(file, "wb");
+      CHECK(f);
+      if (!f) break;
+      CHECK(fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size());
+      CHECK(fclose(f) == 0);
+      std::string cmd = "\"" + std::string(argv[0]) + "\" " + (test == 7 ? "--expect-valid" : "--expect-invalid") + " \"" + file + "\"";
+      STARTUPINFOA si{}; si.cb = sizeof si;
+      PROCESS_INFORMATION pi{};
+      const bool started = CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                                          CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi) != FALSE;
+      CHECK(started);
+      if (started) {
+        CHECK(WaitForSingleObject(pi.hProcess, 30000) == WAIT_OBJECT_0);
+        DWORD code = 1; CHECK(GetExitCodeProcess(pi.hProcess, &code)); CHECK(code == 0);
+        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+      }
+    }
+    DeleteFileA(file);
+    printf("assetdb: 7 malformed and 1 valid fixture, %d failures\n", g_fail);
+    return g_fail ? 1 : 0;
+  }
   // Through the layer's own lookup: a worktree without data/assetdb uses the main checkout's.
   std::string path = bg3::assetdb_file();
   printf("database: %s\n", path.c_str());

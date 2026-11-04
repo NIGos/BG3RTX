@@ -779,6 +779,8 @@ The log reports `[bvh] last N builds ...` (draws, instances, triangles, refits),
 
 ## Split capture partition spill (2026-10-31, offline candidate)
 
+2026-11-04: Alpha overflow spill REJECTED. as1 S8 15:13 had no overflow in the OFF control (alpha made opaque 0.00); no rescue case.
+
 Key rt_alpha_spill=0 is Experimental and live; OFF in defaults/presets. Existing
 alpha overflow captured a draw as opaque even when the opaque storage range had
 room. Exact triangle-list split captures with a direct record now may use that
@@ -1144,3 +1146,13 @@ BLAS. No pool cap, GPU retirement fence or material coverage changes. Synthetic
 admission tests cover the recorded load scale, exact budget, signed pool cap and
 overflow rejection. Actual Dialogue3 peak, scene continuity and GPU cost need a
 live confirmation; no game launch was performed for this repair.
+
+### Native Tilesets qualification outcome (2026-11-04)
+
+`rt_native_tileset` stays hidden and off for the release. ts1 OFF 18:14 was VALID: RT 9.92 ms, GI 12.03 ms,
+float scene mean 0.295. ON failed twice for test reasons, so the one-rerun rule is spent. The first run had
+no `rt_debug=9`, the only dispatch of `gi/rt_hit_material.hlsl` that writes the Tileset counters (core/gi.cpp:3541).
+The second set it, but the pipeline was still building in the background through the whole 60-frame diag window.
+Records were complete 19, unknown 33, capture-incomplete 0. Cross-launch, ON qualified material hits fell from
+13.06 M to 10.57 M (row rejects +6.3 M). Post-release: let the diag window wait for the pipeline build, then
+explain the row rejects before any coverage claim.

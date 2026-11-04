@@ -13,7 +13,7 @@ import time
 
 from tools.live_batches import live_flow as flow
 
-BATCHES = "smoke_ultra water_surface_fresnel cov_paks_compact post_temporal hair_validation hair_crowd gpu_opt1 gpu_opt2 water_offscreen water_flicker_wf9 edge_flicker combined_20261103".split()
+BATCHES = "smoke_ultra water_surface_fresnel post_temporal hair_validation hair_crowd water_flicker_wf9 edge_flicker".split()
 
 
 def active_paths():

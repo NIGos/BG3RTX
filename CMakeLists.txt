@@ -347,6 +347,10 @@ add_test(NAME alpha_metadata_cache_test COMMAND alpha_metadata_cache_test)
 add_executable(settings_test tests/settings_test.cpp)
 target_compile_definitions(settings_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME settings_test COMMAND settings_test)
+add_executable(launcher_launch_test tools/launcher/launch_test.cpp)
+target_compile_definitions(launcher_launch_test PRIVATE UNICODE _UNICODE)
+target_link_libraries(launcher_launch_test PRIVATE advapi32)
+add_test(NAME launcher_launch_test COMMAND launcher_launch_test)
 add_executable(launcher_ui_state_test tools/launcher/ui_state_test.cpp)
 add_test(NAME launcher_ui_state_test COMMAND launcher_ui_state_test)
 add_executable(launcher_web_bridge_test tools/launcher/web_bridge_test.cpp
@@ -369,7 +373,7 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME launcher_diagnostics_fixtures COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_SOURCE_DIR}/tests/launcher_diagnostics_test.py $<TARGET_FILE:launcher_diagnostics_test>
     ${CMAKE_BINARY_DIR}/launcher-diagnostics-fixtures)
-  foreach(py_test merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom gpu_opt1_water mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_prefetch hair_patterns hair_diagnostic batch_jobs_lint water_surface_shader water_surface_gate)
+  foreach(py_test core_resource_init layer_init_failure recording_lifecycle merge_scope host_atomics_lint queue_gates post_temporal_pair dialogue_pair_registration edge_flicker fold_progress coverage_handling ambient_table m4_promotion_gate m5_promotion_gate gi_hit_invariant gi_far_roof shader_identity shader_cache_key hit_material_blockers roof_cap assets_locate mesh_materials mesh_material_replay_audit hit_material_generated vram_motion_gate package_licences diagnostics_package release_install release_setup reflection_toggle spec_cascade_check char_energy box_lights_art_energy hair_groom gpu_opt1_water mesh_paks_offline mesh_paks_compact live_flow live_guard launcher_ui hair_validation hair_prefetch hair_patterns hair_diagnostic batch_jobs_lint water_surface_shader water_surface_gate)
     add_test(NAME ${py_test}_test COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/${py_test}_test.py
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endforeach()
@@ -382,6 +386,11 @@ add_executable(assetdb_test tests/assetdb_test.cpp layer/assetdb.cpp layer/sebri
 target_include_directories(assetdb_test PRIVATE ${VULKAN_SDK}/Include)
 target_compile_definitions(assetdb_test PRIVATE BG3RTX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME assetdb_test COMMAND assetdb_test)
+add_test(NAME assetdb_malformed_test COMMAND assetdb_test --malformed)
+add_executable(layer_cpu_test tests/layer_cpu_test.cpp)
+add_test(NAME layer_cpu_test COMMAND layer_cpu_test)
+add_executable(resource_retirement_test tests/resource_retirement_test.cpp)
+add_test(NAME resource_retirement_test COMMAND resource_retirement_test)
 # Light BVH for many-light sampling (common/light_tree.h, docs/DESIGN_SOTA_NEXT.md item 1).
 add_executable(light_tree_test tests/light_tree_test.cpp)
 add_test(NAME light_tree_test COMMAND light_tree_test)

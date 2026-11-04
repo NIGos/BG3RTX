@@ -1,4 +1,5 @@
 #include "../common/fg_copy_lease.h"
+#include "../layer/recording_init.h"
 #include <cstdio>
 
 int main() {
@@ -32,5 +33,27 @@ int main() {
   if (!check(slots[1].reusable(true) && !slots[0].reusable(true))) return 1;
   slots[0].presented(43); // retirement of an earlier submitted, unselected copy
   if (!check(!slots[0].reusable(false) && slots[0].reusable(true))) return 1;
+  // A reset/free before submit restores an unused slot or its previous completed layout.
+  FgCopyLease lease, previous;
+  lease.write();
+  if (!check(cancel_recorded_copy(true, lease, previous) && lease.reusable(false))) return 1;
+  previous.write(); previous.presented(12); lease = previous; lease.write();
+  if (!check(cancel_recorded_copy(true, lease, previous) && lease.value == 12 && lease.written)) return 1;
+  lease.write();
+  if (!check(!cancel_recorded_copy(false, lease, previous) && !lease.reusable(true))) return 1;
+  RecordingInit init;
+  if (!check(init.needed(1) && init.available(1))) return 1;
+  init.record(1);
+  if (!check(!init.needed(1) && !init.available(2))) return 1;
+  init.discard(2);
+  if (!check(!init.available(2))) return 1;
+  init.discard(1);
+  if (!check(init.needed(2) && init.available(2) && !init.ready)) return 1;
+  init.record(2); init.submitted(1);
+  if (!check(!init.ready)) return 1;
+  init.submitted(2); init.discard(2);
+  if (!check(init.ready && init.available(3) && !init.needed(3))) return 1;
+  init = {};
+  if (!check(!init.ready && init.needed(3))) return 1;
   return 0;
 }

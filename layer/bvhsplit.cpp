@@ -138,7 +138,12 @@ bool make_buf(Buf& out, VkDeviceSize size, VkBufferUsageFlags usage, bool host, 
     out = Buf{};
     return false;
   }
-  dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if (dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0) != VK_SUCCESS) {
+    dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
+    dd->vk.FreeMemory(dd->device, out.m, nullptr);
+    out = Buf{};
+    return false;
+  }
   out.size = size;
   out.addr = rt_buffer_address(out.b);
   fault_track(what, out.addr, size);

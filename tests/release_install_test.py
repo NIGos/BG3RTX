@@ -34,7 +34,7 @@ class ReleaseInstallTest(unittest.TestCase):
     def manifest(self, files):
         (self.package / 'files.txt').write_text('\n'.join(files), encoding='utf-8')
 
-    def run_script(self, name, *args, success=True):
+    def run_script(self, name, *args, success=True, injection=""):
         # Always run a temporary copy, never an installed or repository script.
         # The user's game may be open. Mock process discovery only in this child
         # shell; the production guard stays intact. All I/O uses temp folders.
@@ -42,7 +42,7 @@ class ReleaseInstallTest(unittest.TestCase):
             return "'" + str(value).replace("'", "''") + "'"
         command = (
             'function Get-Process { [CmdletBinding()] param([string[]]$Name, [int]$Id) '
-            'if ($Id) { Microsoft.PowerShell.Management\\Get-Process -Id $Id } }; & '
+            'if ($Id) { Microsoft.PowerShell.Management\\Get-Process -Id $Id } }; ' + injection + ' & '
             + quote(self.package / name) + ' '
             + ' '.join(str(a) if str(a).startswith('-') else quote(a) for a in args))
         result = subprocess.run(
@@ -91,6 +91,65 @@ class ReleaseInstallTest(unittest.TestCase):
             'bin\\BG3RTX.exe': original, 'retired.txt': b'original retired',
             'unrelated.txt': b'keep', 'bg3rtx_user.ini': b'preset=low'})
         self.assertEqual(self.snapshot(self.game), game_before)
+
+    def test_update_failure_rolls_back_payload_and_metadata(self):
+        self.run_script('install.ps1', *self.install_args())
+        before = self.snapshot(self.install)
+        (self.package / 'bin/BG3RTX.exe').write_bytes(b'updated')
+        # Fail once after earlier replacements, then allow rollback copies.
+        injection = r"""
+        $script:injected=$false
+        function Copy-Item {
+          [CmdletBinding()] param([string]$LiteralPath,[string]$Destination,[switch]$Force)
+          if (-not $script:injected -and $LiteralPath -like '*payload*' -and $Destination -like '*BG3RTX.exe') {
+            $script:injected=$true; throw 'injected payload failure'
+          }
+          Microsoft.PowerShell.Management\Copy-Item @PSBoundParameters
+        }
+        """
+        self.run_script('install.ps1', *self.install_args(), success=False, injection=injection)
+        self.assertEqual(self.snapshot(self.install), before)
+        self.run_script('install.ps1', *self.install_args())
+        self.assertEqual((self.install / 'bin/BG3RTX.exe').read_bytes(), b'updated')
+
+    def test_metadata_failure_restores_old_manifest(self):
+        self.run_script('install.ps1', *self.install_args())
+        before = self.snapshot(self.install)
+        (self.package / 'bin/BG3RTX.exe').write_bytes(b'updated')
+        injection = r"""
+        $script:injected=$false
+        function Set-Content {
+          [CmdletBinding()] param([string]$LiteralPath,[string]$Encoding,[Parameter(ValueFromPipeline=$true)]$Value)
+          process {
+            if (-not $script:injected -and $LiteralPath -like '*.bg3rtx_install') {
+              $script:injected=$true; throw 'injected metadata failure'
+            }
+            Microsoft.PowerShell.Management\Set-Content @PSBoundParameters
+          }
+        }
+        """
+        self.run_script('install.ps1', *self.install_args(), success=False, injection=injection)
+        self.assertEqual(self.snapshot(self.install), before)
+
+    def test_backup_failure_and_interrupted_temp_are_not_adopted(self):
+        (self.install / 'bin').mkdir(parents=True)
+        original = self.install / 'bin/BG3RTX.exe'
+        original.write_bytes(b'original collision')
+        injection = r"""
+        function Copy-Item {
+          [CmdletBinding()] param([string]$LiteralPath,[string]$Destination,[switch]$Force)
+          if ($Destination -like '*.bg3rtx_backup*tmp') {
+            [IO.File]::WriteAllText($Destination,'partial'); throw 'injected backup failure'
+          }
+          Microsoft.PowerShell.Management\Copy-Item @PSBoundParameters
+        }
+        """
+        self.run_script('install.ps1', *self.install_args(), success=False, injection=injection)
+        self.assertEqual(original.read_bytes(), b'original collision')
+        self.assertFalse((self.install / '.bg3rtx_backup/bin/BG3RTX.exe').exists())
+        self.assertFalse((self.install / '.bg3rtx_install').exists())
+        self.run_script('install.ps1', *self.install_args())
+        self.assertEqual((self.install / '.bg3rtx_backup/bin/BG3RTX.exe').read_bytes(), b'original collision')
 
     def test_fresh_install_removes_runtime_files(self):
         self.run_script('install.ps1', *self.install_args())

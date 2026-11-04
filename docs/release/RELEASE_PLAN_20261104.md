@@ -81,7 +81,7 @@ fresh-PC/no-SDK and launch acceptance remain open. Use synthetic save data only.
 
 GPL-3.0-or-later plus the NVIDIA exception is chosen. No NVIDIA notification is
 planned. Microsoft runtime uses static CRT; no VC runtime installer or DLL ships.
-Game-data redistribution rights remain open. No release or upload approval is implied.
+User decision 2026-11-04: the release ships the game-derived asset database (8 MB) at the user's own risk on game-data rights; this supersedes the 2026-11-02 plan to generate it on the player's PC. No release or upload approval is implied.
 Other open decisions: oversized Git blob remedy, remaining backlog deferrals,
 installer lifecycle, ambient ratio 1.44 and remaining water appearance, final archive/upload.
 

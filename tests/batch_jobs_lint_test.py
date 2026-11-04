@@ -13,6 +13,13 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_rejected_scheduling_retired_without_deleting_fixtures(self):
+        from tools.live_batches.regenerate_active import BATCHES
+        from tools.live_batches.combined_20261103.make_jobs import PARTITIONS
+        self.assertFalse(PARTITIONS)
+        self.assertFalse(set(BATCHES) & {'cov_paks_compact', 'gpu_opt1', 'gpu_opt2', 'water_offscreen', 'combined_20261103'})
+        self.assertTrue((ROOT / 'tools/live_batches/combined_20261103/jobs').is_dir())
+
     def test_scene_wait_timeout_gates_exclude_captures_and_diagnostics(self):
         from tools.live_batches.regenerate_active import active_paths
         from scripts.queue_gates import line_matches, SCENE_WAIT_BAD, phase_states, scene_wait_eligible

@@ -21,6 +21,7 @@
 // Every view in a set was bound by the game in the frame the set was written.
 #include "host.h"
 #include "perf_submit.h"
+#include "recording_init.h"
 #include <optional>
 #include "../common/submit_batch.h"
 #include "hit_material.h"
@@ -128,7 +129,7 @@ VkBuffer g_rec_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_rec_mem = VK_NULL_HANDLE;
 struct Img { VkImage image = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; VkDeviceMemory mem = VK_NULL_HANDLE; };
 Img g_dummy2d, g_dummy_arr;
-bool g_dummy_ready = false;
+RecordingInit g_dummy_init, g_vt_upload;
 VkBuffer g_dummy_buf = VK_NULL_HANDLE;
 VkDeviceMemory g_dummy_mem = VK_NULL_HANDLE;
 // Scene stamps (set 1 binding 9, 512 bytes per slot, host-visible): uint 0 the
@@ -731,6 +732,8 @@ void alpha_device_destroyed(DeviceData* dd) {
   g_pool = VK_NULL_HANDLE;
   g_dsl = VK_NULL_HANDLE;
   g_wrap = g_clamp = VK_NULL_HANDLE;
+  g_dummy_init = {}; g_vt_upload = {};
+  std::fill(std::begin(g_set_init), std::end(g_set_init), false);
   g_on = false;
   g_current = -1;
   g_dd = nullptr;
@@ -1179,7 +1182,9 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   const VkDeviceFuncs& vk = g_dd->vk;
   std::lock_guard<std::mutex> lock(g_mu);
   load_table();
-  if (!g_dummy_ready) {
+  const uint64_t recording = cmd_recording(cmd);
+  if (!recording || !g_dummy_init.available(recording) || !g_vt_upload.available(recording)) return VK_NULL_HANDLE;
+  if (g_dummy_init.needed(recording)) {
     VkImageMemoryBarrier ib[2];
     VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     for (int i = 0; i < 2; ++i) {
@@ -1208,10 +1213,10 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0,
                           nullptr, 2, ib);
-    g_dummy_ready = true;
+    g_dummy_init.record(recording);
   }
   if (g_vt_state == 0 && cfg_int("rt_vt_alpha_masks", 0)) g_vt_state = vt_masks_load() ? 1 : -1;
-  if (g_vt_state == 1) { vt_masks_upload(cmd); g_vt_state = 2; }
+  if (g_vt_state == 1 && g_vt_upload.needed(recording)) { vt_masks_upload(cmd); g_vt_upload.record(recording); }
   // Records: a 16-byte header (count) and the records, in this slot's region.
   // The scene slot is retired: the GPU finished every frame that read it
   // (rtscene.cpp). The update is still ordered after earlier reads.
@@ -1762,3 +1767,18 @@ bool alpha_sun_bind_scene(uint32_t slot,VkAccelerationStructureKHR tlas,VkBuffer
 }
 
 }  // namespace bg3
+
+namespace bg3 {
+void alpha_discard_recording(uint64_t recording) {
+  std::lock_guard lock(g_mu);
+  g_dummy_init.discard(recording); g_vt_upload.discard(recording);
+}
+void alpha_submit_recordings(const std::vector<VkCommandBuffer>& cmds) {
+  std::lock_guard lock(g_mu);
+  for (auto cmd : cmds) {
+    const uint64_t recording = cmd_recording(cmd);
+    g_dummy_init.submitted(recording); g_vt_upload.submitted(recording);
+  }
+  if (g_vt_upload.ready && g_vt_state == 1) g_vt_state = 2;
+}
+} // namespace bg3

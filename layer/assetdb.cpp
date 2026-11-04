@@ -244,7 +244,7 @@ bool bind(Db& db, const std::unordered_map<std::string, RToc>& toc, const char* 
   auto it = toc.find(tag);
   if (it == toc.end()) return true;  // an empty section is simply absent
   const RToc& t = it->second;
-  if (t.record_size != rsize || t.offset % 4 || t.offset + t.size > db.bytes.size() ||
+  if (t.record_size != rsize || t.offset % 4 || (t.offset > db.bytes.size() || t.size > db.bytes.size() - t.offset) ||
       uint64_t(t.count) * rsize != t.size) {
     err = std::string("section ") + tag + " has an unexpected layout (rebuild with python -m tools.assets build)";
     return false;
@@ -278,7 +278,7 @@ std::unique_ptr<Db> load(std::string& err) {
   memcpy(&h, db->bytes.data(), sizeof h);
   if (memcmp(h.magic, "BG3RTXDB", 8) != 0) return err = "not an asset database", nullptr;
   if (h.version != 1) return err = "format version " + std::to_string(h.version) + " (this layer reads 1)", nullptr;
-  if (h.file_size != db->bytes.size() || h.toc_offset + uint64_t(h.section_count) * sizeof(RToc) > h.file_size)
+  if (h.file_size != db->bytes.size() || (h.toc_offset > h.file_size || uint64_t(h.section_count) * sizeof(RToc) > h.file_size - h.toc_offset))
     return err = "truncated", nullptr;
   std::unordered_map<std::string, RToc> toc;
   for (uint32_t i = 0; i < h.section_count; ++i) {
@@ -298,7 +298,7 @@ std::unique_ptr<Db> load(std::string& err) {
             bind(*db, toc, "ESHD", sizeof(REsh), db->esh, err);
   if (!ok) return nullptr;
   auto s = toc.find("STRS");
-  if (s == toc.end() || s->second.offset + s->second.size > db->bytes.size() || s->second.size == 0 ||
+  if (s == toc.end() || (s->second.offset > db->bytes.size() || s->second.size > db->bytes.size() - s->second.offset) || s->second.size == 0 ||
       db->bytes[s->second.offset + s->second.size - 1] != 0)
     return err = "string section missing or unterminated", nullptr;
   db->strs = reinterpret_cast<const char*>(db->bytes.data() + s->second.offset);

@@ -1,5 +1,5 @@
 #pragma once
-// M5.3 water composition (docs/PLAN_M5_WATER.md M5.3, rt_water_compose, default 0): what the
+// M5.3 water composition (docs/PLAN_M5_WATER.md M5.3, rt_water_compose, on in release presets): what the
 // layer (layer/water.cpp) and the core (core/water.cpp, shaders/rt/water_compose.hlsl) share.
 //
 // The capture ("the minimal extra copy"): the factors of the probe term are not reconstructable

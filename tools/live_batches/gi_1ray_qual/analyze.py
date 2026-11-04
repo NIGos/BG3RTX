@@ -1,8 +1,10 @@
 """Thin adapters to existing energy and QA temporal gates. Never controls the game."""
 import argparse
+from copy import copy
 import json
 from pathlib import Path
 import re
+import statistics
 
 import numpy as np
 from scripts import queue_gates as gates
@@ -12,6 +14,41 @@ from tools.live_batches.edge_flicker.analyze import burst, aligned_frames
 from tools.live_batches.edge_flicker.drift import register_window, translate
 from tools.live_batches.sharc_far.rays_flicker import frames, traces
 from tools.live_batches.gi_1ray_qual.make_job import HERE, STATES
+
+
+def float_samples(run, phase):
+    """Select each trace independently, but resolve exposure from the full log."""
+    p = run.phase_of(phase)
+    reader = copy(run)
+    reader.pre_exposure = run.pre_exposure
+    values = []
+    for line in run.lines:
+        t, txt = line
+        if not (p[1] <= t < p[2] and m4.TRACE.search(txt)):
+            continue
+        reader.lines = [line]
+        v = reader.scene_colour(phase)
+        if not v or isinstance(v[0], str) or v[1] or not v[2] or v[0] <= 0 or not np.isfinite([v[0], v[2]]).all():
+            raise ValueError(phase+': missing/nonfinite float colour or exposure')
+        values.append(v)
+    if len(values) != 3:
+        raise ValueError(phase+': missing float sample')
+    return values
+
+
+def trace_costs(lines, windows):
+    """Use the same reset-aware complete periods as the every-window gates."""
+    rx, group = m4.COST['gi: trace pass']
+    picked = [(t, txt) for t, txt in lines if rx.search(txt)]
+    cost = {}
+    for label, _ in STATES:
+        win = next(w for w in windows if w['label'] == 'cost-'+label)
+        values = [float(rx.search(txt).group(group))
+                  for txt in gates.complete_period_lines(picked, win)]
+        if not values:
+            raise ValueError(label+': missing per-state GI trace GPU timing')
+        cost[label] = statistics.median(values)
+    return cost
 
 
 def temporal_rule(sets, moving):
@@ -50,7 +87,6 @@ def analyze(log, captures_root=None):
 
     static = {}; all_frames = []
     samples = {}
-    original = run.scene_colour
     for label, _ in STATES:
         phase = 'shot-rays-'+label
         paths = traces(run, phase)
@@ -62,20 +98,7 @@ def analyze(log, captures_root=None):
         static[label] = [f.final_code() for f in fs]
         all_frames += fs
         # Keep the existing float dump selection/exposure reader, for every trace.
-        p = run.phase_of(phase)
-        selected = [(t, txt) for t, txt in run.lines if p[1] <= t < p[2] and m4.TRACE.search(txt)]
-        values = []
-        saved = run.lines
-        for line in selected:
-            run.lines = [line]
-            v = original(phase)
-            if not v or isinstance(v[0], str) or v[1] or not v[2] or v[0] <= 0 or not np.isfinite([v[0], v[2]]).all():
-                raise ValueError(phase+': missing/nonfinite float colour or exposure')
-            values.append(v)
-        run.lines = saved
-        if len(values) != 3:
-            raise ValueError(phase+': missing float sample')
-        samples[phase] = values
+        samples[phase] = float_samples(run, phase)
     # Existing energy gate on means of ALL three normalized float observations.
     run.scene_colour = lambda label: (float(np.mean([v[0]/v[2] for v in samples[label]])), 0, 1.0, {})
     energy = m4.energy(run, pool='run')
@@ -84,6 +107,11 @@ def analyze(log, captures_root=None):
     moving = det.animated([f.albedo() for f in all_frames], [f.sun_mask() for f in all_frames],
                           static['off-a'][0].shape[:2], [f.normal() for f in all_frames])
     static_result = temporal_rule(static, moving)
+    cost = trace_costs(run.lines, windows)
+    baseline = (cost['off-a']+cost['off-b'])/2
+    saving = {label: baseline-cost[label] for label in ('on-a','on-b')}
+    evidence = dict(energy=energy, float_samples=samples, static=static_result,
+                    gi_trace_ms=cost, saving_ms=saving)
 
     # K8 edge decoder + existing integer registration. No smoothing/optical flow.
     pans = {}; registrations = {}; support = None; albedos = []
@@ -106,7 +134,11 @@ def analyze(log, captures_root=None):
         h,w = anchor.shape[:2]
         config = dict(roi_extent=(w,h), subtitle_top=h,
                       rois=dict(rigid_control=(0,0,w,h)))
-        keep, reg = register_window(anchor, data['codes'], config)
+        try:
+            keep, reg = register_window(anchor, data['codes'], config)
+        except ValueError as e:
+            return dict(status='INVALID', reason=label+': '+str(e),
+                        pan=dict(status='INVALID', window=label, reason=str(e)), **evidence)
         # Require all eight motion samples; do not silently select a quieter subset.
         if keep != list(range(8)):
             raise ValueError(label+': incomplete pan registration')
@@ -129,16 +161,9 @@ def analyze(log, captures_root=None):
     for label in pans:
         pans[label] = [np.nan_to_num(c) for c in pans[label]]
     pan_result = temporal_rule(pans, ~support | det.animated(albedos, [], support.shape))
-    timed = {label: run.cost('cost-'+label).get('gi: trace pass') for label,_ in STATES}
-    if any(v is None for v in timed.values()):
-        raise ValueError('missing per-state GI trace GPU timing')
-    cost = {label: value[0] for label,value in timed.items()}
-    baseline = (cost['off-a']+cost['off-b'])/2
-    saving = {label: baseline-cost[label] for label in ('on-a','on-b')}
     ok = all(r['ok'] for r in energy) and static_result['ok'] and pan_result['ok'] and min(saving.values()) > 0
-    return dict(status='PASS' if ok else 'FAIL', energy=energy, float_samples=samples,
-                static=static_result, pan=pan_result, registration=registrations,
-                gi_trace_ms=cost, saving_ms=saving)
+    return dict(status='PASS' if ok else 'FAIL', pan=pan_result,
+                registration=registrations, **evidence)
 
 
 def main():

@@ -224,6 +224,12 @@ core only with the key on: key off runs the unchanged `gi_hit_direct` SPIR-V.
 
 ## Far-field sun bounce (`gi_far=0`, `gi_far_m=6`, 2026-11-01; live S8 energy gate failed, kept off)
 
+2026-11-04 outcomes. One-ray Ultra GI (`ultra-gi-1ray`, gi1 live 17:48, all 16 window gates OK): GI trace
+6.74/4.71/9.22/4.48 ms (OFF-a/ON-a/OFF-b/ON-b), saving 3.27/3.50 ms. Float energy ON -7.8%/+3.9%, inside the
+OFF repeat spread 11.6%. Static flicker: ON-a passes, ON-b fails against both OFF repeats (PQ std excess
+0.0032/0.0022 > 0.00098). Pan registration unavailable. Rejected for Ultra: quality before frame rate; Ultra keeps
+two rays. Roof-leak fix (`2aa9d0f3`) kept: rel1 17:52 VALID, GI 11.46 ms vs 11.97 ms before, no measurable cost.
+
 Key `gi_far` (live; GUI Experimental "Far-field sun bounce" off / 4 / 6 / 8 m, needs `exp_gi_hit_sun`).
 Variant: request flag `kGiFar` adds `RT_GI_FAR=1` to the four gi_hit_sun files only (common/shader_variant.h);
 key off runs the unchanged SPIR-V (all 368 existing gi_trace_rt* requests byte-identical, checked). The rule is
@@ -438,6 +444,8 @@ along the view ray by at most
 
 ### gpu-opt1: exact state and immutable metadata candidate (2026-11-03)
 
+2026-11-04: Three GPU candidates REJECTED by the image gate: compact hit state / alpha metadata cache / empty water tiles saved 0.53/0.11/0.19 ms; no release promotion.
+
 `rt_compact_hit_state` is off by default (specialization constant 1024). Closest-hit
 transform retrieval moves after traversal, groom selection and barycentric extraction.
 Only proven non-pool instances omit the query transform: every transform consumer
@@ -456,6 +464,8 @@ GPU fixtures: lit/dark GI, 4,096 rigidly transformed pool hits and real solid/cl
 Key-off gate: all 173 requests/194 entries match HEAD after specialization; SPIR-V validation passes. GPU ms remain unmeasured. Camp/S8 live drafts and the static identity analyzer are in `tools/live_batches/gpu_opt1`.
 
 ## Lower-preset spatial budget (gpu-opt2, 2026-11-03)
+
+2026-11-04: Medium Half is not shipped: about 0.25 ms saving without quality acceptance. Full trace resolution remains selected everywhere; this supersedes the candidate defaults below.
 `rt_trace_scale` is 0.5 in Low/Medium, 1.0 in High/Ultra. High is unchanged because
 PERF_AUDIT_GPU supplies an experiment, not quality evidence for promoting half resolution.
 Low preserves its 2-ray screen-space path; RR half-grid GI uses 1 spp, current-sample temporal
