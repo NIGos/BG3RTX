@@ -74,7 +74,11 @@ float4 tex(Texture2D<float4> t, float2 uv, float2 dx, float2 dy) { return t.Samp
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
 Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD0,
-         [[vk::location(2)]] float4 aux : TEXCOORD2) {
+         [[vk::location(2)]] float4 aux : TEXCOORD2,
+         [[vk::location(3)]] float3 card_normal : TEXCOORD3,
+         [[vk::location(4)]] float3 card_bitangent : TEXCOORD4,
+         [[vk::location(5)]] float3 card_tangent : TEXCOORD5,
+         bool front : SV_IsFrontFace) {
   Out o = (Out)0;
   // Every discard returns at once: DXC lowers discard to OpDemoteToHelperInvocation, and a demoted lane keeps
   // executing, so a load after a failed bound check still ran with its garbage index (hv8 2026-11-04 Aftermath: page
@@ -107,7 +111,17 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint64_t marker = marker_pixels + uint64_t(width) * height * 16u +
                           uint64_t(marker_index) * 8u;
   const uint packed_marker = (tag << 8u) | kDrawSlot;
-  vk::RawBufferStore<uint>(marker, packed_marker, 4);
+  // Native prepass alpha (5a03e5b6): combined masks at the card UV, m8 = 0, m9 = 1.
+  const float card_noise = tex(gNoise, card_uv * F(5u), dx * F(5u), dy * F(5u)).x * 2.0 - 1.0;
+  const float4 card_ma = tex(gMask, card_uv + card_noise * F(7u), dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
+  const float4 card_mb = tex(gMask, card_uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
+  const float4 card_M = max(sign(card_ma), sign(card_mb)) * max(abs(card_ma), abs(card_mb)) + float4(0.5, 0.0, 0.0, 0.0);
+  const float3 card_n = card_normal * (front ? 1.0 : -1.0);
+  const float3x3 card_basis = float3x3(card_tangent, card_n, card_bitangent);
+  const float3 card_to_cam = normalize(mul(normalize(mul(card_basis, -dir)), card_basis));
+  const float grazing = saturate(abs(dot(card_to_cam, normalize(card_n))) * 5.0);
+  if (hp_tips_keep(card_M.w * grazing, pos.xy, tag, aux.x))
+    vk::RawBufferStore<uint>(marker, packed_marker, 4);
   float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
   if (!hp_rebase(rec, gCam.position, org)) { discard; return o; }
   const uint64_t pool = addr2(ld2(rec + 24u)), pixels = addr2(ld2(rec + 32u));

@@ -1,0 +1,13 @@
+## Hair coverage: depth latch epoch, alpha-tested card pixels (branch claude-hair-orphan-alpha, READY_FOR_LIVE, 2026-11-04)
+- Depth obligations now span a prepass epoch, independent of present/frame numbering.
+- Only a G-buffer pass permits the next epoch; sibling fallback and failed-key handling are retained.
+- Unit regressions replay prepass F / G-buffer F+1 and both at F: refusal takes fallback, zero orphans.
+- Repeated prepasses retain obligations; a genuinely unresolved epoch counts one orphan once.
+- Card markers require the native combined-mask alpha test at card UV, with grazing and existing dither.
+- Marker placement remains before strand rejection; strand shading and acceptance are unchanged.
+- Shader request delta: 0; only rt/hair_primary_gbuffer.hlsl changed, no ordinary shader/include edits.
+- Validation: build.ps1 -Test passed; all 149 CTests passed (334.49 s), including both recording orders.
+- G-buffer and count shader requests compiled and passed spirv-val: 2/2, zero failures.
+- The first suite hit an unwritable shared shader cache; rerun passed with BG3RTX_SHADER_CACHE=build/shader_cache.
+- Live quality and GPU cost unmeasured. No game launch, commit or git metadata modification.
+- In the next authorized hv7 close-up A/B, check fallback/orphans and per-key accepted/card coverage.

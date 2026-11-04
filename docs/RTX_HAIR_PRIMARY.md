@@ -244,15 +244,17 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   `key:accepted/card=latest,swapped_frames,used=min..max` for all successful pass decisions. Every
   swapped key also has an untruncated `coverage used` line with its ratio range and decision count. New failed
   evidence prevents subsequent swaps; old late successes cannot replace it. Probes continue with cards.
-- A frame/key latch records dropped prepass depth. Refused G-buffer strands use a native-material fallback
-  with reversed-Z GREATER_OR_EQUAL plus depth writes, including when the applied header loses the key.
-  All sibling draws retain the depth obligation through that frame. Only keys with a known fallback may
+- A prepass epoch/key latch records dropped depth; only a G-buffer pass permits the next epoch. Refused G-buffer
+  strands use a native-material fallback with reversed-Z GREATER_OR_EQUAL plus depth writes, including when the header loses the key.
+  All sibling draws retain the depth obligation through that epoch. Only keys with a known fallback may
   drop prepass depth. Remaining unresolved obligations are true orphans in the existing 300-frame log;
   the coverage line also reports native depth fallback draws. Synthetic ordering tests cover delayed
   readback, ambiguity, failed coverage, fallback and zero orphans on the supported path.
 - Offline validation: final build and all 149 CTests passed, including host atomics lint and the corrected
   prepass -> G-buffer -> delayed-publish ordering regression. Revision CTests took 121.24 s. G-buffer, velocity and count requests
   compiled and passed spirv-val (3/3; 2 rebuilt, velocity cached); no shared shader include changed. Cache: worktree build/shader_cache.
+- Card markers use the native prepass dithered alpha test at card UV, including combined masks and grazing.
+  Transparent card pixels are excluded before strand rejection, matching the bound's composited-opacity basis.
 - Derived bound: `kCoverMin = 0.8913102349775665`. The unchanged batch-4 state has 877 passing styles
   (2,631 front/side/back views). It stores rounded `coverage_delta = mean(strands) - mean(cards)`, not ratios.
   `tools.hair_groom.coverage_bound` regenerates only opacity from the existing groom/card cache and DDS masks;
