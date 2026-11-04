@@ -46,7 +46,7 @@ def make():
             pixels_per_second=1, motion_start=0, motion_end=3,
             capture_at=.2, serial=serial,
             registration_policy='per-frame-exclude-unregistered')
-        step('return-'+label, 3, pan_capture=0).update(
+        step('return-'+label, 3, qa_exposure_hold=1, pan_capture=0).update(
             kind='rotate', speed='slow', turn_mode='keys', direction=1,
             pixels_per_second=1, motion_start=0, motion_end=3)
         every.append(dict(name='K8 '+label, select=rf'\[pan\] burst {serial} complete',
