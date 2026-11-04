@@ -10,7 +10,8 @@ Compatibility assess_compatibility(const GraphicsInspection& probe, int selected
   if (!probe.error.empty() || probe.adapters.empty()) return c;
   if (selected < 0 && probe.adapters.size() == 1) selected = 0;
   if (selected < 0 || size_t(selected) >= probe.adapters.size()) {
-    c.adapter_text = "Choose the GPU used by the game.";
+    c.hardware_text = "Several GPUs found. Choose the one the game uses under Game and graphics.";
+    c.driver_text.clear();
     return c;
   }
   const auto& a = probe.adapters[selected];
@@ -22,10 +23,10 @@ Compatibility assess_compatibility(const GraphicsInspection& probe, int selected
     c.hardware_text = "Hardware ray tracing unavailable. Use Low.";
   } else if (!(c.caps & bg3::settings::kCapDlss)) {
     c.hardware = CheckState::Warning;
-    c.hardware_text = "DLSS requires a compatible NVIDIA RTX GPU. Ray tracing on other GPUs is untested; use Low.";
+    c.hardware_text = "DLSS needs an NVIDIA RTX GPU. BG3RTX is tested only on an RTX 5090; on this GPU use Low.";
   } else {
     c.hardware = CheckState::Supported;
-    c.hardware_text = "RTX ray tracing detected. Compatibility testing is incomplete.";
+    c.hardware_text = "RTX ray tracing detected. BG3RTX is tested only on an RTX 5090; other RTX GPUs are untested.";
   }
   if (!a.driver_version.empty()) {
     c.driver = a.gpu.vendor == 0x10DE && a.driver_version == "621.01" ? CheckState::Supported : CheckState::Warning;

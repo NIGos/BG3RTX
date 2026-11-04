@@ -51,7 +51,8 @@ struct Host {
   std::wstring game, shot, shot_view, export_path;
   std::string session;
   st::Map baseline;
-  bool no_game{}, report{}, failed{}, ready{}, busy{}, closed{};
+  bool no_game{}, report{}, failed{}, ready{}, busy{}, closed{}, shot_bottom{};
+  float shot_scale{};
   int result{};
   std::thread worker;
   std::atomic<bool> cancel{false};
@@ -249,7 +250,25 @@ LRESULT CALLBACK window_proc(HWND window,UINT message,WPARAM w,LPARAM l) {
 }
 }
 
-int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const std::wstring& screenshot,int width,const std::wstring& shot_view) {
+// Screenshot review: the real settings table and copy, Ultra defaults and a reference RTX 5090 without
+// local groom files. Nothing is read from or written to the player's files; no hooks, so no side effects.
+void review_bridge(Host& h,const std::wstring& view){
+  h.state.base=st::code_defaults();h.state.base["dev"]=view==L"advanced"?"1":"0";
+  h.state.preset=st::kUltra;h.state.values=st::preset_values(st::kUltra);h.state.loaded=h.state.values;
+  if(view==L"needs")h.state.values[st::knob_index("rt_geometry")]=0;
+  h.bridge=std::make_unique<Bridge>(h.state);
+  GraphicsInspection probe;GraphicsAdapter a;a.gpu.vendor=0x10DE;a.gpu.device=0x2B85;a.gpu.name="NVIDIA GeForce RTX 5090";
+  a.gpu.ray_query=a.gpu.discrete=a.gpu.opacity_micromap=a.gpu.linear_swept_spheres=a.gpu.shader_int64=a.gpu.fragment_stores=true;
+  a.driver_version="621.01";a.dedicated_bytes=uint64_t(32)<<30;probe.adapters.push_back(a);
+  if(view==L"probe"){probe.adapters.push_back(a);probe.adapters.back().gpu.name="Integrated graphics adapter";h.bridge->set_compatibility(probe,-1);}
+  else h.bridge->set_compatibility(probe);
+  h.bridge->set_mod_status("Mod files present");h.bridge->set_game_path(view==L"missing"?"":"C:\\Games\\Baldurs Gate 3");
+  if(view==L"experimental")h.bridge->handle("{\"type\":\"experimental\",\"value\":true}");
+  if(view==L"preset")h.bridge->handle("{\"type\":\"preset\",\"value\":2}");
+  if(view==L"report")h.bridge->handle("{\"type\":\"report\"}");
+  h.bridge->set_status(view==L"missing"?"Choose the game folder containing bin\\bg3.exe. Settings remain available.":"Settings loaded.");
+}
+int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const std::wstring& screenshot,int width,const std::wstring& shot_view,float shot_scale,bool shot_bottom) {
   LPWSTR version{};
   if(FAILED(GetAvailableCoreWebView2BrowserVersionString(nullptr,&version)))return screenshot.empty()?-1:2;
   CoTaskMemFree(version);
@@ -263,7 +282,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
   int rc=0;
   {
     auto owner=std::make_shared<Host>();
-    Host& h=*owner;h.no_game=no_game||report||!screenshot.empty();h.report=report;h.result=report?3:0;h.shot=screenshot;h.shot_view=shot_view;
+    Host& h=*owner;h.no_game=no_game||report||!screenshot.empty();h.report=report;h.result=report?3:0;h.shot=screenshot;h.shot_view=shot_view;h.shot_scale=shot_scale;h.shot_bottom=shot_bottom;
     h.game=!screenshot.empty()?L"":(game.empty()?saved_game_dir():game);
     if(!h.no_game&&!valid_game_dir(h.game))h.game=detect_game_dir();
     // Screenshot mode does not read player configuration or probe hardware.
@@ -313,12 +332,13 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
       h.bridge->set_game_path(narrow(h.game));
       h.bridge->set_compatibility(inspect_graphics());h.bridge->set_restart_count(pending?ui_state::restart_count(h.baseline,effective(h.state)):0);
       h.bridge->set_status(valid_game_dir(h.game)?"Settings loaded.":"Choose the game folder containing bin\\bg3.exe. Settings remain available.");
-    }
+    } else review_bridge(h,shot_view);
     WNDCLASSEXW cls{sizeof cls};cls.lpfnWndProc=window_proc;cls.hInstance=inst;cls.lpszClassName=L"BG3RTX.WebView";cls.hCursor=LoadCursorW(nullptr,IDC_ARROW);
     cls.hIcon=LoadIconW(inst,MAKEINTRESOURCEW(1));cls.hIconSm=HICON(LoadImageW(inst,MAKEINTRESOURCEW(1),IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),0));
     cls.hbrBackground=CreateSolidBrush(kCaptionBg);RegisterClassExW(&cls);
     // Client size in logical pixels: 32 for the title bar plus the 760 the page was designed for.
-    const UINT system_dpi=GetDpiForSystem();RECT r{0,0,MulDiv(width>0?width:1180,system_dpi,96),MulDiv(760+32,system_dpi,96)};
+    // A review scale stands in for the display scale: physical size and WebView rasterization follow it.
+    const UINT system_dpi=!screenshot.empty()&&shot_scale>0?UINT(96*shot_scale+.5f):GetDpiForSystem();RECT r{0,0,MulDiv(width>0?width:1180,system_dpi,96),MulDiv(760+32,system_dpi,96)};
     AdjustWindowRectExForDpi(&r,WS_OVERLAPPEDWINDOW,FALSE,0,system_dpi);r.top+=GetSystemMetricsForDpi(SM_CYCAPTION,system_dpi);
     HWND created=CreateWindowW(cls.lpszClassName,L"BG3RTX",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,inst,&h);
     if(!created){h.closed=true;h.failed=true;}
@@ -370,12 +390,13 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
             }).Get(),&token);
             h.view->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>([&h](ICoreWebView2*,ICoreWebView2NavigationCompletedEventArgs* args)->HRESULT {
               BOOL ok{};args->get_IsSuccess(&ok);if(!ok){COREWEBVIEW2_WEB_ERROR_STATUS error{};args->get_WebErrorStatus(&error);fail(h,"Navigation",HRESULT(error));return S_OK;}h.ready=true;KillTimer(h.window,3);
-              if(!h.shot.empty())SetTimer(h.window,2,1600,nullptr);
+              if(!h.shot.empty()){if(h.bridge)send(h,h.bridge->state_json());SetTimer(h.window,2,1600,nullptr);}
               else {refresh(h);if(h.report)send(h,h.bridge->handle("{\"type\":\"report\"}"));SetTimer(h.window,1,2000,nullptr);}return S_OK;
             }).Get(),&token);
             controller->put_Bounds(webview_bounds(h));controller->put_IsVisible(TRUE);
+            if(!h.shot.empty()&&h.shot_scale>0){ComPtr<ICoreWebView2Controller3> scaled;if(SUCCEEDED(h.controller.As(&scaled))){scaled->put_ShouldDetectMonitorScaleChanges(FALSE);scaled->put_RasterizationScale(h.shot_scale);}}
             std::wstring url=L"https://app.bg3rtx.local/index.html";
-            if(!h.shot.empty())url+=L"?sample=1&view="+h.shot_view;
+            if(!h.shot.empty())url+=L"?sample=1&view="+h.shot_view+(h.shot_bottom?L"&bottom=1":L"");
             h.view->Navigate(url.c_str());return S_OK;
           }).Get());if(FAILED(started))fail(h);return S_OK;
         }).Get());

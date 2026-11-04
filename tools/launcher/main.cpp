@@ -61,7 +61,7 @@ static void detect_gpu(State& s, std::wstring* err) {
 }
 
 static std::wstring gpu_line(const State& s, const std::wstring& err) {
-  if (!s.have_gpu) return L"Graphics compatibility could not be checked: " + err + L". Unverified features are unavailable; recheck in Overview.";
+  if (!s.have_gpu) return L"Graphics compatibility could not be checked: " + err + L". Unverified features are unavailable; recheck in Help & support.";
   return widen(s.gpu.name) + L": " + caps_text(s.caps) + L". Suggested preset: " +
          widen(st::kPresetLabel[s.suggested]) + L".";
 }
@@ -112,7 +112,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     else if (a == L"--screenshot-scale") g_screenshot_scale=float(_wtof(next().c_str()));
     else if (a == L"--help" || a == L"-h" || a == L"/?") {
       emit(L"BG3RTX.exe [--launch [--dry-run]] [--preset low|medium|high|ultra [--no-clamp]] [--detect]\n"
-           L"           [--report] [--native-ui] [--no-game --screenshot <PNG> [--screenshot-view <sample view>]]\n"
+           L"           [--report] [--native-ui] [--no-game --screenshot <PNG> [--screenshot-view <view>] [--screenshot-scale <s>] [--screenshot-bottom]]\n"
            L"           [--dump-schema] [--game <folder>] [--exe <program>] [--clean] [--out <file>] [-- <game args>]\n"
            L"Steam launch option: \"<path>\\bin\\BG3RTX.exe\" %command%\n");
       flush_output();
@@ -139,7 +139,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
   if (!do_launch && !detect && !dump && preset.empty()) {
     if (!native) {
       int result = launcher::web::run(inst, game_dir, report, g_no_game, g_screenshot,
-                                     g_review_width ? g_review_width : 1180, g_review);
+                                     g_review_width ? g_review_width : 1180, g_review,
+                                     g_screenshot_scale, g_screenshot_bottom);
       if (result != -1) return result;
     }
     if (report) { CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);int rc=launcher::web::native_report(nullptr);CoUninitialize();return rc; }

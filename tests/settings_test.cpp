@@ -1119,13 +1119,13 @@ static void test_consolidation_policy() {
   CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
   m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
   CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
+  // Release: Ctrl+Shift+F10 flips live Experimental choices only. Water surface reflections need a
+  // restart and strand hair is post-release, so the release has no eligible target (launcher and docs say so).
+  for (const char* id : kOptInKnobs)
+    for (int c = 1; c < choice_count(*find_knob(id)); ++c) CHECK(!ab::eligible(*find_knob(id), c, true));
   const auto& live = *find_knob("exp_hair_groom");
-  selection.touch(live, 1, true); CHECK(selection.pending);
-  keys.clear(); selection.append(keys); knob_kvs(live, 0, keys);
-  m["experimental_options"] = "1";
-  for (const auto& kv : keys) m[kv.first] = kv.second;
-  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 1);
-  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 0);
+  selection.touch(live, 1, true); CHECK(!selection.pending);
+  CHECK(!opt_in_knob(live) && !knob_visible(live, false, true));
 
 }
 
@@ -1156,7 +1156,7 @@ static void test_release_migration() {
     Map m = code_defaults(); apply_layer(m, opt);
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
     opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
-    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "1");
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "0"); // post-release
     CHECK_EQ(get(m, "rt_compact_hit_state"), "1"); CHECK(!code_defaults().count("rt_compact_hit_state")); CHECK(!find_knob("exp_compact_hit_state")); CHECK_EQ(get(m, "perf_submit_batch"), "0");
     Map again = m; enforce_release_policy(again); CHECK(again == m);
   }

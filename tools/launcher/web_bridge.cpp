@@ -117,7 +117,16 @@ std::string with_raw_key(const std::string& text,const std::string& key,const st
   if(!value.empty()){if(!out.empty()&&out.back()!='\n')out+='\n';out+=key+"="+value+"\n";}
   return out;
 }
-std::string label(int i,int value){auto& k=st::kKnobs[i];return value<0?"Custom value preserved":k.kind==st::Kind::Choice?std::string(k.choices[value].label):std::to_string(value);}
+std::string label(int i,int value){
+  auto& k=st::kKnobs[i];if(value<0)return "Custom value";if(k.kind==st::Kind::Choice)return k.choices[value].label;
+  if(k.slider.has_off&&value==0)return "Off";const std::string unit=k.slider.unit?k.slider.unit:"";
+  return std::to_string(value)+(unit.empty()||unit=="%"?unit:" "+unit);
+}
+// One review line: "Name: from → to", marked when the change waits for the next game start.
+std::string change_line(int i,int from,int to){
+  return std::string(st::kKnobs[i].label)+": "+label(i,from)+" \xE2\x86\x92 "+label(i,to)+
+    (st::transition_apply(st::kKnobs[i],from,to)==st::Apply::Restart?" (after a game restart)":"");
+}
 }
 Bridge::Bridge(State& state,Hooks hooks):state_(state),hooks_(std::move(hooks)),saved_(state.values),saved_preset_(state.preset) {
   auto m=effective();dev=st::same_value(st::lookup(m,"dev"),"1");
@@ -135,14 +144,14 @@ void Bridge::set_compatibility(GraphicsInspection p,int selected){pending_play_=
 bool Bridge::save_preview(bool enable_required){
   auto p=st::preview_dependencies(state_.values,effective(),state_.caps,enable_required,dev,experimental,opt_in());
   preview_kind_="save";preview_values_=p.values;preview_preset_=state_.preset;preview_keys_=p.required_keys;ab_selection_.append(preview_keys_);blocked_=p.blocked;changes_.clear();
-  for(int i:p.changed)changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,p.values[i]));
+  for(int i:p.changed)changes_.push_back(change_line(i,state_.values[i],p.values[i]));
   for(auto& kv:p.required_keys){
     std::string name="Required startup setting";
     for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;
       for(auto& n:k.required_on)if(n.key&&kv.first==n.key&&preview_values_[i]>=n.min_choice){name=std::string(k.label)+": "+n.label;break;}
       if(name!="Required startup setting")break;
     }
-    changes_.push_back(name+": required setup applies after restarting the game");
+    changes_.push_back(name+": set at the next game start");
   }
   return blocked_.empty();
 }
@@ -176,7 +185,7 @@ std::string Bridge::handle(const std::string& message){
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
-    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i]))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(std::string(st::kKnobs[i].label)+": "+label(i,state_.values[i])+" -> "+label(i,preview_values_[i]));}
+    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i]))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(change_line(i,state_.values[i],preview_values_[i]));}
   }else if(type=="experimental"){
     bool on=get<bool>(o,"value");
     if(dev)experimental=on;
@@ -237,13 +246,14 @@ std::string Bridge::state_json() const {
       out+="{\"value\":"+std::to_string(c)+",\"label\":"+q(k.choices[c].label)+",\"apply\":"+q(st::apply_label(st::transition_apply(k,saved_[i],c),!developer))+",\"enabled\":"+b(available)+",\"reason\":"+q(reason)+",\"requirements\":"+q(requirements)+",\"maturity\":"+q(st::choice_maturity(k,c))+"}";}
     out+="],\"min\":"+std::to_string(k.slider.min)+",\"max\":"+std::to_string(k.slider.max)+",\"step\":"+std::to_string(k.slider.step)+",\"hasOff\":"+b(k.slider.has_off)+",\"unit\":"+q(k.slider.unit?k.slider.unit:"")+"}";
   }
-  std::string gpu="GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
+  std::string gpu=inspection_.adapters.size()>1?"GPU not chosen":"GPU not detected",vram="Not detected",driver="Driver not detected";if(selected_>=0&&size_t(selected_)<inspection_.adapters.size()){auto& a=inspection_.adapters[selected_];gpu=a.gpu.name;driver=a.driver_version.empty()?"Driver not detected":a.driver_version;if(a.dedicated_bytes)vram=std::to_string(a.dedicated_bytes>>30)+" GiB";}
   auto fg=st::lookup(effective(),"fg");std::string fg_label=fg=="0"?"Off":fg=="2"?"2x":fg=="3"?"3x":fg=="4"?"4x":"Unknown";
   std::vector<std::string> warnings;
   if(compatibility_.hardware!=CheckState::Supported&&!compatibility_.hardware_text.empty())warnings.push_back(compatibility_.hardware_text);
   if(compatibility_.driver!=CheckState::Supported&&!compatibility_.driver_text.empty())warnings.push_back(compatibility_.driver_text);
   out+="],\"gamePath\":"+q(game_path_)+",\"compatibility\":{\"gpu\":"+q(gpu)+",\"vram\":"+q(vram)+",\"memory\":"+q(compatibility_.memory_text)+",\"driver\":"+q(driver)+",\"warnings\":"+strings(warnings)+",\"details\":"+strings({compatibility_.hardware_text,compatibility_.driver_text,compatibility_.memory_text,compatibility_.adapter_text})+",\"selected\":"+std::to_string(selected_)+",\"adapters\":[";
   for(size_t i=0;i<inspection_.adapters.size();++i){if(i)out+=",";out+="{\"value\":"+std::to_string(i)+",\"label\":"+q(inspection_.adapters[i].gpu.name)+"}";}out+="]}";
+  out+=",\"presetDescriptions\":[";for(int p=0;p<st::kPresetCount;++p){if(p)out+=",";out+=q(st::kPresetDesc[p]);}out+="]";
   out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
