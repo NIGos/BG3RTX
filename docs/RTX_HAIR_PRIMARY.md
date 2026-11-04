@@ -212,6 +212,7 @@ time. Log: `[hair groom] crowd plan: N instances, budget B k segments: LOD a/b/c
 tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / crowd; READY_FOR_LIVE).
 
 ## 5b. Fail-safes (after the 2026-11-03 user trial: device lost twice, the player's hair gone)
+- Late recording (2026-11-04): retain unresolved depth keys across current and previous prepass epochs; resolve both before rotation, count only expired previous keys, and log the first 4 orphan key prefixes with prepass/drop frame_index per 300 frames (READY_FOR_LIVE; no shader/request or ABI change).
 - Device lost (17:01, 17:04, main ac1380e5): the groom point update read the matched draw's card triangles at its
   `soup_off` also for a *held* draw, whose offset is a mesh-pool snapshot offset: a read at +1.97 GB of a 2 GB soup.
   Now `hair_primary::soup_update_ok` (captured this frame, not held, the whole triangle range inside the soup, the
