@@ -12209,6 +12209,10 @@
         "frozen VALID match"
       ]
     ],
+    "gi: gi_far needs gi_hit_sun": [
+      0,
+      null
+    ],
     "gi: trace pass .*GPU median": [
       619,
       [
