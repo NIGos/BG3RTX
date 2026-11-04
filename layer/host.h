@@ -655,6 +655,9 @@ bool rt_cascade_convert(VkCommandBuffer cmd, VkBuffer xfb, uint32_t tris, uint32
 // The camera position (camera UBO byte 208, the origin of camera-relative space) of the
 // scene build of `frame`, from the last few builds.
 bool rt_build_camera(uint64_t frame, float pos[3]);
+// The same for the build being recorded, without the lock: only from inside the scene build (bvh_build and what it
+// calls, e.g. hair_primary_publish), where rt_after_capture already holds the scene lock. false: not this build's frame.
+bool rt_this_build_camera(uint64_t frame, float pos[3]);
 // Scene snapshots: each build writes one slot (its own TLAS for the split, its
 // InstInfo region of the bvhsplit ring, its alpha set and record region), and a
 // slot is reused only once the GPU finished every frame it was handed out in

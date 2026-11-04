@@ -609,6 +609,14 @@ def test_tips_dither():
                          primary.tips_keep(0.5, samples[:, :2], samples[:, 2].astype(int) + 4, samples[:, 3])))
 
 
+def test_publish_lock():
+    # hair_primary_publish runs inside the scene build, where rt_after_capture holds rtscene's g_mu: a locking camera
+    # read there killed the game at the first publish (hv6 2026-11-04, exit 0xFFFF7001, no crash log).
+    src = (ROOT / "layer/hair_primary.cpp").read_text(encoding="utf-8")
+    check("hair_primary.cpp reads the build camera without the scene lock",
+          "rt_this_build_camera(" in src and "rt_build_camera(" not in src)
+
+
 def test_primary():
     rng = np.random.default_rng(5)
     v = rng.normal(size=(20000, 3))
@@ -980,7 +988,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

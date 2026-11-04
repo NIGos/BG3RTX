@@ -977,8 +977,9 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
   std::memcpy(h.viewport, viewport, sizeof h.viewport);
   StagedHeader st;
   // The build camera: the origin of this publish's camera-relative groom points (the strand passes of the next frame
-  // rebase their rays to their own camera). Without it the strand shaders keep no strand (fail closed).
-  if (rt_build_camera(now, st.cam) && std::isfinite(st.cam[0]) && std::isfinite(st.cam[1]) && std::isfinite(st.cam[2]))
+  // rebase their rays to their own camera). Without it the strand shaders keep no strand (fail closed). Called inside
+  // the scene build: rt_after_capture holds the scene lock (rt_build_camera would lock it again).
+  if (rt_this_build_camera(now, st.cam) && std::isfinite(st.cam[0]) && std::isfinite(st.cam[1]) && std::isfinite(st.cam[2]))
     h.flags |= hair_primary::kFlagCamera;
   else
     ++g_probe_no_camera;

@@ -1,0 +1,1307 @@
+{
+  "run": "wsf1-s8-interface-column.1.043141.log",
+  "base": "755e41b6",
+  "run_valid": true,
+  "duration_s": 220,
+  "completed_phases": 12,
+  "gate_failures": [],
+  "drift": null,
+  "phases": {
+    "partition-static-0": {
+      "state": 0,
+      "direction": "static",
+      "compose": [
+        {
+          "time_s": 16413.917,
+          "line": "[core] [water] compose GPU 0.434 ms median, p90 0.436 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.022 ms median, p90 0.023; compose dispatches 0.411 ms median, p90 0.413",
+          "groups": [
+            "0.434",
+            "0.436",
+            "120",
+            "0.022",
+            "0.023",
+            "0.411",
+            "0.413"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16413.917,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16413.917,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 274783/frame, owned 99.51% (not owned 0.49%), invalid 0, kept: rough 14.86%, below the surface 0.02%; rays 232746/frame: screen hit (composed) 15.0%, hidden 6.4% (skin 0), off screen 2.1%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.25% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 1.00/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "232746",
+            "0",
+            "0"
+          ],
+          "abort_share": 0.0
+        }
+      ],
+      "pipeline": [],
+      "reflection_gpu": [
+        {
+          "time_s": 16413.884,
+          "line": "[core] [water] reflections GPU 0.135 ms median, p90 0.136 (120 timed; water primary + reflection dispatches); scene 2.0 draws, 14480 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.135"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16413.751,
+          "line": "[water] build GPU 0.278 ms median, p90 0.284 (120 timed of 120 builds; 2.0 geometries, 14480 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.278"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.434,
+        "reflection_gpu": 0.135,
+        "build_gpu": 0.278
+      },
+      "copy_dispatch_medians_ms": [
+        0.022,
+        0.411
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "partition-static-1": {
+      "state": 1,
+      "direction": "static",
+      "compose": [
+        {
+          "time_s": 16427.038,
+          "line": "[core] [water] compose GPU 0.459 ms median, p90 0.461 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.022 ms median, p90 0.023; compose dispatches 0.436 ms median, p90 0.438",
+          "groups": [
+            "0.459",
+            "0.461",
+            "120",
+            "0.022",
+            "0.023",
+            "0.436",
+            "0.438"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16427.038,
+          "line": "[core] [water] surface partition: coverage-weighted owned 6999526, invalid 0; coverage zero 0, partial 7003878, full 0, native/missing FS marker 25820664, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 7003878, foam texture source 7003878, edge/flow mask source 7003878; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "6999526",
+            "0",
+            "0",
+            "7003878",
+            "0",
+            "25820664",
+            "0",
+            "0",
+            "0",
+            "7003878",
+            "7003878",
+            "7003878"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16427.038,
+          "line": "[core] [water] compose (120 frames, 119 composed, 1.01 passes/frame): records 277112/frame, owned 99.54% (not owned 0.46%), invalid 0, kept: rough 14.84%, below the surface 0.02%; rays 234862/frame: screen hit (composed) 15.0%, hidden 6.5% (skin 0), off screen 2.1%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.22% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 1, on the previous lighting 119, refused: no recent lighting 0, no scene 0; newer scene taken 2; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.97/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (119 last-pass samples)",
+          "groups": [
+            "120",
+            "234862",
+            "0",
+            "0"
+          ],
+          "abort_share": 0.0
+        }
+      ],
+      "pipeline": [
+        {
+          "time_s": 16426.87,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 120, missing 0",
+          "groups": [
+            "1",
+            "120",
+            "0"
+          ]
+        }
+      ],
+      "reflection_gpu": [
+        {
+          "time_s": 16427.004,
+          "line": "[core] [water] reflections GPU 0.135 ms median, p90 0.136 (120 timed; water primary + reflection dispatches); scene 2.0 draws, 14480 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.135"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16426.87,
+          "line": "[water] build GPU 0.279 ms median, p90 0.285 (120 timed of 120 builds; 2.0 geometries, 14480 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.279"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.459,
+        "reflection_gpu": 0.135,
+        "build_gpu": 0.279
+      },
+      "copy_dispatch_medians_ms": [
+        0.022,
+        0.436
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "partition-static-2": {
+      "state": 0,
+      "direction": "static",
+      "compose": [
+        {
+          "time_s": 16440.018,
+          "line": "[core] [water] compose GPU 0.433 ms median, p90 0.435 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.022 ms median, p90 0.023; compose dispatches 0.411 ms median, p90 0.413",
+          "groups": [
+            "0.433",
+            "0.435",
+            "120",
+            "0.022",
+            "0.023",
+            "0.411",
+            "0.413"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16440.018,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16440.018,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 274854/frame, owned 99.52% (not owned 0.48%), invalid 0, kept: rough 14.80%, below the surface 0.02%; rays 233022/frame: screen hit (composed) 14.9%, hidden 6.4% (skin 0), off screen 2.2%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.27% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 2; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.98/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "233022",
+            "0",
+            "0"
+          ],
+          "abort_share": 0.0
+        }
+      ],
+      "pipeline": [],
+      "reflection_gpu": [
+        {
+          "time_s": 16439.984,
+          "line": "[core] [water] reflections GPU 0.135 ms median, p90 0.136 (120 timed; water primary + reflection dispatches); scene 2.0 draws, 14480 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.135"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16439.852,
+          "line": "[water] build GPU 0.277 ms median, p90 0.284 (120 timed of 120 builds; 2.0 geometries, 14480 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.433,
+        "reflection_gpu": 0.135,
+        "build_gpu": 0.277
+      },
+      "copy_dispatch_medians_ms": [
+        0.022,
+        0.411
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "partition-static-3": {
+      "state": 1,
+      "direction": "static",
+      "compose": [
+        {
+          "time_s": 16452.984,
+          "line": "[core] [water] compose GPU 0.459 ms median, p90 0.461 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.022 ms median, p90 0.023; compose dispatches 0.436 ms median, p90 0.438",
+          "groups": [
+            "0.459",
+            "0.461",
+            "120",
+            "0.022",
+            "0.023",
+            "0.436",
+            "0.438"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16452.984,
+          "line": "[core] [water] surface partition: coverage-weighted owned 6998508, invalid 0; coverage zero 0, partial 7002675, full 0, native/missing FS marker 25831985, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 7002675, foam texture source 7002675, edge/flow mask source 7002675; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "6998508",
+            "0",
+            "0",
+            "7002675",
+            "0",
+            "25831985",
+            "0",
+            "0",
+            "0",
+            "7002675",
+            "7002675",
+            "7002675"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16452.984,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 274894/frame, owned 99.54% (not owned 0.46%), invalid 0, kept: rough 14.81%, below the surface 0.02%; rays 233038/frame: screen hit (composed) 15.0%, hidden 6.4% (skin 0), off screen 2.2%, miss 76.4%, aborted 0, invalid 0; unresolved (probe kept) 87.24% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 1.00/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.000000/0.000000 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "233038",
+            "0",
+            "0"
+          ],
+          "abort_share": 0.0
+        }
+      ],
+      "pipeline": [
+        {
+          "time_s": 16452.819,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 120, missing 0",
+          "groups": [
+            "1",
+            "120",
+            "0"
+          ]
+        }
+      ],
+      "reflection_gpu": [
+        {
+          "time_s": 16452.952,
+          "line": "[core] [water] reflections GPU 0.135 ms median, p90 0.136 (120 timed; water primary + reflection dispatches); scene 2.0 draws, 14480 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.135"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16452.819,
+          "line": "[water] build GPU 0.277 ms median, p90 0.282 (120 timed of 120 builds; 2.0 geometries, 14480 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.459,
+        "reflection_gpu": 0.135,
+        "build_gpu": 0.277
+      },
+      "copy_dispatch_medians_ms": [
+        0.022,
+        0.436
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "cost-turn-0": {
+      "state": 0,
+      "direction": "E",
+      "compose": [
+        {
+          "time_s": 16465.923,
+          "line": "[core] [water] compose GPU 0.573 ms median, p90 0.730 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.550 ms median, p90 0.707",
+          "groups": [
+            "0.573",
+            "0.730",
+            "120",
+            "0.023",
+            "0.024",
+            "0.550",
+            "0.707"
+          ]
+        },
+        {
+          "time_s": 16469.925,
+          "line": "[core] [water] compose GPU 0.575 ms median, p90 0.721 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.023; compose dispatches 0.552 ms median, p90 0.698",
+          "groups": [
+            "0.575",
+            "0.721",
+            "120",
+            "0.023",
+            "0.023",
+            "0.552",
+            "0.698"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16465.923,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "time_s": 16469.925,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16465.923,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 451874/frame, owned 99.31% (not owned 0.69%), invalid 0, kept: rough 6.91%, below the surface 0.00%; rays 417750/frame: screen hit (composed) 17.0%, hidden 15.7% (skin 4200), off screen 17.3%, miss 50.0%, aborted 39, invalid 0; unresolved (probe kept) 84.18% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.468293/0.476251 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "417750",
+            "39",
+            "0"
+          ],
+          "abort_share": 7.779781902791026e-07
+        },
+        {
+          "time_s": 16469.924,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 452535/frame, owned 99.31% (not owned 0.69%), invalid 0, kept: rough 6.93%, below the surface 0.00%; rays 418267/frame: screen hit (composed) 17.0%, hidden 15.8% (skin 4120), off screen 17.4%, miss 49.8%, aborted 188, invalid 0; unresolved (probe kept) 84.21% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 0; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 1.00/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.476231/0.476259 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "418267",
+            "188",
+            "0"
+          ],
+          "abort_share": 3.7456183238836166e-06
+        }
+      ],
+      "pipeline": [],
+      "reflection_gpu": [
+        {
+          "time_s": 16465.89,
+          "line": "[core] [water] reflections GPU 0.181 ms median, p90 0.225 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.181"
+          ]
+        },
+        {
+          "time_s": 16469.888,
+          "line": "[core] [water] reflections GPU 0.181 ms median, p90 0.224 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.181"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16465.76,
+          "line": "[water] build GPU 0.277 ms median, p90 0.283 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        },
+        {
+          "time_s": 16469.759,
+          "line": "[water] build GPU 0.277 ms median, p90 0.286 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.574,
+        "reflection_gpu": 0.181,
+        "build_gpu": 0.277
+      },
+      "copy_dispatch_medians_ms": [
+        0.023,
+        0.551
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "cost-turn-1": {
+      "state": 1,
+      "direction": "E",
+      "compose": [
+        {
+          "time_s": 16481.922,
+          "line": "[core] [water] compose GPU 0.598 ms median, p90 0.748 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.576 ms median, p90 0.725",
+          "groups": [
+            "0.598",
+            "0.748",
+            "120",
+            "0.023",
+            "0.024",
+            "0.576",
+            "0.725"
+          ]
+        },
+        {
+          "time_s": 16485.922,
+          "line": "[core] [water] compose GPU 0.599 ms median, p90 0.740 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.575 ms median, p90 0.717",
+          "groups": [
+            "0.599",
+            "0.740",
+            "120",
+            "0.023",
+            "0.024",
+            "0.575",
+            "0.717"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16481.922,
+          "line": "[core] [water] surface partition: coverage-weighted owned 19172740, invalid 0; coverage zero 0, partial 19188619, full 0, native/missing FS marker 34761333, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 19188619, foam texture source 19188619, edge/flow mask source 19188619; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "19172740",
+            "0",
+            "0",
+            "19188619",
+            "0",
+            "34761333",
+            "0",
+            "0",
+            "0",
+            "19188619",
+            "19188619",
+            "19188619"
+          ]
+        },
+        {
+          "time_s": 16485.922,
+          "line": "[core] [water] surface partition: coverage-weighted owned 19183882, invalid 0; coverage zero 0, partial 19197109, full 0, native/missing FS marker 34792462, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 19197109, foam texture source 19197109, edge/flow mask source 19197109; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "19183882",
+            "0",
+            "0",
+            "19197109",
+            "0",
+            "34792462",
+            "0",
+            "0",
+            "0",
+            "19197109",
+            "19197109",
+            "19197109"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16481.922,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 452582/frame, owned 99.34% (not owned 0.66%), invalid 0, kept: rough 6.85%, below the surface 0.00%; rays 418784/frame: screen hit (composed) 16.9%, hidden 15.8% (skin 3496), off screen 17.4%, miss 49.9%, aborted 198, invalid 0; unresolved (probe kept) 84.23% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.472261/0.476247 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "418784",
+            "198",
+            "0"
+          ],
+          "abort_share": 3.9399833087979825e-06
+        },
+        {
+          "time_s": 16485.922,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 452895/frame, owned 99.34% (not owned 0.66%), invalid 0, kept: rough 6.92%, below the surface 0.00%; rays 418786/frame: screen hit (composed) 16.9%, hidden 15.8% (skin 3599), off screen 17.4%, miss 50.0%, aborted 64, invalid 0; unresolved (probe kept) 84.26% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.472262/0.476251 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "418786",
+            "64",
+            "0"
+          ],
+          "abort_share": 1.273523876383813e-06
+        }
+      ],
+      "pipeline": [
+        {
+          "time_s": 16481.76,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 134, missing 0",
+          "groups": [
+            "1",
+            "134",
+            "0"
+          ]
+        },
+        {
+          "time_s": 16485.762,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 134, missing 0",
+          "groups": [
+            "1",
+            "134",
+            "0"
+          ]
+        }
+      ],
+      "reflection_gpu": [
+        {
+          "time_s": 16481.889,
+          "line": "[core] [water] reflections GPU 0.180 ms median, p90 0.221 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.180"
+          ]
+        },
+        {
+          "time_s": 16485.89,
+          "line": "[core] [water] reflections GPU 0.178 ms median, p90 0.225 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.178"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16481.76,
+          "line": "[water] build GPU 0.276 ms median, p90 0.286 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.276"
+          ]
+        },
+        {
+          "time_s": 16485.762,
+          "line": "[water] build GPU 0.277 ms median, p90 0.283 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.5985,
+        "reflection_gpu": 0.179,
+        "build_gpu": 0.2765
+      },
+      "copy_dispatch_medians_ms": [
+        0.023,
+        0.5754999999999999
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "cost-turn-2": {
+      "state": 0,
+      "direction": "Q",
+      "compose": [
+        {
+          "time_s": 16493.919,
+          "line": "[core] [water] compose GPU 0.593 ms median, p90 0.736 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.569 ms median, p90 0.713",
+          "groups": [
+            "0.593",
+            "0.736",
+            "120",
+            "0.023",
+            "0.024",
+            "0.569",
+            "0.713"
+          ]
+        },
+        {
+          "time_s": 16497.921,
+          "line": "[core] [water] compose GPU 0.589 ms median, p90 0.730 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.565 ms median, p90 0.706",
+          "groups": [
+            "0.589",
+            "0.730",
+            "120",
+            "0.023",
+            "0.024",
+            "0.565",
+            "0.706"
+          ]
+        },
+        {
+          "time_s": 16501.92,
+          "line": "[core] [water] compose GPU 0.591 ms median, p90 0.720 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.568 ms median, p90 0.697",
+          "groups": [
+            "0.591",
+            "0.720",
+            "120",
+            "0.023",
+            "0.024",
+            "0.568",
+            "0.697"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16493.919,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "time_s": 16497.921,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        {
+          "time_s": 16501.92,
+          "line": "[core] [water] surface partition: coverage-weighted owned 0, invalid 0; coverage zero 0, partial 0, full 0, native/missing FS marker 0, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 0, foam texture source 0, edge/flow mask source 0; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16493.919,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 468341/frame, owned 99.36% (not owned 0.64%), invalid 0, kept: rough 7.08%, below the surface 0.00%; rays 432424/frame: screen hit (composed) 16.3%, hidden 15.5% (skin 3624), off screen 18.5%, miss 49.6%, aborted 157, invalid 0; unresolved (probe kept) 84.83% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 3; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.97/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.464324/0.476250 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "432424",
+            "157",
+            "0"
+          ],
+          "abort_share": 3.025583330539005e-06
+        },
+        {
+          "time_s": 16497.921,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 468150/frame, owned 99.35% (not owned 0.65%), invalid 0, kept: rough 6.97%, below the surface 0.00%; rays 432698/frame: screen hit (composed) 16.2%, hidden 15.7% (skin 3754), off screen 18.5%, miss 49.6%, aborted 111, invalid 0; unresolved (probe kept) 84.90% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.472261/0.476246 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "432698",
+            "111",
+            "0"
+          ],
+          "abort_share": 2.137752124752281e-06
+        },
+        {
+          "time_s": 16501.92,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 468223/frame, owned 99.33% (not owned 0.67%), invalid 0, kept: rough 6.83%, below the surface 0.00%; rays 433320/frame: screen hit (composed) 16.3%, hidden 15.7% (skin 3631), off screen 18.4%, miss 49.6%, aborted 56, invalid 0; unresolved (probe kept) 84.84% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.472261/0.476245 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "433320",
+            "56",
+            "0"
+          ],
+          "abort_share": 1.0769574567188106e-06
+        }
+      ],
+      "pipeline": [],
+      "reflection_gpu": [
+        {
+          "time_s": 16493.888,
+          "line": "[core] [water] reflections GPU 0.189 ms median, p90 0.225 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.189"
+          ]
+        },
+        {
+          "time_s": 16497.886,
+          "line": "[core] [water] reflections GPU 0.190 ms median, p90 0.223 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.190"
+          ]
+        },
+        {
+          "time_s": 16501.887,
+          "line": "[core] [water] reflections GPU 0.189 ms median, p90 0.225 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.189"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16493.756,
+          "line": "[water] build GPU 0.277 ms median, p90 0.283 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        },
+        {
+          "time_s": 16497.755,
+          "line": "[water] build GPU 0.277 ms median, p90 0.284 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        },
+        {
+          "time_s": 16501.756,
+          "line": "[water] build GPU 0.277 ms median, p90 0.284 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.591,
+        "reflection_gpu": 0.189,
+        "build_gpu": 0.277
+      },
+      "copy_dispatch_medians_ms": [
+        0.023,
+        0.568
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    },
+    "cost-turn-3": {
+      "state": 1,
+      "direction": "Q",
+      "compose": [
+        {
+          "time_s": 16509.923,
+          "line": "[core] [water] compose GPU 0.614 ms median, p90 0.753 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.591 ms median, p90 0.730",
+          "groups": [
+            "0.614",
+            "0.753",
+            "120",
+            "0.023",
+            "0.024",
+            "0.591",
+            "0.730"
+          ]
+        },
+        {
+          "time_s": 16513.923,
+          "line": "[core] [water] compose GPU 0.615 ms median, p90 0.753 (120 timed frames: the lighting copy + the compose dispatches; 0 passes beyond 4 untimed); copy 0.023 ms median, p90 0.024; compose dispatches 0.592 ms median, p90 0.730",
+          "groups": [
+            "0.615",
+            "0.753",
+            "120",
+            "0.023",
+            "0.024",
+            "0.592",
+            "0.730"
+          ]
+        }
+      ],
+      "partition": [
+        {
+          "time_s": 16509.923,
+          "line": "[core] [water] surface partition: coverage-weighted owned 18596023, invalid 0; coverage zero 0, partial 18610389, full 0, native/missing FS marker 37215152, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 18610389, foam texture source 18610389, edge/flow mask source 18610389; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "18596023",
+            "0",
+            "0",
+            "18610389",
+            "0",
+            "37215152",
+            "0",
+            "0",
+            "0",
+            "18610389",
+            "18610389",
+            "18610389"
+          ]
+        },
+        {
+          "time_s": 16513.923,
+          "line": "[core] [water] surface partition: coverage-weighted owned 18596201, invalid 0; coverage zero 0, partial 18609968, full 0, native/missing FS marker 37244093, unmarked/layout 0, FS spec off 0, compose spec off 0; marked owned 18609968, foam texture source 18609968, edge/flow mask source 18609968; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+          "groups": [
+            "18596201",
+            "0",
+            "0",
+            "18609968",
+            "0",
+            "37244093",
+            "0",
+            "0",
+            "0",
+            "18609968",
+            "18609968",
+            "18609968"
+          ]
+        }
+      ],
+      "compose_stats": [
+        {
+          "time_s": 16509.923,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 468105/frame, owned 99.38% (not owned 0.62%), invalid 0, kept: rough 6.97%, below the surface 0.00%; rays 432780/frame: screen hit (composed) 16.2%, hidden 15.6% (skin 3311), off screen 18.5%, miss 49.7%, aborted 46, invalid 0; unresolved (probe kept) 84.93% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 2; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.98/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.468292/0.476247 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "432780",
+            "46",
+            "0"
+          ],
+          "abort_share": 8.857474379755356e-07
+        },
+        {
+          "time_s": 16513.923,
+          "line": "[core] [water] compose (120 frames, 120 composed, 1.00 passes/frame): records 468359/frame, owned 99.38% (not owned 0.62%), invalid 0, kept: rough 6.89%, below the surface 0.00%; rays 433374/frame: screen hit (composed) 16.3%, hidden 15.7% (skin 2988), off screen 18.4%, miss 49.6%, aborted 125, invalid 0; unresolved (probe kept) 84.86% of owned; clamped 0; skipped frames: no record buffer 0, layout 0, size 0; passes on this frame's lighting 0, on the previous lighting 120, refused: no recent lighting 0, no scene 0; newer scene taken 1; hit shade attempted 0, hidden 0, offscreen 0, rejected material/light/sun/invalid 0/0/0/0; world truncated 0; TLAS age avg/max 0.99/1 frames (120 samples, camera missing 0); build-camera delta avg/max 0.472261/0.476248 m (120 last-pass samples)",
+          "groups": [
+            "120",
+            "433374",
+            "125",
+            "0"
+          ],
+          "abort_share": 2.4036233564504214e-06
+        }
+      ],
+      "pipeline": [
+        {
+          "time_s": 16509.76,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 134, missing 0",
+          "groups": [
+            "1",
+            "134",
+            "0"
+          ]
+        },
+        {
+          "time_s": 16513.759,
+          "line": "[water] surface Fresnel (120 frames): enabled 1, draws 134, missing 0",
+          "groups": [
+            "1",
+            "134",
+            "0"
+          ]
+        }
+      ],
+      "reflection_gpu": [
+        {
+          "time_s": 16509.891,
+          "line": "[core] [water] reflections GPU 0.188 ms median, p90 0.226 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.188"
+          ]
+        },
+        {
+          "time_s": 16513.889,
+          "line": "[core] [water] reflections GPU 0.189 ms median, p90 0.229 (120 timed; water primary + reflection dispatches); scene 2.1 draws, 14481 triangles, age 1.00 frames; F0 0.0196 (Reflectance_Base 0.350, Roughness_Base 0.000, family 8); views 0 over 0 water passes (0 with water between other draws)",
+          "groups": [
+            "0.189"
+          ]
+        }
+      ],
+      "build_gpu": [
+        {
+          "time_s": 16509.76,
+          "line": "[water] build GPU 0.277 ms median, p90 0.283 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        },
+        {
+          "time_s": 16513.759,
+          "line": "[water] build GPU 0.277 ms median, p90 0.285 (120 timed of 120 builds; 2.1 geometries, 14481 triangles per build; busy 0, failed 0; soup 32 MB)",
+          "groups": [
+            "0.277"
+          ]
+        }
+      ],
+      "gpu_medians_ms": {
+        "compose": 0.6145,
+        "reflection_gpu": 0.1885,
+        "build_gpu": 0.277
+      },
+      "copy_dispatch_medians_ms": [
+        0.023,
+        0.5914999999999999
+      ],
+      "forward_fs_ms": null,
+      "whole_water_pass_ms": null
+    }
+  },
+  "shots": [
+    {
+      "label": "partition-static-0",
+      "state": 0,
+      "frame": 2606,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043335",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043335\\img\\d195_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.185109,
+        0.158866,
+        0.164826
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.1648755738,
+      "normalised_luminance": 546.6950514944327,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-0",
+      "state": 0,
+      "frame": 2627,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043338",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043338\\img\\d397_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.18668,
+        0.159819,
+        0.165021
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.16590523299999999,
+      "normalised_luminance": 550.1091993660183,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-1",
+      "state": 1,
+      "frame": 2834,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043347",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043347\\img\\d599_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.19121,
+        0.163843,
+        0.16817
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.16997363359999998,
+      "normalised_luminance": 563.5992174703069,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-1",
+      "state": 1,
+      "frame": 2851,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043350",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043350\\img\\d801_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.193618,
+        0.16579,
+        0.169227
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.17195438419999998,
+      "normalised_luminance": 570.1669978049378,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-2",
+      "state": 0,
+      "frame": 3064,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043400",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043400\\img\\d1003_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.184895,
+        0.158637,
+        0.164663
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.164654528,
+      "normalised_luminance": 545.9621069943564,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-2",
+      "state": 0,
+      "frame": 3090,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043403",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043403\\img\\d1205_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.185665,
+        0.159372,
+        0.165224
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.1653844062,
+      "normalised_luminance": 548.3822398917722,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-3",
+      "state": 1,
+      "frame": 3309,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043413",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043413\\img\\d1407_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.1891,
+        0.16202,
+        0.166657
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.1681119994,
+      "normalised_luminance": 557.426403745532,
+      "raw_f32_files": 0,
+      "roi_float": null
+    },
+    {
+      "label": "partition-static-3",
+      "state": 1,
+      "frame": 3339,
+      "capture": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043417",
+      "png": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-043417\\img\\d1609_p16_c0_i1117_R11G11B10F.png",
+      "rgb": [
+        0.190523,
+        0.163265,
+        0.16762
+      ],
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "luminance": 0.16937448179999998,
+      "normalised_luminance": 561.6125476646793,
+      "raw_f32_files": 0,
+      "roi_float": null
+    }
+  ],
+  "energy": {
+    "normalised_phase_means": [
+      548.4021254302255,
+      566.8831076376223,
+      547.1721734430644,
+      559.5194757051056
+    ],
+    "on1_vs_bracketed_off_pct": 3.4860179214893927,
+    "on3_vs_nearest_off2_pct": 2.2565661890929567,
+    "on3_vs_pooled_off_pct": 2.141767341662981,
+    "off2_vs_off0_pct": -0.22427921594874167,
+    "equal_mean_gate": false,
+    "pool_rim_float": null,
+    "open_water_float": null
+  },
+  "crops": [
+    {
+      "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\review-main\\captures\\offline\\wsf1\\pool_rim_off_on.png",
+      "box_preview_pixels": [
+        490,
+        75,
+        825,
+        285
+      ],
+      "off_frame": 2606,
+      "on_frame": 2834
+    },
+    {
+      "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\review-main\\captures\\offline\\wsf1\\pool_rim_repeat_off_on.png",
+      "box_preview_pixels": [
+        490,
+        75,
+        825,
+        285
+      ],
+      "off_frame": 3064,
+      "on_frame": 3309
+    },
+    {
+      "path": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\review-main\\captures\\offline\\wsf1\\open_water_off_on.png",
+      "box_preview_pixels": [
+        0,
+        75,
+        245,
+        340
+      ],
+      "off_frame": 2606,
+      "on_frame": 2834
+    }
+  ],
+  "gpu_interval_rule": "Previous same-kind timestamp >= queue-gates applied settings; current timestamp < next window. Straddling intervals excluded.",
+  "partition_tolerance": 9.5367431640625e-07,
+  "qualification": "FAIL_INCOMPLETE_EVIDENCE",
+  "limitations": [
+    "No per-pixel float data: region float energy cannot be recovered from PNG previews.",
+    "No forward-FS/whole-water GPU timer: dual FS cost and total cost congruity unmeasured.",
+    "Partition check is coefficient conservation, not a measured dielectric image reference match."
+  ],
+  "cleanup": {
+    "deleted": [],
+    "reason": "No raw floats exist; retain dumps.json, frame.json and PNGs read by gates/review."
+  },
+  "observables": {
+    "coverage_weighted_ownership": {
+      "verdict": "PASS",
+      "static_on": [
+        6999526,
+        6998508
+      ],
+      "E_on_range": [
+        19172740,
+        19183882
+      ],
+      "Q_on_range": [
+        18596023,
+        18596201
+      ],
+      "unit": "wave-rounded weighted pixels / 120 frames"
+    },
+    "coverage_histogram_and_sources": {
+      "verdict": "PASS",
+      "zero_full": [
+        0,
+        0
+      ],
+      "partial_equals_marked_and_both_sources": true,
+      "all_layout_and_spec_mismatch_counts": 0
+    },
+    "energy_partition": {
+      "verdict": "PASS",
+      "invalid": 0,
+      "max_allowed_absolute_error": 9.5367431640625e-07,
+      "measured_max_error": null,
+      "note": "Runtime invalid bit combines finite/range checks and coefficient residual > tolerance; no residual magnitude is logged."
+    },
+    "compose_validity": {
+      "verdict": "PASS",
+      "invalid": 0,
+      "max_abort_share": 3.9399833087979825e-06,
+      "allowed_abort_share": 9.312175577061953e-06
+    },
+    "post_water_full_frame_float": {
+      "verdict": "PASS",
+      "shots": 8,
+      "nonfinite": 0,
+      "pre_exposure": 0.000301586,
+      "note": "Shading-model brightness changes allowed; not an equal-mean or physical-reference-image gate."
+    },
+    "post_water_pool_rim_float": {
+      "verdict": "FAIL",
+      "reason": "Evidence unavailable: 0 per-pixel float files across all 8 captures; PNG energy is inadmissible."
+    },
+    "post_water_open_water_float": {
+      "verdict": "FAIL",
+      "reason": "Evidence unavailable: only full-frame float statistics retained; cannot isolate native huge-family region."
+    },
+    "visible_shallow_reflection_persistence": {
+      "verdict": "FAIL",
+      "reason": "Not established: two PNG OFF/ON pairs show changed pool highlights, but do not resolve persistent reflected-column detail at the shallow rim versus animated normal/glint variation. No clean-coverage/opacity image available."
+    },
+    "physical_model": {
+      "verdict": "PASS",
+      "scope": "Interface/column coefficient model: c+(1-c)*(E+(1-E)*a+(1-E)*(1-a))=1; E retains native rough DFG, direct uses F(L.H), original native foam retained. Not full spectral medium or exact dielectric LUT qualification."
+    },
+    "compose_gpu_report": {
+      "verdict": "PASS",
+      "static_on_minus_mean_off_ms": 0.0255,
+      "E_on_minus_E_off_ms": 0.0245,
+      "Q_on_minus_Q_off_ms": 0.0235,
+      "note": "Turns traverse different views sequentially; differences are descriptive, not isolated incremental FS measurements."
+    },
+    "forward_fs_and_total_cost_congruity": {
+      "verdict": "FAIL",
+      "samples": 0,
+      "reason": "No GPU timer covers the second complete forward-FS evaluation; compose cost alone cannot establish total cost."
+    },
+    "real_ultra_integration": {
+      "verdict": "PASS",
+      "qualified_keys_retained": true,
+      "sequence": [
+        0,
+        1,
+        0,
+        1
+      ],
+      "rotation": [
+        "E",
+        "E",
+        "Q",
+        "Q"
+      ],
+      "completed_phases": 12,
+      "settings_restored": true
+    }
+  },
+  "verdict_meaning": "FAIL denotes missing qualification evidence where noted, not an INVALID run or demonstrated rendering defect. No preset/category/cost-default edits are prepared."
+}
