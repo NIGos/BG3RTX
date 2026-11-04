@@ -135,6 +135,8 @@ uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buf
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
 uint64_t g_order_none = 0;                  // G-buffer passes with no publish ordered before them (no swap)
 void apply_header(VkCommandBuffer cmd, const StagedHeader& st);
+uint64_t g_applied_cmd = 0, g_applied_recording = 0;   // the recording and tag of the last header applied
+uint32_t g_applied_tag = 0;
 // GPU cost of the strand G-buffer draws: a timestamp pair around each (BOTTOM_OF_PIPE: the draw's own completion
 // after the work before it), kTimed draws per frame, a ring of kTimeSlots frames; read kTimeSlots - 1 frames later.
 constexpr uint32_t kTimed = 64, kTimeSlots = 4;
@@ -301,7 +303,8 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
   }
   dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pipe);
   dd->vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_cnt_pl, 0, 2, wr);
-  const uint32_t push[4] = {g_last_tag, g_last_n, uint32_t(g_header.addr), uint32_t(g_header.addr >> 32)};
+  const uint32_t tag = g_applied_cmd == uint64_t(cmd) && g_applied_recording == cmd_recording(cmd) ? g_applied_tag : g_last_tag;
+  const uint32_t push[4] = {tag, g_last_n, uint32_t(g_header.addr), uint32_t(g_header.addr >> 32)};
   dd->vk.CmdPushConstants(cmd, g_cnt_pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof push, push);
   dd->vk.CmdDispatch(cmd, (g_last_n + 255) / 256, 1, 1);
   mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -316,7 +319,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     s.drew[k] = g_last_keys[k] && g_gate.gbuffer_now.count(g_last_keys[k]) != 0;   // the counted frame's G-buffer
   }
   s.frame = now;
-  s.tag = g_last_tag;
+  s.tag = tag;
   s.valid = true;
   g_cnt_next = (g_cnt_next + 1) % kCountSlots;
   // The compute shader's pixel reads before this frame's G-buffer writes them.
@@ -391,6 +394,11 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
   g_last_tag = st.pick.tag;
+  // The tag this recording's strand passes seal with: the count recorded later in the same recording (the scene build
+  // follows the G-buffer pass) counts that frame's entries, not a newer publish applied by another recording.
+  g_applied_cmd = uint64_t(cmd);
+  g_applied_recording = cmd_recording(cmd);
+  g_applied_tag = st.pick.tag;
   g_last_n = st.pixels;
   std::memcpy(g_last_keys, st.keys, sizeof g_last_keys);
   std::memcpy(g_last_lods, st.lods, sizeof g_last_lods);
