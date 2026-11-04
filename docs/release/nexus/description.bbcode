@@ -1,0 +1,198 @@
+[center][img]IMAGE_URL:banner.png[/img]
+
+[img]IMAGE_URL:badges.png[/img]
+
+[size=4][color=#f1e7d2]Ray-traced shadows, indirect light and reflections for Baldur's Gate 3.[/color][/size]
+[size=3][color=#beb5a4]Candles and torches cast real shadows. Light bounces off walls and floors. Water and polished surfaces reflect the world around them.[/color][/size]
+
+[size=3][color=#f2c078][b]Public beta.[/b] Tested only on an NVIDIA GeForce RTX 5090. Expect bugs, and please report them on the Bugs tab.[/color][/size]
+
+[img]IMAGE_URL:divider.png[/img][/center]
+
+[img]IMAGE_URL:h_features.png[/img]
+
+BG3RTX replaces parts of the game's lighting with ray tracing. It runs as a Vulkan layer that its launcher, [b]BG3RTX.exe[/b], enables for the game process only. [b]Nothing in the game folder, the registry or your saves is changed.[/b]
+
+[list]
+[*][color=#d6aa62][b]Sun shadows[/b][/color]: ray-traced, including foliage on High and Ultra and hidden roofs on Ultra.
+[*][color=#d6aa62][b]Local light shadows[/b][/color]: torches, candles, fires and lamps cast ray-traced shadows.
+[*][color=#d6aa62][b]Interior light shadows[/b][/color]: shadows for interior lights, respecting the game's own shadow flags.
+[*][color=#d6aa62][b]Indirect lighting (GI)[/b][/color]: light bounces between surfaces, with off-screen bounce light up to 6 m on Ultra.
+[*][color=#d6aa62][b]Reflections[/b][/color]: glossy to rough surfaces, plus water reflections, shadows and refraction on Ultra.
+[*][color=#d6aa62][b]Hair shadows[/b][/color]: the game's own (stock) hair and scalp take part in ray-traced shadows and occlusion. The hair you see is unchanged.
+[*][color=#d6aa62][b]NVIDIA DLSS Ray Reconstruction[/b][/color]: cleans up the ray-traced image in place of the game's DLSS.
+[*][color=#d6aa62][b]DLSS Frame Generation and NVIDIA Reflex[/b][/color]: 2x, 3x or 4x, depending on your card.
+[*][color=#d6aa62][b]Depth of field and bloom smoothing[/b][/color] on Ultra.
+[*][color=#d6aa62][b]One-key comparison[/b][/color]: [b]Ctrl+Shift+F9[/b] switches every ray-traced effect off and on in game.
+[/list]
+
+[img]IMAGE_URL:h_screenshots.png[/img]
+
+[center][size=2][color=#beb5a4]Each image is one view, toggled with Ctrl+Shift+F9: BG3RTX off on the left, on on the right. Preset: Ultra, RTX 5090. More pairs in the spoiler below.[/color][/size]
+
+[b]Camp at dusk: campfire and lantern shadows[/b]
+[img]SCREENSHOT_URL:shot01_camp_dusk_pair.jpg[/img]
+
+[b]Water reflections in Act 3[/b]
+[img]SCREENSHOT_URL:shot02_water_pair.jpg[/img]
+
+[b]More comparisons[/b][/center]
+[spoiler]
+[center][b]Grymforge: fire light and bounce light[/b]
+[img]SCREENSHOT_URL:shot03_grymforge_pair.jpg[/img]
+
+[b]Daylight through foliage: sun shadows[/b]
+[img]SCREENSHOT_URL:shot04_foliage_pair.jpg[/img]
+
+[b]Interior: the Blushing Mermaid[/b]
+[img]SCREENSHOT_URL:shot05_interior_pair.jpg[/img]
+
+[b]Close-up: shadows on the game's own hair[/b]
+[img]SCREENSHOT_URL:shot06_hair_pair.jpg[/img][/center]
+[/spoiler]
+[center][b]The launcher[/b]
+[img]SCREENSHOT_URL:shot07_launcher.png[/img][/center]
+
+[img]IMAGE_URL:h_requirements.png[/img]
+
+[list]
+[*][b]Windows 10 or 11[/b], 64-bit.
+[*][b]An NVIDIA GeForce RTX graphics card.[/b] Frame generation 2x needs RTX 40 or newer; 3x and 4x need RTX 50. AMD and Intel cards are not supported in this beta.
+[*][b]A recent NVIDIA Game Ready driver.[/b] The test driver was 621.01. This is a reference, not a verified minimum.
+[*][b]Baldur's Gate 3 on Steam, Vulkan renderer[/b] ([i]bin\bg3.exe[/i], not the DirectX 11 one). Tested with game version 4.1.1.7631656 (Patch 8, Hotfix 10). GOG copies should work through [b]Browse...[/b] in the launcher but are untested.
+[*][b]DLSS selected in the game's Graphics options[/b] (Quality recommended). Ray Reconstruction does not run with FSR, XeSS or TAA.
+[*]Disk space for the mod and a shader cache that grows over time in [i]%LOCALAPPDATA%\BG3RTX[/i].
+[/list]
+
+[quote][color=#f2c078][b]Only the RTX 5090 has been tested.[/b][/color] Other RTX cards should work, but there is no qualified preset or VRAM recommendation for them yet. Ray tracing uses a lot of video memory: start with [b]Low[/b] and raise settings step by step. A game patch can also break BG3RTX until it is updated.[/quote]
+
+[img]IMAGE_URL:h_install.png[/img]
+
+[size=3][color=#d6aa62][b]Option A: Windows installer (recommended)[/b][/color][/size]
+[list=1]
+[*]Close the game. Run [b]BG3RTX-<version>-Setup.exe[/b].
+[*]It installs for your Windows user only, without administrator rights, to [i]%LOCALAPPDATA%\Programs\BG3RTX[/i], and adds a Start menu entry.
+[*]Start [b]BG3RTX[/b] from the Start menu.
+[/list]
+
+[size=3][color=#d6aa62][b]Option B: portable ZIP[/b][/color][/size]
+[list=1]
+[*]Unzip the archive anywhere, [b]not[/b] inside the game folder.
+[*]Either run [b]bin\BG3RTX.exe[/b] straight from that folder, or double-click [b]Install.cmd[/b] to copy it to [i]%LOCALAPPDATA%\Programs\BG3RTX[/i] with a Start menu entry (no administrator rights).
+[/list]
+
+[size=3][color=#d6aa62][b]First start[/b][/color][/size]
+[list=1]
+[*]The launcher finds Steam installs by itself. Otherwise press [b]Browse...[/b] and pick the folder that contains [i]bin\bg3.exe[/i].
+[*]Pick a preset (the launcher suggests one for your card), press [b]Save[/b], then [b]Play[/b].
+[*]In the game's Graphics options set the upscaler to [b]DLSS[/b].
+[/list]
+
+[size=3][color=#d6aa62][b]Option C: start from Steam[/b][/color][/size]
+In Steam, right-click Baldur's Gate 3 > [b]Properties > General > Launch options[/b] and enter:
+[code]"<BG3RTX folder>\bin\BG3RTX.exe" %command%[/code]
+Steam then starts the game with BG3RTX and your saved settings, without the launcher window. Set up your preset in the launcher once first.
+
+[size=3][color=#d6aa62][b]Updating[/b][/color][/size]
+Close the game and the launcher, then run the new installer (or the new Install.cmd) into the same folder. Your settings are kept.
+
+[img]IMAGE_URL:h_presets.png[/img]
+
+[list]
+[*][color=#d6aa62][b]Low[/b][/color]: screen-space indirect light and contact shadows. No ray-traced scene, no Ray Reconstruction. The lightest option.
+[*][color=#d6aa62][b]Medium[/b][/color]: ray-traced sun shadows and indirect light for solid surfaces, fast local-light shadows, glossy reflections, Ray Reconstruction.
+[*][color=#d6aa62][b]High[/b][/color]: adds foliage and other cut-out geometry to the ray-traced scene, full local-light shadows, standard reflections.
+[*][color=#d6aa62][b]Ultra[/b][/color]: two-ray indirect light, hidden roofs, full local and interior light shadows, rough reflections, water with refraction, far (6 m) bounce light, hair shadows, depth of field and bloom smoothing. Capped at 58 rendered fps by default.
+[/list]
+All presets use Reflex On and, where your card supports it, frame generation 2x. Change any single option and the launcher shows [b]Custom[/b].
+[size=2][color=#beb5a4]Costs were measured on an RTX 5090. They are not a frame-rate promise for any card.[/color][/size]
+
+[img]IMAGE_URL:h_controls.png[/img]
+
+[list]
+[*][b]Ctrl+Shift+F9[/b] (in game): switch all ray-traced lighting off and on, to compare the same view. DLSS and frame generation stay as they are.
+[*][b]Launcher pages[/b]: [i]Lighting[/i], [i]Surfaces[/i] and [i]Performance[/i] hold every player option. [i]Help & support[/i] holds compatibility help, memory information, overlay troubleshooting and the bug report.
+[*][b]Live or restart[/b]: most options apply while you play. A few say "Restart the game to apply", for example turning frame generation on or off, ray-tracing detail and the first enable of water or hair shadows.
+[*][b]Experimental[/b]: turn on [i]Show experimental options[/i] in the launcher to see the Experimental page. It currently has one option, [i]Water surface reflections[/i], off in every preset.
+[/list]
+
+[img]IMAGE_URL:h_limits.png[/img]
+
+[list]
+[*]Tested mostly in Act 1 (camp, Grymforge, Adamantine Forge) and a few Act 3 places (Water Queen's House, the Blushing Mermaid). Act 2 and most of Act 3 are not systematically tested.
+[*]Long sessions (several hours) are not tested yet.
+[*][b]VRAM[/b] is the main risk, especially on 12-16 GB cards. Long sessions and level changes can hold on to memory. If you see stalls, missing geometry or crashes, lower the preset or resolution and restart the game.
+[*]The first time hair shadows are turned on, shaders compile: expect a short pause or stutter.
+[*]Other Vulkan overlays (Steam, EOS, GOG) can conflict. If the game crashes at start or frame generation does nothing, tick [b]Disable other Vulkan overlays[/b] in the launcher. NVIDIA Smooth Motion is turned off automatically while frame generation is on.
+[*]ReShade, other graphics mods and HDR have not been tested with BG3RTX.
+[*]The DirectX 11 renderer is not supported.
+[*]The water flicker at the port is also in the game's own water. BG3RTX does not fix it.
+[*]Visible hair is the game's stock hair. Strand hair is planned as a later update.
+[/list]
+
+[img]IMAGE_URL:h_faq.png[/img]
+
+[b]Does it change my game files or saves?[/b]
+[spoiler]No. BG3RTX is a Vulkan layer that the launcher enables for the game process only. It writes nothing to the game folder, the registry or your saves. Start the game without the launcher (and without the Steam launch option) and it runs exactly as before.[/spoiler]
+
+[b]I don't have an RTX 5090. Will it run?[/b]
+[spoiler]BG3RTX targets NVIDIA RTX cards, but only the RTX 5090 has been tested. There are no qualified presets or VRAM numbers for other cards. Start with Low, then raise settings step by step and watch for stalls or crashes.[/spoiler]
+
+[b]AMD or Intel graphics?[/b]
+[spoiler]Not supported in this beta. Ray Reconstruction and frame generation are NVIDIA features.[/spoiler]
+
+[b]Why must the game use DLSS?[/b]
+[spoiler]DLSS Ray Reconstruction takes the place of the game's DLSS. It does not run with FSR, XeSS or TAA.[/spoiler]
+
+[b]Frame generation does nothing, or the game crashes at start.[/b]
+[spoiler]Tick [b]Disable other Vulkan overlays[/b] in the launcher (Help & support). Turning frame generation on or off needs a game restart. 2x needs RTX 40 or newer; 3x and 4x need RTX 50.[/spoiler]
+
+[b]How do I see what BG3RTX changes?[/b]
+[spoiler]Press Ctrl+Shift+F9 in game. Every ray-traced effect switches off and on in the same view.[/spoiler]
+
+[b]Does it work with GOG?[/b]
+[spoiler]Probably: pick the game folder with Browse... in the launcher. It is untested.[/spoiler]
+
+[b]Will there be strand hair?[/b]
+[spoiler]Strand hair is planned as a later update. This release keeps the game's own hair and adds ray-traced shadows to it.[/spoiler]
+
+[b]The game was patched and BG3RTX stopped working.[/b]
+[spoiler]A new game patch can break BG3RTX until it is updated. Report it on the Bugs tab with your game version.[/spoiler]
+
+[img]IMAGE_URL:h_uninstall.png[/img]
+
+[list]
+[*][b]Installer version[/b]: Windows Settings > Apps > BG3RTX > Uninstall. It asks whether to keep your settings and removes the shader cache.
+[*][b]ZIP installed with Install.cmd[/b]: run [b]Uninstall.cmd[/b] in the install folder. It removes every BG3RTX file, the Start menu entry and the shader cache.
+[*][b]Portable copy[/b]: delete its folder. There is nothing installed in Windows to remove.
+[*]If you set the Steam launch option, clear it by hand.
+[/list]
+Uninstalling never touches the game or your saves.
+
+[img]IMAGE_URL:h_bugs.png[/img]
+
+[list=1]
+[*]Right after the problem, open the launcher: [b]Help & support > Report a problem...[/b] Preview the files, then [b]Save report...[/b] Nothing is uploaded; the report stays on your PC until you share it.
+[*]Attach it to a new post on the [b]Bugs[/b] tab of this page.
+[*]Add your GPU and VRAM, driver version, preset (and any options you changed), game version and other graphics mods.
+[*]Say where it happens (act, place, time of day), what you expected and what you saw. A screenshot with Ctrl+Shift+F9 off and on helps a lot.
+[/list]
+[size=2][color=#beb5a4]No launcher? Run Diagnostics.cmd in the install folder; it builds the same kind of local report. Never post a save unless you are asked for one.[/color][/size]
+
+[img]IMAGE_URL:h_licence.png[/img]
+
+[list]
+[*]BG3RTX is free software under [b]GPL-3.0-or-later[/b], with an additional permission for the NVIDIA SDK libraries it ships (see LICENSE and LICENSE-EXCEPTION.md in the download).
+[*]Third-party components, each under its own licence (full texts in the [i]licences[/i] folder and THIRD_PARTY.md):
+[list]
+[*]NVIDIA Streamline, DLSS Super Resolution, Ray Reconstruction and Frame Generation, and Reflex
+[*]Microsoft DirectX Shader Compiler (DXC)
+[*]Khronos Vulkan headers
+[*]Microsoft WebView2 (launcher)
+[*]Lato fonts by Lukasz Dziedzic (SIL Open Font License 1.1)
+[/list]
+[*]NVIDIA, GeForce RTX and DLSS are trademarks of NVIDIA Corporation. BG3RTX is an independent fan project. It is not made, endorsed or supported by NVIDIA or Larian Studios.
+[/list]
+
+[center][img]IMAGE_URL:divider.png[/img]
+[size=2][color=#beb5a4]Thanks for testing the beta. Every good bug report makes the next version better.[/color][/size][/center]
