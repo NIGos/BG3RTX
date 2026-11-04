@@ -115,6 +115,8 @@ class PackageLicencesTest(unittest.TestCase):
         names += ['bin/VkLayer_bg3rtx.json', 'bin/bg3rtx_core.dll', 'bin/BG3RTX.exe']
         for name in names:
             path = self.root / name
+            if name == 'bin/VkLayer_bg3rtx.json' or name.startswith('bin/sl/'):
+                path = self.root / 'build-nodiag' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b'fixture, never executed')
         (self.root / 'shaders/main.hlsl').write_text('#include "../common/fixture.h"')
@@ -143,7 +145,7 @@ class PackageLicencesTest(unittest.TestCase):
         self.assertEqual(json.loads((audit / 'files.diff.json').read_text(encoding='utf-8-sig')), [])
         self.assertEqual([e['Destination'] for e in report['Missing']], ['bin\\VkLayer_bg3rtx.dll'])
         lean = self.root / 'build-nodiag/bin/VkLayer_bg3rtx.dll'
-        lean.parent.mkdir(parents=True)
+        lean.parent.mkdir(parents=True, exist_ok=True)
         lean.write_bytes(b'fake lean layer, never executed')
         package = pack('fixture')
         planned = set((audit / 'files.txt').read_text(encoding='utf-8-sig').splitlines())

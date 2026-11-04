@@ -12,6 +12,7 @@ __pycache__/
 /bg3rtx_user.ini.tmp
 /bg3rtx_launcher.ini
 /dist/
+/.scratch/
 
 # Asset database: generated from the game install (python -m tools.assets build)
 /data/assetdb/
