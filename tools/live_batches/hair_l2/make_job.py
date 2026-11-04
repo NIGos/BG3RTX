@@ -33,24 +33,19 @@ def step(label, seconds, trace=False, **keys):
     return hg.step(label, seconds, trace, **keys)
 
 
-SHOT = 8
+SHOT = 4
 plan = [
-    step("warmup", 25, qa_exposure_hold="0", **BASE),     # startup: hair + groom, strand variants
-    step("settle-cam", 10, qa_exposure_hold="0", **BASE),
-    step("warm-shadow", 15, qa_exposure_hold="0", **SHADOW),   # first a_f measurements (counted frames)
-    step("warm-tips", 10, qa_exposure_hold="0", **TIPS),
-    step("warm-back", 10, qa_exposure_hold="0", **BASE),
+    step("warmup", 15, qa_exposure_hold="0", **BASE),     # startup: hair + groom, strand variants
+    step("warm-both", 5, qa_exposure_hold="0", **BOTH),   # warm both independent candidates together
     step("shot-base-a", SHOT, True, **BASE),
     step("shot-shadow-a", SHOT, True, **SHADOW),
     step("shot-base-b", SHOT, True, **BASE),
     step("shot-tips-a", SHOT, True, **TIPS),
-    step("shot-base-c", SHOT, True, **BASE),
-    step("shot-both-a", SHOT, True, **BOTH),
     step("settle", 5, **BASE),
-    step("cost-base-a", 25, **BASE),
-    step("cost-shadow", 25, **SHADOW),
-    step("cost-tips", 25, **TIPS),
-    step("cost-base-b", 25, **BASE),
+    step("cost-base-a", 12, **BASE),
+    step("cost-shadow", 12, **SHADOW),
+    step("cost-tips", 12, **TIPS),
+    step("cost-base-b", 12, **BASE),
     step("restore", 5, qa_exposure_hold="0", **BASE),
 ]
 # hair_primary's job and gates read these module globals: this batch's plan.
@@ -65,6 +60,12 @@ hc.BATCH, hc.LIVE, hc.plan = BATCH, LIVE, plan
 SHADOW_ON = ["cost-shadow"]
 TRANSMIT = (r"\[hair primary\] shadow transmittance: [1-9]\d* draws measured, a_f mean [0-9.]+ [0-9.]+ [0-9.]+ "
             r"\(per draw [0-9.]+\.\.[0-9.]+\); last 300 frames: [1-9]\d* groom rows with a_f")
+
+
+# The initial warmup waits for cold prefetch, GI creation and scene readiness.
+# The candidate warmup waits for its measured a_f producer instead of a second
+# cold-start allowance. The shared retimer derives this 300-frame wait budget.
+plan[1].update(wait_log=[TRANSMIT], wait_log_timeout=1)
 
 
 def job(name, save):
@@ -89,7 +90,7 @@ def job(name, save):
     j["expect_every"] = g
     j["purpose"] = ("Live L2 (docs/RTX_HAIR_COMPLETE_PLAN.md M2 + M3): strands on screen throughout; strand shadow "
                     "transmittance (rt_hair_groom_shadow_t) and dithered strand tips (rt_hair_groom_tips) toggled live "
-                    "against the strands-only baseline. Full-resolution shots base/shadow/base/tips/base/both for the "
+                    "against the strands-only baseline. Full-resolution shots base/shadow/base/tips for the "
                     "user (skin and neck under hair, tip fade), float energy of the pre-post scene colour, cost per mode "
                     "(rt passes, gi, scene build GPU, strand G-buffer draws). Gated: a_f measured while on.")
     return j

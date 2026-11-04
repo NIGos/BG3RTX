@@ -276,12 +276,14 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
                             std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_compact_hit_state",0) != 0 ? 1u : 0u,
                             std::strcmp(entry,"water_copy") != 0 && host->cfg_int("rt_alpha_metadata_cache",0) != 0 ? 1u : 0u,
                             cost_spec ? uint32_t(std::clamp(host->cfg_int("rt_water_hit_cost",0),0,7)) : 0u,
-                            edge_spec && host->cfg_int("rt_water_surface_fresnel",0) != 0 ? 1u : 0u};
-  VkSpecializationMapEntry entries[12]{};
+                            edge_spec && host->cfg_int("rt_water_surface_fresnel",0) != 0 ? 1u : 0u,
+                            native_spec && host->cfg_int("rt_hair_groom_shadow_t",0) != 0 ? 1u : 0u};
+  VkSpecializationMapEntry entries[13]{};
   uint32_t count = 0;
   if (native_spec) {
     entries[count++] = {bg3::shader_variant::kSpecIdTileset, 0, sizeof(uint32_t)};
     entries[count++] = {bg3::shader_variant::kSpecIdScalpHair, sizeof(uint32_t), sizeof(uint32_t)};
+    entries[count++] = {bg3::shader_variant::kSpecIdHairGroomShadowT, 12 * sizeof(uint32_t), sizeof(uint32_t)};
   }
   if (edge_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterRfEdge, 2 * sizeof(uint32_t), sizeof(uint32_t)};
   if (cascade_spec) entries[count++] = {bg3::shader_variant::kSpecIdCascade, 3 * sizeof(uint32_t), sizeof(uint32_t)};
@@ -295,7 +297,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   if (cost_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterHitCost, 10 * sizeof(uint32_t), sizeof(uint32_t)};
   if(edge_spec) entries[count++] = {bg3::shader_variant::kSpecIdWaterSurfaceFresnel,11*sizeof(uint32_t),sizeof(uint32_t)};
   const VkSpecializationInfo info{count, entries, sizeof(values), values};
-  const std::string pipe_key = req + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
+  const std::string pipe_key = req + "#groomshadow=" + std::to_string(values[12]) + "#tileset=" + std::to_string(values[0]) + "#hair=" + std::to_string(values[1]) + "#edge=" + std::to_string(values[2])
       + "#cascade=" + std::to_string(values[3]) + "#shift=" + std::to_string(values[4]) + "#hit=" + std::to_string(values[5]) + "#empty=" + std::to_string(values[7])
       + "#compact=" + std::to_string(values[8]) + "#alphacache=" + std::to_string(values[9]) + "#hitcost=" + std::to_string(values[10]) + "#surface=" + std::to_string(values[11]);
   // Specialization toggles retain their pipelines until the owning layout is retired.

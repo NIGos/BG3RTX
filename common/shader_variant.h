@@ -49,6 +49,7 @@ enum SpecId : unsigned {
   kSpecIdAlphaMetadataCache = 1022,  // gpu-opt1: query-local immutable alpha metadata
   kSpecIdWaterSurfaceFresnel = 1025, // M5.6 clean interface / column partition
   kSpecIdWaterEmptyTiles = 1023,     // gpu-opt1: exact empty compose tiles
+  kSpecIdHairGroomShadowT = 1026,    // C2: strand shadow transmittance, default pre-C2 opaque query
   kSpecIdHairGroom = 1020,           // rt_hair_groom: strand groom TLAS in the secondary queries (gi/ files)
 };
 // rt_hit_material_generated at startup with two-sided generated pool rows (the layer's capability word): RT_HIT_POOL_2S=1

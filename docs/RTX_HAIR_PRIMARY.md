@@ -262,3 +262,21 @@ key-off identity, then the smoke_ultra job with the other qualified keys on. Gat
 | C6 | Every view: portraits and small passes, instanced hair (0ca5ee93), reflections/water secondary hits shade strands with the fibre BSDF | offline, then live | per-pass strand participation lines; no card-only pass left in the smoke run |
 | C7 | Qualify: Ultra preset entry, GUI, cost table, user check notes (what to look at, which save) | live | smoke_ultra clean; cost within the user's budget |
 Strand dynamics of their own (collision, wind per strand) stay out: strands follow the game's simulated cards.
+
+### C2 specialization default (2026-11-04)
+`rt_hair_groom_shadow_t` is specialization 1026 (`kSpecIdHairGroomShadowT`), default 0.
+At 0, rt_visibility uses the original rt_groom_trace first-hit expression. At 1 it uses
+rt_groom_blocks and the shared hp_crossing deduplication used by the GPU bench.
+GI and native water pipelines carry the value in their specialization cache key; toggles
+require driver pipeline creation only. No shader request or ABI change. The former
+RT_GROOM_SHADOW_T_REFERENCE text copy is removed. tools/hair_shadow_check.py compares
+ordinary requests against main, accepting raw differences only through the shared strict
+canonical equivalence with 1026 fixed to zero and every other surviving specialization variable.
+The opt-in primary count/G-buffer and fibre programs have separate GPU validation.
+Live quality and GPU cost remain unmeasured. Check skin and neck under hair in Test Dialogue1,
+then Campsite, with the prepared hair_l2 same-run pairs; no live batch is authorized here.
+Offline gates: 113/255 ordinary requests byte-identical to main 9cb1e3a; 142 strict equivalent
+at default, zero failures. Request delta 0. Unchanged water_surface_shader_test passes against
+009f60f: 16/16 OFF accepted, 16/16 production validated. Full build: 147/147 CTests passed.
+GPU shadow bench: 3000/3000 crossing counts match CPU; 174623 transmitted trials vs 175064.4
+expected, sigma 353.2 (1.25 sigma error). These are offline gates; live GPU cost remains pending.

@@ -1202,6 +1202,7 @@ bool refresh(Pipe& p, const char* file, VkPipelineLayout layout = VK_NULL_HANDLE
     // rt_hair_groom (docs/RTX_HAIR_INTEGRATION.md, live after a startup with it on): the strand groom in the
     // secondary queries; nothing changes until the layer publishes a groom TLAS in the scene stamp.
     specs.add(sv::kSpecIdHairGroom, hair_groom ? 1u : 0u);
+    specs.add(sv::kSpecIdHairGroomShadowT, host->cfg_int("rt_hair_groom_shadow_t", 0) != 0 ? 1u : 0u);
   }
   if (std::strcmp(file, "gi/hair_fibre.hlsl") == 0) {   // rt_hair_fibre: the layer's hair primary header
     const auto* hp = static_cast<const hair_primary::Persist*>(host->persist(hair_primary::kPersistKey, sizeof(hair_primary::Persist)));

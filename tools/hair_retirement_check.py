@@ -1,4 +1,4 @@
-"""Selective hair-retirement equivalence, preserving every surviving specialization.
+"""Selective hair-retirement and C2 default equivalence, preserving other specializations.
 
 Uses the retirement gate's canonical comparator, never a blanket spec-constant freeze.
 Callers must keep the same request (including arithmetic reference defines) on both sides.
@@ -12,10 +12,10 @@ from tools.shader_identity import Progress, compile_requests, identical
 from tools.spec_cascade_check import opt, canonical, differ
 
 
-def retired_off(tool, src, dst):
+def defaults_off(tool, src, dst, ids):
     asm = subprocess.run([str(tool.dxc.with_name('spirv-dis.exe')), '--raw-id', '--no-header', str(src)],
                          capture_output=True, text=True, check=True).stdout
-    retired = set(re.findall(r'OpDecorate\s+(%\d+)\s+SpecId\s+(?:1017|1018|1019)\b', asm))
+    retired = set(re.findall(r'OpDecorate\s+(%\d+)\s+SpecId\s+(?:' + '|'.join(str(i) for i in ids) + r')\b', asm))
     lines = []
     for line in asm.splitlines():
         if any(re.search(r'OpDecorate\s+' + re.escape(i) + r'\s+SpecId\b', line) for i in retired):
@@ -33,8 +33,17 @@ def retired_off(tool, src, dst):
     return dst
 
 
+def retired_off(tool, src, dst):
+    return defaults_off(tool, src, dst, (1017, 1018, 1019))
+
+
+def shadow_off(tool, src, dst):
+    # Only C2 is fixed; every other surviving specialization remains variable.
+    return defaults_off(tool, src, dst, (1026,))
+
+
 def compare_retired(tool, baseline, current, tmp):
-    """Return an error unless all validated entries match with only retired IDs at 0."""
+    """Match every validated entry with retired baseline IDs and C2 default only fixed."""
     if not baseline.ok or not baseline.valid or not current.ok or not current.valid:
         return 'retirement comparison requires compiled, validated modules'
     names = [e.name for e in baseline.entries]
@@ -45,6 +54,8 @@ def compare_retired(tool, baseline, current, tmp):
         a.write_bytes(baseline.blob(entry))
         b.write_bytes(current.blob(entry))
         a = retired_off(tool, a, tmp / f'{i}_retired.spv')
+        a = shadow_off(tool, a, tmp / f'{i}_base_shadow.spv')
+        b = shadow_off(tool, b, tmp / f'{i}_new_shadow.spv')
         a = opt(tool, a, tmp / f'{i}_base_opt.spv', '--fold-spec-const-op-composite',
                 '-O', '--remove-unused-interface-variables')
         b = opt(tool, b, tmp / f'{i}_new_opt.spv', '--fold-spec-const-op-composite',
@@ -69,7 +80,7 @@ def retirement_fallback(rows, base, new, tool, cache, label):
                 with tempfile.TemporaryDirectory(prefix='b3-hair-retire-') as tmp:
                     log = compare_retired(tool, compiled[0][request], compiled[1][request], Path(tmp))
                 if not log:
-                    path = 'retirement equivalence (1017-1019=0)'
+                    path = 'retirement/default equivalence (1017-1019=0 baseline; 1026=0 both)'
             print(f'{label}: {path}: {request}' + (f' ({state}: {log})' if path == 'failed' else ''), flush=True)
             proofs.append({'request': request, 'path': path, 'raw_state': state, 'error': log})
             progress.step(failed=path == 'failed')

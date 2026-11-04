@@ -342,11 +342,24 @@ with tempfile.TemporaryDirectory() as td:
             check(False, 'nonzero retired default must fail')
         except RuntimeError:
             check(True, 'nonzero retired default rejected')
+    shadow_asm = asm + 'OpDecorate %5 SpecId 1026\n%5 = OpSpecConstant %9 0\n'
+    with patch.object(hr.subprocess, 'run', return_value=SimpleNamespace(stdout=shadow_asm)):
+        hr.shadow_off(fake_tool, tmp / 'in.spv', tmp / 'shadow.spv')
+    frozen = (tmp / 'shadow.spvasm').read_text()
+    check('%5 = OpConstant %9 0' in frozen and 'OpDecorate %5 SpecId' not in frozen, 'C2 default frozen')
+    check(all(f'OpDecorate %{i} SpecId' in frozen for i in (1, 2, 3, 4)), 'C2 preserves all other specializations')
+    with patch.object(hr.subprocess, 'run', return_value=SimpleNamespace(stdout=shadow_asm.replace('%5 = OpSpecConstant %9 0', '%5 = OpSpecConstant %9 1'))):
+        try:
+            hr.shadow_off(fake_tool, tmp / 'in.spv', tmp / 'bad.spv')
+            check(False, 'nonzero C2 default must fail')
+        except RuntimeError:
+            check(True, 'nonzero C2 default rejected')
     module = SimpleNamespace(ok=True, valid=True, entries=[SimpleNamespace(name='main')], blob=lambda e: b'module')
     check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=False), tmp)), 'compile failure rejected')
     check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=True, valid=False), tmp)), 'validation failure rejected')
     check(bool(hr.compare_retired(fake_tool, module, SimpleNamespace(ok=True, valid=True, entries=[]), tmp)), 'missing entry rejected')
     with patch.object(hr, 'retired_off', side_effect=lambda t, s, d: s), \
+         patch.object(hr, 'shadow_off', side_effect=lambda t, s, d: s), \
          patch.object(hr, 'opt', side_effect=lambda t, s, d, *p: s), \
          patch.object(hr, 'canonical', side_effect=[([], ['same']), ([], ['same']),
                                                    ([], ['old arithmetic']), ([], ['new arithmetic'])]):
@@ -356,7 +369,7 @@ with tempfile.TemporaryDirectory() as td:
     with patch.object(hr, 'compile_requests', return_value={'changed': module}) as compile_mock, \
          patch.object(hr, 'compare_retired', return_value='') as compare_mock, quiet:
         proofs = hr.retirement_fallback(rows, SimpleNamespace(label='base'), SimpleNamespace(label='new'), None, None, 'test')
-    check([p['path'] for p in proofs] == ['raw identity', 'retirement equivalence (1017-1019=0)', 'failed'],
+    check([p['path'] for p in proofs] == ['raw identity', 'retirement/default equivalence (1017-1019=0 baseline; 1026=0 both)', 'failed'],
           'only DIFFERENT uses fallback, raw identity and failures retain their paths')
     check(compare_mock.call_count == 1 and all(c.args[1] == ['changed'] for c in compile_mock.call_args_list),
           'fallback compiles only differing identical request spellings')

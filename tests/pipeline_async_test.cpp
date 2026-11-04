@@ -34,6 +34,14 @@ int main() {
   }
   CHECK(gpu_choices == (std::set<uint32_t>{kSpecIdCompactHitState, kSpecIdAlphaMetadataCache, kSpecIdWaterEmptyTiles}));
   {
+    pa::PipelineSpecs shadow;
+    shadow.add(kSpecIdHairGroomShadowT, 0);
+    const auto on = pa::experimental_specs(shadow, true);
+    CHECK(on.size() == 1 && on[0].data[0] == 1);
+    CHECK(on[0].entries[0].constantID == kSpecIdHairGroomShadowT);
+    CHECK(on[0].key() != shadow.key());
+  }
+  {
     pa::Builds builds(1, {});
     CHECK(builds.prewarm("warm", 1, [] { return pa::Result{42, 3, true}; }));
     builds.wait_idle();
