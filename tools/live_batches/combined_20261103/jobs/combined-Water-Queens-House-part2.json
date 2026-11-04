@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 5556.0,
+  "timeout": 5568.0,
   "repeat": 1,
   "live_batch": "combined",
   "window_mode": "visible_unfocused_fg",
@@ -818,14 +818,13 @@
               0,
               0
             ],
-            "fps": 25.48853016135551,
-            "windows": 501,
+            "fps": 18.66832607347135,
+            "windows": 487,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -885,11 +884,10 @@
               0
             ],
             "fps": 22.93577981649794,
-            "windows": 14,
+            "windows": 13,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -917,14 +915,14 @@
         "trace_export": {
           "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 370,
+          "samples": 359,
           "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.61315,
-          "source": "wf7a-s8-fg2.1.164300.log",
+          "seconds": 2.6511199999999997,
+          "source": "hmm1-mask-s8-fg2.1.083713.log",
           "quantile": 0.95,
-          "samples": 365,
+          "samples": 359,
           "maximum": 2.90531,
           "logs": 58
         }
@@ -978,10 +976,6 @@
           "match": "got this frame's scene, 0 timeouts",
           "min": 1,
           "windows": [
-            "b2-wo1-s8-hit-shade--shot-sparse-off-a",
-            "b2-wo1-s8-hit-shade--shot-sparse-on-a",
-            "b2-wo1-s8-hit-shade--shot-sparse-off-b",
-            "b2-wo1-s8-hit-shade--shot-sparse-on-b",
             "b2-wo1-s8-hit-shade--cost-sparse-0",
             "b2-wo1-s8-hit-shade--cost-sparse-1",
             "b2-wo1-s8-hit-shade--cost-sparse-2",
@@ -1238,14 +1232,13 @@
               0,
               0
             ],
-            "fps": 25.48853016135551,
-            "windows": 501,
+            "fps": 18.66832607347135,
+            "windows": 487,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -1305,11 +1298,10 @@
               0
             ],
             "fps": 22.93577981649794,
-            "windows": 14,
+            "windows": 13,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -1337,14 +1329,14 @@
         "trace_export": {
           "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 370,
+          "samples": 359,
           "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.61315,
-          "source": "wf7a-s8-fg2.1.164300.log",
+          "seconds": 2.6511199999999997,
+          "source": "hmm1-mask-s8-fg2.1.083713.log",
           "quantile": 0.95,
-          "samples": 365,
+          "samples": 359,
           "maximum": 2.90531,
           "logs": 58
         }
@@ -1398,10 +1390,6 @@
           "match": "got this frame's scene, 0 timeouts",
           "min": 1,
           "windows": [
-            "b3-wo1-s8-bit2--shot-cone-off-a",
-            "b3-wo1-s8-bit2--shot-cone-on-a",
-            "b3-wo1-s8-bit2--shot-cone-off-b",
-            "b3-wo1-s8-bit2--shot-cone-on-b",
             "b3-wo1-s8-bit2--cost-cone-0",
             "b3-wo1-s8-bit2--cost-cone-1",
             "b3-wo1-s8-bit2--cost-cone-2",
@@ -1658,14 +1646,13 @@
               0,
               0
             ],
-            "fps": 25.48853016135551,
-            "windows": 501,
+            "fps": 18.66832607347135,
+            "windows": 487,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -1725,11 +1712,10 @@
               0
             ],
             "fps": 22.93577981649794,
-            "windows": 14,
+            "windows": 13,
             "logs": [
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-              "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
               "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -1757,21 +1743,21 @@
         "trace_export": {
           "seconds": 0.2930000000014843,
           "quantile": 0.95,
-          "samples": 370,
+          "samples": 359,
           "maximum": 0.49399999999877764
         },
         "trace_capture_stall": {
-          "seconds": 2.61315,
-          "source": "wf7a-s8-fg2.1.164300.log",
+          "seconds": 2.6511199999999997,
+          "source": "hmm1-mask-s8-fg2.1.083713.log",
           "quantile": 0.95,
-          "samples": 365,
+          "samples": 359,
           "maximum": 2.90531,
           "logs": 58
         }
       }
     }
   ],
-  "estimated_phase_seconds": 276.1,
+  "estimated_phase_seconds": 288.6,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -1788,14 +1774,13 @@
           0,
           0
         ],
-        "fps": 25.48853016135551,
-        "windows": 501,
+        "fps": 18.66832607347135,
+        "windows": 487,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -1855,11 +1840,10 @@
           0
         ],
         "fps": 22.93577981649794,
-        "windows": 14,
+        "windows": 13,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -1885,16 +1869,16 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.29200000000128057,
+      "seconds": 0.2930000000014843,
       "quantile": 0.95,
-      "samples": 365,
+      "samples": 359,
       "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
-      "seconds": 2.61315,
-      "source": "wf7a-s8-fg2.1.164300.log",
+      "seconds": 2.6511199999999997,
+      "source": "hmm1-mask-s8-fg2.1.083713.log",
       "quantile": 0.95,
-      "samples": 365,
+      "samples": 359,
       "maximum": 2.90531,
       "logs": 58
     },
@@ -1919,14 +1903,13 @@
                 0,
                 0
               ],
-              "fps": 25.48853016135551,
-              "windows": 501,
+              "fps": 18.66832607347135,
+              "windows": 487,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -1986,11 +1969,10 @@
                 0
               ],
               "fps": 22.93577981649794,
-              "windows": 14,
+              "windows": 13,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -2018,14 +2000,14 @@
           "trace_export": {
             "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 359,
             "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.61315,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.6511199999999997,
+            "source": "hmm1-mask-s8-fg2.1.083713.log",
             "quantile": 0.95,
-            "samples": 365,
+            "samples": 359,
             "maximum": 2.90531,
             "logs": 58
           }
@@ -2051,14 +2033,13 @@
                 0,
                 0
               ],
-              "fps": 25.48853016135551,
-              "windows": 501,
+              "fps": 18.66832607347135,
+              "windows": 487,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -2118,11 +2099,10 @@
                 0
               ],
               "fps": 22.93577981649794,
-              "windows": 14,
+              "windows": 13,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -2150,14 +2130,14 @@
           "trace_export": {
             "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 359,
             "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.61315,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.6511199999999997,
+            "source": "hmm1-mask-s8-fg2.1.083713.log",
             "quantile": 0.95,
-            "samples": 365,
+            "samples": 359,
             "maximum": 2.90531,
             "logs": 58
           }
@@ -2183,14 +2163,13 @@
                 0,
                 0
               ],
-              "fps": 25.48853016135551,
-              "windows": 501,
+              "fps": 18.66832607347135,
+              "windows": 487,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\camera-probe-s8.1.100850.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\fl1-ultra-s8-borderless-fg2.1.032907.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hq1-s8-water-fg2.1.053911.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
@@ -2250,11 +2229,10 @@
                 0
               ],
               "fps": 22.93577981649794,
-              "windows": 14,
+              "windows": 13,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.015729.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.031330.log",
-                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf2-s8-fg2.1.161434.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hmm1-mask-s8-fg2.1.083713.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p4-s8-fg2.1.032448.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4w-wind-rgb-s8-fg2.1.083237.log",
@@ -2282,14 +2260,14 @@
           "trace_export": {
             "seconds": 0.2930000000014843,
             "quantile": 0.95,
-            "samples": 370,
+            "samples": 359,
             "maximum": 0.49399999999877764
           },
           "trace_capture_stall": {
-            "seconds": 2.61315,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.6511199999999997,
+            "source": "hmm1-mask-s8-fg2.1.083713.log",
             "quantile": 0.95,
-            "samples": 365,
+            "samples": 359,
             "maximum": 2.90531,
             "logs": 58
           }

@@ -1,7 +1,7 @@
 ## hv9 visual (prepared only)
 Generate: `python tools/live_batches/hair_validation/make_job.py --job-names hv9-visual`.
 Test Dialogue1, one visible_unfocused_fg launch; primary latched 1, groom 1, order 1.
-Plan 63.8 s after load; with a 120 s load allowance, about 183.8 s (3.1 min).
+Plan 66.6 s after load; with a 120 s load allowance, about 186.6 s (3.1 min).
 Warm plus/base, then 60-frame reset windows: a cards (passes 0), b strands (15), c +tips/shadow_t.
 Static a/b/c each export one 960-wide PNG and dumps.json pre-post float scene mean; energy is ungated.
 d strands/cards repeat slow pulsed Q input (E return between), K8 pan_98900/98901; no presented-FG claim.

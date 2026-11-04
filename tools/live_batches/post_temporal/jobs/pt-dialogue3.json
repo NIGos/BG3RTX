@@ -37,16 +37,16 @@
     "trace_export": {
       "seconds": 0.2930000000014843,
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 359,
       "maximum": 0.49399999999877764
     },
     "trace_capture_stall": {
-      "seconds": 2.61315,
-      "source": "wf7a-s8-fg2.1.164300.log",
+      "seconds": 2.6511199999999997,
+      "source": "hmm1-mask-s8-fg2.1.083713.log",
       "quantile": 0.95,
-      "samples": 370,
+      "samples": 359,
       "maximum": 2.90531,
-      "logs": 59
+      "logs": 58
     }
   },
   "repeat": 1,
@@ -1038,7 +1038,7 @@
     "\\[motion-trace\\] phase=77 label=energy-on-09 repeat=0",
     "\\[motion-trace\\] phase=81 label=energy-off-09 repeat=0"
   ],
-  "estimated_phase_seconds": 388.3,
+  "estimated_phase_seconds": 458.3,
   "purpose": "READY_FOR_LIVE: 10 adjacent counterbalanced OFF/ON pairs; all OFF masks frozen; exact paired sign gate. No launch authorized.",
   "max_minutes": 15
 }

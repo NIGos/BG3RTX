@@ -96,7 +96,7 @@ def trace_schedules(job, plan):
         dispatch = float(local.get("trace_dispatch_s", 0))
         fps = fps_windows.expected(job, state)["fps"]
         latency = float(local.get("settings_latency_s", 1))
-        service = max(2/fps + float(local.get("trace_stall_s", 1)), export)
+        service = max(2/fps + capture_stall(local), export)
         times = []
         for at in phase.get("trace_at", []):
             finish = max(origin+max(float(at), latency), finish) + dispatch + service
@@ -590,7 +590,7 @@ def duration_budget(job, plan):
         unresolved = []
         if phase.get("wait_log") and not expected_wait["samples"]:
             unresolved.append("expected readiness unproven: no VALID same-save/key median; not charged as timeout")
-        stall = float(segment_meta.get(label, job.get("live_flow", {})).get("trace_stall_s", 1))
+        stall = capture_stall(segment_meta.get(label, job.get("live_flow", {})))
         if phase.get("trace_at"):
             minimum = max(minimum, schedules[label][-1])
         # dump.cpp: edge9 / water(raw_frames+1) / ordinary17 samples,
