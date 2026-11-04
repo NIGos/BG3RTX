@@ -764,7 +764,7 @@ while ((Get-Date) -lt $deadline) {
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $phaseReadyOffset=if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
-        $iniLines += "pan_capture=$($step.serial)"
+        $iniLines += "pan_capture=$(if ($step.wait_log) { 0 } else { $step.serial })"
         if ($step.set) {
           foreach ($assignment in ($step.set -split ',')) {
             $parts = $assignment -split '=', 2
@@ -782,6 +782,7 @@ while ((Get-Date) -lt $deadline) {
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) hover=$($step.hover_x),$($step.hover_y) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex set=$($step.set)"
         $panCaptureSent = $true
+        $phaseBurstArmed=$false
       }
       # Optional selected-save reload stress test. F8 is load only (never F5).
       # The existing save filter exposes only this run's -Save folder. Require
@@ -851,6 +852,14 @@ while ((Get-Date) -lt $deadline) {
         $phaseStartMs=$planClock.Elapsed.TotalMilliseconds; $elapsed=0
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
         Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
+      }
+      # Settings may be acknowledged before a burst finishes. Arm only after
+      # motion-ready so measured events retain the same readiness boundary.
+      if ($step.wait_log -and $phaseReady -and -not $phaseBurstArmed) {
+        $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
+        $iniLines += "pan_capture=$($step.serial)"
+        $iniLines | Set-Content -LiteralPath $ini
+        $phaseBurstArmed=$true
       }
       if ($step.recenter -and -not $phaseRecentered) {
         $h=Get-GameWindow; $rect=New-Object BG3RTX.Win2+RECT

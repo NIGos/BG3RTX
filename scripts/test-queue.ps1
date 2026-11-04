@@ -439,6 +439,9 @@ function Invoke-SessionRun($job, $name, [int]$i, $tree, [int]$traces) {
 
 # One run of its own: auto-run.ps1 (or the job's command) launches and closes the game.
 function Invoke-SingleRun($job, $name, [int]$i, $tree, [int]$traces, [int]$timeout) {
+  # The readiness median is an estimate, never the runtime safety bound.
+  $capSeconds=if ($null -ne $job.max_minutes) { [double]$job.max_minutes*60 } else { 900.0 }
+  $timeout=[Math]::Min($timeout, [Math]::Floor($capSeconds))
   $t0 = Get-Date
   $lines = @()
   Assert-QueueRuntime

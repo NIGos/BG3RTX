@@ -3,7 +3,7 @@ from statistics import median
 import re
 
 from scripts.queue_gates import stamped_lines, windows, _apply
-from tools.live_batches.pipeline_readiness import conditional
+from tools.live_batches.pipeline_readiness import conditional, reconciled
 
 ENTRIES = []
 CACHE = {}
@@ -57,7 +57,11 @@ def estimate(job, phase, changed, first=False):
                 continue
             delays = []
             if fresh and any(conditional(p) for p in patterns):
-                ack = next((t for t, line in lines if win['start'] <= t < win['end']
+                cfg = next((t for t, line in lines if win['start'] <= t < win['end']
+                            and '[cfg] settings read' in line), None)
+                if cfg is None:
+                    continue
+                ack = next((t for t, line in lines if cfg <= t < win['end']
                             and '[cfg] keys:' in line and (not changed or any(
                                 re.search(r'(?:^|\s)'+re.escape(k)+r'=', line) for k in changed)) and all(
                                 not re.search(r'(?:^|\s)'+re.escape(k)+r'=', line)
@@ -71,6 +75,8 @@ def estimate(job, phase, changed, first=False):
                     'shaders|watch|surface Fresnel', p) and 'gi/[^ ]+' not in p]
                 explicit_only = not any(conditional(p) for p in patterns)
                 ready = None
+                explicit = {p for p in patterns if not reconciled(p)}
+                observed = set()
                 for t, line in lines:
                     if t >= win['end']:
                         break
@@ -80,8 +86,16 @@ def estimate(job, phase, changed, first=False):
                     water_done = re.search(r'\[water\] (\S+\.hlsl[^ ]*) (\w+): built', line)
                     ident = start[1] if start else (water_start[1], water_start[2]) if water_start else None
                     completed = done[1] if done else (water_done[1], water_done[2]) if water_done else None
+                    rr = re.search(r'\[rrpost\] (rr_post[^ ]*\.hlsl:\w+) pipeline (built|building|creation failed)', line)
+                    if rr:
+                        rr_id = ('rrpost', rr[1])
+                        if rr[2] == 'built':
+                            completed = rr_id
+                        else:
+                            ident = rr_id
                     if ident:
                         witness = ('gi: '+ident+' generation ') if isinstance(ident, str) else (
+                            '[rrpost] '+ident[1]+' pipeline built' if ident[0] == 'rrpost' else
                             '[water] '+ident[0]+' '+ident[1]+': built')
                         families = [p for p in affected if re.search(p, witness, re.I)]
                         if t >= ack or families or explicit_only:
@@ -95,17 +109,20 @@ def estimate(job, phase, changed, first=False):
                             if any(re.search(p, line, re.I) for p in families):
                                 pending.discard(old)
                                 historical.pop(old)
-                    if t >= ack and not pending:
+                    observed.update(p for p in explicit
+                                    if (not (p in fresh or 'surface Fresnel' in p) or t >= cfg)
+                                    and re.search(p, line, re.I))
+                    if t >= ack and not pending and len(observed) == len(explicit):
                         ready = t
                         break
                 if ready is None:
                     continue
                 delays.append(max(0, ready-win['start']))
             for pattern in patterns:
-                if fresh and conditional(pattern):
+                if fresh and reconciled(pattern):
                     continue
                 found = next((t for t, line in lines if t < win['end']
-                              and (pattern not in fresh or t >= win.get('settings_applied', win['applied']))
+                              and (not (pattern in fresh or fresh and 'surface Fresnel' in pattern) or t >= win.get('settings_applied', win['applied']))
                               and re.search(pattern, line, re.I)), None)
                 if found is None:
                     break

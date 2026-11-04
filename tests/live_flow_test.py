@@ -717,6 +717,7 @@ class ReadinessBudgetTests(unittest.TestCase):
                   '12:00:10.000 [pan-plan] window 1 set=gi_strength=1\n'
                   '12:00:30.000 [motion-plan] complete')
         lines = ['12:00:01.000 gi: unrelated.hlsl building in the background',
+                 '12:00:10.000 [cfg] settings read',
                  '12:00:10.100 [cfg] keys: gi_strength=1.00']
         def estimate(extra):
             f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines + extra)])
@@ -728,6 +729,33 @@ class ReadinessBudgetTests(unittest.TestCase):
         self.assertEqual(estimate(['12:00:12.000 gi: gi/gi_trace_rt.hlsl generation 1'])['seconds'], 2)
         lines[-1] = '12:00:10.100 [cfg] keys: gi_strength=0'
         self.assertEqual(estimate([])['samples'], 0)
+
+    def test_explicit_fresnel_and_rr_readiness_evidence(self):
+        runner = ('12:00:00.000 [pan-plan] window 0 set=rr_post_temporal=0\n'
+                  '12:00:10.000 [pan-plan] window 1 set=rr_post_temporal=1\n'
+                  '12:00:30.000 [motion-plan] complete')
+        ack = ['12:00:10.000 [cfg] settings read', '12:00:10.100 [cfg] keys: rr_post_temporal=1']
+        quiet = f.pipeline_readiness.QUIET
+        rr = f.pipeline_readiness.TABLE['rr_post_temporal']
+        completed = ['12:00:01.000 [rrpost] rr_post.hlsl:temporal pipeline built',
+                     '12:00:02.000 [rrpost] rr_post.hlsl:temporal_final pipeline built']
+        def estimate(patterns, lines):
+            f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines)])
+            return f.readiness_budget.estimate(dict(save='same'),
+                dict(wait_log=patterns+[quiet], wait_log_fresh=[quiet]), {'rr_post_temporal': '1'})
+        self.assertEqual(estimate(rr, ack)['samples'], 0)
+        self.assertEqual(estimate(rr, completed[:1]+ack)['samples'], 0)
+        self.assertEqual(estimate(rr, completed+ack)['seconds'], 0.1)
+        for status in ('creation failed (-2)', 'building in the background'):
+            failed = completed + ['12:00:09.000 [rrpost] rr_post.hlsl:temporal pipeline '+status] + ack
+            self.assertEqual(estimate(rr, failed)['samples'], 0)
+            self.assertEqual(estimate(rr, failed+['12:00:12.000 [rrpost] rr_post.hlsl:temporal pipeline built'])['seconds'], 2)
+        cold = ack+['12:00:11.000 [rrpost] rr_post.hlsl:temporal pipeline creation failed (-2)']
+        self.assertEqual(estimate(rr, cold)['samples'], 0)
+        fresnel = [r'surface Fresnel.*enabled 1']
+        self.assertEqual(estimate(fresnel, ack)['samples'], 0)
+        self.assertEqual(estimate(fresnel, ['12:00:01.000 surface Fresnel enabled 1']+ack)['samples'], 0)
+        self.assertEqual(estimate(fresnel, ack+['12:00:13.000 surface Fresnel enabled 1'])['seconds'], 3)
 
     def test_retime_bounds_pipeline_timeout_by_median_plus_margin(self):
         j, p = fixture()

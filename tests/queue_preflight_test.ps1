@@ -35,6 +35,13 @@ if((Get-QueuePreflightBlock $file ([pscustomobject]@{session=$true;timeout=300;t
 $selector=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-NextJob'},$true).Extent.Text
 if($selector -notmatch 'Get-QueuePreflightBlock \$next \$job'){throw 'queue selection bypasses lint'}
 $run=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SingleRun'},$true)
+# Execute the actual timeout assignment without launching the runner.
+$bound=$run.FindAll({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -in @('$capSeconds','$timeout')},$true)
+foreach($case in @(@{job=@{};timeout=2238;want=900},@{job=@{max_minutes=2};timeout=2238;want=120},@{job=@{max_minutes=20};timeout=2238;want=1200},@{job=@{};timeout=30;want=30})) {
+ $job=$case.job;$timeout=$case.timeout
+ foreach($assignment in $bound){Invoke-Expression $assignment.Extent.Text}
+ if($timeout -ne $case.want){throw 'runtime deadline does not enforce launch cap'}
+}
 $status=$run.Find({param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Extent.Text -match '^if \(\(Test-Path -LiteralPath \$statusFile\)'},$true)
 $scratch=Join-Path $env:TEMP ('bg3-status-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $scratch | Out-Null
