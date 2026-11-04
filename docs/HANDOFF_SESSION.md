@@ -1,34 +1,25 @@
-﻿# Session handoff - 2026-11-04 night
+﻿# Session handoff - 2026-11-04 morning
 
 Read [PROGRESS_CODEX.md](PROGRESS_CODEX.md), [GOAL_NEXT.md](GOAL_NEXT.md), then
-[RTX_HAIR_COMPLETE_PLAN.md](RTX_HAIR_COMPLETE_PLAN.md). Full folded evidence is in the
-[495-line night archive](archive/PROGRESS_20261104_night.md).
-Rendering main 755e41b6; folding commit/base fb0dd1ca; ABI 26. Branch: docs-consolidate-1104.
-This task is documentation only: never launch the game, submit jobs or write git metadata. Do not commit.
+[RTX_HAIR_COMPLETE_PLAN.md](RTX_HAIR_COMPLETE_PLAN.md). Earlier night evidence is in the
+[night archive](archive/PROGRESS_20261104_night.md). Main de413e94; ABI 26.
 
 ## Resume state
 
-- Bundles 12-15 merged. Two smoke_ultra runs are reported VALID: cascade full 0.0 every window,
-  OMM 1.23 G rays / 0 violations. Earlier INVALID smoke warnings are superseded.
-- Bundle15 hair lives, including hv5 reloads, reportedly have no device loss. Primary strands still never draw.
-- Camera prepass always sees an older groom publish; probe refused 300/300. Probe/publish-order fix is in progress.
-- 877/1,217 styles pass; all companions except Gale beard LOD1 reportedly converted.
-- Fresnel owns 6,914,793 coverage-weighted samples, invalid 0. Later wsf1 is reported VALID; analysis pending.
+- Bundles 12-22 merged plus readiness-period, window-stall, burst-after-ready and lint-active tooling fixes.
+- Water Fresnel wsf1 VALID 06:44: rim +43%, open water +1.8%, FS 0.10-0.15 ms. Waits on the user's look.
+- Hair strands: rays hit since bundle22 (clip y fix). hv6 07:30 lost the device at the first real swap:
+  in-flight scene TLAS referenced released BLAS #552 (fault dump in hv6-strand-diagnostic.1.072839.log).
+- Hair core 1/3/4 identity recheck running on claude/hair-core-shadow (3 differences are main-side).
+- Active lint 26/26 on the fresh corpus; frozen snapshot refreshed (86 VALID logs).
 - Camp pak publication is legitimately 0%; use a compatible Tileset/HLOD-mask scene, e.g. S6.
-- These later smoke/hair/wsf1 outcomes are supplied session updates, absent from the archived folded file.
-  Progress records the evidence boundary. Do not turn supplied updates or dryruns into independent gate receipts.
 
 ## Next queue - only after fresh explicit steering for the concrete batch
 
-1. Finish the hair probe/publish-order fix and its dependent offline checks. Keep cards until fresh coverage proves swaps.
-   Then hv6 first-load/order diagnosis, hv5 reload stages, hair_crowd Dialogue1/Campsite, and hair_l2.
-   hv6 must show current-frame strand samples/draws, resolved refusal reason and no device loss.
-   hv5 must survive reloads with positive strand draws; survival alone is insufficient.
-   Crowd must preserve per-draw coverage. L2 checks shadow transmittance, tips, float energy and pass cost.
-2. Analyze the later VALID wsf1 before another run. Qualify S8 pool-rim interface/column partition against reference.
-   Folded partial run: static compose 0.433 -> 0.458 ms (+0.025 ms); whole-water cost is still missing.
-3. Prepare pak join at S6 or another proven Tileset/HLOD-mask scene. Camp has 22,686 culled unique observations.
-   Require full raw witness/resource/recipe/cull/basis gates; UV candidates alone cannot authorize publication.
+1. Hair: fix the BLAS release lifetime at the first swap (offline test), then hv6 (strand/card about 0.9-1.1,
+   swaps, no device loss), hv5 reload stages, hair_crowd Dialogue1/Campsite, hair_l2. Merge hair-core-shadow.
+2. Water Fresnel: user verdict at the S8 pool rim (ON shots vary 13% vs 2% OFF: check shimmer). Then smoke_ultra.
+3. Prepare pak join at S6 or another proven Tileset/HLOD-mask scene. Require full witness/recipe/cull/basis gates.
 4. Resolve rr_post_temporal promotion with the user. Paired Dialogue3 does not prove improvement:
    12 sign tests p 0.17-0.83; float energy +0.1492% fails; cost 0.152-0.153 ms. Keep off/Advanced meanwhile.
 5. hv4 GPU-AV after participation/L2 prerequisites. Do not infer GPU safety from zero strand draws.
@@ -36,7 +27,7 @@ This task is documentation only: never launch the game, submit jobs or write git
 ## Open branches and remaining work
 
 - water-glint: evidence only; M5.6 step 1 rejected offline. No live qualification queue for this candidate.
-- Hair plan M0 participation is the immediate blocker; M2/M3 and fibre-GI candidates remain unqualified.
+- Hair plan M0 participation (first swap device loss) is the immediate blocker; M2/M3 and fibre-GI candidates remain unqualified.
 - After this queue: wf9, water-hit quality, generated rows/GI guards and GPU candidates still need valid gates.
 - Manual launcher: Apply/restart badges, keyboard/focus, WebView2 zoom, DPI, high contrast, Narrator.
 - Release decisions: project licence, NVIDIA notification, game-data redistribution, Microsoft terms, SHaRC form.
@@ -59,4 +50,3 @@ This task is documentation only: never launch the game, submit jobs or write git
 - Primary activation is startup-latched. Keep unqualified hair/temporal/Fresnel/pak keys off in presets.
 - Remove worktrees only with scripts/remove-worktree.ps1; never recursively clean shared junctions.
 - Keep current replay/gate inputs. Branch progress normally goes in docs/progress/<branch>.md.
-- This requested consolidation edits progress/handoff and adds the verbatim archive only. List files; do not commit.
