@@ -378,17 +378,18 @@ int main() {
     gate.observe(key, 100, 1000, 1000); // arrives at publish 103
     CHECK(gate.allow(key, 103));
     for (uint64_t n = 104; n < 108; ++n) {
-      CHECK(latch.begin(n) == 0);
+      CHECK(latch.begin() == 0);
       const bool prepass = gate.allow(key, n);
       if (prepass) latch.prepass(key);
       // G-buffer 104 refuses its header after a qualified prepass. The failed
       // count from G-buffer 101 arrives only at publish 104, after this draw.
+      latch.gbuffer();
       const bool strands = gate.allow(key, n) && n != 104;
       CHECK(!strands);
-      const bool fallback = latch.needs_card_depth(n, key, strands);
+      const bool fallback = latch.needs_card_depth(key, strands);
       CHECK(fallback == prepass);
       if (fallback) {
-        CHECK(latch.needs_card_depth(n, key, false)); // all sibling draws need depth
+        CHECK(latch.needs_card_depth(key, false)); // all sibling draws need depth
         latch.resolved(key);
       }
       if (n == 104) gate.observe(key, 101, 1000, 1944); // three publishes later, after G-buffer
@@ -396,7 +397,35 @@ int main() {
     }
     gate.observe(key, 100, 1000, 1000); // old success cannot override failure
     CHECK(!gate.allow(key, 108));
-    CHECK(latch.begin(108) == 0); // no orphan
+    CHECK(latch.begin() == 0); // no orphan
+  }
+  { // Prepass before present (F -> F+1), or both passes at F: the same depth epoch.
+    using namespace hair_primary;
+    constexpr uint64_t key = 0xABCD, F = 100;
+    for (uint64_t present : {0ULL, 1ULL}) {
+      DepthLatch latch;
+      CoverageGate gate;
+      gate.observe(key, F, 1000, 1000);
+      CHECK(latch.begin() == 0);
+      CHECK(gate.allow(key, F));
+      latch.prepass(key);
+      CHECK(latch.begin() == 0); // another prepass before G-buffer must retain obligations
+      CHECK(latch.keys.count(key) == 1);
+      latch.gbuffer();
+      gate.invalidate(key, F + present); // G-buffer refuses the prepass-swapped key
+      const bool strands = gate.allow(key, F + present);
+      CHECK(!strands);
+      CHECK(latch.needs_card_depth(key, strands)); // native-depth fallback
+      CHECK(latch.needs_card_depth(key, false)); // sibling draws still need fallback
+      latch.resolved(key);
+      CHECK(latch.begin() == 0); // no orphan, regardless of present's position
+      latch.prepass(key);
+      CHECK(latch.begin() == 0); // repeated prepasses cannot count an orphan
+      latch.gbuffer();
+      CHECK(latch.begin() == 1); // a genuinely unresolved epoch is counted once
+      CHECK(latch.begin() == 0);
+      CHECK(!latch.needs_card_depth(key, false));
+    }
   }
   { // Compact draw keys: duplicates share, live slots survive reorder/removal, overflow keeps cards.
     using namespace hair_primary;

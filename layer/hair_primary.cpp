@@ -851,12 +851,13 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
     std::lock_guard<std::mutex> lock(g_mu);
     if (g_dd) {
       observe_depth(uint64_t(p.depth_image), frame_index());
-      if (!p.color_count && p.width == g_px_w && p.height == g_px_h && g_depth.frame != frame_index() + 1) {
+      if (!p.color_count && p.width == g_px_w && p.height == g_px_h && g_depth.gbuffer_seen) {
         for (uint64_t key : g_depth_resolved) if (!g_depth_failed.count(key)) g_depth.resolved(key);
         g_depth_resolved.clear(); g_depth_failed.clear();
-        g_st.orphan += g_depth.begin(frame_index() + 1);
+        g_st.orphan += g_depth.begin();
       }
       if (p.color_count >= 4 && p.width == g_px_w && p.height == g_px_h) {
+        g_depth.gbuffer();
         timing_before_gbuffer(cmd, frame_index());
       }
     }
@@ -912,7 +913,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (it == g_variant.end()) {
     if (s->pass.color_count >= 4) {
       if (g_live_keys.count(key)) g_coverage.invalidate(key, now + 1);
-      if (g_depth.needs_card_depth(now + 1, key, false)) {
+      if (g_depth.needs_card_depth(key, false)) {
         const auto fb = g_fallback.find(s->pipe[0]);
         if (fb != g_fallback.end()) {
           g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fb->second);
@@ -952,7 +953,7 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   if (pass == Pass::Gbuffer && !probe && !allowed && g_live_keys.count(key)) g_coverage.invalidate(key, now + 1);
   if (pass == Pass::Gbuffer && g_fallback.count(s->pipe[0])) g_depth_safe_keys.insert(key);
   if (pass == Pass::Gbuffer && (draw == hair_primary::kDrawSlots || dv == g_draw_variants.end() || !dv->second.strand[draw])) allowed = false;
-  if (pass == Pass::Gbuffer && g_depth.needs_card_depth(now + 1, key, allowed)) {
+  if (pass == Pass::Gbuffer && g_depth.needs_card_depth(key, allowed)) {
     const auto fb = g_fallback.find(s->pipe[0]);
     if (fb == g_fallback.end()) { g_depth_failed.insert(key); return false; }
     g_dd->vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fb->second);

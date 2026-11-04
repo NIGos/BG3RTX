@@ -257,18 +257,19 @@ inline const GbFrame* unique_frame(const GbFrame* frames, uint32_t n, uint32_t t
   }
   return found;
 }
-// Per-frame depth obligation: refused strands must restore native card depth.
+// Per-prepass epoch depth obligation: refused strands must restore native card depth.
 struct DepthLatch {
-  uint64_t frame = 0;
+  bool gbuffer_seen = true;
   std::unordered_set<uint64_t> keys;
-  uint64_t begin(uint64_t f) {
-    if (f == frame) return 0;
-    const uint64_t orphan = keys.size(); keys.clear(); frame = f; return orphan;
+  uint64_t begin() {
+    if (!gbuffer_seen) return 0;
+    const uint64_t orphan = keys.size(); keys.clear(); gbuffer_seen = false; return orphan;
   }
+  void gbuffer() { gbuffer_seen = true; }
   void prepass(uint64_t key) { keys.insert(key); }
-  bool needs_card_depth(uint64_t f, uint64_t key, bool strands) {
-    if (f != frame || !keys.count(key)) return false;
-    // Keep the obligation for sibling draws of this key throughout the frame.
+  bool needs_card_depth(uint64_t key, bool strands) const {
+    if (!keys.count(key)) return false;
+    // Keep the obligation for sibling draws of this key throughout the epoch.
     return !strands;
   }
   void resolved(uint64_t key) { keys.erase(key); }
