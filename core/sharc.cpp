@@ -183,6 +183,7 @@ void clear(VkCommandBuffer cmd) {
 }
 
 void timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_qp) return;
   const uint32_t old = (g_slot + 1) % kRing;
   const uint32_t mask = g_written[old];
@@ -206,7 +207,7 @@ void timing_collect() {
   };
   const size_t ni = g_ms_inject.size();
   const float mi = med(g_ms_inject), mr = med(g_ms_resolve);
-  host->log("sharc: resolve GPU median %.3f ms, p90 %.3f; inject median %.3f ms (%zu of %zu frames injected); "
+  log_stats("sharc: resolve GPU median %.3f ms, p90 %.3f; inject median %.3f ms (%zu of %zu frames injected); "
             "2^%u entries, stride %d, GI radius %.1f m, query 0x%x",
             mr, g_ms_resolve[g_ms_resolve.size() * 9 / 10], mi, ni, g_ms_resolve.size(), g_log2,
             host->cfg_int("sharc_inject_stride", 2), host->cfg_float("sharc_gi_radius", 4.0f), host->cfg_int("sharc_query", 7));
@@ -371,6 +372,7 @@ void sharc_end(VkCommandBuffer cmd) {
 }
 
 void sharc_timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_qp || index > 3) return;
   const uint32_t q = g_slot * 4 + index;
   if (index == 0) g_written[g_slot] = 0;

@@ -294,7 +294,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now, uint64_t rec) {
     // (submission order). No strike from it; logged so a live run shows how often (rate-limited).
     if (other_total && (cfg_int("rt_stats_period_frames", 0) <= 0 || s.frame > g_stats_start)) ++g_adjacent_window;   // counted frames with adjacent-tag strand pixels (the 300-frame line)
     if (!total && other_total && g_misaligned_logged++ % 300 == 0)
-      log("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
+      log_stats("[hair primary] counted frame %llu: its %u strand pixels carry an adjacent frame's tag (the G-buffer ran "
           "against another publish): no strike (%llu such frames)", (unsigned long long)s.frame, other_total,
           (unsigned long long)g_misaligned_logged);
     s.valid = false;
@@ -503,12 +503,12 @@ void coverage_log(uint64_t now) {
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped, period.used_min, period.used_max);
   }
-  log("[hair primary] coverage (last %u frames): %u draws probed, %u swapped; per draw (key prefix: newest accepted strand pixels/unique card pixels = ratio, swapped frames, used ratio min..max):%s; ratio min %.3f, bound %.3f, upper %.3f, draws outside bounds %u; "
+  log_stats("[hair primary] coverage (last %u frames): %u draws probed, %u swapped; per draw (key prefix: newest accepted strand pixels/unique card pixels = ratio, swapped frames, used ratio min..max):%s; ratio min %.3f, bound %.3f, upper %.3f, draws outside bounds %u; "
       "ambiguous tags %u; native depth fallbacks %llu; draws without a slot %u",
       stats_period(300), probed, swapped, per, minimum, hair_primary::kCoverMin, hair_primary::kCoverMax, below, g_ambiguous, (unsigned long long)g_fallbacks, unsigned(g_without_slot.size()));
   g_ambiguous = 0; g_fallbacks = 0; g_without_slot.clear();
   g_coverage_period.clear();
-  crumbs_log("[hair primary]");
+  if (logging::stats_enabled(cfg_int)) crumbs_log("[hair primary]");
 }
 
 }  // namespace
@@ -831,6 +831,7 @@ bool hair_primary_wanted() {
 // in the publish's command buffer: a G-buffer recorded before the publish was never timed (hc2 2026-11-04: strand
 // draws every period, no 'strand G-buffer draws GPU' line).
 static void timing_before_gbuffer(VkCommandBuffer cmd, uint64_t now) {
+  if (!logging::stats_enabled(cfg_int)) return;
   DeviceData* dd = g_dd;
   if (g_slot_frame[now % kTimeSlots] == now + 1) return;   // once per frame
   if (!g_qp) {
@@ -1136,7 +1137,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     g_adjacent_total += g_adjacent_window;
     {
       const float* r = g_seen.ray;
-      log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
+      log_stats("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
           "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u; card pixels "
           "with tag %u/%u/%u/%u: %u/%u/%u/%u; accepted pixels: %u/%u/%u/%u, evidence from tag %u (G-buffer frame %llu: "
@@ -1148,14 +1149,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
           g_seen.accepted_totals[0], g_seen.accepted_totals[1], g_seen.accepted_totals[2], g_seen.accepted_totals[3], g_seen.evidence_tag,
           (unsigned long long)g_seen.evidence_frame);
     }
-    log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
+    log_stats("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
         (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total,
         (unsigned long long)g_adjacent_window, (unsigned long long)g_adjacent_total, g_order ? "G-buffer" : "prepass");
     g_adjacent_window = 0;
   }
   if (stats_due(now)) {
-    log("[hair primary] frame %llu: %u grooms published; last %u frames: %llu publishes, %llu prepass, %llu "
+    log_stats("[hair primary] frame %llu: %u grooms published; last %u frames: %llu publishes, %llu prepass, %llu "
         "G-buffer and %llu velocity strand draws, %llu pipelines refused, %llu feedback failures; prepass card depth dropped without its G-buffer "
         "swap %llu",
         (unsigned long long)now, count, stats_period(300), (unsigned long long)g_st.publishes, (unsigned long long)g_st.prepass,
@@ -1168,7 +1169,7 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       at += std::snprintf(per + at, sizeof per - at, " %04llx:prepass=%llu,draw=%llu,%s,pipeline=0x%llx",
           (unsigned long long)(o.key >> 48), (unsigned long long)o.prepass, (unsigned long long)o.draw, o.reason, (unsigned long long)o.pipeline);
     }
-    log("[hair primary] depth orphans (last %u frames, first 4; key prefix:prepass frame_index,draw frame_index,reason,pipeline):%s",
+    log_stats("[hair primary] depth orphans (last %u frames, first 4; key prefix:prepass frame_index,draw frame_index,reason,pipeline):%s",
         stats_period(300), at ? per : " none");
     g_depth_orphan_count = 0;
   }
@@ -1181,14 +1182,14 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       for (int c = 0; c < 3; ++c) sum[c] += t.a[c];
     }
     const float n = g_transmit.empty() ? 1.0f : float(g_transmit.size());
-    log("[hair primary] shadow transmittance: %zu draws measured, a_f mean %.3f %.3f %.3f (per draw %.3f..%.3f); "
+    log_stats("[hair primary] shadow transmittance: %zu draws measured, a_f mean %.3f %.3f %.3f (per draw %.3f..%.3f); "
         "last %u frames: %llu groom rows with a_f",
         g_transmit.size(), sum[0] / n, sum[1] / n, sum[2] / n, g_transmit.empty() ? 0.0f : lo, hi,
         stats_period(300), (unsigned long long)g_transmit_rows);
     g_transmit_rows = 0;
   }
   if (stats_due(now) && g_ms_frames)
-    log("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
+    log_stats("[hair primary] strand G-buffer draws GPU %.3f ms/frame (average of %u frames, per-draw timestamps)",
         g_ms_sum / g_ms_frames, g_ms_frames);
   if (stats_due(now)) g_failures.reset(), g_st.orphan = 0, g_st.publishes = g_st.prepass = g_st.gbuffer = g_st.velocity = 0, g_ms_sum = 0, g_ms_frames = 0;
 }

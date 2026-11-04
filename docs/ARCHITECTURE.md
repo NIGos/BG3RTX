@@ -38,6 +38,14 @@ bg3.exe ──► Vulkan loader ──► VK_LAYER_BG3RTX_host (bin/VkLayer_bg3r
   uses it.
 - **Release profile.** `data/release.ini`, appended by `scripts/package.ps1`, turns the
   developer keys off (`dev=0` disables the trace hotkey, `dump_shaders=0`).
+- **Release logging.** Periodic developer reports use `log_stats` in the layer/core,
+  enabled by `detailed_logging`, `dev`, `rt_stats`, `ls_stats`, or a positive `rt_stats_period_frames`.
+  Detailed logging is an off-by-default Help & support option, latched at game startup.
+  The same gate disables log-only GPU timestamp collection and per-allocation fault-range lines;
+  allocation ranges remain recorded in memory for device-fault reports.
+  Startup, settings, state changes and failures use ordinary `log`. The regular VRAM
+  summary is limited to once per minute without statistics. Streamline SDK callbacks
+  retain warnings/errors; info requires Detailed logging, `dev` or explicit `sl_verbose`.
 - **Diagnostics build switch.** CMake `BG3RTX_DIAGNOSTICS` (default ON) compiles the
   diagnostic-only host code into the layer: terrain packet dump, pan bursts, `rt_order_trace`,
   the `cpu_timing` hook timers in `cmd.cpp`, `ls_native_direct_validate`. OFF turns their hooks

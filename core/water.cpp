@@ -130,7 +130,7 @@ VkDeviceMemory g_host_mem = VK_NULL_HANDLE, g_rts_mem = VK_NULL_HANDLE, g_dev_me
 uint8_t* g_map = nullptr;
 VkQueryPool g_qp = VK_NULL_HANDLE;
 uint32_t g_slot = 0;
-bool g_written[kRing] = {};
+bool g_written[kRing] = {}, g_timed[kRing] = {};
 uint64_t g_last_frame = UINT64_MAX;
 bool g_failed_logged = false;
 
@@ -403,7 +403,7 @@ void collect(uint32_t slot) {
     g_win.sumL += u64(w, 18) / 4096.0;
     g_win.sumEL += u64(w, 20) / 4096.0;
   }
-  if (g_qp) {
+  if (g_timed[slot] && g_qp && bg3::logging::stats_enabled(host->cfg_int)) {
     uint64_t t[4] = {};
     if (host->vk->GetQueryPoolResults(host->device, g_qp, slot * 2, 2, sizeof t, t, 16,
                                       VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS &&
@@ -423,7 +423,7 @@ void maybe_log() {
   const uint64_t* w = W.w;
   const double px = double(w[1]), vis = double(w[4] + w[5]), rays = double(w[8]);
   static const char* kWhy[] = {"-", "no scene", "stale", "torn", "no TLAS"};
-  host->log("[water] reflections (%llu frames, %llu traced): water px %.2f%% of %.0f px/frame (in front %.2f%%, empty "
+  log_stats("[water] reflections (%llu frames, %llu traced): water px %.2f%% of %.0f px/frame (in front %.2f%%, empty "
             "G-buffer %.2f%%, at bed %.2f%%), behind bed %llu (%.4f%% of water hits); rays %.0f/frame: screen hit %.1f%%, "
             "hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; normal fallback "
             "%.2f%%; mean E %.4f, mean screen L %.4f, mean E*L %.5f; shift %s; skipped frames: %s %llu, %s %llu, %s %llu, "
@@ -441,7 +441,7 @@ void maybe_log() {
   std::sort(ms.begin(), ms.end());
   const double med = ms.empty() ? 0.0 : double(ms[ms.size() / 2]);
   const double p90 = ms.empty() ? 0.0 : double(ms[(std::min)(ms.size() - 1, ms.size() * 9 / 10)]);
-  host->log("[water] reflections GPU %.3f ms median, p90 %.3f (%zu timed; water primary + reflection dispatches); scene "
+  log_stats("[water] reflections GPU %.3f ms median, p90 %.3f (%zu timed; water primary + reflection dispatches); scene "
             "%.1f draws, %.0f triangles, age %.2f frames; F0 %.4f (Reflectance_Base %.3f, Roughness_Base %.3f, family %d); "
             "views %llu over %llu water passes (%llu with water between other draws)",
             med, p90, ms.size(), W.ran ? double(W.draws) / double(W.ran) : 0.0,
@@ -492,7 +492,7 @@ bool g_crr = false;    // M5.5: the WATER_SHADOWS;WATER_LS;WATER_REFR compose (1
 bool g_cgsh = false;   // M5.4c: the ;WATER_GSH=1 variant of the above (the records + kGshBytes)
 VkQueryPool g_cqp = VK_NULL_HANDLE;
 uint32_t g_cslot = 0;
-bool g_cwritten[kRing] = {};
+bool g_cwritten[kRing] = {}, g_ctimed[kRing] = {};
 uint32_t g_cpasses[kRing] = {};
 // What the composition at the end of the forward water passes needs from this frame's lighting.
 struct Stash {
@@ -732,7 +732,7 @@ void collect_compose(uint32_t slot) {
     g_cwin.sumGshRestored += u64(w, bg3::water::kCsGshSumRestored) / 4096.0;
     g_cwin.sumGshVg += u64(w, bg3::water::kCsGshSumVg) / 4096.0;
   }
-  if (g_cqp) {
+  if (g_ctimed[slot] && g_cqp && bg3::logging::stats_enabled(host->cfg_int)) {
     const uint32_t n = 1 + (std::min)(g_cpasses[slot], kMaxComposePasses);
     uint64_t t[kCQ * 2] = {};
     bg3::water::ComposeMs ms;
@@ -755,7 +755,7 @@ void maybe_log_compose() {
   using namespace bg3::water;
   const double rec = double(w[1]), own = double(w[2]), rays = double(w[kCsRays]), comp = double(w[kCsComposed]);
   const uint32_t t1 = kCsTier1;
-  host->log("[water] compose (%llu frames, %llu composed, %.2f passes/frame): records %.0f/frame, owned %.2f%% (not owned "
+  log_stats("[water] compose (%llu frames, %llu composed, %.2f passes/frame): records %.0f/frame, owned %.2f%% (not owned "
             "%.2f%%), invalid %llu, kept: rough %.2f%%, below the surface %.2f%%; rays %.0f/frame: screen hit (composed) "
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
@@ -775,7 +775,7 @@ void maybe_log_compose() {
             W.camera_samples ? W.camera_delta_sum/W.camera_samples : 0.0, W.camera_delta_max, (unsigned long long)W.camera_samples);
   // Temporal stability (common/water_compose.h ComposeContinuity, pick_scene): the frames whose water
   // passes were all refused show the game's water for one frame (gate: uncomposed 0).
-  host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
+  log_stats("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
             "(on/off flips %llu); refused passes: no recent lighting (cleared %llu, older than %llu frames %llu, ahead "
             "%llu), no scene %llu; earlier lighting: current slot stale %llu, newer build before this frame %llu, newer "
             "pair unavailable %llu, lighting's pair kept %llu; non-finite terms %llu (the game's colour kept: "
@@ -786,7 +786,7 @@ void maybe_log_compose() {
             (unsigned long long)W.no_scene, (unsigned long long)W.cur_stale, (unsigned long long)W.newer_old,
             (unsigned long long)W.newer_failed, (unsigned long long)W.stash_kept,
             (unsigned long long)w[kCsNonFinite]);
-  host->log("[water] surface partition: coverage-weighted owned %llu, invalid %llu; coverage zero %llu, partial %llu, full %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, foam texture source %llu, edge/flow mask source %llu; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
+  log_stats("[water] surface partition: coverage-weighted owned %llu, invalid %llu; coverage zero %llu, partial %llu, full %llu, native/missing FS marker %llu, unmarked/layout %llu, FS spec off %llu, compose spec off %llu; marked owned %llu, foam texture source %llu, edge/flow mask source %llu; histogram ceil(255c), weighted count wave-rounded; energy partition checked (8 float eps), model mean may change",
             (unsigned long long)w[kCsSurfaceClean], (unsigned long long)w[kCsSurfaceInvalid],
             (unsigned long long)w[kCsSurfaceFoamColour], (unsigned long long)w[kCsSurfaceFoamF0],
             (unsigned long long)w[kCsSurfaceFoamRough], (unsigned long long)w[kCsSurfaceNative],
@@ -795,7 +795,7 @@ void maybe_log_compose() {
             (unsigned long long)w[kCsSurfaceFlow], (unsigned long long)w[kCsSurfaceEdge]);
   g_ccont.reset_counts();
   const double meanC = own > 0 ? W.sumC / own : 0.0, delta = W.sumPos - W.sumNeg;
-  host->log("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
+  log_stats("[water] compose energy: mean C %.5f over owned; composed %.2f%% of owned: probe removed (B) %.5f, traced "
             "added (A L) %.5f, delta %+.5f (+%.5f / -%.5f) per composed pixel; mean delta over owned %+.6f = %+.3f%% of mean "
             "C; probe term B over owned %.5f",
             meanC, pct(comp, own), comp > 0 ? W.sumB / comp : 0.0, comp > 0 ? W.sumAL / comp : 0.0,
@@ -805,7 +805,7 @@ void maybe_log_compose() {
   // L / (k Sp) per composed pixel (water_compose.h ratio_bin): one bin = a unit factor; a spread
   // with mass near 1 = the probe's error (sky where the hit geometry is), the physical case.
   const double rbins = double(w[kCsRatioLow] + w[kCsRatioMid] + w[kCsRatioHigh]);
-  host->log("[water] compose ratio A L / B over %.0f composed px: below %.1f %.1f%%, %.1f..%.1f %.1f%%, above %.1f %.1f%%; "
+  log_stats("[water] compose ratio A L / B over %.0f composed px: below %.1f %.1f%%, %.1f..%.1f %.1f%%, above %.1f %.1f%%; "
             "ratio of the means %.3f",
             rbins, double(kRatioLow), pct(double(w[kCsRatioLow]), rbins), double(kRatioLow), double(kRatioHigh),
             pct(double(w[kCsRatioMid]), rbins), double(kRatioHigh), pct(double(w[kCsRatioHigh]), rbins),
@@ -819,7 +819,7 @@ void maybe_log_compose() {
   quant(W.ms, med, p90);
   quant(W.ms_copy, cmed, cp90);
   quant(W.ms_comp, dmed, dp90);
-  host->log("[water] compose GPU %.3f ms median, p90 %.3f (%zu timed frames: the lighting copy + the compose dispatches; "
+  log_stats("[water] compose GPU %.3f ms median, p90 %.3f (%zu timed frames: the lighting copy + the compose dispatches; "
             "%llu passes beyond %u untimed); copy %.3f ms median, p90 %.3f; compose dispatches %.3f ms median, p90 %.3f",
             med, p90, W.ms.size(), (unsigned long long)W.untimed, kMaxComposePasses, cmed, cp90, dmed, dp90);
   if (g_csun || W.no_sun_records || host->cfg_int("rt_water_shadows", 0)) {
@@ -827,7 +827,7 @@ void maybe_log_compose() {
     const double srec = double(w[kCsSunRec]), straced = double(w[kCsSunTraced]), socc = double(w[kCsSunOccluded]);
     const double meanD = srec > 0 ? W.sumD / srec : 0.0, meanRm = srec > 0 ? W.sumRm / srec : 0.0;
     const double removed_own = own > 0 ? W.sumRm / own : 0.0;
-    host->log("[water] shadows (%llu frames, %llu passes, variant %s): sun records %.0f/frame = %.2f%% of owned (no sun "
+    log_stats("[water] shadows (%llu frames, %llu passes, variant %s): sun records %.0f/frame = %.2f%% of owned (no sun "
               "term %.2f%%, invalid %llu); traced %.2f%% of sun records, occluded %.2f%% of traced (traced shadow share "
               "%.2f%% of sun records), unknown %llu (kept); sun term D %.5f per sun record, removed %.5f = %.2f%% of D; "
               "mean removed over owned %.6f = %.3f%% of mean C; clamped %llu; GPU %.3f ms median, p90 %.3f (the "
@@ -844,7 +844,7 @@ void maybe_log_compose() {
     const double grec = double(w[kCsGshRec]), grest = double(w[kCsGshRestored]);
     const double meanDg = grec > 0 ? W.sumGshDg / grec : 0.0, meanRest = grest > 0 ? W.sumGshRestored / grest : 0.0;
     const double restored_own = own > 0 ? W.sumGshRestored / own : 0.0;
-    host->log("[water] game shadow (%llu frames, variant %s): game-shadowed records %.0f/frame = %.2f%% of owned (invalid "
+    log_stats("[water] game shadow (%llu frames, variant %s): game-shadowed records %.0f/frame = %.2f%% of owned (invalid "
               "%llu), mean Vg %.4f; lit by the traced ray (restored C + Dg) %.2f%% of them; occluded where the game was "
               "lit %llu; Dg %.5f per game-shadowed record, restored %.5f per restored record; mean restored over owned "
               "%.6f = %.3f%% of mean C; skipped: records without the words %llu",
@@ -859,7 +859,7 @@ void maybe_log_compose() {
     const double locc = double(w[kCsLsOccluded]), chk = double(w[kCsLsCheck]), chs = double(w[kCsLsChkSh]);
     const double meanL = lrec > 0 ? W.sumLsL / lrec : 0.0, meanRm = lrec > 0 ? W.sumLsRm / lrec : 0.0;
     const double removed_own = own > 0 ? W.sumLsRm / own : 0.0;
-    host->log("[water] local shadows (%llu frames, %llu passes with the light list, %llu without): local records %.0f/frame "
+    log_stats("[water] local shadows (%llu frames, %llu passes with the light list, %llu without): local records %.0f/frame "
               "= %.2f%% of owned (no local term %.2f%%, invalid %llu, list cut %llu); lights evaluated %.2f/record, with a "
               "game shadow map %.2f/record (kept), traced %.2f/record, occluded %.2f%% of traced, unknown %llu (kept); "
               "records with an occluded light %.2f%% of local records; sum check over %.0f records: within %.3f%% %.2f%%, "
@@ -883,7 +883,7 @@ void maybe_log_compose() {
     const double rrec = double(w[kCsRrRec]), rtr = double(w[kCsRrTraced]), rhit = double(w[kCsRrHit]);
     const double game = rhit > 0 ? W.sumRrGame / rhit : 0.0, nw = rhit > 0 ? W.sumRrNew / rhit : 0.0;
     const double delta_own = own > 0 ? (W.sumRrNew - W.sumRrGame) / own : 0.0;
-    host->log("[water] refraction (%llu frames, %llu passes with the colour copy, %llu without): transmissive records "
+    log_stats("[water] refraction (%llu frames, %llu passes with the colour copy, %llu without): transmissive records "
               "%.0f/frame = %.2f%% of owned (opaque %.2f%%, invalid %llu, no usable copy %llu); traced %.2f%% of "
               "transmissive (not traced %llu): screen hit (composed) %.1f%%, hidden %.1f%%, off screen %.1f%%, miss "
               "%.1f%%, aborted %llu; transmission-weighted hidden share %.2f%%; screen shift %.1f px per composed record; "
@@ -992,7 +992,8 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
     g_cimg_init = true;
   }
   memory_barrier(cmd, kXfer, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-  if (g_cqp) {
+  g_ctimed[slot] = g_cqp && bg3::logging::stats_enabled(host->cfg_int);
+  if (g_ctimed[slot]) {
     vk.CmdResetQueryPool(cmd, g_cqp, slot * kCQ, kCQ);
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ);
   }
@@ -1022,7 +1023,7 @@ void compose_at_lighting(VkCommandBuffer cmd, const WaterRfIn& in, VkDescriptorS
   vk.CmdPushDescriptorSet(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_clayout, 0, 9, wr);
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, in.push_bytes, in.push);
   vk.CmdDispatch(cmd, (in.w + 7) / 8, (in.h + 7) / 8, 1);
-  if (g_cqp) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 1);
+  if (g_ctimed[slot]) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 1);
   // The compose dispatches (later passes, other command buffers) and the host read.
   memory_barrier(cmd, kCS, kCS | VK_PIPELINE_STAGE_HOST_BIT);
   g_cwritten[slot] = true;
@@ -1157,7 +1158,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   }
   memory_barrier(cmd, kAll, kCS);
   if (from != G) image_barrier(cmd, p->color_images[0], from, G, kAll, kCS);
-  if (g_cqp && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
+  if (g_ctimed[slot] && pass < kMaxComposePasses) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 2 + pass * 2);
   else ++g_cwin.untimed;
   VkDescriptorBufferInfo bufs[7] = {{g_cdev, kCCamOff, 400},
                                     {g_cdev, kCCamOff + kCVpOff, 16},
@@ -1217,7 +1218,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
-  if (g_cqp && pass < kMaxComposePasses)
+  if (g_ctimed[slot] && pass < kMaxComposePasses)
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 3 + pass * 2);
   // The consumed records, the statistics and the target before the later passes and the copy.
   memory_barrier(cmd, kCS, kAll);
@@ -1342,7 +1343,8 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   // The fill, the earlier views' reads of wOut / wT (other command buffers, earlier in the
   // queue), and the water build (the layer's own submission: AS build stage).
   memory_barrier(cmd, kAll | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, kCS);
-  if (g_qp) {
+  g_timed[slot] = g_qp && bg3::logging::stats_enabled(host->cfg_int);
+  if (g_timed[slot]) {
     vk.CmdResetQueryPool(cmd, g_qp, slot * 2, 2);
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2);
   }
@@ -1400,7 +1402,7 @@ void water_rf(VkCommandBuffer cmd, const WaterRfIn& input) {
   memory_barrier(cmd, kCS, kCS);
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_reflect.p);
   vk.CmdDispatch(cmd, gx, gy, 1);
-  if (g_qp) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
+  if (g_timed[slot]) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_qp, slot * 2 + 1);
   // The views (later passes, other command buffers), the copy of the counters to this slot and
   // its host read kRing frames later.
   memory_barrier(cmd, kCS, kCS | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);

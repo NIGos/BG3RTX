@@ -1285,14 +1285,14 @@ void cascade_pass_before(VkCommandBuffer cmd, CmdState* s, int layer) {
           VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
           VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT);
   c.ts = -1;
-  if (!g_cc_qp) {
+  if (logging::stats_enabled(cfg_int) && !g_cc_qp) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
     qi.queryCount = kCcTs * 2;
     if (g_dd->vk.CreateQueryPool(g_dd->device, &qi, nullptr, &g_cc_qp) != VK_SUCCESS) g_cc_qp = VK_NULL_HANDLE;
   }
   const uint32_t slot = uint32_t(f % kCcTs);
-  if (g_cc_qp && !g_cc_ts_frame[slot]) {
+  if (logging::stats_enabled(cfg_int) && g_cc_qp && !g_cc_ts_frame[slot]) {
     g_cc_ts_frame[slot] = f + 1;
     c.ts = int(slot);
     g_dd->vk.CmdResetQueryPool(cmd, g_cc_qp, slot * 2, 2);
@@ -1476,7 +1476,7 @@ void cc_matrix(const CcMat& m, float m4[4][4]) {
 
 // The [cascade] lines, on the present thread.
 void cascade_on_present() {
-  if (g_cc_qp) {
+  if (logging::stats_enabled(cfg_int) && g_cc_qp) {
     std::lock_guard<std::mutex> lock(g_cc_mu);
     const uint64_t now = frame_index();
     static int reset_token = 0;
@@ -1522,10 +1522,10 @@ void cascade_on_present() {
   const double n = double(st.frames), mb = 1.0 / (1 << 20);
   uint64_t builds = 0;
   for (uint64_t b : st.builds) builds += b;
-  log("[cascade] alpha-tested cascade draws skipped %.1f per frame: FS in the alpha table %.1f, with the captured UV %.1f",
+  log_stats("[cascade] alpha-tested cascade draws skipped %.1f per frame: FS in the alpha table %.1f, with the captured UV %.1f",
       st.alpha / double(st.frames ? st.frames : 1), g_cc_alpha_known.exchange(0) / double(st.frames ? st.frames : 1),
       g_cc_alpha_uv.exchange(0) / double(st.frames ? st.frames : 1));
-  log("[cascade] casters: cascade %d, %llu frames; per frame: draws seen %.1f, skipped as duplicates %.1f, "
+  log_stats("[cascade] casters: cascade %d, %llu frames; per frame: draws seen %.1f, skipped as duplicates %.1f, "
       "alpha-tested skipped %.1f, not sizeable %.1f, other matrix %.1f, buffer full %.1f, added %.1f; triangles %.0f "
       "(max %llu), %.2f MB (max %.2f of %d MB, demand max %.2f MB); camera pass keys %.0f; captures not converted %llu; next-frame builds "
       "%llu: with the instance %llu (%.0f triangles), no soup %llu, unsubmitted %llu, no camera %llu, legacy %llu, "
@@ -1566,7 +1566,7 @@ void cascade_on_present() {
       const double dx = m.v[52] - cam[0], dy = m.v[53] - cam[1], dz = m.v[54] - cam[2];
       d = std::sqrt(dx * dx + dy * dy + dz * dz);
     }
-    log("[cascade] matrix of cascade %d (its set 0 binding 2, _m2 at +128): w column error %.2g -> %s, det %.3g, "
+    log_stats("[cascade] matrix of cascade %d (its set 0 binding 2, _m2 at +128): w column error %.2g -> %s, det %.3g, "
         "extent %.1f x %.1f m, depth %.1f m; its UBO origin (+208) is %.3f m from the camera's of that frame%s; all "
         "cascades (m):%s",
         layer, o.w_err, o.ok ? "orthographic, inverted from its x, y, z rows" : "NOT orthographic: soup invalid",
@@ -1850,7 +1850,7 @@ void geo_uv_summary() {
     std::lock_guard<std::mutex> lock(g_mu);
     pairs = g_uv_bad_pairs.size();
   }
-  log("[geo] UV slots of the patched pipelines so far: %u match the FS, %u the FS's UV is a wider VS output, %u the FS "
+  log_stats("[geo] UV slots of the patched pipelines so far: %u match the FS, %u the FS's UV is a wider VS output, %u the FS "
       "reads its UV elsewhere, %u FS without a float2 input, %u unknown (libraries); %zu distinct mismatching VS/FS pairs",
       g_uv_count[UV_OK].load(), g_uv_count[UV_VS_WIDER].load(), g_uv_count[UV_FS_ELSEWHERE].load(),
       g_uv_count[UV_FS_NONE].load(), g_uv_count[UV_UNKNOWN].load(), pairs);
@@ -2078,7 +2078,7 @@ void geo_pass_before(VkCommandBuffer cmd, CmdState* s) {
   }
   // Timed: the ray tracing source pass (the G-buffer without rt_alpha).
   // (the small passes before the scene's are captured too: time the usual scene ordinal only)
-  if (g_timing && g_qp && rt_src && (!g_alpha_mode || g_scene_ordinal < 0 || int(s->pass.ordinal) == g_scene_ordinal)) {
+  if (logging::stats_enabled(cfg_int) && g_timing && g_qp && rt_src && (!g_alpha_mode || g_scene_ordinal < 0 || int(s->pass.ordinal) == g_scene_ordinal)) {
     std::lock_guard<std::mutex> lock(g_ts_mu);
     uint32_t slot = uint32_t(frame_index() % kTsSlots);
     if (!g_ts_frame[slot]) {
@@ -2194,10 +2194,10 @@ void rt_capture_stats(const Capture& c) {
   int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (l.frames >= uint64_t(every)) {
     if (c.state_log)
-      log("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f",
+      log_stats("[rt-capture] last %llu frames per frame: source draws %.2f depth-write-off draws %.2f triangles %.2f",
           (unsigned long long)l.frames, double(l.source_draws) / l.frames, double(l.no_depth_draws) / l.frames,
           double(l.no_depth_tris) / l.frames);
-    log("[geo] RT capture, last %llu frames: alpha region %.0f MB (peak demand %.1f MB), opaque peak %.1f MB of a "
+    log_stats("[geo] RT capture, last %llu frames: alpha region %.0f MB (peak demand %.1f MB), opaque peak %.1f MB of a "
         "%.0f MB buffer; per frame: alpha draws made opaque (region full) %.2f, opaque draws dropped (buffer full) %.2f, "
         "indirect draws dropped %.2f, non-list draws dropped %.2f (%.0f triangles), strips/fans captured %.2f (%.0f "
         "triangles)",
@@ -2715,7 +2715,7 @@ void geo_finish(uint64_t frame, const std::string& dir, VkQueue queue) {
 void geo_on_present(VkQueue queue) {
   if (g_cap.state != 0) try_process(queue);
   if (g_dd) cascade_on_present();
-  if (!g_timing || !g_qp) return;
+  if (!logging::stats_enabled(cfg_int) || !g_timing || !g_qp) return;
   std::lock_guard<std::mutex> lock(g_ts_mu);
   uint64_t now = frame_index();
   for (uint32_t s = 0; s < kTsSlots; ++s) {

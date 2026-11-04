@@ -1,4 +1,4 @@
-# Compile the exact assembled ZIP payload. Metadata stays outside the 219-file payload.
+# Compile the exact assembled ZIP payload. Metadata stays outside the 221-file payload.
 param(
   [Parameter(Mandatory=$true)][string]$PayloadDir,
   [Parameter(Mandatory=$true)][string]$OutDir,

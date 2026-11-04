@@ -619,6 +619,10 @@ static bool query_memory_budget(DeviceData* dd, uint64_t* used, uint64_t* avail,
 static void log_memory_budget(DeviceData* dd) {
   uint64_t used = 0, avail = 0, size = 0;
   if (!query_memory_budget(dd, &used, &avail, &size)) return;
+  static ULONGLONG last_summary = 0;
+  const ULONGLONG now = GetTickCount64();
+  if (!logging::stats_enabled(cfg_int) && last_summary && now - last_summary < 60000) return;
+  last_summary = now;
   log("[mem] device-local VRAM of this process: used %.0f MB, budget %.0f MB, heaps %.0f MB", used / 1048576.0,
       avail / 1048576.0, size / 1048576.0);
 }
@@ -737,7 +741,7 @@ static void vram_guard_tick(DeviceData* dd, uint64_t frame) {
           vram_guard::kYieldName[1], ask[1] / 1048576.0, vram_guard::kYieldName[2], ask[2] / 1048576.0);
   }
   const bool refused = g_vg_refused_new.exchange(false);
-  if (changed || refused || window_end) {
+  if (changed || refused || (window_end && logging::stats_enabled(cfg_int))) {
     uint64_t rtcap = 0, alpha = 0, cascade = 0;
     geo_vram(&rtcap, &alpha, &cascade);
     log_vram_ours(used, avail, b, rtcap, alpha, cascade, recycled, em_vram_bytes(), water_vram_bytes(), low,
@@ -794,7 +798,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPre
       double worst = 0;
       for (size_t i = s.size() * 99 / 100; i < s.size(); ++i) worst += s[i];
       worst /= double(s.size() - s.size() * 99 / 100);
-      log("[pace] rendered frame time over %zu frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
+      log_stats("[pace] rendered frame time over %zu frames: median %.2f ms (%.1f fps), p99 %.2f ms, 1%% low %.1f fps, max %.2f ms",
           s.size(), med, 1000.0 / med, p99, 1000.0 / worst, s.back());
       ft.clear();
       log_memory_budget(dd);

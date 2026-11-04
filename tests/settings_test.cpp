@@ -417,18 +417,18 @@ static void test_gui_levels() {
     for (const std::string& key : knob_keys(k)) {
       if (!code_default(key)) CHECK_EQ(std::string(k.id) + " writes unknown key " + key, "");
     }
-    // Knob pages of the launcher (tools/launcher/ui/app.js `sections`; Memory and Support render no knobs; plus Developer):
+    // Knob pages of the launcher (tools/launcher/ui/app.js `sections`; Support owns diagnostic controls; plus Developer):
     // a knob in any other category would be in the schema but never shown.
     if (!k.dev_only) {
       const std::string c = k.category;
-      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced");   // the Memory page shows capacity only
+      CHECK(c == "Lighting" || c == "Surfaces" || c == "Performance" || c == "Advanced" || c == "Support");   // the Memory page shows capacity only
     }
     // Off in every preset for experimental knobs.
     if (k.experimental)
       for (int p = 0; p < kPresetCount; ++p) CHECK(k.preset[p] == 0);
   }
   CHECK(user_exp == 0);   // Release has no experimental controls.
-  CHECK(dev.size() == size_t(kKnobCount - 15));
+  CHECK(dev.size() == size_t(kKnobCount - 16));
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
@@ -1132,7 +1132,7 @@ static void test_consolidation_policy() {
 static void test_release_migration() {
   const std::vector<std::string> expected = {"rr", "rt_geometry", "sun_shadows", "gi", "local_shadows",
     "reflections", "frame_generation", "rt_intensity", "fps_cap", "reflex", "exp_water",
-    "exp_hidden_surface", "box_lights", "rr_post_temporal", "exp_native_coverage"};
+    "exp_hidden_surface", "box_lights", "rr_post_temporal", "exp_native_coverage", "detailed_logging"};
   std::vector<std::string> visible;
   for (const auto& k : kKnobs) {
     if (knob_visible(k, false)) { visible.push_back(k.id); CHECK(std::string(k.category) != "Advanced"); }
@@ -1278,6 +1278,25 @@ static void test_stats_window() {
   CHECK_EQ(code_default("rt_stats_reset"), "0");
 }
 
+static void test_detailed_logging() {
+  const auto* k = find_knob("detailed_logging");
+  CHECK(k && !k->dev_only && k->apply == Apply::Restart);
+  CHECK_EQ(k->label, "Detailed logging");
+  CHECK_EQ(k->desc, "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.");
+  CHECK_EQ(k->category, "Support");
+  CHECK_EQ(code_default("detailed_logging"), "0");
+  for (int p = 0; p < kPresetCount; ++p) {
+    auto values = preset_values(p);
+    CHECK(values[knob_index("detailed_logging")] == 0);
+    values[knob_index("detailed_logging")] = 1;
+    CHECK(matching_preset(values) == p);
+    Map read = code_defaults();
+    apply_layer(read, parse_ini(render_user_ini("", p, values)));
+    CHECK_EQ(get(read, "detailed_logging"), "1");
+    CHECK(matching_preset(knob_values(read)) == p);
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 && std::string(argv[1]) == "--write-schema") {
     std::ofstream f(BG3RTX_SOURCE_DIR "/data/settings_schema.json", std::ios::binary);
@@ -1285,6 +1304,7 @@ int main(int argc, char** argv) {
     std::printf("wrote data/settings_schema.json\n");
     return 0;
   }
+  test_detailed_logging();
   test_consolidation_policy();
   test_stats_window();
   test_release_migration();

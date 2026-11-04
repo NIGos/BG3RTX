@@ -335,12 +335,20 @@ static void cfg_read_files() {
   bool derived = settings::resolve_derived(next);
   static const settings::Map startup = next;
   settings::retain_startup_tilesets(next,startup);
+  // Player diagnostics changes apply only on the next game start. Developer
+  // statistics keys remain live so a queue session can toggle its windows.
+  next["detailed_logging"] = startup.at("detailed_logging");
   {
     std::lock_guard<std::mutex> lock(g_cfg_mu);
     g_cfg.swap(next);
   }
   for (const std::string& n : notes) log("[cfg] WARNING %s", n.c_str());
   cfg_log_effective(raw, derived);
+  static const bool logged_detailed = [] {
+    log("[cfg] detailed logging: %d", int(logging::stats_enabled(cfg_int)));
+    return true;
+  }();
+  (void)logged_detailed;
 }
 
 // The defaults of common/settings.h (settings::code_default) by key, parsed once.

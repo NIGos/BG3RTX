@@ -101,6 +101,8 @@ struct Reqs {
 } g_req;
 
 void sl_logcb(sl::LogType type, const char* msg) {
+  if (type != sl::LogType::eError && type != sl::LogType::eWarn &&
+      !logging::sdk_info_enabled(cfg_int)) return;
   size_t n = strlen(msg);
   while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) --n;
   const char* t = type == sl::LogType::eError ? "ERROR " : type == sl::LogType::eWarn ? "warn " : "";
@@ -694,6 +696,7 @@ struct MvCopySlot {
   VkDeviceMemory depth_memory = VK_NULL_HANDLE;
   VkSemaphore fence = VK_NULL_HANDLE;
   FgCopyLease lease, previous_lease;
+  bool timed = false;
   VkSemaphore previous_fence = VK_NULL_HANDLE;
   VkCommandBuffer recording_cmd = VK_NULL_HANDLE;
   uint64_t submitted = UINT64_MAX;
@@ -770,7 +773,8 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
     };
     if (!allocate(source,slot.image,slot.memory,VK_IMAGE_ASPECT_COLOR_BIT) ||
         !allocate(depth,slot.depth,slot.depth_memory,VK_IMAGE_ASPECT_DEPTH_BIT)) return;
-    if (!g_mv_copy_queries) {
+    const bool time_copy = logging::stats_enabled(cfg_int);
+    if (time_copy && !g_mv_copy_queries) {
       VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
       qi.queryType = VK_QUERY_TYPE_TIMESTAMP; qi.queryCount = 16;
       vk.CreateQueryPool(dd->device, &qi, nullptr, &g_mv_copy_queries);
@@ -778,15 +782,15 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
       dd->inst->GetPhysicalDeviceProperties(dd->physical, &props);
       g_mv_copy_period = props.limits.timestampPeriod;
     }
-    if (g_mv_copy_queries) {
-      if (slot.lease.written) {
+    if (time_copy && g_mv_copy_queries) {
+      if (slot.timed) {
         uint64_t result[4]{};
         if (vk.GetQueryPoolResults(dd->device, g_mv_copy_queries, index * 2, 2, sizeof result, result, 16,
                                   VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS && result[1] && result[3]) {
           g_mv_copy_ms.push_back(double(result[2] - result[0]) * g_mv_copy_period / 1e6);
           if (g_mv_copy_ms.size() == 120) {
             std::sort(g_mv_copy_ms.begin(), g_mv_copy_ms.end());
-            log("[sl] gpu FG input copy: median %.3f ms, p99 %.3f ms (120 samples)", g_mv_copy_ms[60], g_mv_copy_ms[118]);
+            log_stats("[sl] gpu FG input copy: median %.3f ms, p99 %.3f ms (120 samples)", g_mv_copy_ms[60], g_mv_copy_ms[118]);
             g_mv_copy_ms.clear();
           }
         }
@@ -794,6 +798,7 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
       vk.CmdResetQueryPool(cmd, g_mv_copy_queries, index * 2, 2);
       vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_mv_copy_queries, index * 2);
     }
+    slot.timed = time_copy && g_mv_copy_queries;
     VkImageMemoryBarrier barriers[4]{};
     for (auto& b : barriers) {
       b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
@@ -825,7 +830,7 @@ void preserve_inputs(VkCommandBuffer cmd, const Bg3Binding& source, const Bg3Bin
     barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barriers[3].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 4, barriers);
-    if (g_mv_copy_queries) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_mv_copy_queries, index * 2 + 1);
+    if (slot.timed) vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_mv_copy_queries, index * 2 + 1);
     state->sl_mvec_copy = source;
     state->sl_mvec_copy.image = slot.image.image; state->sl_mvec_copy.view = slot.image.view;
     state->sl_mvec_copy.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2573,11 +2578,19 @@ VkResult sl_present(DeviceData* dd, VkQueue queue, const VkPresentInfoKHR* info)
     uint64_t batched = g_batched.load();
     static uint64_t prev_batched = 0;
     double ratio = frame > g_prev_frame ? double(shown - g_prev_displayed) / double(frame - g_prev_frame) : 0.0;
-    log("[sl] DLSS-G frame %llu: status 0x%x, presented per app frame %u, displayed/rendered over the last %llu frames "
+    static uint32_t last_status = 0;
+    static uint64_t last_errors = 0;
+    const uint64_t errors = g_api_errors.load();
+    // Keep faults and recovery transitions even with periodic reporting disabled.
+    if (logging::stats_enabled(cfg_int) || uint32_t(st.status) != last_status || errors != last_errors) {
+      log("[sl] DLSS-G frame %llu: status 0x%x, presented per app frame %u, displayed/rendered over the last %llu frames "
         "%.2f (batch-of-2 presents %llu), api errors %u (last %d), camera %s",
         (unsigned long long)frame, uint32_t(st.status), st.numFramesActuallyPresented,
         (unsigned long long)(frame - g_prev_frame), ratio, (unsigned long long)(batched - prev_batched),
         g_api_errors.load(), g_last_api_error.load(), g_cam_valid ? "from uniforms" : "identity");
+    }
+    last_status = uint32_t(st.status);
+    last_errors = errors;
     prev_batched = batched;
     g_prev_displayed = shown;
     g_prev_frame = frame;

@@ -543,7 +543,7 @@ bool run(DeviceData* dd, VkCommandBuffer cmd, int which, const Binds& b, const P
   }
 
   uint32_t slot = UINT32_MAX;
-  if (g_qp && which != P_PROBE && which != P_CHECK && which != P_HOLD) {
+  if (logging::stats_enabled(cfg_int) && g_qp && which != P_PROBE && which != P_CHECK && which != P_HOLD) {
     slot = g_ts_next++ % kTs;
     ts_harvest(dd, slot);
     dd->vk.CmdResetQueryPool(cmd, g_qp, slot * 2, 2);
@@ -1312,11 +1312,11 @@ void rrpost_on_present() {
   stats_start = frame_index();
   g_ts_tick = now;
   if (g_ts_frames[0] || g_ts_frames[1])
-    log("[rrpost] gpu: render-res chain %.3f ms/frame, output-res grade %.3f ms/frame; chains completed %llu, fell back "
+    log_stats("[rrpost] gpu: render-res chain %.3f ms/frame, output-res grade %.3f ms/frame; chains completed %llu, fell back "
         "%llu",
         g_ts_frames[0] ? g_ts_acc[0] / g_ts_frames[0] : 0.0, g_ts_frames[1] ? g_ts_acc[1] / g_ts_frames[1] : 0.0,
         (unsigned long long)g_completed, (unsigned long long)g_broken_frames);
-  if (g_ts_frames[2]) log("[rrpost] gpu temporal: %.3f ms/frame; active %d", g_ts_acc[2] / g_ts_frames[2], int(g_temporal_active));
+  if (g_ts_frames[2]) log_stats("[rrpost] gpu temporal: %.3f ms/frame; active %d", g_ts_acc[2] / g_ts_frames[2], int(g_temporal_active));
   g_ts_acc[2] = 0; g_ts_frames[2] = 0;
   g_ts_acc[0] = g_ts_acc[1] = 0;
   g_ts_frames[0] = g_ts_frames[1] = 0;

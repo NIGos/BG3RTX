@@ -451,6 +451,7 @@ double g_ns_per_tick = 1.0, g_ms_sum = 0;
 uint32_t g_ms_count = 0;
 
 void timing_init() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (g_queries) return;
   VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
   qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -460,6 +461,7 @@ void timing_init() {
 }
 
 void timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_queries) return;
   if (index == 0) g_slot_hair_epoch[g_slot] = g_hair_timing_epoch.generation;
   uint32_t q = g_slot * 4 + index;
@@ -469,6 +471,7 @@ void timestamp(VkCommandBuffer cmd, uint32_t index) {
 
 // Reads the oldest ring slot if the GPU is done with it.
 void timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   hair_timing_update();
   if (!g_queries) return;
   uint32_t old = (g_slot + 1) % kRing;
@@ -485,7 +488,7 @@ void timing_collect() {
     ++g_ms_count;
   }
   if (g_ms_count >= stats_period(300)) {
-    host->log("gi: GPU cost %.3f ms/frame (average of %u frames)", g_ms_sum / g_ms_count, g_ms_count);
+    log_stats("gi: GPU cost %.3f ms/frame (average of %u frames)", g_ms_sum / g_ms_count, g_ms_count);
     g_ms_sum = 0;
     g_ms_count = 0;
   }
@@ -514,6 +517,7 @@ void hair_timing_update() {
 }
 
 void rt_timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   hair_timing_update();
   if (!g_rt_queries) return;
   uint32_t old = (g_rt_slot + 1) % kRing;
@@ -530,7 +534,7 @@ void rt_timing_collect() {
     ++g_rt_ms_count;
   }
   if (g_rt_ms_count >= stats_period(300)) {
-    host->log("rt passes: GPU cost %.3f ms/frame (average of %u frames); TLAS this frame %llu, previous frame %llu, "
+    log_stats("rt passes: GPU cost %.3f ms/frame (average of %u frames); TLAS this frame %llu, previous frame %llu, "
               "none %llu", g_rt_ms_sum / g_rt_ms_count, g_rt_ms_count, (unsigned long long)g_rt_frames_traced,
               (unsigned long long)g_rt_frames_stale, (unsigned long long)g_rt_frames_missing);
     g_rt_ms_sum = 0;
@@ -540,6 +544,7 @@ void rt_timing_collect() {
 }
 
 void rt_timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_rt_queries) return;
   if (index == 0) g_rt_hair_epoch[g_rt_slot] = g_hair_timing_epoch.generation;
   uint32_t q = g_rt_slot * 2 + index;
@@ -554,6 +559,7 @@ bool g_tr_written[kRing] = {}, g_tr_rt[kRing] = {};
 std::vector<float> g_tr_ms[2];   // [0] screen-space, [1] ray-traced
 
 void trace_timestamp(VkCommandBuffer cmd, uint32_t index, bool rt = false) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_tr_queries) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -571,6 +577,7 @@ void trace_timestamp(VkCommandBuffer cmd, uint32_t index, bool rt = false) {
 }
 
 void trace_timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_tr_queries) return;
   uint32_t old = (g_tr_slot + 1) % kRing;
   if (!g_tr_written[old]) return;
@@ -587,7 +594,7 @@ void trace_timing_collect() {
     std::sort(v.begin(), v.end());
     const int rr_setting=host->cfg_int("gi_rr",-1);
     bool rr_mode=rr_setting<0?host->rr_active():rr_setting!=0;
-    host->log("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
+    log_stats("gi: trace pass (%s, %u rays/sample, %s) GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames)",
               k ? "ray-traced, gi_rt=1" : "screen-space",
               uint32_t(rr_mode ? host->cfg_int("gi_rr_rays", 1) : host->cfg_int("gi_rays", 4)),
               rr_mode ? (g_shift?"half res, spatial resolve + RR":"full res, RR denoises") : "half res, own accumulation", v[v.size() / 2], v[v.size() / 10],
@@ -2660,6 +2667,7 @@ bool g_rf_written[kRing] = {};
 std::vector<float> g_rf_ms;
 
 void rf_timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_rf_queries) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -2676,6 +2684,7 @@ void rf_timestamp(VkCommandBuffer cmd, uint32_t index) {
 }
 
 void rf_timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_rf_queries) return;
   uint32_t old = (g_rf_slot + 1) % kRing;
   if (!g_rf_written[old]) return;
@@ -2691,7 +2700,7 @@ void rf_timing_collect() {
   std::sort(v.begin(), v.end());
   int rf_rr = host->cfg_int("rf_rr", -1);
   bool noisy = rf_rr < 0 ? host->rr_active() : rf_rr != 0;
-  host->log("rf: reflection pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; %s, max roughness %.2f, debug %d, "
+  log_stats("rf: reflection pass GPU median %.3f ms, p10 %.3f, p90 %.3f (%zu frames; %s, max roughness %.2f, debug %d, "
             "validate %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], v.size(),
             noisy ? "GGX VNDF, RR denoises" : "mirror rays, no denoiser",
@@ -2707,6 +2716,7 @@ bool g_ls_written[kRing] = {};
 std::vector<float> g_ls_ms, g_ls_join_ms;
 
 void ls_timestamp(VkCommandBuffer cmd, uint32_t index) {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_ls_queries) {
     VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
     qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -2723,6 +2733,7 @@ void ls_timestamp(VkCommandBuffer cmd, uint32_t index) {
 }
 
 void ls_timing_collect() {
+  if (!bg3::logging::stats_enabled(host->cfg_int)) return;
   if (!g_ls_queries) return;
   uint32_t old = (g_ls_slot + 1) % kRing;
   if (!g_ls_written[old]) return;
@@ -2741,7 +2752,7 @@ void ls_timing_collect() {
   auto& j = g_ls_join_ms;
   std::sort(v.begin(), v.end());
   std::sort(j.begin(), j.end());
-  host->log("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
+  log_stats("ls: local-light shadow pass GPU median %.3f ms, p10 %.3f, p90 %.3f, of which join %.3f (%zu frames; "
             "samples %d, exact-k %d + %d (variant %d), soft %d, shadowed mode %d, debug %d, per-light data %d (join %s), owners 0x%X, impl %d, box %d)",
             v[v.size() / 2], v[v.size() / 10], v[v.size() * 9 / 10], j[j.size() / 2], v.size(),
             host->cfg_int("ls_samples", 0), host->cfg_int("ls_k", 0), host->cfg_int("ls_rest_samples", 1), int(g_ls_k_active),
@@ -3100,7 +3111,7 @@ bool run_pre(VkCommandBuffer cmd, Snapshot& s) {
   }
   if (rt_started) {
     rt_timestamp(cmd, 1);
-    g_rt_written[g_rt_slot] = true;
+    g_rt_written[g_rt_slot] = g_rt_queries && bg3::logging::stats_enabled(host->cfg_int);
     g_rt_slot = (g_rt_slot + 1) % kRing;
   }
   timestamp(cmd, 1);
@@ -3509,7 +3520,7 @@ void run_post(VkCommandBuffer cmd, const Snapshot& s) {
     water_rf(cmd, win);
   }
   timestamp(cmd, 3);
-  g_slot_written[g_slot] = true;
+  g_slot_written[g_slot] = g_queries && bg3::logging::stats_enabled(host->cfg_int);
   g_slot = (g_slot + 1) % kRing;
   // The SSS pass samples the diffuse buffer in its fragment shader.
   memory_barrier(cmd, kCS, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | kCS);
@@ -3676,7 +3687,7 @@ void gi_on_frame(uint64_t) {
   const int frames = int(stats_period(unsigned(native_frames > 0 ? native_frames : 120)));
   const unsigned ev = mon.tick(g_builds.pending(), g_builds.started_total(), now, unsigned(frames > 0 ? frames : 120), &w, &b);
   if (ev & bg3::pipe_async::Monitor::kWindow)
-    host->log("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,
+    log_stats("gi: background builds (%u frames): %u frames waiting, %zu pending, %u started", w.frames, w.waiting,
               w.pending, w.started);
   if (ev & bg3::pipe_async::Monitor::kBurst)
     host->log("gi: background builds done: %u builds in %.0f ms over %llu presents, longest present interval %.0f ms",

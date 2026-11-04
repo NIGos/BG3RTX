@@ -185,7 +185,7 @@ std::string Bridge::handle(const std::string& message){
   }else if(type=="preset"){
     int p=get<int>(o,"value",-1);if(p<0||p>=st::kPresetCount){status_="Preset unavailable. Choose another preset.";return state_json();}
     preview_kind_="preset";preview_preset_=p;preview_values_=st::preset_values_for(p,state_.caps);changes_.clear();blocked_.clear();
-    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i]))preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(change_line(i,state_.values[i],preview_values_[i]));}
+    for(int i=0;i<st::kKnobCount;++i){if(!shown(st::kKnobs[i])||std::string(st::kKnobs[i].category)=="Support")preview_values_[i]=state_.values[i];if(preview_values_[i]!=state_.values[i])changes_.push_back(change_line(i,state_.values[i],preview_values_[i]));}
   }else if(type=="experimental"){
     bool on=get<bool>(o,"value");
     if(dev)experimental=on;
@@ -207,7 +207,7 @@ std::string Bridge::handle(const std::string& message){
       pending_play_=true;save_preview(true);
       if(blocked_.empty()&&changes_.empty())return handle("{\"type\":\"confirm\"}");
     }
-  }else if(type=="report"){report_visible_=true;}
+  }else if(type=="report"){report_visible_=true;report_hint_=hooks_.reportHint?hooks_.reportHint():"";}
   else if(type=="closeReport"){report_visible_=false;}
   else if(type=="cancelReport"){status_="Report cancelled.";}
   else if(type=="browseGame"){if(hooks_.browseGame)game_path_=hooks_.browseGame();}
@@ -226,7 +226,7 @@ std::string Bridge::handle(const std::string& message){
 }
 std::string Bridge::state_json() const {
   auto preset_values=st::preset_values_for(state_.preset,state_.caps);bool custom=false;
-  for(int i=0;i<st::kKnobCount;++i)if(shown(st::kKnobs[i])&&state_.values[i]!=preset_values[i])custom=true;
+  for(int i=0;i<st::kKnobCount;++i)if(shown(st::kKnobs[i])&&std::string(st::kKnobs[i].category)!="Support"&&state_.values[i]!=preset_values[i])custom=true;
   std::string out="{\"type\":\"state\",\"preset\":"+std::to_string(state_.preset)+",\"presetLabel\":"+q(st::kPresetLabel[state_.preset])+",\"recommendedPreset\":"+std::to_string(state_.suggested)+",\"dirty\":"+std::to_string(dirty())+",\"unsavedCount\":"+std::to_string(dirty())+",\"restartNeeded\":"+b(restart_count_>0)+",\"restartCount\":"+std::to_string(restart_count_)+",\"restartBanner\":"+q(ui_state::restart_banner(restart_count_))+",\"experimental\":"+b(experimental)+",\"developer\":"+b(dev)+",\"status\":"+q(status_)+",\"canPlay\":"+b(can_play_)+",\"settings\":[";
   bool first=true;for(int i=0;i<st::kKnobCount;++i){auto& k=st::kKnobs[i];if(!shown(k))continue;if(!first)out+=",";first=false;
     int value=state_.values[i];std::string maturity=k.experimental?"experimental":st::choice_maturity(k,value);
@@ -257,7 +257,7 @@ std::string Bridge::state_json() const {
   out+=",\"version\":"+q(BG3RTX_PRODUCT_VERSION)+",\"modStatus\":"+q(mod_status_);
   out+=std::string(",\"custom\":")+b(custom)+",\"frameGeneration\":"+q(fg_label)+",\"frameGenerationNote\":\"Generated frames do not increase the rendered frame rate.\"";
   out+=",\"preview\":{\"kind\":"+q(preview_kind_)+",\"presetLabel\":"+q(preview_preset_>=0?st::kPresetLabel[preview_preset_]:st::kPresetLabel[state_.preset])+",\"changes\":"+strings(changes_)+",\"blocked\":"+strings(blocked_)+"}";
-  out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
+  out+=std::string(",\"report\":{\"visible\":")+b(report_visible_)+",\"privacy\":"+q(diagnostics::privacy_text)+",\"loggingHint\":"+q(report_hint_)+",\"bytes\":"+std::to_string(report_.bytes)+",\"status\":"+std::to_string(int(report_.status))+",\"message\":"+q(report_.message)+",\"files\":[";
   first=true;for(auto& f:report_.files){if(!first)out+=",";first=false;out+="{\"name\":"+q(f.name)+",\"text\":"+q(f.text)+",\"note\":"+q(f.note)+",\"size\":"+std::to_string(f.text.size())+"}";}
   return out+"]}}";
 }

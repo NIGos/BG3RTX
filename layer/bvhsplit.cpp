@@ -2947,7 +2947,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
       ++g_casc_n_refit;
     }
     if ((g_casc_n_build + g_casc_n_refit) % 600 == 0 && casc_refit_on)
-      log("[cascade] BLAS: %llu builds, %llu refits", (unsigned long long)g_casc_n_build,
+      log_stats("[cascade] BLAS: %llu builds, %llu refits", (unsigned long long)g_casc_n_build,
           (unsigned long long)g_casc_n_refit);
     if (ok) {
       casc_build = true;
@@ -3607,7 +3607,7 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
   out->groom_first = n;
   g_groom_st.max_instances = (std::max)(g_groom_st.max_instances, groom_count);
   if (g_groom_on && (cfg_int("rt_stats_period_frames", 0) <= 0 ? now % 300 == 0 : now > g_groom_stats_start && (now - g_groom_stats_start) % stats_period(300) == 0)) {
-    log("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
+    log_stats("[hair groom] frame %llu: %u groom instances; last %u frames: at most %u groom instances, matched %llu (LOD %u/%u/%u), full builds %llu, "
         "refits %llu, compacted %llu, unmatched hair draws %llu (not indexed %llu, count unknown %llu, not mapped %llu, no file %llu, "
         "UV pending %llu, UV mismatch %llu); groom pool %.0f of %.0f MB",
         (unsigned long long)now, groom_count, stats_period(300), g_groom_st.max_instances, (unsigned long long)g_groom_st.matched, g_groom_st.lod[0], g_groom_st.lod[1],
@@ -4295,7 +4295,7 @@ void bvh_on_present() {
     mesh_tris += m.tris;
     ready += m.state == kReady;
   }
-  log("[bvh] last %llu builds, per build: %.1f cached draws -> %.0f static instances (%.3fM triangles), %.1f captured "
+  log_stats("[bvh] last %llu builds, per build: %.1f cached draws -> %.0f static instances (%.3fM triangles), %.1f captured "
       "draws (%.3fM triangles; per-draw BLAS: %.1f refits, %.1f rebuilds, %.2f new); TLAS refit %.0f%%; not instanceable per build: "
       "pattern %.1f, stream %.1f, count %.1f; hold pack %llu jobs (%llu bytes), copy %llu jobs (%llu bytes), unavailable %llu builds",
       (unsigned long long)s.builds, s.cached_draws / nb, s.static_inst / nb, s.static_tris / nb * 1e-6, s.dyn_draws / nb,
@@ -4310,7 +4310,7 @@ void bvh_on_present() {
     chunks += c.buf.b != VK_NULL_HANDLE;
     live += c.ra.live;
   }
-  log("[bvh] mesh cache: %zu meshes (%zu ready, %.2fM triangles), pool %.1f / %.0f MB, AS %.1f MB in %zu chunks; this "
+  log_stats("[bvh] mesh cache: %zu meshes (%zu ready, %.2fM triangles), pool %.1f / %.0f MB, AS %.1f MB in %zu chunks; this "
       "window: %llu new (%.2fM triangles, %llu deferred by the per-build budget), %llu verified, %llu checks ok, "
       "%llu audits ok, rejected %llu/%llu/%llu (%s/%s/%s), %llu results lost (%llu timed out), max accepted error %.3f x tolerance; "
       "evicted %llu destroyed, %llu written, %llu LRU; %llu compactions (-%.1f MB); "
@@ -4329,7 +4329,7 @@ void bvh_on_present() {
       (unsigned long long)g_relocated, double(g_relocated_bytes) / 1048576.0,
       (unsigned long long)g_pool_repacks, double(g_pool_saved) / 1048576.0);
   g_chunks_freed = g_chunk_bytes_freed = 0;
-  log("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
+  log_stats("[bvh] instance matrices read at submit: %llu, non-finite/singular %llu; draws whose instance data changed "
       "between record and submit %llu; recorded but never submitted %llu",
       (unsigned long long)s.fix_applied, (unsigned long long)s.fix_bad, (unsigned long long)s.fix_late,
       (unsigned long long)s.fix_stale);
@@ -4339,7 +4339,7 @@ void bvh_on_present() {
     const double alpha_tris = double(s.omm_alpha_static_tris + s.omm_alpha_dyn_tris);
     uint64_t st[4] = {};
     const bool have_states = omm::bake_state_totals(st);
-    log("[omm] last %llu builds: alpha draws %llu, native plain captures %llu; alpha-tested triangles per build %.3fM "
+    log_stats("[omm] last %llu builds: alpha draws %llu, native plain captures %llu; alpha-tested triangles per build %.3fM "
         "(static %.3fM, per-draw %.3fM), with a capture %.3fM, attached micromaps %.3fM (%.4f%% of alpha-tested); variants "
         "baked %llu, reused %llu, declined %llu; accelerated scenes %llu, declined %llu; micromap+BLAS bytes %.2f MB, bake "
         "inputs %.2f MB; baked microtriangles so far %llu: known opaque %llu, known transparent %llu, unknown %llu%s",
@@ -4360,7 +4360,7 @@ void bvh_on_present() {
       const uint32_t checked = c[3] - last_checked, changed = c[4] - last_changed;
       last_checked = c[3]; last_changed = c[4];
       const double micro = double(c[0]) + double(c[1]) + double(c[2]);
-      log("[omm dyn] last %llu builds (rt_omm_dyn %d): masked per-draw draws %.1f (%.3fM triangles) per build, with a micro-map "
+      log_stats("[omm dyn] last %llu builds (rt_omm_dyn %d): masked per-draw draws %.1f (%.3fM triangles) per build, with a micro-map "
           "%.1f (%.3fM triangles, %.1f%%); baked %llu micro-maps (%.3fM triangles), deferred %llu, failed %llu; accelerated "
           "scenes %llu; cache %zu micro-maps, %.3fM triangles, our buffers %.2f MB, backend micro-map+scratch %.2f MB; baked "
           "micro-triangles so far: known opaque %.1f%%, known transparent %.1f%%, unknown %.1f%% (%u triangles); uv checks "
@@ -4375,7 +4375,7 @@ void bvh_on_present() {
     }
   }
   if (s.audits_moving_ok + s.audits_moving_failed)
-    log("[bvh] audits while the camera moved: %llu ok, %llu failed, max error %.3f x tolerance "
+    log_stats("[bvh] audits while the camera moved: %llu ok, %llu failed, max error %.3f x tolerance "
         "(cached instance matrices at submit against the same frame's raster capture)",
         (unsigned long long)s.audits_moving_ok, (unsigned long long)s.audits_moving_failed, s.err_max_moving);
 }

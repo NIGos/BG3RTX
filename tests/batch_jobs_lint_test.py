@@ -12,6 +12,30 @@ from tools.live_batches import live_flow as flow
 
 
 class BatchJobsLintTests(unittest.TestCase):
+    def test_quiet_release_logging_keeps_active_and_final_job_statistics(self):
+        from scripts.queue_gates import phase_states
+        paths = flow.active_job_files() | set(flow.job_files(ROOT / 'tools/live_batches/release_qual/final'))
+        self.assertTrue(paths)
+        for path in sorted(paths):
+            job, plan, _ = flow.load_job(path)
+            self.assertEqual(flow.settings(job.get("set", "")).get("detailed_logging"), "1", path.name)
+            for phase, state in zip(plan, phase_states(job, plan)):
+                with self.subTest(job=path.name, window=phase['label']):
+                    # common/log_stats.h: each job retains its original producer cadences
+                    # and every pattern/expect, including release qualification at dev=0.
+                    self.assertTrue(any(int(state.get(k, 0)) != 0 for k in ('detailed_logging', 'dev', 'rt_stats', 'ls_stats')) or
+                                    int(state.get('rt_stats_period_frames', 0)) > 0)
+
+    def test_detailed_logging_does_not_change_pipeline_readiness_query(self):
+        from tools.live_batches import readiness_budget
+        self.addCleanup(readiness_budget.configure, [])
+        readiness_budget.configure([])
+        phase = {'wait_log': ['pipeline ready']}
+        expected = readiness_budget.estimate({'save': 'fixture'}, phase, {'rr': '1'}, True)
+        readiness_budget.FROZEN = True
+        self.assertEqual(readiness_budget.estimate({'save': 'fixture'}, phase,
+                         {'rr': '1', 'detailed_logging': '1'}, True), expected)
+
     def test_retained_combined_fixture_has_cross_job_pipeline_readiness(self):
         from tools.live_batches.combined_20261103.make_jobs import FIXTURES
         for name in FIXTURES:

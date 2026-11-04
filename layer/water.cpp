@@ -147,7 +147,7 @@ std::vector<Retired> g_retired;
 struct Slot {
   VkCommandBuffer cb = VK_NULL_HANDLE;
   VkFence fence = VK_NULL_HANDLE;
-  bool used = false, harvest = false;
+  bool used = false, harvest = false, timed = false;
   Buf as, scratch, inst, read;     // BLAS + TLAS storage, scratch, the TLAS instance (host), samples (host)
   VkAccelerationStructureKHR blas = VK_NULL_HANDLE, tlas = VK_NULL_HANDLE;
   VkDeviceSize blas_cap = 0, tlas_off = 0, tlas_cap = 0;
@@ -191,6 +191,7 @@ uint64_t g_surface_timed_draws = 0, g_surface_timed_passes = 0, g_surface_droppe
 uint64_t g_surface_reset_frame = 0;
 
 void surface_harvest() {
+  if (!logging::stats_enabled(cfg_int)) return;
   for (auto& t : g_surface_ts) {
     if (!t.submitted || t.collected ||
         g_dd->vk.WaitForFences(g_dd->device, 1, &t.fence, VK_TRUE, 0) != VK_SUCCESS) continue;
@@ -219,7 +220,7 @@ void surface_harvest() {
 }
 
 void surface_begin(VkCommandBuffer cmd) {
-  if (!cfg_int("rt_water_surface_fresnel", 0)) return;
+  if (!logging::stats_enabled(cfg_int) || !cfg_int("rt_water_surface_fresnel", 0)) return;
   for (uint32_t i = 0; i < kSurfaceSlots; ++i) {
     auto& t = g_surface_ts[i];
     if (!t.reusable()) continue;
@@ -359,7 +360,7 @@ void harvest(uint32_t i) {
   Slot& s = g_slot[i];
   if (!s.harvest) return;
   s.harvest = false;
-  if (g_qp) {
+  if (s.timed && logging::stats_enabled(cfg_int) && g_qp) {
     uint64_t r[4] = {};
     const VkResult res = g_dd->vk.GetQueryPoolResults(g_dd->device, g_qp, i * 2, 2, sizeof r, r, 16,
                                                       VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
@@ -487,7 +488,8 @@ bool build(Slot& s, uint32_t i, const std::vector<const PDraw*>& draws) {
   ti.accelerationStructureReference = s.blas_addr;
   std::memcpy(s.inst.map, &ti, sizeof ti);
 
-  if (g_qp) {
+  s.timed = logging::stats_enabled(cfg_int) && g_qp;
+  if (s.timed) {
     dd->vk.CmdResetQueryPool(s.cb, g_qp, i * 2, 2);
     dd->vk.CmdWriteTimestamp(s.cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, g_qp, i * 2);
   }
@@ -504,7 +506,7 @@ bool build(Slot& s, uint32_t i, const std::vector<const PDraw*>& draws) {
   dd->vk.CmdBuildAccelerationStructuresKHR(s.cb, 1, &tb, &ptr);
   barrier(s.cb, kAS, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, kCS | kAS,
           VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_SHADER_READ_BIT);
-  if (g_qp) dd->vk.CmdWriteTimestamp(s.cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, i * 2 + 1);
+  if (s.timed) dd->vk.CmdWriteTimestamp(s.cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, g_qp, i * 2 + 1);
   // The position check: the first vertices of every draw, as the BLAS read them.
   s.samples.clear();
   VkDeviceSize at = 0;
@@ -1162,7 +1164,7 @@ void water_on_present() {
     std::sort(ms.begin(), ms.end());
     const double med = ms.empty() ? 0.0 : double(ms[ms.size() / 2]);
     const double p90 = ms.empty() ? 0.0 : double(ms[(ms.size() * 9) / 10 < ms.size() ? (ms.size() * 9) / 10 : ms.size() - 1]);
-    log("[water] build GPU %.3f ms median, p90 %.3f (%zu timed of %llu builds; %.1f geometries, %.0f triangles per build; "
+    log_stats("[water] build GPU %.3f ms median, p90 %.3f (%zu timed of %llu builds; %.1f geometries, %.0f triangles per build; "
         "busy %llu, failed %llu; soup %llu MB)",
         med, p90, ms.size(), (unsigned long long)w.builds, w.builds ? double(w.geos) / double(w.builds) : 0.0,
         w.builds ? double(w.build_tris) / double(w.builds) : 0.0, (unsigned long long)w.busy,
@@ -1201,7 +1203,7 @@ void water_on_present() {
     std::vector<double> ms;
     for (const auto& [frame, value] : g_surface_ms) ms.push_back(value);
     std::sort(ms.begin(), ms.end());
-    log("[water] surface FS GPU %.3f ms median, p90 %.3f (%zu timed frames, %llu passes, %llu draws, dropped %llu; "
+    log_stats("[water] surface FS GPU %.3f ms median, p90 %.3f (%zu timed frames, %llu passes, %llu draws, dropped %llu; "
         "patched forward draws only, includes vertex/fixed-function work; native OFF untimed)",
         ms.empty() ? 0.0 : ms[ms.size() / 2], ms.empty() ? 0.0 : ms[ms.size() * 9 / 10], ms.size(),
         (unsigned long long)g_surface_timed_passes, (unsigned long long)g_surface_timed_draws,

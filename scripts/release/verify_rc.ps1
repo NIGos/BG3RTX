@@ -2,7 +2,7 @@
 # powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1
 # No game, launcher, upload, Git mutation, shortcut or existing installation runs.
 # Setup is compiled and executed only against the isolated throwaway tree.
-param([ValidateRange(1,100000)][int]$ExpectedFiles = 219, [switch]$NoBuild)
+param([ValidateRange(1,100000)][int]$ExpectedFiles = 221, [switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -185,6 +185,10 @@ try {
   $detail = "$($actual.Count) files; expected $ExpectedFiles (delta $countDelta); $($differences.Count) differences across ZIP / extracted / files.txt / source plan."
   if ($differences.Count) { $detail += ' Paths: ' + (($differences | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }) -join ', ') }
   Require ($differences.Count -eq 0 -and $countDelta -eq 0 -and @($manifest | Group-Object | Where-Object Count -gt 1).Count -eq 0) $detail
+  $runtimeGuard = Quote (Join-Path $root 'tests\package_runtime_test.py')
+  $runtimePlan = Quote (Join-Path $planRoot 'payload-list.json')
+  Run 'runtime payload dependencies' ("python $runtimeGuard --plan $runtimePlan; if (`$LASTEXITCODE -ne 0) { throw 'Runtime payload dependency guard failed' }")
+  $detail += ' Runtime source dependencies covered.'
   Pass 'Manifest' $detail
   Pass 'Archive' ("Real ZIP, {0:N2} MiB; SHA256 {1}; symbols kept in separate archive." -f ((Get-Item -LiteralPath $archive).Length / 1MB), (Hash $archive))
 
@@ -284,7 +288,7 @@ try {
 
   $stage = 'Setup'
   Run 'verify compiled Setup' ('& ' + (Quote (Join-Path $PSScriptRoot 'verify_setup.ps1')) + ' -PayloadDir ' + (Quote $payload) + ' -OutDir ' + (Quote (Join-Path $run 'setup')) + ' -TestRoot ' + (Quote $scratch))
-  Pass 'Setup' 'Inno 6.7.3 compiled; 219 ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution.'
+  Pass 'Setup' 'Inno 6.7.3 compiled; 221 ZIP payload hashes match after install/update; settings retained by default and removed on opt-in; shader cache removed; 0 owned files or HKCU Apps entries remain. Shortcuts disabled in qualification; no launcher execution.'
 
 } catch {
   $results[$stage].Status = 'FAIL'

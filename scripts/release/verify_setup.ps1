@@ -71,7 +71,7 @@ Require (-not (Get-Process -Name bg3,bg3_dx11,BG3RTX -ErrorAction SilentlyContin
 $version = (Get-Content -LiteralPath (Join-Path $PayloadDir 'VERSION.txt') -TotalCount 1).Substring(7)
 $setup = Join-Path $OutDir "BG3RTX-$version-Setup.exe"
 $manifest = @(Get-Content -LiteralPath (Join-Path $PayloadDir 'files.txt') | Where-Object { $_ })
-Require ($manifest.Count -eq 219) 'Setup qualification expects the 219-file release payload'
+Require ($manifest.Count -eq 221) 'Setup qualification expects the 221-file release payload'
 New-Item -ItemType Directory -Path $install | Out-Null
 [IO.File]::WriteAllText((Join-Path $install 'bg3rtx_user.ini'), 'keep my settings')
 [IO.File]::WriteAllText((Join-Path $install 'unrelated.txt'), 'unrelated file')
@@ -95,7 +95,7 @@ try {
   CheckPayload
   Execute $uninstaller '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /REMOVESETTINGS=1'
   CheckRemoved $false
-  Write-Host 'SETUP_PASS: 219 hashes after install/update; settings retained by default and removed on opt-in; cache removed; 0 owned files/Apps entries remain.'
+  Write-Host 'SETUP_PASS: 221 hashes after install/update; settings retained by default and removed on opt-in; cache removed; 0 owned files/Apps entries remain.'
 } finally {
   # On failed qualification, only the generated uninstaller may remove its Apps entry.
   if (Test-Path -LiteralPath $uninstaller) { Execute $uninstaller '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' }

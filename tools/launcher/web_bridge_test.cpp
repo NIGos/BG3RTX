@@ -1,6 +1,7 @@
 ﻿// CPU-only bridge fixture: injected effects never launch or write real settings.
 #include "web_bridge.h"
 #include "ui_state.h"
+#include "session_logging.h"
 #include <cstdio>
 namespace st=bg3::settings;
 int main(int argc,char** argv){
@@ -81,7 +82,26 @@ int main(int argc,char** argv){
       const auto before=s.values;bridge.handle("{\"type\":\"set\",\"id\":\""+std::string(k.id)+"\",\"value\":"+std::to_string(c)+"}");check(s.values==before);
     }
   }
-  check(visible==15);
+  check(visible==16);
+  // Support edits stay independent of the rendering preset and last-session evidence.
+  {
+    launcher::State ls;ls.caps=~0u;ls.base={{"dev","0"}};ls.values=st::preset_values(st::kHigh);ls.preset=st::kHigh;
+    std::string last_hint="last session was quiet";launcher::web::Hooks lh;lh.reportHint=[&]{return last_hint;};
+    launcher::web::Bridge lb(ls,lh);
+    lb.handle("{\"type\":\"set\",\"id\":\"detailed_logging\",\"value\":1}");
+    check(lb.state_json().find("\"custom\":false")!=std::string::npos);
+    check(lb.dirty()==1);
+    lb.handle("{\"type\":\"preset\",\"value\":2}");lb.handle("{\"type\":\"confirm\"}");
+    check(ls.values[st::knob_index("detailed_logging")]==1);
+    auto json=lb.handle("{\"type\":\"report\"}");check(json.find("\"loggingHint\":\"last session was quiet\"")!=std::string::npos);
+    last_hint.clear();lb.handle("{\"type\":\"set\",\"id\":\"detailed_logging\",\"value\":0}");
+    json=lb.handle("{\"type\":\"report\"}");check(json.find("\"loggingHint\":\"\"")!=std::string::npos);
+  }
+  check(launcher::session_logging::enabled("00:00 [cfg] detailed logging: 0\n")==0);
+  check(launcher::session_logging::enabled("00:00 [cfg] detailed logging: 1\r\n")==1);
+  check(launcher::session_logging::enabled("[cfg] detailed logging: 10\n")==-1);
+  check(launcher::session_logging::enabled("old log without marker")==-1);
+  check(launcher::session_logging::enabled("[cfg] detailed logging: 0\n[cfg] detailed logging: 1\n")==1);
   // Release opt-in: the switch shows exactly settings::kOptInKnobs on their own page,
   // is saved with the settings and Off restores the qualified Off values.
   {

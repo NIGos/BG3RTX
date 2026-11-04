@@ -468,7 +468,7 @@ void load_fade_table() {
   }
   std::lock_guard<std::mutex> lock(g_fade_mu);
   g_fade_table.swap(t);
-  log("[camera fade] %zu camera-fade fragment shaders in %s", g_fade_table.size(), path.c_str());
+  log_stats("[camera fade] %zu camera-fade fragment shaders in %s", g_fade_table.size(), path.c_str());
 }
 
 // "<hash> vt uv=0 cut=0.5 [cut0=0.001] ubo=1.0 p0=0 idx=32 ssbo=0.12 ind=1.3 cache=1.4 col=0"
@@ -1244,7 +1244,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
     w.capsule += g_fade_capsule_ok;
     if (w.captures >= 300) {
       const double n = double(w.captures);
-      log("[camera fade] %llu captures, per capture: fade-shader draws %.1f (%.0f tris), cut enabled %.1f "
+      log_stats("[camera fade] %llu captures, per capture: fade-shader draws %.1f (%.0f tris), cut enabled %.1f "
           "(%.0f tris), flag unreadable %.1f; TLAS instances marked %.1f (%.0f tris); capsule read in %llu captures; "
           "last capsule A [%.3f %.3f %.3f] r %.3f, B [%.3f %.3f %.3f] r %.3f, from [%.3f %.3f %.3f]",
           (unsigned long long)w.captures, w.seen / n, w.seen_tris / n, w.enabled / n, w.enabled_tris / n,
@@ -1322,7 +1322,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   if(g_tileset_binding){   // the native samplers, or g_wrap in every slot with the tileset off
     if(g_tileset_layout && cfg_hot(CfgHot::rt_stats) && frame_index()%120u==0u){uint32_t complete=0,unknown=0;
       for(const auto& record:g_recs)if(record.kind==5)(record.p0[1]==0.0f?complete:unknown)++;
-      log("[alpha tileset] records complete %u unknown %u native samplers %zu capture-incomplete %u stride %u",complete,unknown,g_native_samplers.size(),unsigned(g_tileset_incomplete),stride);
+      log_stats("[alpha tileset] records complete %u unknown %u native samplers %zu capture-incomplete %u stride %u",complete,unknown,g_native_samplers.size(),unsigned(g_tileset_incomplete),stride);
     }
     g_slot_native_samplers[slot]=g_native_samplers;
     VkDescriptorImageInfo samplers[kNativeSamplers]{};
@@ -1361,24 +1361,24 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
   }
   int every = stats_period(unsigned((std::max)(cfg_int("rt_timing_frames", 300), 30)));
   if (g_frames >= uint64_t(every)) {
-    log("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles, %zu textures, %zu tile caches per frame "
+    log_stats("[alpha] last %llu frames: %.1f alpha-tested draws, %.0f triangles, %zu textures, %zu tile caches per frame "
         "(capacity %u, %u, %u records); opaque fallbacks: no view %u, UBO %u, SSBO %u, non-finite %u, records full %u, "
         "views full %u; held records dropped (view destroyed/reused) %u",
         (unsigned long long)g_frames, double(g_draws) / g_frames, double(g_tris) / g_frames, g_tex.size(),
         g_cache.size(), kTextures - 1, kCaches - 1, kMaxRecords, g_fail[0], g_fail[1], g_fail[2], g_fail[3], g_fail[4],
         g_fail[5], g_stale_views.load());
     if (g_vt_state != 0)
-      log("[vt alpha] last %llu frames: %.1f VT records per frame read an offline mask (rt_vt_alpha_masks %d, %zu masks, state %d); "
+      log_stats("[vt alpha] last %llu frames: %.1f VT records per frame read an offline mask (rt_vt_alpha_masks %d, %zu masks, state %d); "
           "%.1f at mip 0 with the hard cut (rt_alpha_fine_lod %d)",
           (unsigned long long)g_frames, double(g_vt_substituted) / g_frames, cfg_int("rt_vt_alpha_masks", 0), g_vt_masks.size(), g_vt_state,
           double(g_vt_fine) / g_frames, cfg_int("rt_alpha_fine_lod", 0));
     g_vt_substituted = 0; g_vt_fine = 0;
     if (cfg_int("rt_vt_alpha_miss_log", 0)) vt_miss_write();
     if (native_scalp::has_capability(static_cast<uint32_t*>(persist(native_scalp::capability_key, sizeof(uint32_t)))))
-      log("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
+      log_stats("[alpha scalp] native hard records %u; native camera dither records %u; invalid/missing native state %u; "
           "RT cone footprint, not native raster sample identity",
           g_scalp_hard.exchange(0), g_scalp_dither.exchange(0), g_scalp_invalid.exchange(0));
-    if (geo_native_hair_enabled()) log("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
+    if (geo_native_hair_enabled()) log_stats("[alpha hair] native coverage records %u; invalid/missing native state %u; unsupported native interfaces total %u; retired bounds-invalid primitives %u; "
         "88-byte strand capture; procedural camera depth and physical Shadow ribbons",
         g_hair_records.exchange(0),g_hair_invalid.exchange(0),g_hair_attributes.load(),g_hair_bounds_invalid.exchange(0));
     // The alpha-tested fragment shaders of this frame by triangles, with their
@@ -1401,7 +1401,7 @@ VkDescriptorSet alpha_commit(VkCommandBuffer cmd, const AlphaBindings& ab, uint3
                f.kind == 1 ? "vt" : "tex", f.cut_first, f.cut, top[i].second.first, top[i].second.second);
       list += b;
     }
-    log("[alpha] this frame's shaders by triangles (cut first/effective): %s", list.c_str());
+    log_stats("[alpha] this frame's shaders by triangles (cut first/effective): %s", list.c_str());
     g_frames = g_draws = g_tris = 0;
     std::memset(g_fail, 0, sizeof g_fail);
   }

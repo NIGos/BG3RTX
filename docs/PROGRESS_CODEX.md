@@ -1,71 +1,51 @@
-# BG3RTX progress - 2026-11-04 (main ccbbb1d2 + rc-final)
+# BG3RTX progress - 2026-11-05 (consolidation)
 
-## Report: backlog closed, release candidate ready for approval
+## Report: project consolidated offline, final qualification ready
 
-**Question for the user (only one):** approve release candidate rc-20261104-ccbbb1d2-0efe5f84?
-Nothing is uploaded. The archive is `.scratch/rc/20261104-182143-0efe5f84/BG3RTX-rc-20261104-ccbbb1d2-0efe5f84.zip`
-(72.60 MiB, SHA256 29f1fa9a...8446f, not in Git).
+**Question for the user (only one): go for the final qualification live?**
+Batch: `tools/live_batches/release_qual/final/` (two launches, about 7 minutes and 200 MB), predictions in
+`tools/live_batches/release_qual/predicted_final.json`, queue command in [final-qual notes](archive/PROGRESS_CODEX_2026-11-05.md).
+Lives stay paused until the go.
 
-**Done.**
-- Every release-backlog row has a final outcome with numbers ([backlog](BACKLOG_20261104.md)).
-- Release check PASS ([RC_CHECK](release/RC_CHECK.md)): lean layer without diagnostics, 229 files, delta 0,
-  hashes and licences checked, install, update and uninstall on a throwaway folder.
-- Final Ultra smoke: rel1 17:52 VALID on the release profile. Later merges (bundle34) touch only tools and docs,
-  so no further smoke is needed.
+**Done (all on main, pushed).**
+- Five independent reviews (layer; core, shaders, common; product surface; shaders; tools). Every finding
+  confirmed in the code first; table with the outcome of every row: [CONSOLIDATION_20261105](CONSOLIDATION_20261105.md).
+- Fixed: 19 layer findings (resource lifetime kept until GPU completion, per-queue pruning, FG state only on
+  SDK success, init/bind/recording failures unwound, asset DB bounds, latches), 8 core, 15 product (launcher
+  failure paths, rejected options out of the opt-in, ZIP install rollback), 5 shader (rr_post overflow,
+  alpha mip clamp, UV edge loads, reprojection validity, half-float clamps), 20 tooling (shader identity trusts
+  only intact blobs, QA gates fail on missing data, deterministic asset DB, about 170 unregistered tests).
+- Not confirmed, written with the reason: C4, C7, C8, C12 (rings larger than frames in flight).
+  Deferred with the reason: L11, L12, L17 (need submission-dependency tracking), S-F05, S-F02, T2.
+- Cleanup: 8 of 9 rejected options removed (pak publication, generated rows, IP grass, alpha spill, water
+  hit shading and cost bits, half resolution, current sun, GI guards, 3 GPU candidates). SHaRC stays: its
+  device capability also serves water and hair. Shader requests 167 -> 122; about 4,000 source lines removed.
+  Release path proven equivalent with frozen specialization constants (71 identical, 139 equivalent, hair
+  requests identical against main, control differs). Last code with them: tag `archive-20261105/pre-cleanup`.
+- UI/UX (Opus review, 26 changes, before/after screenshots at 100-200%): plain help texts with restart notes,
+  Experimental shows only Water surface reflections (strand hair hidden until its update, user decision),
+  preset review, Help & support, first-run folder notice, installer texts.
+- Installer: Inno Setup 6.7.3 pinned by hash, same payload as the ZIP; status text while preparing;
+  lifecycle install 63 -> 15 s. Payload 229 -> 219 files (removed shaders).
+- Release check PASS 12/12 on the candidate ([RC_CHECK](release/RC_CHECK.md)): build, 219 files, hashes,
+  licences, ZIP install/update/uninstall, setup install/update/uninstall and Apps entry.
+- Tests: 172+ CTests green at every merge; merge-green now lints only active or new live jobs.
+- Nexus kit (`docs/release/nexus/`): title, short and main description (the published version plus intro,
+  Beware of Dragons, NVIDIA RTX + Vulkan only), sticky post, header 1300 x 372, graphics script.
+- Lives today (user go): rel1 Ultra S8 VALID 166 s, rel3 stock hair VALID 127 s on main ce1448bf
+  (after the layer fixes): no deferred destroys, no device lost, RR temporal 0.12-0.13 ms.
 
-**Shipped in the release profile.**
-- Ultra: temporal post (0.152-0.153 ms, user visual verdict), exact-k (S7 0.717 -> 0.555 ms), two-ray GI.
-- High: OMM and offline masks (rel2 VALID 12:13).
-- Always on: water camera correction wf9 (turning screen hits 6.7% -> 17%, compose 0.154 ms),
-  far-GI roof-leak fix (rel1: GI 11.46 ms vs 11.97 ms before, no measurable cost).
-- Appearance: native ambient (S8 ratio 1.44), native S8 water shadow edge and glint, hit emission mode 1.
-- Ctrl+Shift+F9 master RT toggle; F10 flips the last Experimental choice.
-- Licence GPL-3.0-or-later with NVIDIA section 7 exception. "Tested only on RTX 5090".
-
-**Experimental (off in presets).** Water Fresnel (rim +43%, open water +1.8%, invisible to the user on open water).
-
-**Rejected or deferred today, with numbers.**
-- One-ray Ultra GI: saves 3.27/3.50 ms GI trace; energy -7.8%/+3.9% inside OFF spread 11.6%; static flicker
-  fails in ON-b (PQ excess 0.0032/0.0022 > 0.00098). Rejected for Ultra.
-- Native Tilesets: OFF VALID (RT 9.92 ms, GI 12.03 ms); ON INVALID twice for test reasons (no rt_debug=9,
-  then the pipeline still building in the 60-frame diag window). Hidden and off; post-release.
-- Water off-screen hit shading: compose refused every pass (light binding 21-22). Bits 1/2/4/7 rejected.
-- Pak publication: 16,616 unique S6 candidates, 0 published. Generated rows: no coverage gain, +0.3/+0.5 ms.
-- Alpha spill (no overflow), three GPU candidates, Medium half resolution, glint, GI guards, current sun,
-  IP grass, SHaRC.
-- Hair strands: post-release. hv7 16:06 VALID (orphans 0, close-up 0.97); hv9 18:02 fail-fast on 3 orphan
-  card depths in one frame. Rule: no hair lives until consolidated offline (review found 9 issues,
-  all hair-only, gated by rt_hair_groom).
-
-**Open, not claimed.** Fresh-PC install, signing, Inno installer, Act 2/3 acceptance (the user tests these),
-upload.
+**Open, not claimed.** Live confirmation of the cleanup, shader fixes and UI on the release build (the final
+qualification); S8 float energy has no historical baseline (reported as unavailable, not pass); signing;
+fresh-PC install; Act 2/3 acceptance (user).
 
 ## Current user decisions
 
-- Stock visible hair ships. Strands are a post-release update on the Experimental page.
-- Fresnel Experimental; native ambient and water edge/glint; emission mode 1.
-- GPL-3.0-or-later plus NVIDIA exception; no NVIDIA notification.
-- The asset database derived from the game (8 MB) ships in the archive, at the user's own risk.
-- Static CRT; no VC runtime ships. Only RTX 5090 tested. Launcher acceptance is DPI only.
-- Lean: live windows in frames, one launch per scene, merge-green scaled to changed paths.
-- RTX Hair: consolidate and verify offline first; one approved READY_FOR_LIVE job afterwards.
+- Stock visible hair ships; strand hair hidden until its post-release update.
+- Experimental page: only Water surface reflections (Fresnel), off.
+- The game-derived asset database ships in the archive (user's own risk on data rights).
+- GPL-3.0-or-later plus NVIDIA exception; no NVIDIA notification. "Tested only on RTX 5090".
+- Nexus: setup in a ZIP (main file) plus portable ZIP; manual download, no Vortex.
+- Lean: only the tests that are really needed; one final live on the user's go.
 
-## Today's merges (all pushed)
-
-- bundle32 f051a7bd: short windows, mg-scope, gi1/ts1 jobs, cp5 startup, generated-row fix, water compose
-  reasons, hair latch.
-- bundle33 a48aaba0: scene-wait traces, water-binding fix, roof-leak fix, docs sync, licences and lean layer,
-  hair hv9 job, appearance decisions.
-- trace-sizing 6a176bb0: trace windows from the capture-stall model; hv9/ts1 job repairs.
-- bundle34 ccbbb1d2: RC verify script, outcomes, gi1 analyzer fix, Tileset job fix.
-- History rewrite (user-approved): a 213 MB corpus removed from 17 local branches; corpora now in .gitignore.
-
-## Lessons written down
-
-- Check blobs > 20 MB before every commit/merge; generated corpora never go in Git.
-- Counters behind a debug dispatch (rt_debug=9) print zeros otherwise: a gate on them needs that dispatch
-  and a window that waits for the pipeline build.
-- Tileset and other startup-latched keys need dev=1 in jobs, or the release policy resets them.
-
-Full folded branch notes of today: [archive](archive/PROGRESS_CODEX_2026-11-04.md).
-Earlier: [night](archive/PROGRESS_20261104_night.md), [11-01](archive/PROGRESS_CODEX_2026-11-01.md).
+Full folded branch notes: [2026-11-05](archive/PROGRESS_CODEX_2026-11-05.md), [2026-11-04](archive/PROGRESS_CODEX_2026-11-04.md).

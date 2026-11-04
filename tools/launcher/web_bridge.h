@@ -14,6 +14,7 @@ struct Hooks {
   std::function<std::string()> browseGame;
   std::function<GraphicsInspection()> recheck;
   std::function<void()> notices;
+  std::function<std::string()> reportHint;
 };
 class Bridge {
  public:
@@ -45,7 +46,7 @@ class Bridge {
   int saved_preset_, preview_preset_ = -1;
   bg3::settings::KVList preview_keys_;
   std::vector<std::string> changes_, blocked_;
-  std::string preview_kind_, status_, game_path_, mod_status_ = "Not checked";
+  std::string preview_kind_, status_, game_path_, report_hint_, mod_status_ = "Not checked";
   int restart_count_ = 0;
   bool can_play_ = false, report_visible_ = false, pending_play_ = false;
   GraphicsInspection inspection_;

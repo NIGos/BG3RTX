@@ -1,10 +1,14 @@
 // Shared state of the hot-reloadable core's translation units.
 #pragma once
+#include "../common/log_stats.h"
 #include "../common/host_api.h"
 
 extern const Bg3HostApi* host;
 #include "../common/stats_window.h"
 inline unsigned stats_period(unsigned native) { return bg3::stats_window::period(host->cfg_int, native); }
+template<class... Args> inline void log_stats(const char* fmt, Args... args) {
+  if (bg3::logging::stats_enabled(host->cfg_int)) host->log(fmt, args...);
+}
 void water_stats_reset();
 void em_stats_reset();
 

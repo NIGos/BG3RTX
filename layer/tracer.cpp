@@ -40,7 +40,7 @@ void diag(DiagCounter c, uint64_t n) {
 static void watchdog_report() {
         uint64_t d[DIAG_COUNT];
         for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_watch[i].exchange(0);
-        log("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
+        log_stats("[watch] presents %llu (displayed %llu) | pipelines %llu (%.0f ms in driver) | shader modules %llu | descriptor writes %llu | "
             "submits %llu | draws %llu | submit CPU %.3f ms | descriptor tracker CPU %.3f ms | alpha descriptors %.3f ms / %llu calls | auxiliary signals coalesced %llu",
             d[DIAG_PRESENT], d[DIAG_DISPLAYED], d[DIAG_PIPELINES], d[DIAG_PIPELINE_US] / 1000.0, d[DIAG_SHADER_MODULES],
             d[DIAG_DESC_WRITES], d[DIAG_SUBMIT], d[DIAG_DRAW], d[DIAG_SUBMIT_US]/1000.0,
@@ -332,7 +332,7 @@ static bool auto_trigger(uint64_t frame, uint32_t passes, uint32_t draws) {
   if (frame % 300 == 0) {
     uint64_t d[DIAG_COUNT];
     for (int i = 0; i < DIAG_COUNT; ++i) d[i] = g_diag[i].exchange(0);
-    log("[auto] present %llu: %u passes, %u draws in the last frame | last 300 presents: submit %llu begin_cmd %llu "
+    log_stats("[auto] present %llu: %u passes, %u draws in the last frame | last 300 presents: submit %llu begin_cmd %llu "
         "render_pass %llu bind %llu draw %llu dispatch %llu",
         (unsigned long long)frame, passes, draws, d[DIAG_SUBMIT], d[DIAG_BEGIN_CMD], d[DIAG_BEGIN_PASS],
         d[DIAG_BIND_PIPE], d[DIAG_DRAW], d[DIAG_DISPATCH]);

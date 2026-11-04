@@ -423,6 +423,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
 
+  {"detailed_logging", "Detailed logging",
+   "Writes extra performance and diagnostic details to the log for bug reports. Leave it off for normal play.",
+   Kind::Choice, Apply::Restart, "Restart the game to apply", false,
+   {{"off", "Off", 0, {{"detailed_logging", "0"}}, {}, {}, false, false, false, Apply::Restart},
+    {"on", "On", 0, {{"detailed_logging", "1"}}, {}, {}, false, false, false, Apply::Restart}},
+   {}, {0, 0, 0, 0}, false, {}, false, "Support", {}},
+
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -512,6 +519,7 @@ inline constexpr KV kPresetExtra[kPresetCount][2] = {{}, {}, {}, {{"rt_rebuild_f
 // The keys of bg3rtx.ini, in file order.
 inline constexpr KV kDefaults[] = {
     {"dev", "1"},
+    {"detailed_logging", "0"},
     {"ab_hotkey", "1"},
     {"ab_off", "0"},
     {"experimental_options", "0"},
@@ -793,6 +801,7 @@ inline constexpr KV kDefaults[] = {
 // The keys of data/release.ini, in file order.
 inline constexpr KV kReleaseDefaults[] = {
     {"dev", "0"},
+    {"detailed_logging", "0"},
     {"dump_shaders", "0"},
     {"shader_debug", "0"},
     {"census_dump", "0"},
@@ -1202,7 +1211,7 @@ inline int matching_preset(const std::vector<int>& values) {
   for (int p = 0; p < kPresetCount; ++p) {
     bool all = true;
     for (int i = 0; i < kKnobCount; ++i)
-      if (values[i] != kKnobs[i].preset[p]) all = false;
+      if (std::string(kKnobs[i].category) != "Support" && values[i] != kKnobs[i].preset[p]) all = false;
     if (all) return p;
   }
   return -1;

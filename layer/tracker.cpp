@@ -205,7 +205,7 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
     LARGE_INTEGER fq;
     QueryPerformanceFrequency(&fq);
     const double frames = double(frame - cost_frame);
-    log("[life] bookkeeping: %.1f references noted and %.3f ms CPU at submit per frame (over %.0f frames); %zu objects "
+    log_stats("[life] bookkeeping: %.1f references noted and %.3f ms CPU at submit per frame (over %.0f frames); %zu objects "
         "tracked, %zu present fences pending",
         double(g_life_noted.exchange(0)) / frames, double(g_life_submit_ticks.exchange(0)) * 1000.0 / double(fq.QuadPart) / frames,
         frames, g_life.size(), g_fences.size());
@@ -216,7 +216,7 @@ void life_on_present(DeviceData* dd, VkQueue queue) {
     last = now;
     last_waits = g_life_waits;
     last_unfenced = g_life_unfenced;
-    log("[life] so far: %llu destroys waited for in-flight work (%.3f ms total, max %.3f ms, %llu timeouts), %llu "
+    log_stats("[life] so far: %llu destroys waited for in-flight work (%.3f ms total, max %.3f ms, %llu timeouts), %llu "
         "found it already complete, %llu with no fence yet (submitted this frame); %zu objects tracked",
         (unsigned long long)g_life_waits, g_life_wait_ms, g_life_wait_max, (unsigned long long)g_life_timeouts,
         (unsigned long long)g_life_noop, (unsigned long long)g_life_unfenced, g_life.size());

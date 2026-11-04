@@ -516,7 +516,7 @@ void release_all() {
 }
 
 void timestamp(VkCommandBuffer cmd, int slot, uint32_t i) {
-  if (slot < 0) return;
+  if (!logging::stats_enabled(cfg_int) || slot < 0) return;
   if (i == 0) {
     hair_timing_observe();
     g_slots[slot].hair_epoch = g_hair_timing_epoch.generation;
@@ -1155,7 +1155,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
       g_blas_valid = false;
     }
     int slot = -1;
-    if (g_qp) {
+    if (logging::stats_enabled(cfg_int) && g_qp) {
       uint32_t s = g_next_slot % kRing;
       if (!g_slots[s].frame) {
         slot = int(s);
@@ -1268,7 +1268,7 @@ void rt_after_capture(VkCommandBuffer cmd, const RtCapture& cap) {
                signature == g_built_sig && int(g_since_build) < rebuild_frames;
 
   int slot = -1;
-  if (g_qp) {
+  if (logging::stats_enabled(cfg_int) && g_qp) {
     uint32_t s = g_next_slot % kRing;
     if (!g_slots[s].frame) {
       slot = int(s);
@@ -1445,6 +1445,7 @@ void wait_for_frame_scene(std::unique_lock<std::mutex>& lock) {
   }
   // rt_scene_wait_log_frames: lean jobs use 120 (complete lines in every cost window for the gate).
   if (g_wait.calls >= uint64_t(stats_period(unsigned((std::clamp)(cfg_int("rt_scene_wait_log_frames", 600), 60, 6000))))) {
+    if (g_wait.timeouts || logging::stats_enabled(cfg_int))
     log("[rt] scene wait: %llu frames, %llu waited (%llu got this frame's scene, %llu timeouts, %llu skipped), "
         "wait mean %.3f ms, max %.3f ms",
         (unsigned long long)g_wait.calls, (unsigned long long)g_wait.waited, (unsigned long long)g_wait.got,
@@ -1586,7 +1587,7 @@ void rt_on_present() {
     g_ortho_live = g_ortho_pipe;
   }
   uint64_t now = frame_index();
-  for (uint32_t s = 0; s < kRing; ++s) {
+  for (uint32_t s = 0; logging::stats_enabled(cfg_int) && s < kRing; ++s) {
     Slot& sl = g_slots[s];
     if (!sl.frame || sl.frame + 4 > now) continue;
     uint64_t r[8] = {};
@@ -1623,18 +1624,18 @@ void rt_on_present() {
       size_t n = a.total.size();
       float c = pct(a.conv, 0.5), b = pct(a.blas, 0.5), t = pct(a.tlas, 0.5);
       float tm = pct(a.total, 0.5), t99 = pct(a.total, 0.99), b99 = pct(a.blas, 0.99);
-      log("[rt] scene build GPU (%s, %s, %zu samples): median %s %.3f ms, %s %.3f ms (p99 %.3f), %s %.3f ms; total "
+      log_stats("[rt] scene build GPU (%s, %s, %zu samples): median %s %.3f ms, %s %.3f ms (p99 %.3f), %s %.3f ms; total "
           "median %.3f ms, p99 %.3f ms",
           kMode[k], mv ? "camera moving" : "static", n, kParts[k][0], c, kParts[k][1], b, b99, kParts[k][2], t, tm, t99);
       a = Acc{};
     }
   if (g_n_split)
-    log("[rt] last %u frames: %u split builds (%.0f TLAS instances, %.3fM static + %.3fM dynamic triangles average), "
+    log_stats("[rt] last %u frames: %u split builds (%.0f TLAS instances, %.3fM static + %.3fM dynamic triangles average), "
         "%u legacy rebuilds, %u refits",
         g_n_frames, g_n_split, double(g_instances_sum) / g_n_split, double(g_static_tris_sum) / g_n_split * 1e-6,
         double(g_prims_sum - g_static_tris_sum) / g_n_frames * 1e-6, g_n_rebuild, g_n_refit);
   else
-    log("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average (%.3fM alpha-tested in %.1f draws), BLAS "
+    log_stats("[rt] last %u frames: %u rebuilds, %u refits, %.2fM triangles average (%.3fM alpha-tested in %.1f draws), BLAS "
         "capacity %u + %u",
         g_n_frames, g_n_rebuild, g_n_refit, double(g_prims_sum) / g_n_frames * 1e-6,
         double(g_aprims_sum) / g_n_frames * 1e-6, double(g_alpha_draws_sum) / g_n_frames, g_blas_capacity,

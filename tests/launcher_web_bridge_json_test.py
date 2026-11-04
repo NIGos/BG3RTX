@@ -49,16 +49,17 @@ expected = {
  "Lighting": ["DLSS Ray Reconstruction", "Ray-tracing detail", "Sun shadows", "Indirect lighting", "Local light shadows", "Mod lighting strength", "Off-screen bounce light", "Interior light shadows", "Hair shadows"],
  "Surfaces": ["Reflections", "Water lighting", "Depth of field and bloom smoothing"],
  "Performance": ["Frame Generation", "Rendered frame limit", "NVIDIA Reflex"],
+ "Support": ["Detailed logging"],
 }
-assert len(state["settings"]) == 15
+assert len(state["settings"]) == 16
 for page, labels in expected.items():
     assert {s["title"] for s in state["settings"] if s["category"] == page} == set(labels)
 assert not state["developer"] and not state["experimental"]
 assert all(not s["developer"] and not s["experimental"] for s in state["settings"])
-print("Exact release pages and 15 controls verified.")
+print("Exact release pages and 16 controls verified.")
 
 choices = {
- "rr": ["Off", "On"], "rt_geometry": ["Off", "Solid surfaces", "Include foliage"],
+ "detailed_logging": ["Off", "On"], "rr": ["Off", "On"], "rt_geometry": ["Off", "Solid surfaces", "Include foliage"],
  "sun_shadows": ["Visible surfaces", "Ray-traced", "Include hidden roofs"],
  "gi": ["Off", "Visible surfaces", "Ray-traced", "Ray-traced high"],
  "local_shadows": ["Off", "Fast", "Full"], "exp_hidden_surface": ["Off", "Near", "Far (6 m)"],

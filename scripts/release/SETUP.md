@@ -23,7 +23,7 @@ The second command reads the version from the assembled `VERSION.txt`, writes
 `payload.sha256.json` and the combined GPL/NVIDIA-exception licence page beside the
 setup, then compiles `BG3RTX-<version>-Setup.exe`. All setup outputs must be under
 this checkout's `.scratch/`; never commit them. The original ZIP payload remains
-**219 files**: the hash manifest is setup metadata, embedded separately and not deployed.
+**221 files**: the hash manifest is setup metadata, embedded separately and not deployed.
 Every deployed payload byte comes from the same assembled folder used for the ZIP.
 `verify_rc.ps1` compiles from the extracted ZIP, proving archive/setup equivalence.
 
@@ -138,7 +138,7 @@ The development process is not elevated. Existing legacy fixture checks also rem
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/verify_rc.ps1`.
 Its Setup row compiles from the extracted ZIP and runs actual setup silently using
 `/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /DIR=<throwaway>` and `/TASKS=""`.
-It refuses an existing BG3RTX Apps entry, isolates TEMP/LOCALAPPDATA, checks 219 hashes
+It refuses an existing BG3RTX Apps entry, isolates TEMP/LOCALAPPDATA, checks 221 hashes
 after install and update (including repair of a corrupt DLL), then checks default
 settings retention, explicit settings removal, shader-cache removal and zero owned
 files or HKCU Apps entries after uninstall. Only the generated uninstaller removes

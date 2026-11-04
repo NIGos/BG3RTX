@@ -85,6 +85,8 @@ Start from the launcher or set the Steam launch option to
 the folder that contains `bin\bg3.exe`. If the game does not start or Frame Generation does nothing,
 turn off other overlays (Steam, Discord, GOG Galaxy) for one launch.
 
+**Detailed logging** in Help & support is off by default in every preset; turn it on, restart the game and reproduce the problem before creating a bug report.
+
 Use **Report a problem…** in Help & support, or run `Diagnostics.cmd`, for a local report ZIP.
 Nothing is uploaded and no save is included by default. Review `CONTENTS.txt` and the ZIP before
 sharing. See the [packaged README](release/README.md) for privacy and manual reporting.

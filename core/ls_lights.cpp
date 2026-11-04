@@ -173,7 +173,7 @@ void refresh(const Bg3AssetDbApi* a) {
   if (g_records != prev) ++g_gen;
   if (g_count && (!g_logged || g_calls % 1200 < 8)) {
     g_logged = true;
-    host->log("ls: per-light data: %u runtime lights within %.0f m of (%.1f, %.1f, %.1f) [%s]: bridge %u, database %u; "
+    log_stats("ls: per-light data: %u runtime lights within %.0f m of (%.1f, %.1f, %.1f) [%s]: bridge %u, database %u; "
               "owners placed %u, item %u, scenery %u, character %u, unknown %u; bridge %s (export %u, level %s); "
               "moving-light tolerance %.2f m = %.1f m/s x %.3f s (export interval %.3f + age at arrival %.3f + 2 "
               "frames of %.4f s)",

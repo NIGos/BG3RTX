@@ -35,6 +35,8 @@ def same_value(actual, wanted):
 
 
 def estimate(job, phase, changed, first=False):
+    # Startup log-only timestamps do not build pipelines or alter readiness signals.
+    changed = {k: v for k, v in changed.items() if k != "detailed_logging"}
     patterns = phase.get('wait_log', [])
     patterns = [patterns] if isinstance(patterns, str) else patterns
     if not patterns:

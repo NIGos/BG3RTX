@@ -1,6 +1,7 @@
 ﻿#include "web_host.h"
 #include "web_bridge.h"
 #include "ui_state.h"
+#include "session_logging.h"
 #include "version.h"
 #include <wrl.h>
 #include <windowsx.h>
@@ -308,6 +309,7 @@ int run(HINSTANCE inst,const std::wstring& game,bool report,bool no_game,const s
         if(h.no_game||game_running()||!valid_game_dir(h.game)){error="Choose the game folder or close the running game to enable Play.";return false;}
         DWORD pid{};std::wstring err;bool ok=launch(make_plan(h.game,L"",{},false,effective_fg(h.state)),&pid,&err);error=ok?"":std::string("Settings saved, but the game could not start. See Help & support.\n")+narrow(err);return ok;
       };
+      hooks.reportHint=[] {return session_logging::hint(root_dir());};
       hooks.prepareReport=[&h](const std::string& issue,bool logs,bool settings,bool system){
         diagnostics::Request r;r.install_root=root_dir();r.issue=issue;r.include_logs=logs;r.include_settings=settings;r.include_system=system;
         if(system)r.system_text=graphics_report(inspect_graphics());
@@ -436,9 +438,9 @@ void native_layout(NativeReportPreview& p) {
   RECT r{}; GetClientRect(p.window, &r);
   int width = r.right, height = r.bottom;
   int listWidth = width > 900 ? 260 : 210;
-  MoveWindow(p.privacy, 16, 12, width - 32, 94, TRUE);
-  MoveWindow(p.files, 16, 114, listWidth, height - 214, TRUE);
-  MoveWindow(p.contents, listWidth + 28, 114, width - listWidth - 44, height - 214, TRUE);
+  MoveWindow(p.privacy, 16, 12, width - 32, 148, TRUE);
+  MoveWindow(p.files, 16, 168, listWidth, height - 268, TRUE);
+  MoveWindow(p.contents, listWidth + 28, 168, width - listWidth - 44, height - 268, TRUE);
   MoveWindow(p.status, 16, height - 88, width - 32, 34, TRUE);
   MoveWindow(p.save, width - 252, height - 46, 134, 32, TRUE);
   MoveWindow(p.cancelButton, width - 108, height - 46, 92, 32, TRUE);
@@ -490,7 +492,7 @@ LRESULT CALLBACK native_report_proc(HWND window, UINT message, WPARAM w, LPARAM 
         return CreateWindowExW(!wcscmp(type, L"EDIT") || !wcscmp(type, L"LISTBOX") ? WS_EX_CLIENTEDGE : 0,
           type, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 0, 0, window, HMENU(INT_PTR(id)), instance, nullptr);
       };
-      p->privacy = control(L"STATIC", widen(diagnostics::privacy_text).c_str(), 0, 0);
+      p->privacy = control(L"STATIC", widen(std::string(diagnostics::privacy_text)+"\n\n"+session_logging::hint(root_dir())).c_str(), 0, 0);
       p->files = control(L"LISTBOX", L"", LBS_NOTIFY | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 101);
       p->contents = control(L"EDIT", L"Select a file to review its contents.",
         ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP, 102);
