@@ -3,7 +3,7 @@
 # 1. Shared live_flow duration/preflight checks, then plan sampling, foreground FG 2 single launch,
 #    expect_runner names the phase count and every trace, no float bursts, diagnostics
 #    (rt_stats, rt_primary_check, rt_primary_identity, ls_stats, ls_check, rt_debug, rf_stats, rf_debug, rt_occ_stats) on
-#    exactly in "diag-*" phases, cost windows diag-off and without traces (debug-view traces only in
+#    exactly in "diag-*" or "producer-sanity-*" phases, cost windows diag-off and without traces (debug-view traces only in
 #    "diag-view-*"). Shared duration totals against -MaxMinutes; disk estimate against -MaxMB.
 # 2. Run A (real jobs, fake game): job 1 cannot see its expect lines, so it is INVALID and the
 #    dependent jobs stay in pending (stop-on-failure). With -Independent (no requires_success_of):
@@ -100,7 +100,8 @@ foreach ($job in $jobs) {
     elseif ($step.serial -or $step.capture_at) { $bursts = $false }
     if ($state['pan_prepare'] -and $state['pan_prepare'] -ne '0' -and $MaxBursts -eq 0) { $bursts = $false }
     $diag = Test-Diag $state; $label = [string]$step.label
-    if ($diag -ne $label.StartsWith('diag-')) { $roles = $false; $roleNote += " $label" }
+    $diagnosticWindow = $label.StartsWith('diag-') -or $label.StartsWith('producer-sanity-')
+    if ($diag -ne $diagnosticWindow) { $roles = $false; $roleNote += " $label" }
     if ($label.StartsWith('cost-') -and $diag) { $roles = $false }
     if ($step.trace_at) {
       $totalTraces += @($step.trace_at).Count
@@ -113,7 +114,7 @@ foreach ($job in $jobs) {
   }
   Check "${n}: plan $(Split-Path $planRel -Leaf) ($($plan.Count) phases, $sec s) parses, sets are key=value, traces inside phases" $ok
   Check "${n}: every phase samples" $sampled
-  Check "${n}: diagnostics on exactly in diag-* phases, never in cost windows or with a trace$roleNote" $roles
+  Check "${n}: diagnostics on exactly in diag-* or producer-sanity-* phases, never in cost windows or with a trace$roleNote" $roles
   if ($burstCount -gt $MaxBursts) { $bursts = $false }
   $totalBursts += $burstCount
   Check "${n}: float bursts $burstCount (allowed $MaxBursts; serial and capture_at both set)" $bursts

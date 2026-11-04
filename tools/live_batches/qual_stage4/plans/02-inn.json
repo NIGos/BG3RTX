@@ -26,7 +26,7 @@
     "seconds": 1.1,
     "capture_at": 0,
     "serial": 0,
-    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=0,qa_exposure_hold=0",
+    "set": "rt_hit_material_generated=1,gi_hit_direct=1,rt_stats=1,qa_exposure_hold=0",
     "wait_log": [
       "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
       "\\[pace\\] rendered frame time over 600 frames",
