@@ -714,6 +714,8 @@ Energy is the post-water image (RR colour input) over the exposure, against the 
 
 ## Water hidden-hit reflection extension (branch rt-reflections-offscreen, 2026-11-03)
 
+2026-11-04: Water hit cost bit 1 remains untested because it depends on rejected off-screen hit shading; bits 2/4 are REJECTED, with no saving.
+
 Design and full source map: [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md), stage A. Candidate
 `rt_water_hit_shade=0` uses native material shading for supported tier 2/3 hits in both the
 geometric diagnostic and the forward-record composition trace. Tier 1 remains the screen

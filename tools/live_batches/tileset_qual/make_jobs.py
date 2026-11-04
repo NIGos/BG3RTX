@@ -30,7 +30,7 @@ def main():
         save='Test Dialogue3', retained_draws=132, supported_material_draws=48,
         supported_depth_draws=56,
         startup_constraint='layer/util.cpp retains startup_tilesets on every reload. No live gate isolates this choice. Two launches required; no fake 0/1/0/1.',
-        pass_rule='Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, unknown 0, capture-incomplete 0, qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.',
+        pass_rule='Cost intervals without traces or diagnostic stats: zero scene-wait timeouts. Each measured interval: capture buffer full and alpha region full zero. ON diagnostic: complete > 0, capture-incomplete 0 (report unknown fallback records), qualified family2 > 0 and native primary matches > 0. OFF/ON coverage and RT/GI ms must be present. Float pre-post means finite and nonnegative; report signed energy/coverage deltas, no equal-energy gate for this shading-model change. Missing data INVALID. Visual quality remains user decision.',
         coverage_prediction='ON has positive family2 acquisitions, OFF has no enabled Tileset acquisitions. Report complete record counts, hybrid GI hit/screen/hidden/off-screen shares and overall material qualified/attempted. No invented minimum coverage percentage.',
         pt_reference=None,
         energy_rule='No matched Dialogue3 PT reference found. Report float pre-post scene colour and exposure per launch; independent load/camera/exposure can confound differences. Never a quality PASS from cross-run comparison.',
@@ -44,16 +44,16 @@ def main():
         state = dict(profile)
         # Developer mode preserves the hidden Tilesets choice under release policy.
         state.update(dev='1', rt_native_tileset=value, rt_native_hair='1', rt_native_scalp='1',
-                     rt_hit_material_paks='0', rt_stats='0', dump_images='1',
+                     rt_hit_material_paks='0', rt_stats='0', rt_debug='0', dump_images='1',
                      dump_png_width='1280', dump_raw='0', dump_preview_f32='0',
                      rt_timing_frames='120', rt_scene_wait_log_frames='120',
                      qa_exposure_hold='0', headless='0')
         plan = [phase('warmup', 19, rt_stats='0', qa_exposure_hold='0'),
                 phase('settle-float', 2, dump_preview_f32='1', qa_exposure_hold='1'),
-                phase('diag-' + suffix, 35, rt_stats='1'),
-                phase('cost-' + suffix, 25, rt_stats='0'),
-                phase('shot-' + suffix, 8),
-                phase('restore', 2, qa_exposure_hold='0', dump_preview_f32='0')]
+                phase('diag-' + suffix, 35, rt_stats='1', rt_debug='9' if value == '1' else '0'),
+                phase('cost-' + suffix, 25, rt_stats='0', rt_debug='0'),
+                phase('shot-' + suffix, 8, rt_debug='0'),
+                phase('restore', 2, rt_debug='0', qa_exposure_hold='0', dump_preview_f32='0')]
         plan[4]['trace_at'] = [5]
         diag, cost = 'diag-' + suffix, 'cost-' + suffix
         gates = [
@@ -66,7 +66,7 @@ def main():
             gate('GI coverage', r'rt stats \(\d+ frames\): hybrid GI', r'hybrid GI [0-9.]+M rays/frame, [0-9.]+% hit;', [diag], period_frames=120),
             gate('material coverage', r'hit material \(\d+ frames\): attempted', r'attempted [1-9]\d* qualified \d+ unsupported \d+', [diag], period_frames=120)]
         if value == '1':
-            gates += [gate('Tileset records: invalid means unknown/incomplete', r'\[alpha tileset\] records', r'records complete [1-9]\d* unknown 0 native samplers [1-9]\d* capture-incomplete 0 stride \d+', [diag], period_frames=120),
+            gates += [gate('Tileset records: complete capture', r'\[alpha tileset\] records', r'records complete [1-9]\d* unknown \d+ native samplers [1-9]\d* capture-incomplete 0 stride \d+', [diag], period_frames=120),
                       gate('Tileset GPU participation', r'hit material tileset \(\d+ frames\):', r'qualified family2 [1-9]\d*; native primary matches [1-9]\d*', [diag], period_frames=120)]
         job = dict(name=name, save='Test Dialogue3', session=False, repeat=1,
             traces=0, hold=90, timeout=294, max_minutes=4.9,

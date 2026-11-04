@@ -53,7 +53,7 @@
     "motion_end": 35,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=1",
+    "set": "rt_debug=9,rt_stats=1",
     "frames": 90,
     "settle_frames": 30,
     "stats_reset": true,
@@ -80,7 +80,7 @@
     "motion_end": 25,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rt_stats=0",
+    "set": "rt_debug=0,rt_stats=0",
     "frames": 60,
     "settle_frames": 0,
     "stats_reset": true,
@@ -105,7 +105,7 @@
     "motion_end": 8.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "",
+    "set": "rt_debug=0",
     "trace_at": [
       5
     ]
@@ -123,6 +123,6 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "dump_preview_f32=0,qa_exposure_hold=0"
+    "set": "dump_preview_f32=0,qa_exposure_hold=0,rt_debug=0"
   }
 ]
