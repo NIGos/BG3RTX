@@ -462,9 +462,11 @@
      "required_from_choice": {},
      "preset_values": {"low": 0, "medium": 0, "high": 0, "ultra": 0},
      "kind": "choice", "choices": [
-       {"id": "all", "label": "All", "apply": "live", "caps": [], "keys": {"rt_hair_primary_passes": "7"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer", "label": "G-buffer only", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "1"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
-       {"id": "gbuffer_velocity", "label": "G-buffer and motion vectors", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "3"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
+       {"id": "all", "label": "All", "apply": "live", "caps": [], "keys": {"rt_hair_primary_passes": "15"}, "needs": {}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "gbuffer", "label": "G-buffer and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "9"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "gbuffer_velocity", "label": "G-buffer, motion vectors and probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "11"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "no_probe", "label": "Swaps without the probe", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "7"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"},
+       {"id": "none", "label": "No strand pass", "apply": "live", "caps": ["ray_query"], "keys": {"rt_hair_primary_passes": "0"}, "needs": {"exp_hair_groom": 1}, "migrate_from": [], "developer": false, "maturity": "developer"}
      ]},
     {"id": "exp_hair_primary_order", "label": "Strand header in G-buffer order",
      "description": "Diagnostic for on-screen strands: writes the strand frame record in the G-buffer pass's own command buffer instead of the depth prepass's. Unqualified.",

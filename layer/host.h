@@ -930,6 +930,8 @@ void hair_primary_note_pipelines(VkDevice device, VkPipelineCache cache, uint32_
                                  const VkPipeline* out);
 void hair_primary_forget_pipeline(VkPipeline p);
 bool hair_primary_wanted();
+// After a device loss (layer/devfault.cpp): the strand breadcrumbs (common/hair_primary.h kCrumbAddrOffset).
+void hair_primary_fault_log();
 uint64_t hair_primary_draw_key(const CmdState* s, const DrawArgs& args);
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);
 void hair_primary_unswap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args);

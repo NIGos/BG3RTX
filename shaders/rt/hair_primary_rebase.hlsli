@@ -25,3 +25,20 @@ bool hp_prev_build_camera(uint64_t rec, out float3 c) {
   c = asfloat(vk::RawBufferLoad<uint3>(rec + hair_primary_prev_camera_offset, 4));
   return all(isfinite(c));
 }
+
+// Breadcrumbs (common/hair_primary.h kCrumbAddrOffset): a violation of [lo, hi) for `bytes` at addr is recorded as
+// (site, address) at crumbs + 16 site, and the caller skips the access (fail closed).
+static const uint hair_primary_crumb_offset = 3232u;
+uint64_t hp_crumbs(uint64_t rec) {
+  const uint2 a = vk::RawBufferLoad<uint2>(rec + hair_primary_crumb_offset, 8);
+  return (uint64_t(a.y) << 32) | uint64_t(a.x);
+}
+bool hp_crumb_ok(uint64_t crumbs, uint site, uint64_t addr, uint64_t bytes, uint64_t lo, uint64_t hi) {
+  if (addr >= lo && addr + bytes <= hi) return true;
+  if (crumbs != 0u) vk::RawBufferStore<uint4>(crumbs + uint64_t(site) * 16u, uint4(site, uint(addr), uint(addr >> 32), 1u), 16);
+  return false;
+}
+// The last value of a used address (site 16 + n: TLAS, pool, pixels), last writer wins.
+void hp_crumb_note(uint64_t crumbs, uint n, uint64_t value) {
+  if (crumbs != 0u) vk::RawBufferStore<uint4>(crumbs + uint64_t(16u + n) * 16u, uint4(16u + n, uint(value), uint(value >> 32), 2u), 16);
+}

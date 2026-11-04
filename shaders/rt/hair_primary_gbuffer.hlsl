@@ -98,6 +98,14 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint pool_bytes = ld(rec + 56u);
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint64_t at = pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes;
+  const uint64_t crumbs = hp_crumbs(rec);
+  const uint64_t pixel_end = pixels + uint64_t(width) * height * hair_primary_pixel_bytes, pool_end = pool + pool_bytes;
+  if (crumbs != 0u && (px.x & 31u) == 0u && (px.y & 31u) == 0u) {
+    hp_crumb_note(crumbs, 0u, addr2(ld2(rec + 16u)));
+    hp_crumb_note(crumbs, 1u, pool);
+    hp_crumb_note(crumbs, 2u, pixels);
+  }
+  if (!hp_crumb_ok(crumbs, 1u, at, 16u, pixels, pixel_end)) discard;
   uint4 e = vk::RawBufferLoad<uint4>(at, 16);
   if (e.w != hp_seal(e.xyz, tag)) {
     RayDesc r;
@@ -114,7 +122,8 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
       if (k < grooms && seg <= hair_primary_max_segment) {
         const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
         uint i0;
-        if (hp_segment(pool, pool_bytes, row, seg, i0)) {
+        if (hp_segment(pool, pool_bytes, row, seg, i0) &&
+            hp_crumb_ok(crumbs, 3u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) {
         const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
         const float3 hit = dir * q.CommittedRayT();   // this frame's camera-relative point
         const float v = hp_segment_param(hit + org, p0, p1);
@@ -142,10 +151,12 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const uint4 row = vk::RawBufferLoad<uint4>(rec + hair_primary_table_offset + k * 16u, 16);
   uint i0;
   if (!hp_segment(pool, pool_bytes, row, seg, i0)) discard;
+  if (!hp_crumb_ok(crumbs, 4u, hp_at(pool, row.x, i0, 12u), 24u, pool, pool_end)) discard;
   const float3 p0 = ldf3(hp_at(pool, row.x, i0, 12u)), p1 = ldf3(hp_at(pool, row.x, i0 + 1u, 12u));
   const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
   if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, length(p1 - p0))) discard;
   if (row.y == 0u) discard;   // no point UVs (the layer publishes a row without them only for a card-kept draw)
+  if (!hp_crumb_ok(crumbs, 5u, hp_at(pool, row.y, i0, 8u), 16u, pool, pool_end)) discard;
   const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
   const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
   const float2 uv = lerp(uv0, uv1, v);

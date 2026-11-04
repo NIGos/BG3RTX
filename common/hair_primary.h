@@ -60,6 +60,13 @@ static_assert(kCameraOffset == 3136 && kPrevCameraOffset == 3152, "shaders/rt/ha
 // float4 (this camera's position, 0). Copied into the counts by rt/hair_primary_count.hlsl and logged.
 constexpr uint32_t kRayDebugOffset = kHeaderTotal, kRayDebugBytes = 64;
 static_assert(kRayDebugOffset == 3168, "shaders/rt/hair_primary_rebase.hlsli hair_primary_ray_debug_offset");
+// Breadcrumbs (diagnostics, hv6/hv7 2026-11-04 device lost once strand rays hit): the device address of a small
+// host-visible buffer of the layer. The strand G-buffer variant checks each explicit buffer access against its range
+// and records a violation there (site, address; the access is skipped), and notes the last TLAS / pool / pixel
+// addresses it used. Read every 300 frames and after a device loss (kCrumbSites sites x 16 bytes, then the notes).
+constexpr uint32_t kCrumbAddrOffset = kRayDebugOffset + kRayDebugBytes, kHeaderAllocAll = kCrumbAddrOffset + 16;   // 3232, 3248
+constexpr uint32_t kCrumbSites = 16, kCrumbBytes = kCrumbSites * 16 * 2;
+static_assert(kCrumbAddrOffset == 3232, "shaders/rt/hair_primary_rebase.hlsli hair_primary_crumb_offset");
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;

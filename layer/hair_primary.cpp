@@ -29,6 +29,7 @@ struct HpBuf {
   VkDeviceMemory m = VK_NULL_HANDLE;
   VkDeviceSize size = 0;
   VkDeviceAddress addr = 0;
+  void* map = nullptr;   // host-visible buffers only (the breadcrumbs)
 };
 
 DeviceData* g_dd = nullptr;
@@ -36,7 +37,7 @@ bool g_startup_enabled = false;        // Restart safety gate; INI reload cannot
 bool g_frag_stores = false;            // fragmentStoresAndAtomics enabled by the game
 std::mutex g_mu;
 HpBuf g_probe_header;
-HpBuf g_header, g_pixels;              // header: fixed (its address is in every variant); pixels: render size
+HpBuf g_header, g_pixels, g_crumbs;              // header: fixed (its address is in every variant); pixels: render size
 bool g_header_tried = false;
 bool g_pixels_fresh = false;           // just allocated: zero it before the next header update
 uint32_t g_px_w = 0, g_px_h = 0;
@@ -147,7 +148,7 @@ uint64_t g_slot_frame[kTimeSlots] = {}; // frame_index + 1 the slot was reset fo
 double g_ms_sum = 0;                    // strand G-buffer draw ms over the timed frames of the window
 uint32_t g_ms_frames = 0;
 
-bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* what) {
+bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* what, bool host = false) {
   DeviceData* dd = g_dd;
   out = HpBuf{};
   VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -160,13 +161,16 @@ bool make(HpBuf& out, VkDeviceSize size, VkBufferUsageFlags usage, const char* w
   fi.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
   VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &fi};
   mai.allocationSize = req.size;
-  mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  mai.memoryTypeIndex = find_memory_type(dd, req.memoryTypeBits, host ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                                                                         : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   if (mai.memoryTypeIndex == UINT32_MAX || dd->vk.AllocateMemory(dd->device, &mai, nullptr, &out.m) != VK_SUCCESS) {
     dd->vk.DestroyBuffer(dd->device, out.b, nullptr);
     out = HpBuf{};
     return false;
   }
   dd->vk.BindBufferMemory(dd->device, out.b, out.m, 0);
+  if (host && dd->vk.MapMemory(dd->device, out.m, 0, VK_WHOLE_SIZE, 0, &out.map) == VK_SUCCESS) std::memset(out.map, 0, size);
   out.size = size;
   out.addr = rt_buffer_address(out.b);
   fault_track(what, out.addr, size);
@@ -348,7 +352,7 @@ bool header_ready() {
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
                   : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game"
                   : !g_precise ? "occlusionQueryPrecise not enabled: no coverage proof, no swaps" : nullptr;
-  if (!why && !make(g_header, hair_primary::kHeaderTotal + hair_primary::kRayDebugBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!why && !make(g_header, hair_primary::kHeaderAllocAll, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
@@ -387,6 +391,11 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
                             0, nullptr);
   dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
   dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
+  {   // the breadcrumb buffer's address (0: none; created on first use, host-visible)
+    if (!g_crumbs.b) make(g_crumbs, hair_primary::kCrumbBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "hair primary breadcrumbs", true);
+    const uint64_t a[2] = {g_crumbs.map ? uint64_t(g_crumbs.addr) : 0u, 0u};
+    dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCrumbAddrOffset, sizeof a, a);
+  }
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   dd->vk.CmdPipelineBarrier(cmd,
@@ -533,6 +542,20 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
   slot.ready = true;
 }
 
+// The breadcrumbs (common/hair_primary.h kCrumbAddrOffset): violations by site and the last noted addresses.
+void crumbs_log(const char* prefix) {
+  if (!g_crumbs.map) return;
+  const auto* c = static_cast<const uint32_t*>(g_crumbs.map);
+  char v[512] = "";
+  int at = 0;
+  for (uint32_t i = 0; i < 2 * hair_primary::kCrumbSites && at < 480; ++i) {
+    const uint32_t* r = c + i * 4;
+    if (r[3]) at += std::snprintf(v + at, sizeof v - at, " %s%u:0x%llx", r[3] == 1 ? "violation site " : "note ", i,
+                                  (unsigned long long)((uint64_t(r[2]) << 32) | r[1]));
+  }
+  log("%s hair primary breadcrumbs:%s", prefix, at ? v : " none");
+}
+
 void coverage_log(uint64_t now) {
   if (now % 300) return;
   char per[1200] = {};
@@ -560,6 +583,7 @@ void coverage_log(uint64_t now) {
       g_probe_no_camera);
   g_probe_no_pick = g_probe_stale = g_probe_quiet = g_probe_no_camera = 0;
   g_coverage_period.clear();
+  crumbs_log("[hair primary]");
 }
 
 }  // namespace
@@ -637,7 +661,7 @@ void hair_primary_device_destroyed(DeviceData* dd) {
   g_last_tag = 0;
   if (g_qp) dd->vk.DestroyQueryPool(dd->device, g_qp, nullptr);
   g_qp = VK_NULL_HANDLE;
-  for (HpBuf* b : {&g_header, &g_pixels, &g_probe_header}) {
+  for (HpBuf* b : {&g_header, &g_pixels, &g_probe_header, &g_crumbs}) {
     if (b->b) dd->vk.DestroyBuffer(dd->device, b->b, nullptr);
     if (b->m) dd->vk.FreeMemory(dd->device, b->m, nullptr);
     *b = HpBuf{};
@@ -833,6 +857,10 @@ void hair_primary_submit_end(const HairPrimarySubmit& recordings, bool success) 
     if (recordings.headers[i] && g_staged[i].recording == recordings.headers[i]) g_staged[i].submitted = true;
 }
 
+void hair_primary_fault_log() {   // after a device loss: the mapped breadcrumbs stay readable (no lock: the device is gone)
+  crumbs_log("[fault]");
+}
+
 bool hair_primary_wanted() {
   return g_startup_enabled && cfg_hot(CfgHot::rt_hair_groom) != 0 && g_header.b != VK_NULL_HANDLE && g_probe_header.b != VK_NULL_HANDLE;
 }
@@ -978,15 +1006,15 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
   // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
   // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
   if (!g_order) allowed = false;
-  {   // rt_hair_primary_passes (diagnostic bitmask, default 7): 1 G-buffer, 2 velocity, 4 prepass clone
-    const int passes = cfg_int("rt_hair_primary_passes", 7);
+  const int passes = cfg_int("rt_hair_primary_passes", 15);
+  {   // rt_hair_primary_passes (diagnostic bitmask, default 15): 1 G-buffer, 2 velocity, 4 prepass clone, 8 coverage probe
     if (!(passes & (pass == Pass::Gbuffer ? 1 : pass == Pass::Velocity ? 2 : 4))) allowed = false;
   }
   if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
   if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) allowed = false;
   if (!allowed) {
     // Cards drawn; the masked strand variant follows the native draw (hair_primary_unswap) for the strand samples.
-    if (strand_query != UINT32_MAX) {
+    if (strand_query != UINT32_MAX && (passes & 8)) {   // bit 8 off: no masked probe draw (no strand evidence)
       s->hp_coverage = strand_query | kProbeAfter;
       g_coverage_period[key].probed = true;
       return true;

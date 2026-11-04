@@ -469,6 +469,7 @@ void fault_on_result(DeviceData* dd, VkResult r, const char* where) {
       (unsigned long long)frame_index(), (unsigned long long)life_gpu_done());
   rt_log_state("[fault]");
   bvh_log_state("[fault]");
+  hair_primary_fault_log();
   fault_details(dd, false);
   dump_checkpoints();
   aftermath_wait();
