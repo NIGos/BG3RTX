@@ -618,6 +618,39 @@ def make_thumbnail():
     save(img.convert("RGB"), "thumbnail.png")
 
 
+def make_only():
+    """Compact requirements strip: NVIDIA RTX and Vulkan only (text only, no logos)."""
+    W, H = 1000, 128
+    img = charcoal(W, H)
+    img = vignette(img, 0.3)
+    img = edge_rule(img, inset=5, alpha=150)
+    img = corner_frame(img, 5, 0, 0.42)
+    pills = ["NVIDIA RTX ONLY", "VULKAN RENDERER ONLY"]
+    f = lato(22, semibold=True)
+    tr, pad, gem_w, gap, ph = 2.6, 26, 26, 28, 46
+    widths = [spaced_width(t, f, tr) + 2 * pad + gem_w for t in pills]
+    x = (W - (sum(widths) + gap)) / 2
+    y = 22
+    big = Image.new("RGBA", (W * SS, H * SS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    spots = []
+    for t, w in zip(pills, widths):
+        d.rounded_rectangle((x * SS, y * SS, (x + w) * SS, (y + ph) * SS), radius=8 * SS,
+                            fill=PANEL + (255,), outline=GOLD + (255,), width=int(1.5 * SS))
+        gem(d, (x + pad + 6) * SS, (y + ph / 2) * SS, 9 * SS, SS)
+        spots.append((x + pad + gem_w, t))
+        x += w + gap
+    img.alpha_composite(big.resize((W, H), Image.LANCZOS))
+    dd = ImageDraw.Draw(img)
+    for tx, t in spots:
+        text_spaced(dd, (tx, y + 31), t, f, TEXT, tracking=tr)
+    m = lato(16)
+    line = "No AMD   ·   No Intel   ·   No DirectX 11"
+    lw = spaced_width(line, m, 1.2)
+    text_spaced(dd, ((W - lw) / 2, 104), line, m, TEXT_2, tracking=1.2)
+    save(img.convert("RGB"), "nvidia_vulkan_only.png")
+
+
 HEADERS = [
     ("features", "What it does"),
     ("screenshots", "Screenshots"),
@@ -690,6 +723,7 @@ def main():
     make_badges()
     make_beware()
     make_thumbnail()
+    make_only()
     for name, title in HEADERS:
         make_header(name, title)
     total = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT))
