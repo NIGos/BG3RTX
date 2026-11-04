@@ -70,13 +70,24 @@ def main():
     import re
     wf9 = json.loads((ROOT / "tools/live_batches/water_flicker_wf9/jobs/wf9-s8-compose-shift.json").read_text())
     static_camera_gate = next(g for g in wf9["expect_every"] if g["name"] == "static build-camera delta < 0.01 m")
+    compose_cpu_suffix = ("; CPU hit shade selected spec 0/1/2 passes 120/0/0, flag 64 passes 0; "
+                          "refused light-binding/input-lifetime/scene-material/frame-shift 120/120/0/0 "
+                          "(overlapping, first light mismatch index 2, bindings 22..28)")
     check("wf9 checks both static ON windows", static_camera_gate["windows"] == ["energy-static-1", "energy-static-3"])
     for delta, samples, expected in [("0.000000", 120, True), ("0.009999", 120, True),
                                       ("0.010000", 120, False), ("294.800000", 120, False), ("0.000000", 0, False)]:
         line = f"[core] [water] compose (120 frames): build-camera delta avg/max {delta}/294.800000 m ({samples} last-pass samples)"
-        check(f"wf9 static delta {delta}, samples {samples}",
-              bool(re.search(static_camera_gate["select"], line)) and
-              bool(re.search(static_camera_gate["match"], line)) == expected)
+        for suffix in ("", compose_cpu_suffix):
+            check(f"wf9 static delta {delta}, samples {samples}, CPU fields {bool(suffix)}",
+                  bool(re.search(static_camera_gate["select"], line + suffix)) and
+                  bool(re.search(static_camera_gate["match"], line + suffix)) == expected)
+    wo1 = json.loads((ROOT / "tools/live_batches/water_offscreen/jobs/wo1-s8-hit-shade.json").read_text())
+    hit_line = ("[core] [water] compose (120 frames): hit shade attempted 100, hidden 80, offscreen 20, "
+                "rejected material/light/sun/invalid 0/0/0/0; world truncated 0" + compose_cpu_suffix)
+    for g in wo1["expect_every"]:
+        if "hit shade attempted" in g["match"] or "world truncated" in g["match"]:
+            if re.search(g["select"], hit_line):
+                check("wo1 appended CPU fields: " + g["name"], bool(re.search(g["match"], hit_line)))
     check("the old any-line expect passes the bad run (the bug)", bool(re.search(OK, bad_run)))
     f = queue_gates.check(gate(windows=["diag-on"]), bad_run, RUNNER, PLAN)
     check("every-window gate fails the bad run", len(f) == 1 and "1 of 2 line(s) fail" in f[0] and "3.1362" in f[0])

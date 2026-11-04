@@ -99,10 +99,11 @@ uint32_t g_push_bytes = 0;
 VkDescriptorSetLayout g_hit_game_layout=VK_NULL_HANDLE, g_hit_sun_layout=VK_NULL_HANDLE;
 VkDescriptorSetLayout g_chit_game_layout=VK_NULL_HANDLE, g_chit_sun_layout=VK_NULL_HANDLE;
 struct Pipe {
-  struct Variant { VkPipeline p; uint64_t gen; std::string req; };
+  struct Variant { VkPipeline p; uint64_t gen; std::string req; uint32_t hit_spec; };
   VkPipeline p = VK_NULL_HANDLE;
   uint64_t gen = 0;
   std::string req;
+  uint32_t hit_spec = 0;   // The built pipeline's value, including while a replacement is pending.
   std::vector<Variant> cached;
 };
 void release_pipe(Pipe& p) {
@@ -303,7 +304,7 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
   // Specialization toggles retain their pipelines until the owning layout is retired.
   if (p.req != pipe_key) {
     for (auto& v : p.cached) if (v.req == pipe_key) {
-      std::swap(p.p, v.p); std::swap(p.gen, v.gen); std::swap(p.req, v.req);
+      std::swap(p.p, v.p); std::swap(p.gen, v.gen); std::swap(p.req, v.req); std::swap(p.hit_spec, v.hit_spec);
       break;
     }
   }
@@ -323,11 +324,12 @@ bool make_pipe(Pipe& p, const char* base, const char* entry, VkPipelineLayout la
     return p.p != VK_NULL_HANDLE;
   }
   if (known) host->defer_destroy(BG3_DEFER_PIPELINE, (uint64_t)p.p);
-  else if (p.p) p.cached.push_back({p.p, p.gen, p.req});
+  else if (p.p) p.cached.push_back({p.p, p.gen, p.req, p.hit_spec});
   if (p.req != pipe_key) host->log("[water] %s %s: built (spec hair=%u edge=%u)", file, entry, values[1], values[2]);
   p.p = np;
   p.gen = gen;
   p.req = pipe_key;
+  p.hit_spec = values[5];
   return true;
 }
 
@@ -622,6 +624,11 @@ struct CWindow {
   uint64_t nl_cleared = 0, nl_old = 0, nl_ahead = 0;
   uint64_t cur_stale = 0, newer_old = 0, newer_failed = 0, stash_kept = 0;
   uint64_t camera_samples = 0, camera_missing = 0, tlas_age_sum = 0, tlas_age_max = 0, tlas_age_samples = 0;
+  uint64_t hit_specs[3] = {}, hit_flag_passes = 0;
+  // Requested but refused passes; independent reasons may overlap. Index is lights[0..6],
+  // mapping to shader bindings 22..28; -1 means no compared mismatch in this window.
+  uint64_t hit_light_refused = 0, hit_input_refused = 0, hit_scene_refused = 0, hit_frame_refused = 0;
+  int hit_first_mismatch = -1;
   double camera_delta_sum = 0, camera_delta_max = 0;
 };
 CWindow g_cwin;
@@ -874,7 +881,7 @@ void maybe_log_compose() {
             "%.1f%%, hidden %.1f%% (skin %llu), off screen %.1f%%, miss %.1f%%, aborted %llu, invalid %llu; unresolved "
             "(probe kept) %.2f%% of owned; clamped %llu; skipped frames: no record buffer %llu, layout %llu, size %llu; "
             "passes on this frame's lighting %llu, on the previous lighting %llu, refused: no recent lighting %llu, no "
-            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu; TLAS age avg/max %.2f/%llu frames (%llu samples, camera missing %llu); build-camera delta avg/max %.6f/%.6f m (%llu last-pass samples)",
+            "scene %llu; newer scene taken %llu; hit shade attempted %llu, hidden %llu, offscreen %llu, rejected material/light/sun/invalid %llu/%llu/%llu/%llu; world truncated %llu; TLAS age avg/max %.2f/%llu frames (%llu samples, camera missing %llu); build-camera delta avg/max %.6f/%.6f m (%llu last-pass samples); CPU hit shade selected spec 0/1/2 passes %llu/%llu/%llu, flag 64 passes %llu; refused light-binding/input-lifetime/scene-material/frame-shift %llu/%llu/%llu/%llu (overlapping, first light mismatch index %d, bindings 22..28)",
             (unsigned long long)W.frames, (unsigned long long)W.ran, W.ran ? double(W.passes) / double(W.ran) : 0.0,
             W.ran ? rec / double(W.ran) : 0.0, pct(own, rec), pct(rec - own, rec), (unsigned long long)w[4],
             pct(double(w[5]), own), pct(double(w[6]), own), W.ran ? rays / double(W.ran) : 0.0,
@@ -888,7 +895,11 @@ void maybe_log_compose() {
             (unsigned long long)w[60],(unsigned long long)w[61],(unsigned long long)w[62],(unsigned long long)w[63],(unsigned long long)w[55],
             W.tlas_age_samples ? double(W.tlas_age_sum)/W.tlas_age_samples : 0.0,
             (unsigned long long)W.tlas_age_max, (unsigned long long)W.tlas_age_samples, (unsigned long long)W.camera_missing,
-            W.camera_samples ? W.camera_delta_sum/W.camera_samples : 0.0, W.camera_delta_max, (unsigned long long)W.camera_samples);
+            W.camera_samples ? W.camera_delta_sum/W.camera_samples : 0.0, W.camera_delta_max, (unsigned long long)W.camera_samples,
+            (unsigned long long)W.hit_specs[0], (unsigned long long)W.hit_specs[1], (unsigned long long)W.hit_specs[2],
+            (unsigned long long)W.hit_flag_passes, (unsigned long long)W.hit_light_refused,
+            (unsigned long long)W.hit_input_refused, (unsigned long long)W.hit_scene_refused,
+            (unsigned long long)W.hit_frame_refused, W.hit_first_mismatch);
   // Temporal stability (common/water_compose.h ComposeContinuity, pick_scene): the frames whose water
   // passes were all refused show the game's water for one frame (gate: uncomposed 0).
   host->log("[water] compose stability (%llu frames): frames with a water pass %llu, composed %llu, uncomposed %llu "
@@ -1234,6 +1245,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   ScenePick pick = pick_scene(use, cur_ok, cur == g_st.tlas, built, now, take_newer, keep_stash);
   if (pick == ScenePick::kNone || !tlas || !alpha) {
     ++g_cwin.no_scene;
+    if (host->cfg_int("rt_water_hit_shade",0) != 0) ++g_cwin.hit_scene_refused;
     g_ccont.note(now, false);
     return false;
   }
@@ -1242,17 +1254,21 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // the hit pipeline; without WATER_LS, hit_sources binds the lighting stash's own list.
   const bool ls_list = g_cls && lights_ok && lights;
   bool same_lights = !g_cls;
+  int first_light_mismatch = -1;
   if (ls_list) {
     same_lights = true;
     for (uint32_t i=0; i<7 && same_lights; ++i) {
       const auto& a=lights[i]; const auto& b=g_st.hit.lights[i+1];
       same_lights=a.buffer==b.buffer && a.offset==b.offset && a.range==b.range && a.view==b.view && a.layout==b.layout;
+      if (!same_lights) first_light_mismatch = int(i);
     }
   }
-  const bool want_hit=host->cfg_int("rt_water_hit_shade",0) != 0 && g_st.hit.game &&
-      hit_shade_inputs_alive(g_st.frame,now,ls_list && same_lights);
+  const bool hit_requested=host->cfg_int("rt_water_hit_shade",0) != 0;
+  const bool hit_inputs_alive=hit_shade_inputs_alive(g_st.frame,now,ls_list && same_lights);
+  const bool want_hit=hit_requested && g_st.hit.game && hit_inputs_alive;
   const bool shift_on=host->cfg_int("rt_water_compose_shift",0) != 0;
   bool previous_hit=false,shade_pass=false;
+  bool hit_scene_failed=false;
   if(hit_shade_previous_frame(g_st.frame,now,want_hit,shift_on) && host->rt_hit_material_use){
     // A changing ring TLAS is expected. Borrow one complete F-1 lighting tuple,
     // rather than requiring this frame's selected TLAS/lights to equal F-1.
@@ -1267,7 +1283,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
        })){
       tlas=ref;alpha=g_st.alpha;material_alpha=material;
       pick=ScenePick::kStashKept;previous_hit=shade_pass=true;
-    }
+    } else hit_scene_failed=true;
   }
   BuildCameraEntry build_camera{};
   uint64_t camera_buffer = 0;
@@ -1287,9 +1303,22 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   }
   const bool shifted = shift_on && camera_buffer && build_camera.frame && compose_shift_needed(use,pick);
   if (previous_hit && !shifted) { previous_hit = false; shade_pass = false; }
-  if(!previous_hit)shade_pass=want_hit &&
-      hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted) &&
-      host->rt_hit_material_use && host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
+  if(!previous_hit) {
+    const bool frame_ok=want_hit && hit_shade_frame_ok(g_st.frame,now,tlas==g_st.tlas,same_lights,shifted);
+    shade_pass=frame_ok && host->rt_hit_material_use &&
+        host->rt_hit_material_use(cmd,tlas,alpha,g_st.hit_identity,&material_alpha) && material_alpha;
+    if (frame_ok && !shade_pass) hit_scene_failed=true;
+  }
+  if (hit_requested && !shade_pass) {
+    if (!same_lights) {
+      ++g_cwin.hit_light_refused;
+      if (g_cwin.hit_first_mismatch < 0) g_cwin.hit_first_mismatch = first_light_mismatch;
+    }
+    if (!g_st.hit.game || !hit_inputs_alive) ++g_cwin.hit_input_refused;
+    if (hit_scene_failed || tlas != g_st.tlas) ++g_cwin.hit_scene_refused;
+    if (!g_st.frame || (g_st.frame != now && !(shifted && now > g_st.frame && now-g_st.frame == 1)))
+      ++g_cwin.hit_frame_refused;
+  }
   const bool apply_ls=ls_list && hit_shade_local_shadows(shade_pass,previous_hit,same_lights);
   if (pick == ScenePick::kNewer) ++g_cwin.newer_scene;
   if (pick == ScenePick::kStashKept) ++g_cwin.stash_kept;
@@ -1309,6 +1338,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   // dispatches' reads of the params, then the update, then this dispatch's read.
   // M5.5: likewise kFlagRefr only with its water draw's colour copy.
   const bool rr_copy = g_crr && copy_ok && copy && copy->view;
+  uint32_t pass_flags = g_st.flags;
   if (g_cls || host->cfg_int("rt_water_compose_shift", 0) != 0) {
     memory_barrier(cmd, kAll, VK_PIPELINE_STAGE_TRANSFER_BIT | kCS);
     uint32_t flags = (apply_ls ? g_st.flags : (g_st.flags & ~kFlagLs)) & (rr_copy ? ~0u : ~kFlagRefr);
@@ -1321,6 +1351,7 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
       } else vk.CmdFillBuffer(cmd, g_cdev, kCCamOff + WATER_COMPOSE_BUILD_CAMERA_OFFSET, 16, 0);
     }
     if(!shade_pass)flags&=~kFlagHitShade;
+    pass_flags = flags;
     vk.CmdUpdateBuffer(cmd, g_cdev, cslot_off(slot) + kCStatBytes + 12, 4, &flags);
     if (g_st.flags & kFlagLs) ++(apply_ls ? g_cwin.ls_passes : g_cwin.ls_no_lights);
     if (g_st.flags & kFlagRefr) ++(rr_copy ? g_cwin.rr_passes : g_cwin.rr_no_copy);
@@ -1388,6 +1419,8 @@ bool compose_at_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p, const Bg3Bin
   vk.CmdPushConstants(cmd, g_clayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, uint32_t(g_st.push.size()), g_st.push.data());
   vk.CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_compose.p);
   vk.CmdDispatch(cmd, (p->width + 7) / 8, (p->height + 7) / 8, 1);
+  ++g_cwin.hit_specs[g_compose.hit_spec];
+  if (pass_flags & kFlagHitShade) ++g_cwin.hit_flag_passes;
   if (g_cqp && pass < kMaxComposePasses)
     vk.CmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, g_cqp, slot * kCQ + 3 + pass * 2);
   // The consumed records, the statistics and the target before the later passes and the copy.
