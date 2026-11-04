@@ -29,7 +29,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // Replace the Lambert response before adding it (and before saving the bounce source).
   // gi.rgb is the exact gathered GI used above; no subtraction of an estimated game ambient.
   const float4 fibre_mat = gMaterial.Load(int3(fp, 0));
-  if (mat_class(fibre_mat) == kMatHair && hv_strand_pixel(fp, d, pc.frame + 1u))
+  if (mat_class(fibre_mat) == kMatHair && hv_strand_pixel(fp, d))
     add = gi.rgb * hd_volume_albedo(saturate(alb.rgb), max(0.09, fibre_mat.x)) * pc.strength;
 #endif
   float3 diffuse = gDiffuse[fp];

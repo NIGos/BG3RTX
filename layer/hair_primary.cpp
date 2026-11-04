@@ -113,7 +113,7 @@ struct StagedHeader {
   bool submitted = false;
   uint32_t n = 0, pixels = 0;
   uint8_t bytes[hair_primary::kHeaderBytes] = {};
-  float cam[4] = {};   // the build camera (kCameraOffset; valid with kFlagCamera)
+  float cam[8] = {};   // the build camera (kCameraOffset; kFlagCamera), the previous publish's (kFlagPrevCamera)
   uint64_t keys[hair_primary::kMaxGrooms] = {};
   uint8_t lods[hair_primary::kMaxGrooms] = {};
 };
@@ -121,6 +121,8 @@ constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
 // Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
+float g_last_pub_camera[3] = {};   // the last publish's build camera (frame + 0 when it had none)
+uint64_t g_last_pub_camera_frame = 0;
 uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0, g_probe_no_camera = 0;   // no_camera: publishes
 bool g_order = false;                       // the last publish was staged (the key on)
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
@@ -370,7 +372,7 @@ void apply_header(VkCommandBuffer cmd, const StagedHeader& st) {
   dd->vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, nullptr,
                             0, nullptr);
   dd->vk.CmdUpdateBuffer(cmd, g_header.b, 0, st.n, st.bytes);
-  dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);
+  dd->vk.CmdUpdateBuffer(cmd, g_header.b, hair_primary::kCameraOffset, sizeof st.cam, st.cam);   // both cameras
   mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_SHADER_WRITE_BIT;
   mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   dd->vk.CmdPipelineBarrier(cmd,
@@ -504,7 +506,7 @@ void coverage_log(uint64_t now) {
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
   }
-  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
+  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: newest strand/card samples = ratio, swapped frames of the period):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
       "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u; publishes without a build "
       "camera %u",
       probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet,
@@ -925,7 +927,9 @@ bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {
                                                                                          : g_gate.allow_prepass(key));
   // Header order prepass (rt_hair_groom_primary_order 0): the G-buffer may read another frame's header than the probe
   // proved (hc2 2026-11-04: adjacent tags in 296 of 300 counted frames, the player half bald). Cards, fail closed.
-  if (!g_order && pass != Pass::Prepass) allowed = false;
+  // Header order prepass: no pass swaps (the G-buffer would read another frame's header than the evidence; a prepass
+  // clone without card depth next to card G-buffer draws loses the hair: order turned off after order-1 swaps).
+  if (!g_order) allowed = false;
   if (g_order && pass != Pass::Prepass && (g_applied_frame != now + 1 || !g_live_keys.count(key))) allowed = false;
   if (g_order && pass == Pass::Prepass && (g_applied_frame != now || !g_live_keys.count(key))) allowed = false;
   if (!allowed) {
@@ -1035,6 +1039,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
     h.flags |= hair_primary::kFlagCamera;
   else
     ++g_probe_no_camera;
+  // The rows' previous points are the last update's: the publish of the previous frame, with its build camera.
+  if (g_last_pub_camera_frame && g_last_pub_camera_frame + 1 == now) {
+    std::memcpy(st.cam + 4, g_last_pub_camera, sizeof g_last_pub_camera);
+    h.flags |= hair_primary::kFlagPrevCamera;
+  }
+  g_last_pub_camera_frame = (h.flags & hair_primary::kFlagCamera) ? now : 0;
+  std::memcpy(g_last_pub_camera, st.cam, sizeof g_last_pub_camera);
   st.pick = {h.tag, rec, uint64_t(cmd)};
   st.recording = cmd_recording(cmd);
   st.n = hair_primary::pack(h, rows, count, st.bytes);
