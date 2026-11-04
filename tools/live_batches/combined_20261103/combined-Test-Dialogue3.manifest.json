@@ -5,7 +5,7 @@
       "prefix": "b1-pt-dialogue3--",
       "offset": 0,
       "count": 87,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\post_temporal\\jobs\\pt-dialogue3.json",
+      "source": "tools/live_batches/post_temporal/jobs/pt-dialogue3.json",
       "job": {
         "name": "pt-dialogue3",
         "save": "Test Dialogue3",
@@ -2533,7 +2533,7 @@
       "prefix": "b2-ef1-dialogue3-attribution--",
       "offset": 88,
       "count": 38,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\edge_flicker\\jobs\\ef1-dialogue3-attribution.json",
+      "source": "tools/live_batches/edge_flicker/jobs/ef1-dialogue3-attribution.json",
       "job": {
         "name": "ef1-dialogue3-attribution",
         "save": "Test Dialogue3",

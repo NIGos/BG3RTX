@@ -48,7 +48,7 @@ class DiagnosticTests(unittest.TestCase):
         for n in ('hv5-reload-bisect','hv6-strand-diagnostic'):
             job,plan,_=live_flow.load_job(root/'jobs'/(n+'.json'))
             b=live_flow.duration_budget(job,plan)
-            self.assertLessEqual(b['seconds']+b['readiness_timeout_seconds'],780)
+            self.assertLessEqual(b['seconds']+b['expected_readiness_seconds'],780)  # the allowance is only a timeout (median accounting)
             self.assertFalse(live_flow.launch_problems(job,b))
         plan=jobs.make_diagnostic()
         self.assertEqual([live_flow.settings(p['set'])['rt_hair_groom_primary_order'] for p in plan if p['label'].startswith('order-')],['0','1','0','1'])

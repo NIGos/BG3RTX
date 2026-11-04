@@ -23,6 +23,7 @@ class BatchJobsLintTests(unittest.TestCase):
             manifest = flow.read(path.parent.parent / (path.stem + '.manifest.json'))
             for segment in manifest['slices']:
                 source = Path(segment['source'])
+                source = source if source.is_absolute() else ROOT / source
                 sources.append(source.relative_to(ROOT / 'tools/live_batches').as_posix())
                 original, plan, _ = flow.load_job(source)
                 self.assertEqual(segment['job']['expect_every'], original['expect_every'])

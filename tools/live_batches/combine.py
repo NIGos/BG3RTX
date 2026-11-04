@@ -22,6 +22,15 @@ from tools.live_batches import live_flow as flow
 from scripts import queue_gates as gates
 
 
+def _repo_relative(path):
+    """Manifests store repo-relative sources: an absolute worktree path breaks every other checkout."""
+    root = Path(__file__).resolve().parents[2]
+    try:
+        return Path(path).resolve().relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def settings(text):
     out = {}
     gates._apply(out, text)
@@ -145,7 +154,7 @@ def combine_group(sources, plan_arg):
                 rx = rx.replace("label=" + old, "label=" + re.escape(new))
             if rx not in combined["expect_runner"]:
                 combined["expect_runner"].append(rx)
-        slices.append(dict(prefix=prefix, offset=offset, count=len(original), source=str(path), job=job, plan=original))
+        slices.append(dict(prefix=prefix, offset=offset, count=len(original), source=_repo_relative(path), job=job, plan=original))
     combined["fail_fast_slices"] = [dict(offset=s["offset"], count=s["count"],
         forbid=s["job"].get("forbid", []), expect=s["job"].get("expect", []),
         expect_every=[g for g in combined["expect_every"] if g["name"].startswith(s["prefix"])],

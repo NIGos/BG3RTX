@@ -5,7 +5,7 @@
       "prefix": "b1-su1-ultra-s8-fg2--",
       "offset": 0,
       "count": 14,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\smoke_ultra\\jobs\\su1-ultra-s8-fg2.json",
+      "source": "tools/live_batches/smoke_ultra/jobs/su1-ultra-s8-fg2.json",
       "job": {
         "name": "su1-ultra-s8-fg2",
         "save": "Water Queens House",
@@ -697,7 +697,7 @@
       "prefix": "b2-go2-s8--",
       "offset": 15,
       "count": 21,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\gpu_opt1\\jobs\\go2-s8.json",
+      "source": "tools/live_batches/gpu_opt1/jobs/go2-s8.json",
       "job": {
         "name": "go2-s8",
         "save": "Water Queens House",
@@ -1605,7 +1605,7 @@
       "prefix": "b3-go2-s8-medium--",
       "offset": 37,
       "count": 12,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\gpu_opt2\\jobs\\go2-s8-medium.json",
+      "source": "tools/live_batches/gpu_opt2/jobs/go2-s8-medium.json",
       "job": {
         "name": "go2-s8-medium",
         "save": "Water Queens House",

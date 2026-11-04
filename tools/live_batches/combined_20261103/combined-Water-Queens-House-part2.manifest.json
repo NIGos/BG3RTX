@@ -5,7 +5,7 @@
       "prefix": "b1-wo1-s8-hit-shade--",
       "offset": 0,
       "count": 39,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\water_offscreen\\jobs\\wo1-s8-hit-shade.json",
+      "source": "tools/live_batches/water_offscreen/jobs/wo1-s8-hit-shade.json",
       "job": {
         "name": "wo1-s8-hit-shade",
         "save": "Water Queens House",
@@ -1790,7 +1790,7 @@
       "prefix": "b2-wf9-s8-compose-shift--",
       "offset": 40,
       "count": 25,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\water_flicker_wf9\\jobs\\wf9-s8-compose-shift.json",
+      "source": "tools/live_batches/water_flicker_wf9/jobs/wf9-s8-compose-shift.json",
       "job": {
         "name": "wf9-s8-compose-shift",
         "save": "Water Queens House",

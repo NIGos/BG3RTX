@@ -5,7 +5,7 @@
       "prefix": "b1-go2-camp-high--",
       "offset": 0,
       "count": 12,
-      "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\agent-a5cfafd9faecf217c\\tools\\live_batches\\gpu_opt2\\jobs\\go2-camp-high.json",
+      "source": "tools/live_batches/gpu_opt2/jobs/go2-camp-high.json",
       "job": {
         "name": "go2-camp-high",
         "save": "Campsite - 27h",
