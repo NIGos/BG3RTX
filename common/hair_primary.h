@@ -19,10 +19,11 @@ constexpr uint32_t kSpecRecordLo = 1100, kSpecRecordHi = 1101;
 //  1 render width, 2 render height, 3 groom instance count (rows of the table below)
 //  4..5 groom TLAS device address (lo, hi), 6..7 mesh pool device address, 8..9 pixel array device address
 //  10..13 the G-buffer viewport x, y, width, height (float; a flipped viewport has a negative height)
-//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 flags (bit 0: dithered strand tips)
+//  14 mesh pool size in bytes (the strand readers bound every pool read by it, hp_segment), 15 flags (bit 0: dithered
+//  strand tips, bit 1: the build camera at kCameraOffset is valid)
 // Table at kTableOffset: per groom instance k (the groom TLAS instance index) four byte offsets into the mesh pool:
 //  points (float3), point UV (float2), segment start indices (uint), previous points (float3; 0: none yet).
-constexpr uint32_t kFlagTips = 1u << 0;
+constexpr uint32_t kFlagTips = 1u << 0, kFlagCamera = 1u << 1;
 constexpr uint32_t kHeaderWords = 16;
 constexpr uint32_t kMaxGrooms = 64;   // bvhsplit kGroomMax
 constexpr uint32_t kTableOffset = kHeaderWords * 4;
@@ -43,6 +44,11 @@ constexpr uint32_t kCountBytes = kTransmitOffset + kMaxGrooms * 16;
 // colour); rt/hair_primary_count.hlsl turns the entries of the counted frame into a_f at the next publish.
 constexpr uint32_t kColourOffset = kHeaderBytes, kColourBytes = 32;
 constexpr uint32_t kHeaderAlloc = kColourOffset + kMaxGrooms * kColourBytes;   // 3136
+// The publish's build camera (world position, float3 + pad: the origin of its camera-relative groom points), written
+// with the header. The scene build, so the groom TLAS, is recorded after the G-buffer pass: the strand passes of frame
+// N read the publish of frame N - 1 and start their rays at camera_N - camera_build in its frame (hp_rebase).
+constexpr uint32_t kCameraOffset = kHeaderAlloc, kHeaderTotal = kCameraOffset + 16;   // 3152
+static_assert(kCameraOffset == 3136, "shaders/rt/hair_primary_rebase.hlsli hair_primary_camera_offset");
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;

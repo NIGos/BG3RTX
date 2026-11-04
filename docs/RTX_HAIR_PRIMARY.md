@@ -281,6 +281,9 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
 - The former zero-pixel strike/retry rule is superseded by measured per-key coverage. Adjacent pixel-record
   tags remain diagnostic and cannot qualify a swap. Grooms sharing an index-range key are measured together;
   every queried draw of that key must have both results available before its frame is accepted.
+- Rebase (2026-11-04): the scene build is recorded after the G-buffer pass, so the strand passes of frame N read
+  frame N-1's publish. The publish carries its build camera; rays start at camera_N - camera_build in its frame
+  (shaders/rt/hair_primary_rebase.hlsli). Publishes up to one frame old are accepted; no build camera: no strand.
 - Coverage gate (2026-11-04): G-buffer and velocity strand swaps need header order G-buffer
   (`rt_hair_groom_primary_order=1`) and fresh per-draw coverage evidence; header order prepass keeps the cards (hc2:
   the G-buffer read an adjacent frame's header in 296 of 300 counted frames; the player was half bald).

@@ -47,6 +47,17 @@
   "cost": "Required only if complete coverage period reports swapped frames > 0",
   "tips": "Order 1 tips 0/1; absent key harmless but no claimed tips effect",
   "swaps_order_0": "0 swapped frames for every draw in order-prepass windows (claude/hair-coverage-gate: header order prepass keeps the cards, fail closed); the coverage line still reports probed ratios there. Strands on screen only in order-gbuffer and tips windows.",
-  "coverage_bound_note": "bound 0.891 derived offline against the fibre-weighted card reference; the live query counts plain alpha-tested card samples, so tilted cards (beards) may fall below it and keep their cards: report the per-draw ratios, re-derive from them"
+  "coverage_bound_note": "bound 0.891 derived offline against the fibre-weighted card reference; the live query counts plain alpha-tested card samples, so tilted cards (beards) may fall below it and keep their cards: report the per-draw ratios, re-derive from them",
+  "rebase_20261104": {
+   "cause": "the scene build (groom TLAS) is recorded after the G-buffer pass: the prepass and the G-buffer only ever see the previous frame's publish (hv6/hv5 04:09-04:41: 'older publish 300' per 300 frames; 'G-buffer pass with no groom publish ordered before it' +300 per 300)",
+   "fix": "claude/hair-probe-gbuffer: the publish carries its build camera; the strand shaders start their rays at camera_now - camera_build; the probe and the G-buffer accept the previous frame's publish (age <= 1)",
+   "predicted": {
+    "coverage_line_order_1": "draws probed = the matched draws in view (4-5 on Dialogue1); strand/card ratio 0.9-1.1 on the static Dialogue1 close-up; swapped frames > 0 for draws at or above 0.891",
+    "refusals": "no publish of the frame ~0, older publish ~0 (a few per 300 at most), load quiet 0 after the window, publishes without a build camera 0",
+    "gbuffer_order_line": "'G-buffer pass with no groom publish ordered before it' grows by ~0 per 300 frames in order 1",
+    "order_0": "probed ratios as in order 1 (the probe uses the staged ring in both orders); swapped 0 (fail closed)"
+   },
+   "invalid_if": "publishes without a build camera > 0 in a strands-on window, or 'older publish' > 30 per 300 frames"
+  }
  }
 }

@@ -2,7 +2,7 @@
 // Coverage-only prepass FS: same camera ray, hp_segment bounds and hp_on_card band
 // as hair_primary_gbuffer. Never reads or writes the G-buffer pixel cache. Late
 // fragment tests are required: discarded rays must not contribute occlusion samples.
-#include "hair_primary.hlsli"
+#include "hair_primary_rebase.hlsli"
 
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
@@ -12,6 +12,8 @@ struct Camera {               // set 0 binding 2 (FRAME_MAP "Frame generation")
   row_major float4x4 proj;    // jittered reversed-Z projection
   row_major float4x4 vp;      // camera-relative jittered view-projection
   float near_z, far_z;
+  float2 m5;
+  float3 position;            // m6: camera world position (the origin of this frame's camera-relative space)
 };
 [[vk::binding(2, 0)]] ConstantBuffer<Camera> gCam;
 [[vk::ext_instruction(4447)]] RaytracingAccelerationStructure hp_tlas(uint2 address);
@@ -38,10 +40,12 @@ void main(float4 pos : SV_Position) {
   const float cos_card = abs(dot(dir, cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
+  if (!hp_rebase(rec, gCam.position, org)) discard;
   const uint64_t pool = addr2(ld2(rec + 24u));
   const uint pool_bytes = ld(rec + 56u);
   RayDesc r;
-  r.Origin = 0.0.xxx; r.TMin = 0.0; r.Direction = dir; r.TMax = 1.0e5;
+  r.Origin = org; r.TMin = 0.0; r.Direction = dir; r.TMax = 1.0e5;
   RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
   q.TraceRayInline(hp_tlas(ld2(rec + 16u)), 0u, 0xFFu, r);
   while (q.Proceed()) {}

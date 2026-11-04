@@ -6,7 +6,7 @@
 // the strand point at the same parameter from the previous frame's points and writes the native motion vector:
 // current pixel minus previous pixel, both without their jitter, in pixels (TRACK_B_FG "Motion vectors").
 // No previous points yet (first frame of a slot): the current point moved with the camera only.
-#include "hair_primary.hlsli"
+#include "hair_primary_rebase.hlsli"
 
 [[vk::constant_id(1100)]] const uint kRecordLo = 0u;
 [[vk::constant_id(1101)]] const uint kRecordHi = 0u;
@@ -63,6 +63,8 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
   const float cos_card = abs(dot(pc / max(t_card, 1e-30), cn)) / max(length(cn), 1e-30);
   const float foot = abs(ddx(t_card)) + abs(ddy(t_card));
   if (tag == 0u || grooms == 0u || width == 0u || height == 0u) discard;
+  float3 org;   // this camera in the published groom's camera-relative frame (hp_rebase)
+  if (!hp_rebase(rec, gCam.position, org)) discard;
   const uint64_t pool = addr2(vk::RawBufferLoad<uint2>(rec + 24u, 4)), pixels = addr2(vk::RawBufferLoad<uint2>(rec + 32u, 4));
   const uint2 px = min(uint2(pos.xy), uint2(width, height) - 1u);
   const uint4 e = vk::RawBufferLoad<uint4>(pixels + uint64_t(px.y * width + px.x) * hair_primary_pixel_bytes, 16);
@@ -90,13 +92,12 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
     if (!hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
   }
-  float3 prev;
-  if (row.w != 0u) {
-    prev = lerp(ldf3(hp_at(pool, row.w, i0, 12u)), ldf3(hp_at(pool, row.w, i0 + 1u, 12u)), v);   // previous camera-relative
-  } else {
-    const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);
-    prev = cur + gCam.position - gPrev.position;
-  }
+  // The strand drawn is the published pose (the build camera's frame, org from this camera). Its previous-camera-relative
+  // position: build-relative point + build camera - previous camera (build camera = this camera - org). The pose of the
+  // publish before is not in this header (its build camera is not kept): the motion vector carries the camera motion
+  // and not the strand's own animation of the last frame.
+  const float3 cur = lerp(ldf3(hp_at(pool, row.x, i0, 12u)), ldf3(hp_at(pool, row.x, i0 + 1u, 12u)), v);
+  const float3 prev = cur + gCam.position - org - gPrev.position;
   const float4 c = mul(float4(prev, 1.0), gPrev.vp);
   // 42a95e17's sibling b70cadc5:49, with the strand's previous clip position in place of the card's.
   const float2 prev_px = ((c.xy / c.w) * float2(0.5, -0.5) + 0.5) * gScreen.scale + gScreen.offset;
