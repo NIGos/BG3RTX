@@ -59,7 +59,7 @@
   {
     "label": "cost-off-a",
     "kind": "static",
-    "seconds": 23.3,
+    "seconds": 23.4,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -92,7 +92,7 @@
   {
     "label": "cost-on",
     "kind": "static",
-    "seconds": 23.3,
+    "seconds": 23.4,
     "set": "qa_exposure_hold=1"
   },
   {
@@ -125,7 +125,7 @@
   {
     "label": "cost-off-b",
     "kind": "static",
-    "seconds": 23.3,
+    "seconds": 23.4,
     "set": "qa_exposure_hold=1"
   },
   {

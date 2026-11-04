@@ -79,6 +79,50 @@ class PipelineReadinessTests(unittest.TestCase):
 
 
 class FlowTests(unittest.TestCase):
+    def test_wsf1_window4_replays_stretched_complete_period(self):
+        data = f.read(f.ROOT / 'tests/fixtures/window_stall_wsf1.json')
+        job, plan, _ = f.load_job(f.ROOT / 'tools/live_batches/water_surface_fresnel/jobs/wsf1-s8-interface-column.json')
+        self.assertEqual(plan[4]['seconds'], data['new_seconds'])
+        clock = f.fps_windows.gates._sec
+        ready = data['runner'].splitlines()[-1]
+        self.assertAlmostEqual(clock(data['new_end']) - clock(ready), plan[4]['seconds'])
+        check = lambda end: f.fps_windows.gates.check([data['gate']], data['game'],
+            data['runner'] + '\n' + end + ' [motion-plan] complete', plan)
+        self.assertIn('0 complete line(s)', check(data['old_end'])[0])
+        self.assertEqual(check(data['new_end']), [])
+
+    def test_capture_stall_p95_ignores_dumps_without_trace_requests(self):
+        entries = [dict(path='unrelated', runner='',
+                       lines=['00:00:00.000 [dump] decoded in 99999 ms'])]
+        for i in range(1, 21):
+            entries.append(dict(path=str(i), runner='00:00:01.000 [motion-trace]',
+                                lines=[f'00:00:02.000 [dump] decoded in {i * 100} ms']))
+        with patch.dict(f.TRACE_STALL, {}, clear=True), patch.dict(f.TRACE_EXPORT, {}, clear=True):
+            f.configure_trace_exports(entries)
+            self.assertEqual(f.TRACE_STALL['samples'], 20)
+            self.assertEqual(f.TRACE_STALL['seconds'], 1.9)
+            self.assertEqual(f.TRACE_STALL['maximum'], 2)
+
+    def test_capture_frame_stall_sizes_periodic_windows_and_survives_reload(self):
+        entry = dict(path='valid.log', runner='00:00:06.000 [motion-trace]',
+                     lines=['00:00:08.000 [dump] 101 of 202 dumps belong to frame 1; decoded in 2100 ms',
+                            '00:00:10.000 [pace] rendered frame time over 600 frames: max 2400 ms'])
+        with patch.dict(f.TRACE_STALL, {}, clear=True), patch.dict(f.TRACE_EXPORT, {}, clear=True):
+            f.configure_trace_exports([entry])
+            self.assertEqual(f.TRACE_STALL['seconds'], 2.4)
+            j, _ = fixture()
+            j['live_flow'] = dict(trace_stall_s=1)
+            p = [phase('capture', 12)]
+            p[0]['trace_at'] = [6, 9]
+            j['expect_every'] = [dict(select='capacity', period_frames=120, windows=['capture'])]
+            self.assertTrue(f.window_problems(j, p)[0])
+            f.retime(j, p)
+            self.assertEqual(p[0]['seconds'], 13.9)
+            self.assertFalse(f.window_problems(j, p)[0])
+            f.TRACE_STALL.clear()
+            self.assertEqual(f.capture_stall(j['live_flow']), 2.4)
+            self.assertEqual(f.duration_budget(j, p)['windows'][0]['minimum_seconds'], 13.9)
+
     def test_trace_export_quantile_and_previous_phase_serialization(self):
         entry = dict(runner='00:00:01.000 [motion-trace]\n00:00:02.000 [motion-trace]',
                      lines=['00:00:01.500 [trace] frame 1 written:',

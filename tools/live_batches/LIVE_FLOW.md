@@ -50,6 +50,23 @@ gate, with the source of the cadence recorded in the batch's documentation.
 The lint reports the minimum window length and guaranteed complete-line count.
 These are planning assumptions, not a promise about an arbitrarily stalled GPU.
 
+Periodic trace windows also charge the VALID corpus capture-frame stall p95.
+Each motion-trace is paired with its first dump decode before the next request;
+the sample is max(decode seconds, maximum frame seconds in the next pace report).
+The latter includes decoding, so the two are not added. Missing pace reports use
+decode time alone; dumps without a trace request are excluded. The nearest-rank
+p95 of 437 samples in 75 VALID logs is 2.71857 s (source wf7a 164300, maximum
+2.9799 s). `trace_capture_stall` preserves this evidence in jobs and the lint
+snapshot; the larger of measured p95 and declared trace_stall_s is charged per
+trace, alongside settings latency and the straddling period. Trace export event
+scheduling retains its separate request-to-written model.
+For wsf1, 26.8817 rendered FPS gives 120 / FPS = 4.464 s per geo period:
+1 + 2 * 2.71857 + 2 * 4.464 = 15.36514 s, rounded exclusively to 15.4 s.
+The window 4 timing replay in tests/fixtures/window_stall_wsf1.json retains the
+real geo timestamps: 13.642 -> 22.432 is excluded by the old 21.797 endpoint,
+but fits before ready 09.680 + 15.4 = 25.080. This replaces the historical next
+toggle for a timing counterfactual only; it proves no Fresnel rendering quality.
+
 Scene settling and failure survival are wall-clock observations, not log cadence.
 Warm/prefetch bounds are retained even with readiness waits; the first warmup also
 waits for scene-ready. Recent VALID logs show time after scene-ready until both

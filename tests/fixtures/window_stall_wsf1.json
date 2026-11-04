@@ -1,0 +1,18 @@
+{
+  "source": "wsf1-s8-interface-column.1.062805",
+  "gate": {
+    "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every traced cost window",
+    "select": "\\[geo\\] RT capture, last \\d+ frames:",
+    "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+    "min": 1,
+    "windows": [
+      "partition-static-1"
+    ]
+  },
+  "game": "06:30:09.640  [geo] RT capture, last 120 frames: alpha region 818 MB (peak demand 151.7 MB), opaque peak 174.2 MB of a 2047 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)\n06:30:13.642  [geo] RT capture, last 120 frames: alpha region 818 MB (peak demand 151.7 MB), opaque peak 174.5 MB of a 2047 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)\n06:30:22.432  [geo] RT capture, last 120 frames: alpha region 818 MB (peak demand 151.7 MB), opaque peak 174.2 MB of a 2047 MB buffer; per frame: alpha draws made opaque (region full) 0.00, opaque draws dropped (buffer full) 0.00, indirect draws dropped 0.00, non-list draws dropped 0.00 (0 triangles), strips/fans captured 0.00 (0 triangles)",
+  "runner": "06:30:08.776 [pan-plan] window 4 serial 0 repeat_ms 0 kind=static speed_px_s=0 direction=0 hover=, set=rt_water_surface_fresnel=1,qa_exposure_hold=1,dump_preview_f32=1 foreground=False real_present=True visible_unfocused=True\n06:30:09.680 [motion-ready] phase=4 label=partition-static-1",
+  "old_end": "06:30:21.797",
+  "new_end": "06:30:25.080",
+  "new_seconds": 15.4,
+  "note": "Timing-only replay of unchanged geo timestamps; historical toggle is replaced by the longer endpoint. No Fresnel quality or live PASS."
+}
