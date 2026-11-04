@@ -53,11 +53,12 @@ def load(path=PATH):
 
 
 def main():
-    from tools.live_batches.regenerate_active import active_paths
     index = flow.corpus(flow.default_results(), flow.ROOT / 'captures/.cache/live_flow_corpus.json', newest=100000)
     if not index['entries']:
         raise ValueError('cannot freeze an empty VALID corpus')
-    flow.write(PATH, freeze(index, active_paths()))
+    # merge-green also lints changed qualification and historical jobs outside
+    # the active inventory. Freeze every checked-in job's queries together.
+    flow.write(PATH, freeze(index, flow.job_files(flow.ROOT / 'tools/live_batches')))
     print(f'Frozen {len(index["entries"])} VALID logs into {PATH.name}; no logs retained', flush=True)
 
 
