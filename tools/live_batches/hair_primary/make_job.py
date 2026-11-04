@@ -89,6 +89,11 @@ def expect_every():
         {"name": "strand participation: G-buffer and velocity strand draws > 0 in the strands-on cost window",
          "select": r"\[hair primary\] frame \d+: \d+ grooms published", "match": STRANDS, "min": 1, "required_if": WHEN_SWAPPED,
          "windows": ["cost-strands", "cost-fibre"]},
+        # Not vacuous: the strand shaders ran (draws probed) in the strands-on cost windows even when no draw swapped
+        # (a run whose coverage never yields evidence must not pass the conditional strand gates with zero strands).
+        {"name": "strand shaders ran: a draw with strand and card samples in every strands-on cost window",
+         "select": COVERAGE, "match": r"coverage \(last 300 frames\): [1-9]\d* draws probed, \d+ swapped; per draw [^:]*:.*[0-9a-fA-F]{4}:[1-9]\d*/[1-9]\d*=",
+         "min": 1, "period_frames": 300, "windows": ["cost-strands", "cost-fibre"]},
         {"name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
          "select": r"\[hair primary\] strand G-buffer draws GPU", "match": r"GPU [0-9.]+ ms/frame \(average of \d+ frames",
          "min": 1, "required_if": WHEN_SWAPPED, "windows": ["cost-strands"]},

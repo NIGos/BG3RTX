@@ -77,7 +77,7 @@ def job(name, save):
     for x in j["expect_every"]:
         if x["name"].startswith("crowd plan"):
             continue
-        if x["name"].startswith(("strand participation", "strand cost", "groom participation")):
+        if x["name"].startswith(("strand participation", "strand cost", "strand shaders ran", "groom participation")):
             x = dict(x, windows=hp.cost)   # strands are on in every cost window
         g.append(x)
     g += [
