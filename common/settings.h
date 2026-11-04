@@ -499,12 +499,12 @@ inline constexpr Knob kKnobs[] = {
   {"exp_ls_exact_k", "Local light sampling (exact-k)",
    "Cost option for interiors with many lights: the strongest 1 or 2 lights of each pixel keep their own "
    "shadow ray, and one ray is shared by the rest, picked in proportion to their light and weighted so the "
-   "mean brightness is unchanged. Needs Local light shadows Full. Off by user decision (developer only).",
+   "mean brightness is unchanged. Needs Local light shadows Full. Qualified k1 is automatic in Ultra; developer override only.",
    Kind::Choice, Apply::Hitch, "First use may compile a core pipeline; no game restart.", false,
    {{"off", "Off", 0, {{"ls_k", "0"}, {"ls_rest_samples", "1"}}, {}, {}, false, false, false, Apply::Live},
     {"k1", "1 exact light", kCapRayQuery, {{"ls_k", "1"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}, {}, false, false, false, Apply::Hitch},
     {"k2", "2 exact lights", kCapRayQuery, {{"ls_k", "2"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+   {}, {0, 0, 0, 1}, false, {}, true, "Developer", {"Measured", "0.717 -> 0.555 ms (-23%) at S7 inn", "Unknown", "RTX 5090; k1 scene energy -0.38/-0.34/+0.12%, within OFF spread 0.89%. Ultra approved 2026-11-04; lower presets unqualified."}},
 
   {"exp_current_sun", "Current cascade sun shadows",
    "Uses the current four native sun-caster domains with finite per-layer rays and native "
@@ -1236,7 +1236,10 @@ inline void enforce_release_policy(Map& m) {
       (map_int(m, "rt_hit_material", 0) || map_int(m, "rt_hit_emission", 0) ? 1 : 0);
   write("exp_hidden_surface", std::min(bounce, 2));
   if (map_int(m, "ls_box", 0)) write("box_lights", 1);
-  if (knob_value(*find_knob("local_shadows"), m) == 3) write("local_shadows", 2);
+  // A partial override need not match any choice (e.g. Fast + ls_shadowed=1).
+  // Normalize the raw hidden mode without changing whether local shadows are enabled.
+  if (map_int(m, "ls_shadowed", 0) == 1)
+    m["ls_shadowed"] = map_int(m, "ls_samples", 0) == 0 ? "3" : "0";
   if (map_int(m, "rt_native_tileset", 0)) write("exp_native_coverage", 1);
   m["rt_hair_pool_trim"] = map_int(m, "rt_native_hair", 0) ? "1" : "0";
   // Full geometry in High still awaits its own OMM/mask qualification.
@@ -1244,6 +1247,9 @@ inline void enforce_release_policy(Map& m) {
       lookup(m, "rt_build") != "0";
   write("exp_vt_alpha_masks", qualified_full ? 1 : 0);
   write("exp_omm", qualified_full ? 1 : 0);
+  // Approved k1 optimisation, no release control. Lower presets lack qualification.
+  write("exp_ls_exact_k", lookup(m, "preset") == "ultra" && lookup(m, "rt_build") != "0" &&
+      knob_value(*find_knob("local_shadows"), m) == 2 ? 1 : 0);
   // Candidate correction follows water; wf9 remains a release blocker.
   m["rt_water_compose_shift"] = map_int(m, "rt_water_compose", 0) ? "1" : "0";
 }

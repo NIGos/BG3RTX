@@ -46,7 +46,14 @@ Automatic release policies (also after stale user INI layering):
 - Water camera correction follows water; wf9 is still a release blocker, not a qualification claim.
 - Near/Far writes material/instanced/wind capture, direct/sun bounce and emission mode 1.
 - Box On writes `ls_box=2`, `ls_box_honour_shadow=1`; obsolete mode 1 migrates to On.
-- Stale Far + reflections migrates to Far, Tilesets to stock hair, Full + shadowed lights to Full.
+- Stale Far + reflections migrates to Far and Tilesets to stock hair. Raw `ls_shadowed=1`
+  migrates independently of complete choice matching: to 0 for Fast (`ls_samples=1`),
+  to 3 for Full (`ls_samples=0`), preserving whether local shadows are enabled.
+- Exact-k k1 (`ls_k=1`, `ls_rest_samples=1`) is an always-on qualified Ultra optimisation
+  when Full local shadows and ray-traced geometry are active; there is no release user control.
+  Lower presets stay Off: the approved Full-path evidence does not qualify them.
+  User decision 2026-11-04: S7 inn 0.717 -> 0.555 ms (-23%); pre-post scene energy
+  -0.38/-0.34/+0.12%, within OFF spread 0.89%. Stale raw k/rest overrides cannot disable or change it.
 - Hidden candidates and perf_* overrides are reset; unknown unrelated keys remain preserved.
 - Release profile no longer pins `ls_box` or `rt_emissive` Off.
 
@@ -61,5 +68,6 @@ Hidden knob ids (developer mode retains them):
 Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed;
 exp_hidden_surface Far + reflections; exp_native_coverage + Tilesets.
 Fresnel remains Off pending user verdict. Three GPU candidates remain rejected/Off (08:12).
-No shader source, define, specialization ID or variants request change; request delta 0.
+Exact-k selects existing LS_K requests in Ultra; no shader source, define, specialization ID
+or variants catalogue changes; request delta 0. Non-Ultra keeps the default path.
 Copy/layout changes do not change keys, values, presets, dependencies or apply transitions. The only flow change is Play saving first; blur smoothing moves to Surfaces.
