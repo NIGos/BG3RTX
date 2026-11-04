@@ -1,0 +1,77 @@
+{
+  "prepared_jobs": [
+    {
+      "job": "wos1-s8-fg2",
+      "seconds": 161.3,
+      "all_waits_plus_load_seconds": 652.967,
+      "timeout": 840
+    },
+    {
+      "job": "wo1-s8-bit2",
+      "seconds": 188.0,
+      "all_waits_plus_load_seconds": 799.428,
+      "timeout": 840
+    },
+    {
+      "job": "wo1-s8-bit4",
+      "seconds": 188.0,
+      "all_waits_plus_load_seconds": 799.428,
+      "timeout": 840
+    },
+    {
+      "job": "wo1-s8-hit-shade",
+      "seconds": 188.0,
+      "all_waits_plus_load_seconds": 799.428,
+      "timeout": 840
+    },
+    {
+      "job": "hgn1-generated-camp-fg2",
+      "seconds": 223.6,
+      "all_waits_plus_load_seconds": 703.6,
+      "timeout": 704
+    },
+    {
+      "job": "hgn2-generated-inn-fg2",
+      "seconds": 152.7,
+      "all_waits_plus_load_seconds": 632.7,
+      "timeout": 633
+    },
+    {
+      "job": "qs4-01-camp",
+      "seconds": 223.6,
+      "all_waits_plus_load_seconds": 703.6,
+      "timeout": 704
+    },
+    {
+      "job": "qs4-02-inn",
+      "seconds": 152.7,
+      "all_waits_plus_load_seconds": 632.7,
+      "timeout": 633
+    },
+    {
+      "job": "qs4-03-guards-camp",
+      "seconds": 210.1,
+      "all_waits_plus_load_seconds": 610.1,
+      "timeout": 611
+    },
+    {
+      "job": "cp5-compact-s6-publication",
+      "seconds": 203.3,
+      "all_waits_plus_load_seconds": 803.3,
+      "timeout": 850
+    },
+    {
+      "job": "as1-alpha-spill-s8",
+      "seconds": 229.8,
+      "all_waits_plus_load_seconds": 709.8,
+      "timeout": 710
+    },
+    {
+      "job": "cs1-current-sun-s8",
+      "seconds": 137.9,
+      "all_waits_plus_load_seconds": 317.9,
+      "timeout": 318
+    }
+  ],
+  "all_below_15_minutes": true
+}

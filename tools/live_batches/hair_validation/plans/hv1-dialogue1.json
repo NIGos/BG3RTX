@@ -42,7 +42,7 @@
       "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -85,7 +85,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "shot-strands-a",
@@ -113,7 +113,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "shot-cards-b",
@@ -141,7 +141,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "shot-strands-b",
@@ -169,7 +169,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "shot-cards-c",
@@ -197,7 +197,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "turn-q-a",
@@ -223,7 +223,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "turn-e-a",
@@ -330,7 +330,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "toggle-1",
@@ -355,7 +355,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "toggle-2",
@@ -380,7 +380,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "toggle-3",
@@ -405,7 +405,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "toggle-4",
@@ -430,7 +430,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "toggle-5",
@@ -455,7 +455,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "rendered-cards",
@@ -545,13 +545,13 @@
     "label": "cost-cards-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.4,
+    "seconds": 12.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 13.4,
-    "motion_end": 13.4,
+    "motion_start": 12.4,
+    "motion_end": 12.4,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
@@ -570,13 +570,13 @@
     "label": "cost-strands",
     "kind": "static",
     "speed": "static",
-    "seconds": 62.8,
+    "seconds": 61.8,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 62.8,
-    "motion_end": 62.8,
+    "motion_start": 61.8,
+    "motion_end": 61.8,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
@@ -589,19 +589,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-cards-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 13.4,
+    "seconds": 12.4,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 13.4,
-    "motion_end": 13.4,
+    "motion_start": 12.4,
+    "motion_end": 12.4,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_hair_groom=0,rt_hair_groom_primary=1,rt_hair_fibre=0,pan_prepare=0,pan_edge=0,pan_capture=0,fg_snap=0",
@@ -614,7 +614,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "reload-selected",
@@ -640,7 +640,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-after-reload",
@@ -680,6 +680,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]

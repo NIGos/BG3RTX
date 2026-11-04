@@ -1,37 +1,13 @@
-# Water hit cost draft
+# Water reflection cost bits
 
-No game launch or queue submission. One S8 Water Queens House launch, Ultra,
-visible_unfocused_fg, fixed rt_water_hit_shade=2 and rt_water_compose_shift=1.
-The four groups independently compare rt_water_hit_cost 0/1/0/1 (sparse),
-0/2/0/2 (cone/zero), 0/4/0/4 (candidate order), and 0/7/0/7 (combined).
-All values 0/1/2/4/7 warm before the first capture. Each group takes four static float-energy windows
-(two captures each), then four static diagnostic-free cost windows (14 s each; exclusive lint minimum > 13 s).
-This isolates hit cost from camera motion and the pending compose-shift issue.
-Energy uses water-compose float pre-post scene plus same-frame delta and exposure,
-with separate OFF-repeat/encoding bands per group. Every ON must preserve energy,
-coverage, zero invalid hits and zero world truncation. No radiance gain correction.
+Prepared offline, never queued. `python -m tools.live_batches.water_offscreen.make_jobs` reads retained source seeds and uses shared live_flow timing/readiness. `dryrun.ps1` validates each launch independently.
 
-Judge cost ONLY on [water] reflections GPU median and p90; report compose GPU
-separately. Discard the first GPU report after each toggle; use the last complete
-120-sample report within the cost window (two reports required). Do not use frame
-time, total RT time or traced capture windows for cost.
-The goal is lower than mode 2's supplied 0.8-2.4 ms median / up to 3.3 ms p90.
-Budgets are optimization targets, never hard stops. Report all measured numbers.
-Existing m4 energy post gate checks every ON; cost reporting is separate (no budget gate).
-Mode 1 shares cone/zero culling, but sparse/order only affect out-of-grid mode 2;
-mode 1 remains covered by offline specialization checks, not claimed live-qualified.
+Three Water Queens House launches: `wo1-s8-hit-shade` tests bit 1 (sparse), `wo1-s8-bit2` tests cone/zero culling, `wo1-s8-bit4` tests candidate ordering. Each independently compares 0/value/0/value at fixed hit shading 2 and compose-shift 1. The historical oversized wo1 path now starts bit 1 only. The unused historic wo1_s8 plan is retained as provenance; it is not referenced by a job. The combined-bit test is excluded: it cannot substitute for independent bit verdicts.
 
-557 s phases + loading (11.3 min dryrun estimate), 32 PNG traces, no float bursts,
-1930 MB conservative estimate. Final restore clears experimental keys/exposure;
-runner restores per-run overrides. Run dryrun.ps1 for synthetic queue verification.
-The synthetic receipt grants no live authorization. Commit predicted.json through
-the coordinator before an authorized run (Git metadata is read only here).
+Each job warms its own states, takes four static float-energy windows (two traces each), then four diagnostic-free cost windows. Shared sizing gives 188 s phases plus 8.428 s estimated readiness and 120 s loading: 5.3 minutes/launch, 490 MB each, 1.47 GB batch. Each has a runtime 15-minute cap; unproven key-specific readiness medians do not constitute timing qualification.
 
-Lint assumptions: 30 rendered FPS, 1 s settings latency, 4 s per trace stall.
-Energy shots last 18 s (exclusive minimum > 17 s); cost windows last 14 s
-(two retained GPU reports after the skipped first line). Load-time roof overflow
-and mesh-pool warnings are rejected with zero tolerance in measured windows.
-Regenerate with `python tools/live_batches/water_offscreen/make_jobs.py`; canonical JSON is the seed.
-The 18:56 shots had no complete periodic lines in several windows: two trace
-stalls consume the cadence budget. All existing every-window gates remain; the
-longer shots reserve 8 s for trace stalls plus apply and two 120-frame periods.
+Every ON must preserve post-water float energy and composition/tier coverage within its own OFF-repeat noise, with 100% captured supported water draws/triangles, zero invalid hits and zero world truncation in every compared window. The existing m4 post gate checks every ON's `water-compose` energy divided by exposure. Retained log histograms provide the coverage comparison. Reject a bit if any ON fails those rules, or if either ON reflection GPU median/p90 does not improve beyond OFF-repeat spread. Report compose ms separately; never use frame time or captures for cost. Missing observations invalidate the run. Do not adjust radiance to pass.
+
+Run the shading qualification first; bit jobs measure optimization equivalence, not the correctness of mode 2. Predictions were written before validation; the coordinator must commit them before live runs because this workspace's Git metadata is read-only. Final phases and queue restoration clear overrides. No live qualification is claimed by a synthetic receipt.
+
+Finite cold-start wait is 180 s; subsequent key/producer waits are capped at 30 s (producer sanity 11.428 s). Including every timeout plus 120 s load, each launch is bounded by 799.428 s (13.33 min). Timeout is INVALID, never evidence to reject rendering.

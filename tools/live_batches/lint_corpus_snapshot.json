@@ -1,15 +1,14 @@
 {
   "version": 1,
-  "valid_logs": 86,
+  "valid_logs": 78,
   "saves": {
-    "Water Queens House": 45,
+    "Water Queens House": 42,
     "Test Dialogue3": 4,
-    "Campsite - 27h": 12,
+    "Campsite - 27h": 11,
     "Test Dialogue1": 8,
-    "Adamantine Forge": 7,
+    "Adamantine Forge": 6,
     "Test Dialogue2": 1,
-    "The Blushing Mermaid - 96h 39m": 7,
-    "Lower City - 91h": 2
+    "The Blushing Mermaid - 96h 39m": 6
   },
   "fps": [
     {
@@ -21,8 +20,8 @@
         0,
         0
       ],
-      "fps": 29.94011976057557,
-      "windows": 153
+      "fps": 29.940119760466867,
+      "windows": 144
     },
     {
       "save": "Adamantine Forge",
@@ -46,7 +45,7 @@
         0
       ],
       "fps": 27.985074626862634,
-      "windows": 2
+      "windows": 1
     },
     {
       "save": "Campsite - 27h",
@@ -57,8 +56,8 @@
         0,
         0
       ],
-      "fps": 12.106537530270467,
-      "windows": 110
+      "fps": 12.39669421487566,
+      "windows": 102
     },
     {
       "save": "Campsite - 27h",
@@ -82,31 +81,7 @@
         0
       ],
       "fps": 6.949270326617158,
-      "windows": 2
-    },
-    {
-      "save": "Lower City - 91h",
-      "state": [
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "fps": 10.249402118223632,
-      "windows": 16
-    },
-    {
-      "save": "Lower City - 91h",
-      "state": [
-        1,
-        0,
-        0,
-        0,
-        0
-      ],
-      "fps": 26.548672566433222,
-      "windows": 6
+      "windows": 1
     },
     {
       "save": "Test Dialogue1",
@@ -178,7 +153,7 @@
         0
       ],
       "fps": 12.30012300122847,
-      "windows": 67
+      "windows": 59
     },
     {
       "save": "The Blushing Mermaid - 96h 39m",
@@ -202,7 +177,7 @@
         0
       ],
       "fps": 14.48575567358825,
-      "windows": 6
+      "windows": 3
     },
     {
       "save": "Water Queens House",
@@ -254,9 +229,9 @@
     }
   ],
   "trace_export": {
-    "seconds": 0.30399999999644933,
+    "seconds": 0.3019999999960419,
     "quantile": 0.95,
-    "samples": 428,
+    "samples": 402,
     "maximum": 0.43699999999807915
   },
   "trace_capture_stall": {
@@ -463,8 +438,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -602,8 +577,8 @@
       "changed": [],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -773,8 +748,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -905,8 +880,8 @@
       "changed": [],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -1399,6 +1374,353 @@
       }
     },
     {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "crash_dump",
+          "0"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_preview_f32",
+          "1"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_log_presents",
+          "6"
+        ],
+        [
+          "fg_snap_delay",
+          "0"
+        ],
+        [
+          "fg_snap_delay_ms",
+          "0"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "gi",
+          "1"
+        ],
+        [
+          "gi_hit_direct",
+          "1"
+        ],
+        [
+          "gi_hit_sun",
+          "1"
+        ],
+        [
+          "gi_rt",
+          "1"
+        ],
+        [
+          "gi_rt_fallback",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "ls_box",
+          "0"
+        ],
+        [
+          "ls_k",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rf_hit_shade",
+          "0"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rt",
+          "1"
+        ],
+        [
+          "rt_alpha",
+          "1"
+        ],
+        [
+          "rt_alpha_spill",
+          "0"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_cascade_casters",
+          "1"
+        ],
+        [
+          "rt_cascade_mb",
+          "427"
+        ],
+        [
+          "rt_em_fx_pulse",
+          "0"
+        ],
+        [
+          "rt_emissive",
+          "1"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "0"
+        ],
+        [
+          "rt_hit_emission",
+          "1"
+        ],
+        [
+          "rt_hit_material",
+          "1"
+        ],
+        [
+          "rt_hit_material_generated",
+          "0"
+        ],
+        [
+          "rt_hit_material_instanced",
+          "1"
+        ],
+        [
+          "rt_hit_material_ip_grass",
+          "0"
+        ],
+        [
+          "rt_hit_material_paks",
+          "1"
+        ],
+        [
+          "rt_hit_material_wind_rgb",
+          "1"
+        ],
+        [
+          "rt_hit_reference",
+          "0"
+        ],
+        [
+          "rt_mesh_content_id",
+          "1"
+        ],
+        [
+          "rt_native_hair",
+          "0"
+        ],
+        [
+          "rt_native_scalp",
+          "0"
+        ],
+        [
+          "rt_native_tileset",
+          "1"
+        ],
+        [
+          "rt_omm",
+          "0"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_reflections",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_stability_log",
+          "0"
+        ],
+        [
+          "rt_sun_cascade_current",
+          "0"
+        ],
+        [
+          "rt_timing_frames",
+          "300"
+        ],
+        [
+          "rt_xfb_mb",
+          "1024"
+        ],
+        [
+          "sharc",
+          "0"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 5,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hit_material_paks",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hit_material_paks",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hit_material_paks",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": true,
+      "estimate": {
+        "seconds": 0,
+        "samples": 5,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Adamantine Forge",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hit_material_paks",
+          "1"
+        ],
+        [
+          "rt_stats",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
       "save": "Test Dialogue3",
       "patterns": [
         "\\[shaders\\] cache: prefetched ",
@@ -1490,10 +1812,6 @@
         [
           "rr_guides_v2",
           "1"
-        ],
-        [
-          "rr_hair_resolve",
-          "0"
         ],
         [
           "rr_post",
@@ -1803,10 +2121,6 @@
           "1"
         ],
         [
-          "rr_hair_resolve",
-          "0"
-        ],
-        [
           "rr_post",
           "1"
         ],
@@ -1841,8 +2155,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -3095,8 +3409,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -4368,7 +4682,7 @@
         ],
         [
           "rt_hair_primary_passes",
-          "1"
+          "15"
         ],
         [
           "rt_hit_emission",
@@ -4457,56 +4771,6 @@
     {
       "save": "Test Dialogue1",
       "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_primary_passes",
-          "3"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_primary_passes",
-          "7"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
         "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -4542,14 +4806,269 @@
       "changed": [
         [
           "rt_hair_primary_passes",
+          "8"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_hair_primary_passes",
+          "15"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Test Dialogue1",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "aftermath",
+          "1"
+        ],
+        [
+          "crash_dump",
+          "1"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "960"
+        ],
+        [
+          "dump_preview_f32",
+          "1"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_letterbox",
+          "1"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "gi_hit_direct",
+          "1"
+        ],
+        [
+          "gi_hit_sun",
+          "1"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "ls_box",
+          "2"
+        ],
+        [
+          "ls_k",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rt",
+          "1"
+        ],
+        [
+          "rt_alpha",
+          "1"
+        ],
+        [
+          "rt_alpha_spill",
+          "0"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
+          "rt_cascade_casters",
+          "1"
+        ],
+        [
+          "rt_cascade_mb",
+          "587"
+        ],
+        [
+          "rt_emissive",
+          "1"
+        ],
+        [
+          "rt_hair_fibre",
+          "0"
+        ],
+        [
+          "rt_hair_groom",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary",
+          "1"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "0"
+        ],
+        [
+          "rt_hair_groom_tips",
+          "0"
+        ],
+        [
+          "rt_hair_physical_origin",
+          "1"
+        ],
+        [
+          "rt_hair_primary_passes",
+          "15"
+        ],
+        [
+          "rt_hit_emission",
+          "1"
+        ],
+        [
+          "rt_hit_material",
+          "1"
+        ],
+        [
+          "rt_hit_material_instanced",
+          "1"
+        ],
+        [
+          "rt_hit_material_recycle",
+          "1"
+        ],
+        [
+          "rt_hit_reference",
+          "0"
+        ],
+        [
+          "rt_native_hair",
+          "1"
+        ],
+        [
+          "rt_native_scalp",
+          "1"
+        ],
+        [
+          "rt_native_tileset",
+          "0"
+        ],
+        [
+          "rt_omm",
+          "1"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_origin",
+          "1"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "60"
+        ],
+        [
+          "rt_stability_log",
+          "0"
+        ],
+        [
+          "rt_sun_cascade_current",
+          "0"
+        ],
+        [
+          "rt_timing_frames",
+          "60"
+        ],
+        [
+          "rt_xfb_mb",
+          "1408"
+        ],
+        [
+          "sharc",
+          "0"
+        ],
+        [
+          "sharc_device",
           "1"
         ]
       ],
-      "first": false,
+      "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
+        "seconds": 0.0,
+        "samples": 8,
+        "source": "VALID same-save/key median"
       }
     },
     {
@@ -4563,8 +5082,12 @@
       ],
       "changed": [
         [
+          "rt_hair_groom_primary_order",
+          "1"
+        ],
+        [
           "rt_hair_primary_passes",
-          "3"
+          "8"
         ]
       ],
       "first": false,
@@ -4577,16 +5100,27 @@
     {
       "save": "Test Dialogue1",
       "patterns": [
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
       ],
       "fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
       "changed": [
         [
+          "rt_hair_groom",
+          "0"
+        ],
+        [
+          "rt_hair_groom_primary_order",
+          "0"
+        ],
+        [
           "rt_hair_primary_passes",
-          "7"
+          "15"
         ]
       ],
       "first": false,
@@ -6023,8 +6557,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -6660,8 +7194,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -7018,14 +7552,6 @@
           "1"
         ],
         [
-          "rt_water_rf_edge",
-          "0"
-        ],
-        [
-          "rt_water_rr_hitdist",
-          "0"
-        ],
-        [
           "rt_water_shadows",
           "1"
         ],
@@ -7044,8 +7570,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -7078,79 +7604,7 @@
       "changed": [
         [
           "rt_water_hit_cost",
-          "1"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
           "2"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
-          "4"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
-          "7"
         ]
       ],
       "first": false,
@@ -7194,73 +7648,7 @@
       "changed": [
         [
           "rt_water_hit_cost",
-          "1"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
           "2"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
-          "4"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Water Queens House",
-      "patterns": [
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_water_hit_cost",
-          "7"
         ]
       ],
       "first": false,
@@ -7318,7 +7706,7 @@
         ],
         [
           "rt_water_hit_cost",
-          "1"
+          "2"
         ]
       ],
       "first": false,
@@ -7353,6 +7741,154 @@
         [
           "rt_water_hit_shade",
           "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_water_hit_cost",
+          "4"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_water_hit_cost",
+          "4"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "qa_exposure_hold",
+          "1"
+        ],
+        [
+          "rt_water_hit_cost",
+          "4"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_water_hit_cost",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_water_hit_cost",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "qa_exposure_hold",
+          "1"
+        ],
+        [
+          "rt_water_hit_cost",
+          "1"
         ]
       ],
       "first": false,
@@ -7587,14 +8123,6 @@
           "0"
         ],
         [
-          "rt_water_rf_edge",
-          "0"
-        ],
-        [
-          "rt_water_rr_hitdist",
-          "0"
-        ],
-        [
           "rt_water_shadows",
           "0"
         ],
@@ -7613,8 +8141,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -7651,8 +8179,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.015,
-        "samples": 12,
+        "seconds": 0.014,
+        "samples": 17,
         "source": "VALID same-save/key median"
       }
     },
@@ -7673,8 +8201,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.017,
-        "samples": 15,
+        "seconds": 0.019,
+        "samples": 21,
         "source": "VALID same-save/key median"
       }
     },
@@ -7695,8 +8223,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.015,
-        "samples": 12,
+        "seconds": 0.014,
+        "samples": 17,
         "source": "VALID same-save/key median"
       }
     },
@@ -7721,8 +8249,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.021,
-        "samples": 3,
+        "seconds": 0.015,
+        "samples": 4,
         "source": "VALID same-save/key median"
       }
     },
@@ -7751,9 +8279,9 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
+        "seconds": 0.019,
+        "samples": 1,
+        "source": "VALID same-save/key median"
       }
     },
     {
@@ -7777,8 +8305,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.015,
-        "samples": 3,
+        "seconds": 0.012,
+        "samples": 4,
         "source": "VALID same-save/key median"
       }
     },
@@ -7807,8 +8335,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.023,
-        "samples": 3,
+        "seconds": 0.026,
+        "samples": 4,
         "source": "VALID same-save/key median"
       }
     },
@@ -7845,8 +8373,8 @@
       ],
       "first": false,
       "estimate": {
-        "seconds": 0.021,
-        "samples": 3,
+        "seconds": 0.015,
+        "samples": 4,
         "source": "VALID same-save/key median"
       }
     },
@@ -9070,10 +9598,6 @@
           "1"
         ],
         [
-          "rr_hair_resolve",
-          "0"
-        ],
-        [
           "rr_post",
           "1"
         ],
@@ -9125,7 +9649,9 @@
       "save": "Test Dialogue3",
       "patterns": [
         "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built"
       ],
       "fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -9141,6 +9667,10 @@
         ],
         [
           "gi_ao",
+          "1"
+        ],
+        [
+          "rr_post_temporal",
           "1"
         ]
       ],
@@ -9171,7 +9701,9 @@
       "save": "Test Dialogue3",
       "patterns": [
         "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built"
       ],
       "fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -9195,6 +9727,10 @@
         ],
         [
           "pan_prepare",
+          "1"
+        ],
+        [
+          "rr_post_temporal",
           "1"
         ]
       ],
@@ -9270,20 +9806,12 @@
           "0"
         ],
         [
-          "gi_far",
-          "1"
-        ],
-        [
           "gi_hit_direct",
           "1"
         ],
         [
           "gi_hit_sun",
           "1"
-        ],
-        [
-          "gi_rr_rays",
-          "2"
         ],
         [
           "headless",
@@ -9298,14 +9826,6 @@
           "0"
         ],
         [
-          "ls_samples",
-          "0"
-        ],
-        [
-          "ls_shadowed",
-          "3"
-        ],
-        [
           "pan_inputs",
           "0"
         ],
@@ -9316,10 +9836,6 @@
         [
           "reflex",
           "1"
-        ],
-        [
-          "rf_max_rough",
-          "0.8"
         ],
         [
           "rr",
@@ -9335,10 +9851,6 @@
         ],
         [
           "rt_alpha",
-          "1"
-        ],
-        [
-          "rt_alpha_fine_lod",
           "1"
         ],
         [
@@ -9370,10 +9882,6 @@
           "0"
         ],
         [
-          "rt_hair_pool_trim",
-          "1"
-        ],
-        [
           "rt_hit_emission",
           "1"
         ],
@@ -9387,10 +9895,6 @@
         ],
         [
           "rt_hit_material_recycle",
-          "1"
-        ],
-        [
-          "rt_hit_material_wind_rgb",
           "1"
         ],
         [
@@ -9414,16 +9918,8 @@
           "1"
         ],
         [
-          "rt_omm_dyn",
-          "1"
-        ],
-        [
           "rt_order_trace",
           "0"
-        ],
-        [
-          "rt_rebuild_frames",
-          "600"
         ],
         [
           "rt_scene_wait",
@@ -9450,48 +9946,8 @@
           "120"
         ],
         [
-          "rt_trace_scale",
-          "1.0"
-        ],
-        [
-          "rt_vt_alpha_masks",
-          "1"
-        ],
-        [
-          "rt_water_compose",
-          "1"
-        ],
-        [
-          "rt_water_compose_shift",
-          "1"
-        ],
-        [
           "rt_water_empty_tiles",
           "0"
-        ],
-        [
-          "rt_water_game_shadow",
-          "1"
-        ],
-        [
-          "rt_water_geometry",
-          "1"
-        ],
-        [
-          "rt_water_ls_shadows",
-          "1"
-        ],
-        [
-          "rt_water_reflections",
-          "1"
-        ],
-        [
-          "rt_water_refraction",
-          "1"
-        ],
-        [
-          "rt_water_shadows",
-          "1"
         ],
         [
           "rt_xfb_mb",
@@ -9508,8 +9964,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -9585,32 +10041,58 @@
     {
       "save": "Water Queens House",
       "patterns": [
-        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
-        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
-        "gi: gi/rt_shadow\\.hlsl[^ ]* generation .*spec cascade=0",
-        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation .*spec cascade=0",
-        "gi: gi/rt_reflections\\.hlsl[^ ]* generation .*spec cascade=0",
-        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
-        "\\[water\\] rt/water_reflect\\.hlsl[^ ]* water_reflect: built"
+        "\\[shaders\\] cache: prefetched ",
+        "\\[auto\\] scene ready"
       ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
+      "fresh": [],
       "changed": [
         [
           "crash_dump",
           "0"
         ],
         [
-          "dump_preview_f32",
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_letterbox",
+          "1"
+        ],
+        [
+          "fg_log_presents",
+          "6"
+        ],
+        [
+          "fg_snap_delay",
+          "0"
+        ],
+        [
+          "fg_snap_delay_ms",
           "0"
         ],
         [
           "fg_state_every",
           "60"
+        ],
+        [
+          "fps_cap",
+          "0"
         ],
         [
           "gi_far",
@@ -9629,6 +10111,18 @@
           "1"
         ],
         [
+          "headless",
+          "0"
+        ],
+        [
+          "ls_box",
+          "0"
+        ],
+        [
+          "ls_k",
+          "0"
+        ],
+        [
           "ls_samples",
           "1"
         ],
@@ -9637,12 +10131,44 @@
           "0"
         ],
         [
+          "pan_inputs",
+          "0"
+        ],
+        [
           "preset",
           "medium"
         ],
         [
+          "reflex",
+          "1"
+        ],
+        [
+          "rf_hit_gi",
+          "0"
+        ],
+        [
+          "rf_hit_shade",
+          "0"
+        ],
+        [
           "rf_max_rough",
           "0.4"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rr_post_temporal",
+          "0"
+        ],
+        [
+          "rt",
+          "1"
         ],
         [
           "rt_alpha",
@@ -9653,11 +10179,27 @@
           "0"
         ],
         [
+          "rt_alpha_spill",
+          "0"
+        ],
+        [
+          "rt_bvh_split",
+          "1"
+        ],
+        [
           "rt_cascade_casters",
           "0"
         ],
         [
+          "rt_cascade_mb",
+          "160"
+        ],
+        [
           "rt_emissive",
+          "0"
+        ],
+        [
+          "rt_hair_physical_origin",
           "0"
         ],
         [
@@ -9677,7 +10219,31 @@
           "0"
         ],
         [
+          "rt_hit_material_recycle",
+          "1"
+        ],
+        [
           "rt_hit_material_wind_rgb",
+          "0"
+        ],
+        [
+          "rt_hit_reference",
+          "0"
+        ],
+        [
+          "rt_native_hair",
+          "0"
+        ],
+        [
+          "rt_native_scalp",
+          "0"
+        ],
+        [
+          "rt_native_tileset",
+          "0"
+        ],
+        [
+          "rt_omm",
           "0"
         ],
         [
@@ -9685,8 +10251,36 @@
           "0"
         ],
         [
+          "rt_order_trace",
+          "0"
+        ],
+        [
           "rt_rebuild_frames",
           "60"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_stability_log",
+          "0"
+        ],
+        [
+          "rt_sun_cascade_current",
+          "0"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "rt_trace_scale",
+          "1.0"
         ],
         [
           "rt_vt_alpha_masks",
@@ -9709,6 +10303,14 @@
           "0"
         ],
         [
+          "rt_water_hit_cost",
+          "0"
+        ],
+        [
+          "rt_water_hit_shade",
+          "0"
+        ],
+        [
           "rt_water_ls_shadows",
           "0"
         ],
@@ -9723,6 +10325,178 @@
         [
           "rt_water_shadows",
           "0"
+        ],
+        [
+          "rt_xfb_mb",
+          "1024"
+        ],
+        [
+          "sharc",
+          "0"
+        ],
+        [
+          "sharc_device",
+          "1"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.0,
+        "samples": 32,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+        "gi: gi/rt_shadow\\.hlsl[^ ]* generation .*spec cascade=1",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation .*spec cascade=1",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation .*spec cascade=1",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[water\\] rt/water_reflect\\.hlsl[^ ]* water_reflect: built"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg_log_presents",
+          "0"
+        ],
+        [
+          "fg_snap_delay_ms",
+          "2000"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "gi_far",
+          "1"
+        ],
+        [
+          "gi_hit_direct",
+          "1"
+        ],
+        [
+          "gi_hit_sun",
+          "1"
+        ],
+        [
+          "gi_rr_rays",
+          "2"
+        ],
+        [
+          "ls_samples",
+          "0"
+        ],
+        [
+          "ls_shadowed",
+          "3"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "rf_max_rough",
+          "0.8"
+        ],
+        [
+          "rr_post_temporal",
+          "1"
+        ],
+        [
+          "rt_alpha",
+          "1"
+        ],
+        [
+          "rt_alpha_fine_lod",
+          "1"
+        ],
+        [
+          "rt_cascade_casters",
+          "1"
+        ],
+        [
+          "rt_cascade_mb",
+          "427"
+        ],
+        [
+          "rt_emissive",
+          "1"
+        ],
+        [
+          "rt_hair_pool_trim",
+          "1"
+        ],
+        [
+          "rt_hit_emission",
+          "1"
+        ],
+        [
+          "rt_hit_material",
+          "1"
+        ],
+        [
+          "rt_hit_material_instanced",
+          "1"
+        ],
+        [
+          "rt_hit_material_wind_rgb",
+          "1"
+        ],
+        [
+          "rt_omm_dyn",
+          "1"
+        ],
+        [
+          "rt_rebuild_frames",
+          "600"
+        ],
+        [
+          "rt_vt_alpha_masks",
+          "1"
+        ],
+        [
+          "rt_water_compose",
+          "1"
+        ],
+        [
+          "rt_water_compose_shift",
+          "1"
+        ],
+        [
+          "rt_water_game_shadow",
+          "1"
+        ],
+        [
+          "rt_water_geometry",
+          "1"
+        ],
+        [
+          "rt_water_ls_shadows",
+          "1"
+        ],
+        [
+          "rt_water_reflections",
+          "1"
+        ],
+        [
+          "rt_water_refraction",
+          "1"
+        ],
+        [
+          "rt_water_shadows",
+          "1"
         ]
       ],
       "first": false,
@@ -9736,10 +10510,187 @@
       "save": "Water Queens House",
       "patterns": [
         "\\[shaders\\] cache: prefetched ",
-        "\\[auto\\] scene ready"
+        "\\[auto\\] scene ready",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
-      "fresh": [],
-      "changed": [],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "rt_water_hit_shade",
+          "2"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
+        "gi: gi/rt_shadow\\.hlsl[^ ]* generation .*spec cascade=1",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation .*spec cascade=1",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation .*spec cascade=1",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
+        "\\[water\\] rt/water_reflect\\.hlsl[^ ]* water_reflect: built"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "fg_log_presents",
+          "0"
+        ],
+        [
+          "fg_snap_any",
+          "1"
+        ],
+        [
+          "fg_snap_delay_ms",
+          "2000"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "gi_far",
+          "1"
+        ],
+        [
+          "gi_hit_direct",
+          "1"
+        ],
+        [
+          "gi_hit_sun",
+          "1"
+        ],
+        [
+          "gi_rr_rays",
+          "2"
+        ],
+        [
+          "ls_samples",
+          "0"
+        ],
+        [
+          "ls_shadowed",
+          "3"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "qa_exposure_hold",
+          "0"
+        ],
+        [
+          "rf_max_rough",
+          "0.8"
+        ],
+        [
+          "rr_post_temporal",
+          "1"
+        ],
+        [
+          "rt_alpha",
+          "1"
+        ],
+        [
+          "rt_alpha_fine_lod",
+          "1"
+        ],
+        [
+          "rt_cascade_casters",
+          "1"
+        ],
+        [
+          "rt_cascade_mb",
+          "427"
+        ],
+        [
+          "rt_emissive",
+          "1"
+        ],
+        [
+          "rt_hair_pool_trim",
+          "1"
+        ],
+        [
+          "rt_hit_emission",
+          "1"
+        ],
+        [
+          "rt_hit_material",
+          "1"
+        ],
+        [
+          "rt_hit_material_instanced",
+          "1"
+        ],
+        [
+          "rt_hit_material_wind_rgb",
+          "1"
+        ],
+        [
+          "rt_omm_dyn",
+          "1"
+        ],
+        [
+          "rt_rebuild_frames",
+          "600"
+        ],
+        [
+          "rt_vt_alpha_masks",
+          "1"
+        ],
+        [
+          "rt_water_compose",
+          "1"
+        ],
+        [
+          "rt_water_compose_shift",
+          "1"
+        ],
+        [
+          "rt_water_game_shadow",
+          "1"
+        ],
+        [
+          "rt_water_geometry",
+          "1"
+        ],
+        [
+          "rt_water_ls_shadows",
+          "1"
+        ],
+        [
+          "rt_water_reflections",
+          "1"
+        ],
+        [
+          "rt_water_refraction",
+          "1"
+        ],
+        [
+          "rt_water_shadows",
+          "1"
+        ]
+      ],
       "first": false,
       "estimate": {
         "seconds": 0,
@@ -9856,7 +10807,23 @@
           "1"
         ],
         [
+          "rr_cbt",
+          "1"
+        ],
+        [
+          "rr_guides_at",
+          "1"
+        ],
+        [
+          "rr_guides_v2",
+          "1"
+        ],
+        [
           "rr_post",
+          "1"
+        ],
+        [
+          "rr_post_temporal",
           "1"
         ],
         [
@@ -9992,14 +10959,6 @@
           "1"
         ],
         [
-          "rt_water_rf_edge",
-          "0"
-        ],
-        [
-          "rt_water_rr_hitdist",
-          "0"
-        ],
-        [
           "rt_water_shadows",
           "1"
         ],
@@ -10018,8 +10977,8 @@
       ],
       "first": true,
       "estimate": {
-        "seconds": 0,
-        "samples": 31,
+        "seconds": 0.0,
+        "samples": 32,
         "source": "VALID same-save/key median"
       }
     },
@@ -10063,6 +11022,114 @@
           "0"
         ]
       ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
+        "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "changed": [
+        [
+          "dump_images",
+          "0"
+        ],
+        [
+          "dump_png_width",
+          "384"
+        ],
+        [
+          "fg_log_presents",
+          "6"
+        ],
+        [
+          "fg_snap_delay_ms",
+          "0"
+        ],
+        [
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "rr_post_temporal",
+          "0"
+        ],
+        [
+          "rt_cascade_mb",
+          "160"
+        ],
+        [
+          "rt_omm",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "600"
+        ],
+        [
+          "rt_water_compose_shift",
+          "1"
+        ],
+        [
+          "rt_water_game_shadow",
+          "1"
+        ],
+        [
+          "rt_water_ls_shadows",
+          "1"
+        ],
+        [
+          "rt_water_refraction",
+          "1"
+        ],
+        [
+          "rt_water_shadows",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [],
       "first": false,
       "estimate": {
         "seconds": 0,
@@ -10126,587 +11193,85 @@
       }
     },
     {
-      "save": "Test Dialogue1",
+      "save": "Water Queens House",
       "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[auto\\] scene ready"
-      ],
-      "fresh": [],
-      "changed": [
-        [
-          "crash_dump",
-          "1"
-        ],
-        [
-          "dump_images",
-          "1"
-        ],
-        [
-          "dump_png_width",
-          "960"
-        ],
-        [
-          "dump_preview_f32",
-          "1"
-        ],
-        [
-          "dump_raw",
-          "0"
-        ],
-        [
-          "dump_shaders",
-          "0"
-        ],
-        [
-          "fg",
-          "2"
-        ],
-        [
-          "fg_letterbox",
-          "1"
-        ],
-        [
-          "fg_state_every",
-          "30"
-        ],
-        [
-          "fps_cap",
-          "0"
-        ],
-        [
-          "gi_hit_direct",
-          "1"
-        ],
-        [
-          "gi_hit_sun",
-          "1"
-        ],
-        [
-          "headless",
-          "0"
-        ],
-        [
-          "ls_box",
-          "2"
-        ],
-        [
-          "ls_k",
-          "0"
-        ],
-        [
-          "pan_inputs",
-          "0"
-        ],
-        [
-          "preset",
-          "ultra"
-        ],
-        [
-          "reflex",
-          "1"
-        ],
-        [
-          "rr",
-          "1"
-        ],
-        [
-          "rr_post",
-          "1"
-        ],
-        [
-          "rt",
-          "1"
-        ],
-        [
-          "rt_alpha",
-          "1"
-        ],
-        [
-          "rt_alpha_spill",
-          "0"
-        ],
-        [
-          "rt_bvh_split",
-          "1"
-        ],
-        [
-          "rt_cascade_casters",
-          "1"
-        ],
-        [
-          "rt_cascade_mb",
-          "587"
-        ],
-        [
-          "rt_emissive",
-          "1"
-        ],
-        [
-          "rt_hair_fibre",
-          "0"
-        ],
-        [
-          "rt_hair_groom",
-          "1"
-        ],
-        [
-          "rt_hair_groom_primary",
-          "1"
-        ],
-        [
-          "rt_hair_groom_primary_order",
-          "0"
-        ],
-        [
-          "rt_hair_groom_tips",
-          "0"
-        ],
-        [
-          "rt_hair_physical_origin",
-          "1"
-        ],
-        [
-          "rt_hair_primary_passes",
-          "15"
-        ],
-        [
-          "rt_hit_emission",
-          "1"
-        ],
-        [
-          "rt_hit_material",
-          "1"
-        ],
-        [
-          "rt_hit_material_instanced",
-          "1"
-        ],
-        [
-          "rt_hit_material_recycle",
-          "1"
-        ],
-        [
-          "rt_hit_reference",
-          "0"
-        ],
-        [
-          "rt_native_hair",
-          "1"
-        ],
-        [
-          "rt_native_scalp",
-          "1"
-        ],
-        [
-          "rt_native_tileset",
-          "0"
-        ],
-        [
-          "rt_omm",
-          "1"
-        ],
-        [
-          "rt_order_trace",
-          "0"
-        ],
-        [
-          "rt_origin",
-          "1"
-        ],
-        [
-          "rt_scene_wait",
-          "1"
-        ],
-        [
-          "rt_scene_wait_log_frames",
-          "60"
-        ],
-        [
-          "rt_stability_log",
-          "0"
-        ],
-        [
-          "rt_sun_cascade_current",
-          "0"
-        ],
-        [
-          "rt_timing_frames",
-          "60"
-        ],
-        [
-          "rt_xfb_mb",
-          "1408"
-        ],
-        [
-          "sharc",
-          "0"
-        ],
-        [
-          "sharc_device",
-          "1"
-        ]
-      ],
-      "first": true,
-      "estimate": {
-        "seconds": 0.0,
-        "samples": 8,
-        "source": "VALID same-save/key median"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_groom_primary_order",
-          "1"
-        ],
-        [
-          "rt_hair_primary_passes",
-          "0"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_primary_passes",
-          "8"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_primary_passes",
-          "15"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\] cache: prefetched ",
-        "gi: gi/[^ ]+ generation ",
-        "\\[auto\\] scene ready"
-      ],
-      "fresh": [],
-      "changed": [
-        [
-          "aftermath",
-          "1"
-        ],
-        [
-          "crash_dump",
-          "1"
-        ],
-        [
-          "dump_images",
-          "1"
-        ],
-        [
-          "dump_png_width",
-          "960"
-        ],
-        [
-          "dump_preview_f32",
-          "1"
-        ],
-        [
-          "dump_raw",
-          "0"
-        ],
-        [
-          "dump_shaders",
-          "0"
-        ],
-        [
-          "fg",
-          "2"
-        ],
-        [
-          "fg_letterbox",
-          "1"
-        ],
-        [
-          "fg_state_every",
-          "30"
-        ],
-        [
-          "fps_cap",
-          "0"
-        ],
-        [
-          "gi_hit_direct",
-          "1"
-        ],
-        [
-          "gi_hit_sun",
-          "1"
-        ],
-        [
-          "headless",
-          "0"
-        ],
-        [
-          "ls_box",
-          "2"
-        ],
-        [
-          "ls_k",
-          "0"
-        ],
-        [
-          "pan_inputs",
-          "0"
-        ],
-        [
-          "preset",
-          "ultra"
-        ],
-        [
-          "reflex",
-          "1"
-        ],
-        [
-          "rr",
-          "1"
-        ],
-        [
-          "rr_post",
-          "1"
-        ],
-        [
-          "rt",
-          "1"
-        ],
-        [
-          "rt_alpha",
-          "1"
-        ],
-        [
-          "rt_alpha_spill",
-          "0"
-        ],
-        [
-          "rt_bvh_split",
-          "1"
-        ],
-        [
-          "rt_cascade_casters",
-          "1"
-        ],
-        [
-          "rt_cascade_mb",
-          "587"
-        ],
-        [
-          "rt_emissive",
-          "1"
-        ],
-        [
-          "rt_hair_fibre",
-          "0"
-        ],
-        [
-          "rt_hair_groom",
-          "1"
-        ],
-        [
-          "rt_hair_groom_primary",
-          "1"
-        ],
-        [
-          "rt_hair_groom_primary_order",
-          "0"
-        ],
-        [
-          "rt_hair_groom_tips",
-          "0"
-        ],
-        [
-          "rt_hair_physical_origin",
-          "1"
-        ],
-        [
-          "rt_hair_primary_passes",
-          "15"
-        ],
-        [
-          "rt_hit_emission",
-          "1"
-        ],
-        [
-          "rt_hit_material",
-          "1"
-        ],
-        [
-          "rt_hit_material_instanced",
-          "1"
-        ],
-        [
-          "rt_hit_material_recycle",
-          "1"
-        ],
-        [
-          "rt_hit_reference",
-          "0"
-        ],
-        [
-          "rt_native_hair",
-          "1"
-        ],
-        [
-          "rt_native_scalp",
-          "1"
-        ],
-        [
-          "rt_native_tileset",
-          "0"
-        ],
-        [
-          "rt_omm",
-          "1"
-        ],
-        [
-          "rt_order_trace",
-          "0"
-        ],
-        [
-          "rt_origin",
-          "1"
-        ],
-        [
-          "rt_scene_wait",
-          "1"
-        ],
-        [
-          "rt_scene_wait_log_frames",
-          "60"
-        ],
-        [
-          "rt_stability_log",
-          "0"
-        ],
-        [
-          "rt_sun_cascade_current",
-          "0"
-        ],
-        [
-          "rt_timing_frames",
-          "60"
-        ],
-        [
-          "rt_xfb_mb",
-          "1408"
-        ],
-        [
-          "sharc",
-          "0"
-        ],
-        [
-          "sharc_device",
-          "1"
-        ]
-      ],
-      "first": true,
-      "estimate": {
-        "seconds": 0.0,
-        "samples": 8,
-        "source": "VALID same-save/key median"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "fresh": [
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
-      ],
-      "changed": [
-        [
-          "rt_hair_groom_primary_order",
-          "1"
-        ],
-        [
-          "rt_hair_primary_passes",
-          "8"
-        ]
-      ],
-      "first": false,
-      "estimate": {
-        "seconds": 0,
-        "samples": 0,
-        "source": "unproven; no VALID same-save/key observation"
-      }
-    },
-    {
-      "save": "Test Dialogue1",
-      "patterns": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
         "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
         "gi: gi/rt_local_shadows\\.hlsl[^ ]* generation ",
         "gi: gi/rt_reflections\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
-        "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
+        "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built"
       ],
       "fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
       "changed": [
         [
-          "rt_hair_groom",
+          "dump_images",
           "0"
         ],
         [
-          "rt_hair_groom_primary_order",
+          "dump_png_width",
+          "384"
+        ],
+        [
+          "fg_log_presents",
+          "6"
+        ],
+        [
+          "fg_snap_delay_ms",
           "0"
         ],
         [
-          "rt_hair_primary_passes",
-          "15"
+          "fg_state_every",
+          "30"
+        ],
+        [
+          "pan_edge",
+          "1"
+        ],
+        [
+          "pan_post",
+          "1"
+        ],
+        [
+          "pan_prepare",
+          "1"
+        ],
+        [
+          "rr_post_temporal",
+          "0"
+        ],
+        [
+          "rt_cascade_mb",
+          "160"
+        ],
+        [
+          "rt_omm",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "600"
+        ],
+        [
+          "rt_water_compose_shift",
+          "1"
+        ],
+        [
+          "rt_water_game_shadow",
+          "1"
+        ],
+        [
+          "rt_water_ls_shadows",
+          "1"
+        ],
+        [
+          "rt_water_refraction",
+          "1"
+        ],
+        [
+          "rt_water_shadows",
+          "1"
         ]
       ],
       "first": false,
@@ -10755,37 +11320,36 @@
       null
     ],
     "\\[ab\\] ab_off: ray tracing OFF": [
-      1,
-      [
-        "su1-ultra-s8-fg2.1.041744.log",
-        "frozen VALID match"
-      ]
+      0,
+      null
     ],
     "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF": [
-      1,
-      [
-        "su1-ultra-s8-fg2.1.041744.log",
-        "frozen VALID match"
-      ]
+      0,
+      null
     ],
     "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON": [
-      1,
-      [
-        "su1-ultra-s8-fg2.1.041744.log",
-        "frozen VALID match"
-      ]
+      0,
+      null
+    ],
+    "\\[aftermath\\] GPU crash dump written: .*\\.nv-gpudmp \\([1-9]\\d* bytes\\); decode with bin\\\\aftermath_decode\\.exe|\\[hair primary\\] hair primary breadcrumbs:": [
+      0,
+      null
+    ],
+    "\\[aftermath\\] GPU crash dumps ENABLED": [
+      0,
+      null
     ],
     "\\[auto\\] scene ready": [
-      21,
+      19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ": [
-      1254,
+      1296,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -10794,9 +11358,9 @@
       null
     ],
     "\\[cfg\\] settings read": [
-      495,
+      494,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -10808,14 +11372,18 @@
       0,
       null
     ],
+    "\\[fault\\] VK_ERROR_DEVICE_LOST from |\\[hair primary\\] hair primary breadcrumbs:": [
+      0,
+      null
+    ],
     "\\[fault\\]\\s+(read|write|execute) invalid": [
       0,
       null
     ],
     "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,": [
-      2058,
+      1971,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -10940,7 +11508,7 @@
     "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)": [
       19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -10949,23 +11517,23 @@
       null
     ],
     "\\[hot\\] core generation \\d+ loaded": [
-      21,
+      19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)": [
-      1316,
+      1360,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[ngx\\] RR create .*: Success": [
-      21,
+      19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -10974,7 +11542,7 @@
       null
     ],
     "\\[omm\\] EXT backend available max_four_state_level=\\d+": [
-      7,
+      6,
       [
         "wsf1-s8-interface-column.1.064436.log",
         "frozen VALID match"
@@ -10989,15 +11557,18 @@
       null
     ],
     "\\[omm\\] requesting EXT micromap \\+ synchronization2": [
-      7,
+      6,
       [
         "wsf1-s8-interface-column.1.064436.log",
         "frozen VALID match"
       ]
     ],
     "\\[pan\\] burst 99100 complete: 8 frames": [
-      0,
-      null
+      1,
+      [
+        "wf9-s8-compose-shift.1.085931.log",
+        "frozen VALID match"
+      ]
     ],
     "\\[pan\\].*(REFUSED|INVALID|failed|dropped)": [
       0,
@@ -11016,37 +11587,37 @@
       null
     ],
     "\\[rrpost\\] exposure held": [
-      214,
+      224,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[rrpost\\] exposure held .*qa_exposure_hold=1": [
       15,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\)": [
       15,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [-0-9.]+": [
       15,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[rrpost\\] exposure held \\(qa_exposure_hold=1\\) at EV [0-9.]+": [
       15,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11057,7 +11628,7 @@
     "\\[rrpost\\] exposure hold released after [1-9]\\d* writes": [
       14,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11066,16 +11637,16 @@
       null
     ],
     "\\[rt\\] scene wait: 120 frames, .*got this frame's scene, 0 timeouts": [
-      914,
+      963,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00": [
-      14236,
+      23575,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11086,14 +11657,14 @@
     "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+": [
       19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[sl\\] present capture done": [
-      28,
+      33,
       [
-        "pt-dialogue3.1.032335.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11102,9 +11673,9 @@
       null
     ],
     "\\[trace\\] frame \\d+ written": [
-      156,
+      151,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11113,9 +11684,9 @@
       null
     ],
     "\\[water\\] compose GPU": [
-      1339,
+      1384,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11124,23 +11695,23 @@
       null
     ],
     "\\[water\\] compose energy": [
-      1339,
+      1384,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[water\\] compose stability": [
-      1339,
+      1384,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)": [
-      1339,
+      1384,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11157,9 +11728,9 @@
       null
     ],
     "\\[water\\] reflections \\(\\d+ frames, [1-9]\\d* traced\\)": [
-      1346,
+      1391,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11182,7 +11753,7 @@
     "\\[water\\] water geometry capture on \\(rt_water_geometry=1": [
       19,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11199,30 +11770,30 @@
       null
     ],
     "gi: GPU cost .*average of 300 frames": [
-      666,
+      633,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "gi: GPU cost [0-9.]+ ms/frame": [
-      666,
+      633,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)": [
-      666,
+      633,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "gi: trace pass .*GPU median": [
-      665,
+      632,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11243,23 +11814,23 @@
       null
     ],
     "rf: reflection pass GPU median": [
-      665,
+      632,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)": [
-      664,
+      631,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
     "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0": [
-      618,
+      589,
       [
-        "wsf1-s8-interface-column.1.064436.log",
+        "wf9-s8-compose-shift.1.085931.log",
         "frozen VALID match"
       ]
     ],
@@ -11276,18 +11847,6 @@
       null
     ],
     "skipped: no variant for": [
-      0,
-      null
-    ],
-    "\\[aftermath\\] GPU crash dump written: .*\\.nv-gpudmp \\([1-9]\\d* bytes\\); decode with bin\\\\aftermath_decode\\.exe|\\[hair primary\\] hair primary breadcrumbs:": [
-      0,
-      null
-    ],
-    "\\[aftermath\\] GPU crash dumps ENABLED": [
-      0,
-      null
-    ],
-    "\\[fault\\] VK_ERROR_DEVICE_LOST from |\\[hair primary\\] hair primary breadcrumbs:": [
       0,
       null
     ]

@@ -4,7 +4,7 @@
   "session": false,
   "traces": 0,
   "hold": 90,
-  "timeout": 2359,
+  "timeout": 2359.0,
   "repeat": 1,
   "live_batch": "hair-validation",
   "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1,crash_dump=1,rt_timing_frames=60,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,dump_png_width=960,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=1,rt_sun_cascade_current=0,rt_native_tileset=0,rt_alpha_spill=0,ls_box=2,ls_k=0,rt_hit_reference=0,sharc=0,rt_bvh_split=1,rt_alpha=1,qa_exposure_hold=0,sharc_device=1,rt_scene_wait_log_frames=60,rt_hit_material=1,rt_hit_material_instanced=1,gi_hit_direct=1,gi_hit_sun=1,rt_emissive=1,rt_hit_emission=1,rt_cascade_casters=1,rt_scene_wait=1,rt_hit_material_recycle=1,fg_letterbox=1,rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=1,rt_origin=1,rt_xfb_mb=1408,rt_cascade_mb=587,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom=1,rt_hair_groom_primary=1,rt_hair_groom_primary_order=0,rt_hair_groom_tips=0",
@@ -58,18 +58,18 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.30399999999644933,
+      "seconds": 0.3019999999960419,
       "quantile": 0.95,
-      "samples": 437,
+      "samples": 402,
       "maximum": 0.43699999999807915
     },
     "trace_capture_stall": {
-      "seconds": 2.71857,
-      "source": "wf7a-s8-fg2.1.164300.log",
+      "seconds": 2.7200900000000003,
+      "source": "wf1-s8-fg2.1.100826.log",
       "quantile": 0.95,
-      "samples": 437,
+      "samples": 402,
       "maximum": 2.9799,
-      "logs": 75
+      "logs": 65
     }
   },
   "args": [
@@ -158,7 +158,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "First-load safety, order 0/1/0/1, per-draw card fallback, tips 0/1 and same-run player-head flicker. No reload.",
-  "estimated_phase_seconds": 438.4,
+  "estimated_phase_seconds": 431.4,
   "expect_every": [
     {
       "name": "first load quiet period",

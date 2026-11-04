@@ -1,13 +1,12 @@
 {
-  "status": "PREPARED_SCREENING_ONLY_NOT_AUTHORIZED",
+  "status": "PREPARED_NOT_AUTHORIZED",
   "queued": false,
   "limits": {
     "seconds_per_save": 300,
     "disk_mb": 2048
   },
   "blockers": [
-    "Original GI transient gate needs five K16 full float bursts (~11 GiB). PNG Q/E pairs cannot pass it.",
-    "No promotion from a dryrun or from screening. No live permission inherited."
+    "Original 5 K16 contract cannot be satisfied by PNG screening. 03-guards-camp is the smallest rejection screen (float static energy plus Q/E images and GPU cost); it can reject or identify a fix, never promote. Original calibrated 5 K16 transient qualification remains required for promotion."
   ],
   "cpu_verdicts": {
     "perf_hook_state": "REJECTED",
@@ -110,5 +109,12 @@
     "energy": "Static pre-post float scene mean in dumps.json, within same-run OFF-repeat noise; never PNG/bloom mean.",
     "costs": "CPU ms normalized by presents/draws/builds; frame time recorded but not judged unfocused. GPU pass ms within OFF repeat uncertainty.",
     "restoration": "All experimental CPU/GI/generated keys 0; qa_exposure_hold and diagnostics 0; runner restores original INI on all exit paths."
+  },
+  "guard_decision": {
+    "observable": "scripts.qa.pan_artifacts gi_luma edge/interior pixel-frame rates and mean, same-run OFF repeat spread; gi trace and temporal GPU ms",
+    "original_promotion_gate": "prev: edge below min(OFF) by more than OFF spread, interior/mean within OFF spread; mv: edge/interior no greater than max(OFF), mean within OFF spread; fresh current-sample fallback preserves energy. All five K16 complete and valid; FG active on all frames, registration and calibrated detector pass.",
+    "reject": "Any energy/detail regression, no edge benefit beyond OFF spread, or no useful effect rejects that bit for release. Missing evidence is INVALID.",
+    "tool": "python -m scripts.qa.pan_artifacts <five-K16-burst-directories> --out <analysis-dir> (original transient gate only; PNG screen cannot run this gate)",
+    "disk_mb": 600
   }
 }

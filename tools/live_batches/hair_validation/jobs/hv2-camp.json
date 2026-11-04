@@ -21,15 +21,14 @@
           0,
           0
         ],
-        "fps": 12.106537530270467,
-        "windows": 110,
+        "fps": 12.39669421487566,
+        "windows": 102,
         "logs": [
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\cp4-compact-camp-join.1.031842.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.015441.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\gf1-camp-fg2.1.033251.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\hig1-ip-grass-camp-fg2.1.102740.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m4p1-camp-fg2.1.031746.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\m5p3-camp-fg2.1.214813.log",
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\om3-camp-option-b-fg2.1.133450.log",
@@ -70,18 +69,25 @@
           0
         ],
         "fps": 6.949270326617158,
-        "windows": 2,
+        "windows": 1,
         "logs": [
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log",
-          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.083902.log"
+          "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\lr1-camp-fg2.1.043856.log"
         ]
       }
     ],
     "trace_export": {
-      "seconds": 0.3169999999954598,
+      "seconds": 0.3019999999960419,
       "quantile": 0.95,
-      "samples": 431,
+      "samples": 402,
       "maximum": 0.43699999999807915
+    },
+    "trace_capture_stall": {
+      "seconds": 2.7200900000000003,
+      "source": "wf1-s8-fg2.1.100826.log",
+      "quantile": 0.95,
+      "samples": 402,
+      "maximum": 2.9799,
+      "logs": 65
     }
   },
   "args": [
@@ -169,7 +175,7 @@
   ],
   "stop_on_dump": true,
   "purpose": "Hair validation: same-run cards/strands, held Q/E enter/leave view, zoom LOD, repeated toggles, diagnostic-free Ultra costs. No quality pass without analyzer evidence.",
-  "estimated_phase_seconds": 327.0,
+  "estimated_phase_seconds": 322.3,
   "expect_every": [
     {
       "name": "scene wait: every judged window traces its own frame's scene (0 timeouts)",

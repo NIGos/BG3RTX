@@ -12,7 +12,7 @@
     "motion_end": 20.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -33,7 +33,7 @@
     "motion_end": 20.0,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[shaders\\] cache: prefetched ",
       "gi: gi/[^ ]+ generation ",
@@ -59,7 +59,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -81,7 +81,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-00",
@@ -96,7 +96,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-00",
@@ -111,7 +111,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -129,7 +129,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -153,7 +153,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-00",
@@ -168,7 +168,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-00",
@@ -183,7 +183,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -201,7 +201,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-01",
@@ -216,7 +216,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-01",
@@ -231,7 +231,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-01",
@@ -246,7 +246,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -264,7 +264,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -286,7 +286,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-01",
@@ -301,7 +301,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-01",
@@ -316,7 +316,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -334,7 +334,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-02",
@@ -349,7 +349,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-02",
@@ -364,7 +364,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-02",
@@ -379,7 +379,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -397,7 +397,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -421,7 +421,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-02",
@@ -436,7 +436,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-02",
@@ -451,7 +451,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -469,7 +469,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-03",
@@ -484,7 +484,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-03",
@@ -499,7 +499,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-03",
@@ -514,7 +514,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -532,7 +532,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -554,7 +554,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-03",
@@ -569,7 +569,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-03",
@@ -584,7 +584,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -602,7 +602,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-04",
@@ -617,7 +617,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-04",
@@ -632,7 +632,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-04",
@@ -647,7 +647,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -665,7 +665,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -689,7 +689,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-04",
@@ -704,7 +704,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-04",
@@ -719,7 +719,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -737,7 +737,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-05",
@@ -752,7 +752,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-05",
@@ -767,7 +767,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-05",
@@ -782,7 +782,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -800,7 +800,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -822,7 +822,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-05",
@@ -837,7 +837,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-05",
@@ -852,7 +852,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -870,7 +870,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-06",
@@ -885,7 +885,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-06",
@@ -900,7 +900,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-06",
@@ -915,7 +915,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -933,7 +933,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -957,7 +957,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-06",
@@ -972,7 +972,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-06",
@@ -987,7 +987,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1005,7 +1005,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-07",
@@ -1020,7 +1020,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-07",
@@ -1035,7 +1035,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-07",
@@ -1050,7 +1050,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1068,7 +1068,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -1090,7 +1090,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-07",
@@ -1105,7 +1105,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-07",
@@ -1120,7 +1120,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1138,7 +1138,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-off-08",
@@ -1153,7 +1153,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-08",
@@ -1168,7 +1168,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-08",
@@ -1183,7 +1183,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1201,7 +1201,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -1225,7 +1225,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-08",
@@ -1240,7 +1240,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-08",
@@ -1255,7 +1255,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1273,7 +1273,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--rendered-on-09",
@@ -1288,7 +1288,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-on-09",
@@ -1303,7 +1303,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-on-09",
@@ -1318,7 +1318,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1336,7 +1336,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -1358,7 +1358,7 @@
     "motion_end": 2.7,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--presented-off-09",
@@ -1373,7 +1373,7 @@
     "motion_end": 3.3,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--energy-off-09",
@@ -1388,7 +1388,7 @@
     "motion_end": 6.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "trace_at": [
       1
     ]
@@ -1406,7 +1406,7 @@
     "motion_end": 2.4,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--timing-off-cost",
@@ -1421,7 +1421,7 @@
     "motion_end": 11.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--settle-timing-on-cost",
@@ -1436,7 +1436,7 @@
     "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
     "wait_log": [
       "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
       "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -1460,7 +1460,7 @@
     "motion_end": 11.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+    "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
   },
   {
     "label": "b1-pt-dialogue3--restore",
@@ -1475,7 +1475,7 @@
     "motion_end": 1.1,
     "pixels_per_second": 0,
     "direction": 0,
-    "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+    "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
     "wait_log": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
@@ -1493,10 +1493,12 @@
     "serial": 0,
     "motion_start": 1.1,
     "motion_end": 1.1,
-    "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
+    "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
     "wait_log": [
       "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
-      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+      "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built"
     ],
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -1763,13 +1765,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-base-a",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1811,13 +1813,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-fg-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1867,13 +1869,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-ao-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1924,13 +1926,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-sun-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -1981,13 +1983,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-gi-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2038,13 +2040,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-rr-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2095,13 +2097,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-cbt-off",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2152,13 +2154,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-post-late",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",
@@ -2208,13 +2210,13 @@
     "label": "b2-ef1-dialogue3-attribution--settle-base-b",
     "kind": "static",
     "speed": "static",
-    "seconds": 2.4,
+    "seconds": 5.6,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 2.4,
-    "motion_end": 2.4,
+    "motion_start": 5.6,
+    "motion_end": 5.6,
     "pixels_per_second": 0,
     "direction": 0,
     "registration_policy": "per-frame-exclude-unregistered",

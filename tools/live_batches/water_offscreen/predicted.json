@@ -1,45 +1,45 @@
 {
-  "_rule": "Written before dryrun; Git read only. No game launch authorized. Budgets are optimization targets, never quality hard stops.",
+  "_rule": "Prepared 2026-11-04 before live; no authorization. Bits judged independently.",
   "wo1-s8-hit-shade": {
     "shot-sparse-on-a": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 1: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
     },
     "shot-sparse-on-b": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
-    },
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 1: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
+    }
+  },
+  "wo1-s8-bit2": {
     "shot-cone-on-a": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 2: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
     },
     "shot-cone-on-b": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
-    },
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 2: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
+    }
+  },
+  "wo1-s8-bit4": {
     "shot-order-on-a": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 4: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
     },
     "shot-order-on-b": {
       "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
-    },
-    "shot-combined-on-a": {
-      "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
-    },
-    "shot-combined-on-b": {
-      "predicted": 0.0,
-      "source": "Fixed hit shade 2; static float water-compose mean, band from same-subkey OFF repeats and encoding uncertainty. No energy rescaling.",
-      "cost_target": "Reduce reflection GPU median/p90 from mode 2 baseline (0.8-2.4 ms median, p90 up to 3.3 ms); report measured cost regardless of target. Compose reported separately."
+      "source": "Same-run OFF-repeat noise and float encoding uncertainty; water-compose mean divided by exposure.",
+      "deciding_observable": "bit 4: every ON energy, coverage, truncation and reflections GPU median/p90",
+      "pass_rule": "Every ON within same-bit OFF energy and coverage repeat noise; invalid=0 and world truncated=0. Both ON cost medians and p90 improve beyond OFF-repeat spread; otherwise reject the bit. Missing observations INVALID."
     }
   }
 }

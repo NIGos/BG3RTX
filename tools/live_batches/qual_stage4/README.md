@@ -1,37 +1,36 @@
-# Stage 4: generated rows and GI guard screening
+# Stage 4 — generated rows and GI guard rejection screen
 
-Prepared offline only. No game launch, queue submission, permission, merge or commit.
-`python tools/live_batches/qual_stage4/make_batch.py` regenerates the two jobs/plans
-and predictions using read-only Git queries. Historical audit: merge_audit.json.
+Prepared offline only. `python tools/live_batches/qual_stage4/make_batch.py` uses the
+existing m4 jobs and shared live_flow retiming/readiness. No Git writes, game or queue.
 
-One job per save: camp 310 s phases, inn 209 s. S8 CPU screening is removed:
-perf_hook_state was rejected, perf_hitmat_lists had no gain, perf_submit_batch
-was within noise. All three keys remain off. Variants delta: 0.
+01-camp and 02-inn are aliases of the repaired m4 generated-row qualification jobs.
+Their deciding gates are retained intact. Run either these aliases or m4, never both.
+Camp ~6.57 min and inn ~5.39 min including 120 s load and expected readiness.
 
-Camp/inn retain every m4_generated gate, Ultra settings, and masks-off native
-source diagnostics. Generated rows start enabled to latch capture, then toggle
-inside one run. Compare share, clip checks, capacity, float energy and GPU ms
-against same-run OFF repeats; matching regexes alone do not qualify the feature.
-The speculative generated 2S capture restores recording-order independence;
-expect historical deferred-stream allocation 57 -> 93 MB, with live cost pending.
+03-guards-camp is the smallest fix-or-reject screen: warm both individual GI guard bits,
+then OFF / mv-only / prev-only / OFF, with static pre-post float energy, held Q/E image
+pairs, and diagnostic-free GI GPU cost windows. Reject a bit for release on energy loss
+outside the OFF repeat spread or visible detail/temporal regression. If an artifact exposes
+a concrete fix, implement and regate. A null or apparently improved PNG result does not
+promote either guard. Missing registration, energy or cost evidence is INVALID.
 
-Camp guard shots wait up to 60 s each for exact pipeline-ready regexes. Search
-all of this run's log, including earlier cached records; use the latest matching
-line for each regex. Waiting pauses phase time and fails closed at timeout.
-OFF shots post pointer centre with WM_MOUSEMOVE, without a Home key or camera
-movement; verify camera return registration. Q/E traces at 3 s are during motion.
-GI remains screening only: PNG pairs cannot satisfy the original K16 transient
-gate (~11 GiB). Preserve the original contracts in predicted.json. No promotion.
+The original transient gate measures 1-3-frame edge events: five calibrated K16 float
+bursts (~11 GiB), analyzed by `python -m scripts.qa.pan_artifacts`, with FG evidence,
+registered edge/interior rates and mean energy vs OFF repeats. A few PNG traces cannot
+supply these samples. That gate is preserved in predicted.json and has not been weakened.
+The lean screen can decide reject/fix only; original promotion remains unproven. No new
+large capture protocol is prepared. The release owner must reject unproven bits if no
+corrective hypothesis survives this screen, rather than claiming screening qualified them.
 
-Dryrun: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/qual_stage4/dryrun.ps1`.
-It uses synthetic runners in TEMP with no live authority; unknown phase fields fail.
-PASS: 2/2 INVALID without evidence, 2/2 structurally valid, scene-wait/capacity lints.
-Estimate: 499 s phases + <=240 s readiness waits + 2 x 120 s loads = 16.3 min;
-18 traces, 1,100 MB. Cost windows have no traces or expensive diagnostics.
+Run order: camp generated rows, then guard screen (separate launch to stay below 15 min);
+inn generated rows last. No S8 launch is needed. Guard screen is ~6 min with load;
+12 PNG traces, ~730 MB; all three jobs ~1.1 GB. Dryrun uses only fake runners:
+`powershell -File tools/live_batches/qual_stage4/dryrun.ps1`.
 
-Before a later live batch, obtain explicit user steering and use the existing
-serial queue. Keep builds/compiles out of cost windows. Do not copy jobs into
-pending now. The runner restores the original INI on exit/failure; final phases
-also reset experimental keys and diagnostics. Never modify saves.
+Readiness waits reconcile cached consumer builds and require fresh pipeline quiet. New
+transitions lack historical timing witnesses; timeout is INVALID. Expected minutes are
+planning bounds, not live receipts. No live authorization or quality promotion implied.
 
-2026-11-03 offline repair: explicitly warm generated rows OFF and masks OFF before the first diagnostic. The original rejected S8 CPU screen remains historical and absent; all CPU keys stay off.
+Cold-wait limit: each readiness wait is at most 40 s and fails INVALID if not ready.
+Full job timeouts include every wait plus 120 s loading: camp 704 s, inn 633 s,
+guard screen 611 s (the latter applies only to qual_stage4). No launch can run 15 min.

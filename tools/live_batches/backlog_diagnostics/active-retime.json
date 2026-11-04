@@ -1,0 +1,160 @@
+{
+  "corpus_logs": 78,
+  "jobs": {
+    "combined-Campsite---27h-part1.json": {
+      "problems": [],
+      "seconds": 675.4000000000002,
+      "readiness_seconds": 55.845
+    },
+    "combined-Campsite---27h-part2.json": {
+      "problems": [],
+      "seconds": 240.99999999999997,
+      "readiness_seconds": 11.68
+    },
+    "combined-Test-Dialogue3.json": {
+      "problems": [],
+      "seconds": 584.4000000000004,
+      "readiness_seconds": 0.324
+    },
+    "combined-Water-Queens-House-part1.json": {
+      "problems": [],
+      "seconds": 584.9000000000001,
+      "readiness_seconds": 36.14
+    },
+    "combined-Water-Queens-House-part2.json": {
+      "problems": [],
+      "seconds": 567.8999999999999,
+      "readiness_seconds": 25.298
+    },
+    "combined-Water-Queens-House-part3.json": {
+      "problems": [],
+      "seconds": 636.6000000000001,
+      "readiness_seconds": 17.017
+    },
+    "cp4-compact-camp-join.json": {
+      "problems": [],
+      "seconds": 100.89999999999999,
+      "readiness_seconds": 29.645
+    },
+    "cp5-compact-s6-publication.json": {
+      "problems": [],
+      "seconds": 203.29999999999995,
+      "readiness_seconds": 0
+    },
+    "ef1-dialogue3-attribution.json": {
+      "problems": [],
+      "seconds": 161.20000000000005,
+      "readiness_seconds": 0.198
+    },
+    "go1-camp.json": {
+      "problems": [],
+      "seconds": 573.4000000000001,
+      "readiness_seconds": 26.2
+    },
+    "go2-s8.json": {
+      "problems": [],
+      "seconds": 408.80000000000007,
+      "readiness_seconds": 18.07
+    },
+    "go2-camp-high.json": {
+      "problems": [],
+      "seconds": 240.99999999999997,
+      "readiness_seconds": 11.68
+    },
+    "go2-s8-medium.json": {
+      "problems": [],
+      "seconds": 189.7,
+      "readiness_seconds": 8.428
+    },
+    "hc1-dialogue1-fg2.json": {
+      "problems": [],
+      "seconds": 401.50000000000006,
+      "readiness_seconds": 65.794
+    },
+    "hc2-campsite-fg2.json": {
+      "problems": [],
+      "seconds": 340.5,
+      "readiness_seconds": 52.4
+    },
+    "hv1-dialogue1.json": {
+      "problems": [],
+      "seconds": 340.7,
+      "readiness_seconds": 0.32
+    },
+    "hv2-camp.json": {
+      "problems": [],
+      "seconds": 322.30000000000007,
+      "readiness_seconds": 0.0
+    },
+    "hv3-s8.json": {
+      "problems": [],
+      "seconds": 270.20000000000005,
+      "readiness_seconds": 0.0
+    },
+    "hv4-gpuav.json": {
+      "problems": [],
+      "seconds": 398.80000000000007,
+      "readiness_seconds": 0.032
+    },
+    "hv5-reload-bisect.json": {
+      "problems": [],
+      "seconds": 488.30000000000007,
+      "readiness_seconds": 0.046
+    },
+    "hv6-strand-diagnostic.json": {
+      "problems": [],
+      "seconds": 431.40000000000003,
+      "readiness_seconds": 0.042
+    },
+    "hv7-pass-bisect.json": {
+      "problems": [],
+      "seconds": 303.9,
+      "readiness_seconds": 0.0
+    },
+    "hv8-probe-aftermath.json": {
+      "problems": [],
+      "seconds": 118.69999999999999,
+      "readiness_seconds": 0.0
+    },
+    "pt-dialogue3.json": {
+      "problems": [],
+      "seconds": 393.3000000000002,
+      "readiness_seconds": 0.126
+    },
+    "pt-s8.json": {
+      "problems": [],
+      "seconds": 139.5,
+      "readiness_seconds": 0.0
+    },
+    "su1-ultra-s8-fg2.json": {
+      "problems": [],
+      "seconds": 174.99999999999997,
+      "readiness_seconds": 18.07
+    },
+    "wf9-s8-compose-shift.json": {
+      "problems": [],
+      "seconds": 306.90000000000003,
+      "readiness_seconds": 8.589
+    },
+    "wo1-s8-bit2.json": {
+      "problems": [],
+      "seconds": 188.00000000000006,
+      "readiness_seconds": 8.428
+    },
+    "wo1-s8-bit4.json": {
+      "problems": [],
+      "seconds": 188.00000000000006,
+      "readiness_seconds": 8.428
+    },
+    "wo1-s8-hit-shade.json": {
+      "problems": [],
+      "seconds": 188.00000000000006,
+      "readiness_seconds": 8.428
+    },
+    "wsf1-s8-interface-column.json": {
+      "problems": [],
+      "seconds": 157.0,
+      "readiness_seconds": 92.708
+    }
+  }
+}

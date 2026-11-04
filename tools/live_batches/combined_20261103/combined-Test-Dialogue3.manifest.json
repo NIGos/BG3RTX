@@ -43,23 +43,23 @@
             }
           ],
           "trace_export": {
-            "seconds": 0.3169999999954598,
+            "seconds": 0.3019999999960419,
             "quantile": 0.95,
-            "samples": 431,
+            "samples": 402,
             "maximum": 0.43699999999807915
           },
           "trace_capture_stall": {
-            "seconds": 2.71857,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.7200900000000003,
+            "source": "wf1-s8-fg2.1.100826.log",
             "quantile": 0.95,
-            "samples": 428,
+            "samples": 402,
             "maximum": 2.9799,
-            "logs": 73
+            "logs": 65
           }
         },
         "repeat": 1,
         "stop_on_dump": false,
-        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,rr_hair_resolve=0,pan_post=1,qa_exposure_hold=0",
+        "set": "preset=ultra,headless=0,fps_cap=0,rt=1,reflex=1,crash_dump=0,rt_stats=0,rt_primary_check=0,rt_primary_identity=0,ls_stats=0,ls_check=0,rf_stats=0,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rr_guides_at=1,rr_guides_v2=1,rt_native_hair=0,rt_native_scalp=0,rt_hair_physical_origin=0,pan_prepare=1,pan_edge=1,pan_water=0,pan_inputs=0,pan_capture=0,pan_delay_ms=0,fg_snap=0,fg_snap_any=1,fg_snap_delay_ms=0,fg_state_every=30,fg_letterbox=1,dump_images=0,dump_raw=0,dump_shaders=0,rt_timing_frames=120,dump_png_width=384,fg_log_presents=6,fg_snap_delay=0,rt_xfb_mb=1024,fg=2,rr=1,rr_post=1,rr_cbt=1,rr_sss=1,rr_post_temporal=0,pan_post=1,qa_exposure_hold=0",
         "args": [
           "-RealPresent",
           "-Move",
@@ -1064,7 +1064,7 @@
           "motion_end": 20.0,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
           "wait_log": [
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation ",
@@ -1085,7 +1085,7 @@
           "motion_end": 20.0,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
           "wait_log": [
             "\\[shaders\\] cache: prefetched ",
             "gi: gi/[^ ]+ generation ",
@@ -1111,7 +1111,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -1133,7 +1133,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-00",
@@ -1148,7 +1148,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-00",
@@ -1163,7 +1163,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1181,7 +1181,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -1205,7 +1205,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-00",
@@ -1220,7 +1220,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-00",
@@ -1235,7 +1235,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1253,7 +1253,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-on-01",
@@ -1268,7 +1268,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-01",
@@ -1283,7 +1283,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-01",
@@ -1298,7 +1298,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1316,7 +1316,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -1338,7 +1338,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-01",
@@ -1353,7 +1353,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-01",
@@ -1368,7 +1368,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1386,7 +1386,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-off-02",
@@ -1401,7 +1401,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-02",
@@ -1416,7 +1416,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-02",
@@ -1431,7 +1431,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1449,7 +1449,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -1473,7 +1473,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-02",
@@ -1488,7 +1488,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-02",
@@ -1503,7 +1503,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1521,7 +1521,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-on-03",
@@ -1536,7 +1536,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-03",
@@ -1551,7 +1551,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-03",
@@ -1566,7 +1566,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1584,7 +1584,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -1606,7 +1606,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-03",
@@ -1621,7 +1621,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-03",
@@ -1636,7 +1636,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1654,7 +1654,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-off-04",
@@ -1669,7 +1669,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-04",
@@ -1684,7 +1684,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-04",
@@ -1699,7 +1699,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1717,7 +1717,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -1741,7 +1741,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-04",
@@ -1756,7 +1756,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-04",
@@ -1771,7 +1771,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1789,7 +1789,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-on-05",
@@ -1804,7 +1804,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-05",
@@ -1819,7 +1819,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-05",
@@ -1834,7 +1834,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1852,7 +1852,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -1874,7 +1874,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-05",
@@ -1889,7 +1889,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-05",
@@ -1904,7 +1904,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1922,7 +1922,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-off-06",
@@ -1937,7 +1937,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-06",
@@ -1952,7 +1952,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-06",
@@ -1967,7 +1967,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -1985,7 +1985,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -2009,7 +2009,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-06",
@@ -2024,7 +2024,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-06",
@@ -2039,7 +2039,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2057,7 +2057,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-on-07",
@@ -2072,7 +2072,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-07",
@@ -2087,7 +2087,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-07",
@@ -2102,7 +2102,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2120,7 +2120,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -2142,7 +2142,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-07",
@@ -2157,7 +2157,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-07",
@@ -2172,7 +2172,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2190,7 +2190,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-off-08",
@@ -2205,7 +2205,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-08",
@@ -2220,7 +2220,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-08",
@@ -2235,7 +2235,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2253,7 +2253,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -2277,7 +2277,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-08",
@@ -2292,7 +2292,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-08",
@@ -2307,7 +2307,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2325,7 +2325,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "rendered-on-09",
@@ -2340,7 +2340,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-on-09",
@@ -2355,7 +2355,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-on-09",
@@ -2370,7 +2370,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2388,7 +2388,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -2410,7 +2410,7 @@
           "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "presented-off-09",
@@ -2425,7 +2425,7 @@
           "motion_end": 3.3,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
         },
         {
           "label": "energy-off-09",
@@ -2440,7 +2440,7 @@
           "motion_end": 6.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "trace_at": [
             1
           ]
@@ -2458,7 +2458,7 @@
           "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "timing-off-cost",
@@ -2473,7 +2473,7 @@
           "motion_end": 11.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "settle-timing-on-cost",
@@ -2488,7 +2488,7 @@
           "motion_end": 5.6,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
           "wait_log": [
             "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
             "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -2512,7 +2512,7 @@
           "motion_end": 11.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+          "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
         },
         {
           "label": "restore",
@@ -2527,7 +2527,7 @@
           "motion_end": 1.1,
           "pixels_per_second": 0,
           "direction": 0,
-          "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+          "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
           "wait_log": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
@@ -2551,7 +2551,7 @@
         "window_mode": "visible_unfocused_fg",
         "traces": 0,
         "hold": 90,
-        "timeout": 3519,
+        "timeout": 3519.0,
         "live_flow": {
           "expected_fps": 30,
           "settings_latency_s": 1,
@@ -2568,28 +2568,29 @@
                 0,
                 0
               ],
-              "fps": 25.684931506736675,
-              "windows": 76,
+              "fps": 23.49256068911431,
+              "windows": 163,
               "logs": [
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef1-dialogue3-attribution.1.121018.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\ef2-dialogue3-hair-guide.1.130232.log",
+                "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.032335.log",
                 "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
               ]
             }
           ],
           "trace_export": {
-            "seconds": 0.3169999999954598,
+            "seconds": 0.3019999999960419,
             "quantile": 0.95,
-            "samples": 439,
+            "samples": 402,
             "maximum": 0.43699999999807915
           },
           "trace_capture_stall": {
-            "seconds": 2.71857,
-            "source": "wf7a-s8-fg2.1.164300.log",
+            "seconds": 2.7200900000000003,
+            "source": "wf1-s8-fg2.1.100826.log",
             "quantile": 0.95,
-            "samples": 428,
+            "samples": 402,
             "maximum": 2.9799,
-            "logs": 73
+            "logs": 65
           }
         },
         "repeat": 1,
@@ -2907,7 +2908,7 @@
           "^Run ended: done",
           "\\[motion-plan\\] complete phases=38\\b"
         ],
-        "estimated_phase_seconds": 158.5,
+        "estimated_phase_seconds": 161.2,
         "purpose": "Offline prepared only. No supported dialogue pause key. Register every captured frame; exclude cuts, never warp. Attribution only; retain default native hair. See predicted.json."
       },
       "plan": [
@@ -2975,7 +2976,7 @@
             "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )",
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3002,7 +3003,7 @@
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
             "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation "
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3029,7 +3030,7 @@
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
             "gi: gi/rt_shadow\\.hlsl[^ ]* generation "
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3056,7 +3057,7 @@
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
             "gi: gi/gi_composite\\.hlsl[^ ]* generation "
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3083,7 +3084,7 @@
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
             "\\[shaders\\].*(?: compiled(?: in| \\()|read from the cache|cache: prefetched )"
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3110,7 +3111,7 @@
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
             "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built"
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3162,7 +3163,7 @@
             "\\[rrpost\\] rr_post\\.hlsl:resolve pipeline built",
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0,
+          "wait_log_timeout": 2.0,
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ]
@@ -3171,13 +3172,13 @@
           "label": "settle-base-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3187,13 +3188,13 @@
           "label": "rendered-base-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98300,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3203,13 +3204,13 @@
           "label": "presented-base-a",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3219,13 +3220,13 @@
           "label": "settle-fg-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3237,19 +3238,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-fg-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98301,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3259,13 +3260,13 @@
           "label": "presented-fg-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3275,13 +3276,13 @@
           "label": "settle-ao-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3294,19 +3295,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-ao-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98302,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3316,13 +3317,13 @@
           "label": "presented-ao-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3332,13 +3333,13 @@
           "label": "settle-sun-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3351,19 +3352,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-sun-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98303,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3373,13 +3374,13 @@
           "label": "presented-sun-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3389,13 +3390,13 @@
           "label": "settle-gi-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3408,19 +3409,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-gi-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98304,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3430,13 +3431,13 @@
           "label": "presented-gi-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3446,13 +3447,13 @@
           "label": "settle-rr-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3465,19 +3466,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-rr-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98305,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3487,13 +3488,13 @@
           "label": "presented-rr-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3503,13 +3504,13 @@
           "label": "settle-cbt-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3522,19 +3523,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-cbt-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98306,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3544,13 +3545,13 @@
           "label": "presented-cbt-off",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3560,13 +3561,13 @@
           "label": "settle-post-late",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3584,13 +3585,13 @@
           "label": "rendered-post-late",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98307,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3600,13 +3601,13 @@
           "label": "presented-post-late",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3616,13 +3617,13 @@
           "label": "settle-base-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.3,
+          "seconds": 2.4,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 2.3,
-          "motion_end": 2.3,
+          "motion_start": 2.4,
+          "motion_end": 2.4,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3634,19 +3635,19 @@
           "wait_log_fresh": [
             "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
           ],
-          "wait_log_timeout": 180.0
+          "wait_log_timeout": 2.0
         },
         {
           "label": "rendered-base-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 2.6,
+          "seconds": 2.7,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0.1,
           "serial": 98308,
-          "motion_start": 2.6,
-          "motion_end": 2.6,
+          "motion_start": 2.7,
+          "motion_end": 2.7,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3656,13 +3657,13 @@
           "label": "presented-base-b",
           "kind": "static",
           "speed": "static",
-          "seconds": 3.7,
+          "seconds": 3.8,
           "repeat_ms": 0,
           "scan": 16,
           "capture_at": 0,
           "serial": 0,
-          "motion_start": 3.7,
-          "motion_end": 3.7,
+          "motion_start": 3.8,
+          "motion_end": 3.8,
           "pixels_per_second": 0,
           "direction": 0,
           "registration_policy": "per-frame-exclude-unregistered",
@@ -3701,7 +3702,7 @@
       "motion_end": 20.0,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
       "wait_log": [
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation ",
@@ -3722,7 +3723,7 @@
       "motion_end": 20.0,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
       "wait_log": [
         "\\[shaders\\] cache: prefetched ",
         "gi: gi/[^ ]+ generation ",
@@ -3748,7 +3749,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -3770,7 +3771,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98800,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-00",
@@ -3785,7 +3786,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-00",
@@ -3800,7 +3801,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -3818,7 +3819,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -3842,7 +3843,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98801,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-00",
@@ -3857,7 +3858,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-00",
@@ -3872,7 +3873,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -3890,7 +3891,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-on-01",
@@ -3905,7 +3906,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98802,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-01",
@@ -3920,7 +3921,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-01",
@@ -3935,7 +3936,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -3953,7 +3954,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -3975,7 +3976,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98803,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-01",
@@ -3990,7 +3991,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-01",
@@ -4005,7 +4006,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4023,7 +4024,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-off-02",
@@ -4038,7 +4039,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98804,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-02",
@@ -4053,7 +4054,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-02",
@@ -4068,7 +4069,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4086,7 +4087,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -4110,7 +4111,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98805,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-02",
@@ -4125,7 +4126,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-02",
@@ -4140,7 +4141,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4158,7 +4159,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-on-03",
@@ -4173,7 +4174,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98806,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-03",
@@ -4188,7 +4189,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-03",
@@ -4203,7 +4204,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4221,7 +4222,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -4243,7 +4244,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98807,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-03",
@@ -4258,7 +4259,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-03",
@@ -4273,7 +4274,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4291,7 +4292,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-off-04",
@@ -4306,7 +4307,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98808,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-04",
@@ -4321,7 +4322,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-04",
@@ -4336,7 +4337,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4354,7 +4355,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -4378,7 +4379,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98809,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-04",
@@ -4393,7 +4394,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-04",
@@ -4408,7 +4409,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4426,7 +4427,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-on-05",
@@ -4441,7 +4442,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98810,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-05",
@@ -4456,7 +4457,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-05",
@@ -4471,7 +4472,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4489,7 +4490,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -4511,7 +4512,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98811,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-05",
@@ -4526,7 +4527,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-05",
@@ -4541,7 +4542,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4559,7 +4560,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-off-06",
@@ -4574,7 +4575,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98812,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-06",
@@ -4589,7 +4590,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-06",
@@ -4604,7 +4605,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4622,7 +4623,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -4646,7 +4647,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98813,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-06",
@@ -4661,7 +4662,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-06",
@@ -4676,7 +4677,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4694,7 +4695,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-on-07",
@@ -4709,7 +4710,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98814,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-07",
@@ -4724,7 +4725,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-07",
@@ -4739,7 +4740,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4757,7 +4758,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -4779,7 +4780,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98815,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-07",
@@ -4794,7 +4795,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-07",
@@ -4809,7 +4810,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4827,7 +4828,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-off-08",
@@ -4842,7 +4843,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98816,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-08",
@@ -4857,7 +4858,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-08",
@@ -4872,7 +4873,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4890,7 +4891,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -4914,7 +4915,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98817,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-08",
@@ -4929,7 +4930,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-08",
@@ -4944,7 +4945,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -4962,7 +4963,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--rendered-on-09",
@@ -4977,7 +4978,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98818,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-on-09",
@@ -4992,7 +4993,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-on-09",
@@ -5007,7 +5008,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -5025,7 +5026,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -5047,7 +5048,7 @@
       "motion_end": 2.7,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=98819,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--presented-off-09",
@@ -5062,7 +5063,7 @@
       "motion_end": 3.3,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=8,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--energy-off-09",
@@ -5077,7 +5078,7 @@
       "motion_end": 6.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "trace_at": [
         1
       ]
@@ -5095,7 +5096,7 @@
       "motion_end": 2.4,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--timing-off-cost",
@@ -5110,7 +5111,7 @@
       "motion_end": 11.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--settle-timing-on-cost",
@@ -5125,7 +5126,7 @@
       "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=1,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1",
       "wait_log": [
         "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
         "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built",
@@ -5149,7 +5150,7 @@
       "motion_end": 11.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=1,rr_hair_resolve=0,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
+      "set": "rr=1,rr_post=1,rr_post_temporal=1,fg=2,pan_edge=1,pan_post=0,pan_prepare=1,pan_capture=0,fg_snap=0,qa_exposure_hold=1"
     },
     {
       "label": "b1-pt-dialogue3--restore",
@@ -5164,7 +5165,7 @@
       "motion_end": 1.1,
       "pixels_per_second": 0,
       "direction": 0,
-      "set": "rr=1,rr_post=1,rr_post_temporal=0,rr_hair_resolve=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
+      "set": "rr=1,rr_post=1,rr_post_temporal=0,fg=2,pan_edge=0,pan_post=0,pan_prepare=0,pan_capture=0,fg_snap=0,qa_exposure_hold=0",
       "wait_log": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
       ],
@@ -5182,10 +5183,12 @@
       "serial": 0,
       "motion_start": 1.1,
       "motion_end": 1.1,
-      "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_hair_resolve=0,rr_post=1,rr_post_temporal=0,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
+      "set": "crash_dump=0,dump_images=0,dump_png_width=1280,dump_raw=0,dump_shaders=0,fg=2,fg_letterbox=1,fg_log_presents=6,fg_snap=0,fg_snap_any=1,fg_snap_delay=0,fg_snap_delay_ms=1000,fg_state_every=30,fps_cap=0,gi_ao=1,gi_debug=0,gi_strength=1,headless=0,ls_check=0,ls_debug=0,ls_stats=0,pan_capture=0,pan_delay_ms=0,pan_edge=1,pan_inputs=0,pan_post=0,pan_prepare=1,pan_water=0,preset=ultra,qa_exposure_hold=0,reflex=1,rf_debug=0,rf_stats=0,rr=1,rr_cbt=1,rr_guides_at=1,rr_guides_v2=1,rr_post=1,rr_post_temporal=1,rr_show=0,rr_sss=1,rt=1,rt_debug=0,rt_hair_physical_origin=0,rt_native_hair=0,rt_native_scalp=0,rt_primary_check=0,rt_primary_identity=0,rt_shadows=1,rt_stats=0,rt_timing_frames=120,rt_xfb_mb=1024",
       "wait_log": [
         "gi: gi/gi_ao_apply\\.hlsl[^ ]* generation ",
-        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal pipeline built",
+        "\\[rrpost\\] rr_post\\.hlsl:temporal_final pipeline built"
       ],
       "wait_log_fresh": [
         "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
@@ -5452,13 +5455,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-base-a",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5500,13 +5503,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-fg-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5556,13 +5559,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-ao-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5613,13 +5616,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-sun-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5670,13 +5673,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-gi-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5727,13 +5730,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-rr-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5784,13 +5787,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-cbt-off",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5841,13 +5844,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-post-late",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",
@@ -5897,13 +5900,13 @@
       "label": "b2-ef1-dialogue3-attribution--settle-base-b",
       "kind": "static",
       "speed": "static",
-      "seconds": 2.4,
+      "seconds": 5.6,
       "repeat_ms": 0,
       "scan": 16,
       "capture_at": 0,
       "serial": 0,
-      "motion_start": 2.4,
-      "motion_end": 2.4,
+      "motion_start": 5.6,
+      "motion_end": 5.6,
       "pixels_per_second": 0,
       "direction": 0,
       "registration_policy": "per-frame-exclude-unregistered",

@@ -1,32 +1,21 @@
 {
-  "status": "PASS_SYNTHETIC_ONLY",
+  "status": "PASS_OFFLINE_STRUCTURAL_ONLY",
+  "date": "2026-11-04",
   "game_launched": false,
-  "commands": [
-    "python tools/live_batches/qual_stage4/make_batch.py",
-    "powershell -NoProfile -ExecutionPolicy Bypass -File tools/live_batches/qual_stage4/dryrun.ps1",
-    "git diff --check"
+  "queue_written": false,
+  "live_flow": "PASS 3/3",
+  "dryrun": "shared lean_dryrun structural, fake negative/positive queue paths; final wait cap separately rechecked by live_flow",
+  "batch_jobs_lint_test": "4/6 pass; 2 global active/combined inventory failures during concurrent water/pak edits; parent owns shared refresh",
+  "planning_minutes": [
+    6.57,
+    5.39,
+    5.5
   ],
-  "checks": [
-    "2 plans sampled; unknown phase fields rejected",
-    "visible_unfocused_fg normalized",
-    "scene-wait lint",
-    "capacity lint",
-    "run A: 2/2 INVALID without evidence",
-    "run B: 2/2 structurally valid",
-    "631 camera-input and permission checks; cached readiness and runtime timeout tested",
-    "Build and all 134 CTests passed",
-    "QA detectors passed",
-    "git diff --check passed"
+  "full_timeout_seconds": [
+    704,
+    633,
+    611
   ],
-  "phase_seconds": [
-    300,
-    199
-  ],
-  "estimated_capture_mb": 1100,
-  "qualification": "Generated rows READY_FOR_LIVE; GI screening only; original gates pending; CPU jobs dropped",
-  "environment": "Temporary py -3 launcher shim for installed python; no project tool modification",
-  "pipeline_ready_wait_seconds_max": 240,
-  "trace_count": 18,
-  "estimated_minutes_with_loading_and_waits": 16.3,
-  "scratch": "%TEMP%/bg3rtx-qual_stage4-dryrun/20261103-145401"
+  "qualification": "READY_FOR_LIVE generated rows; GI guard screen decides fix/reject only, never promotion",
+  "historical_replay": "unproven new transitions; not rendering evidence"
 }

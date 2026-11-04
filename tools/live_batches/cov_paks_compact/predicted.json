@@ -1,5 +1,5 @@
 {
-  "status": "READY_FOR_LIVE",
+  "status": "READY_FOR_LIVE_S6_UNQUALIFIED",
   "game_launched": false,
   "catalogue_rows": 40983,
   "catalogue_binary_bytes": 41956440,
@@ -11,7 +11,7 @@
     "uv_missing": "expected majority; attempts = unique + missing + ambiguous + invalid",
     "uv_ambiguous": "may be nonzero; disputed UV signatures must stay rejected",
     "uv_invalid": "expected 0 for finite retired XFB samples",
-    "exact_material_matches": ">0 in each camp ON window; candidate frequency does not predict a distinct mesh count",
+    "exact_material_matches": ">0 each S6 ON; camp had 0 and is retained only as historical diagnostic.",
     "rejections": "Existing missing/ambiguous/invalid/witness/recipe_cull/inputs_pending remain; full witness mismatch is explicit",
     "id_equal": null,
     "id_different": null,
@@ -23,9 +23,9 @@
     "published_records": ">0 in each ON window",
     "basis_ready": ">0 in each ON window, after existing basis verification"
   },
-  "result_rule": "Every ON window requires UV attempts >0, witness_ok >0, published_records >0 and pak records/basis ready >0. Any zero fails this publication hypothesis; UV-only candidates never qualify. No promotion or visual/energy/GPU-cost claim.",
-  "window_bound": "120-frame producer with rt_stats; cp4 observed 240 frames in 16.020 s, or 8.010 s per line. Rounded 9 s period plus 1 s settings latency and one straddling line requires >19 s; both ON windows are 19.1 s.",
-  "offline_status": "Host build and 7/7 focused CTests pass; production ring replay covers match, mismatch, budgets, chunks, discarded submissions and reuse. live_flow preflight passes (1 job, 0 failures). Historical publish-audit.json remains the sampled-only baseline.",
+  "result_rule": "Reject if either ON has zero witness_ok/published_records/exact records/basis, or an unsupported witness/recipe/cull/resource/COLOR path publishes. All publication still follows layer/hit_material.cpp unchanged policy. Zero publication is a candidate rejection, not a quality pass. Missing producers/readiness/captures are INVALID. Require conservative null mean energy within same-run OFF-repeat Student/Bonferroni noise (m4_promotion_gate --pool run); no arbitrary positive-energy allowance. Inspect same-exposure images for improved correct material detail and no leaks, substitution or regression. Any resolved mean shift requires a matched PT explanation before promotion; this job alone cannot authorize it. Report every ON cost vs its neighbouring OFF windows; useful correctness is not rejected for cost alone.",
+  "window_bound": "Shared live_flow retime: 120-frame publication and 300-frame cost producers. Finite readiness caps: warmup 180 s, changed states 60 s each; global job timeout 850 s and max_minutes 15. No compilation/diagnostics in cost windows.",
+  "offline_status": "Prepared with shared retime; fresh lint/dryrun receipts listed in README. No game launched.",
   "readback_budget": {
     "bytes_per_frame": 4194304,
     "jobs_in_flight": 16,
@@ -33,5 +33,11 @@
     "oversize": "Explicitly unsupported above the bounded raw job capacity; no GPU wait. Larger-than-frame ranges progress in chunks.",
     "raw_retirements_per_frame": 2,
     "source_policy": "Raw float3 positions and half2/float2 UVs; mapped mutable buffers remain unknown. Source writes/reuse invalidate per-witness proof and dependent records."
-  }
+  },
+  "scene": "Adamantine Forge (S6 Tileset/HLOD-mask cohort)",
+  "job": "cp5-compact-s6-publication",
+  "deciding_observable": "Positive exact witnessed publication and verified basis in both S6 ON windows; same-run image/energy and full GPU timers.",
+  "analysis_command": "python -m tools.m4_promotion_gate <log> --batch cov_paks_compact --pool run",
+  "coverage": "Full witness/COLOR/resource/recipe/cull/basis are existing publication prerequisites, not UV-count proxies. Both ON diag windows require witness_ok >0, published_records >0, exact >0, records >0 and basis ready >0. Rejection counters may be positive for unsupported candidates; do not require all scene candidates to qualify.",
+  "capture_contract": "OFF-a / ON / OFF-b / ON-repeat / OFF-c static float pre-post scene and PNG at held exposure, five traces; image checks use native scene/material crops and OFF-repeat noise. At most 310 MB estimated."
 }
