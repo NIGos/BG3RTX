@@ -206,7 +206,7 @@ Check (-not (Test-CameraPlanReady $readyStep 'temporal spec mv=1 pg=0, pipeline'
 Check (-not (Test-CameraPlanReady $readyStep "temporal spec mv=0 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline")) 'wrong specialization blocks capture'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline") 'all matching specializations release capture'
 Check ($runner.IndexOf('if ($step.wait_log -and -not $phaseReady)') -lt $runner.IndexOf('if ($null -ne $step.trace_at -and')) 'runner checks readiness before any phase trace'
-Check ($runner -match '(?s)phaseWaitAt -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
+Check ($runner -match '(?s)waitAnchor -ge \$step.wait_log_timeout.*?pipeline readiness timed out:.*?break') 'readiness timeout aborts before trace'
 Check (Test-CameraPlanReady $readyStep "temporal spec mv=1 pg=0, pipeline`ntrace spec mv=0 pg=0, pipeline`nunrelated later line") 'unchanged cached spec releases a later phase'
 Check (-not (Test-CameraPlanReady @{wait_log=@('temporal.*trace')} "temporal`ntrace")) 'readiness cannot match across log lines'
 Assert-CameraPlanFields @{wait_log=@('ready');wait_log_timeout=60;recenter=$true}
@@ -276,6 +276,7 @@ $waitBlock=[scriptblock]::Create($waitSource)
 $step.label='cards-b';$step.wait_log_timeout=5
 $planClock=@{Elapsed=@{TotalSeconds=20;TotalMilliseconds=20000}}
 $phaseReady=$false;$phaseWaitAt=10;$panCaptureSent=$true;$panIndex=6;$elapsed=0;$after=$false;$result=''
+$phaseShaderProgress=@{}
 Set-Content $log '07:01:40.963 [cfg] settings read'
 while ($true) { . $waitBlock; $after=$true; break }
 Check (-not $after -and (Get-Content $ini -Raw) -match 'pan_capture=0') 'hv6 missing readiness cannot arm explicit burst'
@@ -303,4 +304,35 @@ $step.wait_log=@('missing');$phaseReady=$false;$phaseWaitAt=10;$after=$false;$re
 while ($true) { . $waitBlock; $after=$true; break }
 Check (-not $after -and $result -eq 'pipeline readiness timed out: cached; missing: missing') 'actual runtime timeout exits before downstream capture'
 Check ($runner -match '(?s)if \(\$step.recenter.*?Send-PlanMouse 0x0200 0.*?\[motion-recenter\]') 'recenter posts pointer centre and emits marker'
+# Cold-cache progress renews only the prefetch inactivity budget. Re-reading the
+# same log, periodic summaries and failed compiles must never keep a stall alive.
+$prefetch=@{wait_log=@('\[shaders\] cache: prefetched ');label='warmup';wait_log_timeout=180}
+$progress=@{}
+$compiled='08:53:20 [shaders] gi/test.hlsl?A=1:main compiled in 12000 ms, prefetch (generation 1)'
+Check ((Get-CameraPlanWaitAnchor $progress $prefetch $compiled 100 10) -eq 10) 'historical shader completions grant no extension'
+$advancing=$compiled+"`n08:55:00 [shaders] gi/next.hlsl:main compiled in 30000 ms (generation 1)"
+Check ((Get-CameraPlanWaitAnchor $progress $prefetch $advancing 200 10) -eq 200) 'new completed shader renews prefetch timeout'
+Check ((Get-CameraPlanWaitAnchor $progress $prefetch $advancing 300 10) -eq 200) 'same log cannot renew timeout'
+$noise=$advancing+"`n[shaders] cache: 46 hits, 44 compiled, 0 failed`n[shaders] bad.hlsl:main FAILED, keeping previous in 1 ms"
+Check ((Get-CameraPlanWaitAnchor $progress $prefetch $noise 380 10) -eq 200) 'summary and failure are not advancing compiles'
+Check ((Get-CameraPlanWaitAnchor $progress $prefetch ($noise+"`n[shaders] cache: prefetched 90 requests") 381 10) -eq 10) 'prefetch complete restores ordinary deadline for other missing witnesses'
+Check (-not (Test-CameraPlanReady $prefetch $noise)) 'compilation progress alone is never readiness'
+Check (Test-CameraPlanReady $prefetch ($noise+"`n[shaders] cache: prefetched 90 requests")) 'prefetch witness releases warmup'
+Check ((Get-CameraPlanWaitAnchor $progress @{wait_log=@('other')} ($noise+"`n"+$compiled) 400 10) -eq 10) 'unrelated waits keep their original timeout'
+# Exercise the production wait block beyond its original deadline. Substitute
+# only the sleep so one poll returns to the test without waiting or launching.
+$pollBlock=[scriptblock]::Create($waitSource.Replace('Start-Sleep -Milliseconds 100', '$waited=$true;break'))
+$step=$prefetch;$phaseReady=$false;$phaseWaitAt=10;$phaseReadyOffset=0;$phaseShaderProgress=@{}
+[void](Get-CameraPlanWaitAnchor $phaseShaderProgress $step $compiled 10 10)
+$planClock=@{Elapsed=@{TotalSeconds=200;TotalMilliseconds=200000}}
+[IO.File]::WriteAllText($log,$advancing)
+$after=$false;$waited=$false;$result=''
+while ($true) { . $pollBlock; $after=$true;break }
+Check ($waited -and -not $after -and -not $result -and -not $phaseReady) 'actual cold-cache wait continues on progress without releasing capture'
+$planClock.Elapsed.TotalSeconds=380
+$waited=$false;$result=''
+while ($true) { . $pollBlock;break }
+Check ($result -like 'pipeline readiness timed out: warmup*' -and -not $waited) 'actual stalled prefetch fails after inactivity budget'
+Check ($runner.Contains('$deadline = $start.AddSeconds([Math]::Min($TimeoutSec,900))') -and
+       $runner.Contains('while ((Get-Date) -lt $deadline)')) 'progress cannot extend absolute 15-minute launch cap'
 Write-Host "$count camera-input and permission checks passed"

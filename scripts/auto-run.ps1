@@ -583,7 +583,7 @@ if($SELightProbe){Invoke-SEProbeChild 'WaitConsole'}
 if ($Background) { Set-DisplayUserGame $displayUser $game }
 Write-Host "Game pid $($game.Id)"
 
-$deadline = $start.AddSeconds($TimeoutSec)
+$deadline = $start.AddSeconds([Math]::Min($TimeoutSec,900))
 $lastNote = Get-Date
 $result = "timeout"
 $moving = $false
@@ -850,7 +850,10 @@ while ((Get-Date) -lt $deadline) {
       if ($step.wait_log -and -not $phaseReady) {
         # Apply the phase's settings at capture_at before awaiting their pipelines.
         if (-not $panCaptureSent) { Start-Sleep -Milliseconds 100; continue }
-        if ($null -eq $phaseWaitAt) { $phaseWaitAt=$planClock.Elapsed.TotalSeconds }
+        if ($null -eq $phaseWaitAt) {
+          $phaseWaitAt=$planClock.Elapsed.TotalSeconds
+          $phaseShaderProgress=@{}
+        }
         $readyText=''; $freshText=''
         if (Test-Path -LiteralPath $log) {
           $readyStream=[IO.File]::Open($log,'Open','Read','ReadWrite,Delete')
@@ -863,8 +866,9 @@ while ((Get-Date) -lt $deadline) {
           finally { $readyStream.Dispose() }
         }
         $phaseReady=Test-CameraPlanReady $step $readyText $freshText
+        $waitAnchor=Get-CameraPlanWaitAnchor $phaseShaderProgress $step $readyText $planClock.Elapsed.TotalSeconds $phaseWaitAt
         if (-not $phaseReady) {
-          if ($planClock.Elapsed.TotalSeconds-$phaseWaitAt -ge $step.wait_log_timeout) {
+          if ($planClock.Elapsed.TotalSeconds-$waitAnchor -ge $step.wait_log_timeout) {
             $result="pipeline readiness timed out: $($step.label); missing: $(@(Get-CameraPlanMissing $step $readyText $freshText) -join '; ')"
             if($step.label -match '(?:^|--)producer-sanity-'){
               $silent=@($step.wait_log | Where-Object {$readyText -notmatch $_})
