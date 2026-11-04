@@ -40,12 +40,17 @@ const rr=ids.get('control-rr-0');assert(rr.type==='checkbox'&&rr.attributes['ari
 rr.focus();render(fixture);assert.strictEqual(document.activeElement,ids.get(rr.id),'focus lost on bridge update');
 const checkbox=ids.get(rr.id);let clicked=false;checkbox.click=()=>clicked=true;checkbox.onkeydown({key:'Enter',preventDefault(){}});assert(clicked);
 for(let p=0;p<4;p++){ids.get('preset-'+p).onclick();assert.deepStrictEqual(JSON.parse(JSON.stringify(sent.at(-1))),{type:'preset',value:p});}
-const advanced=fixture.settings.filter(s=>s.experimental);assert(advanced.length);
-ids.get('nav-Advanced').onclick();const summary=ids.get('experimental-summary');assert.strictEqual(summary.tagName,'summary');
+assert(!ids.get('navigation').children.some(e=>['nav-Advanced','nav-Memory'].includes(e.id)));
+assert(!all(ids.get('section-content')).some(e=>e.id==='experimental-summary'));
+ids.get('nav-Support').onclick();
+assert(all(ids.get('section-content')).some(e=>e.textContent.includes("Ctrl+Shift+F9 compares BG3RTX with the game's own image.")));
+assert(all(ids.get('section-content')).some(e=>e.textContent==='Video memory'));
+assert(all(ids.get('section-content')).some(e=>e.textContent==='Compatibility'));
+assert(ids.get('support-report')&&ids.get('support-browse')&&ids.get('support-recheck'));
 // Explicit bridge authorization, rather than the presence of a developer row.
 const dev={...fixture.settings[0],id:'test-dev',developer:true};
 render({...fixture,settings:[...fixture.settings,dev]});assert(!ids.get('navigation').children.some(e=>e.id==='nav-Developer'));
-render({...fixture,developer:true,settings:[...fixture.settings,dev]});ids.get('nav-Developer').onclick();assert(all(ids.get('section-content')).some(e=>e.id==='card-test-dev'));
+render({...fixture,developer:true,settings:[...fixture.settings,dev]});ids.get('nav-Advanced').onclick();assert.strictEqual(ids.get('experimental-summary').tagName,'summary');ids.get('nav-Developer').onclick();assert(all(ids.get('section-content')).some(e=>e.id==='card-test-dev'));
 // Card disclosures and focus survive periodic bridge refreshes.
 render(fixture);ids.get('nav-Lighting').onclick();
 const details=all(ids.get('section-content')).find(e=>e.tagName==='details'&&e.id?.startsWith('details-'));

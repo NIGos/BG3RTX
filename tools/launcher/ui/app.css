@@ -429,6 +429,13 @@ select:focus-visible {outline:3px solid var(--teal);outline-offset:3px;}
   .window {height:auto;min-height:100dvh;overflow:visible;}
   main {overflow:visible;}
 }
+/* Release presentation uses the bundled UI face and flat text panels. */
+.brand h1,.hero h2,.section-title {font-family:"Lato","Segoe UI",sans-serif;font-weight:600;letter-spacing:normal;}
+.hero {background:var(--bg-2);min-height:0;}
+.hero-copy {width:100%;background:var(--bg-2);}
+dialog {background:var(--panel);}
+.card {padding:16px;border-color:var(--line);}
+.card::before,.card::after,.section-title::after {display:none;}
 @media(forced-colors:active) {
   .hero-copy,dialog,.card,.stat {background:Canvas;color:CanvasText;}
   .hero-copy {width:100%;}

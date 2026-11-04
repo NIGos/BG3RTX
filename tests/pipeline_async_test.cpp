@@ -23,7 +23,9 @@ int main() {
   warm.add(kSpecIdWaterComposeShift, 0); warm.add(kSpecWaterHitShade, 0);
   warm.add(kSpecIdCompactHitState, 0); warm.add(kSpecIdAlphaMetadataCache, 0);
   warm.add(kSpecIdWaterEmptyTiles, 0);
-  const auto alternatives = pa::experimental_specs(warm, false);
+  // Release (dev=0) shows no Experimental control, so nothing is prewarmed; developer mode keeps the alternatives.
+  CHECK(pa::experimental_specs(warm, false).empty());
+  const auto alternatives = pa::experimental_specs(warm, true);
   CHECK(alternatives.size() == 5); // hit shading 1/2 and three exact GPU candidates (native hair graduated: restart-only, not prewarmed)
   std::set<uint32_t> gpu_choices;
   for (const auto& alt : alternatives) {
