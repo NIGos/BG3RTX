@@ -640,6 +640,74 @@ def test_publish_lock():
           "rt_this_build_camera(" in src and "rt_build_camera(" not in src)
 
 
+def test_groom_soup_bounds():
+    """F01: uint32 shader twins vs unbounded byte-address arithmetic."""
+    mask = (1 << 32) - 1
+
+    def old(tri, tris, stride, base, size):
+        need = ((3 * tri + 2) * stride + 24) & mask if tri < tris else mask
+        return (tri < tris < (1 << 24) and 24 <= stride <= 256 and
+                base <= size and need <= size - base)
+
+    def new(tri, tris, stride, base, size):
+        return (tri < tris < (1 << 24) and 24 <= stride <= 256 and
+                base <= size and size - base >= 24 and
+                3 * tri + 2 <= (size - base - 24) // stride)
+
+    cases = []
+    for tris in (1, 2, 5592406, (1 << 24) - 1):
+        for tri in (0, tris - 1):
+            for stride in (24, 256):
+                for base in (0, 64, mask - 24):
+                    enough = base + (3 * tri + 2) * stride + 24
+                    for size in (0, 23, 24, base - 1, enough - 1, enough, mask):
+                        if 0 <= size <= mask:
+                            cases.append((tri, tris, stride, base, size))
+    wrap = (5592405, 5592406, 256, 0, 280)
+    cases.append(wrap)
+    # Includes position bytes [0,12) and UV bytes [16,24) for all three vertices.
+    def inside(tri, tris, stride, base, size):
+        return all(0 <= base + (3 * tri + k) * stride + byte < size
+                   for k in range(3) for byte in (*range(12), *range(16, 24)))
+    check("F01 division bound equals every actual byte read in range",
+          all(new(*c) == inside(*c) for c in cases), len(cases))
+    check("F01 old uint32 bound accepts wrap (need=280), new bound rejects",
+          old(*wrap) and not new(*wrap) and not inside(*wrap))
+    check("F01 invalid triangle/stride rejected", all(not new(*c) for c in (
+        (1, 1, 24, 0, mask), (0, 1 << 24, 24, 0, mask),
+        (0, 1, 0, 0, mask), (0, 1, 23, 0, mask), (0, 1, 257, 0, mask))))
+    source = (ROOT / "shaders/rt/hair_groom_update.hlsl").read_text()
+    check("F01 shader uses division before load address multiplication",
+          "3u * tri + 2u <= (available - 24u) / pc.stride" in source and
+          "if (ok)" in source and "const uint need" not in source)
+
+
+def test_pixel_seal_tearing():
+    """F08: Python hp_seal twin; all 14 nontrivial word mixes, including halves."""
+    rng = np.random.default_rng(808)
+    passes = 0
+    count = 100000
+    for a, b, tag in zip(rng.integers(0, 1 << 32, (count, 3), dtype=np.uint32).tolist(),
+                         rng.integers(0, 1 << 32, (count, 3), dtype=np.uint32).tolist(),
+                         rng.integers(1, 1 << 32, count, dtype=np.uint32).tolist()):
+        a.append(primary.seal(*a, tag))
+        b.append(primary.seal(*b, tag))
+        # Identical writers pass even when different words/halves win the store.
+        other = a.copy()
+        same = a[:2] + other[2:]
+        if same[3] != primary.seal(*same[:3], tag):
+            raise AssertionError("identical halves rejected")
+        for mask in range(1, 15):
+            torn = [b[i] if mask & (1 << i) else a[i] for i in range(4)]
+            passes += torn[3] == primary.seal(*torn[:3], tag)
+    print(f"F08 seal: {count} identical pairs pass; {count * 14} torn mixes, {passes} passes")
+    check("F08 sampled different-entry tears fail seal", passes == 0, passes)
+    source = (ROOT / "shaders/rt/hair_primary_gbuffer.hlsl").read_text()
+    check("F08 cached ray uses fixed depth, independent of card layer",
+          "mul(float4(ndc, 1.0, 1.0), inv)" in source and
+          "const float3 dir = normalize(ray_h.xyz / ray_h.w);" in source)
+
+
 def test_ndc_ray():
     # rt/hair_primary_gbuffer.hlsl and _velocity.hlsl: a card fragment's camera-relative point from its pixel. The game's
     # vertex shaders write gl_Position = (W, 1) vp with y negated (rt/xfb_to_world.hlsl, the groom points' space), so
@@ -1038,7 +1106,7 @@ def test_sample():
     check("sample no reasons has no failure class", sample.failure_class({"reasons": []}) is None)
 
 
-for t in (test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
+for t in (test_groom_soup_bounds, test_pixel_seal_tearing, test_strand_source_safety, test_ndc_ray, test_publish_lock, test_tips_dither, test_reorient, test_sample, test_batch_cache, test_cost, test_dual, test_volume, test_primary, test_bsdf, test_batch_catalogue, test_geom, test_asset, test_bench_data, test_quality_options, test_run_radii, test_thin, test_trace, test_cross_sections, test_stitch, test_convert, test_locate_overlap, test_render, test_render_equivalence, test_mesh_loader):
     t()
 print(f"{len(FAILS)} failures" if FAILS else "all passed")
 sys.exit(1 if FAILS else 0)

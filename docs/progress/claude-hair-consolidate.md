@@ -1,5 +1,5 @@
 ## Hair strand path consolidated offline (branch claude-hair-consolidate, READY_FOR_LIVE, 2026-11-04)
-Readiness only, not live qualification. The failure-mode table (37 hair rows, all closed, 3 accepted limitations)
+Readiness only, not live qualification. The failure-mode table (40 hair rows, all closed, 4 accepted limitations)
 is in [RTX_HAIR_PRIMARY section 9](../RTX_HAIR_PRIMARY.md#9-known-failure-modes-and-offline-proofs).
 Generated-material rows (hgn1/hgn2) are not hair: TRACK_D_REFLECTIONS owns them.
 
@@ -36,3 +36,5 @@ Verification (reviewer, 2026-11-04): build + 153 CTests; `live-flow: 1 jobs, 0 f
 101 patterns, 0 missing, 0 forbidden; shader identity vs 6a176bb0: 261/263 byte-identical, the two
 differences are rt/hair_primary_count and rt/hair_primary_velocity (key-on only). ABI unchanged.
 Not measured: live image, candidate GPU cost (historical hv9 G-buffer 0.197 ms/frame).
+- F01: overflow-safe soup division bound; F08: fixed-depth pixel ray, 1.4 M torn seal mixes / 0 passes; F09: accepted same-groom/frame colour mixes. Section 9 records proofs and pointers.
+- Review checks: shader validation 2/2; identity vs main 2f81c3d0: 259/263 identical, only hair groom update, G-buffer, count and velocity differ; request delta 0. Build + 161/161 CTests passed (240.15 s).
