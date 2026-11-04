@@ -37,7 +37,11 @@ constexpr uint32_t kHeaderBytes = kTableOffset + kMaxGrooms * kRowBytes;   // 10
 constexpr uint32_t kRefusedOffset = kMaxGrooms * 4, kOtherOffset = kRefusedOffset + kMaxGrooms * 4;
 // Then (C2) per groom float4 (a_f rgb, 1 when measured) from its strand colour sample.
 constexpr uint32_t kTransmitOffset = kOtherOffset + kMaxGrooms * 4;   // 768
-constexpr uint32_t kCountBytes = kTransmitOffset + kMaxGrooms * 16;
+// Then (diagnostics, 2026-11-04 strand traces found no strand) the counted frame's traced pixel entries (any sealed
+// entry) and those with a strand, and one sampled ray of the strand G-buffer variant (kRayDebugOffset, 64 bytes).
+constexpr uint32_t kTracedOffset = kTransmitOffset + kMaxGrooms * 16;   // 1792
+constexpr uint32_t kRaySampleOffset = kTracedOffset + 16;
+constexpr uint32_t kCountBytes = kRaySampleOffset + 64;
 // Strand colour samples (C2 shadow transmittance), after the header in the same buffer, never written by the layer's
 // update: per groom k 32 bytes, float4 (albedo rgb, fibre roughness) then the frame tag that wrote it. The strand
 // G-buffer variant stores one fragment's values per 8 x 8 pixel block (last writer wins: a sample of the groom's
@@ -51,6 +55,11 @@ constexpr uint32_t kHeaderAlloc = kColourOffset + kMaxGrooms * kColourBytes;   /
 // pose of the last publish in the previous frame's camera space).
 constexpr uint32_t kCameraOffset = kHeaderAlloc, kPrevCameraOffset = kCameraOffset + 16, kHeaderTotal = kCameraOffset + 32;   // 3168
 static_assert(kCameraOffset == 3136 && kPrevCameraOffset == 3152, "shaders/rt/hair_primary_rebase.hlsli offsets");
+// After the cameras: one ray of the strand G-buffer variant (fragments on a sparse 64-pixel grid, last writer wins):
+// float4 (origin, card distance), float4 (direction, committed), float4 (hit distance, groom, segment, tag),
+// float4 (this camera's position, 0). Copied into the counts by rt/hair_primary_count.hlsl and logged.
+constexpr uint32_t kRayDebugOffset = kHeaderTotal, kRayDebugBytes = 64;
+static_assert(kRayDebugOffset == 3168, "shaders/rt/hair_primary_rebase.hlsli hair_primary_ray_debug_offset");
 // Pixel entry (16 B): key = groom k << 24 | segment (0xFFFFFFFF: no strand on this ray), parameter v along the segment
 // (float), native depth (float), frame tag.
 constexpr uint32_t kPixelBytes = 16;

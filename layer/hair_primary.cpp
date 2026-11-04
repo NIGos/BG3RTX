@@ -102,7 +102,8 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 // Diagnostics of the last read count (logged with the 300-frame line and at each strike): per groom k of the counted
 // frame its draw key, LOD, strand pixels and pool-bound refusals.
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
-                   uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {}; };
+                   uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
+                   uint32_t traced = 0, hit = 0; float ray[16] = {}; };
 CountSeen g_seen;
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
 std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
@@ -246,6 +247,9 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     if (!(life_gpu_done() > s.frame + 1)) return true;   // still in flight: no new count this frame
     uint32_t total = 0, other_total = 0, other[hair_primary::kMaxGrooms];
     g_seen.frame = s.frame;
+    g_seen.traced = s.map[hair_primary::kTracedOffset / 4];
+    g_seen.hit = s.map[hair_primary::kTracedOffset / 4 + 1];
+    std::memcpy(g_seen.ray, s.map + hair_primary::kRaySampleOffset / 4, sizeof g_seen.ray);
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
       g_seen.keys[k] = s.keys[k];
       g_seen.lods[k] = s.lods[k];
@@ -339,7 +343,7 @@ bool header_ready() {
                   : !info || !(info->features & BG3_DEV_INT64) ? "shaderInt64 not enabled (sharc_device=1 enables it)"
                   : !g_frag_stores ? "fragmentStoresAndAtomics not enabled by the game"
                   : !g_precise ? "occlusionQueryPrecise not enabled: no coverage proof, no swaps" : nullptr;
-  if (!why && !make(g_header, hair_primary::kHeaderTotal, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+  if (!why && !make(g_header, hair_primary::kHeaderTotal + hair_primary::kRayDebugBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     "hair primary header"))
     why = "header buffer allocation failed";
   if (why) {
@@ -1110,6 +1114,13 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
                             (unsigned long long)(g_seen.keys[k] >> 48));
     }
     g_adjacent_total += g_adjacent_window;
+    {
+      const float* r = g_seen.ray;
+      log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
+          "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
+          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f)", (unsigned long long)g_seen.frame, g_seen.traced,
+          g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14]);
+    }
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",
         (unsigned long long)g_seen.frame, at ? per : " none", refused, (unsigned long long)g_refused_total,

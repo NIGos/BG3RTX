@@ -8,6 +8,7 @@ static const uint hair_primary_flag_camera = 2u;
 static const uint hair_primary_camera_offset = 3136u;   // common/hair_primary.h kCameraOffset
 static const uint hair_primary_flag_prev_camera = 4u;
 static const uint hair_primary_prev_camera_offset = 3152u;   // kPrevCameraOffset
+static const uint hair_primary_ray_debug_offset = 3168u;   // kRayDebugOffset
 // The ray origin of this frame's camera in the published groom's camera-relative frame (the publish of the previous
 // frame: the scene build is recorded after the G-buffer pass). false: no build camera, the caller keeps no strand.
 bool hp_rebase(uint64_t rec, float3 cam_now, out float3 o) {
