@@ -677,6 +677,9 @@ def retime(job, plan):
             patterns = [patterns] if isinstance(patterns, str) else patterns
             periods = [period(dict(select=rx), state, fps_windows.expected(job,state)["fps"]) for rx in patterns]
             phase["wait_log_timeout"] = max(float(phase.get("wait_log_timeout",0)), max([dt+5 for dt in periods if dt is not None] or [0]))
+    for phase, limit in zip(plan, readiness_budget.timeouts(job, plan)):
+        if phase.get('wait_log'):
+            phase['wait_log_timeout'] = limit
     budget = duration_budget(job, plan)
     job["timeout"] = max(float(job.get("timeout", 0)), math.ceil(budget["seconds"] + budget["readiness_timeout_seconds"] + 120))
     return changes

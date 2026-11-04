@@ -710,6 +710,42 @@ class ReadinessBudgetTests(unittest.TestCase):
         self.assertEqual(f.readiness_budget.estimate(dict(save="same"), step, {"rt": "1"})["seconds"], 0)
         self.assertIn("unproven", f.readiness_budget.estimate(dict(save="unknown"), step, {"rt": "1"})["source"])
 
+    def test_resident_and_outstanding_build_readiness_median(self):
+        step = dict(wait_log=[f.pipeline_readiness.GI_TRACE, f.pipeline_readiness.QUIET],
+                    wait_log_fresh=[f.pipeline_readiness.QUIET])
+        runner = ('12:00:00.000 [pan-plan] window 0 set=gi_strength=0\n'
+                  '12:00:10.000 [pan-plan] window 1 set=gi_strength=1\n'
+                  '12:00:30.000 [motion-plan] complete')
+        lines = ['12:00:01.000 gi: unrelated.hlsl building in the background',
+                 '12:00:10.100 [cfg] keys: gi_strength=1.00']
+        def estimate(extra):
+            f.readiness_budget.configure([dict(save='same', runner=runner, lines=lines + extra)])
+            return f.readiness_budget.estimate(dict(save='same'), step, {'gi_strength': '1'})
+        self.assertEqual(estimate([])['seconds'], 0.1)
+        # A build queued before acknowledgement cannot be hidden by quiet.
+        lines.insert(1, '12:00:09.000 gi: gi/gi_trace_rt.hlsl building in the background')
+        self.assertEqual(estimate([])['samples'], 0)
+        self.assertEqual(estimate(['12:00:12.000 gi: gi/gi_trace_rt.hlsl generation 1'])['seconds'], 2)
+        lines[-1] = '12:00:10.100 [cfg] keys: gi_strength=0'
+        self.assertEqual(estimate([])['samples'], 0)
+
+    def test_retime_bounds_pipeline_timeout_by_median_plus_margin(self):
+        j, p = fixture()
+        j['live_flow'] = dict(settings_latency_s=1, settling_margin_s=2)
+        with patch.object(f.readiness_budget, 'estimate', return_value=dict(seconds=7, samples=3, source='VALID median')):
+            f.retime(j, p)
+        self.assertEqual(p[1]['wait_log_timeout'], 9)
+        with tempfile.TemporaryDirectory() as directory:
+            import subprocess
+            root = Path(directory)
+            for name, data in [('context', {'job': j}), ('plan', p), ('cache', {'entries': []})]:
+                (root / (name+'.json')).write_text(json.dumps(data))
+            run = subprocess.run([sys.executable, '-m', 'tools.live_batches.readiness_budget',
+                                  '--context', str(root/'context.json'), '--plan', str(root/'plan.json'),
+                                  '--cache', str(root/'cache.json')], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)[1], 9)
+
     def test_expected_wait_cap_and_full_allowance_deadline_are_distinct(self):
         j, p = fixture()
         p = [phase("warm", 102.9)]

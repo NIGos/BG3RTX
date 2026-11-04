@@ -138,35 +138,91 @@ function Get-RotationMouseMessages($action) {
   @{message=$message;buttons=$buttons;x=$action.x;y=$action.y}
 }
 
-# Search the whole current run, including cached pipelines from earlier phases.
-# Match individual lines and use the latest matching record for each requirement.
-function Test-CameraPlanReady($step, [string]$text, [string]$freshText=$text) {
+# Bundle13 plans encode build witnesses in wait_log. These are conditional:
+# resident variants and push constants emit no new pipeline completion record.
+function Test-CameraPlanBuildPattern([string]$pattern) {
+  return $pattern -match 'generation |pipeline built|: built|surface Fresnel|read from the cache|cache: prefetched |pipelines 0'
+}
+
+function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
   if ($step.wait_log_fresh) {
     $cfg=[regex]::Match($freshText, '(?m)^.*\[cfg\] settings read[^\n]*')
-    if (-not $cfg.Success) { return $false }
+    if (-not $cfg.Success) { return '[cfg] settings read after settings write' }
     $freshText=$freshText.Substring($cfg.Index)
-  }
-  # An empty driver interval is not completion while a requested async build
-  # is still queued. Reconcile the actual producer start/completion records.
-  if ($step.wait_log_fresh) {
-    $pending=@{}
-    foreach ($line in ($text -split "`n")) {
-      if ($line -match 'gi: (\S+) building in the background') { $pending[$Matches[1]]=$true }
-      elseif ($line -match 'gi: (\S+) generation ') { $pending.Remove($Matches[1]) }
-      elseif ($line -match '(\S+\.hlsl[^ ]*) (\w+): building in the background') { $pending[($Matches[1]+' '+$Matches[2])]=$true }
-      elseif ($line -match '\[water\] (\S+\.hlsl[^ ]*) (\w+): built') { $pending.Remove(($Matches[1]+' '+$Matches[2])) }
+    # Check reported keys, including numerical formatting (1 vs 1.00). Some
+    # observation/CPU knobs are not included in the renderer's keys record.
+    $keys=@([regex]::Matches($freshText, '(?m)^.*\[cfg\] keys:.*$'))
+    if ($step.set) {
+      if (-not $keys.Count) { return '[cfg] keys with requested values' }
+      $values=@{}
+      foreach ($pair in ($step.set -split ',')) {
+        $kv=$pair -split '=',2
+        if ($kv.Count -eq 2) { $values[$kv[0]]=$kv[1] }
+      }
+      $ack=$null
+      foreach ($record in $keys) {
+        $bad=@();$seen=0
+        $ack=$null
+        foreach ($key in $values.Keys) {
+          $m=[regex]::Match($record.Value, '(?:^|\s)'+[regex]::Escape($key)+'=([^\s]+)')
+          if ($m.Success) { $seen++ }
+          if ($m.Success -and $m.Groups[1].Value -ne $values[$key]) {
+            $actual=0.0;$wanted=0.0
+            $culture=[Globalization.CultureInfo]::InvariantCulture
+            if (-not ([double]::TryParse($m.Groups[1].Value, [Globalization.NumberStyles]::Float, $culture, [ref]$actual) -and
+                      [double]::TryParse($values[$key], [Globalization.NumberStyles]::Float, $culture, [ref]$wanted) -and $actual -eq $wanted)) {
+              $bad += "$key=$($values[$key])"
+            }
+          }
+        }
+        if ($seen -and -not $bad.Count) { $ack=$record }
+      }
+      if ($null -eq $ack) { return '[cfg] keys: '+($bad -join ', ') }
+      # Start/completion reconciliation below includes builds between settings
+      # read and keys, and outstanding builds from earlier phases.
     }
-    if ($pending.Count) { return $false }
+    $pending=@{}; $historical=@{}; $afterAck=$false
+    $explicitOnly=-not @($step.wait_log | Where-Object { Test-CameraPlanBuildPattern $_ }).Count
+    $affected=@($step.wait_log | Where-Object {
+      (Test-CameraPlanBuildPattern $_) -and $_ -notmatch 'shaders|watch|surface Fresnel' -and
+      -not $_.Contains('gi/[^ ]+')
+    })
+    foreach ($line in ($text -split "`n")) {
+      if ($line.TrimEnd("`r") -eq $cfg.Value.TrimEnd("`r")) { $afterAck=$true }
+      $id=$null;$completion=$null;$done=$false
+      if ($line -match 'gi: (\S+) building in the background') { $id=$Matches[1];$completion='gi: '+$id+' generation ' }
+      elseif ($line -match 'gi: (\S+) generation ') { $id=$Matches[1];$done=$true }
+      elseif ($line -match '(\S+\.hlsl[^ ]*) (\w+): building in the background') { $id=$Matches[1]+' '+$Matches[2];$completion='[water] '+$Matches[1]+' '+$Matches[2]+': built' }
+      elseif ($line -match '\[water\] (\S+\.hlsl[^ ]*) (\w+): built') { $id=$Matches[1]+' '+$Matches[2];$done=$true }
+      if ($done) {
+        $pending.Remove($id);$historical.Remove($id)
+        # Older starts may belong to abandoned alternatives (_k, hit_sun vs
+        # hit_sun_em). A selected completion is authoritative for that mapped
+        # pass family. New starts always require their exact completion.
+        foreach ($old in @($historical.Keys)) {
+          if (@($historical[$old] | Where-Object { $line -match $_ }).Count) {
+            $pending.Remove($old);$historical.Remove($old)
+          }
+        }
+      } elseif ($id) {
+        $families=@($affected | Where-Object { $completion -match $_ })
+        if ($afterAck -or $families.Count -or $explicitOnly) {
+          $pending[$id]=$completion
+          if (-not $afterAck) { $historical[$id]=$families }
+        }
+      }
+    }
+    foreach ($missing in $pending.Values) { $missing }
   }
   foreach ($pattern in @($step.wait_log)) {
-    $latest=$null
+    if ($step.wait_log_fresh -and (Test-CameraPlanBuildPattern $pattern)) { continue }
     $source=if ($pattern -in @($step.wait_log_fresh)) {$freshText} else {$text}
-    foreach ($line in ($source -split "`n")) {
-      if ($line -match $pattern) { $latest=$line }
-    }
-    if ($null -eq $latest) { return $false }
+    if (-not @($source -split "`n" | Where-Object { $_ -match $pattern }).Count) { $pattern }
   }
-  return $true
+}
+
+function Test-CameraPlanReady($step, [string]$text, [string]$freshText=$text) {
+  return @(Get-CameraPlanMissing $step $text $freshText).Count -eq 0
 }
 
 # Central list of phase fields consumed by auto-run and the camera samplers.

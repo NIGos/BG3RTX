@@ -112,6 +112,8 @@ struct StagedHeader {
 constexpr int kStaged = 3;
 StagedHeader g_staged[kStaged];
 int g_staged_next = 0;
+// Probe refusals since the last coverage line: no publish of this frame ordered before the prepass, load quiet window.
+uint32_t g_probe_no_pick = 0, g_probe_stale = 0, g_probe_quiet = 0;
 bool g_order = false;                       // the last publish was staged (the key on)
 uint64_t g_applied_frame = 0;               // frame_index + 1 of the last G-buffer pass that applied (or refused)
 std::unordered_set<uint64_t> g_live_keys;   // the keys of the header the G-buffer reads (order mode: swaps need them)
@@ -395,6 +397,9 @@ void observe_depth(uint64_t image, uint64_t now) {
 // Do not recycle an in-flight slot even if its query values happen to be available.
 void coverage_before_prepass(VkCommandBuffer cmd) {
   const uint64_t now = frame_index();
+  // No strand tracing in the game's passes while a level streams (hv5 2026-11-04: device lost in the load with no
+  // strand swap; the probe was the only groom trace in the game's command buffers).
+  if (g_load.quiet(now)) { ++g_probe_quiet; return; }
   ProbeSlot& slot = g_probe_slots[now % kCoverageSlots];
   if (slot.frame == now + 1) return;
   if (slot.frame) {
@@ -443,9 +448,11 @@ void coverage_before_prepass(VkCommandBuffer cmd) {
     picks[i] = submitted || same_recording ? st.pick : hair_primary::Staged{};
   }
   const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
-  if (i < 0) return;
+  if (i < 0) { ++g_probe_no_pick; return; }
   const auto& st = g_staged[i];
-  if (st.pick.tag + 2 < now + 1) return; // header lifetime, distinct from readback evidence freshness
+  // Only this frame's publish: the groom TLAS is camera-relative (an older one misses the strands: hv6 2026-11-04, 0
+  // strand samples next to 95670 card samples) and can reference a BLAS range already freed by a LOD change.
+  if (st.pick.tag != now + 1) { ++g_probe_stale; return; }
   VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   mb.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
   mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -481,8 +488,10 @@ void coverage_log(uint64_t now) {
         (unsigned long long)(key >> 48), unsigned((std::min)(e.strand, uint64_t(UINT32_MAX))),
         unsigned((std::min)(e.card, uint64_t(UINT32_MAX))), ratio, period.swapped);
   }
-  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u",
-      probed, swapped, per, minimum, hair_primary::kCoverMin, below);
+  log("[hair primary] coverage (last 300 frames): %u draws probed, %u swapped; per draw (key prefix: strand/card samples = ratio, swapped frames):%s; ratio min %.3f, bound %.3f, draws below bound %u; "
+      "probe frames refused: no publish of the frame %u, older publish %u, load quiet %u",
+      probed, swapped, per, minimum, hair_primary::kCoverMin, below, g_probe_no_pick, g_probe_stale, g_probe_quiet);
+  g_probe_no_pick = g_probe_stale = g_probe_quiet = 0;
   g_coverage_period.clear();
 }
 
@@ -811,7 +820,10 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
                                 bvh_rec_state(st.pick.rec) == 0;
     picks[i] = st.submitted || same_recording ? st.pick : hair_primary::Staged{};
   }
-  const int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  int i = hair_primary::pick_publish(picks, kStaged, uint64_t(cmd), [](uint64_t rec) { return bvh_rec_submitted(rec); });
+  // Only this frame's publish: an older groom TLAS is camera-relative to another camera and may reference freed
+  // ranges (bvhsplit kGroomFreeLag covers 2 frames of age, not more).
+  if (i >= 0 && g_staged[i].pick.tag != frame) i = -1;
   if (i < 0) {
     g_live_keys.clear();   // no swap this frame; the prepass of the next one keeps its cards too
     if (g_order_none++ % 300 == 0)
@@ -819,7 +831,7 @@ void hair_primary_before_pass(VkCommandBuffer cmd, const Bg3PassInfo& p) {
           (unsigned long long)g_order_none);
     return;
   }
-  apply_header(cmd, g_staged[i]);   // a staged publish may serve again (no newer one ordered before)
+  apply_header(cmd, g_staged[i]);
 }
 
 bool hair_primary_swap(VkCommandBuffer cmd, CmdState* s, const DrawArgs& args) {

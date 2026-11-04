@@ -1,15 +1,16 @@
-"""Pipeline completion signals shared by generators and offline lint.
+"""Changed-key readiness contracts for generators and offline lint.
 
-Signatures are the VALID corpus pipeline/status records (see LIVE_FLOW.md).
-A fresh zero-build watch interval follows settings acknowledgement. The runner
-also reconciles outstanding background build records; quiet alone is never an
-authoritative completion for an unknown key.
+Build/status patterns in existing bundle13 plans are conditional witnesses in
+camera-plan.ps1: acknowledge settings, then reconcile starts and completions.
+Resident pipelines need neither a new completion nor a quiet watch interval.
 """
+import re
+
 from scripts.queue_gates import phase_states
 
 QUIET = r"\[watch\].*\| pipelines 0 \(0 ms in driver\)"
-# Known state-bearing records must follow this settings write: a prior ON
-# announcement cannot establish that a later OFF -> ON transition completed.
+# Keep the legacy pattern registry so checked-in plans remain compatible.
+# These records are conditional on an actual build, not mandatory announcements.
 TABLE = {
     "rt_water_surface_fresnel": [r"\[water\] surface Fresnel \(\d+ frames\): enabled {value},"],
     "rr_post_temporal": [r"\[rrpost\] rr_post\.hlsl:temporal pipeline built",
@@ -129,3 +130,9 @@ def problems(job, plan):
             if missing:
                 errors.append(f"readiness: {phase.get('label')}: changed {key} requires pipeline wait_log ({'; '.join(missing)})")
     return errors
+
+
+def conditional(pattern):
+    """Keep aligned with Test-CameraPlanBuildPattern (legacy plan encoding)."""
+    return bool(re.search(
+        r'generation |pipeline built|: built|surface Fresnel|read from the cache|cache: prefetched |pipelines 0', pattern))
