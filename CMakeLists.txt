@@ -253,6 +253,9 @@ add_test(NAME variant_matrix_test COMMAND variant_matrix_test ${CMAKE_SOURCE_DIR
 # The runtime SPIR-V cache (layer/shader_cache.cpp): keys against tests/shader_cache_key_golden.txt (Python's), the store.
 add_executable(shader_cache_test tests/shader_cache_test.cpp layer/shader_cache.cpp)
 add_test(NAME shader_cache_test COMMAND shader_cache_test ${CMAKE_SOURCE_DIR})
+add_executable(shader_prefetch_test tests/shader_prefetch_test.cpp layer/shader_cache.cpp)
+target_include_directories(shader_prefetch_test PRIVATE ${VULKAN_SDK}/Include)
+add_test(NAME shader_prefetch_test COMMAND shader_prefetch_test)
 add_executable(ls_exact_k_test tests/ls_exact_k_test.cpp)
 add_test(NAME ls_exact_k_test COMMAND ls_exact_k_test)
 add_executable(native_hair_receiver_test tests/native_hair_receiver_test.cpp)
