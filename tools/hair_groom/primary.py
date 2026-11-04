@@ -21,6 +21,17 @@ import numpy as np
 HAIR_CLASS = 5
 
 
+def tips_keep(alpha, pixel, tag, jitter):
+    """Twin of hp_tips_keep: native TAA dither, m8=0/m9=1, no card grazing."""
+    pixel = np.asarray(pixel, dtype=np.float32)
+    phase = np.asarray((np.asarray(tag) - 1) & 3, dtype=np.float32)
+    frac = lambda x: x - np.floor(x)
+    pattern0 = frac((pixel[..., 1] * 2 + pixel[..., 0] - 1.5 + phase) * np.float32(0.2))
+    pattern1 = frac(pixel[..., 0] * np.float32(2.4084) + pixel[..., 1] * np.float32(3.2535))
+    dither = frac(np.float32(0.833) * pattern0 + np.float32(0.1666) * pattern1 + np.asarray(jitter, np.float32))
+    return np.asarray(alpha, np.float32) + dither - np.float32(0.6667) >= np.float32(0.3333)
+
+
 # ---- G-buffer encodings (inverse of the game's decoders; FRAME_MAP "G-buffer", bg3_materials.hlsli) ----
 def stereo_encode(n):
     """RT0 (RG16F): rg = n.xy / (1 - n.z) * 0.28125 + 0.5 (G-buffer FS aa4efa4d). n: (..., 3) unit view-space."""

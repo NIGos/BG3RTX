@@ -433,6 +433,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_primary_order", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
+  {"exp_hair_groom_tips", "Dithered strand tips",
+   "Experimental: fades on-screen strand tips with the game mask alpha and temporal dither. Appearance and cost are unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"off", "Off", 0, {{"rt_hair_groom_tips", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_groom_tips", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+
   {"exp_hair_pool_trim", "Retire unused hair snapshots",
    "Reclaims unused hair capture memory.",
    Kind::Choice, Apply::Live, "live", false,
@@ -757,6 +764,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_primary_order", "0"},
+    {"rt_hair_groom_tips", "0"},
     {"rt_hair_fibre", "0"},
     {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},

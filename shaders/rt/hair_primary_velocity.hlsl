@@ -30,6 +30,13 @@ struct Previous {             // set 0 binding 5: the previous frame's camera
 [[vk::binding(4, 0)]] ConstantBuffer<Screen> gScreen;
 [[vk::binding(5, 0)]] ConstantBuffer<Previous> gPrev;
 
+// Native velocity material: twelve scalar floats, unlike the G-buffer vec3/float pairs.
+struct Material { float4 c[3]; };
+[[vk::binding(1, 1)]] ConstantBuffer<Material> gMat;
+[[vk::binding(7, 0)]] SamplerState gWrap;
+[[vk::binding(3, 1)]] Texture2D<float4> gNoise;
+[[vk::binding(4, 1)]] Texture2D<float4> gMask;
+
 uint64_t record() { return (uint64_t(kRecordHi) << 32) | uint64_t(kRecordLo); }
 uint64_t addr2(uint2 a) { return (uint64_t(a.y) << 32) | uint64_t(a.x); }
 uint ld(uint64_t a) { return vk::RawBufferLoad<uint>(a, 4); }
@@ -40,7 +47,9 @@ struct Out {
   float depth : SV_Depth;
 };
 
-Out main(float4 pos : SV_Position) {
+Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD0,
+         [[vk::location(6)]] float4 aux : TEXCOORD6) {
+  const float2 dx = ddx(card_uv), dy = ddy(card_uv);
   const uint64_t rec = record();
   const uint tag = ld(rec), width = ld(rec + 4u), height = ld(rec + 8u), grooms = ld(rec + 12u);
   // The card fragment's camera-relative point, as in the G-buffer variant (derivatives before any discard).
@@ -68,6 +77,18 @@ Out main(float4 pos : SV_Position) {
     const float4 hh = mul(float4(ndc, asfloat(e.z), 1.0), inv);
     const float seg_len = length(ldf3(hp_at(pool, row.x, i0 + 1u, 12u)) - ldf3(hp_at(pool, row.x, i0, 12u)));
     if (!hp_on_card(t_card, length(hh.xyz / hh.w), cos_card, foot, seg_len)) discard;
+  }
+  if ((ld(rec + 60u) & hair_primary_flag_tips) != 0u) {
+    if (row.y == 0u) discard;
+    const float2 uv0 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0, 8u), 4));
+    const float2 uv1 = asfloat(vk::RawBufferLoad<uint2>(hp_at(pool, row.y, i0 + 1u, 8u), 4));
+    const float2 uv = lerp(uv0, uv1, v);
+    const float m2 = gMat.c[0].z, m3 = gMat.c[0].w;
+    const float nz = gNoise.SampleGrad(gWrap, uv * m2, dx * m2, dy * m2).x * 2.0 - 1.0;
+    const float4 ma = gMask.SampleGrad(gWrap, uv + nz * m3, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
+    const float4 mb = gMask.SampleGrad(gWrap, uv, dx, dy) - float4(0.5, 0.0, 0.0, 0.0);
+    const float4 M = max(sign(ma), sign(mb)) * max(abs(ma), abs(mb)) + float4(0.5, 0.0, 0.0, 0.0);
+    if (!hp_tips_keep(M.w, pos.xy, tag, aux.x)) discard;
   }
   float3 prev;
   if (row.w != 0u) {
