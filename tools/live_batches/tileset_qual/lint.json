@@ -1,0 +1,227 @@
+{
+  "status": "PASS_OFFLINE_ONLY",
+  "corpus_logs": 152,
+  "jobs": {
+    "ts1-native-tileset-off.json": {
+      "problems": [],
+      "duration": {
+        "seconds": 99.59999999999998,
+        "minimum_seconds": 99.6,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          }
+        ],
+        "expected_readiness_seconds": 0.0,
+        "readiness_timeout_seconds": 180.0,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 19.0,
+            "minimum_seconds": 19.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "expected_readiness_seconds": 0.0,
+            "readiness_samples": 4,
+            "readiness_source": "VALID same-save/key median",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "settle-float",
+            "seconds": 5.6,
+            "minimum_seconds": 5.6,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "diag-off",
+            "seconds": 54.5,
+            "minimum_seconds": 54.5,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-off",
+            "seconds": 11.3,
+            "minimum_seconds": 11.3,
+            "savings_seconds": 0.0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-off",
+            "seconds": 8.1,
+            "minimum_seconds": 8.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      },
+      "replay": {
+        "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.032335.log",
+        "status": "UNPROVEN",
+        "problems": [
+          "diag-off: material table capacity: no historical window in same diagnostic state",
+          "diag-off: scene waits: no historical window in same diagnostic state",
+          "every-window scene waits: window 'cost-off' (phase 0) has 0 complete line(s), need 1",
+          "diag-off: RT capture capacity: no historical window in same diagnostic state",
+          "diag-off: cascade capacity: no historical window in same diagnostic state",
+          "every-window GI GPU ms: window 'cost-off' (phase 0) has 0 complete line(s), need 1",
+          "diag-off: GI coverage: no historical window in same diagnostic state",
+          "diag-off: material coverage: no historical window in same diagnostic state"
+        ],
+        "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
+      }
+    },
+    "ts1-native-tileset-on.json": {
+      "problems": [],
+      "duration": {
+        "seconds": 99.59999999999998,
+        "minimum_seconds": 99.6,
+        "unresolved": [
+          {
+            "window": "warmup",
+            "reasons": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ]
+          }
+        ],
+        "expected_readiness_seconds": 0.0,
+        "readiness_timeout_seconds": 180.0,
+        "windows": [
+          {
+            "window": "warmup",
+            "seconds": 19.0,
+            "minimum_seconds": 19.0,
+            "savings_seconds": 0,
+            "unresolved": [
+              "scene/pipeline settle bound retained; not a producer cadence"
+            ],
+            "readiness_timeout_seconds": 180.0,
+            "expected_readiness_seconds": 0.0,
+            "readiness_samples": 4,
+            "readiness_source": "VALID same-save/key median",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "settle-float",
+            "seconds": 5.6,
+            "minimum_seconds": 5.6,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "diag-on",
+            "seconds": 54.5,
+            "minimum_seconds": 54.5,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "cost-on",
+            "seconds": 11.3,
+            "minimum_seconds": 11.3,
+            "savings_seconds": 0.0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "shot-on",
+            "seconds": 8.1,
+            "minimum_seconds": 8.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          },
+          {
+            "window": "restore",
+            "seconds": 1.1,
+            "minimum_seconds": 1.1,
+            "savings_seconds": 0,
+            "unresolved": [],
+            "readiness_timeout_seconds": 0.0,
+            "expected_readiness_seconds": 0,
+            "readiness_samples": 0,
+            "readiness_source": "no wait",
+            "minimum_readiness_wait_seconds": 0
+          }
+        ],
+        "findings": []
+      },
+      "replay": {
+        "log": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.032335.log",
+        "status": "UNPROVEN",
+        "problems": [
+          "expect missing: \\[cfg\\] keys:.*rt_native_tileset=1\\b",
+          "diag-on: material table capacity: no historical window in same diagnostic state",
+          "diag-on: scene waits: no historical window in same diagnostic state",
+          "every-window scene waits: window 'cost-on' (phase 0) has 0 complete line(s), need 1",
+          "diag-on: RT capture capacity: no historical window in same diagnostic state",
+          "diag-on: cascade capacity: no historical window in same diagnostic state",
+          "every-window GI GPU ms: window 'cost-on' (phase 0) has 0 complete line(s), need 1",
+          "diag-on: GI coverage: no historical window in same diagnostic state",
+          "diag-on: material coverage: no historical window in same diagnostic state",
+          "diag-on: Tileset records: invalid means unknown/incomplete: no historical window in same diagnostic state",
+          "diag-on: Tileset GPU participation: no historical window in same diagnostic state"
+        ],
+        "note": "Historical coverage only; missing evidence is unproven, never a rendering pass."
+      }
+    }
+  }
+}
