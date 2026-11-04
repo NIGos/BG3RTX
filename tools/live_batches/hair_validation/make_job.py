@@ -323,16 +323,55 @@ def pass_bisect_job(name, save, plan):
     return j
 
 
+AFTERMATH_FAULT = r"\[fault\] VK_ERROR_DEVICE_LOST from "
+AFTERMATH_DUMP = r"\[aftermath\] GPU crash dump written: .*\.nv-gpudmp \([1-9]\d* bytes\); decode with bin\\aftermath_decode\.exe"
+
+
+def make_probe_aftermath():
+    # Share hv7's exact warmup, probe and restore; never visit header-only/all-pass order 1.
+    return [p for p in make_pass_bisect() if p['label'] in ('warm-all', 'passes-8-probe', 'restore')]
+
+
+def probe_aftermath_job(name, save, plan):
+    j = diagnostic_job(name, save, plan)
+    j.update(max_minutes=5.9, timeout=350,
+             purpose="hv7 08:37 probe-only device loss 1.9 s after readiness: collect captures/aftermath/*.nv-gpudmp; completion is also informative. Queue has no expected-crash VALID outcome; a captured crash remains INVALID.")
+    # Read only in aftermath_pre_device(), before vkCreateDevice; never a window key.
+    j['set'] += ',rt_hair_primary_passes=15,aftermath=1'
+    j['live_flow']['startup_only'] = list(dict.fromkeys(j['live_flow'].get('startup_only', []) + ['aftermath']))
+    j['patterns'] += [r'\[aftermath\]', AFTERMATH_FAULT]
+    j['expect'] = [rx for rx in j['expect'] if 'exposure held' not in rx]
+    j['expect'] += [r'\[aftermath\] GPU crash dumps ENABLED',
+                    AFTERMATH_FAULT + r'|\[hair primary\] hair primary breadcrumbs:',
+                    AFTERMATH_DUMP + r'|\[hair primary\] hair primary breadcrumbs:']
+    # Do not fail the log guard on the expected loss before Aftermath can write.
+    # Native runner crash monitoring and fail_fast remain enabled.
+    j['forbid'] = [rx for rx in j['forbid'] if rx not in
+                   (r'VK_ERROR_DEVICE_LOST', r'(?i)device (?:was )?lost')]
+    j['expect_every'] = [j['expect_every'][0],
+        dict(name='probe window completed two breadcrumb periods',
+             select=r'\[hair primary\] hair primary breadcrumbs:',
+             match=r'\[hair primary\] hair primary breadcrumbs:',
+             min=2, period_frames=PRIMARY_LOG_FRAMES, windows=['passes-8-probe'])]
+    # required_if only handles complete periodic trigger pairs in a window,
+    # not a single crash event. Do not pretend it conditionally requires a dump.
+    # Completion proves the probe window closed; readiness is required even on a crash.
+    # The queue cannot OR successful completion with a qualified crash (see purpose).
+    j['expect_runner'] += [r'\[motion-ready\] phase=1\b']
+    return j
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect")
+    parser.add_argument("--job-names", default="hv5-reload-bisect,hv6-strand-diagnostic,hv7-pass-bisect,hv8-probe-aftermath")
     names = parser.parse_args().job_names.split(",")
     assert (HERE / "predicted.json").exists()
     for folder in ("jobs", "plans"):
         (HERE/folder).mkdir(exist_ok=True)
     for name, builder, factory in [("hv5-reload-bisect", make_bisect, bisect_job),
                                    ("hv6-strand-diagnostic", make_diagnostic, diagnostic_job),
-                                   ("hv7-pass-bisect", make_pass_bisect, pass_bisect_job)]:
+                                   ("hv7-pass-bisect", make_pass_bisect, pass_bisect_job),
+                                   ("hv8-probe-aftermath", make_probe_aftermath, probe_aftermath_job)]:
         if name not in names:
             continue
         plan = builder()

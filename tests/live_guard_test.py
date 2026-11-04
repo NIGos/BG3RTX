@@ -12,6 +12,42 @@ def stamp(sec, text):
 
 
 class LiveGuardTest(unittest.TestCase):
+    def test_hv8_probe_aftermath_startup_and_crash_limitation(self):
+        import re
+        from tools.live_batches.hair_validation.make_job import (
+            make_pass_bisect, make_probe_aftermath, probe_aftermath_job,
+            AFTERMATH_FAULT, AFTERMATH_DUMP)
+        plan = make_probe_aftermath()
+        job = probe_aftermath_job('hv8-probe-aftermath', 'Test Dialogue1', plan)
+        self.assertEqual(plan, [p for p in make_pass_bisect()
+                              if p['label'] in ('warm-all', 'passes-8-probe', 'restore')])
+        self.assertEqual([p['label'] for p in plan], ['warm-all', 'passes-8-probe', 'restore'])
+        self.assertEqual(job['save'], 'Test Dialogue1')
+        self.assertIn('preset=ultra', job['set'])
+        self.assertIn('aftermath=1', job['set'])
+        self.assertIn('aftermath', job['live_flow']['startup_only'])
+        self.assertTrue(all('aftermath=' not in p['set'] for p in plan))
+        self.assertIn('rt_hair_primary_passes=8', plan[1]['set'])
+        self.assertIn('rt_hair_groom_primary_order=1', plan[1]['set'])
+        self.assertTrue(job['fail_fast'])
+        self.assertLess(job['max_minutes'], 6)
+        fault = '[fault] VK_ERROR_DEVICE_LOST from the fault poll (our present fence) in frame 4902'
+        dump = '[aftermath] GPU crash dump written: C:\\BG3RTX\\captures\\aftermath\\20261104-084014-0.nv-gpudmp (42 bytes); decode with bin\\aftermath_decode.exe'
+        self.assertRegex(fault, AFTERMATH_FAULT)
+        self.assertRegex(dump, AFTERMATH_DUMP)
+        self.assertIsNone(re.search(AFTERMATH_DUMP, dump.replace('42 bytes', '0 bytes')))
+        self.assertTrue(any(re.search(rx, fault) for rx in job['expect']))
+        self.assertTrue(any(re.search(rx, dump) for rx in job['expect']))
+        runner = stamp(1, '[pan-plan] window 1 set=' + plan[1]['set']) + stamp(2, '[motion-ready] phase=1')
+        # Existing global crash handling remains fail-fast, even after readiness
+        # with a dump. No supported expected-crash VALID override exists.
+        for game in (stamp(3.9, fault), stamp(3.9, fault) + stamp(4, dump)):
+            result = evaluate(job, plan, game, runner, 1, 5, ())
+            self.assertIn('global game failure', result['check'])
+        gate = next(g for g in job['expect_every'] if g.get('windows'))
+        self.assertEqual(gate['windows'], ['passes-8-probe'])
+        self.assertEqual(gate['min'], 2)
+
     def test_hv7_pass_masks_require_only_enabled_passes_and_real_swaps(self):
         from tools.live_batches.hair_validation.make_job import make_pass_bisect, pass_bisect_job
         from scripts.queue_gates import line_matches
