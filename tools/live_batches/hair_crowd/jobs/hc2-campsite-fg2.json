@@ -134,7 +134,6 @@
   "\\[hair primary\\] G-buffer hair pipeline: native depth test \\d write \\d compare \\d+",
   "\\[hair primary\\] velocity hair pipeline: native depth test \\d write \\d compare \\d+",
   "\\[hair primary\\] pixel record \\d+x\\d+: [0-9.]+ MB",
-  "\\[hair primary\\] frame \\d+: [1-9]\\d* grooms published; last 300 frames: \\d+ publishes, \\d+ prepass, [1-9]\\d* G-buffer and [1-9]\\d* velocity strand draws, 0 pipelines refused",
   "\\[hair primary\\] strand G-buffer draws GPU [0-9.]+ ms/frame",
   "rt passes: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
   "gi: GPU cost [0-9.]+ ms/frame \\(average of 300 frames\\)",
@@ -316,7 +315,11 @@
     "cost-strands",
     "cost-crowd"
    ],
-   "period_frames": 300
+   "period_frames": 300,
+   "required_if": {
+    "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+    "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+   }
   },
   {
    "name": "strand cost: a G-buffer strand draw GPU sample in the strands-on cost window",
@@ -327,7 +330,11 @@
     "cost-strands",
     "cost-crowd"
    ],
-   "period_frames": 300
+   "period_frames": 300,
+   "required_if": {
+    "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+    "match": "[0-9a-fA-F]{4}:\\d+/\\d+=[0-9.]+,[1-9]\\d*\\b"
+   }
   },
   {
    "name": "groom participation in every cost window",
@@ -385,6 +392,17 @@
     "cost-crowd"
    ],
    "period_frames": 300
+  },
+  {
+   "name": "strand shaders ran: a draw with strand and card samples in every strands-on cost window",
+   "select": "\\[hair primary\\] coverage \\(last 300 frames\\):",
+   "match": "coverage \\(last 300 frames\\): [1-9]\\d* draws probed, \\d+ swapped; per draw [^:]*:.*\\b[0-9a-fA-F]{4}:[1-9]\\d*/[1-9]\\d*=",
+   "min": 1,
+   "period_frames": 300,
+   "windows": [
+    "cost-strands",
+    "cost-crowd"
+   ]
   }
  ],
  "window_mode": "visible_unfocused_fg"

@@ -80,7 +80,7 @@ def job(name, save):
     for x in j["expect_every"]:
         if "fibre" in x["name"]:
             continue
-        if x["name"].startswith("strand participation") or x["name"].startswith("strand cost"):
+        if x["name"].startswith(("strand participation", "strand cost", "strand shaders ran")):
             x = dict(x, windows=["cost-strands", "cost-crowd"])
         if x["name"].startswith("groom participation"):
             x = dict(x, windows=GROOM_ON)
