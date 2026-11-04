@@ -120,9 +120,37 @@ var
   Applied, Completed: Boolean;
   RemoveSettings: Boolean;
 
+procedure LifecycleStatus(Text: String);
+begin
+  Log(Text);
+  if IsUninstaller then begin
+    { InitializeUninstall runs before the progress form exists. }
+    if Assigned(UninstallProgressForm) then begin
+      UninstallProgressForm.StatusLabel.Caption := Text;
+      UninstallProgressForm.StatusLabel.Update;
+    end;
+  end else begin
+    WizardForm.PreparingLabel.Caption := Text;
+    WizardForm.StatusLabel.Caption := Text;
+    WizardForm.PreparingLabel.Update;
+    WizardForm.StatusLabel.Update;
+  end;
+end;
+
 function Lifecycle(Action, Extra, Script: String): Boolean;
 var Code: Integer;
 begin
+  if Action = 'Install' then
+    LifecycleStatus('Copying and verifying files. This can take a minute...')
+  else if Action = 'Uninstall' then
+    LifecycleStatus('Backing up and removing BG3RTX files. This can take a minute...')
+  else if Action = 'Commit' then
+    LifecycleStatus('Finishing installation and keeping recovery backups...')
+  else if Action = 'Recover' then
+    LifecycleStatus('Restoring the previous complete installation...')
+  else
+    LifecycleStatus('Checking BG3RTX installation and recovery files...');
+  { Inno's synchronous Exec pumps messages while waiting for termination. }
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Script +
     '" -Action ' + Action + ' -Destination "' + ExpandConstant('{app}') +
@@ -134,6 +162,7 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var Extra: String;
 begin
   Result := '';
+  LifecycleStatus('Extracting BG3RTX files. This can take a minute...');
   ExtractTemporaryFiles('{tmp}\bg3rtx-payload\*');
   ExtractTemporaryFile('bg3rtx-lifecycle.ps1');
   if not Lifecycle('Inspect', '', ExpandConstant('{tmp}\bg3rtx-lifecycle.ps1')) then begin

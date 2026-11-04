@@ -218,6 +218,26 @@ class LifecycleTest(unittest.TestCase):
         self.run_action('Install', ok=False)
         self.assertEqual(self.snapshot(), before)
 
+    def test_new_junction_after_preflight_is_rechecked(self):
+        target = self.root / 'untouched'
+        target.mkdir()
+        (target / 'keep').write_bytes(b'keep')
+        link = self.dst / 'bin'
+        quote = lambda p: "'" + str(p).replace("'", "''") + "'"
+        hook = ("  New-Item -ItemType Directory -Force -Path " + quote(self.dst) + " | Out-Null\n"
+                "  New-Item -ItemType Junction -Path " + quote(link) +
+                " -Target " + quote(target) + " | Out-Null\n")
+        text = self.script.read_text(encoding='utf-8-sig')
+        self.script.write_text(text.replace('  $records = Snapshot', hook + '  $records = Snapshot'), encoding='utf-8-sig')
+        try:
+            result = self.run_action('Install', ok=False)
+            self.assertIn('Refusing reparse point', result.stderr)
+            self.assertEqual(self.snapshot(target), {'keep': b'keep'})
+            self.assertFalse(list(self.local.rglob('pending.json')))
+        finally:
+            if link.exists():
+                os.rmdir(link)
+
     def test_payload_and_backup_ancestor_junctions(self):
         self.run_action('Install')
         before = self.snapshot()
