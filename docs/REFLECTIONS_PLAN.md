@@ -79,8 +79,16 @@ uses eager pure predicates so specialization matches the fixed-key reference wit
 the tier counts. Compose flag 64 controls
 hit shading separately from shift flag 32. Borrowed descriptors require one consistent lighting frame: the TLAS/material identity,
 light list and camera must agree. Compose can shade with F-1 lighting only when
-rt_water_compose_shift moves the ray into that lighting camera space and shared
-forward light bindings match the stash. Older frames or identity mismatches retain
+rt_water_compose_shift moves the ray into that lighting camera space and
+the current deferred pass has re-observed all nine stashed light resources and
+the borrowed game set. The observation is published at dispatch pre, before the
+delayed lighting flush: forward F normally finds the F-1 stash. Comparing forward
+F's seven bindings with that stash mixed two different pass contracts, beginning
+with forward set 2 b0 versus deferred set 1 b13. Forward equality now only permits
+sharing b22..28 with WATER_LS. If it fails, bind the full deferred tuple and keep
+the native local-shadow term. A missing observation, rotated deferred resource or
+changed game set refuses F-1 shading; scene/material retention and camera shift
+remain required. Older frames or identity mismatches retain
 the probe. Ordinary and hit-capable pipeline layouts and specialization pipelines
 are cached across 0/2 toggles; no shader request is added.
 
@@ -138,7 +146,8 @@ and type union once at lighting, before the water traces, in device-local memory
 It scans only the current grid dimensions, validates list bounds and rejects an
 inconsistent type. Transfer clear -> compute build -> compute readers are ordered.
 The preparation is included in reflection GPU timing. Borrowed frame/TLAS and
-forward/opaque light-buffer equality checks still apply to compose.
+current deferred resource lifetime checks still apply to compose. Forward/opaque
+equality controls shared local-shadow bindings independently.
 
 **Provider limit:** the premise that every b25 slot is a current active light is
 false for this renderer. ASSET_DB.md measured 1,182 valid-looking slots versus 39
