@@ -17,17 +17,37 @@ try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch { }
 if (Get-Process -Name bg3,bg3_dx11,BG3RTX -ErrorAction SilentlyContinue) {
   throw 'Close the game and BG3RTX settings, then retry. No process was stopped.'
 }
-function Safe([string]$p) {
-  $p = [IO.Path]::GetFullPath($p)
-  if ($p -match '(?i)[\\/]Larian Studios([\\/]|$)') { throw 'Refusing protected profile path.' }
-  for ($q = $p; $q; $q = Split-Path $q) {
-    if (Test-Path -LiteralPath $q) {
-      if ((Get-Item -LiteralPath $q -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Refusing reparse point: $q" }
-      foreach ($exe in @('bin\bg3.exe','bin\bg3_dx11.exe','bg3.exe','bg3_dx11.exe')) {
-        if (Test-Path -LiteralPath (Join-Path $q $exe)) { throw "Refusing game directory: $q" }
+if (-not ('BG3RTXLifecyclePaths' -as [type])) {
+  # Keep the repeated filesystem walk out of the PowerShell provider/interpreter.
+  # No results are cached: every access still checks all ancestors and game paths.
+  Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+public static class BG3RTXLifecyclePaths {
+  public static FileAttributes Attributes(string path) {
+    // FileInfo exposes directory/link attributes too; missing paths return -1
+    // without throwing an exception for each absent game executable.
+    return new FileInfo(path).Attributes;
+  }
+  public static void Check(string path) {
+    for (string q = path; !String.IsNullOrEmpty(q); q = Path.GetDirectoryName(q)) {
+      FileAttributes attrs = Attributes(q);
+      if (attrs == (FileAttributes)(-1)) continue;
+      if ((attrs & FileAttributes.ReparsePoint) != 0)
+        throw new IOException("Refusing reparse point: " + q);
+      foreach (string exe in new[] { @"bin\bg3.exe", @"bin\bg3_dx11.exe", "bg3.exe", "bg3_dx11.exe" }) {
+        if (Attributes(Path.Combine(q, exe)) != (FileAttributes)(-1))
+          throw new IOException("Refusing game directory: " + q);
       }
     }
   }
+}
+'@
+}
+function Safe([string]$p) {
+  $p = [IO.Path]::GetFullPath($p)
+  if ($p -match '(?i)[\\/]Larian Studios([\\/]|$)') { throw 'Refusing protected profile path.' }
+  [BG3RTXLifecyclePaths]::Check($p)
   return $p
 }
 function Under([string]$root, [string]$rel) {
@@ -35,9 +55,10 @@ function Under([string]$root, [string]$rel) {
   foreach ($segment in ($rel -split '[\\/]')) {
     if ($segment -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)') { throw "Reserved device path: $rel" }
   }
-  $p = Safe (Join-Path $root $rel)
+  $p = Safe ([IO.Path]::Combine($root, $rel))
   if (-not $p.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Path escape: $rel" }
-  if ((Test-Path -LiteralPath $p) -and -not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "Expected file: $p" }
+  $attrs = [BG3RTXLifecyclePaths]::Attributes($p)
+  if ($attrs -ne -1 -and ($attrs -band [IO.FileAttributes]::Directory)) { throw "Expected file: $p" }
   return $p
 }
 function PayloadPath([string]$root, [string]$rel) {
@@ -59,11 +80,17 @@ function WriteJson([string]$p, $value) {
 function CopyFile([string]$from, [string]$to) {
   Tick 'Copying/staging'
   $null = Safe $from; $null = Safe $to
-  New-Item -ItemType Directory -Force -Path (Split-Path $to) | Out-Null
+  $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($to))
   [IO.File]::Copy($from, $to, $true)
 }
 function DeleteFile([string]$p) { Tick 'Removing recorded files'; $null = Safe $p; if (Test-Path -LiteralPath $p -PathType Leaf) { [IO.File]::Delete($p) } }
-function Hash([string]$p) { Tick 'Verifying SHA256'; return (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }
+function Hash([string]$p) {
+  Tick 'Verifying SHA256'
+  $stream = [IO.File]::OpenRead($p)
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
+  finally { $sha.Dispose(); $stream.Dispose() }
+}
 $script:operations = 0L
 $script:timer = [Diagnostics.Stopwatch]::StartNew()
 function Tick([string]$phase) {
