@@ -71,7 +71,7 @@ capture evidence elsewhere first. Lifecycle/Inno has a different retention polic
 
 ## Owner sign-off
 
-- [ ] Answer the licence, NVIDIA notification, game-data rights and Microsoft runtime questions
+- [x] Answer the licence, NVIDIA notification, game-data rights and Microsoft runtime questions
   in [offline status](RELEASE_OFFLINE_STATUS.md). Notices do not grant game-data redistribution.
 - [ ] Approve explicit deferral of the unqualified backlog and define supported hardware/content.
 - [ ] Review the final archive, README, known issues and deciding evidence before distribution.

@@ -45,6 +45,7 @@ upload.
 - Stock visible hair ships. Strands are a post-release update on the Experimental page.
 - Fresnel Experimental; native ambient and water edge/glint; emission mode 1.
 - GPL-3.0-or-later plus NVIDIA exception; no NVIDIA notification.
+- The asset database derived from the game (8 MB) ships in the archive, at the user's own risk.
 - Static CRT; no VC runtime ships. Only RTX 5090 tested. Launcher acceptance is DPI only.
 - Lean: live windows in frames, one launch per scene, merge-green scaled to changed paths.
 - RTX Hair: consolidate and verify offline first; one approved READY_FOR_LIVE job afterwards.

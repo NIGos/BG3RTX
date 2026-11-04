@@ -20,6 +20,7 @@ Then [backlog](BACKLOG_20261104.md) and [RC_CHECK](release/RC_CHECK.md). ABI 26.
 - Fresnel Experimental and off. Tilesets hidden and off. One-ray GI rejected for Ultra.
 - Ctrl+Shift+F9 master RT toggle; F10 flips the last Experimental choice.
 - GPL-3.0-or-later plus NVIDIA exception. "Tested only on RTX 5090".
+- The game-derived asset database ships in the archive (user decision, own risk).
 
 ## Post-release queue
 
