@@ -22,7 +22,9 @@ BATCH = "hair_crowd"
 LIVE = "hair-crowd"
 SAVES = [("hc1-dialogue1-fg2", "Test Dialogue1"), ("hc2-campsite-fg2", "Campsite - 27h")]
 # rt_hair_groom_primary is latched on at startup (hair_primary make_job PRIMARY_START); the live A/B is rt_hair_groom.
-CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0")
+# Header order G-buffer in every phase: in header order prepass the coverage gate keeps the cards (no strand draws).
+CARDS = dict(rt_hair_groom="0", rt_hair_groom_primary="1", rt_hair_fibre="0", rt_hair_groom_crowd_ksegments="0",
+             rt_hair_groom_primary_order="1")
 SCREEN = dict(CARDS, rt_hair_groom="1")
 CROWD = dict(SCREEN, rt_hair_groom_crowd_ksegments="1800")   # the GUI's "2 close characters"
 

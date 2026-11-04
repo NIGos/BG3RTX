@@ -82,7 +82,7 @@
   "trace_export": {
    "seconds": 0.3169999999954598,
    "quantile": 0.95,
-   "samples": 439,
+   "samples": 429,
    "maximum": 0.43699999999807915
   }
  },
