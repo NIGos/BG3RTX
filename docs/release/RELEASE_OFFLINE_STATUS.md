@@ -3,29 +3,33 @@
 No commit, game launch, upload or installation outside synthetic test scratch. Git metadata is read-only.
 PASS means only the named offline check. This is not release approval or final hardware acceptance.
 
-## Owner decisions (questions)
+## Settled direction and open decisions
 
-- Which project licence is approved, and should NVIDIA be notified? No notification was sent.
+- GPL-3.0-or-later plus NVIDIA exception is chosen. No NVIDIA notification is planned.
 - May the game-derived asset database be redistributed under Larian's terms?
-- Are the Microsoft static CRT/WebView2 terms approved? No VC redistributable installer or DLL ships.
-- Keep SHaRC off and its headers excluded, or separately resolve its distribution terms?
-- Close Fresnel hidden, or accept the retained S8 rim appearance? wsf1 is not promoted here.
+- Microsoft runtime uses static CRT. No VC runtime installer or DLL ships.
+- SHaRC is rejected unless matched injection/resolve inputs exist; keep Off and headers excluded meanwhile.
+- Fresnel stays Experimental, Off in presets: invisible on open water to the user.
 - Approve the explicit deferral of the remaining unqualified non-hair backlog?
-- What hardware/content support scope is acceptable after VRAM, transition, Act 2/3 and RTX 30/40 acceptance?
+- Only RTX 5090 has been tested. Memory/transition and Act 2/3 acceptance remain open; no broader GPU claim.
 - Which installer ships: current ZIP legacy helpers, or separately integrated/qualified lifecycle/Inno?
 - Accept ambient ratio 1.44 and the remaining water shadow/glint appearance? Emission stays mode 1.
 - After build/acceptance and legal decisions, approve the final archive and upload?
 
-Temporal promotion is already accepted on user visual verdict; it is not a pending owner question.
+Temporal promotion is accepted on user visual verdict; its statistical/energy limits remain.
+Stock visible hair ships; strands are a post-release Experimental update. One-ray Ultra GI
+and Tilesets are being qualified. No promotion is claimed. Manual launcher check: DPI only.
+Rejected: three GPU candidates, Medium Half, water bits 2/4, glint, alpha spill (no S8
+overflow), GI guards, current Sun and IP grass. Keep work lean and sized to what is needed.
 
 ## Evidence and release docs
 
 | Item | State |
 |---|---|
 | README / settings | UPDATED to the 15 final controls, three settings pages, stock visible hair, automatic Ultra OMM/masks, Full tracing and Ctrl+Shift+F9 master RT toggle. Removed obsolete player activation guidance. |
-| Feature evidence | wf9 08:59 VALID on main 6a00b295: 17 every-window gates; static ON equals OFF; turning compose screen hits about 6.7% to 17%; final compose median 0.154 ms absolute. Receipt read from main checkout `tools/live_batches/water_flicker_wf9/RESULT_wf9_085908.md`, absent in this branch until qualification stream integration. Supersedes the contract/plan's older wf9 hold. |
+| Feature evidence | wf9 08:59 VALID: 17 gates; static ON equals OFF; turning hits about 6.7% -> 17%; compose 0.154 ms absolute. Qualified; no release hold. |
 | Temporal post | PROMOTED by user verdict. RESULT_pairs_032335: isolated 0.152-0.153 ms; 12 primary sign tests p 0.17-0.83 and float energy +0.1492% did not pass. About 250 MiB reference memory comes from release plan, not that RESULT. No statistical pass claimed. |
-| Fresnel | NOT PROMOTED. RESULT_wsf1_064436: rim +43%, open water +1.8%, ON variation 13% versus OFF about 2%; surface FS 0.10-0.15 ms absolute; no PT reference. |
+| Fresnel | Experimental by user decision; Off in presets. Rim +43%, open water +1.8%; ON variation 13% versus about 2% OFF; FS 0.10-0.15 ms; no PT reference. |
 | Other historical feature costs | README names OMM, box, bounce and stock-card figures from defaults review/TRACK/native-hair evidence. No new RESULT files for these are in this tree. Older combined RESULT_WATER_185612 is INVALID: exploratory costs do not qualify candidates. |
 | GPU / VRAM / versions | No model-based preset guarantee, minimum driver claim or qualified VRAM capacity. Driver 621.01 and game 4.1.1.7631656 remain recorded references, pending final-log verification. Port observation 31.7 GB versus 30.6 GB budget prevents a 32 GB safety claim. |
 | Effective defaults / final UX | Contract consumed for documentation. Final merged settings enforcement, generated tables, hidden stale-INI filtering and native/WebView parity remain A/B acceptance; not certified by packaging tests. |
@@ -70,6 +74,8 @@ Supply/rebuild the lean layer and establish final binary freshness/provenance; i
 files.txt, private symbol separation and any installer hash manifest after owner decisions. ZIP still ships
 legacy install helpers; lifecycle/Inno integration, compiler pin/signing and portable/setup equivalence are
 not done. Complete disposable VM shortcuts, locked-file/low-space/interruption and IncludeSave dialog
-acceptance with synthetic data. Fresh-PC/no-SDK, Steam/GOG launch and actual launcher accessibility
-acceptance remain open. Complete final stock-hair Ultra smoke, dialogue/startup, multi-hour memory,
-scene transitions, Act 2/3 and broader hardware acceptance with separately authorized batches.
+acceptance with synthetic data. Fresh-PC/no-SDK and Steam/GOG launch acceptance remain open. Manual launcher acceptance
+is DPI only. rel1 Ultra smoke VALID 13:47, rel2 High VALID 12:13 and rel3 stock hair VALID
+13:51 are recorded receipts; review retained dialogue images separately. Do not repeat
+smoke without a material release change. Memory/transition and Act 2/3 acceptance require
+separately authorized, lean batches. Only RTX 5090 has been tested.
