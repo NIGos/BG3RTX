@@ -1,0 +1,392 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 17.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 17.0,
+    "motion_end": 17.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 180.0
+  },
+  {
+    "label": "prefetch-one-ray",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 3.0,
+    "motion_end": 3.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=1",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "prefetch-two-rays",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 3.0,
+    "motion_end": 3.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "gi: gi/[^ ]+ generation ",
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "cost-off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 24.2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 24.2,
+    "motion_end": 24.2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0"
+  },
+  {
+    "label": "shot-rays-off-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 19.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 19.3,
+    "motion_end": 19.3,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "pan-off-a",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 4.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0.2,
+    "serial": 99100,
+    "motion_start": 0,
+    "motion_end": 3,
+    "pixels_per_second": 1,
+    "direction": -1,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=99100",
+    "turn_mode": "keys",
+    "registration_policy": "per-frame-exclude-unregistered"
+  },
+  {
+    "label": "return-off-a",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 3.0,
+    "pixels_per_second": 1,
+    "direction": 1,
+    "set": "pan_capture=0",
+    "turn_mode": "keys"
+  },
+  {
+    "label": "cost-on-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 23.2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 23.2,
+    "motion_end": 23.2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0
+  },
+  {
+    "label": "shot-rays-on-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 19.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 19.3,
+    "motion_end": 19.3,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "pan-on-a",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 4.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0.2,
+    "serial": 99101,
+    "motion_start": 0,
+    "motion_end": 3,
+    "pixels_per_second": 1,
+    "direction": -1,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=99101",
+    "turn_mode": "keys",
+    "registration_policy": "per-frame-exclude-unregistered"
+  },
+  {
+    "label": "return-on-a",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 3.0,
+    "pixels_per_second": 1,
+    "direction": 1,
+    "set": "pan_capture=0",
+    "turn_mode": "keys"
+  },
+  {
+    "label": "cost-off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 23.2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 23.2,
+    "motion_end": 23.2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0
+  },
+  {
+    "label": "shot-rays-off-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 19.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 19.3,
+    "motion_end": 19.3,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=0",
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "pan-off-b",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 4.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0.2,
+    "serial": 99102,
+    "motion_start": 0,
+    "motion_end": 3,
+    "pixels_per_second": 1,
+    "direction": -1,
+    "set": "gi_rr_rays=2,qa_exposure_hold=1,pan_capture=99102",
+    "turn_mode": "keys",
+    "registration_policy": "per-frame-exclude-unregistered"
+  },
+  {
+    "label": "return-off-b",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 3.0,
+    "pixels_per_second": 1,
+    "direction": 1,
+    "set": "pan_capture=0",
+    "turn_mode": "keys"
+  },
+  {
+    "label": "cost-on-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 23.2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 23.2,
+    "motion_end": 23.2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 2.0
+  },
+  {
+    "label": "shot-rays-on-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 19.3,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 19.3,
+    "motion_end": 19.3,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=0",
+    "trace_at": [
+      1,
+      6,
+      11
+    ]
+  },
+  {
+    "label": "pan-on-b",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 4.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0.2,
+    "serial": 99103,
+    "motion_start": 0,
+    "motion_end": 3,
+    "pixels_per_second": 1,
+    "direction": -1,
+    "set": "gi_rr_rays=1,qa_exposure_hold=1,pan_capture=99103",
+    "turn_mode": "keys",
+    "registration_policy": "per-frame-exclude-unregistered"
+  },
+  {
+    "label": "return-on-b",
+    "kind": "rotate",
+    "speed": "slow",
+    "seconds": 3.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 0,
+    "motion_end": 3.0,
+    "pixels_per_second": 1,
+    "direction": 1,
+    "set": "pan_capture=0",
+    "turn_mode": "keys"
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "gi_rr_rays=2,qa_exposure_hold=0,pan_capture=0,pan_prepare=0,pan_edge=0",
+    "wait_log": [
+      "gi: gi/(?:gi_trace_rt[^ /]*|gi_trace)\\.hlsl[^ ]* generation ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ],
+    "wait_log_timeout": 180.0
+  }
+]

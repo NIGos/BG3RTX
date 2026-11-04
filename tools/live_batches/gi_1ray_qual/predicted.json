@@ -1,0 +1,16 @@
+{
+  "status": "READY_FOR_LIVE only after offline validation; no live authorization",
+  "job": "gi1-ultra-1ray",
+  "scene": "Water Queens House (S8): roofed dim stone and high contrast exterior; sh1/sh2 already exposed the OFF-repeat flicker floor here. Camp has higher trace cost, but no comparative flicker receipt proving it worse. S8 is the worst evidenced one-ray flicker case, not a claimed exhaustive ranking.",
+  "profile": "Current main preset=ultra, RR and FG 2. No old sh2 feature-disable overrides. Only gi_rr_rays changes rendering: 2/1/2/1. No preset promotion.",
+  "prediction": {"gi_trace_saving_ms": 2.30, "energy_relative": 0.0},
+  "prior": "ultra-gi-1ray 75c7f5b0: sh2 static S8 trace 4.31 -> 2.02 ms, energy +0.16%; motion stippling unmeasured. Not release acceptance.",
+  "pass_rule": [
+    "All job expectations and every-window gates pass; complete single launch; zero scene-wait timeouts in every measured interval. Transport, nonfinite data, missing captures or registration/support failures are INVALID, never PASS.",
+    "Report each cost state's GI trace GPU median and each ON saving against mean OFF. Both savings must be positive. The prior 2.30 ms is a prediction, not a tuned minimum.",
+    "Both static ON float pre-post scene-colour means, exposure-normalized, must satisfy tools.m4_promotion_gate.energy(pool=run), null prediction 0 and its Student-t OFF-repeat band. Missing/zero-degree-of-freedom band is INVALID. Never gate PNG brightness.",
+    "Static and registered held-pan final PQ frames use scripts.qa.detectors.temporal, the TRACK_C_GI/docs/QA flicker detector. Check each ON against both OFF sets. Reuse sharc_far/rays_flicker floor rule: if both directed OFF-repeat nulls pass, all detector gates must pass; otherwise each ON excess area <= max directed OFF-null excess area AND mean std excess <= the detector's one-PQ-step limit. INCONCLUSIVE always invalidates, including the OFF nulls.",
+    "No promotion unless BOTH ON repeats pass energy and BOTH static/pan temporal acceptance. Inspect S8 shaded stone/roof transitions for stippling; settings promotion is separate."
+  ],
+  "budget": "One launch, 120 s load allowance, under 360 s including expected readiness; runtime max_minutes=5.9 clamps the generated timeout to 354 s and fails closed on slow loads. Twelve PNG/stat traces at 60 MB plus four compact K8 edge bursts at 165 MB plus logs = 1390 MB. No full K16 raw bursts. No diagnostics in cost windows."
+}
