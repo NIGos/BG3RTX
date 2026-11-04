@@ -77,7 +77,8 @@ class LiveGuardTest(unittest.TestCase):
         self.plan = [dict(label="diag", seconds=10, set="rt_stats=1"),
                      dict(label="reset", seconds=1, set="rt_stats=0"),
                      dict(label="next", seconds=10, set="rt_stats=1")]
-        self.job = dict(set="rt_stats=1", window_mode="visible_unfocused_fg", forbid=["BROKEN"], expect=[],
+        # Match the synthetic FPS signature regardless of the developer OMM default.
+        self.job = dict(set="rt_stats=1,rt_omm=0", window_mode="visible_unfocused_fg", forbid=["BROKEN"], expect=[],
                         expect_every=[dict(select="stats", match="good", windows=["diag"])],
                         live_flow=dict(fps_windows=[dict(state=[1,0,0,0,0], fps=30, windows=1, logs=["synthetic"])]))
         self.runner = stamp(1, "[pan-plan] window 0 set=rt_stats=1")
