@@ -319,9 +319,8 @@ struct Bg3HostApi {
   // alive until that command buffer has run (the layer's image lifetime tracking).
   bool (*rt_emissive)(VkCommandBuffer cmd, VkDescriptorSetLayout* layout, VkDescriptorSet* set, Bg3EmissiveInfo* info);
 
-  // ABI 19. Optional, default null until implemented. Invoked ONLY by the opt-in
-  // sun path, after selection of the baseline TLAS/alpha tuple. False means keep
-  // that baseline; clear *out on failure. Never silently substitute another epoch.
+  // ABI 19. Retired current-sun callback; kept null. This slot and its signature
+  // remain reserved so the host/core ABI layout does not change. Never reuse.
   bool (*rt_sun_scene)(VkCommandBuffer cmd, VkAccelerationStructureKHR selected_tlas,
                        VkDescriptorSet selected_alpha, Bg3SunSceneInfo* out);
   // ABI 19. Validate/register each OMM traversal command. Always returns its

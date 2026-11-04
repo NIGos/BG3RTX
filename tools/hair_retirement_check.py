@@ -1,4 +1,4 @@
-"""Selective hair-retirement and C2 default equivalence, preserving other specializations.
+"""Selective rejected-feature retirement and C2 default equivalence, preserving other specializations.
 
 Uses the retirement gate's canonical comparator, never a blanket spec-constant freeze.
 Callers must keep the same request (including arithmetic reference defines) on both sides.
@@ -34,7 +34,7 @@ def defaults_off(tool, src, dst, ids):
 
 
 def retired_off(tool, src, dst):
-    return defaults_off(tool, src, dst, (1017, 1018, 1019))
+    return defaults_off(tool, src, dst, (1001, 1002, 1005, 1006, 1016, 1017, 1018, 1019, 1021, 1022, 1023, 1024))
 
 
 def shadow_off(tool, src, dst):
@@ -56,10 +56,13 @@ def compare_retired(tool, baseline, current, tmp):
         a = retired_off(tool, a, tmp / f'{i}_retired.spv')
         a = shadow_off(tool, a, tmp / f'{i}_base_shadow.spv')
         b = shadow_off(tool, b, tmp / f'{i}_new_shadow.spv')
+        # Retired empty-water voting leaves an unused GroupNonUniformVote declaration.
+        # Trim unused capabilities symmetrically, as check_one does; executable instructions
+        # and every surviving specialization remain part of the exact comparison.
         a = opt(tool, a, tmp / f'{i}_base_opt.spv', '--fold-spec-const-op-composite',
-                '-O', '--remove-unused-interface-variables')
+                '-O', '--remove-unused-interface-variables', '--trim-capabilities')
         b = opt(tool, b, tmp / f'{i}_new_opt.spv', '--fold-spec-const-op-composite',
-                '-O', '--remove-unused-interface-variables')
+                '-O', '--remove-unused-interface-variables', '--trim-capabilities')
         delta = differ(canonical(tool, a), canonical(tool, b))
         if delta:
             return f'{entry}: {delta}'
@@ -77,10 +80,10 @@ def retirement_fallback(rows, base, new, tool, cache, label):
         for request, state, log in rows:
             path = 'raw identity' if identical(state) else 'failed'
             if state == 'DIFFERENT':
-                with tempfile.TemporaryDirectory(prefix='b3-hair-retire-') as tmp:
+                with tempfile.TemporaryDirectory(prefix='b3-feature-retire-') as tmp:
                     log = compare_retired(tool, compiled[0][request], compiled[1][request], Path(tmp))
                 if not log:
-                    path = 'retirement/default equivalence (1017-1019=0 baseline; 1026=0 both)'
+                    path = 'retirement/default equivalence (1001/1002/1005/1006/1016-1019/1021-1024=0 baseline; 1026=0 both)'
             print(f'{label}: {path}: {request}' + (f' ({state}: {log})' if path == 'failed' else ''), flush=True)
             proofs.append({'request': request, 'path': path, 'raw_state': state, 'error': log})
             progress.step(failed=path == 'failed')

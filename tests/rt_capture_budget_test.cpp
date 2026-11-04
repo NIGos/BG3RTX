@@ -123,28 +123,6 @@ int main(){
   }
  }
 
- // Partition overflow with free opaque storage must retain a direct alpha
- // record. The reservation is transactional: failures leave the output/cursors.
- uint64_t offset=999;
- check(alpha_spill_offset(true,true,true,true,100,200,100,offset) && offset==100);
- for(unsigned missing=0;missing<4;++missing){
-  bool conditions[4]={true,true,true,true};conditions[missing]=false;offset=999;
-  check(!alpha_spill_offset(conditions[0],conditions[1],conditions[2],conditions[3],100,200,100,offset) && offset==999);
- }
- for(auto request:{std::pair{201ull,1ull},std::pair{100ull,101ull},std::pair{100ull,0ull},
-                   std::pair{UINT64_MAX,UINT64_MAX}}){
-  offset=999;check(!alpha_spill_offset(true,true,true,true,request.first,200,request.second,offset) && offset==999);
- }
- // Overflow-safe last-byte reservation and independent storage cursors.
- check(alpha_spill_offset(true,true,true,true,UINT64_MAX-1,UINT64_MAX,1,offset) && offset==UINT64_MAX-1);
- uint64_t opaque_cursor=100,alpha_cursor=900,opaque_end=200;
- check(alpha_spill_offset(true,true,true,true,opaque_cursor,opaque_end,60,offset));
- opaque_cursor+=60;check(opaque_cursor==160 && alpha_cursor==900);
- check(!alpha_spill_offset(true,true,true,true,opaque_cursor,opaque_end,60,offset));
- check(alpha_spill_offset(true,true,true,true,opaque_cursor,opaque_end,40,offset));
- opaque_cursor+=40;check(opaque_cursor==opaque_end && alpha_cursor==900);
- check(opaque_partition_demand(opaque_cursor,100,true)==100); // Spill is alpha demand only.
-
  // Existing shader/host addressing: InstInfo base and HLSL byte offsets are
  // uint32, metadata stores stride in eight bits, conversion dispatch is256 wide.
  // These are representability checks, NOT runtime device-memory availability.

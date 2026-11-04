@@ -3,7 +3,7 @@
     {
       "job": "hv1-dialogue1",
       "before_seconds": 297.0,
-      "after_seconds": 247.7,
+      "after_seconds": 215.63799999999998,
       "unresolved": [
         {
           "window": "warmup",
@@ -15,6 +15,12 @@
           "window": "warm-strands",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warm-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
@@ -70,7 +76,7 @@
     {
       "job": "hv2-camp",
       "before_seconds": 297.0,
-      "after_seconds": 260.7,
+      "after_seconds": 223.40000000000003,
       "unresolved": [
         {
           "window": "warmup",
@@ -81,48 +87,128 @@
         {
           "window": "warm-strands",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warm-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-strands-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-strands-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-c",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "turn-q-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
           "window": "toggle-0",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-1",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-2",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-3",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-4",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-5",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "rendered-cards",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "rendered-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-cards-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-cards-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
           "window": "reload-selected",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
@@ -130,6 +216,12 @@
           "window": "cost-after-reload",
           "reasons": [
             "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "restore",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         }
       ]
@@ -137,7 +229,7 @@
     {
       "job": "hv3-s8",
       "before_seconds": 297.0,
-      "after_seconds": 248.7,
+      "after_seconds": 200.9,
       "unresolved": [
         {
           "window": "warmup",
@@ -148,48 +240,128 @@
         {
           "window": "warm-strands",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warm-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-strands-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-strands-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "shot-cards-c",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "turn-q-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
           "window": "toggle-0",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-1",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-2",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-3",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-4",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
         {
           "window": "toggle-5",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "rendered-cards",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "rendered-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-cards-a",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "cost-cards-b",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
           "window": "reload-selected",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "failure-latency observation bound retained"
           ]
         },
@@ -198,13 +370,19 @@
           "reasons": [
             "failure-latency observation bound retained"
           ]
+        },
+        {
+          "window": "restore",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
         }
       ]
     },
     {
       "job": "hv4-gpuav",
       "before_seconds": 50.0,
-      "after_seconds": 84.3,
+      "after_seconds": 69.276,
       "unresolved": [
         {
           "window": "warmup",
@@ -216,6 +394,12 @@
           "window": "warm-strands",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warm-strands",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
@@ -241,7 +425,7 @@
     {
       "job": "pt-dialogue3",
       "before_seconds": 173,
-      "after_seconds": 130.3,
+      "after_seconds": 458.3000000000005,
       "unresolved": [
         {
           "window": "warmup",
@@ -260,7 +444,7 @@
     {
       "job": "pt-s8",
       "before_seconds": 173,
-      "after_seconds": 130.3,
+      "after_seconds": 125.89999999999999,
       "unresolved": [
         {
           "window": "warmup",
@@ -271,175 +455,38 @@
         {
           "window": "warmup-camera",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "cp4-compact-camp-join",
-      "before_seconds": 80,
-      "after_seconds": 55.5,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
         {
-          "window": "warmup-off",
+          "window": "settle-off-a",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "go1-camp",
-      "before_seconds": 321,
-      "after_seconds": 289.6,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "warm-rt_compact_hit_state",
+          "window": "settle-on-a",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "warm-rt_alpha_metadata_cache",
+          "window": "settle-off-b",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "warm-rt_water_empty_tiles",
+          "window": "settle-on-b",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "warm-off",
+          "window": "restore",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "go2-s8",
-      "before_seconds": 321,
-      "after_seconds": 289.6,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warm-rt_compact_hit_state",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warm-rt_alpha_metadata_cache",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warm-rt_water_empty_tiles",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warm-off",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "go2-camp-high",
-      "before_seconds": 176,
-      "after_seconds": 151.0,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warmup-scaled",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "go2-s8-medium",
-      "before_seconds": 176,
-      "after_seconds": 151.0,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "warmup-scaled",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        }
-      ]
-    },
-    {
-      "job": "wo1-s8-hit-shade",
-      "before_seconds": 557,
-      "after_seconds": 525.4,
-      "unresolved": [
-        {
-          "window": "warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "prefetch-sparse",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "prefetch-cone",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "prefetch-order",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "prefetch-combined",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         }
       ]
@@ -447,12 +494,18 @@
     {
       "job": "wf9-s8-compose-shift",
       "before_seconds": 302,
-      "after_seconds": 280.1,
+      "after_seconds": 281.30000000000007,
       "unresolved": [
         {
           "window": "warmup",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warmup",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
@@ -466,12 +519,18 @@
     {
       "job": "su1-ultra-s8-fg2",
       "before_seconds": 221,
-      "after_seconds": 156.7,
+      "after_seconds": 154.9,
       "unresolved": [
         {
           "window": "warmup",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "producer-sanity-warmup",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
@@ -485,13 +544,25 @@
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
+        },
+        {
+          "window": "ab-off",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "ab-on",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
         }
       ]
     },
     {
       "job": "ef1-dialogue3-attribution",
       "before_seconds": 220,
-      "after_seconds": 155.8,
+      "after_seconds": 162.00000000000006,
       "unresolved": [
         {
           "window": "warmup",
@@ -502,6 +573,7 @@
         {
           "window": "warmup-camera",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -544,6 +616,7 @@
         {
           "window": "warm-post-late",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -552,66 +625,11 @@
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
-        }
-      ]
-    },
-    {
-      "job": "combined-Campsite---27h",
-      "before_seconds": 587.0,
-      "after_seconds": 498.3,
-      "unresolved": [
-        {
-          "window": "b1-cp4-compact-camp-join--warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
         },
         {
-          "window": "b1-cp4-compact-camp-join--warmup-off",
+          "window": "settle-post-late",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b2-go1-camp--warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b2-go1-camp--warm-rt_compact_hit_state",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b2-go1-camp--warm-rt_alpha_metadata_cache",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b2-go1-camp--warm-rt_water_empty_tiles",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b2-go1-camp--warm-off",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b3-go2-camp-high--warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b3-go2-camp-high--warmup-scaled",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         }
       ]
@@ -619,7 +637,7 @@
     {
       "job": "combined-Test-Dialogue3",
       "before_seconds": 398.0,
-      "after_seconds": 287.2,
+      "after_seconds": 678.2000000000002,
       "unresolved": [
         {
           "window": "b1-pt-dialogue3--warmup",
@@ -634,14 +652,22 @@
           ]
         },
         {
+          "window": "b2-ef1-dialogue3-attribution--settings-reset",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
           "window": "b2-ef1-dialogue3-attribution--warmup",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
         {
           "window": "b2-ef1-dialogue3-attribution--warmup-camera",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -684,6 +710,7 @@
         {
           "window": "b2-ef1-dialogue3-attribution--warm-post-late",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -692,18 +719,30 @@
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
+        },
+        {
+          "window": "b2-ef1-dialogue3-attribution--settle-post-late",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
         }
       ]
     },
     {
       "job": "combined-Water-Queens-House",
       "before_seconds": 1775.0,
-      "after_seconds": 1538.6,
+      "after_seconds": 564.2999999999996,
       "unresolved": [
         {
           "window": "b1-su1-ultra-s8-fg2--warmup",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b1-su1-ultra-s8-fg2--producer-sanity-warmup",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
@@ -719,99 +758,78 @@
           ]
         },
         {
-          "window": "b2-go2-s8--warmup",
+          "window": "b1-su1-ultra-s8-fg2--ab-off",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "b1-su1-ultra-s8-fg2--ab-on",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "b2-wf9-s8-compose-shift--warmup",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "scene/pipeline settle bound retained; not a producer cadence"
+          ]
+        },
+        {
+          "window": "b2-wf9-s8-compose-shift--producer-sanity-warmup",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
+          ]
+        },
+        {
+          "window": "b2-wf9-s8-compose-shift--prefetch-shift-on",
           "reasons": [
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
         {
-          "window": "b2-go2-s8--warm-rt_compact_hit_state",
+          "window": "b3-pt-s8--warmup",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
         {
-          "window": "b2-go2-s8--warm-rt_alpha_metadata_cache",
+          "window": "b3-pt-s8--warmup-camera",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
         {
-          "window": "b2-go2-s8--warm-rt_water_empty_tiles",
+          "window": "b3-pt-s8--settle-off-a",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "b2-go2-s8--warm-off",
+          "window": "b3-pt-s8--settle-on-a",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "b3-go2-s8-medium--warmup",
+          "window": "b3-pt-s8--settle-off-b",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "b3-go2-s8-medium--warmup-scaled",
+          "window": "b3-pt-s8--settle-on-b",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         },
         {
-          "window": "b4-wo1-s8-hit-shade--warmup",
+          "window": "b3-pt-s8--restore",
           "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b4-wo1-s8-hit-shade--prefetch-sparse",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b4-wo1-s8-hit-shade--prefetch-cone",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b4-wo1-s8-hit-shade--prefetch-order",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b4-wo1-s8-hit-shade--prefetch-combined",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b5-wf9-s8-compose-shift--warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b5-wf9-s8-compose-shift--prefetch-shift-on",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b6-pt-s8--warmup",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
-          ]
-        },
-        {
-          "window": "b6-pt-s8--warmup-camera",
-          "reasons": [
-            "scene/pipeline settle bound retained; not a producer cadence"
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout"
           ]
         }
       ]
@@ -819,7 +837,7 @@
     {
       "job": "hv5-reload-bisect",
       "before_seconds": 307.1,
-      "after_seconds": 307.1,
+      "after_seconds": 139.55599999999998,
       "unresolved": [
         {
           "window": "warmup",
@@ -830,6 +848,7 @@
         {
           "window": "warm-settle",
           "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
             "scene/pipeline settle bound retained; not a producer cadence"
           ]
         },
@@ -894,61 +913,62 @@
           ]
         },
         {
-          "window": "set-c-groom",
+          "window": "set-c-strands",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "reload-c-groom",
+          "window": "reload-c-strands",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "survive-c-groom-1",
+          "window": "survive-c-strands-1",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "survive-c-groom-2",
+          "window": "survive-c-strands-2",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "survive-c-groom-3",
+          "window": "survive-c-strands-3",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "set-d-primary",
+          "window": "set-d-fibre",
+          "reasons": [
+            "expected readiness unproven: no VALID same-save/key median; not charged as timeout",
+            "failure-latency observation bound retained"
+          ]
+        },
+        {
+          "window": "reload-d-fibre",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "reload-d-primary",
+          "window": "survive-d-fibre-1",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "survive-d-primary-1",
+          "window": "survive-d-fibre-2",
           "reasons": [
             "failure-latency observation bound retained"
           ]
         },
         {
-          "window": "survive-d-primary-2",
-          "reasons": [
-            "failure-latency observation bound retained"
-          ]
-        },
-        {
-          "window": "survive-d-primary-3",
+          "window": "survive-d-fibre-3",
           "reasons": [
             "failure-latency observation bound retained"
           ]

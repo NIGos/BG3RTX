@@ -13,14 +13,15 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
 ## Requirements
 
 - Windows 10 or 11, 64-bit.
-- **NVIDIA GeForce RTX GPU.** This beta targets RTX cards. Ray Reconstruction supports RTX cards.
+- **NVIDIA GeForce RTX GPU.** BG3RTX is tested only on an RTX 5090. Other RTX cards should work
+  but are untested. Ray Reconstruction supports RTX cards.
   Frame generation 2x needs RTX 40 or newer; 3x and 4x need RTX 50.
   AMD and Intel GPUs are not qualified for this beta.
 - An NVIDIA Game Ready driver. The recorded test driver is 621.01. Other versions are untested.
   This is a test reference, not a verified minimum driver version.
 - **Baldur's Gate 3 on Steam, Vulkan renderer** (`bin\bg3.exe`, not the DirectX 11 one). Tested with
   game version 4.1.1.7631656 (Patch 8, Hotfix 10). A new game patch can break BG3RTX until it is updated.
-  GOG copies should work through **Browse...** in the launcher but are untested.
+  GOG copies should work through **Choose game folder…** in the launcher but are untested.
 - Disk space for the extracted archive plus a growing shader cache in `%LOCALAPPDATA%\BG3RTX`.
   Final package size and long-session cache growth are not yet qualified.
 
@@ -32,9 +33,10 @@ This is a beta. Expect bugs. Please report them (see "Reporting a bug").
    **BG3RTX** to the Start menu. For another folder:
    `powershell -ExecutionPolicy Bypass -File install.ps1 -Destination "D:\Mods\BG3RTX"`.
    You can also skip the installer and run `bin\BG3RTX.exe` straight from the unzipped folder.
-3. Start **BG3RTX** (`bin\BG3RTX.exe`). It finds Steam installs by itself; otherwise use **Browse...**
-   and pick the folder that contains `bin\bg3.exe`.
-4. Pick a preset (the window suggests one for your GPU) and press **Save**, then **Play**.
+3. Start **BG3RTX** (`bin\BG3RTX.exe`). It finds Steam installs by itself; otherwise use
+   **Choose game folder…** and pick the folder that contains `bin\bg3.exe`.
+4. Pick a preset (hover a preset to see what it does and which one is suggested for your GPU),
+   then press **Play**. Play saves your changes first.
 5. In the game's Graphics options set the upscaler to **DLSS** (Quality recommended). Ray
    Reconstruction replaces the game's DLSS; it does not run with FSR, XeSS or TAA.
 
@@ -60,14 +62,14 @@ and clear any Steam launch option; there is no installed Vulkan layer to unregis
 |---|---|---|
 | Low | Lowest | Screen-space GI and contact shadows. No RT scene or Ray Reconstruction. |
 | Medium | Higher | Opaque RT scene, RT GI, fast local-light shadows and glossy reflections. |
-| High | High | Adds alpha-tested geometry, including foliage, to the RT scene. |
-| Ultra | Highest | Two-ray GI, hidden roofs, Full local/box shadows, Rough reflections, water + Refraction, Far (6 m) bounce/emission, stock hair/scalp shadows and temporal depth of field/bloom. Rendered cap 58 fps. |
+| High | High | Adds foliage, grates and chains to the RT scene, Full local-light shadows and Standard reflections; opacity micromaps and cutout masks speed up foliage shadows. |
+| Ultra | Highest | Two-ray GI, hidden roofs, Full local and interior light shadows with faster light sampling, Rough reflections, water with refraction, Far (6 m) off-screen bounce light, stock hair/scalp shadows and depth of field/bloom smoothing. Rendered frame limit 58 fps. |
 
 Reference measurements come from an RTX 5090, not a GPU support matrix or an FPS guarantee.
-The final release configuration still needs integrated smoke and long-session acceptance.
+Long-session acceptance is still open.
 Every control, its choices and restart requirements are in `docs\USER_SETTINGS.md`.
-Lighting, Surfaces and Performance contain player controls; Help & support contains compatibility,
-memory and reporting help. Visible hair remains the game's stock hair.
+Lighting, Surfaces and Performance contain player controls; Help & support contains the game folder,
+compatibility, memory and reporting help. Visible hair remains the game's stock hair.
 
 ### VRAM guidance
 
@@ -85,19 +87,23 @@ Stock hair stays visible; no replacement hair is part of this release.
 
 | Feature | Recorded evidence / cost on the test system |
 |---|---|
-| RT sun/local shadows, GI, reflections and RR | Existing release paths; no universal per-feature cost receipt |
-| Ultra opacity micromaps and cutout masks | Camp: 1.17 G compared rays, zero violations; RT 8.65-8.75 versus 9.37-10.08 ms; local data/hardware fallback applies |
-| Box light shadows respecting game shadow flags | S6: local lighting +0.13 ms; signed energy delta 0.0 within repeat noise |
-| Off-screen bounce/emission, Far (6 m) | S8/camp: GI trace +3.2/+3.7 ms; energy -2.01%/-2.42% (shading change) |
-| Stock hair/scalp shadows and occlusion | Recorded RT +2.3-6.3 ms and GI +3.2-8.8 ms; capture pool trim reduces used mesh pool 26-50%, with no numeric GPU saving measured |
-| Water reflections, shadows, refraction and camera correction | wf9 08:59 qualified: static ON equals OFF, turning screen hits about 6.7% to 17%; final compose median 0.154 ms absolute, not an incremental cost |
-| Temporal depth of field and bloom | Ultra promotion accepted on user visual verdict; isolated pass 0.152-0.153 ms, about 250 MiB reference memory; paired statistical quality/energy tests did not pass |
+| RT sun/local shadows, GI, reflections and RR | Core features; no single per-feature cost |
+| Include hidden roofs (sun shadows) | About 0.3-1.3 ms more, depending on the scene |
+| High/Ultra opacity micromaps and cutout masks | Camp: ray tracing 8.65-8.75 ms instead of 9.37-10.08 ms, same image; falls back to the standard path without hardware or local masks |
+| Interior light shadows, respecting the game's shadow flags | About 0.13 ms; brightness unchanged |
+| Off-screen bounce light, Far (6 m) | About 3.2-3.7 ms more indirect lighting; slightly darker, more correct shading |
+| Stock hair/scalp shadows | About 2.3-6.3 ms more ray tracing and 3.2-8.8 ms more indirect lighting, depending on the scene |
+| Water reflections, shadows, refraction and camera correction | Estimated 0.5-0.7 ms in total (final water pass about 0.15 ms); reflections stay on while the camera turns |
+| Depth of field and bloom smoothing | About 0.15 ms and about 250 MiB of video memory; subtle, most visible in dialogue |
 
-Water surface Fresnel is not promoted. Generated rows, hidden-water shading, SHaRC, reduced
-trace resolution and the rejected GPU candidates are excluded from the release feature set.
+**Experimental:** Water surface reflections (Fresnel) is off in every preset. Turn on
+**Show experimental options** in the launcher to try it; it needs a game restart. Options rejected
+in testing are not part of this release.
 
 **Compare with the original image:** press **Ctrl+Shift+F9** in game to switch every ray-traced effect off
-and on again. DLSS and frame generation stay as they are.
+and on again. DLSS and frame generation stay as they are. **Ctrl+Shift+F10** switches the last
+Experimental option off and on, but only options that apply without a restart; in this release
+there is none, so it has no effect yet.
 
 ## Known limits (beta)
 
@@ -109,9 +115,9 @@ and on again. DLSS and frame generation stay as they are.
 - VRAM pressure is a particular risk on 12-16 GB cards. Long sessions and level changes can retain memory,
   even on larger cards. See VRAM guidance above.
 - The water flicker seen at the port is also present in the game's own water. BG3RTX does not fix it.
-- Other Vulkan overlays (Steam, EOS, GOG) can conflict: tick "Disable other Vulkan overlays" in the
-  launcher if the game crashes at start or frame generation does nothing. NVIDIA Smooth Motion is
-  turned off automatically while frame generation is on.
+- Other overlays (Steam, Discord, EOS, GOG Galaxy) can conflict. If the game crashes at start or frame
+  generation does nothing, turn them off for one launch. NVIDIA Smooth Motion is turned off
+  automatically while frame generation is on.
 - ReShade, other graphics mods and HDR are untested together with BG3RTX.
 - The DirectX 11 renderer is not supported.
 

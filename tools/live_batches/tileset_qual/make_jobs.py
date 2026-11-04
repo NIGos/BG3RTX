@@ -44,7 +44,7 @@ def main():
         state = dict(profile)
         # Developer mode preserves the hidden Tilesets choice under release policy.
         state.update(dev='1', rt_native_tileset=value, rt_native_hair='1', rt_native_scalp='1',
-                     rt_hit_material_paks='0', rt_stats='0', rt_debug='0', dump_images='1',
+                     rt_stats='0', rt_debug='0', dump_images='1',
                      dump_png_width='1280', dump_raw='0', dump_preview_f32='0',
                      rt_timing_frames='120', rt_scene_wait_log_frames='120',
                      qa_exposure_hold='0', headless='0')

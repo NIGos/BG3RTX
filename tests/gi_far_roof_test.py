@@ -45,7 +45,7 @@ class FarGiRoof(unittest.TestCase):
         compact = re.sub(r"\s+", " ", SOURCE)
         self.assertIn("#if (RT_GI_FAR || defined(RT_SPEC_GI_FAR)) && RT_HIT_GI_SUN", compact)
         self.assertRegex(compact, r"#if defined\(RT_SPEC_GI_FAR\) if \(kSpecGiFar != 0u\) #endif screen_roof_blocked = t > RB && !gi_far_roof_clear\(o, dir, t\);")
-        self.assertRegex(compact, r"if \(!screen_roof_blocked\) \{ #endif float3 L = prev_bounce_at\(qp\);")
+        self.assertRegex(compact, r"if \(!screen_roof_blocked\) \{ #endif float3 L; if \(prev_bounce_at\(qp, L\)\)")
         self.assertRegex(compact, r"if \(screen_roof_blocked\) \{ if \(pc.rt_stats != 0u\) g_far_stat\[4\] \+= 1u; continue; \}")
         reject = SOURCE.index("if (screen_roof_blocked)")
         self.assertLess(SOURCE.index("stat_add(12,"), reject)

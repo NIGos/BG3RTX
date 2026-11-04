@@ -85,12 +85,7 @@ inline constexpr Recipe recipes[]={
  // at the VS UV with sampler 0:7; 1:1 {vec3 c0 @0, reflectance @12, vec3 c1 @16, vec3 c2 @32}.
  // RT1.rgb = clamp(mix(A, (c0 m.x + c1 m.y + c2 m.z) A, m.x + m.y + m.z)) (nv_mask_albedo). VS 2d2ac3c3.
  {0xa5f44c487527d272ull,0x2d2ac3c38992b7f0ull,0,32,36,ReflectanceUbo,12,CapturePool,LayoutMask},
- // IP_Wind_GrassFlowers_AlphaTest_2S_VT / _PBR_VT STI (rt_hit_material_ip_grass, startup; per-draw instanced rows, family 4 of
- // native_hit_instanced.h): classifier vs 14678345 (tests/material_families_test.py IpGrass) "same sampling"; the FS adds a
- // camera-distance dither discard (coverage, not material) and reads the 14678345 VT layers at 1:4..1:7 (LayoutVt4), the engine
- // UBO 1:0 {p @0, offset @32, tile-set index @44, channel @48, flag @52} as 923131c7, the reflectance at 1:1 byte 16. Not
- // two-sided. VS 105e47e4: W at 0, UV at 1, N/B/T at 2..4 (the frame patch at N location 2); wind: not class A.
- {0x35a18400f9654d9dull,0x105e47e448736d89ull,0,44,48,ReflectanceUbo,16,CaptureDraw,LayoutVt4}};
+};
 inline const Recipe* recipe(uint64_t fs){for(const auto& r:recipes)if(r.fs==fs)return &r;return nullptr;}
 // Material UBO 1:1 bytes the recipe reads (0: no 1:1 binding).
 // LayoutIridescent: _m0.._m5 (24; the thickness _m5 is the class 4 RT3.z term, not decoded yet).

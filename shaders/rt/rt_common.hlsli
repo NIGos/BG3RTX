@@ -11,13 +11,6 @@
 // (below) says where each instance's vertices and alpha record are.
 #pragma once
 #include "spec_native.hlsli"
-// gpu-opt1: no new define product. The legacy guard exists only for offline identity.
-#ifdef BG3RTX_GPU_OPT_LEGACY
-#define RT_COMPACT_HIT_STATE_ON false
-#else
-[[vk::constant_id(1024)]] const uint kSpecCompactHitState = 0u;
-#define RT_COMPACT_HIT_STATE_ON (kSpecCompactHitState != 0u)
-#endif
 
 #ifdef RT_NATIVE_TILESET
 #include "../../common/native_tileset_coverage.h"
@@ -105,7 +98,10 @@ void rt_count_unknown(uint bin) {
 // Per-draw records: 16-byte header (uint count), then 208 bytes per draw,
 // sorted by first_tri (layer/host.h AlphaRec).
 [[vk::binding(0, 1)]] ByteAddressBuffer gAlphaRec;
-#include "alpha_metadata_cache.hlsli"
+uint alpha_record_bytes() { uint bytes; gAlphaRec.GetDimensions(bytes); return bytes; }
+uint alpha_record_count() { return gAlphaRec.Load(0u); }
+uint alpha_record_stride() { return gAlphaRec.Load(4u); }
+uint alpha_record_policy() { return gAlphaRec.Load(8u); }
 // Geometry 1's vertices, 24 bytes each: camera-relative position (float4), UV.
 [[vk::binding(1, 1)]] ByteAddressBuffer gAlphaSoup;
 // Sizes: layer/alphatest.cpp kTextures / kCaches.
@@ -173,7 +169,7 @@ float3 rt_scene_ray_origin(float3 lighting_origin) { return lighting_origin + rt
 // selects the masks and the cascade candidate test at pipeline creation; folded by the driver, each value is
 // the same program as the old variant (tools/spec_cascade_check.py). RT_SPEC_CASCADE_SUN marks the sun pass
 // (rt_shadow.hlsl), RT_CASCADE_SUN's place. The current-caster sun pipe keeps its defines.
-#if defined(RT_CASCADE_MASKS) || defined(RT_CASCADE_SUN) || defined(RT_SUN_CURRENT)
+#if defined(RT_CASCADE_MASKS) || defined(RT_CASCADE_SUN)
 #error RT_SPEC_CASCADE replaces RT_CASCADE_MASKS / RT_CASCADE_SUN and is not for the current-caster sun
 #endif
 [[vk::constant_id(1000)]] const uint kSpecCascadeMasks = 0u;
@@ -204,10 +200,6 @@ static bool g_rt_cascade_ray = false;
 #define RT_HIT_MASK 0xFF
 #define RT_VIS_MASK 0xFF
 #endif
-#ifdef RT_SUN_CURRENT
-#undef RT_VIS_MASK
-#define RT_VIS_MASK (2u<<gSunLayer)
-#endif
 #if defined(RT_CASCADE_SUN) || (defined(RT_CASCADE_SUN_HIT) && defined(RT_CASCADE_MASKS)) || \
     (defined(RT_SPEC_CASCADE) && (defined(RT_SPEC_CASCADE_SUN) || defined(RT_CASCADE_SUN_HIT)))
 static const uint kRtCascadeId = 0xFFFFFFu;   // common/cascade_casters.h kCustomIndex
@@ -237,58 +229,7 @@ bool rt_scene_ok() {
 #endif
 }
 
-#ifdef RT_SUN_CURRENT
-#include "../../common/native_sun_math.h"
-[[vk::binding(14,1)]] ByteAddressBuffer gSunParameters;
-static uint gSunLayer=0u;
-float4 sun_caster_row(uint layer,uint axis) {return asfloat(gSunParameters.Load4(992u+48u*layer+16u*axis));}
-float4 sun_domain_row(uint layer,uint axis) {
-  uint offset=64u+64u*layer+4u*axis;
-  return asfloat(uint4(gSunParameters.Load(offset),gSunParameters.Load(offset+16u),
-    gSunParameters.Load(offset+32u),gSunParameters.Load(offset+48u)));
-}
-float3 sun_domain_position(uint layer,float3 p) {
-  return float3(dot(sun_domain_row(layer,0u),float4(p,1)),dot(sun_domain_row(layer,1u),float4(p,1)),
-                dot(sun_domain_row(layer,2u),float4(p,1)));
-}
-float3 sun_domain_direction(uint layer,float3 d) {
-  return float3(dot(sun_domain_row(layer,0u).xyz,d),dot(sun_domain_row(layer,1u).xyz,d),dot(sun_domain_row(layer,2u).xyz,d));
-}
-static const float kSunGamma128=7.62945274e-6; // gamma128: normalization/basis plus affine projection operation budget
 
-// A private build can be withheld when native producer generations/submit order
-// do not match. Never touch its unbuilt TLAS in that case. Byte12 belongs to
-// native Hair; byte16 is the current cascade's conversion-invalid counter.
-bool sun_current_scene_ready() {
-  return rt_scene_ok() && gSceneStamp.Load(20u)==gSceneStamp.Load(0u) &&
-         gSceneStamp.Load(12u)==0u && gSceneStamp.Load(16u)==0u &&
-         (gSceneStamp.Load(24u)&31u)==31u && (gSunParameters.Load(1200u)&1u)!=0u;
-}
-
-#endif
-
-#ifdef RT_SUN_CURRENT
-[[vk::binding(12,1)]] ByteAddressBuffer gSunDraws;
-[[vk::binding(13,1)]] ByteAddressBuffer gSunSoup0;
-[[vk::binding(16,1)]] ByteAddressBuffer gSunSoup1;
-[[vk::binding(17,1)]] ByteAddressBuffer gSunSoup2;
-[[vk::binding(18,1)]] ByteAddressBuffer gSunSoup3;
-uint sun_soup_bytes(uint layer) {
-  uint bytes;
-  if(layer==0u)gSunSoup0.GetDimensions(bytes);else if(layer==1u)gSunSoup1.GetDimensions(bytes);
-  else if(layer==2u)gSunSoup2.GetDimensions(bytes);else gSunSoup3.GetDimensions(bytes);
-  return bytes;
-}
-uint3 sun_load3(uint layer,uint offset) {
-  if(layer==0u)return gSunSoup0.Load3(offset);if(layer==1u)return gSunSoup1.Load3(offset);
-  if(layer==2u)return gSunSoup2.Load3(offset);return gSunSoup3.Load3(offset);
-}
-uint2 sun_load2(uint layer,uint offset) {
-  if(layer==0u)return gSunSoup0.Load2(offset);if(layer==1u)return gSunSoup1.Load2(offset);
-  if(layer==2u)return gSunSoup2.Load2(offset);return gSunSoup3.Load2(offset);
-}
-static bool gSunAlphaKnown=true;
-#endif
 static const uint kRecBytes = 208;
 
 uint rec_addr(uint i) { return 16 + i * kRecBytes; }
@@ -387,12 +328,12 @@ AlphaRead vt_alpha(uint a, float2 uv, float g, uint tex, uint cache, uint col) {
   float aniso = min(0.5 * l - 0.5 * log2(max(min(d1, d2), 1e-30)), vt_t(a, 0, 1, 0));
   float mip = floor(min(max(0.5 * l - aniso - 0.5, 0.0), P1.x) + 0.5);
   float2 dims = float2(vt_t(a, 0, 0, 3), vt_t(a, 0, 0, 3) * vt_t(a, 0, 1, 3));
-  float2 ip = floor(u * dims * pow(0.5, mip));
   // Stay inside the indirection texture (constants from another tile set, or a
   // mip it does not have, would fetch out of bounds).
   uint iw, ih, ilevels;
   gAlphaTex[NonUniformResourceIndex(tex)].GetDimensions(0, iw, ih, ilevels);
   mip = min(mip, float(max(ilevels, 1u) - 1u));
+  float2 ip = floor(u * dims * pow(0.5, mip));
   int2 ipi = clamp(int2(ip), int2(0, 0), int2(max(iw >> uint(mip), 1u) - 1u, max(ih >> uint(mip), 1u) - 1u));
   uint e = asuint(gAlphaTex[NonUniformResourceIndex(tex)].Load(int3(ipi, int(mip))).x);
   float sc = pow(2.0, float(e & 15u));
@@ -627,9 +568,6 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
 #endif
 #endif
     alpha_stat(4, true, prim);
-#ifdef RT_SUN_CURRENT
-    gSunAlphaKnown=false;
-#endif
     return alpha_unknown(flags);
   }
   uint tex = min(h0.w, 4095u), cache = min(h1.x, 15u);
@@ -732,9 +670,6 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   else r = tex_alpha(a, uv, g, tex, h1.y);
   if (!r.ok) {
     alpha_stat(5, true, prim);
-#ifdef RT_SUN_CURRENT
-    gSunAlphaKnown=false;
-#endif
     return alpha_unknown(flags);
   }
   const float cut_first = asfloat(h1.w);
@@ -767,130 +702,6 @@ bool alpha_eval(uint a, float3 p0, float3 p1, float3 p2, float2 u0, float2 u1, f
   return solid;
 }
 
-#ifdef RT_SUN_CURRENT
-// UNKNOWN is a reference fallback, never an opaque interpretation of a native
-// shader whose scalar/texture coverage was not captured correctly.
-uint sun_caster_visibility(uint layer,uint prim,float2 bary,float footprint,float3x4 o2w,float3 ray) {
-  uint bytes;gSunDraws.GetDimensions(bytes);
-  if(bytes<64u || layer>=4u)return kRtUnknown;
-  uint soup_bytes=sun_soup_bytes(layer);
-  uint4 header=gSunDraws.Load4(layer*16u);
-  uint base=header.x,n=header.y,stride=header.z,total=header.w;
-  if(base<64u || base>bytes || n==0u || n>(bytes-base)/16u || prim>=total)return kRtUnknown;
-  uint lo=0u,hi=n;
-  while(hi-lo>1u) {uint mid=lo+(hi-lo)/2u;if(gSunDraws.Load(base+16u*mid)<=prim)lo=mid;else hi=mid;}
-  uint4 record=gSunDraws.Load4(base+16u*lo);
-  if(prim<record.x || prim-record.x>=record.y || stride<16u || !tri_in_range(0u,prim,stride,soup_bytes))return kRtUnknown;
-  uint offset=prim*3u*stride;
-  float3 raw0=asfloat(sun_load3(layer,offset)),raw1=asfloat(sun_load3(layer,offset+stride)),
-         raw2=asfloat(sun_load3(layer,offset+2u*stride));
-  float3 p0=mul(o2w,float4(raw0,1)),p1=mul(o2w,float4(raw1,1)),p2=mul(o2w,float4(raw2,1));
-  float3 hit=raw0+(raw1-raw0)*bary.x+(raw2-raw0)*bary.y;
-  float3 q=float3(dot(sun_caster_row(layer,0u),float4(hit,1)),dot(sun_caster_row(layer,1u),float4(hit,1)),
-    dot(sun_caster_row(layer,2u),float4(hit,1)));
-  const float offset_error=asfloat(gSunParameters.Load(1184u+4u*layer));
-  if(!all(isfinite(q)) || !isfinite(offset_error))return kRtUnknown;
-  [unroll]for(uint axis=0u;axis<3u;++axis) {
-    float4 row=sun_caster_row(layer,axis);
-    float error=kSunGamma128*dot(abs(row),float4(abs(raw0)+abs(raw1-raw0)*abs(bary.x)+abs(raw2-raw0)*abs(bary.y),1))+offset_error;
-    if(q[axis]<-error || q[axis]>1.0+error)return kRtLit;
-    if(!(q[axis]>error && q[axis]<1.0-error))return kRtUnknown;
-  }
-  if(record.w>1u)return kRtUnknown;
-  if(record.w==0u)return kRtOccluded;
-  if(stride<24u || !rec_in_range(record.z))return kRtUnknown;
-  float2 u0=asfloat(sun_load2(layer,offset+16u)),u1=asfloat(sun_load2(layer,offset+stride+16u)),
-         u2=asfloat(sun_load2(layer,offset+2u*stride+16u));
-  uint kind=gAlphaRec.Load(record.z+8u);
-#ifdef RT_SPEC_NATIVE
-  if (!RT_SCALP_ON) {
-  if(kind==3u || kind==4u)return kRtUnknown;
-  }
-#else
-#ifndef RT_NATIVE_SCALP
-  if(kind==3u || kind==4u)return kRtUnknown;
-#endif
-#endif
-#ifdef RT_SPEC_NATIVE
-  if (!RT_HAIR_ON) {
-  if(kind==4u)return kRtUnknown;
-  } else {
-  if(kind==4u) {
-    if(stride<88u)return kRtUnknown;
-    gNativeHair=(NativeHairData)0;
-    float3 weights=float3(1.0-bary.x-bary.y,bary);
-    [unroll]for(uint i=0u;i<3u;++i) {
-      uint v=offset+i*stride;
-      gNativeHair.n+=asfloat(sun_load3(layer,v+24u))*weights[i];
-      gNativeHair.t+=asfloat(sun_load3(layer,v+36u))*weights[i];
-      gNativeHair.b+=asfloat(sun_load3(layer,v+48u))*weights[i];
-      gNativeHair.p+=asfloat(sun_load3(layer,v+60u))*weights[i];
-    }
-    gNativeHair.n=mul((float3x3)o2w,gNativeHair.n);
-    gNativeHair.t=mul((float3x3)o2w,gNativeHair.t);gNativeHair.b=mul((float3x3)o2w,gNativeHair.b);
-    gNativeHair.ray=ray;gNativeHair.physical=true;
-    gNativeHair.valid=all(isfinite(gNativeHair.n)) && all(isfinite(gNativeHair.t)) &&
-      all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
-  }
-  }
-#else
-#ifndef RT_NATIVE_HAIR
-  if(kind==4u)return kRtUnknown;
-#else
-  if(kind==4u) {
-    if(stride<88u)return kRtUnknown;
-    gNativeHair=(NativeHairData)0;
-    float3 weights=float3(1.0-bary.x-bary.y,bary);
-    [unroll]for(uint i=0u;i<3u;++i) {
-      uint v=offset+i*stride;
-      gNativeHair.n+=asfloat(sun_load3(layer,v+24u))*weights[i];
-      gNativeHair.t+=asfloat(sun_load3(layer,v+36u))*weights[i];
-      gNativeHair.b+=asfloat(sun_load3(layer,v+48u))*weights[i];
-      gNativeHair.p+=asfloat(sun_load3(layer,v+60u))*weights[i];
-    }
-    gNativeHair.n=mul((float3x3)o2w,gNativeHair.n);
-    gNativeHair.t=mul((float3x3)o2w,gNativeHair.t);gNativeHair.b=mul((float3x3)o2w,gNativeHair.b);
-    gNativeHair.ray=ray;gNativeHair.physical=true;
-    gNativeHair.valid=all(isfinite(gNativeHair.n)) && all(isfinite(gNativeHair.t)) &&
-      all(isfinite(gNativeHair.b)) && all(isfinite(gNativeHair.p));
-  }
-#endif
-#endif
-#ifdef RT_SPEC_NATIVE
-  if (RT_TILESET_ON) {
-  if(kind==5u){
-    gTilesetColorKnown=stride>=40u && asfloat(gAlphaRec.Load(record.z+56u))==0.f;
-    if(gTilesetColorKnown){float c0=asfloat(sun_load2(layer,offset+28u).x),c1=asfloat(sun_load2(layer,offset+stride+28u).x),c2=asfloat(sun_load2(layer,offset+2u*stride+28u).x);
-      gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
-  }
-  if(kind<1u || kind>5u)return kRtUnknown;
-  } else {
-    if(kind<1u || kind>4u)return kRtUnknown;
-  }
-#else
-#ifdef RT_NATIVE_TILESET
-  if(kind==5u){
-    gTilesetColorKnown=stride>=40u && asfloat(gAlphaRec.Load(record.z+56u))==0.f;
-    if(gTilesetColorKnown){float c0=asfloat(sun_load2(layer,offset+28u).x),c1=asfloat(sun_load2(layer,offset+stride+28u).x),c2=asfloat(sun_load2(layer,offset+2u*stride+28u).x);
-      gTilesetGreen=c0+(c1-c0)*bary.x+(c2-c0)*bary.y;}
-  }
-  if(kind<1u || kind>5u)return kRtUnknown;
-#else
-  if(kind<1u || kind>4u)return kRtUnknown;
-#endif
-#endif
-  gSunAlphaKnown=true;
-  bool solid=alpha_eval(record.z,p0,p1,p2,u0,u1,u2,bary,footprint,prim);
-#ifdef RT_SPEC_NATIVE
-    if(RT_TILESET_ON && (gTilesetUnknown))return kRtUnknown;
-#else
-#ifdef RT_NATIVE_TILESET
-  if(gTilesetUnknown)return kRtUnknown;
-#endif
-#endif
-  return !gSunAlphaKnown?kRtUnknown:solid?kRtOccluded:kRtLit;
-}
-#endif
 
 // Legacy: true if the alpha-tested triangle `prim` of geometry 1 is solid at `bary`.
 bool alpha_pass(uint prim, float2 bary, float footprint) {
@@ -1299,11 +1110,6 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #endif
 #endif
   g_rt_class = 1u;
-#ifdef RT_SUN_CURRENT
-  if(g_rt_pass==kRtPassSun && (!sun_current_scene_ready() || !rt_ray_valid(o,d,tmax))) {
-    rt_count_unknown(0u);return kRtUnknown;
-  }
-#endif
 #ifdef RT_SPEC_NATIVE
   gHairCameraQuery=false;
   if (RT_HAIR_ON) {
@@ -1337,11 +1143,6 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
   RayDesc r = (RayDesc)0;
   r.Origin = o;
 #ifdef RT_SCENE_REBASE
-#ifdef RT_SUN_CURRENT
-  // Native current-cascade instances already map caster W into lighting P.
-  // Camera-mask primary queries still need the baseline scene translation.
-  if(g_rt_pass!=kRtPassSun)
-#endif
   r.Origin = rt_scene_ray_origin(o);
 #endif
   r.Direction = d;
@@ -1397,20 +1198,9 @@ uint RT_OMM_TRACED(rt_visibility)(float3 o, float3 d, float tmax, RtCone cone) {
 #else
     if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
 #endif
-#ifdef RT_SUN_CURRENT
-        q.CandidateInstanceID()<=kRtCascadeId && q.CandidateInstanceID()>=kRtCascadeId-3u
-#else
         q.CandidateInstanceID()==kRtCascadeId
-#endif
         ) {
-#ifdef RT_SUN_CURRENT
-      uint state=sun_caster_visibility(kRtCascadeId-q.CandidateInstanceID(),q.CandidatePrimitiveIndex(),q.CandidateTriangleBarycentrics(),
-        cone.f0+cone.spread*q.CandidateTriangleRayT(),q.CandidateObjectToWorld3x4(),d);
-      if(state==kRtUnknown) {aborted=true;q.Abort();break;}
-      if(state==kRtOccluded)q.CommitNonOpaqueTriangleHit();
-#else
       if (q.CandidateTriangleRayT() > max(RT_CASCADE_TMIN, RT_CASCADE_TMIN_REL * length(o))) q.CommitNonOpaqueTriangleHit();
-#endif
       continue;
     }
 #endif
@@ -1470,71 +1260,6 @@ uint rt_visibility(float3 o, float3 d, float tmax, RtCone cone) {
 // never as a light leak; callers that have the game's own visibility use rt_visibility.
 bool rt_occluded(float3 o, float3 d, float tmax, RtCone cone) { return rt_visibility(o, d, tmax, cone) != kRtLit; }
 
-#ifdef RT_SUN_CURRENT
-struct NativeSunResult {float visibility;bool unknown;uint samples;uint reason;};
-bool sun_origin_constant(float3 normal,float3 L,float3 t,float3 b,float radius) {
-  if(all(normal==0.0))return true;
-  float center=dot(normal,L),width=radius*(abs(dot(normal,t))+abs(dot(normal,b)));
-  float error=kSunGamma128*dot(abs(normal),abs(L)+radius*(abs(t)+abs(b)));
-  return center>width+error || center<-(width+error);
-}
-NativeSunResult sun_native_visibility(float3 P,float depth,float3 origin,float3 direction,float3 L,float3 t,float3 b,
-                                     float radius,RtCone cone,float3 shading_normal,float3 geometric_normal) {
-  NativeSunResult result;result.visibility=1;result.unknown=true;result.samples=0;result.reason=1;
-  if(!sun_current_scene_ready())return result;
-  NativeSunAux aux=ns_aux(gSunParameters.Load(548u),asfloat(gSunParameters.Load(884u)),depth,asfloat(gSunParameters.Load(556u)));
-  if(aux.valid==0u) {result.reason=2;return result;}
-  float3 q[4];
-  [unroll]for(uint layer=0u;layer<4u;++layer) {
-    uint offset=64u+64u*layer;
-    float4x4 receiver_matrix=float4x4(asfloat(gSunParameters.Load4(offset)),asfloat(gSunParameters.Load4(offset+16u)),
-      asfloat(gSunParameters.Load4(offset+32u)),asfloat(gSunParameters.Load4(offset+48u)));
-    q[layer]=mul(float4(P,1),receiver_matrix).xyz;
-  }
-  NativeSunSelection selection=ns_select(q,asfloat(gSunParameters.Load(24u)),asfloat(gSunParameters.Load4(32u)),
-    asfloat(gSunParameters.Load4(48u)),gSunParameters.Load(1204u),true,true,false);
-  if(selection.valid==0u)return result;
-  if(aux.active!=0u) {
-    float4x4 aux4=float4x4(asfloat(gSunParameters.Load4(560u)),asfloat(gSunParameters.Load4(576u)),
-      asfloat(gSunParameters.Load4(592u)),asfloat(gSunParameters.Load4(608u)));
-    float4x4 aux5=float4x4(asfloat(gSunParameters.Load4(624u)),asfloat(gSunParameters.Load4(640u)),
-      asfloat(gSunParameters.Load4(656u)),asfloat(gSunParameters.Load4(672u)));
-    float csm3=ns_weight(q[3],asfloat(gSunParameters.Load(24u)),asfloat(gSunParameters.Load(44u)),asfloat(gSunParameters.Load(60u)));
-    aux=ns_aux_domain(aux,mul(float4(P,1),aux4).xyz,mul(float4(P,1),aux5).xyz,csm3);
-    if(aux.valid==0u || aux.active!=0u) {result.reason=2;return result;}
-  }
-  if(selection.selected==4u) {result.unknown=false;result.reason=0;return result;}
-  float r=max(tan(radius),0.0);
-  if(!isfinite(r) || !sun_origin_constant(shading_normal,L,t,b,r) ||
-    (pc.rt_origin!=0u && !sun_origin_constant(geometric_normal,L,t,b,r))) {result.reason=3;return result;}
-  uint layers[2]={selection.selected,selection.next};
-  float weights[2]={selection.selectedWeight,selection.nextWeight};
-  float maximum[2]={0,0};
-  // Certify the ENTIRE angular disc before sampling. A direction-dependent
-  // native-mask fallback would bias the expected penumbra/energy.
-  [unroll]for(uint item=0u;item<2u;++item) if(layers[item]<4u && weights[item]>0) {
-    uint layer=layers[item];float3 o=sun_domain_position(layer,origin),center=sun_domain_direction(layer,L);
-    float3 width=r*(abs(sun_domain_direction(layer,t))+abs(sun_domain_direction(layer,b)))+.5*r*r*abs(center);
-    float3 oe,de;
-    [unroll]for(uint axis=0u;axis<3u;++axis) {
-      float4 row=sun_domain_row(layer,axis);
-      oe[axis]=kSunGamma128*dot(abs(row),float4(abs(origin),1))+asfloat(gSunParameters.Load(1184u+4u*layer));
-      de[axis]=kSunGamma128*(dot(abs(row.xyz),abs(L)+r*(abs(t)+abs(b)))+width[axis]);
-    }
-    NativeSunFront front=ns_cone_front(ns_cone_bounds(o,center,width,oe,de),true);
-    if(front.valid==0u) {result.reason=3;return result;}
-    maximum[item]=front.maxDistance;
-  }
-  result.visibility=selection.whiteWeight;
-  [unroll]for(uint item=0u;item<2u;++item) if(layers[item]<4u && weights[item]>0) {
-    gSunLayer=layers[item];++result.samples;
-    uint visibility=rt_visibility(origin,direction,maximum[item],cone);
-    if(visibility==kRtUnknown) {result.reason=4;return result;}
-    result.visibility+=weights[item]*(visibility==kRtLit?1.0:0.0);
-  }
-  result.unknown=false;result.reason=0;return result;
-}
-#endif
 
 // Debug (rt_debug=3/5): the closest hit, whether it is alpha-tested geometry,
 // and the family of the nearest alpha-tested candidate along the ray, whether
@@ -1838,8 +1563,7 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   h.geom = hit ? q.CommittedGeometryIndex() : 0u;
   h.prim = hit ? q.CommittedPrimitiveIndex() : 0u;
   h.inst = hit ? q.CommittedInstanceIndex() : 0u;
-  if (!RT_COMPACT_HIT_STATE_ON)
-    h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+  h.o2w = hit ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
 #ifdef RT_SPEC_NATIVE
   bool groom_hit = false;
   if (RT_GROOM_ON && !camera_primary && !aborted) {
@@ -1863,19 +1587,6 @@ RtHit RT_OMM_TRACED(rt_closest_hit)(float3 o, float3 d, float tmax, RtCone cone
   h.dir=d;
 #endif
 #endif
-  if (RT_COMPACT_HIT_STATE_ON) {
-    // Only pooled geometry consumes the instance transform. Keep it out of the
-    // query/groom/barycentric work above; soup/legacy consumers use world vertices.
-    // A malformed instance retains the original transform (and consumer guards).
-    uint info_bytes; gInstInfo.GetDimensions(info_bytes);
-    bool need_transform = hit;
-    if (hit && h.inst < info_bytes / 16u)
-      need_transform = (gInstInfo.Load(h.inst * 16u + 4u) & kInfoPool) != 0u;
-#ifdef RT_SPEC_NATIVE
-    if (groom_hit) need_transform = false;
-#endif
-    h.o2w = need_transform ? q.CommittedObjectToWorld3x4() : float3x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
-  }
 #ifdef RT_SCENE_REBASE
   // Ray t is translation-invariant. Return transforms in lighting space so
   // callers reconstruct lighting-relative hit positions as before.

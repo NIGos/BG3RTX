@@ -25,12 +25,6 @@ float2 prev_sample_px(int2 hp) {
   return float2(min(uint2(hp) * 2u + uint2(f & 1u, (f >> 1) & 1u), pc.full - 1u)) + 0.5;
 }
 
-#if GI_SPEC_GUARDS
-#if GI_TEMPORAL_MV_SAMPLE
-#error GI_SPEC_GUARDS replaces GI_TEMPORAL_MV_SAMPLE
-#endif
-[[vk::constant_id(1001)]] const uint kSpecTemporalMv = 0u;   // gi_temporal_mv_sample (step G)
-#endif
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
   uint2 id = tid.xy;
@@ -42,42 +36,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float2 prev_px = cur_px;                        // where its surface was last frame
   if (pc.has_mv != 0) {
     float scale = pc.res_shift ? 2.0 : 1.0;
-#if GI_TEMPORAL_MV_SAMPLE
-    // gi_temporal_mv_sample=1 (from codex 06f62f9): the motion vector of the sample cd belongs to
-    // (cur_px rotates over the 2x2 block), not of the block's fixed pixel; and the reprojected
-    // position is checked in render pixels before the floor (an off-image position can still land
-    // in the last half-res texel at an odd extent).
-    const float2 mv = gVelocity.Load(int3(int2(cur_px), 0)) * pc.mv_scale;
-    prev_px = cur_px + mv;
-    const bool on_image = all(isfinite(prev_px)) && all(prev_px >= 0.0) && all(prev_px < float2(pc.full));
-    hp = on_image ? int2(floor(prev_px / scale)) : int2(-1, -1);
-#elif GI_SPEC_GUARDS
-    // Constant 1001 (gi_temporal_mv_sample): the same choice at pipeline creation.
-    if (kSpecTemporalMv != 0u) {
-    // gi_temporal_mv_sample=1 (from codex 06f62f9): the motion vector of the sample cd belongs to
-    // (cur_px rotates over the 2x2 block), not of the block's fixed pixel; and the reprojected
-    // position is checked in render pixels before the floor (an off-image position can still land
-    // in the last half-res texel at an odd extent).
-    const float2 mv = gVelocity.Load(int3(int2(cur_px), 0)) * pc.mv_scale;
-    prev_px = cur_px + mv;
-    const bool on_image = all(isfinite(prev_px)) && all(prev_px >= 0.0) && all(prev_px < float2(pc.full));
-    hp = on_image ? int2(floor(prev_px / scale)) : int2(-1, -1);
-    } else {
     float2 fpix = float2(min(id * (pc.res_shift ? 2u : 1u) + pc.res_shift, pc.full - 1)) + 0.5;
     float2 mv = gVelocity.Load(int3(int2(fpix), 0)) * pc.mv_scale;
     float2 prev = (fpix + mv) / scale;
     // A non-finite motion vector is no position: float-to-int of NaN/Inf is undefined.
-    hp = all(isfinite(prev)) ? int2(floor(prev)) : int2(-1, -1);
+    hp = all(isfinite(prev)) && all(prev >= 0.0) && all(prev < float2(pc.half))
+       ? int2(floor(prev)) : int2(-1, -1);
     prev_px = cur_px + mv;
-    }
-#else
-    float2 fpix = float2(min(id * (pc.res_shift ? 2u : 1u) + pc.res_shift, pc.full - 1)) + 0.5;
-    float2 mv = gVelocity.Load(int3(int2(fpix), 0)) * pc.mv_scale;
-    float2 prev = (fpix + mv) / scale;
-    // A non-finite motion vector is no position: float-to-int of NaN/Inf is undefined.
-    hp = all(isfinite(prev)) ? int2(floor(prev)) : int2(-1, -1);
-    prev_px = cur_px + mv;
-#endif
   }
   bool inside = all(hp >= 0) && all(hp < int2(pc.half));
   float4 hist = inside ? giHistIn[hp] : float4(0, 0, 0, 1);

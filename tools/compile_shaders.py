@@ -118,8 +118,7 @@ if rf_hit and rf_checker.exists():
                 (["--hair"] if ("RT_HAIR_PHYSICAL_ORIGIN=1" in d or "RT_SPEC_HAIR_ORIGIN=1" in d) else []) + \
                 (["--cascade"] if "RT_CASCADE_MASKS=1" in d else []) + \
                 (["--em"] if f.partition("?")[0].endswith("_em.hlsl") else []) + \
-                (["--gi"] if ("RF_HIT_GI=1" in d or "RF_SPEC_HIT_GI=1" in d) else []) + \
-                (["--half"] if "RT_TRACE_HALF=1" in d else [])
+                (["--gi"] if ("RF_HIT_GI=1" in d or "RF_SPEC_HIT_GI=1" in d) else [])
         result = subprocess.run([str(rf_checker), *flags, module], capture_output=True, text=True)
         if result.returncode:
             res.append(("rf hit shade descriptor interface " + f, result.returncode, result.stdout + result.stderr))

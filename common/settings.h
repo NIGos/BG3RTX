@@ -38,10 +38,11 @@ enum Preset : int { kLow, kMedium, kHigh, kUltra, kPresetCount };
 inline constexpr const char* kPresetId[kPresetCount] = {"low", "medium", "high", "ultra"};
 inline constexpr const char* kPresetLabel[kPresetCount] = {"Low", "Medium", "High", "Ultra"};
 inline constexpr const char* kPresetDesc[kPresetCount] = {
-    "Lighting and sun shadows use visible surfaces; ray tracing and DLSS Ray Reconstruction are off.",
-    "Ray-traced lighting on solid surfaces, Fast local shadows and Glossy reflections.",
-    "Includes foliage in ray-traced lighting, with Full local shadows and Standard reflections.",
-    "Adds hidden-roof and hair shadows, interior light shadows, Far bounce light, water refraction and blur smoothing; rendered frame limit: 58 fps.",
+    "Lightest. Lighting and sun shadows use visible surfaces only; ray tracing and DLSS Ray Reconstruction are off.",
+    "Ray-traced lighting and sun shadows on solid surfaces, Fast local light shadows and Glossy reflections.",
+    "Adds foliage to ray tracing, Full local light shadows and Standard reflections.",
+    "Adds hidden-roof, interior light and hair shadows, two-ray indirect lighting, Rough reflections, water lighting, "
+    "Far off-screen bounce light and depth of field smoothing. Limits rendering to 58 fps.",
 };
 
 // ---- hardware capabilities a choice needs ----
@@ -149,7 +150,7 @@ struct Knob {
 // layer/ngx.cpp switches RR with a history reset. streamline.cpp reflex_apply() and framecap.cpp
 // read latency/cap live. geocapture.cpp init fixes rt_alpha/hair/tileset strides; hit_material.cpp
 // device_created fixes material/wind capture. water.cpp patches graphics pipelines at creation.
-// omm_backend.cpp device setup and sun_scene.cpp startup resources require restart.
+// OMM device setup requires restart.
 // Mixed controls declare their most demanding transition, with exceptions in apply_note/choices.
 // cfg_hot consumers: alphatest.cpp (VT masks), geocapture.cpp (spill/hooks), hit_material.cpp
 // (CPU lists), tracker.cpp/layer.cpp (submit batching). Their prerequisites are separate controls.
@@ -160,39 +161,32 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Hitch, "May briefly pause when changed", false,
    {{"off", "Off", 0, {{"rr", "0"}}, {}, {}, false, false, false, Apply::Hitch},
     {"on", "On", kCapDlss, {{"rr", "1"}}, {}, {}, false, false, false, Apply::Hitch}},
-   {}, {0, 1, 1, 1}, false, {}, false, "Lighting", {}, "Requires a compatible NVIDIA RTX GPU and DLSS enabled in the game."},
+   {}, {0, 1, 1, 1}, false, {}, false, "Lighting", {}, "Needs an NVIDIA RTX GPU. Select DLSS as the upscaler in the game's graphics options."},
 
   {"rt_geometry", "Ray-tracing detail",
-   "Includes solid surfaces, or foliage, grates and chains too, in ray-traced lighting and shadows.",
+   "Chooses what ray-traced lighting and shadows include: solid surfaces only, or also foliage, grates and chains.",
    Kind::Choice, Apply::Restart, "Restart the game after changing this setting", false,
    {{"off", "Off", 0, {{"rt_build", "0"}, {"rt_alpha", "0"}}, {}, {}, false, false, false, Apply::Restart},
     {"opaque", "Solid surfaces", kCapRayQuery, {{"rt_build", "auto"}, {"rt_alpha", "0"}}, {}, {}, false, false, false, Apply::Restart},
     {"full", "Include foliage", kCapRayQuery, {{"rt_build", "auto"}, {"rt_alpha", "1"}}, {}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 1, 2, 2}, false, {}, false, "Lighting", {}, "Ray-traced lighting and shadows require Solid surfaces or Include foliage."},
+   {}, {0, 1, 2, 2}, false, {}, false, "Lighting", {}, "Off turns off all ray-traced lighting, shadows, reflections and water."},
 
   {"sun_shadows", "Sun shadows",
-   "Adds sun shadows, including shadows from roofs and canopies hidden by the camera.",
+   "Ray-traced sun shadows. Include hidden roofs also keeps shadows from roofs and canopies the game hides near the camera.",
    Kind::Choice, Apply::Live, "", false,
    {{"ss", "Visible surfaces", 0, {{"rt_shadows", "0"}, {"contact_shadows", "1"}, {"rt_cascade_casters", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"rt", "Ray-traced", kCapRayQuery, {{"rt_shadows", "1"}, {"contact_shadows", "1"}, {"rt_cascade_casters", "0"}}, {{"rt_geometry", 1}}, {"rt_shadows"}, false, false, false, Apply::Live},
     {"hidden_roofs", "Include hidden roofs", kCapRayQuery, {{"rt_shadows", "1"}, {"contact_shadows", "1"}, {"rt_cascade_casters", "1"}}, {{"rt_geometry", 1}}, {"rt_cascade_casters"}, false, false, false, Apply::Live}},
-   {}, {0, 1, 1, 2}, false, {}, false, "Lighting", {}, "Hidden roofs: 0.3–1.3 ms extra in recorded tests."},
+   {}, {0, 1, 1, 2}, false, {}, false, "Lighting", {}, "Include hidden roofs costs about 0.3–1.3 ms more on an RTX 5090, depending on the scene."},
 
   {"gi", "Indirect lighting",
-   "Adds bounced light and shading where surfaces meet, with less noise at the highest level.",
+   "Adds bounced light and soft shading where surfaces meet. The highest level traces two rays per pixel for less noise.",
    Kind::Choice, Apply::Live, "", false,
    {{"off", "Off", 0, {{"gi", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"ss", "Visible surfaces", 0, {{"gi", "1"}, {"gi_rt", "0"}, {"gi_rays", "2"}, {"gi_steps", "12"}}, {}, {}, false, false, false, Apply::Live},
     {"rt", "Ray-traced", kCapRayQuery, {{"gi", "1"}, {"gi_rt", "1"}, {"gi_rr_rays", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live},
     {"rt_high", "Ray-traced high", kCapRayQuery, {{"gi", "1"}, {"gi_rt", "1"}, {"gi_rr_rays", "2"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
    {}, {1, 2, 2, 3}, false, {}, false, "Lighting", {}},
-
-  {"rt_trace_scale", "Lighting trace resolution",
-   "Developer only: Half is unqualified. Release uses Full in every preset.",
-   Kind::Choice, Apply::Hitch, "resets lighting history", true,
-   {{"half", "Half", 0, {{"rt_trace_scale", "0.5"}}, {}, {}, false, false, false, Apply::Hitch},
-    {"full", "Full", 0, {{"rt_trace_scale", "1.0"}}, {}, {}, false, false, false, Apply::Hitch}},
-   {}, {1, 1, 1, 1}, false, {}, true, "Performance", {}},
 
   {"local_shadows", "Local light shadows",
    "Adds shadows from torches, lamps and spells.",
@@ -201,7 +195,7 @@ inline constexpr Knob kKnobs[] = {
     {"fast", "Fast", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "1"}, {"ls_shadowed", "0"}}, {{"rt_geometry", 1}, {"rr", 1}}, {}, false, false, false, Apply::Live},
     {"full", "Full", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "3"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live},
     {"full_plus", "Full + shadowed lights", kCapRayQuery, {{"rt_local_shadows", "1"}, {"ls_samples", "0"}, {"ls_shadowed", "1"}}, {{"rt_geometry", 1}}, {}, true, false, false, Apply::Live}},
-   {}, {0, 1, 2, 2}, false, {}, false, "Lighting", {}, "Fast requires DLSS Ray Reconstruction; Full preserves the game's shadows where needed."},
+   {}, {0, 1, 2, 2}, false, {}, false, "Lighting", {}, "Fast needs DLSS Ray Reconstruction. Full keeps the game's own shadows where they are needed."},
 
   {"reflections", "Reflections",
    "Adds reflections to smooth surfaces and, at higher levels, rougher surfaces.",
@@ -210,7 +204,7 @@ inline constexpr Knob kKnobs[] = {
     {"glossy", "Glossy", kCapRayQuery, {{"rt_reflections", "1"}, {"rf_max_rough", "0.4"}}, {{"rt_geometry", 1}, {"gi", 1}}, {}, false, false, false, Apply::Live},
     {"standard", "Standard", kCapRayQuery, {{"rt_reflections", "1"}, {"rf_max_rough", "0.6"}}, {{"rt_geometry", 1}, {"gi", 1}}, {}, false, false, false, Apply::Live},
     {"rough", "Rough", kCapRayQuery, {{"rt_reflections", "1"}, {"rf_max_rough", "0.8"}}, {{"rt_geometry", 1}, {"gi", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 1, 2, 3}, false, {}, false, "Surfaces", {}, "Requires ray-tracing detail and indirect lighting; without DLSS Ray Reconstruction, only mirror-like reflections are traced."},
+   {}, {0, 1, 2, 3}, false, {}, false, "Surfaces", {}, "Needs Ray-tracing detail and Indirect lighting. Without DLSS Ray Reconstruction, only mirror-like reflections are traced."},
 
   {"frame_generation", "Frame Generation",
    "Adds generated frames between rendered frames for smoother motion.",
@@ -219,7 +213,7 @@ inline constexpr Knob kKnobs[] = {
     {"2x", "2x", kCapFg, {{"fg", "2"}}, {{"reflex", 1}}, {}, false, false, false, Apply::Restart},
     {"3x", "3x", kCapMfg, {{"fg", "3"}}, {{"reflex", 1}}, {}, false, false, false, Apply::Restart},
     {"4x", "4x", kCapMfg, {{"fg", "4"}}, {{"reflex", 1}}, {}, false, false, false, Apply::Restart}},
-   {}, {1, 1, 1, 1}, false, {}, false, "Performance", {}, "Frame Generation requires NVIDIA Reflex On or On + Boost; changing 2x/3x/4x applies after saving. Generated frames do not increase the rendered frame rate."},
+   {}, {1, 1, 1, 1}, false, {}, false, "Performance", {}, "Needs NVIDIA Reflex On or On + Boost. Turning it on or off needs a game restart; switching between 2x, 3x and 4x applies after saving. Generated frames make motion smoother but do not raise the rendered frame rate."},
 
   {"rt_intensity", "Mod lighting strength",
    "Blends indirect lighting, local shadows and reflections toward the game's original appearance at lower values.",
@@ -229,7 +223,7 @@ inline constexpr Knob kKnobs[] = {
   {"fps_cap", "Rendered frame limit",
    "Limits the frame rate before Frame Generation adds frames.",
    Kind::Slider, Apply::Live, "", false,
-   {}, {30, 240, 1, true, 1.0f, "fps", {"fps_cap"}}, {0, 0, 0, 58}, false, {}, false, "Performance", {}},
+   {}, {30, 240, 1, true, 1.0f, "fps", {"fps_cap"}}, {0, 0, 0, 58}, false, {}, false, "Performance", {}, "Ultra limits rendering to 58 fps. A limit is a ceiling, not a target."},
 
   {"reflex", "NVIDIA Reflex",
    "Reduces the delay between your input and the image on screen.",
@@ -237,14 +231,14 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"reflex", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", 0, {{"reflex", "1"}}, {}, {}, false, false, false, Apply::Live},
     {"boost", "On + Boost", 0, {{"reflex", "2"}}, {}, {}, false, false, false, Apply::Live}},
-   {}, {1, 1, 1, 1}, false, {}, false, "Performance", {}, "Frame Generation requires NVIDIA Reflex On or On + Boost."},
+   {}, {1, 1, 1, 1}, false, {}, false, "Performance", {}, "Frame Generation needs On or On + Boost."},
 
   // M5 water chain (docs/PLAN_M5_WATER.md "Promotion": m5_promotion passed at S8, Flymm and camp, 11-01): Advanced,
   // before the Experimental section; "+ Refraction" in Ultra, Off elsewhere. The compose levels patch the
   // audited water FS at pipeline creation (restart to turn on, key_change_needs_restart) and need 64-bit
   // shader integers at device creation (sharc_device=1).
   {"exp_water", "Water lighting",
-   "Adds water reflections, shadows and a distorted view of the riverbed or pool floor.",
+   "Adds water reflections, shadows and, at the highest level, a refracted view of the riverbed or pool floor. About 0.5–0.7 ms on an RTX 5090 (estimate).",
    Kind::Choice, Apply::Restart, "Restart to enable; disabling applies after saving.", true,
    {{"off", "Off", 0, {{"rt_water_geometry", "0"}, {"rt_water_reflections", "0"}, {"rt_water_compose", "0"},
       {"rt_water_shadows", "0"}, {"rt_water_ls_shadows", "0"}, {"rt_water_game_shadow", "0"}, {"rt_water_refraction", "0"}}, {}, {}, false, false, false, Apply::Live},
@@ -257,15 +251,15 @@ inline constexpr Knob kKnobs[] = {
     {"refraction", "Include refraction", kCapRayQuery, {{"rt_water_geometry", "1"}, {"rt_water_reflections", "1"}, {"rt_water_compose", "1"},
       {"rt_water_shadows", "1"}, {"rt_water_ls_shadows", "1"}, {"rt_water_game_shadow", "1"}, {"rt_water_refraction", "1"}},
      {{"rt_geometry", 1}}, {"rt_water_refraction"}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 3}, false, {{"rt","1","Ray-tracing support"},{"sharc_device","1","Ray-tracing support"}}, false, "Surfaces", {"Estimate", "0.5–0.7 ms", "Up to 520 MB", "Estimated water cost: 0.5–0.7 ms and up to 520 MB on RTX 5090 at Water Queens House."}, "Water requires ray-tracing detail."},
+   {}, {0, 0, 0, 3}, false, {{"rt","1","Ray-tracing support"},{"sharc_device","1","Ray-tracing support"}}, false, "Surfaces", {"Estimate", "0.5–0.7 ms", "Up to 520 MB", "Estimated water cost: 0.5–0.7 ms and up to 520 MB on RTX 5090 at Water Queens House."}, "Needs Ray-tracing detail. Turning water on or raising its level needs a game restart; lowering it or turning it off applies after saving. Uses up to about 520 MB of video memory."},
 
-  {"water_surface_fresnel", "Water interface Fresnel",
-   "Experimental: adjusts reflections at the water surface.",
+  {"water_surface_fresnel", "Water surface reflections",
+   "Experimental: works out the reflection at the water surface separately from the water's depth colour. Mostly visible at the edges of shallow pools; open water barely changes.",
    Kind::Choice, Apply::Restart, "on: restart; off: live", true,
    {{"off", "Off", 0, {{"rt_water_surface_fresnel", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On (unqualified)", kCapRayQuery, {{"rt_water_surface_fresnel", "1"}}, {{"exp_water", 1}},
+    {"on", "On", kCapRayQuery, {{"rt_water_surface_fresnel", "1"}}, {{"exp_water", 1}},
      {"rt_water_surface_fresnel"}, false, true, true, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Separates clean-water reflection from column opacity. Awaiting qualification at S8 Water Queens House; compare shallow pool reflections."},
+   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}, "Needs Water lighting. Turning it on needs a game restart; turning it off applies after saving. Compare the reflections on shallow pools."},
 
   // om3 qualified the fine-LOD policy; om4 qualified the dynamic micromap bake (2026-11-03).
   // Keep the legacy ids for saved GUI selections. Hardware and local masks remain prerequisites.
@@ -284,29 +278,9 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_vt_alpha_masks", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 1, 1}, false, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"}}, true, "Advanced", {"Measured", "Not measured", "80.9 MB camp masks", "RTX 5090; va1 camp 2026-11-02; energy +0.24% within +/-1.95% repeat band; RT passes unchanged. Masks generated on the player's PC. Reference only."}},
 
-  {"exp_water_hit_shade", "Water: hidden-surface reflections",
-   "Experimental: adds lighting from hidden surfaces to water reflections.",
-   Kind::Choice, Apply::Live, "live; needs captured materials at startup", false,
-   {{"off", "Off", 0, {{"rt_water_hit_shade","0"}}, {}, {}, false, false, false, Apply::Hitch},
-    {"on", "On (experimental)", kCapRayQuery, {{"rt_water_hit_shade","1"}},
-     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch},
-    {"world", "World lights (experimental)", kCapRayQuery, {{"rt_water_hit_shade","2"}},
-     {{"exp_water",1},{"exp_hidden_surface",1}}, {"rt_water_hit_shade"}, false, true, false, Apply::Hitch}},
-   {}, {0,0,0,0}, true, {}, true, "Advanced", {}, "Shades hidden/off-screen objects reflected in water. First enable compiles for about a minute. S8 pool: compare reflected objects. Cost: +0.8-2.4 ms."},
-
-  {"exp_water_hit_cost", "Water reflection optimizations",
-   "Experimental: reduces the work needed to shade water reflections.",
-   Kind::Choice, Apply::Live, "live", true,
-   {{"off", "Off", 0, {{"rt_water_hit_cost","0"}}, {}, {}, false, false, false, Apply::Hitch},
-    {"sparse", "Sparse lights", kCapRayQuery, {{"rt_water_hit_cost","1"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
-    {"zero", "Zero light rejection", kCapRayQuery, {{"rt_water_hit_cost","2"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
-    {"order", "Unsorted candidates", kCapRayQuery, {{"rt_water_hit_cost","4"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch},
-    {"combined", "Combined", kCapRayQuery, {{"rt_water_hit_cost","7"}}, {{"exp_water",1},{"exp_hidden_surface",1},{"exp_water_hit_shade",1}}, {}, false, true, false, Apply::Hitch}},
-   {}, {0,0,0,0}, true, {}, true, "Advanced", {}, "Sparse light lookup, zero-light rejection and candidate order; Combined enables all three. Energy qualification pending."},
-
   // GUI audit A: one chain, legacy partial files migrate via Choice::mark.
   {"exp_hidden_surface", "Off-screen bounce light",
-   "Adds bounced light from surfaces outside the camera's view.",
+   "Adds bounced light and glow from surfaces outside the camera's view. Far carries sunlight bounce up to 6 m. About 0.6 ms for Near and 3–4 ms for Far on an RTX 5090.",
    Kind::Choice, Apply::Restart, "Restart to enable or disable; changing Near/Far may briefly pause.", true,
    {{"off", "Off", 0, {{"rt_hit_material", "0"}, {"rt_hit_material_instanced", "0"}, {"rt_hit_material_wind_rgb", "0"},
       {"gi_hit_direct", "0"}, {"gi_hit_sun", "0"}, {"rf_hit_shade", "0"}, {"rf_hit_gi", "0"},
@@ -325,7 +299,7 @@ inline constexpr Knob kKnobs[] = {
      {{"rt_geometry", 2}, {"gi", 2}, {"reflections", 1}}, {"rf_hit_shade", "rf_hit_gi"}, true, true, false, Apply::Restart}},
    {}, {0, 0, 0, 2}, false,
    {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Hidden-surface tracking"},
-    {"gi_rt_fallback","0","Hidden-surface lighting mode",1}}, false, "Lighting", {"Estimate", "Near about 0.6 ms; Far about 4 ms", "Unknown", "Estimated cost on RTX 5090: about 0.6 ms for Near or 4 ms for Far."}, "Includes light from glowing surfaces. Requires Include foliage and ray-traced indirect lighting."},
+    {"gi_rt_fallback","0","Hidden-surface lighting mode",1}}, false, "Lighting", {"Estimate", "Near about 0.6 ms; Far about 4 ms", "Unknown", "Estimated cost on RTX 5090: about 0.6 ms for Near or 4 ms for Far."}, "Needs Ray-tracing detail: Include foliage and Indirect lighting: Ray-traced. Turning it on or off needs a game restart; switching between Near and Far may briefly pause the game."},
 
   // Box shadows qualified for Ultra (user decision 2026-11-03). Experimental features
   // stay off in every preset; hair origins and spill are developer-only until qualified.
@@ -335,7 +309,7 @@ inline constexpr Knob kKnobs[] = {
    {{"off", "Off", 0, {{"ls_box", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"all", "On", kCapRayQuery, {{"ls_box", "2"}, {"ls_box_honour_shadow", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, false, false, false, Apply::Live},
     {"on", "Shadowed", kCapRayQuery, {{"ls_box", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 1}}, {}, true, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {}, false, "Lighting", {"Measured", "About 0.13 ms", "Unknown", ""}},
+   {}, {0, 0, 0, 1}, false, {}, false, "Lighting", {"Measured", "About 0.13 ms", "Unknown", ""}, "Needs Local light shadows. Lights the game marks as not casting shadows stay unshadowed."},
 
   {"rr_post", "RR order",
    "Experimental: changes how fine hair edges appear through depth of field.",
@@ -349,28 +323,7 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "Applies after saving.", false,
    {{"off", "Off", 0, {{"rr_post_temporal", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 1}, false, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "Surfaces", {"Measured", "About 0.15 ms", "250 MiB at 2560 × 1067", "250 MiB at 2560 × 1067 on RTX 5090 in dialogue."}, "Visual improvement varies by scene; paired tests did not establish an improvement."},
-
-  {"exp_compact_hit_state", "Compact ray hit state",
-   "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_compact_hit_state", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_compact_hit_state", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}},
-
-  {"exp_alpha_metadata_cache", "Cache alpha metadata",
-   "Reuses immutable alpha metadata within a ray query. Ray footprint and native coverage remain unchanged. GPU cost awaits qualification.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_alpha_metadata_cache", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_alpha_metadata_cache", "1"}}, {{"rt_geometry", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}},
-
-  {"exp_water_empty_tiles", "Skip empty water tiles",
-   "Skips water composition work where no pixel can use a reflection. Native scene colour is preserved. GPU cost awaits qualification.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_water_empty_tiles", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_water_empty_tiles", "1"}}, {{"exp_water", 1}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {}, true, "Advanced", {}},
+   {}, {0, 0, 0, 1}, false, {{"rr_post", "1", "Ray Reconstruction before post effects"}}, false, "Surfaces", {"Measured", "About 0.15 ms", "250 MiB at 2560 × 1067", "250 MiB at 2560 × 1067 on RTX 5090 in dialogue."}, "Needs DLSS Ray Reconstruction. The effect is subtle; it is most visible in dialogue close-ups, on hair and fine edges against a blurred background."},
 
   {"exp_water_compose_shift", "Water camera correction",
    "Keeps water reflections on while the camera turns (traces the reflection scene in its own camera space).",
@@ -380,14 +333,14 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 1}, false, {}, true, "Surfaces", {"Measured", "+0.00 ms (compose 0.12 ms on and off) S8", "Unknown", "RTX 5090; wf9 2026-11-03: turning screen hits 7% -> 17%, hidden 25% -> 15.5%, static delta 0 m, energy within noise"}},
 
   {"exp_native_coverage", "Hair shadows",
-   "Adds shadows and contact shading from the game's hair, including on faces and necks.",
+   "Adds shadows and contact shading from the game's hair, including on faces and necks. About 2–6 ms in ray tracing and 3–9 ms in indirect lighting on an RTX 5090, depending on the scene.",
    Kind::Choice, Apply::Restart, "Restart to enable; disabling applies after saving.", false,
    {{"off", "Off", 0, {{"rt_native_hair", "0"}, {"rt_native_scalp", "0"}, {"rt_native_tileset", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"hair", "On", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "0"}},
      {{"rt_geometry", 2}}, {"rt_native_hair", "rt_native_scalp"}, false, false, false, Apply::Restart},
     {"tilesets", "+ Tilesets", kCapRayQuery, {{"rt_native_hair", "1"}, {"rt_native_scalp", "1"}, {"rt_native_tileset", "1"}},
      {{"rt_geometry", 2}}, {"rt_native_tileset"}, true, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "RT 2.3–6.3 ms; indirect-light tracing 3.2–8.8 ms", "Unknown", "Recorded RTX 5090 increases: 2.3–6.3 ms in the ray-tracing pass and 3.2–8.8 ms in indirect-light tracing, depending on scene."}, "Hair shadows require Include foliage."},
+   {}, {0, 0, 0, 1}, false, {{"rt","1","Ray-tracing support"},{"rt_alpha","1","Foliage capture"},{"rt_bvh_split","1","Scene cache"}}, false, "Lighting", {"Measured", "RT 2.3–6.3 ms; indirect-light tracing 3.2–8.8 ms", "Unknown", "Recorded RTX 5090 increases: 2.3–6.3 ms in the ray-tracing pass and 3.2–8.8 ms in indirect-light tracing, depending on scene."}, "Needs Ray-tracing detail: Include foliage. Turning it on needs a game restart, and the first start may pause while shaders compile. Visible hair stays the game's own hair."},
 
   {"exp_hair_groom", "Strand hair in ray-traced lighting",
    "Experimental: uses individual strands for hair shadows and reflected light.",
@@ -470,20 +423,6 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_physical_origin", "1"}}, {{"rt_geometry", 2}, {"exp_native_coverage",1}}, {}, false, false, false, Apply::Restart}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_native_hair","1","Native hair capture startup"},{"rt_origin","1","Primary origin matching"}}, true, "Developer", {}},
 
-  {"exp_alpha_spill", "Preserve cutout capture on overflow",
-   "Preserves more cutout surfaces when scene capture fills. Quality and cost remain unqualified.",
-   Kind::Choice, Apply::Live, "live", false,
-   {{"off", "Off", 0, {{"rt_alpha_spill", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_alpha_spill", "1"}}, {{"rt_geometry", 2}}, {}, false, false, false, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_alpha","1","Cutout capture"},{"rt_bvh_split","1","Direct split records"}}, true, "Developer", {}},
-
-  {"exp_hit_paks", "Pak material coverage",
-   "Uses a locally generated pak mesh table to recover HLOD materials. Requires native material and instanced capture at startup. Unsupported materials keep the existing fallback.",
-   Kind::Choice, Apply::Restart, "restart to enable; off is live", false,
-   {{"off", "Off", 0, {{"rt_hit_material_paks", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapRayQuery, {{"rt_hit_material_paks", "1"}}, {{"exp_hidden_surface",1}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt_hit_material","1","Native material startup"},{"rt_hit_material_instanced","1","Instanced material startup"}}, true},
-
   // Developer only (dev=1): debug references and options parked by user decision. Their keys keep working.
   {"exp_hit_reference", "Experimental lighting reference",
    "Shows a limited reference using point and spot lights on supported opaque surfaces. "
@@ -506,15 +445,6 @@ inline constexpr Knob kKnobs[] = {
     {"k2", "2 exact lights", kCapRayQuery, {{"ls_k", "2"}, {"ls_rest_samples", "1"}}, {{"rt_geometry", 1}, {"local_shadows", 2}}, {}, false, false, false, Apply::Hitch}},
    {}, {0, 0, 0, 1}, false, {}, true, "Developer", {"Measured", "0.717 -> 0.555 ms (-23%) at S7 inn", "Unknown", "RTX 5090; k1 scene energy -0.38/-0.34/+0.12%, within OFF spread 0.89%. Ultra approved 2026-11-04; lower presets unqualified."}},
 
-  {"exp_current_sun", "Current cascade sun shadows",
-   "Uses the current four native sun-caster domains with finite per-layer rays and native "
-   "receiver selection. Needs ray-traced geometry, Sun shadows with hidden roofs, RT device setup and the "
-   "static BVH split. Gives one window of samples, then falls back while the scene is unready "
-   "(DIALOGUE_SHADOWS.md): developer only until fixed. Restart required.",
-   Kind::Choice, Apply::Restart, "restart required", false,
-   {{"off", "Off", 0, {{"rt_sun_cascade_current", "0"}}, {}, {}, false, false, false, Apply::Restart},
-    {"on", "On", kCapRayQuery, {{"rt_sun_cascade_current", "1"}}, {{"rt_geometry", 1}, {"sun_shadows", 2}}, {}, false, false, false, Apply::Restart}},
-   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"},{"rt_bvh_split","1","Static geometry cache"},{"rt_cascade_casters","1","Roof sun shadows"}}, true, "Developer", {}},
 };
 // clang-format on
 inline constexpr int kKnobCount = int(sizeof kKnobs / sizeof kKnobs[0]);
@@ -608,7 +538,6 @@ inline constexpr KV kDefaults[] = {
     {"gi", "1"},
     {"gi_rays", "4"},
     {"gi_rr_rays", "1"},
-    {"rt_trace_scale", "1.0"},
     {"gi_steps", "16"},
     {"gi_radius", "0.15"},
     {"gi_thickness", "0.03"},
@@ -642,7 +571,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_backlit", "1"},
     {"rt_tmax", "300"},
     {"rt_sun_radius", "0.00459"},
-    {"rt_sun_cascade_current", "0"},
     {"rt_sun_replace", "1"},
     {"rt_sun_roofs", "1"},
     {"rt_sun_roof_mode", "0"},
@@ -704,8 +632,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_water_xfb_mb", "32"},
     {"rt_water_xfb_max_mb", "256"},
     {"rt_water_reflections", "0"},
-    {"rt_water_hit_shade", "0"},
-    {"rt_water_hit_cost", "0"},
     {"rt_water_compose_shift", "0"},
     {"rt_water_surface_fresnel", "0"},
     {"rt_water_compose", "0"},
@@ -728,11 +654,8 @@ inline constexpr KV kDefaults[] = {
     {"perf_hitmat_lists", "0"},
     {"perf_hook_state", "0"},
     {"rt_hit_material_wind_rgb", "0"},
-    {"rt_hit_material_ip_grass", "0"},
     {"rt_hit_material_mask", "0"},
     {"rt_hit_material_pool_alpha", "1"},
-    {"rt_hit_material_generated", "0"},
-    {"rt_hit_material_paks", "0"},
     {"rt_hit_reference", "0"},
     {"rt_omm", "1"},
     {"rt_omm_reference", "0"},
@@ -754,7 +677,6 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_receiver_guard", "0"},
     {"rt_alpha_unknown", "1"},
     {"rt_alpha_auto", "1"},
-    {"rt_alpha_spill", "0"},
     {"rt_vt_alpha_masks", "1"},
     {"rt_alpha_fine_lod", "1"},
     {"rt_vt_alpha_miss_log", "0"},
@@ -768,8 +690,6 @@ inline constexpr KV kDefaults[] = {
     {"gi_hit_sun", "0"},
     {"gi_far", "0"},
     {"gi_far_m", "6"},
-    {"gi_temporal_mv_sample", "0"},
-    {"gi_prev_radiance_guard", "0"},
     {"sharc", "0"},
     {"sharc_log2", "22"},
     {"sharc_inject_stride", "2"},
@@ -867,9 +787,6 @@ inline constexpr KV kDefaults[] = {
     {"fg_tag_ui", "1"},
     {"fg_letterbox", "1"},
     {"fg_ui_pq", "0"},
-    {"rt_compact_hit_state", "0"},
-    {"rt_alpha_metadata_cache", "0"},
-    {"rt_water_empty_tiles", "0"},
     {"rt_stats_period_frames", "0"},
     {"rt_stats_reset", "0"},
 };
@@ -961,11 +878,8 @@ inline bool key_change_needs_restart(const std::string& key, const std::string& 
   // The instanced foliage rows patch the G-buffer VS at startup; off is live (layer/hit_material.cpp).
   if (key == "rt_hit_material_instanced") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   // Native hair capture and optional LSS support are prepared at startup for live toggles.
-  // Likewise the generated rows (common/native_hit_generated.h: their G-buffer VSs are patched at startup).
-  if (key == "rt_hit_material_generated") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
-  if (key == "rt_hit_material_paks") return std::atoi(from.c_str()) == 0 && std::atoi(to.c_str()) != 0;
   static const char* const kRestart[] = {"rt", "rt_alpha", "geo_capture", "ngx_hook", "rt_xfb_mb", "rt_alpha_mb",
-                                         "sharc_device", "rt_bvh_split", "rt_native_tileset", "rt_omm", "rt_sun_cascade_current", "rt_hit_material",
+                                         "sharc_device", "rt_bvh_split", "rt_native_tileset", "rt_omm", "rt_hit_material",
                                          "rt_hit_material_wind_rgb"};
   for (const char* k : kRestart)
     if (key == k) return from != to;
@@ -1035,11 +949,10 @@ inline bool knob_visible(const Knob& k, bool dev) { return dev || !k.dev_only; }
 // (launcher: "Show experimental options", Experimental page). Rejected candidates
 // (compact hit state, alpha metadata cache, empty water tiles), perf_* keys, diagnostics and
 // knobs owned by an automatic release policy are not listed and stay developer only.
+// Release 2026-11: Water surface reflections only. Strand hair (exp_hair_*) is a post-release
+// update and returns to this list with it; until then release resets its keys.
 inline constexpr const char* kOptInKnobs[] = {
-  "water_surface_fresnel",
-  "exp_hair_groom", "exp_hair_groom_primary", "exp_hair_fibre", "exp_hair_fibre_gi",
-  "exp_hair_groom_crowd", "exp_hair_groom_shadow_t", "exp_hair_groom_tips",
-  "exp_hair_physical_origin"};
+  "water_surface_fresnel"};
 inline bool opt_in_knob(const Knob& k) {
   for (const char* id : kOptInKnobs) if (std::string(id) == k.id) return true;
   return false;
@@ -1250,10 +1163,10 @@ inline void enforce_release_policy(Map& m) {
   const bool opt_in = map_int(m, "experimental_options", 0) == 1;
   const bool omm_enabled = map_int(m, "rt_omm", 1) != 0;
   for (const auto& k : kKnobs) if (k.dev_only && !(opt_in && opt_in_knob(k))) write(k.id, 0);
-  m["rt_trace_scale"] = "1.0"; m["rr_post"] = "1";
+  m["rr_post"] = "1";
   for (const char* key : {"perf_submit_batch", "perf_hitmat_lists", "perf_hook_state",
-       "rt_hit_material_generated", "gi_temporal_mv_sample", "gi_prev_radiance_guard", "sharc",
-       "rt_hit_material_ip_grass", "rt_hair_receiver_guard"}) m[key] = "0";
+       "sharc",
+       "rt_hair_receiver_guard"}) m[key] = "0";
   m.erase("rt_water_rf_edge"); m.erase("rt_water_rr_hitdist");
   int bounce = knob_value(*find_knob("exp_hidden_surface"), m);
   if (bounce < 0) bounce = map_int(m, "gi_far", 0) ? 2 :

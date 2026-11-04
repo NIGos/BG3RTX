@@ -1,12 +1,5 @@
 #include "../../common/water_camera_layout.h"
 
-// gpu-opt1: offline legacy override removes the opt-in code for key-off identity.
-#ifndef BG3RTX_GPU_OPT_LEGACY
-[[vk::constant_id(1023)]] const uint kSpecWaterEmptyTiles = 0;
-#define WATER_EMPTY_TILES_ON (kSpecWaterEmptyTiles != 0u)
-#else
-#define WATER_EMPTY_TILES_ON false
-#endif
 #ifdef WATER_SPEC_CASCADE
 #define RT_SPEC_CASCADE 1
 #endif
@@ -123,14 +116,7 @@
 // every frame (the hidden / same-surface test does not move under a pure turn, the screen border does).
 // Both terms carry the same env-BRDF weight E, so w blends two estimates of one reflection (no double count).
 #include "../gi/gi_common.hlsli"
-#ifdef WATER_HIT_SHADE_LAYOUT
-#define RT_HIT_MATERIAL 1
-#define RT_CASCADE_SUN_HIT 1
-#define RT_HIT_INSTANCED 1
-#define RT_HIT_WIND_RGB 1
-#endif
 #include "rt_common.hlsli"
-#include "water_hit_shade.hlsli"
 #ifdef WATER_LS
 #include "bg3_lights.hlsli"
 #endif
@@ -182,9 +168,7 @@ float3 compose_scene_origin(float3 origin) {
 // Group-reduced statistics (words 1..31; word 0 is one add per dispatch): cstat / csum64 add a
 // wave's count / sum into gsStat, cstat_flush (after a group barrier every thread reaches) adds the
 // group's non-zero words to cStats, with the carry into the high word for the 64-bit sums.
-#if defined(WATER_HIT_SHADE_LAYOUT) && !defined(WATER_LS)
-static const uint kGsWords = 64u;
-#elif defined(WATER_REFR)
+#if defined(WATER_REFR)
 static const uint kGsWords = 120u;  // common/water_compose.h kCsRrWords
 #elif defined(WATER_LS)
 static const uint kGsWords = 91u;   // common/water_compose.h kCsLsWords
@@ -207,9 +191,6 @@ void surface_flush(uint gi) {
   if (surface_diagnostics() && gi < 12u && gsSurface[gi] != 0u)
     cStats.InterlockedAdd((gi < 8u ? 120u + gi : 91u + gi - 8u)*4u, gsSurface[gi]);
 }
-#endif
-#ifndef BG3RTX_GPU_OPT_LEGACY
-groupshared uint gsWaterPresent;
 #endif
 void cstat(uint word, bool cond) {
   const uint n = WaveActiveCountBits(cond);
@@ -360,7 +341,8 @@ void water_copy(uint3 tid : SV_DispatchThreadID) {
   if (any(fp >= pc.full)) return;
   const float3 L = gDiffuse[fp] + gSpecular[fp];
   const uint cls = uint(gMaterial.Load(int3(fp, 0)).a * 255.0 + 0.5) & 7u;
-  wRad[fp] = float4(all(isfinite(L)) ? max(L, 0.0) : 0.0.xxx, float(cls));
+  // Narrow to rgba16f only after limiting the sum to its finite range.
+  wRad[fp] = float4(all(isfinite(L)) ? clamp(L, 0.0, 65504.0) : 0.0.xxx, float(cls));
   wDepOut[fp] = gDepth.Load(int3(fp, 0));
 }
 
@@ -397,9 +379,6 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
 #else
   if (gi < kGsWords) gsStat[gi] = 0u;
 #endif
-#ifndef BG3RTX_GPU_OPT_LEGACY
-  if (WATER_EMPTY_TILES_ON && gi == 0u) gsWaterPresent = 0u;
-#endif
   GroupMemoryBarrierWithGroupSync();
   const bool inside = all(fp < pc.full);
   const uint idx = fp.y * cp.a.x + fp.x;
@@ -411,17 +390,6 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     r1 = cRec.Load4(at + 16u);
   }
   has = has && (r1.w & 0xffffu) != 0u;
-#ifndef BG3RTX_GPU_OPT_LEGACY
-  if (WATER_EMPTY_TILES_ON) {
-    // Every lane participates, including dispatch padding. The FS validity word is
-    // the exact baseline has predicate; no inference from colour, roughness or rays.
-    if (WaveActiveAnyTrue(has) && WaveIsFirstLane()) InterlockedOr(gsWaterPresent, 1u);
-    GroupMemoryBarrierWithGroupSync();
-    // Empty groups have no target/record writes and all per-record statistics are
-    // zero. Dispatch count and camera forwarding above still run, even for WI.
-    if (gsWaterPresent == 0u) return;
-  }
-#endif
   if (has) cRec.Store(at + 28u, 0u);   // consumed
   const float2 a01 = f16tof32(uint2(r0.x, r0.x >> 16)), ab = f16tof32(uint2(r0.y, r0.y >> 16));
   const float2 b12 = f16tof32(uint2(r0.z, r0.z >> 16)), n01 = f16tof32(uint2(r0.w, r0.w >> 16));
@@ -453,10 +421,6 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   uint tier = 0u;
   bool skin = false;
   float3 L = 0.0.xxx;
-#ifdef WATER_HIT_SHADE_LAYOUT
-  bool shaded=false, shade_attempt=false;
-  uint shade_reason=0;
-#endif
 #ifdef WATER_RF_EDGE
   float rf_w = 1.0;   // the screen-edge fade of the traced term (D-RF's rf_edge)
 #define WATER_RF_TERM (WATER_EDGE_ON ? rf_w * (A * L - B) : A * L - B)
@@ -478,12 +442,7 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
     if (!all(isfinite(o)) || !all(isfinite(R))) {
       tier = 6u;
     } else {
-      #ifdef WATER_HIT_SHADE_LAYOUT
-      RtHit hh=rt_closest_hit(compose_scene_origin(o),R,pc.rf_tmax,cone);
-      const float th=hh.t; aborted=hh.aborted;
-#else
       const float th = rt_closest(compose_scene_origin(o), R, pc.rf_tmax, cone, aborted);
-#endif
       if (aborted) tier = 5u;
       else if (th < 0.0) tier = 4u;
       else {
@@ -515,21 +474,10 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
             }
           }
         }
-#ifdef WATER_HIT_SHADE_LAYOUT
-        if(kWaterHitShade!=0u && (cp.a.w & 64u)!=0u && (tier==2u || tier==3u)) {
-          shade_attempt=true;
-          shade_reason=water_hit_shade(hh,compose_scene_origin(H),R,cone,fp,L);
-          shaded=shade_reason==0u;
-        }
-#endif
       }
     }
   }
-#ifdef WATER_HIT_SHADE_LAYOUT
-  const bool composed = tier == 1u || shaded;
-#else
   const bool composed = tier == 1u;
-#endif
 #ifdef WATER_SHADOWS
   // M5.4: the FS's sun visibility (1) replaced by one traced ray: occluded, the FS's own colour
   // without its sun term R = C - D (f32 in the FS, then half: common/water_compose.h; not C - D here,
@@ -803,18 +751,8 @@ void water_compose(uint3 tid : SV_DispatchThreadID, uint gi : SV_GroupIndex) {
   cstat(7, trace && tier != 6u);
   // Tiers 1..6 at words 8..13 (common/water_compose.h kCsTier1). Was 6 + k: tier 1 went into the
   // ray count (7) and every logged tier was the next one (m5w3: "off screen 66%" were sky misses).
-#ifdef WATER_HIT_SHADE_LAYOUT
-  // Eager pure predicates keep histogram reduction independent of specialization folding.
-  [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace & (tier == k));
-#else
   [unroll] for (uint k = 1u; k <= 6u; ++k) cstat(7u + k, trace && tier == k);
-#endif
   cstat(14, trace && tier == 2u && skin);
-#ifdef WATER_HIT_SHADE_LAYOUT
-  if(kWaterHitShade==2u)cstat(55,g_water_truncated);
-  cstat(57,shade_attempt); cstat(58,shaded && tier==2u); cstat(59,shaded && tier==3u);
-  [unroll] for(uint reason=1u;reason<=4u;++reason) cstat(59u+reason,shade_attempt && shade_reason==reason);
-#endif
 #ifdef WATER_SHADOWS
 #ifdef WATER_SPEC_RF_EDGE
   cstat(15, composed && any(WATER_RF_ADD(Ct) < 0.0));

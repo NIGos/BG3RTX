@@ -164,8 +164,7 @@ bool native_hit_gi_screen(float3x3 inv,float3 ph,out bool onscreen,out float3 L)
  const bool has_tlas=pc.rt_origin!=0u && oq.w<kOriginNoHit;
  const float3 ngq=pc.rt_origin!=0u?oq.xyz:depth_geo_normal(qp,ray_at((float2(qp)+0.5)/float2(pc.full))*sd);
  if(!(sd>0.0 && depth_same_surface(qp,qd,sd,ngq,has_tlas,oq.w,pc.gi_rt_tol)))return false;
- L=prev_bounce_at(qp);
- return all(isfinite(L));
+ return prev_bounce_at(qp,L);
 }
 
 // native_hit_ao's estimator (same rays, same random stream, same weights: A is the same) plus the

@@ -8,7 +8,7 @@
  "repeat": 1,
  "live_batch": "consolidation-20261031",
  "window_mode": "visible_unfocused_fg",
- "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,rt_order_trace=0,rt_stability_log=0,rt_cascade_casters=1,ls_box=1,rt_native_scalp=1,rt_native_hair=1,rt_hair_physical_origin=1,rt_omm=1,rt_sun_cascade_current=1,ls_shadowed=1,ls_samples=0,rt_stats=0,rt_primary_check=0,fg_state_every=1,pan_prepare=1",
+ "set": "preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,reflex=1,crash_dump=1,rt_timing_frames=120,rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,dump_images=0,dump_raw=0,dump_shaders=0,pan_capture=0,pan_inputs=0,rt_order_trace=0,rt_stability_log=0,rt_cascade_casters=1,ls_box=1,rt_native_scalp=1,rt_native_hair=1,rt_hair_physical_origin=1,rt_omm=1,ls_shadowed=1,ls_samples=0,rt_stats=0,rt_primary_check=0,fg_state_every=1,pan_prepare=1",
  "args": [
   "-Move",
   "-MovePlan",

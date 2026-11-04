@@ -1034,14 +1034,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL MapMemory(VkDevice device, VkDeviceMemory 
                                                 VkMemoryMapFlags f, void** data) {
   VkResult r = device_of(device)->vk.MapMemory(device, m, o, size, f, data);
   if (r == VK_SUCCESS && data && *data) {
-    std::vector<VkBuffer> affected;
     {
     std::unique_lock<std::shared_mutex> lock(tracker().mu);
     tracker().mapped[m] = static_cast<uint8_t*>(*data) - o;
     tracker().mapped_ranges[m] = {o, size == VK_WHOLE_SIZE ? UINT64_MAX : o + size};
-    if(cfg_int("rt_hit_material_paks",0))for(const auto& [buffer,binding]:tracker().buffer_mem)if(binding.first==m)affected.push_back(buffer);
     }
-    for(auto buffer:affected)native_hit::pak_uv_forget_buffer(buffer);
   }
   return r;
 }

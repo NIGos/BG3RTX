@@ -44,12 +44,6 @@ bool core_water_pass_take(VkCommandBuffer cmd, Bg3Binding* lights = nullptr, boo
 
 // water.cpp (M5.2 water reflections, rt_water_reflections; docs/PLAN_M5_WATER.md): the trace in
 // run_post (after the views), its views (rt_debug 21-24) at the end of the forward water pass.
-struct WaterHitInputs {
-  Bg3Binding lights[9]{}; // lighting push bindings 21..29
-  VkDescriptorSet game=VK_NULL_HANDLE,sun=VK_NULL_HANDLE;
-  VkDescriptorSetLayout game_layout=VK_NULL_HANDLE,sun_layout=VK_NULL_HANDLE;
-  uint32_t dyn[16]{},ndyn=0;
-};
 struct WaterRfIn {
   Bg3Binding cam, vp, mat, dep, dif, spe, cam2;   // the lighting's (core/gi.cpp Snapshot)
   VkAccelerationStructureKHR scene_tlas;          // the TLAS + alpha set the RT passes used
@@ -59,14 +53,11 @@ struct WaterRfIn {
   uint32_t w, h;
   // rt_water_rr_hitdist: RR's specular hit distance image (core/gi.cpp g_rf_hit, R16F) when D-RF wrote it
   // this frame and the key is on, else null (the variant is then not selected).
-  WaterHitInputs hit{};
   uint64_t hit_identity=0;
   VkImageView rf_hit = VK_NULL_HANDLE;
 };
 bool water_rf_wanted();
 void water_rf(VkCommandBuffer cmd, const WaterRfIn& in);
-// Current deferred bindings, observed before run_post can be delayed past water recording.
-void water_note_lighting(const Bg3Binding* lights, VkDescriptorSet game);
 void water_on_pass_end(VkCommandBuffer cmd, const Bg3PassInfo* p);
 void water_release();
 

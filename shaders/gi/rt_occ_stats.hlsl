@@ -5,8 +5,7 @@
 //   sun: the darkening is the real pass's (rtVis: r traced visibility, g the game's mask before the
 //     fold; game mask x (1 - traced)); the occluder comes from a replica of rt_shadow.hlsl's ray (same
 //     seed, disc sample and origin), traced to its CLOSEST occluder (rt_common.hlsli RT_OCC_STATS).
-//     Disagreements with rtVis.r are counted (kOccSunMismatch). The current-caster sun
-//     (rt_sun_cascade_current) traces another scene: then the replica does not apply (mismatches).
+//     Disagreements with rtVis.r are counted (kOccSunMismatch).
 //   AO: the darkening is the real trace's 1 - giRaw.a (ambient visibility); the occluders come from
 //     a replica of gi_trace_rt.hlsl's rays (same seed, directions, origin, radius gi_rt_radius and
 //     the 1 - (t/R)^2 fade; gi_far's longer radiance rays and the hit-material passes' extra random

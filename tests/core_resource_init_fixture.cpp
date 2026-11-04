@@ -59,7 +59,7 @@ struct Pipe {
   struct Variant { VkPipeline pipeline = VK_NULL_HANDLE; };
   std::unordered_map<std::string, Variant> variants;
 };
-Pipe g_rf, g_rf_resolve, g_rf_sharc;
+Pipe g_rf, g_rf_sharc;
 VkPipelineLayout g_rf_layout = VK_NULL_HANDLE, g_rf_sharc_layout = VK_NULL_HANDLE;
 VkDescriptorSetLayout g_rf_set_layout = VK_NULL_HANDLE, g_rf_game_layout = VK_NULL_HANDLE;
 void defer_layout_destroy(uint64_t h) { defer(BG3_DEFER_PIPELINE_LAYOUT, h); }
@@ -113,7 +113,7 @@ int main() {
   }
   live.clear(); retired.clear(); fail_at = 0;
   check(gi::ensure_rf_layout((VkDescriptorSetLayout)1));
-  for (auto p : {&gi::g_rf, &gi::g_rf_resolve, &gi::g_rf_sharc}) {
+  for (auto p : {&gi::g_rf, &gi::g_rf_sharc}) {
     for (int i = 0; i < 3; ++i) p->variants[std::to_string(i)].pipeline = (VkPipeline)++serial;
     p->pipeline = p->variants["0"].pipeline;
   }
@@ -121,7 +121,7 @@ int main() {
   calls = 0; fail_at = 2;
   check(!gi::ensure_rf_layout((VkDescriptorSetLayout)2)); check(gi::g_rf_layout == old && retired.empty());
   fail_at = 0; check(gi::ensure_rf_layout((VkDescriptorSetLayout)2));
-  check(retired.size() == 11); // nine variants and two layouts, each once
-  check(gi::g_rf.variants.empty() && gi::g_rf_sharc.variants.empty() && gi::g_rf_resolve.variants.empty());
+  check(retired.size() == 8); // six variants and two layouts, each once
+  check(gi::g_rf.variants.empty() && gi::g_rf_sharc.variants.empty());
   std::printf("%d resource initialization checks passed\n", checks);
 }

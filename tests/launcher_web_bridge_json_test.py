@@ -39,8 +39,8 @@ assert "0.13 ms" in box["description"]
 assert [c["label"] for c in box["choices"]] == ["Off", "On"]
 assert all(c["enabled"] and c["maturity"] == "qualified" for c in box["choices"])
 assert "0.13 ms" in box["cost"]
-assert not any(s["id"] in {"roof_shadows", "exp_hit_emission", "exp_gi_far", "exp_alpha_spill", "exp_hair_physical_origin"} for s in state["settings"])
-assert not any(s["id"] in {"exp_omm", "exp_vt_alpha_masks", "rt_trace_scale", "rr_post"} for s in state["settings"])
+assert not any(s["id"] in {"roof_shadows", "exp_hit_emission", "exp_gi_far", "exp_hair_physical_origin"} for s in state["settings"])
+assert not any(s["id"] in {"exp_omm", "exp_vt_alpha_masks", "rr_post"} for s in state["settings"])
 local = next(s for s in state["settings"] if s["id"] == "local_shadows")
 assert [c["label"] for c in local["choices"]] == ["Off", "Fast", "Full"]
 print("Consolidated cards, qualified box shadows and developer visibility verified.")

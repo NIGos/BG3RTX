@@ -1,0 +1,751 @@
+{
+  "baseline": "e0200e2abd75",
+  "method": "tools/shader_identity.py byte comparison; expected DIFFERENT exit 1",
+  "unique_requests": 214,
+  "identical": 64,
+  "different": 150,
+  "compile_failures": 0,
+  "manifest_request_delta": 0,
+  "different_requests_and_touched_dependencies": {
+    "gi/gi_composite.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_composite.hlsl"
+    ],
+    "gi/gi_contact.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_contact.hlsl"
+    ],
+    "gi/gi_temporal.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_temporal.hlsl"
+    ],
+    "gi/gi_trace.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace.hlsl"
+    ],
+    "gi/gi_trace_rt.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/hair_fibre.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_local.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_epoch.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_fade.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_identity.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_direct.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_material.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_two_bounce.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box_k.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_check.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box_k.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_check.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_k.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_k.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full_box.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_ref.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_occ_stats.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_origin.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade_em.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_shadow.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "rr_post.hlsl": [
+      "shaders/rr_post.hlsl"
+    ],
+    "rt/water_compose.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_reflect.hlsl": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_composite.hlsl?RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_composite.hlsl"
+    ],
+    "gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_HAIR_FIBRE_GI_REFERENCE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_composite.hlsl"
+    ],
+    "gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_composite.hlsl"
+    ],
+    "gi/gi_composite.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_HAIR_FIBRE_GI_REFERENCE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_composite.hlsl"
+    ],
+    "gi/gi_contact.hlsl?RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_contact.hlsl"
+    ],
+    "gi/gi_contact.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_contact.hlsl"
+    ],
+    "gi/gi_temporal.hlsl?RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_temporal.hlsl"
+    ],
+    "gi/gi_temporal.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_temporal.hlsl"
+    ],
+    "gi/gi_trace.hlsl?RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace.hlsl"
+    ],
+    "gi/gi_trace.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace.hlsl"
+    ],
+    "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_direct_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_direct_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/gi_trace_rt_sharc_hit_sun_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RT_SPEC_GI_FAR=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/gi_trace_rt.hlsl",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/hair_fibre.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/hair_fibre.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_local.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_local.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_epoch.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_epoch.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_fade.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_fade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_identity.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/pan_primary_identity.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_direct.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_material.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_two_bounce.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_hit_two_bounce.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HIT_INST=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_check.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_check.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1;RT_SPEC_OCC_STATS=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_OCC_STATS=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_box_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_check.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_check.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_full_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_k.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_native_full_box.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_ref.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_local_shadows_ref.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_occ_stats.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_occ_stats.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_origin.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_HIT_INST=1;RT_SPEC_CASCADE=1;RF_SPEC_HIT_GI=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/gi/rt_reflections.hlsl",
+      "shaders/rt/native_hit_shade.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "gi/rt_shadow.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_HAIR_ORIGIN=1;RT_SPEC_CASCADE=1;RT_SPEC_CASCADE_SUN=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_GSH=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_REFR=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_LS=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1;RT_CASCADE_SUN_HIT=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_compose.hlsl?WATER_SPEC_RF_EDGE=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli",
+      "shaders/rt/water_compose.hlsl"
+    ],
+    "rt/water_reflect.hlsl?WATER_RR_HIT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ],
+    "rt/water_reflect.hlsl?WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1": [
+      "shaders/gi/gi_common.hlsli",
+      "shaders/rt/rt_common.hlsli"
+    ]
+  },
+  "identical_requests": [
+    "fg/fg_ui_pq.hlsl",
+    "geo_ubo_copy.hlsl",
+    "gi/gi_ao_apply.hlsl",
+    "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1",
+    "gi/gi_ao_apply.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "gi/rt_debug.hlsl",
+    "gi/rt_debug.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1",
+    "gi/rt_debug.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1",
+    "gi/rt_local_shadows_match.hlsl",
+    "gi/rt_local_shadows_match.hlsl?RT_SPEC_NATIVE=1",
+    "gi/rt_local_shadows_match.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "gi/rt_local_shadows_prep.hlsl",
+    "gi/rt_local_shadows_prep.hlsl?RT_SPEC_NATIVE=1",
+    "gi/rt_local_shadows_prep.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "gi/rt_sun_resolve.hlsl",
+    "gi/rt_sun_resolve.hlsl?RT_SPEC_NATIVE=1",
+    "gi/rt_sun_resolve.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "gi/sharc_debug.hlsl",
+    "gi/sharc_debug.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_debug.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_inject.hlsl",
+    "gi/sharc_inject.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_inject.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_inject_lock.hlsl",
+    "gi/sharc_inject_lock.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_inject_lock.hlsl?RT_SPEC_NATIVE=1;RT_SPEC_CASCADE=1",
+    "gi/sharc_resolve.hlsl",
+    "gi/sharc_resolve.hlsl?RT_SPEC_NATIVE=1",
+    "gi/sharc_resolve.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "gi/sharc_roof.hlsl",
+    "gi/sharc_roof.hlsl?RT_SPEC_NATIVE=1",
+    "gi/sharc_roof.hlsl?RT_SPEC_NATIVE=1;RT_OMM_SCENE=1",
+    "probe.hlsl",
+    "replay_copy.hlsl",
+    "replay_image.hlsl",
+    "rr_guides.hlsl",
+    "rr_hair.hlsl",
+    "rr_post_temporal.hlsl",
+    "rt/em_copy.hlsl",
+    "rt/em_debug.hlsl",
+    "rt/em_lights.hlsl",
+    "rt/em_sanitize.hlsl",
+    "rt/hair_bounds.hlsl",
+    "rt/hair_groom_update.hlsl",
+    "rt/hair_primary_count.hlsl",
+    "rt/hair_primary_gbuffer.hlsl",
+    "rt/hair_primary_velocity.hlsl",
+    "rt/hit_material_gather.hlsl",
+    "rt/hit_material_instanced_remap.hlsl",
+    "rt/hit_material_join.hlsl",
+    "rt/hit_material_tileset_gather.hlsl",
+    "rt/hold_pack.hlsl",
+    "rt/mesh_extract.hlsl",
+    "rt/mesh_extract_basis.hlsl",
+    "rt/omm_bake_mask.hlsl",
+    "rt/omm_bake_plain.hlsl",
+    "rt/omm_content_epoch.hlsl",
+    "rt/omm_scene_clone.hlsl",
+    "rt/omm_scene_validate.hlsl",
+    "rt/terrain_packet_ssbo.hlsl",
+    "rt/terrain_packet_ubo.hlsl",
+    "rt/water_view.hlsl",
+    "rt/xfb_to_world.hlsl",
+    "rt/xfb_to_world_ortho.hlsl"
+  ]
+}

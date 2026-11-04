@@ -156,6 +156,8 @@ and what the trust did with them (`sun stats`, 600-frame windows):
 private same-submit build insertion, cloned alpha/stamp, strict whole-ray coverage.
 Design, tests and remaining material/LOD/volume gates: docs/SUN_CURRENT_SCENE.md.
 This is not a passing exploration-shadow gate; zero certified pixels is INVALID.
+Release outcome: rejected; native-caster coverage is unqualified.
+code removed 2026-11-05, evidence above
 
 ## Dialogue legacy cascade filter (2026-11-03, READY_FOR_LIVE)
 

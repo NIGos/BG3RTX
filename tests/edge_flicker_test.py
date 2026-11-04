@@ -176,8 +176,6 @@ class EdgeFlickerTest(unittest.TestCase):
         smoke = json.loads((root/'smoke_ultra/plans/su1_s8.json').read_text())
         self.assertEqual(smoke[0]['seconds'], 45)
         self.assertEqual(smoke[0]['motion_start'], 45)
-        water = json.loads((root/'water_offscreen/plans/wo1_s8.json').read_text())
-        self.assertIn('rt_water_hit_shade=2', water[0]['set'].split(','))
         job = json.loads((root/'edge_flicker/jobs/ef1-dialogue3-attribution.json').read_text())
         self.assertIn(r'\[crash\] exception 0x', job['forbid'])
         self.assertFalse(any('mesh pool full' in f for f in job['forbid']))

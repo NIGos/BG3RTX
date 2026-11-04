@@ -48,5 +48,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   float3 tot = rad + gSpecular[fp];
   const float3 kY = float3(0.2126, 0.7152, 0.0722);
   float share = dot(tot, kY) > 1e-8 ? saturate(dot(max(rad, 0.0), kY) / dot(tot, kY)) : 1.0;
-  prevRadiance[fp] = float4(tot, share);
+  // The sum of two finite lighting targets can exceed the rgba16f range.
+  prevRadiance[fp] = float4(all(isfinite(tot)) ? clamp(tot, 0.0, 65504.0) : 0.0.xxx, share);
 }

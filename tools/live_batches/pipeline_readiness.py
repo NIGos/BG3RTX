@@ -28,15 +28,14 @@ GI_QUERY = [GI_TRACE, r"gi: gi/rt_local_shadows\.hlsl[^ ]* generation ",
             r"gi: gi/rt_reflections\.hlsl[^ ]* generation "]
 for key in ("rt_hair_groom", "rt_hair_physical_origin", "rt_hit_material",
             "rt_hit_material_instanced", "rt_hit_material_wind_rgb",
-            "rt_compact_hit_state", "rt_alpha_metadata_cache", "rt_trace_scale",
             "rt_alpha_fine_lod", "rt_vt_alpha_masks", "rt_omm", "rt_omm_dyn"):
     TABLE[key] = list(GI_QUERY)
 for key in ("gi_far", "gi_hit_direct", "gi_hit_sun", "gi_rr_rays",
             "rt_hit_emission", "rt_emissive"):
     TABLE[key] = [GI_TRACE]
 WATER_COMPOSE = r"\[water\] rt/water_compose\.hlsl[^ ]* water_compose: built"
-for key in ("rt_water_hit_cost", "rt_water_hit_shade", "rt_water_compose_shift",
-            "rt_water_empty_tiles", "rt_water_shadows", "rt_water_ls_shadows",
+for key in ("rt_water_compose_shift",
+            "rt_water_shadows", "rt_water_ls_shadows",
             "rt_water_refraction", "rt_water_game_shadow"):
     TABLE[key] = [WATER_COMPOSE]
 # rt_hair_groom_shadow_t: specialization 1026 of every rt_visibility consumer (core/gi.cpp refresh, core/water.cpp):
@@ -68,7 +67,7 @@ TABLE.update({
 # change CPU publication/LOD; paks changes host data, geometry capture is host
 # side, and rr/fg use vendor pipelines. preset and ab_off affect many passes.
 GENERIC = r"\[shaders\].*(?: compiled(?: in| \()|read from the cache|cache: prefetched )"
-CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_primary_passes rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_hit_material_paks rt_water_geometry rr fg preset ab_off".split())
+CONSERVATIVE = set("rt_hair_fibre rt_hair_groom_primary_order rt_hair_primary_passes rt_hair_groom_tips rt_hair_groom_crowd_ksegments rt_water_geometry rr fg preset ab_off".split())
 for key in CONSERVATIVE:
     TABLE[key] = [GENERIC]
 
@@ -76,7 +75,7 @@ for key in CONSERVATIVE:
 # selecting pipelines. Unknown rendering keys require explicit completion evidence.
 # Alpha spill only selects the CPU capture allocator (layer/geocapture.cpp:2634);
 # its current-frame scene publication is checked by the job's scene-wait gates.
-CONTROL = set("rt_stats_period_frames rt_stats_reset rt_alpha_spill qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
+CONTROL = set("rt_stats_period_frames rt_stats_reset qa_exposure_hold fg_snap pan_capture pan_prepare pan_post pan_edge pan_water rt_stats rt_primary_check rt_primary_identity rt_primary_epoch ls_stats ls_check rf_stats rt_debug ls_debug gi_debug rf_debug rt_occ_stats rr_show fg_snap_any replay_pack rt_mesh_audit_frames rt_mesh_audits rt_scene_wait_ms rt_scene_wait_log_frames rt_rebuild_frames fg_state_every fg_log_presents crash_dump dump_images dump_preview_f32 dump_png_width fg_snap_delay_ms pan_delay_ms rt_mesh_content_id rt_cascade_mb rt_hair_pool_trim".split())
 
 
 def requirements(job, plan):

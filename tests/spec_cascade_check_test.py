@@ -6,25 +6,9 @@ from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.spec_cascade_check import (phi_order, block_order, lower_priority, old_requests_waterhair,
-                                     check_baseline, gpu_opt_requests,
-                                     gpu_opt_full_trace_request)
+                                     check_baseline)
 
 
-class GpuOptRequestsTest(unittest.TestCase):
-    def test_baseline_turns_off_trace_scaling_and_preserves_other_defines(self):
-        full = "gi/rt_reflections_sharc_hit_shade_em.hlsl?RT_SPEC_NATIVE=1;RT_HIT_POOL_2S=1;GI_SPEC_GUARDS=1"
-        half = full.replace(";GI_SPEC_GUARDS=1", ";RT_TRACE_HALF=1;GI_SPEC_GUARDS=1")
-        self.assertEqual(gpu_opt_full_trace_request(half), full)
-        self.assertEqual(gpu_opt_full_trace_request(full), full)
-        self.assertEqual(gpu_opt_full_trace_request("gi/rt_reflections.hlsl?RT_TRACE_HALF=1"),
-                         "gi/rt_reflections.hlsl")
-        self.assertEqual(gpu_opt_full_trace_request("gi/gi_trace_rt.hlsl"), "gi/gi_trace_rt.hlsl")
-
-    def test_off_reference_preserves_every_existing_define(self):
-        for request in ("gi/gi_trace_rt.hlsl", "rt/water_compose.hlsl?WATER_LS=1;WATER_SPEC_CASCADE=1"):
-            [(assign, reference)] = gpu_opt_requests(request)
-            self.assertEqual(assign, {1024: 0, 1022: 0, 1023: 0})
-            self.assertEqual(reference, request + (";" if "?" in request else "?") + "BG3RTX_GPU_OPT_LEGACY=1")
 
 
 class BaselineWorkerTest(unittest.TestCase):
@@ -56,27 +40,8 @@ class WaterHairRequestsTest(unittest.TestCase):
             ({1008: 1, 1010: 1}, "rt/water_compose.hlsl?WATER_SHADOWS=1;WATER_SPEC_RF_EDGE=1;RT_NATIVE_TILESET=1;RT_NATIVE_SCALP=1;RT_NATIVE_HAIR=1;RT_CASCADE_MASKS=1")])
 
 
-class WaterHitMappingTest(unittest.TestCase):
-    def test_all_modes_keep_descriptor_contract(self):
-        from tools.spec_cascade_check import KEYS
-        request = "rt/water_compose.hlsl?WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1;RT_SPEC_NATIVE=1"
-        marker, references = KEYS["waterhit"]
-        self.assertEqual(marker, "WATER_HIT_SHADE_LAYOUT=1")
-        self.assertEqual(references(request), [
-            ({1016: v, 1015: shift}, request + f";WATER_HIT_SHADE_REFERENCE={v};WATER_COMPOSE_SHIFT_REFERENCE={shift}")
-            for shift in (0, 1) for v in (0, 1, 2)])
 
 
-class WaterCostMappingTest(unittest.TestCase):
-    def test_independent_bits_and_modes(self):
-        from tools.spec_cascade_check import KEYS
-        request = "rt/water_compose.hlsl?WATER_HIT_SHADE_LAYOUT=1;WATER_SPEC_CASCADE=1"
-        pairs = KEYS["watercost"][1](request)
-        self.assertEqual(len(pairs), 20)
-        self.assertEqual({a[1021] for a, _ in pairs}, {0, 1, 2, 4, 7})
-        self.assertEqual({(a[1016], a[1015]) for a, _ in pairs}, {(1,0),(1,1),(2,0),(2,1)})
-        for a, r in pairs:
-            self.assertIn(f"WATER_HIT_COST_REFERENCE={a[1021]}", r)
 
 
 class PhiOrderTest(unittest.TestCase):

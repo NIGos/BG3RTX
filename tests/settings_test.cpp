@@ -56,7 +56,6 @@ static void test_parse() {
 static void test_preset_expansion() {
   for(int p=0;p<kPresetCount;++p) {
     Map m; for(auto& kv:expand_preset(p)) m[kv.first]=kv.second;
-    CHECK_EQ(get(m,"rt_trace_scale"),"1.0");
     if(p<kUltra) for(const char* key:{"gi_far","gi_hit_direct","gi_hit_sun","rf_hit_shade","rf_hit_gi","rt_hit_emission","rt_emissive"}) CHECK_EQ(get(m,key),"0");
   }
   Map high;
@@ -367,13 +366,13 @@ static Map on_map(const Knob& k, int c) {
 // Keys every GUI entry wrote before the 2026-11-01 rationalization (docs/GUI_AUDIT_20261101.md):
 // each must still be written by a knob or be listed in kAutomaticKeys (no orphan key).
 static const char* const kOldKnobKeys[] = {
-    "rt_cascade_casters", "ls_box", "ls_k", "ls_rest_samples", "rt_native_scalp", "rt_alpha_spill",
+    "rt_cascade_casters", "ls_box", "ls_k", "ls_rest_samples", "rt_native_scalp",
     "rt_native_tileset", "rt_native_hair", "rt_hair_physical_origin", "rt_hit_material",
     "rt_hit_material_instanced", "rt_hit_material_recycle", "fg_letterbox", "rt_hit_material_wind_rgb",
     "gi_hit_direct", "gi_hit_sun", "gi_far", "gi_far_m", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission",
     "rt_hit_reference", "rt_omm", "rt_water_geometry", "rt_water_reflections", "rt_water_compose",
     "rt_water_shadows", "rt_water_ls_shadows", "rt_water_refraction", "rt_water_game_shadow",
-    "rt_sun_cascade_current", "rt_vram_guard", "rt_vram_compact", "rt_capture_elastic"};
+    "rt_vram_guard", "rt_vram_compact", "rt_capture_elastic"};
 
 // The old knob ids, each with the one key its "On" wrote.
 static const char* const kOldOn[][2] = {
@@ -433,7 +432,7 @@ static void test_gui_levels() {
   const auto* fibre_gi = find_knob("exp_hair_fibre_gi");
   CHECK(fibre_gi && fibre_gi->dev_only && fibre_gi->apply == Apply::Live);
   CHECK_EQ(code_default("rt_hair_fibre_gi"), "0");
-  for (const char* id : {"exp_hit_reference", "exp_current_sun"}) CHECK(find_knob(id)->experimental);
+  for (const char* id : {"exp_hit_reference"}) CHECK(find_knob(id)->experimental);
   CHECK(!find_knob("exp_ls_exact_k")->experimental);
   CHECK(dev_mode("1"));
   CHECK(!dev_mode("0"));
@@ -480,7 +479,7 @@ static void test_gui_levels() {
   CHECK_EQ(get(on_map(*box, box->preset[kHigh]), "ls_box"), "0");
   CHECK_EQ(get(on_map(*roof, 1), "rt_cascade_casters"), "0");
   CHECK_EQ(get(on_map(*roof, 2), "rt_cascade_casters"), "1");
-  for (const char* id : {"exp_hair_physical_origin", "exp_alpha_spill"}) {
+  for (const char* id : {"exp_hair_physical_origin"}) {
     CHECK(!knob_visible(*find_knob(id), false)); CHECK(knob_visible(*find_knob(id), true));
   }
 
@@ -650,7 +649,7 @@ static void test_gui_levels() {
   CHECK(!key_change_needs_restart("rt_hit_material_instanced", "1", "0"));
   CHECK(!key_change_needs_restart("rt_hit_material_recycle", "0", "1"));
   for (const char* key : {"gi_hit_direct", "gi_hit_sun", "rf_hit_shade", "rf_hit_gi", "rt_hit_emission", "rt_emissive",
-                          "gi_far", "gi_far_m", "ls_box", "rt_alpha_spill", "fg_letterbox", "ls_k", "rt_hit_reference"})
+                          "gi_far", "gi_far_m", "ls_box", "fg_letterbox", "ls_k", "rt_hit_reference"})
     CHECK(!key_change_needs_restart(key, "0", "1"));
   for (const char* key : {"rt_water_compose", "rt_water_shadows", "rt_water_ls_shadows", "rt_water_game_shadow",
                           "rt_water_refraction"}) {
@@ -658,7 +657,7 @@ static void test_gui_levels() {
     CHECK(!key_change_needs_restart(key, "1", "0"));
   }
   CHECK(!key_change_needs_restart("rt_water_geometry", "0", "1"));
-  for (const char* key : {"rt_native_tileset", "rt_omm", "rt_sun_cascade_current"})
+  for (const char* key : {"rt_native_tileset", "rt_omm"})
     CHECK(key_change_needs_restart(key, "0", "1"));
   CHECK(!key_change_needs_restart("rt_native_scalp", "0", "1"));
 }
@@ -678,7 +677,6 @@ static void test_user_ini_migration() {
     if (v[i] < 0) CHECK_EQ(std::string(kKnobs[i].id) + " reads back as custom", "");
   CHECK(preset_from_id(get(user, "preset")) == kUltra);
   CHECK(v[knob_index("box_lights")] == 1);
-  CHECK(v[knob_index("exp_alpha_spill")] == 1);
   CHECK(v[knob_index("exp_hidden_surface")] == 3);
   CHECK(v[knob_index("exp_water")] == 3);
   CHECK(v[knob_index("exp_native_coverage")] == 1);   // Ultra
@@ -969,18 +967,6 @@ static void test_gui_review_safety() {
   CHECK(!choice_available(fresnel,1,false,false,~0u));
   CHECK(!choice_available(fresnel,1,false,true,~0u));
   CHECK(choice_available(fresnel,1,true,true,~0u));
-  const auto& cost=*find_knob("exp_water_hit_cost");
-  CHECK(choice_count(cost)==5);
-  CHECK_EQ(get(on_map(cost,4),"rt_water_hit_cost"),"7");
-  CHECK(knob_value(cost,parse_ini("rt_water_hit_cost=7\n"))==4);
-  auto values=preset_values(kUltra);
-  values[knob_index("exp_water_hit_shade")]=0;
-  for(int c=1;c<choice_count(cost);++c) {
-    CHECK(!unmet_need(cost,c,values).empty());
-    values[knob_index("exp_water_hit_shade")]=1;
-    CHECK(unmet_need(cost,c,values).empty());
-    values[knob_index("exp_water_hit_shade")]=0;
-  }
   CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[1].label,"3.5 million segments");
   CHECK_EQ(find_knob("exp_hair_groom_crowd")->choices[2].label,"1.8 million segments");
   CHECK(std::string(find_knob("exp_hair_groom")->cost.gpu).find("ms")!=std::string::npos);
@@ -1019,7 +1005,7 @@ static void test_apply_modes() {
   // Player trial toggles are visible, default-off and live in both directions.
   // exp_water_compose_shift graduated to Ultra (wf9 2026-11-03).
   CHECK(!find_knob("exp_water_compose_shift")->experimental && find_knob("exp_water_compose_shift")->preset[3] == 1);
-  for (const auto* id : {"rr_post", "exp_water_hit_shade",
+  for (const auto* id : {"rr_post",
                          "exp_hair_groom"}) {
     const auto& k=*find_knob(id);
     CHECK(k.experimental && !knob_visible(k,false) && k.dev_only);
@@ -1113,16 +1099,6 @@ static void test_retired_hair_ini() {
 }
 
 static void test_consolidation_policy() {
-  for (const char* id : {"exp_water_hit_shade", "exp_water_hit_cost", "exp_alpha_spill", "exp_hit_paks"}) {
-    const auto& k = *find_knob(id);
-    CHECK(!knob_visible(k, false, true));
-    for (const char* opt : {"0", "1"}) {
-      Map m; KVList pairs; knob_kvs(k, 1, pairs);
-      for (const auto& kv : pairs) m[kv.first] = kv.second;
-      m["experimental_options"] = opt; enforce_release_policy(m);
-      CHECK(knob_value(k, m) == 0);
-    }
-  }
   Map m; apply_layer(m, parse_ini("preset=high\nrt_omm=0\n"));
   CHECK_EQ(get(m, "rt_omm"), "0");
   CHECK_EQ(get(m, "rt_omm_dyn"), "0");
@@ -1143,13 +1119,13 @@ static void test_consolidation_policy() {
   CHECK(!ab::flip(m, indicator)); // A stale Fresnel target must not bypass restart safety.
   m["experimental_options"] = "0"; CHECK(!ab::flip(m, indicator));
   CHECK(!ab::eligible(*find_knob("exp_omm"), 1, true));
+  // Release: Ctrl+Shift+F10 flips live Experimental choices only. Water surface reflections need a
+  // restart and strand hair is post-release, so the release has no eligible target (launcher and docs say so).
+  for (const char* id : kOptInKnobs)
+    for (int c = 1; c < choice_count(*find_knob(id)); ++c) CHECK(!ab::eligible(*find_knob(id), c, true));
   const auto& live = *find_knob("exp_hair_groom");
-  selection.touch(live, 1, true); CHECK(selection.pending);
-  keys.clear(); selection.append(keys); knob_kvs(live, 0, keys);
-  m["experimental_options"] = "1";
-  for (const auto& kv : keys) m[kv.first] = kv.second;
-  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 1);
-  CHECK(ab::flip(m, indicator)); CHECK(knob_value(live, m) == 0);
+  selection.touch(live, 1, true); CHECK(!selection.pending);
+  CHECK(!opt_in_knob(live) && !knob_visible(live, false, true));
 
 }
 
@@ -1172,17 +1148,16 @@ static void test_release_migration() {
     CHECK(k && k->dev_only && !knob_visible(*k, false) && knob_visible(*k, false, true));
     if (k) CHECK(choice_available(*k, 1, false, true, ~0u, true) && !choice_available(*k, 1, false, true, ~0u));
   }
-  for (const char* id : {"exp_compact_hit_state", "exp_alpha_metadata_cache", "exp_water_empty_tiles", "rt_trace_scale",
-       "exp_omm", "exp_vt_alpha_masks", "rr_post", "exp_water_compose_shift", "exp_hair_pool_trim", "exp_ls_exact_k",
-       "exp_hit_reference", "exp_current_sun", "exp_hair_primary_passes", "exp_hair_primary_order"})
+  for (const char* id : {       "exp_omm", "exp_vt_alpha_masks", "rr_post", "exp_water_compose_shift", "exp_hair_pool_trim", "exp_ls_exact_k",
+       "exp_hit_reference", "exp_hair_primary_passes", "exp_hair_primary_order"})
     CHECK(find_knob(id) && !opt_in_knob(*find_knob(id)) && !knob_visible(*find_knob(id), false, true));
   {
     Map opt = parse_ini("dev=0\npreset=ultra\nrt_water_surface_fresnel=1\nrt_hair_groom=1\nrt_compact_hit_state=1\nperf_submit_batch=1\n");
     Map m = code_defaults(); apply_layer(m, opt);
     CHECK_EQ(get(m, "rt_water_surface_fresnel"), "0"); CHECK_EQ(get(m, "rt_hair_groom"), "0");
     opt["experimental_options"] = "1"; m = code_defaults(); apply_layer(m, opt);
-    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "1");
-    CHECK_EQ(get(m, "rt_compact_hit_state"), "0"); CHECK_EQ(get(m, "perf_submit_batch"), "0");
+    CHECK_EQ(get(m, "rt_water_surface_fresnel"), "1"); CHECK_EQ(get(m, "rt_hair_groom"), "0"); // post-release
+    CHECK_EQ(get(m, "rt_compact_hit_state"), "1"); CHECK(!code_defaults().count("rt_compact_hit_state")); CHECK(!find_knob("exp_compact_hit_state")); CHECK_EQ(get(m, "perf_submit_batch"), "0");
     Map again = m; enforce_release_policy(again); CHECK(again == m);
   }
   Map stale;
@@ -1191,7 +1166,7 @@ static void test_release_migration() {
     KVList kvs; knob_kvs(k, choice_count(k) - 1, kvs);
     for (const auto& kv : kvs) stale[kv.first] = kv.second;
   }
-  stale["dev"] = "0"; stale["rr_post"] = "0"; stale["rt_trace_scale"] = "0.5";
+  stale["dev"] = "0"; stale["rr_post"] = "0";
   stale["perf_submit_batch"] = "1"; stale["perf_hook_state"] = "1";
   stale["rt_water_rf_edge"] = "1"; stale["rt_water_rr_hitdist"] = "1";
   for (int p = 0; p < kPresetCount; ++p) {
@@ -1200,7 +1175,6 @@ static void test_release_migration() {
     for (const auto& k : kKnobs) if (k.dev_only) {
       int want = 0;
       std::string id = k.id;
-      if (id == "rt_trace_scale") want = 1;
       if ((id == "exp_omm" || id == "exp_vt_alpha_masks") && (p == kHigh || p == kUltra)) want = 1;
       if ((id == "exp_water_compose_shift" || id == "exp_hair_pool_trim" ||
            id == "exp_ls_exact_k") && p == kUltra) want = 1;

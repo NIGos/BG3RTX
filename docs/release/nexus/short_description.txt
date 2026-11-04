@@ -1,0 +1,1 @@
+Ray-traced sun and local-light shadows, indirect lighting and reflections (water included) for Baldur's Gate 3, with DLSS Ray Reconstruction and Frame Generation. A small launcher enables it for the game only: game files, registry and saves stay untouched. Vulkan and NVIDIA RTX. Public beta, tested only on an RTX 5090.

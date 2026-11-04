@@ -299,12 +299,10 @@
     "rt_hair_groom_primary_order",
     "rt_hair_groom_tips",
     "rt_hair_primary_passes",
-    "rt_hit_material_paks",
     "rt_water_geometry"
   ],
   "no_game_launched": true,
   "superseded": {
-    "combined-Campsite---27h": 498.30000000000035,
     "combined-Water-Queens-House": 1538.599999999998
   },
   "historical_jobs": 94,

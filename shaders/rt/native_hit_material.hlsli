@@ -15,13 +15,12 @@
 #endif
 #if defined(RT_SPEC_HIT_FAMILY)
 // Variant migration step S2a (docs/BUILD_AND_PACKAGE_EFFICIENCY.md "Migration plan"): one module for the instanced
-// hit-material families, constants 1004 (rt_hit_material_wind_rgb) and 1005 (rt_hit_material_ip_grass) set by
+// hit-material families, constants 1004 (rt_hit_material_wind_rgb) set by
 // core/gi.cpp refresh() from the layer's capability words.
-#if defined(RT_HIT_WIND_RGB) || defined(RT_HIT_IP_GRASS) || !(defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
-#error RT_SPEC_HIT_FAMILY replaces RT_HIT_WIND_RGB / RT_HIT_IP_GRASS and needs RT_HIT_INSTANCED or RT_SPEC_HIT_INST
+#if defined(RT_HIT_WIND_RGB) || !(defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
+#error RT_SPEC_HIT_FAMILY replaces RT_HIT_WIND_RGB and needs RT_HIT_INSTANCED or RT_SPEC_HIT_INST
 #endif
 [[vk::constant_id(1004)]] const uint kSpecWindRgb = 0u;
-[[vk::constant_id(1005)]] const uint kSpecIpGrass = 0u;
 #endif
 #define BG3_NATIVE_HIT_MATERIAL_HLSLI
 #include "../../common/native_opaque_transport.h"
@@ -124,14 +123,7 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
  uint4 header=gHitRecords.Load4(0);
  if(header.w!=1 || header.x!=pc.frame || header.y==0 || header.y!=gSceneStamp.Load(0) || header.y!=gSceneStamp.Load(4))return hit_material_unknown(2);
  uint4 h0=gHitRecords.Load4(row),h1=gHitRecords.Load4(row+16),h2=gHitRecords.Load4(row+32);
-#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
- // rt_hit_material_generated two-sided pool rows (common/native_hit_generated.h, e.g. Base_2S_VT 2d815e2a = 923131c7):
- // h2.w = 5, the FS scales the N column by (gl_FrontFacing ? 1 : -1); every consumer without this define rejects them.
- const bool two_sided=RT_HIT_INST_ON && h2.w==5u;
- if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || (h2.w!=3u && !two_sided))return hit_material_unknown(3);
-#else
  if(h0.x!=slot+1u || h0.y!=ii.tris || h0.z!=ii.base || h1.w!=pc.frame || h1.x!=nh_pool_basis_vertex || h2.w!=3u)return hit_material_unknown(3);
-#endif
  if(h0.y>(0xffffffffu-nh_pool_basis_header)/(3u*nh_pool_basis_vertex) || h0.w>pbytes || nh_pool_basis_header+h0.y*3u*nh_pool_basis_vertex>pbytes-h0.w)return result;
  uint4 bh=gMeshPool.Load4(h0.w);
  if(bh.x!=nh_pool_basis_magic || bh.y!=gHitRecords.Load(row+216u) || bh.z!=h0.y || bh.w!=1u)return hit_material_unknown(4);
@@ -151,10 +143,6 @@ NativeHitMaterial rt_hit_material_pool(RtHit hit,float footprint,InstInfo ii){
   [unroll]for(uint v=0;v<3;++v){float3 b=mul(a,asfloat(gMeshPool.Load3(first+v*nh_pool_basis_vertex+8u+12u*component)));w[v]=b*rsqrt(dot(b,b));}
   basis[component]=w[0]+(w[1]-w[0])*hit.bary.x+(w[2]-w[0])*hit.bary.y;
  }
-#if defined(RT_HIT_POOL_2S) && (defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST))
- // The facing is the geometry's, as the per-draw two-sided rows: world triangle, interpolated world N, the ray.
- if(two_sided)basis[0]*=nv_two_sided_sign(cross(position[1]-position[0],position[2]-position[0]),basis[0],hit.dir);
-#endif
  const uint4 detail=gHitRecords.Load4(row+nh_pool_row_detail);
  NvFields fields;
  if(detail.x==2u){
@@ -289,26 +277,13 @@ NativeHitMaterial rt_hit_material(RtHit hit,float footprint){
 #if defined(RT_HIT_INSTANCED) || defined(RT_SPEC_HIT_INST)
  // Instanced rows (word 220 bits 8..9 = family): hm_clip_instanced, the wind rows within their derived tolerance.
 #if defined(RT_SPEC_HIT_FAMILY)
- // Migration step S2a: RT_HIT_IP_GRASS as specialization constant 1005 (the 3-bit family field when set).
- const uint hm_flags=RT_HIT_INST_ON?gHitRecords.Load(row+220u):0u,hm_family=(hm_flags>>8)&(kSpecIpGrass!=0u?7u:3u);
-#elif defined(RT_HIT_IP_GRASS)
- // rt_hit_material_ip_grass at startup: the family field is bits 8..10 (IP grass = 4); g_hm_clip then packs the family in
- // bits 0..2, the outcome in 3..5 and the rigid flag in bit 6. Without the define bits 8..9 only: an IP grass row reads
- // family 0 and gets the plain per-draw bit-exact check below (fail closed, uncounted).
- const uint hm_flags=gHitRecords.Load(row+220u),hm_family=(hm_flags>>8)&7u;
+ const uint hm_flags=RT_HIT_INST_ON?gHitRecords.Load(row+220u):0u,hm_family=(hm_flags>>8)&3u;
 #else
  const uint hm_flags=gHitRecords.Load(row+220u),hm_family=(hm_flags>>8)&3u;
 #endif
  if(hm_family!=0u){
   const uint outcome=hm_clip_instanced(row,h0,h1.x,ii,hit.prim,(hm_flags&2u)!=0u);
-#if defined(RT_SPEC_HIT_FAMILY)
-  if(kSpecIpGrass!=0u)g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
-  else g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
-#elif defined(RT_HIT_IP_GRASS)
-  g_hm_clip=hm_family|((outcome&7u)<<3)|(outcome&8u)<<3;
-#else
   g_hm_clip=hm_family|((outcome&7u)<<2)|(outcome&8u)<<2;
-#endif
   if((outcome&7u)>=3u)return hit_material_unknown(4);
  }else
 #endif
@@ -413,14 +388,8 @@ void hit_material_count(RtHit hit,uint status,uint bin){
  // wind RGB 2S 427..): checked, bit-exact, within the derived tolerance, UV differs, beyond x1-16, x16-256,
  // over x256, rigid offset.
 #if defined(RT_SPEC_HIT_FAMILY)
- // Migration step S2a: RT_HIT_WIND_RGB (1004) and RT_HIT_IP_GRASS (1005) as specialization constants.
+ // Migration step S2a: RT_HIT_WIND_RGB (1004) as a specialization constant.
  if(!RT_HIT_INST_ON){
- }else if(kSpecIpGrass!=0u){
- const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
- [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;
-  stat_add(base,mine,bin);
-  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
-  stat_add(base+7u,mine && (g_hm_clip&64u)!=0u,bin);}
  }else if(kSpecWindRgb!=0u){
  const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
  [unroll]for(uint f=1;f<4;++f){const uint base=f<3u?356u+(f-1u)*8u:427u;const bool mine=family==f;
@@ -434,13 +403,6 @@ void hit_material_count(RtHit hit,uint status,uint bin){
   [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
   stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
  }
-#elif defined(RT_HIT_IP_GRASS)
- // rt_hit_material_ip_grass at startup: families 1..4 (wind RGB 427.., IP grass 435..), the 3-bit packing above.
- const uint family=g_hm_clip&7u,outcome=(g_hm_clip>>3)&7u;
- [unroll]for(uint f=1;f<5;++f){const uint base=f<3u?356u+(f-1u)*8u:(f==3u?427u:435u);const bool mine=family==f;
-  stat_add(base,mine,bin);
-  [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
-  stat_add(base+7u,mine && (g_hm_clip&64u)!=0u,bin);}
 #else
  const uint family=g_hm_clip&3u,outcome=(g_hm_clip>>2)&7u;
 #ifdef RT_HIT_WIND_RGB
@@ -452,7 +414,7 @@ void hit_material_count(RtHit hit,uint status,uint bin){
   stat_add(base,mine,bin);
   [unroll]for(uint o=1;o<7;++o)stat_add(base+o,mine && outcome==o,bin);
   stat_add(base+7u,mine && (g_hm_clip&32u)!=0u,bin);}
-#endif // RT_HIT_IP_GRASS
+#endif // instanced hit family
 #endif
 }
 #endif

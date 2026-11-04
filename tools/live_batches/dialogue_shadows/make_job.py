@@ -16,7 +16,7 @@ SAVES = [("ds1-dialogue1-fg2", "Test Dialogue1"), ("ds2-dialogue2-fg2", "Test Di
 
 # The user's session of 2026-11-02 06:24 (bg3rtx_user.ini over preset=ultra, bg3rtx.log): stride 64, xfb 1024 MB.
 USER = ("ls_box=2,rt_hit_material=1,rt_hit_material_instanced=1,rt_hit_material_wind_rgb=1,gi_hit_direct=1,gi_hit_sun=1,"
-        "rf_hit_shade=1,rf_hit_gi=1,rt_alpha_spill=1")
+        "rf_hit_shade=1,rf_hit_gi=1,")
 # Startup latches for the hair A/B (NATIVE_HAIR.md): 88-byte vertices, physical-origin image. Buffers scaled 88/64 from
 # the user's explicit 1024 / 427 MB (an explicit rt_xfb_mb is not scaled by the stride, common/rt_capture_budget.h:53;
 # the user's opaque peak 812.7 MB x 88/64 = 1117 MB would not fit 1024).
@@ -26,7 +26,7 @@ BASE_SET = ("preset=ultra,fg=2,headless=0,fps_cap=0,rt=1,rr=1,rr_post=1,reflex=1
             "rt_debug=0,ls_debug=0,gi_debug=0,rf_debug=0,rr_show=0,rf_stats=0,ls_stats=0,ls_check=0,dump_images=1,"
             "dump_png_width=768,dump_raw=0,dump_preview_f32=1,dump_shaders=0,pan_capture=0,pan_inputs=0,pan_prepare=0,rt_order_trace=0,"
             "rt_stability_log=0,rt_stats=0,rt_primary_check=0,rt_primary_epoch=0,fg_state_every=30,rt_omm=0,rt_omm_dyn=0,rt_vt_alpha_masks=0,rt_alpha_fine_lod=0,"
-            "rt_sun_cascade_current=0,rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
+            "rt_native_tileset=0,ls_k=0,ls_samples=0,ls_shadowed=3,rt_bvh_split=1,rt_alpha=1,"
             "qa_exposure_hold=0,rt_scene_wait=1,rt_scene_wait_log_frames=60,rt_cascade_casters=1,rt_dyn_hold=4,"
             "rt_shadows=1,contact_shadows=1,rt_local_shadows=1,ls_owners=31,ls_noshadow=1,gi_ao=1.0")
 

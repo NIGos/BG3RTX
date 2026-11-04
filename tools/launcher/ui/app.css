@@ -161,6 +161,8 @@ details.exp .grid { margin: 12px 0 4px; }
 
 .notice { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #6e5833; border-radius: var(--radius); background: #29241d; color: var(--warn); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice.error { border-color: #945e59; background: #2b1f1f; color: var(--err); }
+.notice.setup { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; white-space: normal; }
+.notice.setup .btn { color: var(--text); }
 .page-foot { display: grid; gap: 4px; }
 a.link { width: fit-content; color: var(--teal); }
 

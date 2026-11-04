@@ -7,13 +7,12 @@ namespace bg3::native_hit {
 inline constexpr uint32_t cache_slots=nh_cache_slots,sampler_slots=nh_sampler_slots,record_bytes=256,max_records=nh_alpha_rows;
 bool enabled();
 // Invalidate retained pak UV candidates before a game buffer handle can be reused.
-void pak_uv_forget_buffer(VkBuffer);
 // Bytes the recycled-buffer pool retains (rt_vram_guard breakdown and yield 2).
 uint64_t recycled_bytes();
 // rt_hit_material_instanced at startup: the G-buffer VS of an instanced wind / 2S pair gets the
 // N/B/T XFB frame patch (common/native_hit_instanced.h).
 bool instanced_patch_vs(uint64_t vs);
-// Its N location (UV one below); rt_hit_material_generated at startup: also the generated VSs (native_hit_generated.h).
+// Its N location (UV one below) for the audited instanced paths.
 uint32_t instanced_frame_location(uint64_t vs);
 void device_created(DeviceData*);
 void device_destroyed(DeviceData*);

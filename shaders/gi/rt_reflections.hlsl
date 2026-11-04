@@ -39,9 +39,6 @@
 // b11 − local − Tp must be 0 where no projector light is listed.
 #include "gi_common.hlsli"
 #include "../rt/spec_rf_gi.hlsli"
-#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
-#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
-#endif
 #include "../rt/rt_common.hlsli"
 #include "../rt/bg3_lights.hlsli"
 #include "../rt/bg3_ambient.hlsli"
@@ -107,11 +104,6 @@
 
 [[vk::binding(30, 0)]] [[vk::image_format("r16f")]] RWTexture2D<float> rfHitDist;
 
-#if RT_TRACE_HALF
-// Reflections do not use GI's raw output. Reuse its RGBA16F slot so D-RF stays
-// within maxPushDescriptors (32), including hit-shade, SHaRC and emission.
-#define rfRaw giRaw
-#endif
 static const float kNoHit = 65504.0;
 
 float lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
@@ -179,21 +171,12 @@ void rf_pixel(uint3 tid) {
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
 #endif
-#if RT_TRACE_HALF
-  if (any(tid.xy >= (pc.full+1u)/2u)) return;
-  uint2 fp = min(tid.xy*2u + uint2(pc.frame&1u,(pc.frame>>1)&1u),pc.full-1u);
-#else
   uint2 fp = tid.xy;
-#endif
   if (any(fp >= pc.full)) return;
   g_rt_pass = kRtPassRefl;
   float d = gDepth.Load(int3(fp, 0));
   if (d <= 0.0) {
-#if RT_TRACE_HALF
-    rfRaw[tid.xy] = float4(0,0,0,kNoHit);
-#else
     rfHitDist[fp] = kNoHit;
-#endif
     return;
   }
 
@@ -317,8 +300,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
           const bool has_tlas = pc.rt_origin != 0u && oq.w < kOriginNoHit;
           const float3 ngq = pc.rt_origin != 0u ? oq.xyz : depth_geo_normal(qp, ray_at((float2(qp) + 0.5) / float2(pc.full)) * sd);
           if (sd > 0.0 && depth_same_surface(qp, qd, sd, ngq, has_tlas, oq.w, pc.rf_depth_tol) && dot(nq, dir) < 0.2) {
-            float3 L = prev_radiance_at(qp);
-            if (all(isfinite(L))) {
+            float3 L;
+            if (prev_radiance_at(qp, L)) {
               float2 e = min(quv, 1.0 - quv) / max(pc.rf_edge, 1e-4);
               w = rough_w * saturate(min(e.x, e.y)) * saturate(pc.rf_strength);
               Lrt = max(L, 0.0);
@@ -374,7 +357,8 @@ void main(uint3 tid : SV_DispatchThreadID) {
               hs_box = hs.box;
               const int2 qq = min(int2(quv * float2(pc.full)), int2(pc.full) - 1);
               hs_ao_screen = lFlags.m0.x > 0.0 ? saturate(lgAO.Load(int3(qq, 0)).x) : 1.0;
-              hs_La_share = saturate(prevRadiance[prev_radiance_px(qq)].a);
+              int2 prev_qq;
+              if (prev_radiance_px(qq, prev_qq)) hs_La_share = saturate(prevRadiance[prev_qq].a);
 #if RF_HIT_GI
   if(RF_GI_ON) {
               hg_gi = lum(hs.gi);
@@ -502,15 +486,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   // Never hand the game a non-finite value.
   if (any(!isfinite(os))) os = gs;
   if (any(!isfinite(od))) od = gd;
-#if RT_TRACE_HALF
-  rfRaw[tid.xy] = float4(all(isfinite(delta)) ? delta : 0.0.xxx,
-#if RF_HIT_SHADE
-    (tier == 1 || cached || shaded)
-#else
-    (tier == 1 || cached)
-#endif
-    && w > 0.0 ? min(hit_t,kNoHit) : kNoHit);
-#else
   gSpecular[fp] = os;
   if (pc.rf_debug != 0) gDiffuse[fp] = od;
 #if RF_HIT_SHADE
@@ -519,7 +494,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
   rfHitDist[fp] = (tier == 1 || cached) && w > 0.0 ? min(hit_t, kNoHit) : kNoHit;
 #endif
 
-  #endif // RT_TRACE_HALF
 
   if (pc.rf_stats != 0) {
     uint bin = (fp.x >> 3) * 7 + (fp.y >> 3) * 13;

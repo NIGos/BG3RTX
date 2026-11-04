@@ -158,7 +158,7 @@ int main(int argc,char** argv){
   int writes=0;launcher::web::Hooks dh;dh.save=[&](launcher::State&,const st::KVList&,std::string&){++writes;return true;};
   launcher::web::Bridge db(dependencies,dh);
   db.handle("{\"type\":\"set\",\"id\":\"frame_generation\",\"value\":1}");
-  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);check(preview.find("NVIDIA Reflex: Off -> On")!=std::string::npos);check(dependencies.values[st::knob_index("reflex")]==0);
+  auto preview=db.handle("{\"type\":\"save\",\"policy\":\"enable\"}");check(writes==0);check(preview.find("NVIDIA Reflex: Off \xE2\x86\x92 On")!=std::string::npos);check(dependencies.values[st::knob_index("reflex")]==0);
   db.handle("{\"type\":\"confirm\"}");check(writes==1);check(dependencies.values[st::knob_index("reflex")]==1);
   db.handle("{\"type\":\"set\",\"id\":\"local_shadows\",\"value\":3}");
   int hidden_choice=st::knob_index("local_shadows");if(hidden_choice>=0)check(dependencies.values[hidden_choice]!=3);

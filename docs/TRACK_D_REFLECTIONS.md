@@ -490,6 +490,10 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
   VS 105e47e4: W at 0, UV at 1, N/B/T at 2..4 (frame patch N location 2). Both VSs: the same wind arithmetic, so the
   rows are checked bit for bit. Family 4 needs word 220 bit 10: without the define it reads 0 and the row gets the plain
   bit-exact check; with it the 3-bit field and counters 435..442. Pair check: time, camera, 2S translation, wind words.
+  Release outcome 2026-11-04: REJECTED; +3 coverage points cost +1.9 ms and about 1.5 GB
+  (BACKLOG_20261104.md, IP grass row).
+
+code removed 2026-11-05, evidence above
   Live: `tools/live_batches/m4_ip_grass` (camp). Predicted +30 points qualified (10-40), brightness null.
 - **Pool family: Base_MSK_VT (2026-11-01; offline, READY_FOR_LIVE, not qualified).** Live key
   `rt_hit_material_mask=0` (ini only: the GUI knob "Hidden-surface shading" is at its 8-key limit).
@@ -510,6 +514,8 @@ PLAN_M4_REFLECTIONS_GI.md M4.2.
     HM_BLOCKERS) with the new pool SPIR-V; the qualified share after it cannot be replayed (the pack holds only the
     rows and views captured live). Live: batch `m4_hit_mask` (S8 + inn). Predicted S8 +1.1 points (0.3-3).
 2026-11-04: Generated rows REJECTED. hgn1 camp qualified share 23.455% -> 23.314%; hgn2 inn 23.671% -> 23.070%, within OFF spread; GI +0.299/+0.527 ms. Earlier +2.3 pp was not reproduced; this supersedes the earlier verdict below.
+
+code removed 2026-11-05, evidence above
 
 - **Generated rows (2026-11-02; offline, READY_FOR_LIVE, not qualified; docs/GAME_DATA_AUDIT.md action 2).** Key
   `rt_hit_material_generated=0` (startup VS frame patch, then live; ini only). `py -3 -m tools.material_families.recipe_rows`
@@ -722,6 +728,8 @@ establish a new pak join or predict its qualified-share gain. No GPU cost or ene
 
 2026-11-04: `exp_hit_paks` REJECTED for release. Camp published 0% (22,686 unique HLOD_VT); S6 cp5 16:16: 185,373 attempts, 16,616 unique, 0 published, all rejected by shader_pair (HLOD), missing UV 146,875.
 
+code removed 2026-11-05, evidence above
+
 Camp participation fix (pakjoin-zero, offline only): candidate discovery must run
 on ordinary class-A pool draws independently of the HLOD publication recipe.
 The old HLOD-only dispatch and readback prefilter left all join counters at zero
@@ -751,6 +759,8 @@ counts rejected witnesses, including a sampled-only device-local candidate;
 position-ID counters are zero. The startup key worked (40,983 loaded rows and
 enabled 1); the absent full ordered object-space witness blocks publication
 before basis readiness. Do not publish UV-only matches or promote the key.
+
+code removed 2026-11-05, evidence above
 The readback retains 32 UV pairs, not raw positions/indices/full UVs; fixing
 publication requires bounded raw attribute readback/decoding with write
 invalidation, followed by the unchanged recipe/cull/resource/basis gates.
@@ -956,6 +966,8 @@ or GPU-cost result is claimed. See `docs/progress/cov-paks.md` for deciding chec
 ## Off-screen reflection plan (branch rt-reflections-offscreen, 2026-11-03)
 
 2026-11-04: `exp_water_hit_shade` REJECTED for release; stays Experimental. wos1 16:08/17:01 compose refused every pass: light-binding 60/60, input-lifetime 57-60/60, first mismatch binding 21-22; diagnostic water_reflect shaded 2.37 M hidden hits/period. Fix `2f288a51` changed nothing.
+Water hit cost bits 1/2/4/7 are retired with this candidate. Bit 1 lacked a usable shading dependency; bits 2/4 were rejected with no saving (PLAN_M5_WATER.md, water hit cost outcome).
+code removed 2026-11-05, evidence above
 
 See [REFLECTIONS_PLAN.md](REFLECTIONS_PLAN.md) for the current composition/tier map and staged
 water, directional-environment, world-provider and bias work. Candidate key

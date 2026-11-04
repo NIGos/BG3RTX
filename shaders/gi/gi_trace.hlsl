@@ -3,9 +3,6 @@
 // game's ambient and returns last frame's lit radiance at that pixel (the
 // bounce); a miss leaves the ambient to the game's own IBL.
 #include "gi_common.hlsli"
-#if GI_PREV_RADIANCE_GUARD || GI_SPEC_GUARDS
-#include "gi_prev_guard.hlsli"   // gi_prev_radiance_guard: guarded last-frame radiance reads
-#endif
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -56,24 +53,17 @@ void main(uint3 tid : SV_DispatchThreadID) {
       float3 Q = P + dir * t;
       float2 quv;
       float qd;
-      if (!project(inv, Q, quv, qd) || any(quv < 0.0) || any(quv > 1.0)) break;
+      if (!project(inv, Q, quv, qd) || any(quv < 0.0) || any(quv >= 1.0)) break;
       int2 qp = int2(quv * float2(pc.full));
       float sd = gDepth.Load(int3(qp, 0));
       if (sd > 0.0 && qd > sd * 1.0015 && qd < sd * (1.0 + pc.thickness)) {
-#if GI_PREV_RADIANCE_GUARD
-        // Its surface was off screen last frame: as a ray leaving the screen (no hit).
-        const float3 L = prev_bounce_at(qp);
-        if (!all(isfinite(L))) break;
-        bounce += L;
-#elif GI_SPEC_GUARDS
-        // Constant 1002 (gi_prev_radiance_guard): the same choice at pipeline creation.
-        const float3 L = prev_bounce_at(qp);
-        if (kSpecPrevGuard != 0u && !all(isfinite(L))) break;
-        bounce += L;
-#else
-        bounce += prev_bounce_at(qp);
-#endif
-        hits += 1.0;
+        float3 L;
+        // No previous observation: keep the native ambient rather than occlude it
+        // with an unavailable (black) bounce.
+        if (prev_bounce_at(qp, L)) {
+          bounce += L;
+          hits += 1.0;
+        }
         break;
       }
     }

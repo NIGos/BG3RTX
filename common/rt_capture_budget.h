@@ -202,16 +202,6 @@ inline int effective_mb(int value,int default_mb,uint32_t stride){
 // Ordinary POSITION and POSITION/UV layouts retain their established policy.
 inline bool corrected_partition_feedback(uint32_t stride){return stride==40u || stride==64u || stride==80u || stride==88u;}
 
-// Split instances carry a direct AlphaRec and absolute soup offset. When the
-// alpha partition is full, an exact dynamic list can use free opaque storage
-// WITHOUT changing its alpha semantics. No cursor is consumed until record
-// publication succeeds. Legacy geometry uses first_tri and must never spill.
-inline bool alpha_spill_offset(bool enabled,bool split,bool direct_record,bool exact_list,
-                               uint64_t cursor,uint64_t end,uint64_t bytes,uint64_t& offset){
- if(!enabled || !split || !direct_record || !exact_list || !bytes || cursor>end || bytes>end-cursor)return false;
- offset=cursor;return true;
-}
-
 // Existing per-frame alpha partition arithmetic. Physical MB limits and the
 // 1.5x alpha / 1.1x opaque reserves are unchanged.
 inline uint64_t alpha_region(uint64_t size,uint64_t floor,uint64_t current,

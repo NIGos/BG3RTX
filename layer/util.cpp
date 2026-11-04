@@ -427,13 +427,13 @@ float cfg_float(const char* key, float fallback) {
 // The hot keys of host.h's CfgHot, in its order, with the fallback literal of their call sites.
 struct CfgHotKey { const char* key; int fallback; };
 static const CfgHotKey kCfgHot[] = {
-  {"geo_indirect_mb", 8}, {"rt_strips", 1}, {"rt_alpha_capture", 1}, {"rt_alpha_spill", 0},
+  {"geo_indirect_mb", 8}, {"rt_strips", 1}, {"rt_alpha_capture", 1},
   {"rt_native_tileset", 0}, {"rt_stats", 0}, {"rt_em_overlap_check", 0}, {"rt_cascade_casters", 0},
   {"geo_capture", 0}, {"pan_capture", 0}, {"fg_input_copy", 0},
   {"pan_inputs", 0}, {"rt_event_flush", 1}, {"sl_log_barriers", 0}, {"rt_build", 1},
   {"rt_bvh_split", 1}, {"rt_omm", 0}, {"rt_hit_material", 0}, {"rt_native_hair", 0},
   {"rt_native_scalp", 0}, {"rt_mesh_audit_frames", 600}, {"rt_mesh_audits", 2}, {"rt_emissive", 0},
-  {"rt_em_backdrop", 0}, {"rt_em_decal", 1}, {"rt_sun_cascade_current", 0}, {"rt_cascade_index", 1},
+  {"rt_em_backdrop", 0}, {"rt_em_decal", 1}, {"rt_cascade_index", 1},
   {"rt_alpha_cut", 1}, {"rt_alpha_stochastic", 1}, {"rt_alpha_unknown", 1}, {"rt_alpha_test", 1},
   {"rt_water_geometry", 0}, {"rt_water_compose", 0}, {"rt_hit_material_instanced", 0},
   {"rt_water_shadows", 0}, {"rt_water_ls_shadows", 0}, {"rt_water_refraction", 0}, {"rt_hit_material_recycle", 1},
@@ -442,7 +442,6 @@ static const CfgHotKey kCfgHot[] = {
   {"perf_hook_state", 0},
   {"rt_hair_groom", 0},
   {"rt_hair_groom_primary", 0},
-  {"rt_hit_material_paks", 0},
 };
 static_assert(sizeof kCfgHot / sizeof kCfgHot[0] == size_t(CfgHot::Count), "kCfgHot must list every CfgHot");
 static std::atomic<int> g_cfg_hot[size_t(CfgHot::Count)];

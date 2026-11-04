@@ -20,21 +20,15 @@ int main() {
   pa::PipelineSpecs warm;
   using namespace bg3::shader_variant;
   warm.add(kSpecIdTileset, 0); warm.add(kSpecIdScalpHair, 0);
-  warm.add(kSpecIdWaterComposeShift, 0); warm.add(kSpecWaterHitShade, 0);
-  warm.add(kSpecIdCompactHitState, 0); warm.add(kSpecIdAlphaMetadataCache, 0);
-  warm.add(kSpecIdWaterEmptyTiles, 0);
+  warm.add(kSpecIdWaterComposeShift, 0);
   // Release (dev=0) shows no Experimental control, so nothing is prewarmed; developer mode keeps the alternatives.
   CHECK(pa::experimental_specs(warm, false).empty());
   const auto alternatives = pa::experimental_specs(warm, true);
-  CHECK(alternatives.size() == 5); // hit shading 1/2 and three exact GPU candidates (native hair graduated: restart-only, not prewarmed)
-  std::set<uint32_t> gpu_choices;
+  CHECK(alternatives.empty()); // remaining native choices require restart
   for (const auto& alt : alternatives) {
     CHECK(alt.data[0] == 0); // tilesets require restart
     CHECK(alt.data[2] == 0); // compose shift is developer-only
-    for (uint32_t i = 4; i < alt.count; ++i)
-      if (alt.data[i]) gpu_choices.insert(alt.entries[i].constantID);
   }
-  CHECK(gpu_choices == (std::set<uint32_t>{kSpecIdCompactHitState, kSpecIdAlphaMetadataCache, kSpecIdWaterEmptyTiles}));
   {
     pa::PipelineSpecs shadow;
     shadow.add(kSpecIdHairGroomShadowT, 0);
