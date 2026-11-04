@@ -223,12 +223,14 @@ tools/live_batches/hair_crowd (Dialogue1 + Campsite, cards / RT / on screen / cr
   at least `kCoverMin`, in addition to `SwapGate` publication/pass rules. The prepass and velocity retain their
   previous-G-buffer requirement. A failed ratio brings cards back at the next readback, without strikes or a
   600-frame retry delay; probes continue while cards are visible. Pixel-record counts are diagnostic only.
-- Coverage acquisition: two precise occlusion queries per matched indexed main-camera prepass draw: the real card
-  draw (native or no-depth-write clone), followed after XFB ends by `rt/hair_primary_probe.hlsl`. The probe clones
-  native depth testing, rasterization and sample count, disables depth/colour/stencil writes, and uses the same
-  camera ray, `hp_segment` bounds and `hp_on_card` band as the G-buffer reader. No pixel-record reads or stores.
-  Strict native depth comparisons can reject equal-depth probe fragments after the card draw; this is conservative
-  (cards remain), and the requested depth test is deliberately preserved.
+- Coverage acquisition (2026-11-04, second form): per matched draw a precise occlusion query of its card samples in
+  the camera prepass (native draw or no-depth-write clone), and one of its strand samples in the G-buffer pass: the
+  strand G-buffer variant itself with no colour or depth writes, drawn after the native card draw (or the swapped
+  strand draw, counted directly). Same shader, ray, rebase, pool bound and ownership band as the strands drawn.
+  The first form (a prepass probe shader at the card's own depth) counted 0 strand samples in every live run:
+  the native prepass depth test rejects equal depth where the card adds no depth offset; it was also the only
+  strand shader running when hv5 lost the device. Strand queries only in order mode with this frame's applied header,
+  the prepass recording ordered before (same recording or submitted), no game query open; else no evidence (cards).
 - Query resets run in the game's prepass command buffer at `hair_primary_before_pass`, outside the render pass.
   Each ring slot is restricted to the exact recording that reset it. Readback requires its successful submission,
   GPU completion and query availability. Unsubmitted/discarded results are never evidence; indices are retained

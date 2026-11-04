@@ -1053,15 +1053,15 @@ static VKAPI_ATTR void VKAPI_CALL CmdWaitEvents2(VkCommandBuffer cmd, uint32_t n
 static VKAPI_ATTR void VKAPI_CALL CmdBeginQuery(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query, VkQueryControlFlags flags) {
   if (auto* s = cmd_state(cmd)) ++s->hp_native_queries;
   auto* dd = device_of(cmd);
-  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
-  static PFN_vkCmdBeginQuery fn = nullptr;
+  thread_local VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, per recording thread and device
+  thread_local PFN_vkCmdBeginQuery fn = nullptr;
   if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdBeginQuery>(dd->gdpa(dd->device, "vkCmdBeginQuery")), dev = dd->device;
   fn(cmd, pool, query, flags);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdEndQuery(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query) {
   auto* dd = device_of(cmd);
-  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
-  static PFN_vkCmdEndQuery fn = nullptr;
+  thread_local VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, per recording thread and device
+  thread_local PFN_vkCmdEndQuery fn = nullptr;
   if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdEndQuery>(dd->gdpa(dd->device, "vkCmdEndQuery")), dev = dd->device;
   fn(cmd, pool, query);
   if (auto* s = cmd_state(cmd); s && s->hp_native_queries) --s->hp_native_queries;
@@ -1070,15 +1070,15 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginQueryIndexedEXT(VkCommandBuffer cmd, V
                                                          VkQueryControlFlags flags, uint32_t index) {
   if (auto* s = cmd_state(cmd)) ++s->hp_native_queries;
   auto* dd = device_of(cmd);
-  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
-  static PFN_vkCmdBeginQueryIndexedEXT fn = nullptr;
+  thread_local VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, per recording thread and device
+  thread_local PFN_vkCmdBeginQueryIndexedEXT fn = nullptr;
   if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdBeginQueryIndexedEXT>(dd->gdpa(dd->device, "vkCmdBeginQueryIndexedEXT")), dev = dd->device;
   fn(cmd, pool, query, flags, index);
 }
 static VKAPI_ATTR void VKAPI_CALL CmdEndQueryIndexedEXT(VkCommandBuffer cmd, VkQueryPool pool, uint32_t query, uint32_t index) {
   auto* dd = device_of(cmd);
-  static VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, looked up once per device
-  static PFN_vkCmdEndQueryIndexedEXT fn = nullptr;
+  thread_local VkDevice dev = VK_NULL_HANDLE;   // the next layer's entry, per recording thread and device
+  thread_local PFN_vkCmdEndQueryIndexedEXT fn = nullptr;
   if (dd->device != dev) fn = reinterpret_cast<PFN_vkCmdEndQueryIndexedEXT>(dd->gdpa(dd->device, "vkCmdEndQueryIndexedEXT")), dev = dd->device;
   fn(cmd, pool, query, index);
   if (auto* s = cmd_state(cmd); s && s->hp_native_queries) --s->hp_native_queries;

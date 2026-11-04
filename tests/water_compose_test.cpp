@@ -1107,6 +1107,26 @@ int main(int argc, char** argv) {
 
   // 4f. "[water] compose GPU": pair 0 the lighting copy, the rest the compose dispatches.
   {
+    SurfaceTimerState<uint64_t> slot;
+    CHECK(slot.reusable());
+    slot.reserve(123);
+    CHECK(!slot.reusable()); // recorded but not submitted: still referenced by command buffer
+    CHECK(slot.begin_draw(2)); slot.end_draw();
+    CHECK(slot.begin_draw(2)); slot.end_draw();
+    CHECK(!slot.begin_draw(2) && slot.overflow && slot.draws == 2);
+    slot.end_draw();
+    CHECK(slot.draws == 2); // overflowing draw cannot end/increment an earlier pair
+    slot.submitted = true;
+    slot.owner = 0;
+    CHECK(!slot.reusable()); // reset before asynchronous fence completion
+    slot.collected = true;
+    CHECK(slot.reusable());
+    slot.reserve(456);
+    CHECK(slot.draws == 0 && !slot.overflow && !slot.submitted && !slot.collected);
+    slot.submitted = slot.collected = true;
+    CHECK(!slot.reusable()); // completed, but executable command still owns its queries
+    slot.owner = 0;
+    CHECK(slot.reusable());
     const uint64_t q[12] = {100, 1, 300, 1, 1000, 1, 1500, 1, 2000, 1, 2100, 1};
     ComposeMs ms;
     CHECK(compose_ms(q, 3, 0.001, ms) && std::fabs(ms.copy - 0.2) < 1e-12 && std::fabs(ms.compose - 0.6) < 1e-12);

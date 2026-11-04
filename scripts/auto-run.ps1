@@ -764,14 +764,20 @@ while ((Get-Date) -lt $deadline) {
       if (-not $panCaptureSent -and $elapsed -ge $step.capture_at) {
         $phaseReadyOffset=if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
         $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
-        $iniLines += "pan_capture=$($step.serial)"
+        $iniLines += "pan_capture=$(if ($step.wait_log) { 0 } else { $step.serial })"
+        $phaseBurstSerial=$step.serial
         if ($step.set) {
           foreach ($assignment in ($step.set -split ',')) {
             $parts = $assignment -split '=', 2
             if ($parts.Count -ne 2) { throw 'MovePlan set requires key=value' }
             $settingPattern = '^' + [regex]::Escape($parts[0]) + '='
             $iniLines = @($iniLines | Where-Object { $_ -notmatch $settingPattern })
-            $iniLines += $assignment
+            if ($step.wait_log -and $parts[0] -eq 'pan_capture') {
+              # Explicit set values override serial too. Preparation/mode keys
+              # still apply now so their resources can warm before readiness.
+              $phaseBurstSerial=$parts[1]
+              $iniLines += 'pan_capture=0'
+            } else { $iniLines += $assignment }
           }
         }
         if ($NoActivate) { $iniLines=Set-UnfocusedIniLines $iniLines -PreserveFG:$UnfocusedFG }
@@ -782,6 +788,7 @@ while ((Get-Date) -lt $deadline) {
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex serial $($step.serial) repeat_ms $($step.repeat_ms) kind=$($step.kind) speed_px_s=$($step.pixels_per_second) direction=$($step.direction) hover=$($step.hover_x),$($step.hover_y) set=$($step.set) foreground=$Foreground real_present=$RealPresent visible_unfocused=$NoActivate"
         Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [pan-plan] window $panIndex set=$($step.set)"
         $panCaptureSent = $true
+        $phaseBurstArmed=$false
       }
       # Optional selected-save reload stress test. F8 is load only (never F5).
       # The existing save filter exposes only this run's -Save folder. Require
@@ -851,6 +858,14 @@ while ((Get-Date) -lt $deadline) {
         $phaseStartMs=$planClock.Elapsed.TotalMilliseconds; $elapsed=0
         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
         Add-Content -LiteralPath $guardRunner "$(Get-Date -Format 'HH:mm:ss.fff') [motion-ready] phase=$panIndex label=$($step.label)"
+      }
+      # Settings may be acknowledged before a burst finishes. Arm only after
+      # motion-ready so measured events retain the same readiness boundary.
+      if ($step.wait_log -and $phaseReady -and -not $phaseBurstArmed) {
+        $iniLines = @(Get-Content -LiteralPath $ini | Where-Object { $_ -notmatch '^pan_capture=' })
+        $iniLines += "pan_capture=$phaseBurstSerial"
+        $iniLines | Set-Content -LiteralPath $ini
+        $phaseBurstArmed=$true
       }
       if ($step.recenter -and -not $phaseRecentered) {
         $h=Get-GameWindow; $rect=New-Object BG3RTX.Win2+RECT
@@ -1068,6 +1083,13 @@ Write-Host "Run ended: $result after $([int]($end - $start).TotalSeconds)s ($run
   # Also on errors and Ctrl+C. A killed script skips this: its locks are released by
   # Windows. A later run refuses any surviving game rather than closing it. The next
   # background run restores the display settings once no run of ours is alive.
+  # Catch exits between the last loop poll and cleanup (including a done-file race).
+  if ($game -and $game.HasExited -and $null -eq $observedExitCode -and -not $scriptCloseRequested) {
+    $game.WaitForExit()
+    $observedExitCode = $game.ExitCode
+    $exitHex = '{0:X8}' -f ([long]$observedExitCode -band 0xffffffffL)
+    Write-Host "[exit] process=$($game.Id) code=$observedExitCode hex=0x$exitHex phase=$panIndex/$($panPlan.Count)"
+  }
   if (-not $KeepRunning) {
     # Ask nicely first so the game can save its pipeline cache; a killed game
     # recompiles ~30k pipelines on the next start.

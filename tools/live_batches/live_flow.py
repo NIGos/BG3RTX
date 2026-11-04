@@ -26,29 +26,61 @@ from tools.live_batches import fps_windows, readiness_budget, pipeline_readiness
 SCENE_SETTLE_SECONDS = {"Water Queens House": 17, "Test Dialogue3": 19,
                         "Test Dialogue1": 16, "Campsite - 27h": 29}
 TRACE_EXPORT = {}
+TRACE_STALL = {}
 
 
 def configure_trace_exports(entries):
-    """Nearest-rank p95 request -> written latency, including consecutive requests.
+    """VALID nearest-rank p95 export latency and capture-frame stalls.
 
     Match each request only before the next request; never borrow a later export
     to hide missing evidence. Clocks use the same midnight handling as gates.
     """
     from scripts.queue_gates import stamped_lines
     samples = []
+    stalls = []
+    stall_logs = set()
     for entry in entries:
         requests = [t for t, line in stamped_lines(entry.get("runner", "")) if "[motion-trace]" in line]
-        writes = [t for t, line in stamped_lines("\n".join(entry["lines"]))
+        lines = stamped_lines("\n".join(entry["lines"]))
+        writes = [t for t, line in lines
                   if re.search(r"\[trace\] frame \d+ written:", line)]
+        dumps = [(t, int(m[1])/1000) for t, line in lines
+                 if (m := re.search(r"\[dump\].*decoded in (\d+) ms", line))]
+        pace = [(t, float(m[1])/1000) for t, line in lines
+                if (m := re.search(r"\[pace\].*max ([\d.]+) ms", line))]
         for i, start in enumerate(requests):
             end = requests[i+1] if i+1 < len(requests) else math.inf
             finish = next((t for t in writes if start <= t < end), None)
             if finish is not None:
                 samples.append(finish-start)
+            # The next pace report contains the capture frame. Charge its full
+            # maximum, rather than adding decode again (already in that frame).
+            decoded = [(t, seconds) for t, seconds in dumps if start <= t < end]
+            if decoded:
+                t, seconds = decoded[0]
+                frame = next((maximum for stamp, maximum in pace if stamp >= t), 0)
+                stalls.append((max(seconds, frame), Path(entry['path']).name))
+                stall_logs.add(Path(entry['path']).name)
     TRACE_EXPORT.clear()
     if samples:
         TRACE_EXPORT.update(seconds=sorted(samples)[math.ceil(.95*len(samples))-1],
                             quantile=.95, samples=len(samples), maximum=max(samples))
+    TRACE_STALL.clear()
+    if stalls:
+        seconds, source = sorted(stalls)[math.ceil(.95*len(stalls))-1]
+        TRACE_STALL.update(seconds=seconds, source=source,
+                           quantile=.95, samples=len(stalls), maximum=max(stalls)[0],
+                           logs=len(stall_logs))
+
+
+def capture_stall(meta):
+    """Declared floor plus the VALID capture-frame p95, also in fresh processes."""
+    declared = float(meta.get('trace_stall_s', 1))
+    if not math.isfinite(declared) or declared < 0:
+        return declared  # retain validation errors even with measured evidence
+    return max(declared,
+               float(meta.get('trace_capture_stall', {}).get('seconds', 0)),
+               float(TRACE_STALL.get('seconds', 0)))
 
 
 def trace_schedules(job, plan):
@@ -387,7 +419,7 @@ def window_problems(job, plan):
         return ["windows: declare live_flow.expected_fps for a foreground job"], []
     fps = float(fps)
     latency = float(meta.get("settings_latency_s", 1))
-    trace_stall = float(meta.get("trace_stall_s", 1))
+    trace_stall = capture_stall(meta)
     if not all(math.isfinite(v) and v >= 0 for v in (latency, trace_stall)):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
@@ -406,7 +438,7 @@ def window_problems(job, plan):
             p, state = phases[label]
             fps = fps_windows.expected(job, state)["fps"]
             window_meta = segment_meta.get(label, meta)
-            trace_stall = float(window_meta.get("trace_stall_s", 1))
+            trace_stall = capture_stall(window_meta)
             if not math.isfinite(trace_stall) or trace_stall < 0:
                 errors.append(f"windows: {label}: trace stall budget must be finite and nonnegative")
                 continue
@@ -516,6 +548,7 @@ def duration_budget(job, plan):
         changed = {k: v for k, v in state.items() if previous.get(k) != v and k not in CONTROL}
         previous = state
         expected_wait = readiness_budget.estimate(job, phase, changed, first=index == 0)
+        wait_floor = readiness_budget.minimum_wait(job, phase, state)
         fps = fps_windows.expected(job, state)["fps"]
         current = float(phase.get("seconds", 0))
         label = phase.get("label", "")
@@ -572,9 +605,9 @@ def duration_budget(job, plan):
         windows.append(dict(window=label, seconds=current, minimum_seconds=round(minimum, 3),
                             savings_seconds=round(max(0, current-minimum), 3), unresolved=unresolved,
                             readiness_timeout_seconds=float(phase.get("wait_log_timeout", 0)),
-                            expected_readiness_seconds=expected_wait["seconds"],
+                            expected_readiness_seconds=max(expected_wait["seconds"], wait_floor),
                             readiness_samples=expected_wait["samples"], readiness_source=expected_wait["source"],
-                            minimum_readiness_wait_seconds=0))
+                            minimum_readiness_wait_seconds=wait_floor))
     total = sum(w["seconds"] for w in windows)
     minimum = sum(w["minimum_seconds"] for w in windows)
     findings = [f"duration: {w['window']}: {w['seconds']:g} s > 1.5x minimum {w['minimum_seconds']:g} s; save {w['savings_seconds']:g} s"
@@ -669,6 +702,10 @@ def retime(job, plan):
     job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
     if TRACE_EXPORT:
         job["live_flow"]["trace_export"] = dict(TRACE_EXPORT)
+    if TRACE_STALL and any(p.get("trace_at") for p in plan):
+        job["live_flow"]["trace_capture_stall"] = dict(TRACE_STALL)
+        for segment in job["live_flow"].get("segments", []):
+            segment.setdefault("live_flow", {})["trace_capture_stall"] = dict(TRACE_STALL)
     pipeline_readiness.apply(job, plan)
     changes = tighten(job, plan)
     for phase, state in zip(plan, phase_states(job, plan)):
@@ -865,6 +902,8 @@ def main(argv=None):
                                 if field in updated:
                                     original[field] = updated[field]
                         segment["job"].setdefault("live_flow", {})["fps_windows"] = job["live_flow"]["fps_windows"]
+                        if "trace_capture_stall" in job["live_flow"]:
+                            segment["job"]["live_flow"]["trace_capture_stall"] = job["live_flow"]["trace_capture_stall"]
                         segment["job"]["estimated_phase_seconds"] = round(sum(p["seconds"] for p in segment["plan"]), 3)
                     write(manifest_path, manifest)
             if a.replay_only:

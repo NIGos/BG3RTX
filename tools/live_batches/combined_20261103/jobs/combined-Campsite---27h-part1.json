@@ -788,7 +788,7 @@
       }
     }
   ],
-  "estimated_phase_seconds": 682.7,
+  "estimated_phase_seconds": 694.6,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -862,9 +862,9 @@
       }
     ],
     "trace_export": {
-      "seconds": 0.3169999999954598,
+      "seconds": 0.30399999999644933,
       "quantile": 0.95,
-      "samples": 431,
+      "samples": 437,
       "maximum": 0.43699999999807915
     },
     "segments": [
@@ -949,6 +949,14 @@
             "quantile": 0.95,
             "samples": 431,
             "maximum": 0.43699999999807915
+          },
+          "trace_capture_stall": {
+            "seconds": 2.71857,
+            "source": "wf7a-s8-fg2.1.164300.log",
+            "quantile": 0.95,
+            "samples": 437,
+            "maximum": 2.9799,
+            "logs": 75
           }
         }
       },
@@ -1033,10 +1041,26 @@
             "quantile": 0.95,
             "samples": 411,
             "maximum": 0.43699999999807915
+          },
+          "trace_capture_stall": {
+            "seconds": 2.71857,
+            "source": "wf7a-s8-fg2.1.164300.log",
+            "quantile": 0.95,
+            "samples": 437,
+            "maximum": 2.9799,
+            "logs": 75
           }
         }
       }
-    ]
+    ],
+    "trace_capture_stall": {
+      "seconds": 2.71857,
+      "source": "wf7a-s8-fg2.1.164300.log",
+      "quantile": 0.95,
+      "samples": 437,
+      "maximum": 2.9799,
+      "logs": 75
+    }
   },
   "post": "py -3 tools/live_batches/combine.py --extract \"tools/live_batches/combined_20261103/combined-Campsite---27h-part1.manifest.json\" --log \"{log}\" --runner \"{runner}\" --status \"{status}\" --out \"{log}.batches\" --run-post"
 }

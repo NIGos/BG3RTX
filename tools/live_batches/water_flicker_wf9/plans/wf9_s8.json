@@ -29,7 +29,7 @@
     "wait_log": [
       "\\[water\\] compose stability"
     ],
-    "wait_log_timeout": 9.447999999996682
+    "wait_log_timeout": 9.464000000007218
   },
   {
     "label": "prefetch-shift-on",
@@ -51,7 +51,7 @@
       "\\[water\\] rt/water_compose\\.hlsl[^ ]* water_compose: built",
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0,
+    "wait_log_timeout": 2.0,
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ]
@@ -60,13 +60,13 @@
     "label": "energy-static-0",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.9,
+    "seconds": 12.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10.9,
-    "motion_end": 10.9,
+    "motion_start": 12.7,
+    "motion_end": 12.7,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,fg_snap=16",
@@ -86,13 +86,13 @@
     "label": "energy-static-1",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.9,
+    "seconds": 12.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10.9,
-    "motion_end": 10.9,
+    "motion_start": 12.7,
+    "motion_end": 12.7,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
@@ -106,19 +106,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "energy-static-2",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.9,
+    "seconds": 12.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10.9,
-    "motion_end": 10.9,
+    "motion_start": 12.7,
+    "motion_end": 12.7,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0",
@@ -132,19 +132,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "energy-static-3",
     "kind": "static",
     "speed": "static",
-    "seconds": 10.9,
+    "seconds": 12.7,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 10.9,
-    "motion_end": 10.9,
+    "motion_start": 12.7,
+    "motion_end": 12.7,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=1",
@@ -158,19 +158,19 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "diag-view-static",
     "kind": "static",
     "speed": "static",
-    "seconds": 4.5,
+    "seconds": 6.2,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 4.5,
-    "motion_end": 4.5,
+    "motion_start": 6.2,
+    "motion_end": 6.2,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "rt_water_compose=1,qa_exposure_hold=1,rr=1,rt_debug=0,fg_snap=0,pan_capture=0,rt_water_compose_shift=0,rt_debug=25,pan_capture=99100",
@@ -181,7 +181,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "cost-turn-0",
@@ -269,7 +269,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "snap-turn-1",
@@ -341,7 +341,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "snap-turn-2",
@@ -413,7 +413,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   },
   {
     "label": "snap-turn-3",
@@ -484,6 +484,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 2.0
   }
 ]

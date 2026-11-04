@@ -567,6 +567,23 @@ inline void add64(uint32_t& lo, uint32_t& hi, uint32_t s) {
 struct ComposeMs {
   double copy = 0, compose = 0;
 };
+
+// Recorded queries cannot be recycled before both command reset and GPU completion.
+// Command is VkCommandBuffer in the layer; integer tokens keep this CPU-testable.
+template<class Command> struct SurfaceTimerState {
+  Command owner{};
+  uint32_t draws = 0;
+  uint64_t frame = 0;
+  bool active = false, submitted = false, collected = false, overflow = false;
+  bool reusable() const { return !owner && (!submitted || collected); }
+  void reserve(Command cmd) { *this = SurfaceTimerState{}; owner = cmd; }
+  bool begin_draw(uint32_t limit) {
+    if (draws >= limit) { overflow = true; return false; }
+    active = true;
+    return true;
+  }
+  void end_draw() { if (active) { ++draws; active = false; } }
+};
 inline bool compose_ms(const uint64_t* q, uint32_t pairs, double ms_per_tick, ComposeMs& out) {
   out = ComposeMs{};
   for (uint32_t i = 0; i < pairs; ++i) {

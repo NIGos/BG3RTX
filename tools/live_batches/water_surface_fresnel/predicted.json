@@ -11,21 +11,22 @@
   "reference": "c is native colour foam SSA 751. Separate original native and clean-material FS evaluations: c*native+(1-c)*clean. Clean coefficient partition E,(1-E)*a,(1-E)*(1-a), scaled (1-c), plus foam c, sums to 1 for every c,a,E in [0,1]. F(L.H) stays direct; E remains native DFG weighting of the clean material. Foam term remains authored native shading.",
   "prediction": "Authored BridgePools/Fountain exact-zero foam share is 0%; floor at least 7.96e-8/1.19e-7. Coverage-weighted clean ownership > 0 despite no exact-zero samples; invalid 0 in every ON window. Native/clean blend preserves native at c=1 and clean at c=0. Shallow pool retains interface reflections as opacity approaches 0; model brightness may change.",
   "acceptance": "Each ON static/turn window: coverage-weighted owned > 0, invalid 0, emitted energy partition checked within 8 float eps (operation-count bound). Histogram/source/spec counters explain participation without a diagnostic run. Every static phase requires two finite post-water float colour shots and valid lighting exposure through the post gate. Inspect pool rim and foam appearance; no equal-mean gate.",
-  "float_observable": "Post-water scene colour referenced by energy_fs=water-compose; retain dumps.json full-resolution float means, exposure b0[0], and existing RR post-preview _p.f32 colour shots for every partition-static phase (layer/dump.cpp writes post_preview float data independently of dump_raw). PNGs only for framing, never energy. Static camera begins at save pool rim; verify framing before judging.",
-  "gpu": "ON evaluates a second complete native FS. Previous +0.01-0.05 ms estimate withdrawn. Report compose/copy/dispatch and whole water pass cost, ON minus adjacent OFF; actual cost unmeasured. No builds during live cost windows. Existing compose timing excludes the added forward FS evaluation; report that measurement limit explicitly if no forward-pass timer is available.",
+  "float_observable": "dump_preview_f32=1 warmed without captures, then enabled for eight shots in four static windows; dump_raw=0. Read the existing water-capture-fix explicit post_core same-image/same-pass pair in frame.json, then its _p.f32 preview (1280 x 533 at S8 2560 x 1067). Never use pre-water 5c3fdabc or PNG radiance. Half-open preview ROIs: pool rim [490,75,825,285] (70,350 pixels), open water [0,75,245,340] (64,925 pixels); source texel=floor(preview coordinate * render size / preview size). Post gate rejects missing, truncated, unpaired, nonfinite or out-of-bounds data and reports both regional luminance/exposure values for each shot.",
+  "gpu": "Require surface FS GPU ms in every ON static/turn window, separately from compose/copy/dispatch. Timer covers patched candidate water draws including their vertex/raster work; no OFF timer, so ON FS absolute ms plus compose is reported, not an inferred incremental FS delta. Static compose delta prediction +0.0255 ms from VALID wsf1; FS cost remains unknown until measured. No builds during live cost windows. Timer samples first submission of each recorded pass; query slots remain reserved until command reset. Re-executed unchanged command buffers are not sampled again. Capacity 64 passes x 256 draw pairs; every ON interval requires nonzero frames/passes/draws and dropped 0. Trailing empty fence submission is outside the timed region.",
   "motion": "Hold E for cost-turn-0/1 and Q for cost-turn-2/3. Keep pool rim in view. One launch, visible_unfocused_fg; occlusion invalidates presented/frame-time judgement, use GPU ms and float/log evidence.",
   "smoke_ultra": "All windows use real Ultra with qualified water, OMM, box and off-screen bounce settings retained. No isolated preset substitutions.",
-  "budget": "127.4 s scheduled phases (static windows 11.1 s, capture-free E/Q windows 12 s), plus one load; 8 traces, about 490 MB. Static cadence minimum >11 s = 1 s apply + 2 s trace stalls + two 120-frame intervals at 30 fps. Restore kept 5 s for existing fake-runner phase-size contract.",
+  "budget": "Eight static traces only; bounded 1280 x 533 float previews, 10,915,840 bytes each. At S8 one pre-water plus one paired post-water preview/shot adds 174,653,440 bytes (166.56 MiB) to about 490 MB existing captures: about 665 MB total, below 2 GB. No raw float attachments (would add 5.86 GB). E/Q cost windows are capture-free; shared generator derives durations.",
   "restore": "Last phase resets candidate 0 and releases exposure hold; serial queue restores original INI after job. Startup candidate=1 provisions FS before live toggles, no restart within batch.",
   "reference_limit": "Runtime FS partition check independently checks c+(1-c)*(E+(1-E)*a+(1-E)*(1-a)); float post gate rejects missing or nonfinite full-resolution RR colour evidence. Algebra/log validity does not qualify image quality or prove a measured physical reference match. No additional diagnostic launch is needed to establish exact-zero impossibility.",
   "histogram": "ceil(255c) telemetry only: zero bin0, partial bins1..254, full bin255 includes near-full coverage; weighted count rounds each wave, <=0.5 pixel error/wave. Shading uses original float c.",
   "compose_abort_share": {
-    "max": 9.312175577061953e-06,
-    "samples": 2529,
-    "log": "hq1-s8-water-fg2.1.053911.log",
-    "frames": 60,
-    "rays_per_frame": 270256,
-    "aborted": 151,
+    "max": 1.7863675248347788e-05,
+    "samples": 2752,
+    "log": "wsf1-s8-interface-column.1.043141.log",
+    "frames": 120,
+    "rays_per_frame": 585453,
+    "aborted": 1255,
     "derivation": "Maximum aborted / (frames * (rays_per_frame - 0.5)) over VALID compose intervals with invalid 0; lower denominator accounts for rounded rays/frame. No added tolerance. Every selected interval must comply; invalid remains exactly zero."
-  }
+  },
+  "qualification_prediction": "8/8 paired regional float shots, 2 ROIs each; finite/nonnegative RGB and valid exposure, invalid 0, partition <= 9.5367431640625e-7, clean ownership > 0 in every ON interval. Full-frame ON change expected near prior +2.257% to +3.486%, descriptive only. Regional change and forward FS absolute ms have no measured prior: report them, do not invent thresholds or claim image/reference qualification. Open-water fallback should agree within this run OFF-repeat variation; rim interface change must be reviewed against reflected-column persistence, not equal-mean gating."
 }

@@ -14,8 +14,8 @@
       "before_readiness_seconds": 0.0,
       "before_basis": "original job",
       "after_seconds": 127.8,
-      "readiness_seconds": 0.0,
-      "preflight_seconds": 127.8,
+      "readiness_seconds": 70.928,
+      "preflight_seconds": 199.128,
       "problems": []
     },
     "cp4-compact-camp-join": {

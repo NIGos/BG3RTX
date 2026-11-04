@@ -122,6 +122,15 @@ Out main(float4 pos : SV_Position, [[vk::location(0)]] float2 card_uv : TEXCOORD
     }
     e.w = hp_seal(e.xyz, tag);
     vk::RawBufferStore<uint4>(at, e, 16);
+    if ((px.x & 63u) == 32u && (px.y & 63u) == 32u) {   // diagnostics: one ray of a sparse grid (last writer wins)
+      const uint64_t d = rec + hair_primary_ray_debug_offset;
+      const bool hit = q.CommittedStatus() != COMMITTED_NOTHING;
+      vk::RawBufferStore<float4>(d, float4(org, t_card), 16);
+      vk::RawBufferStore<float4>(d + 16u, float4(dir, hit ? 1.0 : 0.0), 16);
+      vk::RawBufferStore<float4>(d + 32u, float4(hit ? q.CommittedRayT() : -1.0, hit ? float(q.CommittedInstanceIndex()) : -1.0,
+                                                 hit ? float(q.CommittedPrimitiveIndex()) : -1.0, float(tag)), 16);
+      vk::RawBufferStore<float4>(d + 48u, float4(gCam.position, 1.0), 16);
+    }
   }
   if (e.x == hair_primary_no_strand) discard;
   const uint k = e.x >> 24, seg = e.x & hair_primary_max_segment;

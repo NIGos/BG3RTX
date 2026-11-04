@@ -3,7 +3,7 @@ from statistics import median
 import re
 
 from scripts.queue_gates import stamped_lines, windows, _apply
-from tools.live_batches.pipeline_readiness import conditional
+from tools.live_batches.pipeline_readiness import conditional, reconciled
 
 ENTRIES = []
 CACHE = {}
@@ -56,22 +56,32 @@ def estimate(job, phase, changed, first=False):
             if not first and (not changed or any(win['changed'].get(k) != v for k, v in changed.items())):
                 continue
             delays = []
+            observation_start = win.get('settings_applied', win['applied'])
+            observation_index = -1
             if fresh and any(conditional(p) for p in patterns):
-                ack = next((t for t, line in lines if win['start'] <= t < win['end']
+                cfg = next((t for t, line in lines if win['start'] <= t < win['end']
+                            and '[cfg] settings read' in line), None)
+                if cfg is None:
+                    continue
+                acknowledgement = next(((index, t) for index, (t, line) in enumerate(lines) if cfg <= t < win['end']
                             and '[cfg] keys:' in line and (not changed or any(
                                 re.search(r'(?:^|\s)'+re.escape(k)+r'=', line) for k in changed)) and all(
                                 not re.search(r'(?:^|\s)'+re.escape(k)+r'=', line)
                                 or same_value(re.search(r'(?:^|\s)'+re.escape(k)+r'=([^\s]+)', line)[1], v)
                                 for k, v in changed.items())), None)
-                if ack is None:
+                if acknowledgement is None:
                     continue
+                observation_index, ack = acknowledgement
+                observation_start = ack
                 pending = set()
                 historical = {}
                 affected = [p for p in patterns if conditional(p) and not re.search(
                     'shaders|watch|surface Fresnel', p) and 'gi/[^ ]+' not in p]
                 explicit_only = not any(conditional(p) for p in patterns)
                 ready = None
-                for t, line in lines:
+                explicit = {p for p in patterns if not reconciled(p)}
+                observed = set()
+                for index, (t, line) in enumerate(lines):
                     if t >= win['end']:
                         break
                     start = re.search(r'gi: (\S+) building in the background', line)
@@ -80,8 +90,16 @@ def estimate(job, phase, changed, first=False):
                     water_done = re.search(r'\[water\] (\S+\.hlsl[^ ]*) (\w+): built', line)
                     ident = start[1] if start else (water_start[1], water_start[2]) if water_start else None
                     completed = done[1] if done else (water_done[1], water_done[2]) if water_done else None
+                    rr = re.search(r'\[rrpost\] (rr_post[^ ]*\.hlsl:\w+) pipeline (built|building|creation failed)', line)
+                    if rr:
+                        rr_id = ('rrpost', rr[1])
+                        if rr[2] == 'built':
+                            completed = rr_id
+                        else:
+                            ident = rr_id
                     if ident:
                         witness = ('gi: '+ident+' generation ') if isinstance(ident, str) else (
+                            '[rrpost] '+ident[1]+' pipeline built' if ident[0] == 'rrpost' else
                             '[water] '+ident[0]+' '+ident[1]+': built')
                         families = [p for p in affected if re.search(p, witness, re.I)]
                         if t >= ack or families or explicit_only:
@@ -95,17 +113,20 @@ def estimate(job, phase, changed, first=False):
                             if any(re.search(p, line, re.I) for p in families):
                                 pending.discard(old)
                                 historical.pop(old)
-                    if t >= ack and not pending:
+                    observed.update(p for p in explicit
+                                    if (not (p in fresh or 'surface Fresnel' in p) or index > observation_index)
+                                    and re.search(p, line, re.I))
+                    if t >= ack and not pending and len(observed) == len(explicit):
                         ready = t
                         break
                 if ready is None:
                     continue
                 delays.append(max(0, ready-win['start']))
             for pattern in patterns:
-                if fresh and conditional(pattern):
+                if fresh and reconciled(pattern):
                     continue
-                found = next((t for t, line in lines if t < win['end']
-                              and (pattern not in fresh or t >= win.get('settings_applied', win['applied']))
+                found = next((t for index, (t, line) in enumerate(lines) if t < win['end']
+                              and (not (pattern in fresh or fresh and 'surface Fresnel' in pattern) or t >= observation_start and index > observation_index)
                               and re.search(pattern, line, re.I)), None)
                 if found is None:
                     break
@@ -116,6 +137,25 @@ def estimate(job, phase, changed, first=False):
                   samples=len(samples), source='VALID same-save/key median' if samples else 'unproven; no VALID same-save/key observation')
     CACHE[key] = result
     return result
+
+
+def minimum_wait(job, phase, state):
+    """Full periodic observation plus settings latency and polling margin.
+
+    Reconciled build/cache/quiet witnesses do not require a new periodic line.
+    Use the same producer and rendered-FPS model as measured-window lint.
+    """
+    from tools.live_batches.live_flow import period, fps_windows
+    patterns = phase.get('wait_log', [])
+    patterns = [patterns] if isinstance(patterns, str) else patterns
+    fresh = phase.get('wait_log_fresh', [])
+    periods = [period(dict(select=p), state, fps_windows.expected(job, state)['fps'])
+               for p in patterns if not (fresh and reconciled(p))]
+    periods = [dt for dt in periods if dt is not None]
+    if not periods:
+        return 0
+    policy = job.get('live_flow', {})
+    return max(periods) + float(policy.get('settings_latency_s', 1)) + float(policy.get('settling_margin_s', 1))
 
 
 def timeouts(job, plan):
@@ -133,7 +173,7 @@ def timeouts(job, plan):
             margin = float(job.get('live_flow', {}).get('settling_margin_s', 1))
             latency = float(job.get('live_flow', {}).get('settings_latency_s', 1))
             limit = min(limit, max(latency, learned['seconds']) + margin)
-        result.append(limit)
+        result.append(max(limit, minimum_wait(job, phase, state)))
     return result
 
 

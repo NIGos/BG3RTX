@@ -2,6 +2,9 @@
 
 ## User questions and decisions
 
+- Promote water surface Fresnel (rt_water_surface_fresnel) to Ultra? wsf1 VALID 06:44: all gates pass; pool rim
+  +43% brighter ON (open water +1.8%), FS 0.10-0.15 ms. Look at the S8 pool rim for shimmer first:
+  ON shots vary 13% vs 2% OFF. [Result](../tools/live_batches/water_surface_fresnel/RESULT_wsf1_064436.md).
 - Promote rr_post_temporal to Ultra on the user's visual judgement? Keep it off pending that decision.
   Dialogue3 paired evidence is inconclusive: 12 sign tests p 0.17-0.83; energy +0.15% unproven; cost 0.153 ms.
 - Choose the project licence and whether to notify NVIDIA for the beta. No notification has been sent.

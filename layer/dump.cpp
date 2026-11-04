@@ -28,6 +28,7 @@ struct Dump {
   VkFormat format;
   bool depth;
   bool post_preview = false;
+  bool post_water = false;    // explicit water-capture-fix post_core pairing
   uint32_t ordinal;            // pass ordinal inside its command buffer
   uint32_t slot;               // color attachment index, or 99 for depth
   uint64_t pass_fs;
@@ -179,6 +180,7 @@ std::string trace_dump_pass(VkCommandBuffer cmd, CmdState* s, bool post_preview,
     d.format = rec.ci.format;
     d.depth = depth;
     d.post_preview = post_preview;
+    d.post_water = post_core;
     d.ordinal = s->pass.ordinal;
     d.slot = slot;
     d.pass_fs = s->pass.first_fs_hash;
@@ -446,7 +448,8 @@ static std::string process(const Dump& d, const uint8_t* data, const std::string
   // preview's size and with its nearest-texel sampling, so the same texels as every other preview of the
   // render-resolution targets (the G-buffer class in RT2's _a.png): float energy over a screen mask
   // (tools/live_batches/dialogue_shadows/char_energy.py) at ~10 MB per trace instead of full-size dumps.
-  if (!d.depth && ((g_dump_preview_f32 && d.pass_fs == kFsComposeDump) || d.post_preview)) {
+  // Include the explicit post_core water-capture-fix pair, so regional energy sees compose writes.
+  if (!d.depth && ((g_dump_preview_f32 && (d.pass_fs == kFsComposeDump || d.post_water)) || d.post_preview)) {
     std::vector<float> pv(size_t(ow) * oh * 4);
     for (uint32_t y = 0; y < oh; ++y)
       for (uint32_t x = 0; x < ow; ++x) {

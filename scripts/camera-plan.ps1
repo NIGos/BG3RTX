@@ -144,7 +144,16 @@ function Test-CameraPlanBuildPattern([string]$pattern) {
   return $pattern -match 'generation |pipeline built|: built|surface Fresnel|read from the cache|cache: prefetched |pipelines 0'
 }
 
+# Only GI/water have reliable build-start tracking. Quiet records are replaced
+# by reconciliation; state observations and other completions remain explicit.
+function Test-CameraPlanReconciledPattern([string]$pattern) {
+  return (Test-CameraPlanBuildPattern $pattern) -and
+    ($pattern -match '^gi: |water.*: built|shaders|watch|read from the cache|cache: prefetched |pipelines 0')
+}
+
 function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
+  $ack=$null
+  $observationText=$freshText
   if ($step.wait_log_fresh) {
     $cfg=[regex]::Match($freshText, '(?m)^.*\[cfg\] settings read[^\n]*')
     if (-not $cfg.Success) { return '[cfg] settings read after settings write' }
@@ -184,6 +193,9 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
       # Start/completion reconciliation below includes builds between settings
       # read and keys, and outstanding builds from earlier phases.
     }
+    # Explicit state observations must follow the acknowledged requested values.
+    # Keep build reconciliation anchored at settings read, including intervening builds.
+    $observationText=if ($null -ne $ack) { $freshText.Substring($ack.Index+$ack.Length) } else { $freshText.Substring($cfg.Length) }
     $pending=@{}; $historical=@{}; $afterAck=$false
     $explicitOnly=-not @($step.wait_log | Where-Object { Test-CameraPlanBuildPattern $_ }).Count
     $affected=@($step.wait_log | Where-Object {
@@ -197,6 +209,10 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
       elseif ($line -match 'gi: (\S+) generation ') { $id=$Matches[1];$done=$true }
       elseif ($line -match '(\S+\.hlsl[^ ]*) (\w+): building in the background') { $id=$Matches[1]+' '+$Matches[2];$completion='[water] '+$Matches[1]+' '+$Matches[2]+': built' }
       elseif ($line -match '\[water\] (\S+\.hlsl[^ ]*) (\w+): built') { $id=$Matches[1]+' '+$Matches[2];$done=$true }
+      elseif ($line -match '\[rrpost\] (rr_post[^ ]*\.hlsl:\w+) pipeline (built|building|creation failed)') {
+        $id='rrpost '+$Matches[1];$completion='[rrpost] '+$Matches[1]+' pipeline built'
+        $done=$Matches[2] -eq 'built'
+      }
       if ($done) {
         $pending.Remove($id);$historical.Remove($id)
         # Older starts may belong to abandoned alternatives (_k, hit_sun vs
@@ -218,8 +234,8 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
     foreach ($missing in $pending.Values) { $missing }
   }
   foreach ($pattern in @($step.wait_log)) {
-    if ($step.wait_log_fresh -and (Test-CameraPlanBuildPattern $pattern)) { continue }
-    $source=if ($pattern -in @($step.wait_log_fresh)) {$freshText} else {$text}
+    if ($step.wait_log_fresh -and (Test-CameraPlanReconciledPattern $pattern)) { continue }
+    $source=if ($pattern -in @($step.wait_log_fresh) -or ($step.wait_log_fresh -and $pattern -match 'surface Fresnel')) {$observationText} else {$text}
     if (-not @($source -split "`n" | Where-Object { $_ -match $pattern }).Count) { $pattern }
   }
 }

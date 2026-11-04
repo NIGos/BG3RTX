@@ -9710,6 +9710,199 @@
         "samples": 0,
         "source": "unproven; no VALID same-save/key observation"
       }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[auto\\] scene ready"
+      ],
+      "fresh": [],
+      "changed": [
+        [
+          "crash_dump",
+          "0"
+        ],
+        [
+          "dump_images",
+          "1"
+        ],
+        [
+          "dump_png_width",
+          "1280"
+        ],
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "dump_raw",
+          "0"
+        ],
+        [
+          "dump_shaders",
+          "0"
+        ],
+        [
+          "fg",
+          "2"
+        ],
+        [
+          "fg_state_every",
+          "1"
+        ],
+        [
+          "fps_cap",
+          "0"
+        ],
+        [
+          "headless",
+          "0"
+        ],
+        [
+          "pan_inputs",
+          "0"
+        ],
+        [
+          "preset",
+          "ultra"
+        ],
+        [
+          "reflex",
+          "1"
+        ],
+        [
+          "rr",
+          "1"
+        ],
+        [
+          "rr_post",
+          "1"
+        ],
+        [
+          "rt",
+          "1"
+        ],
+        [
+          "rt_order_trace",
+          "0"
+        ],
+        [
+          "rt_scene_wait",
+          "1"
+        ],
+        [
+          "rt_scene_wait_log_frames",
+          "120"
+        ],
+        [
+          "rt_stability_log",
+          "0"
+        ],
+        [
+          "rt_timing_frames",
+          "120"
+        ],
+        [
+          "rt_water_compose",
+          "1"
+        ],
+        [
+          "rt_water_game_shadow",
+          "1"
+        ],
+        [
+          "rt_water_geometry",
+          "1"
+        ],
+        [
+          "rt_water_ls_shadows",
+          "1"
+        ],
+        [
+          "rt_water_reflections",
+          "1"
+        ],
+        [
+          "rt_water_refraction",
+          "1"
+        ],
+        [
+          "rt_water_shadows",
+          "1"
+        ],
+        [
+          "rt_water_surface_fresnel",
+          "0"
+        ],
+        [
+          "sharc_device",
+          "1"
+        ]
+      ],
+      "first": true,
+      "estimate": {
+        "seconds": 0.0,
+        "samples": 30,
+        "source": "VALID same-save/key median"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[shaders\\] cache: prefetched ",
+        "gi: gi/[^ ]+ generation ",
+        "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
+      ],
+      "changed": [
+        [
+          "dump_preview_f32",
+          "1"
+        ],
+        [
+          "rt_water_surface_fresnel",
+          "1"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
+    },
+    {
+      "save": "Water Queens House",
+      "patterns": [
+        "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,",
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+      ],
+      "fresh": [
+        "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+        "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
+      ],
+      "changed": [
+        [
+          "dump_preview_f32",
+          "0"
+        ],
+        [
+          "rt_water_surface_fresnel",
+          "0"
+        ]
+      ],
+      "first": false,
+      "estimate": {
+        "seconds": 0,
+        "samples": 0,
+        "source": "unproven; no VALID same-save/key observation"
+      }
     }
   ],
   "matches": {
@@ -10277,5 +10470,13 @@
       0,
       null
     ]
+  },
+  "trace_capture_stall": {
+    "seconds": 2.71857,
+    "source": "wf7a-s8-fg2.1.164300.log",
+    "quantile": 0.95,
+    "samples": 437,
+    "maximum": 2.9799,
+    "logs": 75
   }
 }
