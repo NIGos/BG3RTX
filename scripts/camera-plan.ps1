@@ -152,6 +152,8 @@ function Test-CameraPlanReconciledPattern([string]$pattern) {
 }
 
 function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
+  $ack=$null
+  $observationText=$freshText
   if ($step.wait_log_fresh) {
     $cfg=[regex]::Match($freshText, '(?m)^.*\[cfg\] settings read[^\n]*')
     if (-not $cfg.Success) { return '[cfg] settings read after settings write' }
@@ -191,6 +193,9 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
       # Start/completion reconciliation below includes builds between settings
       # read and keys, and outstanding builds from earlier phases.
     }
+    # Explicit state observations must follow the acknowledged requested values.
+    # Keep build reconciliation anchored at settings read, including intervening builds.
+    $observationText=if ($null -ne $ack) { $freshText.Substring($ack.Index+$ack.Length) } else { $freshText.Substring($cfg.Length) }
     $pending=@{}; $historical=@{}; $afterAck=$false
     $explicitOnly=-not @($step.wait_log | Where-Object { Test-CameraPlanBuildPattern $_ }).Count
     $affected=@($step.wait_log | Where-Object {
@@ -230,7 +235,7 @@ function Get-CameraPlanMissing($step, [string]$text, [string]$freshText=$text) {
   }
   foreach ($pattern in @($step.wait_log)) {
     if ($step.wait_log_fresh -and (Test-CameraPlanReconciledPattern $pattern)) { continue }
-    $source=if ($pattern -in @($step.wait_log_fresh) -or ($step.wait_log_fresh -and $pattern -match 'surface Fresnel')) {$freshText} else {$text}
+    $source=if ($pattern -in @($step.wait_log_fresh) -or ($step.wait_log_fresh -and $pattern -match 'surface Fresnel')) {$observationText} else {$text}
     if (-not @($source -split "`n" | Where-Object { $_ -match $pattern }).Count) { $pattern }
   }
 }

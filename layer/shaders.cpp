@@ -18,6 +18,7 @@
 #include <dxc/dxcapi.h>
 
 #include <condition_variable>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <thread>
@@ -239,7 +240,7 @@ static const std::string& cache_dir() {
 }
 
 // DXC's arguments of `file` (see kArgsTemplate). False when the source is unreadable or the compile fails.
-static bool compile(const ShaderEntry& e, std::vector<uint32_t>& out) {
+static bool compile(const ShaderEntry& e, std::vector<uint32_t>& out, bool& missing_entry) {
   Dxc* d = dxc();
   if (!d) return false;
   const size_t q = e.file.find('?');
@@ -319,7 +320,12 @@ static bool compile(const ShaderEntry& e, std::vector<uint32_t>& out) {
   result->GetStatus(&status);
   IDxcBlobUtf8* errors = nullptr;
   result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
-  if (errors && errors->GetStringLength()) log("[shaders] %s:%s\n%s", e.file.c_str(), e.entry.c_str(), errors->GetStringPointer());
+  if (errors && errors->GetStringLength()) {
+    missing_entry = FAILED(status) &&
+        std::strstr(errors->GetStringPointer(), "missing entry point definition") != nullptr;
+    if (!(t_prefetch && missing_entry))
+      log("[shaders] %s:%s\n%s", e.file.c_str(), e.entry.c_str(), errors->GetStringPointer());
+  }
   if (errors) errors->Release();
   bool ok = false;
   if (SUCCEEDED(status)) {
@@ -338,15 +344,26 @@ static bool compile(const ShaderEntry& e, std::vector<uint32_t>& out) {
 // Fetches (cache) or compiles `e` for the sources of `tree`. Called without g_mu, with e.busy set
 // (or from shader_poll, which holds g_mu: nobody else touches `e` then). Unchanged inputs keep the
 // code and the generation.
-static void build(ShaderEntry& e, const sc::Tree& tree, bool reload) {
+// Stale prefetch failures are decided under g_mu: the renderer may request e while DXC runs.
+enum class BuildResult { Done, SourceRemoved, EntryRemoved };
+static BuildResult build(ShaderEntry& e, const sc::Tree& tree, bool reload) {
   const uint64_t t0 = now_us();
+  if (t_prefetch) {
+    const std::string path = shaders_dir() + "\\" + e.file.substr(0, e.file.find('?'));
+    if (GetFileAttributesA(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+      const DWORD error = GetLastError();
+      if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return BuildResult::SourceRemoved;
+    }
+  }
   const std::string tool = tool_id(cfg_int("shader_debug", 0));
   const std::string key = tool.empty() ? std::string() : sc::request_key(tree, tool, e.file, e.entry, e.profile);
-  if (!key.empty() && key == e.key) return;
+  if (!key.empty() && key == e.key) return BuildResult::Done;
   const std::string& dir = cache_dir();
   std::vector<uint32_t> code;
   const bool hit = !key.empty() && !dir.empty() && sc::load(dir, key, code);
-  const bool ok = hit || compile(e, code);
+  bool missing_entry = false;
+  const bool ok = hit || compile(e, code, missing_entry);
+  if (!ok && t_prefetch && missing_entry) return BuildResult::EntryRemoved;
   if (ok && !hit && !key.empty() && !dir.empty()) sc::store(dir, key, code);
   const double ms = double(now_us() - t0) / 1000.0;
   g_build_us += now_us() - t0;
@@ -362,6 +379,7 @@ static void build(ShaderEntry& e, const sc::Tree& tree, bool reload) {
     log("[shaders] %s:%s %s in %.0f ms%s (generation %llu)", e.file.c_str(), e.entry.c_str(),
         hit ? "read from the cache" : ok ? "compiled" : "FAILED, keeping previous", ms, t_prefetch ? ", prefetch" : "",
         static_cast<unsigned long long>(e.generation));
+  return BuildResult::Done;
 }
 
 // ---- the request manifest: <cache>\requests.txt, "<sessions unseen>\t<file>\t<entry>\t<profile>" ----
@@ -418,6 +436,18 @@ static void manifest_note(const ShaderEntry& e) {
   manifest_write();
 }
 
+static void manifest_drop(const ShaderEntry& e, BuildResult result) {
+  std::lock_guard<std::mutex> lock(g_manifest_mu);
+  const auto end = std::remove_if(g_manifest.begin(), g_manifest.end(), [&](const Request& r) {
+    return r.file == e.file && r.entry == e.entry && r.profile == e.profile;
+  });
+  if (end == g_manifest.end()) return;
+  g_manifest.erase(end, g_manifest.end());
+  manifest_write();
+  log("[shaders] prefetch: dropped stale request %s:%s (%s)", e.file.c_str(), e.entry.c_str(),
+      result == BuildResult::SourceRemoved ? "source removed" : "entry point removed");
+}
+
 static void start_prefetch();
 
 bool shader_get(const char* file, const char* entry, const char* profile, Bg3ShaderBlob* out) {
@@ -432,9 +462,18 @@ bool shader_get(const char* file, const char* entry, const char* profile, Bg3Sha
   if (!e.built) {
     e.busy = true;
     lock.unlock();
-    build(e, *source_tree(), false);
+    const BuildResult result = build(e, *source_tree(), false);
     lock.lock();
-    e.built = true;
+    if (result != BuildResult::Done) {
+      if (!e.requested) manifest_drop(e, result);
+      else {
+        ++g_failed;
+        log("[shaders] %s:%s FAILED, keeping previous, prefetch (generation %llu)",
+            e.file.c_str(), e.entry.c_str(), static_cast<unsigned long long>(e.generation));
+      }
+    }
+    // A later renderer request must still attempt the normal compile and report errors.
+    e.built = result == BuildResult::Done || e.requested;
     e.busy = false;
     g_cv.notify_all();
   }

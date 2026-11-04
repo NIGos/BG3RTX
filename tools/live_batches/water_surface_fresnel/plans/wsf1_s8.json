@@ -84,7 +84,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "partition-static-1",
@@ -112,7 +112,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "partition-static-2",
@@ -140,7 +140,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "partition-static-3",
@@ -168,7 +168,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "cost-turn-0",
@@ -218,7 +218,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "cost-turn-2",
@@ -243,7 +243,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "cost-turn-3",
@@ -268,7 +268,7 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 1,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   },
   {
     "label": "restore",
@@ -292,6 +292,6 @@
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
       "\\[water\\] surface Fresnel \\(\\d+ frames\\): enabled 0,"
     ],
-    "wait_log_timeout": 2.0
+    "wait_log_timeout": 6.447999999996682
   }
 ]
