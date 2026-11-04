@@ -85,7 +85,7 @@ uint64_t g_logged_pipes = 0;
 // (rt/hair_primary_count.hlsl) at the next publish, copied to a host-visible ring and read kCountSlots - 1 publishes
 // later. With them the keys and whether each one's G-buffer variant ran in the counted frame.
 constexpr uint32_t kCountSlots = 4;
-struct CountSlot { uint64_t frame = 0; bool valid = false; uint64_t keys[hair_primary::kMaxGrooms] = {};
+struct CountSlot { uint64_t frame = 0; bool valid = false; uint32_t tag = 0; uint64_t keys[hair_primary::kMaxGrooms] = {};
                    uint8_t lods[hair_primary::kMaxGrooms] = {};
                    bool drew[hair_primary::kMaxGrooms] = {}; VkBuffer rb = VK_NULL_HANDLE; VkDeviceMemory rb_mem = VK_NULL_HANDLE;
                    const uint32_t* map = nullptr; };
@@ -103,7 +103,7 @@ uint8_t g_last_lods[hair_primary::kMaxGrooms] = {};
 // frame its draw key, LOD, strand pixels and pool-bound refusals.
 struct CountSeen { uint64_t frame = 0; uint64_t keys[hair_primary::kMaxGrooms] = {}; uint8_t lods[hair_primary::kMaxGrooms] = {};
                    uint32_t pixels[hair_primary::kMaxGrooms] = {}, refused[hair_primary::kMaxGrooms] = {};
-                   uint32_t traced = 0, hit = 0; float ray[16] = {}; };
+                   uint32_t traced = 0, hit = 0, tag = 0; float ray[16] = {}; };
 CountSeen g_seen;
 // C2 shadow transmittance: each draw's measured a_f (strand colour samples of the counted frames), by draw key.
 std::unordered_map<uint64_t, hair_primary::TransmitMean> g_transmit;
@@ -248,6 +248,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     uint32_t total = 0, other_total = 0, other[hair_primary::kMaxGrooms];
     g_seen.frame = s.frame;
     g_seen.traced = s.map[hair_primary::kTracedOffset / 4];
+    g_seen.tag = s.tag;
     g_seen.hit = s.map[hair_primary::kTracedOffset / 4 + 1];
     std::memcpy(g_seen.ray, s.map + hair_primary::kRaySampleOffset / 4, sizeof g_seen.ray);
     for (uint32_t k = 0; k < hair_primary::kMaxGrooms; ++k) {
@@ -315,6 +316,7 @@ bool count_feedback(VkCommandBuffer cmd, uint64_t now) {
     s.drew[k] = g_last_keys[k] && g_gate.gbuffer_now.count(g_last_keys[k]) != 0;   // the counted frame's G-buffer
   }
   s.frame = now;
+  s.tag = g_last_tag;
   s.valid = true;
   g_cnt_next = (g_cnt_next + 1) % kCountSlots;
   // The compute shader's pixel reads before this frame's G-buffer writes them.
@@ -1118,8 +1120,10 @@ void hair_primary_publish(VkCommandBuffer cmd, uint64_t rec, uint64_t tlas, uint
       const float* r = g_seen.ray;
       log("[hair primary] strand traces in counted frame %llu: %u traced pixel entries, %u with a strand; sampled ray: "
           "origin (%.4f %.4f %.4f), card distance %.3f, direction (%.4f %.4f %.4f), committed %.0f, hit distance %.3f, "
-          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f)", (unsigned long long)g_seen.frame, g_seen.traced,
-          g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14]);
+          "groom %.0f, segment %.0f, tag %.0f, camera (%.3f %.3f %.3f); counted with tag %u, header tag now %u",
+          (unsigned long long)g_seen.frame, g_seen.traced,
+          g_seen.hit, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14],
+          g_seen.tag, g_last_tag);
     }
     log("[hair primary] counted frame %llu: strand pixels per groom (LOD, draw key prefix):%s; pool-bound refusals %u "
         "(session %llu); counted frames with adjacent-tag pixels %llu (session %llu), header order %s",

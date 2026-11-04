@@ -439,6 +439,7 @@ struct GroomSlot {
   // rt_hair_groom_crowd_ksegments (hair_groom::plan_crowd): last frame's screen size and screen-size LOD, the
   // segments per LOD, and this frame's plan (-2 none, -1 cards, else the finest LOD it may use).
   float size = 0;
+  float centre[3] = {}, bounds_frame_used = 0;   // diagnostics: camera-relative bounds centre of that readback's frame
   int want = 0, crowd = -2;
   uint32_t segments[kGroomLods] = {};
   VkDeviceSize pos_off = 0, pos_size = 0, bounds_off = 0;   // points then 24 bytes of bounds, in the mesh pool
@@ -1084,6 +1085,8 @@ int groom_pick_lod(GroomSlot& g, int lods, uint64_t gpu_done) {
       const float size = std::sqrt(ex * ex + ey * ey + ez * ez) / (std::max)(std::sqrt(cx * cx + cy * cy + cz * cz), 0.1f);
       want = size > 0.09f ? 0 : size > 0.03f ? 1 : 2;
       g.size = size;
+      g.centre[0] = cx, g.centre[1] = cy, g.centre[2] = cz;
+      g.bounds_frame_used = float(g.bounds_frame[slot]);
     }
   }
   want = (std::min)(want, lods - 1);
@@ -3467,6 +3470,13 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         // Word 2: the strands' shadow transmittance (rt_hair_groom_shadow_t; 0: they block, as before).
         const uint32_t row[4] = {w.card, uint32_t(w.l->segtri), hair_primary_transmit(w.hp_key), 0u};
         std::memcpy(info_out + (n + groom_count) * 4, row, sizeof row);
+        if (frame_index() % 300 == 0 && groom_count < 6)
+          log("[hair groom] diag groom %u: camera-relative bounds centre (%.3f %.3f %.3f) of frame %.0f (now %llu), "
+              "size %.3f, LOD %d (ready %d), BLAS 0x%llx, built %d, refit %d, points off %llu, segments %u",
+              groom_count, w.g->centre[0], w.g->centre[1], w.g->centre[2], w.g->bounds_frame_used,
+              (unsigned long long)frame_index(), w.g->size, w.g->lod, int(w.l->ready), (unsigned long long)w.g->as.addr,
+              int(w.g->built), int(w.refit),
+              (unsigned long long)w.g->pos_off, unsigned(w.l->segments));
         if (groom_count < hair_primary::kMaxGrooms) {
           // Previous points: valid from the second update of this points range (the first copies stale bytes).
           hp_rows[groom_count] = {uint32_t(w.g->pos_off), uint32_t(w.g->uv_off), uint32_t(w.l->seg),
