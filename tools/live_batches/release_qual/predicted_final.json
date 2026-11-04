@@ -1,0 +1,1851 @@
+{
+  "status": "READY_FOR_LIVE",
+  "base": "ab66c855",
+  "baseline_release": "ce1448bf (rel1/rel3); High OMM receipt rel2 12:13",
+  "queue_only": [
+    "final-s8-ultra-high",
+    "final-stock-hair-dialogue1"
+  ],
+  "launches": 2,
+  "scenes": 2,
+  "shader_request_delta": 0,
+  "device_lost": 0,
+  "crashes": 0,
+  "references": {
+    "rel1": {
+      "log": "captures/queue/logs/rel1-smoke-ultra-s8.1.205853.log",
+      "runner": "captures/queue/logs/rel1-smoke-ultra-s8.1.205853.runner.txt",
+      "gpu_costs": {
+        "static-a": {
+          "water reflections": {
+            "median_ms": 0.135,
+            "min_ms": 0.135,
+            "max_ms": 0.135,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.434,
+            "min_ms": 0.434,
+            "max_ms": 0.434,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.275,
+            "min_ms": 0.275,
+            "max_ms": 0.275,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.186,
+            "min_ms": 1.186,
+            "max_ms": 1.186,
+            "samples": 1
+          },
+          "RR": {
+            "median_ms": 2.677,
+            "min_ms": 2.677,
+            "max_ms": 2.677,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.117,
+            "min_ms": 0.117,
+            "max_ms": 0.117,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.059,
+            "min_ms": 0.059,
+            "max_ms": 0.059,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.091,
+            "min_ms": 0.091,
+            "max_ms": 0.091,
+            "samples": 1
+          }
+        },
+        "pan-q": {
+          "water reflections": {
+            "median_ms": 0.136,
+            "min_ms": 0.136,
+            "max_ms": 0.136,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.435,
+            "min_ms": 0.435,
+            "max_ms": 0.435,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.275,
+            "min_ms": 0.275,
+            "max_ms": 0.275,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 2.334,
+            "min_ms": 1.339,
+            "max_ms": 3.329,
+            "samples": 2
+          },
+          "RR": {
+            "median_ms": 2.545,
+            "min_ms": 2.545,
+            "max_ms": 2.545,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.11,
+            "min_ms": 0.11,
+            "max_ms": 0.11,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.06,
+            "min_ms": 0.06,
+            "max_ms": 0.06,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.095,
+            "min_ms": 0.095,
+            "max_ms": 0.095,
+            "samples": 1
+          }
+        },
+        "pan-e": {
+          "water reflections": {
+            "median_ms": 0.145,
+            "min_ms": 0.145,
+            "max_ms": 0.145,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.498,
+            "min_ms": 0.498,
+            "max_ms": 0.498,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.275,
+            "min_ms": 0.275,
+            "max_ms": 0.275,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.8795000000000002,
+            "min_ms": 1.277,
+            "max_ms": 2.482,
+            "samples": 2
+          },
+          "RR": {
+            "median_ms": 2.548,
+            "min_ms": 2.548,
+            "max_ms": 2.548,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.106,
+            "min_ms": 0.106,
+            "max_ms": 0.106,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.058,
+            "min_ms": 0.058,
+            "max_ms": 0.058,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.09,
+            "min_ms": 0.09,
+            "max_ms": 0.09,
+            "samples": 1
+          }
+        },
+        "rotate-r": {
+          "RT": {
+            "median_ms": 11.791,
+            "min_ms": 11.791,
+            "max_ms": 11.791,
+            "samples": 1
+          },
+          "GI": {
+            "median_ms": 13.968,
+            "min_ms": 13.968,
+            "max_ms": 13.968,
+            "samples": 1
+          },
+          "GI trace": {
+            "median_ms": 8.421,
+            "min_ms": 8.421,
+            "max_ms": 8.421,
+            "samples": 1
+          },
+          "local shadows": {
+            "median_ms": 0.6,
+            "min_ms": 0.6,
+            "max_ms": 0.6,
+            "samples": 1
+          },
+          "reflections": {
+            "median_ms": 1.197,
+            "min_ms": 1.197,
+            "max_ms": 1.197,
+            "samples": 1
+          },
+          "water reflections": {
+            "median_ms": 0.167,
+            "min_ms": 0.167,
+            "max_ms": 0.167,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.515,
+            "min_ms": 0.515,
+            "max_ms": 0.515,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.275,
+            "min_ms": 0.275,
+            "max_ms": 0.275,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.207,
+            "min_ms": 1.207,
+            "max_ms": 1.207,
+            "samples": 1
+          },
+          "RR": {
+            "median_ms": 2.481,
+            "min_ms": 2.481,
+            "max_ms": 2.481,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.105,
+            "min_ms": 0.105,
+            "max_ms": 0.105,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.055,
+            "min_ms": 0.055,
+            "max_ms": 0.055,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.087,
+            "min_ms": 0.087,
+            "max_ms": 0.087,
+            "samples": 1
+          }
+        },
+        "rotate-l": {
+          "RT": {
+            "median_ms": 11.362,
+            "min_ms": 11.362,
+            "max_ms": 11.362,
+            "samples": 1
+          },
+          "GI": {
+            "median_ms": 13.619,
+            "min_ms": 13.619,
+            "max_ms": 13.619,
+            "samples": 1
+          },
+          "GI trace": {
+            "median_ms": 8.3,
+            "min_ms": 8.3,
+            "max_ms": 8.3,
+            "samples": 1
+          },
+          "local shadows": {
+            "median_ms": 0.587,
+            "min_ms": 0.587,
+            "max_ms": 0.587,
+            "samples": 1
+          },
+          "reflections": {
+            "median_ms": 1.23,
+            "min_ms": 1.23,
+            "max_ms": 1.23,
+            "samples": 1
+          },
+          "water reflections": {
+            "median_ms": 0.168,
+            "min_ms": 0.168,
+            "max_ms": 0.168,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.514,
+            "min_ms": 0.514,
+            "max_ms": 0.514,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.275,
+            "min_ms": 0.275,
+            "max_ms": 0.275,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.457,
+            "min_ms": 1.457,
+            "max_ms": 1.457,
+            "samples": 1
+          },
+          "RR": {
+            "median_ms": 2.41,
+            "min_ms": 2.41,
+            "max_ms": 2.41,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.101,
+            "min_ms": 0.101,
+            "max_ms": 0.101,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.055,
+            "min_ms": 0.055,
+            "max_ms": 0.055,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.088,
+            "min_ms": 0.088,
+            "max_ms": 0.088,
+            "samples": 1
+          }
+        }
+      },
+      "energy": null,
+      "energy_status": "No float capture in this smoke; signed historical delta unavailable."
+    },
+    "rel2": {
+      "log": "captures/queue/logs/rel2-smoke-high-s8.1.121305.log",
+      "runner": "captures/queue/logs/rel2-smoke-high-s8.1.121305.runner.txt",
+      "gpu_costs": {},
+      "energy": null,
+      "energy_status": "No float capture in this smoke; signed historical delta unavailable."
+    },
+    "rel3": {
+      "log": "captures/queue/logs/rel3-stock-hair-dialogue1.1.210304.log",
+      "runner": "captures/queue/logs/rel3-stock-hair-dialogue1.1.210304.runner.txt",
+      "gpu_costs": {
+        "static-a": {
+          "RT": {
+            "median_ms": 11.088999999999999,
+            "min_ms": 11.055,
+            "max_ms": 11.123,
+            "samples": 2
+          },
+          "GI": {
+            "median_ms": 13.946,
+            "min_ms": 13.924,
+            "max_ms": 13.968,
+            "samples": 2
+          },
+          "GI trace": {
+            "median_ms": 8.8385,
+            "min_ms": 8.818,
+            "max_ms": 8.859,
+            "samples": 2
+          },
+          "local shadows": {
+            "median_ms": 1.229,
+            "min_ms": 1.205,
+            "max_ms": 1.253,
+            "samples": 2
+          },
+          "reflections": {
+            "median_ms": 1.2069999999999999,
+            "min_ms": 1.182,
+            "max_ms": 1.232,
+            "samples": 2
+          },
+          "water reflections": {
+            "median_ms": 0.076,
+            "min_ms": 0.076,
+            "max_ms": 0.076,
+            "samples": 2
+          },
+          "water compose": {
+            "median_ms": 0.322,
+            "min_ms": 0.322,
+            "max_ms": 0.322,
+            "samples": 2
+          },
+          "water build": {
+            "median_ms": 0.137,
+            "min_ms": 0.137,
+            "max_ms": 0.137,
+            "samples": 2
+          },
+          "scene build": {
+            "median_ms": 1.8045,
+            "min_ms": 1.791,
+            "max_ms": 1.818,
+            "samples": 2
+          },
+          "RR": {
+            "median_ms": 2.5285,
+            "min_ms": 2.476,
+            "max_ms": 2.581,
+            "samples": 2
+          },
+          "post chain": {
+            "median_ms": 0.15300000000000002,
+            "min_ms": 0.135,
+            "max_ms": 0.171,
+            "samples": 2
+          },
+          "post grade": {
+            "median_ms": 0.08399999999999999,
+            "min_ms": 0.072,
+            "max_ms": 0.096,
+            "samples": 2
+          },
+          "post temporal": {
+            "median_ms": 0.146,
+            "min_ms": 0.119,
+            "max_ms": 0.173,
+            "samples": 2
+          }
+        },
+        "static-b": {
+          "water reflections": {
+            "median_ms": 0.076,
+            "min_ms": 0.076,
+            "max_ms": 0.076,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.321,
+            "min_ms": 0.321,
+            "max_ms": 0.321,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.137,
+            "min_ms": 0.137,
+            "max_ms": 0.137,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.798,
+            "min_ms": 1.798,
+            "max_ms": 1.798,
+            "samples": 1
+          },
+          "RR": {
+            "median_ms": 2.419,
+            "min_ms": 2.419,
+            "max_ms": 2.419,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.126,
+            "min_ms": 0.126,
+            "max_ms": 0.126,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.076,
+            "min_ms": 0.076,
+            "max_ms": 0.076,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.127,
+            "min_ms": 0.127,
+            "max_ms": 0.127,
+            "samples": 1
+          }
+        },
+        "cost-hair": {
+          "RT": {
+            "median_ms": 11.789,
+            "min_ms": 11.789,
+            "max_ms": 11.789,
+            "samples": 1
+          },
+          "GI": {
+            "median_ms": 15.036,
+            "min_ms": 15.036,
+            "max_ms": 15.036,
+            "samples": 1
+          },
+          "GI trace": {
+            "median_ms": 9.448,
+            "min_ms": 9.448,
+            "max_ms": 9.448,
+            "samples": 1
+          },
+          "local shadows": {
+            "median_ms": 1.573,
+            "min_ms": 1.573,
+            "max_ms": 1.573,
+            "samples": 1
+          },
+          "reflections": {
+            "median_ms": 1.25,
+            "min_ms": 1.25,
+            "max_ms": 1.25,
+            "samples": 1
+          },
+          "water reflections": {
+            "median_ms": 0.076,
+            "min_ms": 0.076,
+            "max_ms": 0.076,
+            "samples": 1
+          },
+          "water compose": {
+            "median_ms": 0.321,
+            "min_ms": 0.321,
+            "max_ms": 0.321,
+            "samples": 1
+          },
+          "water build": {
+            "median_ms": 0.137,
+            "min_ms": 0.137,
+            "max_ms": 0.137,
+            "samples": 1
+          },
+          "scene build": {
+            "median_ms": 1.929,
+            "min_ms": 1.929,
+            "max_ms": 1.929,
+            "samples": 1
+          },
+          "RR": {
+            "median_ms": 2.503,
+            "min_ms": 2.503,
+            "max_ms": 2.503,
+            "samples": 1
+          },
+          "post chain": {
+            "median_ms": 0.126,
+            "min_ms": 0.126,
+            "max_ms": 0.126,
+            "samples": 1
+          },
+          "post grade": {
+            "median_ms": 0.077,
+            "min_ms": 0.077,
+            "max_ms": 0.077,
+            "samples": 1
+          },
+          "post temporal": {
+            "median_ms": 0.137,
+            "min_ms": 0.137,
+            "max_ms": 0.137,
+            "samples": 1
+          }
+        }
+      },
+      "energy": {
+        "mean_rgb": [
+          0.356024,
+          0.379745,
+          0.375399
+        ],
+        "luminance": 0.37438813419999994,
+        "dimensions": [
+          3840,
+          1600
+        ],
+        "source": "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\.claude\\worktrees\\test-main\\captures\\20261104-210456\\dumps.json"
+      },
+      "energy_status": "Single static float baseline; no baseline noise repeats."
+    }
+  },
+  "jobs": {
+    "rel1-smoke-ultra-s8": {
+      "status": "READY_FOR_LIVE",
+      "save": "Water Queens House",
+      "max_minutes": 5,
+      "hard_timeout_seconds": 300,
+      "load_allowance_seconds": 120,
+      "expected_minutes": 2.78,
+      "scheduled_seconds": 42.224000000000004,
+      "readiness_seconds": 4.354,
+      "captures": 1,
+      "disk_estimate_mb": 70,
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+        "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+        "\\[cfg\\] settings read",
+        "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+        "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
+        "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+        "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+        "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+        "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+        "\\[ab\\] ab_off: ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+        "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+        "gi: GPU cost [0-9.]+ ms/frame"
+      ],
+      "expect_every": [
+        {
+          "name": "water reflections traced in every window with the casters on",
+          "select": "\\[water\\] reflections \\(\\d+ frames, ",
+          "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "zero alpha region overflow",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        }
+      ],
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed",
+        "\\[water\\] water geometry UNAVAILABLE",
+        "\\[water\\] build submission failed",
+        "\\[water\\] reflections unavailable",
+        "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+        "\\[water\\] compose UNAVAILABLE",
+        "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+        "\\[water\\] compose: variant pipeline creation failed",
+        "\\[water\\] compose: a water pipeline blends",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[cascade\\] could not allocate",
+        "skipped: no variant for",
+        "set 1 [1-9]\\d* out-of-range reads skipped",
+        "\\[hit material pool basis\\] over kBasisCapBytes"
+      ]
+    },
+    "rel2-smoke-high-s8": {
+      "status": "READY_FOR_LIVE",
+      "save": "Water Queens House",
+      "max_minutes": 5,
+      "hard_timeout_seconds": 300,
+      "load_allowance_seconds": 120,
+      "expected_minutes": 2.92,
+      "scheduled_seconds": 51.124,
+      "readiness_seconds": 4.354,
+      "captures": 1,
+      "disk_estimate_mb": 70,
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+        "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+        "\\[cfg\\] settings read",
+        "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+        "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
+        "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+        "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+        "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+        "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+        "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+        "gi: GPU cost [0-9.]+ ms/frame",
+        "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+        "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+        "\\[vt alpha\\].*"
+      ],
+      "expect_every": [
+        {
+          "name": "water reflections traced in every window with the casters on",
+          "select": "\\[water\\] reflections \\(\\d+ frames, ",
+          "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ]
+        },
+        {
+          "name": "zero alpha region overflow",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+          "select": "omm check \\(\\d+ frames\\):",
+          "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+          "windows": [
+            "diag-omm"
+          ],
+          "min": 1
+        },
+        {
+          "name": "float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "static-a",
+            "pan-q",
+            "pan-e",
+            "rotate-r",
+            "rotate-l"
+          ],
+          "min": 1
+        }
+      ],
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed",
+        "\\[water\\] water geometry UNAVAILABLE",
+        "\\[water\\] build submission failed",
+        "\\[water\\] reflections unavailable",
+        "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+        "\\[water\\] compose UNAVAILABLE",
+        "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+        "\\[water\\] compose: variant pipeline creation failed",
+        "\\[water\\] compose: a water pipeline blends",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[cascade\\] could not allocate",
+        "skipped: no variant for",
+        "set 1 [1-9]\\d* out-of-range reads skipped",
+        "\\[hit material pool basis\\] over kBasisCapBytes",
+        "\\[omm\\] VK_EXT_opacity_micromap unavailable",
+        "\\[omm\\] producer disabled after EXT record failure",
+        "\\[omm dyn\\] WARNING"
+      ]
+    },
+    "rel3-stock-hair-dialogue1": {
+      "status": "READY_FOR_LIVE",
+      "save": "Test Dialogue1",
+      "max_minutes": 5,
+      "hard_timeout_seconds": 300,
+      "load_allowance_seconds": 120,
+      "expected_minutes": 3.32,
+      "scheduled_seconds": 79.1,
+      "readiness_seconds": 0,
+      "captures": 1,
+      "disk_estimate_mb": 70,
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)"
+      ],
+      "expect_every": [
+        {
+          "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "native hair coverage active; valid bounds",
+          "select": "\\[alpha hair\\] native coverage records \\d+;",
+          "match": "native coverage records [1-9]\\d*; invalid/missing native state 0;.*retired bounds-invalid primitives 0;",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "native scalp participation",
+          "select": "\\[alpha scalp\\] native hard records \\d+;",
+          "match": "native hard records (?:[1-9]\\d*; native camera dither records \\d+|\\d+; native camera dither records [1-9]\\d*); invalid/missing native state 0;",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "first-enable compilation complete, no skipped pass",
+          "select": "gi: background builds \\(\\d+ frames\\):",
+          "match": ": 0 frames waiting, 0 pending, 0 started",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "GPU cost with stock hair",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "GI cost with stock hair",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        }
+      ],
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed"
+      ]
+    },
+    "final-s8-ultra-high": {
+      "status": "READY_FOR_LIVE",
+      "save": "Water Queens House",
+      "max_minutes": 5,
+      "hard_timeout_seconds": 300,
+      "load_allowance_seconds": 120,
+      "expected_minutes": 3.72,
+      "scheduled_seconds": 94.448,
+      "readiness_seconds": 8.708,
+      "captures": 2,
+      "disk_estimate_mb": 130,
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+        "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+        "\\[cfg\\] settings read",
+        "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+        "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+        "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
+        "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+        "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+        "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+        "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+        "\\[ab\\] ab_off: ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing OFF",
+        "\\[ab\\] toggle latency: [0-9.]+ ms .* ray tracing ON",
+        "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+        "gi: GPU cost [0-9.]+ ms/frame",
+        "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+        "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+        "\\[vt alpha\\].*"
+      ],
+      "expect_every": [
+        {
+          "name": "b1-rel1-smoke-ultra-s8--water reflections traced in every window with the casters on",
+          "select": "\\[water\\] reflections \\(\\d+ frames, ",
+          "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--zero alpha region overflow",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b1-rel1-smoke-ultra-s8--release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "b1-rel1-smoke-ultra-s8--static-a",
+            "b1-rel1-smoke-ultra-s8--pan-q",
+            "b1-rel1-smoke-ultra-s8--pan-e",
+            "b1-rel1-smoke-ultra-s8--rotate-r",
+            "b1-rel1-smoke-ultra-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--water reflections traced in every window with the casters on",
+          "select": "\\[water\\] reflections \\(\\d+ frames, ",
+          "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+          "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+          "match": "; non-finite terms 0 \\(",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ]
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--zero alpha region overflow",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+          "select": "omm check \\(\\d+ frames\\):",
+          "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+          "windows": [
+            "b2-rel2-smoke-high-s8--diag-omm"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "b2-rel2-smoke-high-s8--energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        },
+        {
+          "name": "b2-rel2-smoke-high-s8--release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "b2-rel2-smoke-high-s8--static-a",
+            "b2-rel2-smoke-high-s8--pan-q",
+            "b2-rel2-smoke-high-s8--pan-e",
+            "b2-rel2-smoke-high-s8--rotate-r",
+            "b2-rel2-smoke-high-s8--rotate-l"
+          ],
+          "min": 1
+        }
+      ],
+      "forbid": [
+        "FAILED, keeping previous",
+        "RR creation failed",
+        "RR evaluate failed",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[cascade\\] could not allocate",
+        "\\[crash\\] exception 0x",
+        "\\[hit material pool basis\\] over kBasisCapBytes",
+        "\\[hot\\] core (rejected|faulted)",
+        "\\[rrpost\\] exposure hold REFUSED",
+        "\\[water\\] build submission failed",
+        "\\[water\\] compose UNAVAILABLE",
+        "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+        "\\[water\\] compose: a water pipeline blends",
+        "\\[water\\] compose: variant pipeline creation failed",
+        "\\[water\\] reflections unavailable",
+        "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+        "\\[water\\] water geometry UNAVAILABLE",
+        "compile call failed",
+        "set 1 [1-9]\\d* out-of-range reads skipped",
+        "skipped: no variant for"
+      ]
+    },
+    "final-stock-hair-dialogue1": {
+      "status": "READY_FOR_LIVE",
+      "save": "Test Dialogue1",
+      "max_minutes": 5,
+      "hard_timeout_seconds": 300,
+      "load_allowance_seconds": 120,
+      "expected_minutes": 3.32,
+      "scheduled_seconds": 79.1,
+      "readiness_seconds": 0,
+      "captures": 1,
+      "disk_estimate_mb": 70,
+      "expect": [
+        "\\[auto\\] scene ready",
+        "\\[hot\\] core generation \\d+ loaded",
+        "\\[ngx\\] RR create .*: Success",
+        "\\[geo\\] transform feedback enabled: .*\\(stride 88\\)"
+      ],
+      "expect_every": [
+        {
+          "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+          "select": "\\[geo\\] RT capture, last \\d+ frames:",
+          "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+          "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+          "match": ", buffer full 0\\.0, added ",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "when_present": true
+        },
+        {
+          "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+          "select": "\\[rt\\] scene wait: \\d+ frames",
+          "match": "got this frame's scene, 0 timeouts",
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+          "select": "\\[mem\\] ours \\(",
+          "match": "\\(within budget\\); guard (normal|LOW)",
+          "event": true,
+          "settle_s": 1,
+          "min": 1,
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ]
+        },
+        {
+          "name": "native hair coverage active; valid bounds",
+          "select": "\\[alpha hair\\] native coverage records \\d+;",
+          "match": "native coverage records [1-9]\\d*; invalid/missing native state 0;.*retired bounds-invalid primitives 0;",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "native scalp participation",
+          "select": "\\[alpha scalp\\] native hard records \\d+;",
+          "match": "native hard records (?:[1-9]\\d*; native camera dither records \\d+|\\d+; native camera dither records [1-9]\\d*); invalid/missing native state 0;",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "first-enable compilation complete, no skipped pass",
+          "select": "gi: background builds \\(\\d+ frames\\):",
+          "match": ": 0 frames waiting, 0 pending, 0 started",
+          "windows": [
+            "static-a",
+            "static-b",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "GPU cost with stock hair",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "GI cost with stock hair",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "stock cards: no strand producer",
+          "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+          "match": "(?!)",
+          "min": 0,
+          "event": true
+        },
+        {
+          "name": "float pre-post energy exported",
+          "select": "\\[trace\\] frame \\d+ written:",
+          "match": "\\[trace\\] frame \\d+ written:",
+          "windows": [
+            "energy-static"
+          ],
+          "min": 1,
+          "event": true
+        },
+        {
+          "name": "release cost: rt passes: GPU cost",
+          "select": "rt passes: GPU cost",
+          "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: gi: GPU cost",
+          "select": "gi: GPU cost",
+          "match": "gi: GPU cost [0-9.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[rrpost\\] gpu:",
+          "select": "\\[rrpost\\] gpu:",
+          "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        },
+        {
+          "name": "release cost: \\[ngx\\] gpu RR:",
+          "select": "\\[ngx\\] gpu RR:",
+          "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+          "windows": [
+            "static-a",
+            "cost-hair"
+          ],
+          "min": 1
+        }
+      ],
+      "forbid": [
+        "\\[crash\\] exception 0x",
+        "VK_ERROR_DEVICE_LOST",
+        "\\[hot\\] core (rejected|faulted)",
+        "FAILED, keeping previous",
+        "compile call failed",
+        "RR creation failed",
+        "RR evaluate failed"
+      ]
+    }
+  },
+  "cost_prediction": "Within the same-scene rel1/rel3 observed GPU range unless a shader fix explains a signed change. Use per-pass ms, not frame time or occluded presented captures. Report every signed delta; single-sample ranges are not a statistical noise estimate. No build or compile overlaps.",
+  "cost_exceptions": {
+    "rr_post": "Parallel log-sum arithmetic can increase post-chain GPU ms; report the signed measured cost, no fabricated ms allowance.",
+    "bounds": "Mip/UV/finite guards add small ALU; expected within observed noise. Corrected visibility can change ray traversal cost.",
+    "lifetime": "Layer lifetime/FG/init changes predict no sustained per-pass GPU increase after warmup."
+  },
+  "energy_prediction": {
+    "expected": "within noise",
+    "measurement": "Float full-image scene C before post: rrpost slot 2 dumps.json mean RGB, luminance 0.2126 R + 0.7152 G + 0.0722 B.",
+    "rr_post": "Log-domain geometric mean prevents intermediate product overflow/underflow and preserves ordinary rounding; no systematic pre-post C shift expected.",
+    "alpha_mip": "Only clamped out-of-range mip addresses change; corrected cutout visibility can add or remove occlusion. No global sign or percent can be derived.",
+    "uv_bounds": "Rejecting UV == 1 removes false edge hits; local sign depends on replaced sample. No systematic global shift expected.",
+    "reprojection": "Invalid history falls back to fresh/native. Previously black unavailable bounce regions may brighten; valid-history regions remain within noise. Uniform darkening is not expected.",
+    "half_float": "Finite positive tails above 65504 are capped (local downward delta); negative tails clamp to zero (upward). Avoided Inf and downstream rejection can change the observed sign. Ordinary radiance remains within noise.",
+    "acceptance": "Report signed absolute/percent deltas where a same-scene baseline exists. Never call lower energy an improvement. A material shift requires physically expected attribution or PT evidence, not an invented tolerance. S8 historical energy is unavailable in rel1/rel2; retain current floats and mark this comparison unavailable, not PASS."
+  },
+  "visual": "Inspect High cutout silhouettes and holes, Ultra water/edges, stock hair cards and face/neck shadows. No cross-run image A/B.",
+  "pending": "Live paused. Coordinator must commit predictions and obtain explicit steering before staging; no receipt grants authority."
+}

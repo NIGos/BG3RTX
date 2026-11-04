@@ -17,7 +17,7 @@
       "\\[shaders\\] cache: prefetched ",
       "\\[auto\\] scene ready"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 60
   },
   {
     "label": "producer-sanity-warmup",
@@ -38,7 +38,25 @@
       "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
       "gi: GPU cost [0-9.]+ ms/frame"
     ],
-    "wait_log_timeout": 16.77000000003318
+    "wait_log_timeout": 10
+  },
+  {
+    "label": "energy-static",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 3.8,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 3.8,
+    "motion_end": 3.8,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "trace_at": [
+      1
+    ],
+    "set": "qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,rt_debug=0"
   },
   {
     "label": "static-a",
@@ -49,8 +67,8 @@
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
-    "motion_start": 16.6,
-    "motion_end": 16.6,
+    "motion_start": 3.631,
+    "motion_end": 3.631,
     "pixels_per_second": 0,
     "direction": 0,
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0,rt_scene_wait_ms=12,rt_scene_wait_log_frames=120",
@@ -64,20 +82,24 @@
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "\\[mem\\] ours \\("
+      "\\[mem\\] ours \\(",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rrpost\\] gpu:",
+      "\\[ngx\\] gpu RR:"
     ]
   },
   {
     "label": "pan-q",
     "kind": "pan",
     "speed": "fast",
-    "seconds": 14.0,
+    "seconds": 3.631,
     "repeat_ms": 33,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
     "motion_start": 1,
-    "motion_end": 14.0,
+    "motion_end": 3.631,
     "pixels_per_second": 0,
     "direction": -1,
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
@@ -91,20 +113,24 @@
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "\\[mem\\] ours \\("
+      "\\[mem\\] ours \\(",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rrpost\\] gpu:",
+      "\\[ngx\\] gpu RR:"
     ]
   },
   {
     "label": "pan-e",
     "kind": "pan",
     "speed": "fast",
-    "seconds": 14.0,
+    "seconds": 3.631,
     "repeat_ms": 33,
     "scan": 18,
     "capture_at": 0,
     "serial": 0,
     "motion_start": 1,
-    "motion_end": 14.0,
+    "motion_end": 3.631,
     "pixels_per_second": 0,
     "direction": 1,
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
@@ -118,20 +144,24 @@
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "\\[mem\\] ours \\("
+      "\\[mem\\] ours \\(",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rrpost\\] gpu:",
+      "\\[ngx\\] gpu RR:"
     ]
   },
   {
     "label": "rotate-r",
     "kind": "rotate",
     "speed": "slow",
-    "seconds": 19.0,
+    "seconds": 3.631,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
     "motion_start": 1,
-    "motion_end": 19.0,
+    "motion_end": 3.631,
     "pixels_per_second": 60,
     "direction": 1,
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
@@ -145,20 +175,24 @@
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "\\[mem\\] ours \\("
+      "\\[mem\\] ours \\(",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rrpost\\] gpu:",
+      "\\[ngx\\] gpu RR:"
     ]
   },
   {
     "label": "rotate-l",
     "kind": "rotate",
     "speed": "slow",
-    "seconds": 19.0,
+    "seconds": 3.631,
     "repeat_ms": 0,
     "scan": 16,
     "capture_at": 0,
     "serial": 0,
     "motion_start": 1,
-    "motion_end": 19.0,
+    "motion_end": 3.631,
     "pixels_per_second": 60,
     "direction": -1,
     "set": "qa_exposure_hold=1,rt_debug=0,rt_stats=0,ab_off=0",
@@ -172,7 +206,11 @@
       "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
       "\\[rt\\] scene wait: \\d+ frames",
       "\\[water\\] compose stability \\(\\d+ frames\\)",
-      "\\[mem\\] ours \\("
+      "\\[mem\\] ours \\(",
+      "rt passes: GPU cost",
+      "gi: GPU cost",
+      "\\[rrpost\\] gpu:",
+      "\\[ngx\\] gpu RR:"
     ]
   },
   {
@@ -196,7 +234,7 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 10
   },
   {
     "label": "ab-on",
@@ -219,6 +257,6 @@
     "wait_log_fresh": [
       "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
     ],
-    "wait_log_timeout": 180.0
+    "wait_log_timeout": 10
   }
 ]

@@ -1,0 +1,243 @@
+{
+  "status": "READY_FOR_LIVE",
+  "save": "Water Queens House",
+  "max_minutes": 5,
+  "hard_timeout_seconds": 300,
+  "load_allowance_seconds": 120,
+  "expected_minutes": 2.92,
+  "scheduled_seconds": 51.124,
+  "readiness_seconds": 4.354,
+  "captures": 1,
+  "disk_estimate_mb": 70,
+  "expect": [
+    "\\[auto\\] scene ready",
+    "\\[hot\\] core generation \\d+ loaded",
+    "\\[ngx\\] RR create .*: Success",
+    "\\[sl\\] DLSS-G frame \\d+: status 0x0, presented per app frame 2, displayed/rendered over the last \\d+ frames 2\\.00",
+    "rt passes: GPU cost [0-9.]+ ms/frame \\(average of \\d+ frames\\); TLAS this frame [1-9]\\d*, previous frame \\d+, none 0",
+    "\\[cfg\\] settings read",
+    "\\[geo\\] RT capture, last \\d+ frames: .*opaque draws dropped \\(buffer full\\) 0\\.00,",
+    "\\[cascade\\] casters: cascade \\d+, \\d+ frames; .*, buffer full 0\\.0, added ",
+    "\\[rt\\] scene wait: \\d+ frames, .*got this frame's scene, 0 timeouts",
+    "\\[water\\] water geometry capture on \\(rt_water_geometry=1",
+    "\\[hit material\\] buffer reuse on \\(rt_hit_material_recycle=1\\)",
+    "\\[sl\\] fg_letterbox=1: UI composite pass \\d+x\\d+",
+    "\\[water\\] compose stability \\(\\d+ frames\\): frames with a water pass \\d+, composed \\d+, uncomposed \\d+ \\(on/off flips \\d+\\)",
+    "\\[mem\\] ours \\(window\\): .*\\(within budget\\); guard (normal|LOW)",
+    "gi: GPU cost [0-9.]+ ms/frame",
+    "\\[omm\\] requesting EXT micromap \\+ synchronization2",
+    "\\[omm\\] EXT backend available max_four_state_level=\\d+",
+    "\\[vt alpha\\].*"
+  ],
+  "expect_every": [
+    {
+      "name": "water reflections traced in every window with the casters on",
+      "select": "\\[water\\] reflections \\(\\d+ frames, ",
+      "match": "\\(\\d+ frames, [1-9]\\d* traced\\)",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "capacity: the RT capture drops no opaque draw (buffer full 0.00) in every smoke window",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "opaque draws dropped \\(buffer full\\) 0\\.00,",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ]
+    },
+    {
+      "name": "capacity: the cascade casters buffer is never full (buffer full 0.0) in every smoke window with the casters on",
+      "select": "\\[cascade\\] casters: cascade \\d+, \\d+ frames;",
+      "match": ", buffer full 0\\.0, added ",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ]
+    },
+    {
+      "name": "scene wait: 0 timeouts in every smoke window (static, pan, rotation)",
+      "select": "\\[rt\\] scene wait: \\d+ frames",
+      "match": "got this frame's scene, 0 timeouts",
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ]
+    },
+    {
+      "name": "compose stability: no water frame left uncomposed (no on/off flip of the reflection and shadows), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "frames with a water pass [1-9]\\d*, composed [1-9]\\d*, uncomposed 0 \\(on/off flips 0\\)",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "non-finite added by water 0: no record with a non-finite composed colour (kept the game's colour, counted), every complete compose-on window",
+      "select": "\\[water\\] compose stability \\(\\d+ frames\\)",
+      "match": "; non-finite terms 0 \\(",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "VRAM: process usage stays within the driver's real budget in every smoke window",
+      "select": "\\[mem\\] ours \\(",
+      "match": "\\(within budget\\); guard (normal|LOW)",
+      "event": true,
+      "settle_s": 1,
+      "min": 1,
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ]
+    },
+    {
+      "name": "zero alpha region overflow",
+      "select": "\\[geo\\] RT capture, last \\d+ frames:",
+      "match": "alpha draws made opaque \\(region full\\) 0\\.00,",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "stock cards: no strand producer",
+      "select": "\\[hair (?:primary|groom)\\] (?:frame|coverage|strand|counted)",
+      "match": "(?!)",
+      "min": 0,
+      "event": true
+    },
+    {
+      "name": "OMM: nonempty same-ray comparison, no unavailable query and no violation in the dedicated Ultra diagnostic",
+      "select": "omm check \\(\\d+ frames\\):",
+      "match": "compared [1-9]\\d*, not compared \\(accelerated scene not current or an unknown answer\\) 0; violations 0;",
+      "windows": [
+        "diag-omm"
+      ],
+      "min": 1
+    },
+    {
+      "name": "float pre-post energy exported",
+      "select": "\\[trace\\] frame \\d+ written:",
+      "match": "\\[trace\\] frame \\d+ written:",
+      "windows": [
+        "energy-static"
+      ],
+      "min": 1,
+      "event": true
+    },
+    {
+      "name": "release cost: rt passes: GPU cost",
+      "select": "rt passes: GPU cost",
+      "match": "TLAS this frame [1-9]\\d*, previous frame 0, none 0",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "release cost: gi: GPU cost",
+      "select": "gi: GPU cost",
+      "match": "gi: GPU cost [0-9.]+ ms/frame",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "release cost: \\[rrpost\\] gpu:",
+      "select": "\\[rrpost\\] gpu:",
+      "match": "render-res chain [\\d.]+ ms/frame, output-res grade [\\d.]+ ms/frame",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    },
+    {
+      "name": "release cost: \\[ngx\\] gpu RR:",
+      "select": "\\[ngx\\] gpu RR:",
+      "match": "gpu RR: guides [\\d.]+ ms \\+ evaluate [\\d.]+ ms",
+      "windows": [
+        "static-a",
+        "pan-q",
+        "pan-e",
+        "rotate-r",
+        "rotate-l"
+      ],
+      "min": 1
+    }
+  ],
+  "forbid": [
+    "\\[crash\\] exception 0x",
+    "VK_ERROR_DEVICE_LOST",
+    "\\[hot\\] core (rejected|faulted)",
+    "FAILED, keeping previous",
+    "compile call failed",
+    "RR creation failed",
+    "RR evaluate failed",
+    "\\[water\\] water geometry UNAVAILABLE",
+    "\\[water\\] build submission failed",
+    "\\[water\\] reflections unavailable",
+    "\\[water\\] rt/water_\\w+\\.hlsl \\w+: pipeline creation failed",
+    "\\[water\\] compose UNAVAILABLE",
+    "\\[water\\] compose: FS [0-9a-f]+ NOT patched",
+    "\\[water\\] compose: variant pipeline creation failed",
+    "\\[water\\] compose: a water pipeline blends",
+    "\\[rrpost\\] exposure hold REFUSED",
+    "\\[cascade\\] could not allocate",
+    "skipped: no variant for",
+    "set 1 [1-9]\\d* out-of-range reads skipped",
+    "\\[hit material pool basis\\] over kBasisCapBytes",
+    "\\[omm\\] VK_EXT_opacity_micromap unavailable",
+    "\\[omm\\] producer disabled after EXT record failure",
+    "\\[omm dyn\\] WARNING"
+  ]
+}
