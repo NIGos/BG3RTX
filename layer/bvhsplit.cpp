@@ -3024,6 +3024,12 @@ bool bvh_build(VkCommandBuffer cmd, const RtCapture& cap, void (*stamp)(VkComman
         r[s] = {c.soup_off + VkDeviceSize(hair_groom::uv_sample_corner(s, count)) * stride + 16, VkDeviceSize(c.job) * 256 + s * 8, 8};
       dd->vk.CmdCopyBuffer(cmd, cap.xfb, g_groom_uv_rb.b, hair_groom::kSamples, r);
     }
+    // rt_hair_groom_primary: the strand passes of the game's frame (G-buffer variant, coverage query, velocity) traced the
+    // previous publish's groom TLAS and read its points earlier on this queue; this build rewrites the same BLAS (full
+    // builds rewrite node pointers) and points ranges in place. Their reads finish first (write after read: an
+    // execution dependency; hv5/hc1 2026-11-04 lost the device in loads, where LOD changes force full builds).
+    if (!groom_work.empty() && hair_primary_wanted())
+      barrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, kXfer | kCS | kAS, 0);
     for (GroomWork& w : groom_work) {
       if (w.compact_copy) {
         VkCopyAccelerationStructureInfoKHR cp{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
