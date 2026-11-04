@@ -3,6 +3,9 @@
 // SSS and fog passes), then keeps this frame's lit radiance for next frame's
 // ray hits.
 #include "gi_common.hlsli"
+#if RT_HAIR_FIBRE_GI_REFERENCE
+#include "../rt/hair_fibre_gi.hlsli"
+#endif
 
 [numthreads(8, 8, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
@@ -22,6 +25,13 @@ void main(uint3 tid : SV_DispatchThreadID) {
   const uint cls = mat_class_at(fp);
   float3 dcol = mat_diffuse_colour(cls, alb.rgb, metal);
   float3 add = gi.rgb * dcol * pc.strength;
+#if RT_HAIR_FIBRE_GI_REFERENCE
+  // Replace the Lambert response before adding it (and before saving the bounce source).
+  // gi.rgb is the exact gathered GI used above; no subtraction of an estimated game ambient.
+  const float4 fibre_mat = gMaterial.Load(int3(fp, 0));
+  if (mat_class(fibre_mat) == kMatHair && hv_strand_pixel(fp, d, pc.frame + 1u))
+    add = gi.rgb * hd_volume_albedo(saturate(alb.rgb), max(0.09, fibre_mat.x)) * pc.strength;
+#endif
   float3 diffuse = gDiffuse[fp];
   if (pc.debug == 1 || pc.debug >= 4) diffuse = gi.rgb;
   else if (pc.debug == 2) diffuse = add * 4.0;

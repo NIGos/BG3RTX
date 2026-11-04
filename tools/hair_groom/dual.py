@@ -307,6 +307,53 @@ def shade_table_pixel(t, wo, wi, n_front, color, roughness):
     return single + correction_table(color, roughness)[None, :] * (F - single)
 
 
+def volume_integral(color, beta, n=200000, seed=41):
+    """Diffuse slab integral of the existing corrected dual model; returns (single, multiple).
+
+    Incident photons are cosine distributed, outgoing directions uniform over the upper hemisphere.
+    The first visible fibre has depth z = mu_o Exp(1), and the incident path crosses Poisson(z/mu_i)
+    fibres. A_raw = S + M = 2 pi <mu_o/mu_i [1[n=0] f_s + k (F_dual - 1[n=0] f_s)]>.
+    F_dual is shade with table averages, before k: Zinke 2008 eqs. 5, 10, 14, 18-22 and Fig. 5
+    (the angular slab integral is our derivation, NOT a new formula attributed to that paper).
+    This integrates a_f, a_b, d_f, d_b and k over the slab rather than treating the backward fraction
+    at one fibre as the reflectance of an entire volume.
+    """
+    rng = np.random.default_rng(seed)
+    t, wo = bsdf._sphere(rng, n), _upper(rng, n)
+    u, phi = rng.uniform(size=n), rng.uniform(0, 2 * np.pi, n)
+    wi = np.column_stack((np.sqrt(u) * np.cos(phi), np.sqrt(u) * np.sin(phi), np.sqrt(1 - u)))
+    h = rng.uniform(-1, 1, n)
+    nf = rng.poisson(rng.exponential(size=n) * wo[:, 2] / wi[:, 2].clip(1e-8))
+    single = bsdf.evaluate(t, wo, wi, h, color, beta) * (nf == 0)[:, None]
+    f = shade_table(t, wo, wi, h, nf, color, beta)
+    # wi is sampled by incident flux (mu_i/pi), whereas a fibre integrates radiance d omega_i.
+    measure = (2 * np.pi * wo[:, 2] / wi[:, 2])[:, None]
+    return (single * measure).mean(0), ((f - single) * measure).mean(0)
+
+
+def volume_albedo(colour, beta):
+    """Diffuse reflectance of a semi-infinite random-fibre slab, per RGB channel.
+
+    A = S + k_volume M, where S and M are volume_integral's single and corrected multiple
+    terms. k_volume = (path-traced diffuse slab - S)/M corrects the angular domain of TABLE_K
+    (fitted at normal incidence). It is independent of the test walks. The nonabsorbing endpoint
+    A(1,beta)=1 follows conservation in a semi-infinite slab, not the clamped 0.9 direct-light table.
+    See docs/RTX_HAIR_PRIMARY.md M4.1 for the derivation and limitations.
+    """
+    from .volume_table import VOLUME_C, VOLUME_A
+    # Reflectance is smooth in colour itself (unlike the single-fibre averages); explicit white endpoint.
+    out = []
+    b = float(np.clip(beta, TABLE_BETA[0], TABLE_BETA[-1]))
+    j = int(np.clip(np.searchsorted(TABLE_BETA, b) - 1, 0, len(TABLE_BETA) - 2))
+    v = (b - TABLE_BETA[j]) / (TABLE_BETA[j + 1] - TABLE_BETA[j])
+    for c in np.clip(np.asarray(colour, float), VOLUME_C[0], 1):
+        i = int(np.clip(np.searchsorted(VOLUME_C, c) - 1, 0, len(VOLUME_C) - 2))
+        u = (c - VOLUME_C[i]) / (VOLUME_C[i + 1] - VOLUME_C[i])
+        a = np.asarray(VOLUME_A)
+        out.append((1-u)*((1-v)*a[i,j]+v*a[i,j+1])+u*((1-v)*a[i+1,j]+v*a[i+1,j+1]))
+    return np.array(out)
+
+
 def hlsl_tables():
     """The generated body of shaders/rt/hair_dual_table.hlsli (CTest test_dual checks it is current)."""
     fmt = lambda x: f"{x:.4f}"

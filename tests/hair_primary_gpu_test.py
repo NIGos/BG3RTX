@@ -182,6 +182,14 @@ def dual_check(exe, spv, n=3000, seed=13):
         block[:, 0:3], block[:, 3], block[:, 4:7], block[:, 7] = t, h, wo, rough
         block[:, 8:11], block[:, 11], block[:, 12:15] = wi, nf, color
         rows.append(block)
+    # h = 3 selects the diffuse volume response; include endpoints, clamps and random interpolation cells.
+    colours = np.vstack((rng.uniform(0.02, 1, (2000, 3)), np.ones((3, 3)), np.full((3, 3), 0.02)))
+    betas = np.concatenate((rng.uniform(0.05, 1, 2000), [0.35, 0.5, 0.7]*2))
+    volume_want = np.array([dual.volume_albedo(c, b) for c, b in zip(colours, betas)])
+    block = np.zeros((len(colours), 16), "<f4")
+    block[:, 3], block[:, 7], block[:, 12:15] = 3.0, betas, colours
+    rows.append(block)
+    want.append(volume_want)
     want = np.concatenate(want)
     with tempfile.TemporaryDirectory() as d:
         inp, out = Path(d) / "s.bin", Path(d) / "o.bin"
@@ -202,6 +210,9 @@ def dual_check(exe, spv, n=3000, seed=13):
     check("dual GPU values finite", rep["finite"])
     check("dual GPU vs CPU: 99% of samples within 1e-4 relative", rep["rel_err_p99"] < 1e-4, rep["rel_err_p99"])
     check("dual GPU vs CPU: every sample within 1e-3 relative", rep["rel_err_max"] < 1e-3, rep["rel_err_max"])
+    volume_err = np.abs(got[-len(colours):] - volume_want) / np.maximum(volume_want, 1e-12)
+    print(json.dumps({"volume_samples": len(colours), "volume_max_rel_diff": float(volume_err.max())}))
+    check("volume GPU vs CPU: every channel within 1e-3 relative", volume_err.max() < 1e-3, volume_err.max())
 
 
 def shadow_check(exe, spv, pts, rad, offs, cam, n_rays=3000, seed=17):

@@ -411,6 +411,13 @@ inline constexpr Knob kKnobs[] = {
     {"on", "On", kCapRayQuery, {{"rt_hair_fibre", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, false, "Advanced", {}, "Uses a fibre BSDF with multiple scattering instead of the game hair shading. Cost and appearance remain unqualified."},
 
+  {"exp_hair_fibre_gi", "Strand indirect scattering",
+   "Uses the fibre volume's multiple-scattering reflectance for indirect light on visible strands. Experimental; cost and look unqualified.",
+   Kind::Choice, Apply::Live, "live; needs Strand hair on screen and GI", false,
+   {{"off", "Off", 0, {{"rt_hair_fibre_gi", "0"}}, {}, {}, false, false, false, Apply::Live},
+    {"on", "On", kCapRayQuery, {{"rt_hair_fibre_gi", "1"}}, {{"exp_hair_groom_primary", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {{"rt","1","RT device setup"}}, true, "Developer", {}},
+
   {"exp_hair_groom_crowd", "Strand hair crowd budget",
    "Experimental: gives nearby characters finer strands and reduces distant hair detail.",
    Kind::Choice, Apply::Live, "live", false,
@@ -766,6 +773,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_primary_order", "0"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_fibre", "0"},
+    {"rt_hair_fibre_gi", "0"},
     {"rt_hair_groom_crowd_ksegments", "0"},
     {"rt_hair_physical_origin", "0"},
     {"rt_hair_receiver_guard", "0"},
