@@ -1,5 +1,9 @@
 # Third-party components in BG3RTX
 
+BG3RTX uses GPL-3.0-or-later with the NVIDIA SDK exception, approved by the user on 2026-11-04.
+The package root includes `LICENSE` and `LICENSE-EXCEPTION.md` (the same files as at the source root).
+In the player package, both files are beside this inventory. Third-party components retain their own terms below.
+
 Disk-only audit updated: 2026-11-03, branch `release-licences`. Scope: the explicit file list in
 `scripts/package.ps1`, its `-WithSharc` option, CMake include paths (read only), and runtime
 loading in `layer/` and `tools/launcher/`. Only disposable packaging tests were run; no player package, compiler or game was run.
@@ -218,8 +222,10 @@ not made, endorsed or supported by NVIDIA or Larian Studios.
 
 Stream C audited the current explicit payload using `-DryRun -OutDir` in worktree scratch.
 This mode plans all runtime files, checks source availability and diffs planned destinations
-against its files.txt; it copies no binaries or game data. The lean layer is missing, so there
-is no distributable package or final-binary provenance acceptance. Fonts/OFL and branding
+against its files.txt; it copies no binaries or game data. Release-pack2 built the lean layer
+with `scripts/build.ps1 -ReleaseLayer` at BelowNormal: diagnostics OFF, RelWithDebInfo.
+The refreshed audit has 229 files, 0 missing inputs and 0 manifest differences, including
+both project licence files at the root. This is not final archive acceptance. Fonts/OFL and branding
 provenance remain included. No notices were altered and no distribution terms were approved.
 The selected SDK DXC remains a packaging-machine source, not a player SDK requirement.
 
@@ -253,7 +259,8 @@ separately; no ordinary package promotion or redistribution approval is implied.
    The old sample DXC licence remains reference evidence only.
 2. **Package wiring implemented; release remains paused.** The script copies this
    inventory and every collected text. All five new texts are mandatory before
-   builds or package writes. Project licence, NVIDIA notification, Microsoft runtime
+   builds or package writes. Project licence is GPL-3.0-or-later with the NVIDIA SDK exception
+   (user decision 2026-11-04). NVIDIA notification, Microsoft runtime
    terms and game-data redistribution decisions remain open; see RELEASE_OFFLINE_STATUS.md.
 3. **LSLib MIT text (conditional; not a player-package blocker while excluded).** If LSLib
    or dependent offline tools are distributed, obtain the exact v1.20.4 `LICENSE` from
