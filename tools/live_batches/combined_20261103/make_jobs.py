@@ -22,4 +22,4 @@ SOURCES = [
 
 if __name__ == "__main__":
     base = ROOT / "tools/live_batches"
-    sys.exit(main([str(base / p) for p in SOURCES] + ["--out", str(Path(__file__).resolve().parent)]))
+    sys.exit(main([str(base / p) for p in SOURCES] + ["--out", str(Path(__file__).resolve().parent), "--split-seconds", "900"]))

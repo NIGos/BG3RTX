@@ -140,10 +140,28 @@ function Get-RotationMouseMessages($action) {
 
 # Search the whole current run, including cached pipelines from earlier phases.
 # Match individual lines and use the latest matching record for each requirement.
-function Test-CameraPlanReady($step, [string]$text) {
+function Test-CameraPlanReady($step, [string]$text, [string]$freshText=$text) {
+  if ($step.wait_log_fresh) {
+    $cfg=[regex]::Match($freshText, '(?m)^.*\[cfg\] settings read[^\n]*')
+    if (-not $cfg.Success) { return $false }
+    $freshText=$freshText.Substring($cfg.Index)
+  }
+  # An empty driver interval is not completion while a requested async build
+  # is still queued. Reconcile the actual producer start/completion records.
+  if ($step.wait_log_fresh) {
+    $pending=@{}
+    foreach ($line in ($text -split "`n")) {
+      if ($line -match 'gi: (\S+) building in the background') { $pending[$Matches[1]]=$true }
+      elseif ($line -match 'gi: (\S+) generation ') { $pending.Remove($Matches[1]) }
+      elseif ($line -match '(\S+\.hlsl[^ ]*) (\w+): building in the background') { $pending[($Matches[1]+' '+$Matches[2])]=$true }
+      elseif ($line -match '\[water\] (\S+\.hlsl[^ ]*) (\w+): built') { $pending.Remove(($Matches[1]+' '+$Matches[2])) }
+    }
+    if ($pending.Count) { return $false }
+  }
   foreach ($pattern in @($step.wait_log)) {
     $latest=$null
-    foreach ($line in ($text -split "`n")) {
+    $source=if ($pattern -in @($step.wait_log_fresh)) {$freshText} else {$text}
+    foreach ($line in ($source -split "`n")) {
       if ($line -match $pattern) { $latest=$line }
     }
     if ($null -eq $latest) { return $false }
@@ -159,6 +177,11 @@ function Assert-CameraPlanFields($step) {
   $names=if ($step -is [System.Collections.IDictionary]) { @($step.Keys) } else { @($step.PSObject.Properties.Name) }
   foreach ($name in $names) {
     if ($name -notin $allowed) { throw "Unknown camera plan field: $name" }
+  }
+  if ($step.wait_log_fresh) {
+    foreach ($pattern in @($step.wait_log_fresh)) {
+      if ($pattern -notin @($step.wait_log)) { throw 'wait_log_fresh must be a subset of wait_log' }
+    }
   }
   if ($step.wait_log) {
     if (-not ($step.wait_log_timeout -gt 0) -or [double]::IsInfinity([double]$step.wait_log_timeout)) {

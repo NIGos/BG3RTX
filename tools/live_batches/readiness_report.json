@@ -1,0 +1,261 @@
+{
+  "jobs": {
+    "su1-ultra-s8-fg2": {
+      "before_seconds": 164.0,
+      "before_readiness_seconds": 6.029,
+      "before_basis": "original job",
+      "after_seconds": 164.0,
+      "readiness_seconds": 6.029,
+      "preflight_seconds": 170.029,
+      "problems": []
+    },
+    "wsf1-s8-interface-column": {
+      "before_seconds": 127.8,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 127.8,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 127.8,
+      "problems": []
+    },
+    "cp4-compact-camp-join": {
+      "before_seconds": 102.9,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 102.9,
+      "readiness_seconds": 0,
+      "preflight_seconds": 102.9,
+      "problems": []
+    },
+    "pt-dialogue3": {
+      "before_seconds": 384.9,
+      "before_readiness_seconds": 19.453,
+      "before_basis": "original job",
+      "after_seconds": 384.9,
+      "readiness_seconds": 19.453,
+      "preflight_seconds": 404.353,
+      "problems": []
+    },
+    "pt-s8": {
+      "before_seconds": 131.7,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 131.7,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 131.7,
+      "problems": []
+    },
+    "hv1-dialogue1": {
+      "before_seconds": 343.7,
+      "before_readiness_seconds": 143.23,
+      "before_basis": "original job",
+      "after_seconds": 343.7,
+      "readiness_seconds": 143.23,
+      "preflight_seconds": 486.93,
+      "problems": []
+    },
+    "hv2-camp": {
+      "before_seconds": 324.2,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 324.2,
+      "readiness_seconds": 0,
+      "preflight_seconds": 324.2,
+      "problems": []
+    },
+    "hv3-s8": {
+      "before_seconds": 251.7,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 251.7,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 251.7,
+      "problems": []
+    },
+    "hv4-gpuav": {
+      "before_seconds": 398.8,
+      "before_readiness_seconds": 14.323,
+      "before_basis": "original job",
+      "after_seconds": 398.8,
+      "readiness_seconds": 14.323,
+      "preflight_seconds": 413.123,
+      "problems": []
+    },
+    "hv5-reload-bisect": {
+      "before_seconds": 749.5,
+      "before_readiness_seconds": 11.69,
+      "before_basis": "original job",
+      "after_seconds": 488.3,
+      "readiness_seconds": 11.69,
+      "preflight_seconds": 499.99,
+      "problems": []
+    },
+    "hv6-strand-diagnostic": {
+      "before_seconds": null,
+      "before_readiness_seconds": null,
+      "before_basis": "original job",
+      "after_seconds": 433.3,
+      "readiness_seconds": 14.764,
+      "preflight_seconds": 448.064,
+      "problems": [
+        "readiness: warm-order: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+        "readiness: warm-cards: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+        "readiness: tips-on: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)",
+        "readiness: cards-c: changed rt_hair_groom_tips requires pipeline wait_log (unknown pipeline mapping; declare key-specific wait_log)"
+      ]
+    },
+    "hc1-dialogue1-fg2": {
+      "before_seconds": 400.7,
+      "before_readiness_seconds": 29.087,
+      "before_basis": "original job",
+      "after_seconds": 400.7,
+      "readiness_seconds": 29.087,
+      "preflight_seconds": 429.787,
+      "problems": []
+    },
+    "hc2-campsite-fg2": {
+      "before_seconds": 339.3,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 339.3,
+      "readiness_seconds": 0,
+      "preflight_seconds": 339.3,
+      "problems": []
+    },
+    "go1-camp": {
+      "before_seconds": 567.5,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 567.5,
+      "readiness_seconds": 0,
+      "preflight_seconds": 567.5,
+      "problems": []
+    },
+    "go2-s8": {
+      "before_seconds": 305.6,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 305.6,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 305.6,
+      "problems": []
+    },
+    "go2-camp-high": {
+      "before_seconds": 241.0,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 241.0,
+      "readiness_seconds": 0,
+      "preflight_seconds": 241.0,
+      "problems": []
+    },
+    "go2-s8-medium": {
+      "before_seconds": 157.9,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 157.9,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 157.9,
+      "problems": []
+    },
+    "wo1-s8-hit-shade": {
+      "before_seconds": 559.0,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 559.0,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 559.0,
+      "problems": []
+    },
+    "wf9-s8-compose-shift": {
+      "before_seconds": 283.3,
+      "before_readiness_seconds": 33.11,
+      "before_basis": "original job",
+      "after_seconds": 283.3,
+      "readiness_seconds": 33.11,
+      "preflight_seconds": 316.41,
+      "problems": []
+    },
+    "ef1-dialogue3-attribution": {
+      "before_seconds": 158.5,
+      "before_readiness_seconds": 30.588,
+      "before_basis": "original job",
+      "after_seconds": 158.5,
+      "readiness_seconds": 30.588,
+      "preflight_seconds": 189.088,
+      "problems": []
+    },
+    "combined-Campsite---27h-part1": {
+      "before_seconds": 671.5,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 671.5,
+      "readiness_seconds": 0,
+      "preflight_seconds": 671.5,
+      "problems": []
+    },
+    "combined-Campsite---27h-part2": {
+      "before_seconds": 241.0,
+      "before_readiness_seconds": 0,
+      "before_basis": "original job",
+      "after_seconds": 241.0,
+      "readiness_seconds": 0,
+      "preflight_seconds": 241.0,
+      "problems": []
+    },
+    "combined-Test-Dialogue3": {
+      "before_seconds": 544.5,
+      "before_readiness_seconds": 50.041,
+      "before_basis": "original job",
+      "after_seconds": 544.5,
+      "readiness_seconds": 50.041,
+      "preflight_seconds": 594.541,
+      "problems": []
+    },
+    "combined-Water-Queens-House-part1": {
+      "before_seconds": 629.7,
+      "before_readiness_seconds": 6.029,
+      "before_basis": "original job",
+      "after_seconds": 629.7,
+      "readiness_seconds": 6.029,
+      "preflight_seconds": 635.729,
+      "problems": []
+    },
+    "combined-Water-Queens-House-part2": {
+      "before_seconds": 843.4,
+      "before_readiness_seconds": 33.11,
+      "before_basis": "original job",
+      "after_seconds": 843.4,
+      "readiness_seconds": 33.11,
+      "preflight_seconds": 876.51,
+      "problems": []
+    },
+    "combined-Water-Queens-House-part3": {
+      "before_seconds": 131.7,
+      "before_readiness_seconds": 0.0,
+      "before_basis": "original job",
+      "after_seconds": 131.7,
+      "readiness_seconds": 0.0,
+      "preflight_seconds": 131.7,
+      "problems": []
+    }
+  },
+  "conservative_keys": [
+    "ab_off",
+    "fg",
+    "preset",
+    "rr",
+    "rt_hair_fibre",
+    "rt_hair_groom_crowd_ksegments",
+    "rt_hair_groom_primary_order",
+    "rt_hit_material_paks",
+    "rt_water_geometry"
+  ],
+  "no_game_launched": true,
+  "superseded": {
+    "combined-Campsite---27h": 498.30000000000035,
+    "combined-Water-Queens-House": 1538.599999999998
+  },
+  "historical_jobs": 84,
+  "max_preflight_seconds": 876.51
+}

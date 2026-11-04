@@ -4,19 +4,24 @@ Offline drafts only. Nothing is queued and no game launch is authorized.
 
 | Save | Source order | Launches | Phase seconds |
 | --- | --- | --- | --- |
-| S8 / Water Queens House | smoke_ultra, gpu_opt1 S8, gpu_opt2 Medium, water_offscreen, wf9, post_temporal S8 | 6 -> 1 | 1775 |
-| Campsite - 27h | cov_paks_compact, gpu_opt1 camp, gpu_opt2 High | 3 -> 1 | 587 |
-| Test Dialogue3 | post_temporal, edge_flicker | 2 -> 1 | 398 |
+| S8 part 1 | smoke_ultra, gpu_opt1 S8, gpu_opt2 Medium | 3 -> 1 | 629.7 |
+| S8 part 2 | water_offscreen, wf9 | 2 -> 1 | 843.4 |
+| S8 part 3 | post_temporal S8 | 1 -> 1 | 131.7 |
+| Camp part 1 | cov_paks_compact, gpu_opt1 camp | 2 -> 1 | 671.5 |
+| Camp part 2 | gpu_opt2 High | 1 -> 1 | 241.0 |
+| Test Dialogue3 | post_temporal, edge_flicker | 2 -> 1 | 544.5 |
 
-These full combinations exceed the usual 2-5 minute scene target; windows and
-source captures are retained to preserve the requested evidence. Durations exclude
-loading and any readiness waits. Medium/High tests retain their actual presets;
+The generator splits at source boundaries to keep scheduled time plus VALID-median
+readiness under 900 s (largest preflight total: about 876.5 s). Old oversized S8
+and camp jobs remain inactive historical artifacts. Windows and source captures
+retain their gates. Phase seconds exclude loading and conditional readiness;
+the exact totals are in `../readiness_report.json`. Medium/High retain their presets;
 each segment restores its own preset, explicit baselines and warmup. The restart
 capture budget is pinned at 1024 MB throughout. Q/E motion is unchanged.
 
 Regenerate with `python tools/live_batches/combined_20261103/make_jobs.py`.
 Run `python tools/live_batches/combined_20261103/dryrun.py` for shared lints and
-synthetic extraction checks on all three real manifests. The dryrun checks that
+synthetic extraction checks on all six active manifests. The dryrun checks that
 real gates reject fake data, then strips observation gates to verify isolated
 log slices and original phase numbering. It never runs original post commands.
 Source batch dryruns separately exercise the fake queue.

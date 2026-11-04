@@ -6,7 +6,7 @@
   "window_mode": "visible_unfocused_fg",
   "traces": 0,
   "hold": 90,
-  "timeout": 639,
+  "timeout": 3519,
   "live_flow": {
     "expected_fps": 30,
     "settings_latency_s": 1,
@@ -31,7 +31,13 @@
           "C:\\Users\\quali\\Documents\\Code Projects\\BG3RTX\\captures\\queue\\logs\\pt-dialogue3.1.210703.log"
         ]
       }
-    ]
+    ],
+    "trace_export": {
+      "seconds": 0.3169999999954598,
+      "quantile": 0.95,
+      "samples": 439,
+      "maximum": 0.43699999999807915
+    }
   },
   "repeat": 1,
   "stop_on_dump": false,

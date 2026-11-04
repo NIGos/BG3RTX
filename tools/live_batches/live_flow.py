@@ -18,13 +18,60 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from scripts.queue_gates import phase_states, _apply
-from tools.live_batches import fps_windows
+from tools.live_batches import fps_windows, readiness_budget, pipeline_readiness
 
 # Recent VALID logs, scene-ready -> both a zero-timeout scene interval and
 # a watch interval with zero pipeline builds. See LIVE_FLOW.md for timestamps.
 # ceil(max observed seconds) + the one-second settings/observation alignment.
 SCENE_SETTLE_SECONDS = {"Water Queens House": 17, "Test Dialogue3": 19,
                         "Test Dialogue1": 16, "Campsite - 27h": 29}
+TRACE_EXPORT = {}
+
+
+def configure_trace_exports(entries):
+    """Nearest-rank p95 request -> written latency, including consecutive requests.
+
+    Match each request only before the next request; never borrow a later export
+    to hide missing evidence. Clocks use the same midnight handling as gates.
+    """
+    from scripts.queue_gates import stamped_lines
+    samples = []
+    for entry in entries:
+        requests = [t for t, line in stamped_lines(entry.get("runner", "")) if "[motion-trace]" in line]
+        writes = [t for t, line in stamped_lines("\n".join(entry["lines"]))
+                  if re.search(r"\[trace\] frame \d+ written:", line)]
+        for i, start in enumerate(requests):
+            end = requests[i+1] if i+1 < len(requests) else math.inf
+            finish = next((t for t in writes if start <= t < end), None)
+            if finish is not None:
+                samples.append(finish-start)
+    TRACE_EXPORT.clear()
+    if samples:
+        TRACE_EXPORT.update(seconds=sorted(samples)[math.ceil(.95*len(samples))-1],
+                            quantile=.95, samples=len(samples), maximum=max(samples))
+
+
+def trace_schedules(job, plan):
+    """Carry the previous export across phase boundaries, including ungated traces."""
+    meta = job.get("live_flow", {})
+    segments = {i: seg.get("live_flow", {}) for seg in meta.get("segments", [])
+                for i in range(seg["offset"], seg["offset"]+seg["count"])}
+    origin = finish = 0
+    out = {}
+    for i, (phase, state) in enumerate(zip(plan, phase_states(job, plan))):
+        local = segments.get(i, meta)
+        export = max(float(local.get("trace_export", {}).get("seconds", 0)), TRACE_EXPORT.get("seconds", 0))
+        dispatch = float(local.get("trace_dispatch_s", 0))
+        fps = fps_windows.expected(job, state)["fps"]
+        latency = float(local.get("settings_latency_s", 1))
+        service = max(2/fps + float(local.get("trace_stall_s", 1)), export)
+        times = []
+        for at in phase.get("trace_at", []):
+            finish = max(origin+max(float(at), latency), finish) + dispatch + service
+            times.append(finish-origin)
+        out[phase.get("label")] = times
+        origin += float(phase.get("seconds", 0))
+    return out
 
 
 def read(path):
@@ -42,6 +89,12 @@ def job_files(directory):
     if directory.is_file():
         return [directory]
     return sorted(directory.glob("jobs/*.json")) + sorted(directory.glob("*/jobs/*.json"))
+
+
+def active_job_files():
+    """Explicit inventory; historical artifacts remain available for audit."""
+    inventory = read(ROOT / "tools/live_batches/duration_lint.json")
+    return {ROOT / Path(path) for path, result in inventory.items() if result.get("active", False)}
 
 
 def load_job(path):
@@ -301,7 +354,7 @@ def judged_labels(job, plan):
     return labels
 
 
-def trace_event_budget(gate, phase, fps, latency, stall):
+def trace_event_budget(gate, phase, fps, latency, stall, completions=None):
     """Trace requests serialize through tracer.cpp's two-present recording and write.
 
     auto-run.ps1 queues one request file at a time; a dense trace_at list cannot
@@ -310,10 +363,11 @@ def trace_event_budget(gate, phase, fps, latency, stall):
     """
     if not gate.get("event") or "[trace] frame" not in gate["select"].replace("\\", ""):
         return None
-    finish, completions = latency, []
-    for at in phase.get("trace_at", []):
-        finish = max(float(at), finish) + 2 / fps + stall
-        completions.append(finish)
+    if completions is None:
+        finish, completions = latency, []
+        for at in phase.get("trace_at", []):
+            finish = max(float(at), finish) + 2 / fps + stall
+            completions.append(finish)
     end = float(phase.get("seconds", 0))
     settled = latency + float(gate.get("settle_s", 0))
     complete = sum(settled <= t < end for t in completions)
@@ -337,6 +391,7 @@ def window_problems(job, plan):
     if not all(math.isfinite(v) and v >= 0 for v in (latency, trace_stall)):
         return ["windows: settings latency and trace stall budgets must be finite and nonnegative"], []
     errors, budgets = [], []
+    schedules = trace_schedules(job, plan)
     phases = {p.get("label"): (p, s) for p, s in zip(plan, phase_states(job, plan))}
     segment_meta = {p.get("label"): seg.get("live_flow", {})
                     for seg in meta.get("segments", [])
@@ -359,7 +414,7 @@ def window_problems(job, plan):
             if need == 0:
                 continue
             name = g.get("name", g["select"])
-            trace = trace_event_budget(g, p, fps, latency, trace_stall)
+            trace = trace_event_budget(g, p, fps, latency, trace_stall, schedules[label])
             if trace is not None:
                 if "trace_stall_s" not in window_meta:
                     errors.append(f"windows: {label}: {name}: declare live_flow.trace_stall_s, the upper stall budget per trace")
@@ -452,22 +507,26 @@ def duration_budget(job, plan):
     fps = 30 if str(job.get("window_mode", "")).startswith("visible_unfocused") else float(job.get("live_flow", {}).get("expected_fps", 30))
     stall = float(job.get("live_flow", {}).get("trace_stall_s", 1))
     windows = []
+    schedules = trace_schedules(job, plan)
     segment_meta = {p.get("label"): seg.get("live_flow", {})
                     for seg in job.get("live_flow", {}).get("segments", [])
                     for p in plan[seg["offset"]:seg["offset"] + seg["count"]]}
-    for phase, state in zip(plan, phase_states(job, plan)):
+    previous = {}
+    for index, (phase, state) in enumerate(zip(plan, phase_states(job, plan))):
+        changed = {k: v for k, v in state.items() if previous.get(k) != v and k not in CONTROL}
+        previous = state
+        expected_wait = readiness_budget.estimate(job, phase, changed, first=index == 0)
         fps = fps_windows.expected(job, state)["fps"]
         current = float(phase.get("seconds", 0))
         label = phase.get("label", "")
         bare_label = label.rsplit("--", 1)[-1]
         minimum = by_label.get(label, latency)
         unresolved = []
+        if phase.get("wait_log") and not expected_wait["samples"]:
+            unresolved.append("expected readiness unproven: no VALID same-save/key median; not charged as timeout")
         stall = float(segment_meta.get(label, job.get("live_flow", {})).get("trace_stall_s", 1))
         if phase.get("trace_at"):
-            finish = latency
-            for at in phase["trace_at"]:
-                finish = max(finish, float(at)) + 2 / fps + stall
-            minimum = max(minimum, finish)
+            minimum = max(minimum, schedules[label][-1])
         # dump.cpp: edge9 / water(raw_frames+1) / ordinary17 samples,
         # then three presents before completion; include settings and write budget.
         selected = [g for g in job.get("expect_every", []) if g.get("event") and int(g.get("min",1)) > 0
@@ -513,13 +572,9 @@ def duration_budget(job, plan):
         windows.append(dict(window=label, seconds=current, minimum_seconds=round(minimum, 3),
                             savings_seconds=round(max(0, current-minimum), 3), unresolved=unresolved,
                             readiness_timeout_seconds=float(phase.get("wait_log_timeout", 0)),
+                            expected_readiness_seconds=expected_wait["seconds"],
+                            readiness_samples=expected_wait["samples"], readiness_source=expected_wait["source"],
                             minimum_readiness_wait_seconds=0))
-    readiness = {}
-    for phase in plan:
-        if phase.get("wait_log"):
-            patterns = phase["wait_log"]
-            key = (patterns,) if isinstance(patterns, str) else tuple(patterns)
-            readiness[key] = max(readiness.get(key, 0), float(phase.get("wait_log_timeout", 0)))
     total = sum(w["seconds"] for w in windows)
     minimum = sum(w["minimum_seconds"] for w in windows)
     findings = [f"duration: {w['window']}: {w['seconds']:g} s > 1.5x minimum {w['minimum_seconds']:g} s; save {w['savings_seconds']:g} s"
@@ -528,7 +583,8 @@ def duration_budget(job, plan):
         findings.append(f"duration: plan {total:g} s > 1.3x minimum {minimum:g} s; save {total-minimum:g} s")
     return dict(seconds=total, minimum_seconds=round(minimum, 3),
                 unresolved=[dict(window=w["window"], reasons=w["unresolved"]) for w in windows if w["unresolved"]],
-                readiness_timeout_seconds=sum(readiness.values()),
+                expected_readiness_seconds=round(sum(w["expected_readiness_seconds"] for w in windows), 3),
+                readiness_timeout_seconds=sum(float(p.get("wait_log_timeout", 0)) for p in plan if p.get("wait_log")),
                 windows=windows, findings=findings)
 
 
@@ -611,6 +667,9 @@ def settings(text):
 def retime(job, plan):
     """One regeneration path for generators and the offline CLI."""
     job.setdefault("live_flow", {})["fps_windows"] = [dict(state=list(sig), **v) for (save, sig),v in fps_windows.MODEL.items() if save == job.get("save")]
+    if TRACE_EXPORT:
+        job["live_flow"]["trace_export"] = dict(TRACE_EXPORT)
+    pipeline_readiness.apply(job, plan)
     changes = tighten(job, plan)
     for phase, state in zip(plan, phase_states(job, plan)):
         if phase.get("wait_log"):
@@ -623,12 +682,16 @@ def retime(job, plan):
     return changes
 
 
-def tighten_files(directory):
+def tighten_files(directory, cache=None, job_names=None):
     """Refresh checked-in artifacts with the same model used by lint/preflight."""
-    index = corpus(default_results(), ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
+    index = corpus(default_results(), cache or ROOT / "captures/.cache/live_flow_corpus.json", newest=100000)
     fps_windows.configure(index["entries"])
+    configure_trace_exports(index["entries"])
+    readiness_budget.configure(index["entries"])
     reports = []
     for path in job_files(directory):
+        if job_names and path.stem not in job_names:
+            continue
         job, plan, plan_path = load_job(path)
         first_warm = next((p for p in plan if p.get("label", "").startswith(("warm", "prefetch"))), None)
         if first_warm is not None:
@@ -692,7 +755,7 @@ def launch_problems(job, duration):
     limit = float(job.get("max_minutes", 15))
     if not math.isfinite(limit) or limit <= 0:
         return ["duration: max_minutes must be finite and positive"]
-    if duration["seconds"] + duration["readiness_timeout_seconds"] > 60 * limit:
+    if duration["seconds"] + duration.get("expected_readiness_seconds", 0) > 60 * limit:
         return ["duration: launch exceeds max_minutes (default 15); split the batch or explicitly set max_minutes"]
     return []
 
@@ -704,7 +767,7 @@ def lint(job, plan, evidence, memo=None):
     timeout = []
     if "timeout" in job and float(job["timeout"]) < duration["seconds"] + duration["readiness_timeout_seconds"]:
         timeout.append("duration: timeout does not cover plan + readiness allowance")
-    return dict(problems=plan_field_problems(plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan) + timeout, regex_coverage=coverage, windows=budgets, duration=duration, replay=fps_windows.replay(job, plan, evidence))
+    return dict(problems=plan_field_problems(plan) + pipeline_readiness.problems(job, plan) + regex + environment_problems(job) + windows + producer_problems(job, plan) + warmup_problems(job, plan) + timeout, regex_coverage=coverage, windows=budgets, duration=duration, replay=fps_windows.replay(job, plan, evidence))
 
 
 def markdown_report(report):
@@ -753,18 +816,25 @@ def main(argv=None):
     ap.add_argument("--batches", help="comma-separated batch folders to regenerate with --retime")
     ap.add_argument("--replay-only", action="store_true", help="report historical gate coverage without regex-forbid audit")
     ap.add_argument("--report")
+    ap.add_argument("--job-names", help="comma-separated job stems to check")
     ap.add_argument("--tree", help="actual runner tree for preflight plan resolution")
     ap.add_argument("--preflight", action="store_true", help="refuse invalid or overlong launches before starting the runner")
+    ap.add_argument("--active", action="store_true", help="check only active jobs in duration_lint.json")
     a = ap.parse_args(argv)
     if a.newest < 1:
         ap.error("--newest must be positive")
     index = corpus(a.results, a.cache, a.newest)
     fps_windows.configure(index["entries"])
+    configure_trace_exports(index["entries"])
+    readiness_budget.configure(index["entries"])
     print(f"VALID corpus: {len(index['entries'])} logs, {len(index['saves'])} saves; {a.results}", flush=True)
     report = dict(corpus={k: v for k, v in index.items() if k not in ("entries", "key", "matches")}, jobs={})
     failures = 0
     memo = index.get("matches", {})
+    active = active_job_files() if a.active else None
     for path in job_files(a.target):
+        if (active is not None and path not in active) or (a.job_names and path.stem not in a.job_names.split(",")):
+            continue
         try:
             if a.preflight and a.tree:
                 job = read(path)
@@ -799,7 +869,10 @@ def main(argv=None):
             if changes is not None:
                 result["changes"] = changes
             duration = result["duration"]
-            print(f"{job.get('name', path.stem)}: expected duration {duration['seconds']:g} s after load; minimum {duration['minimum_seconds']:g} s; readiness timeout allowance {duration['readiness_timeout_seconds']:g} s", flush=True)
+            print(f"{job.get('name', path.stem)}: expected duration {duration['seconds']:g} s after load; minimum {duration['minimum_seconds']:g} s; expected readiness {duration['expected_readiness_seconds']:g} s; readiness timeout allowance {duration['readiness_timeout_seconds']:g} s", flush=True)
+            unproven = [w["window"] for w in duration["windows"] if w["readiness_timeout_seconds"] and not w["readiness_samples"]]
+            if unproven:
+                print(f"{job.get('name', path.stem)}: expected readiness unproven for {', '.join(unproven)}; no VALID same-save/key median (not charged as timeout)", flush=True)
             for finding in duration["findings"]:
                 print(f"{job.get('name', path.stem)}: {finding}", flush=True)
             if a.preflight:
