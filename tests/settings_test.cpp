@@ -772,7 +772,7 @@ static void test_schema_file() {
   CHECK(norm == want);
 }
 
-// Stage 3 of the M5 water promotion (m5_promotion passed 11-01): RT water "+ Refraction" in Ultra, Off elsewhere.
+// Stage 3 of the M5 water promotion (m5_promotion passed 11-01): RT water "Include refraction" in Ultra, Off elsewhere.
 static void test_ultra_water() {
   const char* keys[] = {"rt_water_geometry", "rt_water_reflections", "rt_water_compose", "rt_water_shadows",
                         "rt_water_ls_shadows", "rt_water_game_shadow", "rt_water_refraction"};
@@ -817,7 +817,7 @@ static void test_ultra_water() {
   CHECK(iw < first_exp);
   const Knob& temporal = *find_knob("rr_post_temporal");
   CHECK(!temporal.experimental && !temporal.advanced && !temporal.dev_only);
-  CHECK_EQ(temporal.category, "Lighting");   // Alongside Ray Reconstruction.
+  CHECK_EQ(temporal.category, "Surfaces");   // Blur and bloom belong with surface effects.
   CHECK(temporal.apply == Apply::Live);
   CHECK(!temporal.choices[1].experimental && !temporal.choices[1].awaiting_qualification);
   CHECK(temporal.choices[1].caps == kCapDlss);
@@ -878,7 +878,7 @@ static void test_product_policy() {
   Map disabled = on_map(omm, 0);
   for (const char* key : {"rt_omm", "rt_omm_dyn", "rt_alpha_fine_lod", "rt_omm_reference"})
     CHECK_EQ(get(disabled, key), "0");
-  CHECK_EQ(find_knob("exp_water")->choices[3].label, "+ Refraction");
+  CHECK_EQ(find_knob("exp_water")->choices[3].label, "Include refraction");
 
   auto edited = preset_values(kMedium);
   edited[knob_index("rr")] = 0;
@@ -998,9 +998,9 @@ static void test_apply_modes() {
       CHECK(knob_apply(k,c)==k.choices[c].apply);
     }
   }
-  CHECK_EQ(apply_label(Apply::Live),"Live");
-  CHECK_EQ(apply_label(Apply::Hitch),"Applies after a short hitch");
-  CHECK_EQ(apply_label(Apply::Restart),"Restart to apply");
+  CHECK_EQ(apply_label(Apply::Live),"Applies after saving");
+  CHECK_EQ(apply_label(Apply::Hitch),"Applies after saving; may briefly pause");
+  CHECK_EQ(apply_label(Apply::Restart),"Restart the game to apply");
   // Persisted startup resources cannot be added by a core reload (core/gi.cpp).
   CHECK(key_change_needs_restart("rt_hair_physical_origin","0","1"));
   CHECK(!key_change_needs_restart("rt_hair_physical_origin","1","0"));

@@ -13,6 +13,7 @@ struct Hooks {
   std::function<bool(const diagnostics::Snapshot&, std::string&)> exportReport;
   std::function<std::string()> browseGame;
   std::function<GraphicsInspection()> recheck;
+  std::function<void()> notices;
 };
 class Bridge {
  public:
@@ -42,7 +43,7 @@ class Bridge {
   std::vector<std::string> changes_, blocked_;
   std::string preview_kind_, status_, game_path_, mod_status_ = "Not checked";
   int restart_count_ = 0;
-  bool can_play_ = false, report_visible_ = false;
+  bool can_play_ = false, report_visible_ = false, pending_play_ = false;
   GraphicsInspection inspection_;
   Compatibility compatibility_;
   int selected_ = -1;

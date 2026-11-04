@@ -444,3 +444,11 @@ dialog {background:var(--panel);}
   button:disabled {color:GrayText;}
   .toggle input {accent-color:Highlight;}
 }
+
+/* One compact release header; all fields wrap at larger zoom. */
+header {flex-wrap:wrap;}
+header h1 {font-size:18px;}
+header dl {display:flex;flex-wrap:wrap;gap:4px 12px;margin:0;font-size:12px;}
+header dt {color:var(--text-2);}
+header dd {margin:0;overflow-wrap:anywhere;}
+a.help-copy {color:var(--teal);}

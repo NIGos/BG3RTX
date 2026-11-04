@@ -1,4 +1,4 @@
-# Release control contract (stream A, 2026-11-04)
+# Release control contract (2026-11-04)
 
 Release means effective `dev=0`; `dev=1` exposes developer controls. Metadata is in
 `common/settings.h`; schema retains hidden metadata with `developer: true`.
@@ -8,19 +8,19 @@ Choice indices remain schema indices. Box On is index 1 (`all`, ls_box=2); legac
 
 | Page | Label (`knob id`) | Raw keys | Choices / range | Presets | Apply |
 |---|---|---|---|---|---|
-| Lighting | Ray Reconstruction (`rr`) | `rr` | Off / On | Off / On / On / On | hitch |
-| Lighting | Ray-traced geometry (`rt_geometry`) | `rt_build`, `rt_alpha` | Off / Opaque / Full | Off / Opaque / Full / Full | restart |
-| Lighting | Sun shadows (`sun_shadows`) | `rt_shadows`, `contact_shadows`, `rt_cascade_casters` | Screen-space / Ray-traced / Ray-traced + hidden roofs | Screen-space / Ray-traced / Ray-traced / Ray-traced + hidden roofs | live |
-| Lighting | Global illumination (`gi`) | `gi`, `gi_rt`, `gi_rays`, `gi_steps`, `gi_rr_rays` | Off / Screen-space / Ray-traced / Ray-traced High | Screen-space / Ray-traced / Ray-traced / Ray-traced High | live |
-| Lighting | Local light shadows (`local_shadows`) | `rt_local_shadows`, `ls_samples`, `ls_shadowed` | Off / Fast / Full | Off / Fast / Full / Full | live |
-| Lighting | RT lighting strength (`rt_intensity`) | `gi_strength`, `ls_strength`, `rf_strength` | 50-100%, step 5% | 100 / 100 / 100 / 100 | live |
+| Lighting | Ray-tracing detail (`rt_geometry`) | `rt_build`, `rt_alpha` | Off / Solid surfaces / Include foliage | Off / Solid surfaces / Include foliage / Include foliage | restart |
+| Lighting | DLSS Ray Reconstruction (`rr`) | `rr` | Off / On | Off / On / On / On | hitch |
+| Lighting | Sun shadows (`sun_shadows`) | `rt_shadows`, `contact_shadows`, `rt_cascade_casters` | Visible surfaces / Ray-traced / Include hidden roofs | Visible surfaces / Ray-traced / Ray-traced / Include hidden roofs | live |
+| Lighting | Indirect lighting (`gi`) | `gi`, `gi_rt`, `gi_rays`, `gi_steps`, `gi_rr_rays` | Off / Visible surfaces / Ray-traced / Ray-traced high | Visible surfaces / Ray-traced / Ray-traced / Ray-traced high | live |
 | Lighting | Off-screen bounce light (`exp_hidden_surface`) | `rt_hit_material`, `rt_hit_material_instanced`, `rt_hit_material_wind_rgb`, `gi_hit_direct`, `gi_hit_sun`, `rf_hit_shade`, `rf_hit_gi`, `rt_hit_emission`, `rt_emissive`, `gi_far`, `gi_far_m` | Off / Near / Far (6 m) | Off / Off / Off / Far (6 m) | restart |
-| Lighting | Box light shadows (`box_lights`) | `ls_box`, `ls_box_honour_shadow` | Off / On | Off / Off / Off / On | live |
-| Lighting | Temporal depth of field and bloom (`rr_post_temporal`) | `rr_post_temporal` | Off / On | Off / Off / Off / On | live |
-| Lighting | Hair shadows and occlusion (`exp_native_coverage`) | `rt_native_hair`, `rt_native_scalp`, `rt_native_tileset` | Off / Stock hair + scalp | Off / Off / Off / Stock hair + scalp | restart |
+| Lighting | Local light shadows (`local_shadows`) | `rt_local_shadows`, `ls_samples`, `ls_shadowed` | Off / Fast / Full | Off / Fast / Full / Full | live |
+| Lighting | Interior light shadows (`box_lights`) | `ls_box`, `ls_box_honour_shadow` | Off / On | Off / Off / Off / On | live |
+| Lighting | Hair shadows (`exp_native_coverage`) | `rt_native_hair`, `rt_native_scalp`, `rt_native_tileset` | Off / On | Off / Off / Off / On | restart |
+| Lighting | Mod lighting strength (`rt_intensity`) | `gi_strength`, `ls_strength`, `rf_strength` | 50-100%, step 5% | 100 / 100 / 100 / 100 | live |
 | Surfaces | Reflections (`reflections`) | `rt_reflections`, `rf_max_rough` | Off / Glossy / Standard / Rough | Off / Glossy / Standard / Rough | live |
-| Surfaces | Water lighting (`exp_water`) | `rt_water_geometry`, `rt_water_reflections`, `rt_water_compose`, `rt_water_shadows`, `rt_water_ls_shadows`, `rt_water_game_shadow`, `rt_water_refraction` | Off / Reflections / + Shadows / + Refraction | Off / Off / Off / + Refraction | restart |
-| Performance | Frame generation (`frame_generation`) | `fg` | Off / 2x / 3x / 4x | 2x / 2x / 2x / 2x | restart |
+| Surfaces | Water lighting (`exp_water`) | `rt_water_geometry`, `rt_water_reflections`, `rt_water_compose`, `rt_water_shadows`, `rt_water_ls_shadows`, `rt_water_game_shadow`, `rt_water_refraction` | Off / Reflections / Reflections and shadows / Include refraction | Off / Off / Off / Include refraction | restart |
+| Surfaces | Depth of field and bloom smoothing (`rr_post_temporal`) | `rr_post_temporal` | Off / On | Off / Off / Off / On | live |
+| Performance | Frame Generation (`frame_generation`) | `fg` | Off / 2x / 3x / 4x | 2x / 2x / 2x / 2x | restart |
 | Performance | Rendered frame limit (`fps_cap`) | `fps_cap` | Off / 30-240 fps, step 1 | 0 / 0 / 0 / 58 | live |
 | Performance | NVIDIA Reflex (`reflex`) | `reflex` | Off / On / On + Boost | On / On / On / On | live |
 
@@ -30,8 +30,13 @@ RT strength affects indirect light, local shadows and reflections. Frame limit c
 Capability/dependency previews, startup prerequisites and existing hardware/local-mask fallback remain.
 
 Advanced has no release controls; omit its navigation and Experimental disclosure.
-Help & support owns compatibility, memory, overlay help and local reports. Keep Ctrl+Shift+F9;
-omit experimental F10 instructions. Stream B owns navigation/copy and native/WebView parity.
+Help & support owns setup, compatibility, memory, overlay/comparison help, notices and one local-report entry. Keep Ctrl+Shift+F9; omit experimental F10 instructions.
+Play saves settings first in both renderers; dependency reviews may be cancelled and failed saves keep edits and prevent launch.
+One compact header shows version, preset, GPU and mod-file presence. Installed files do not confirm runtime activity.
+Costs appear once: supported measurements after descriptions, estimates and separate-pass hair timings in details. Unknown costs and memory badges are omitted.
+Dependency dialogs name actions: Enable requirements / Adjust options / Keep editing; Apply changes / Cancel.
+Apply labels: “Applies after saving”; “Applies after saving; may briefly pause”; “Restart the game to apply”.
+The native report preview uses the default inclusion set and has no issue field or inclusion checkboxes; WebView provides both.
 
 Automatic release policies (also after stale user INI layering):
 - `rr_post=1`; `rt_trace_scale=1.0` in all presets. Half is developer only.
@@ -57,4 +62,4 @@ Hidden choices: local_shadows Full + shadowed lights; box_lights legacy Shadowed
 exp_hidden_surface Far + reflections; exp_native_coverage + Tilesets.
 Fresnel remains Off pending user verdict. Three GPU candidates remain rejected/Off (08:12).
 No shader source, define, specialization ID or variants request change; request delta 0.
-Bridge tests need stream B updates; renderer references to retired water keys remain outside A ownership.
+Copy/layout changes do not change keys, values, presets, dependencies or apply transitions. The only flow change is Play saving first; blur smoothing moves to Surfaces.
