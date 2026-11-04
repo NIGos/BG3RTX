@@ -108,6 +108,10 @@ foreach($result in @('done','fail-fast: missing expected line')) {
  $r.status=$statusFile
 }
 # Execute only the cleanup race guard, using a synthetic exited process.
+@{last_phase=4;last_phase_label='passes-1-gbuffer';script_close_requested=$true} | ConvertTo-Json | Set-Content $statusFile
+Set-Content $crashLog '07:30:22.465 [fault] VK_ERROR_DEVICE_LOST from the fault poll'
+$r.status=$statusFile;$r.runner_log=$null
+if((Get-QueueCrashOutcome $r) -notmatch 'phase 4 \[passes-1-gbuffer\]'){throw 'device-loss result lost pass-bisect window label'}
 $autoTokens=$null;$autoErrors=$null
 $autoAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts/auto-run.ps1'),[ref]$autoTokens,[ref]$autoErrors)
 if($errors.Count -or $autoErrors.Count){throw 'runner parse errors'}

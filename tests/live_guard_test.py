@@ -12,6 +12,29 @@ def stamp(sec, text):
 
 
 class LiveGuardTest(unittest.TestCase):
+    def test_hv7_pass_masks_require_only_enabled_passes_and_real_swaps(self):
+        from tools.live_batches.hair_validation.make_job import make_pass_bisect, pass_bisect_job
+        from scripts.queue_gates import line_matches
+        plan = make_pass_bisect()
+        job = pass_bisect_job('hv7-pass-bisect', 'Test Dialogue1', plan)
+        for step in plan:
+            state = dict(kv.split('=', 1) for kv in step['set'].split(','))
+            if step['label'].startswith('warm'):
+                self.assertTrue(state['rt_hair_groom_primary_order'] == '0' or state['rt_hair_primary_passes'] == '0')
+        participation = [g for g in job['expect_every'] if g['name'].startswith('strand participation ')]
+        for gate, prepass, velocity in zip(participation, (0, 0, 12), (0, 12, 12)):
+            line = f'[hair primary] frame 900: 5 grooms published; last 300 frames: 300 publishes, {prepass} prepass, 12 G-buffer and {velocity} velocity strand draws, 0 pipelines refused'
+            self.assertTrue(line_matches(gate, line))
+            self.assertFalse(line_matches(gate, line.replace('12 G-buffer', '0 G-buffer')))
+            self.assertTrue(gate['required_if'])
+        samples = next(g for g in job['expect_every'] if g['name'].startswith('card and strand'))
+        swapped = next(g for g in job['expect_every'] if g['name'].startswith('swapped frames'))
+        line = '[hair primary] coverage (last 300 frames): 1 draws probed, 1 swapped; per draw (key prefix): abcd:90/100=0.900,5'
+        self.assertTrue(line_matches(samples, line))
+        self.assertTrue(line_matches(swapped, line))
+        self.assertFalse(line_matches(samples, line.replace('90/100', '0/100')))
+        self.assertFalse(line_matches(swapped, line.replace('0.900,5', '0.900,0')))
+
     def setUp(self):
         self.plan = [dict(label="diag", seconds=10, set="rt_stats=1"),
                      dict(label="reset", seconds=1, set="rt_stats=0"),

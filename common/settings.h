@@ -346,11 +346,11 @@ inline constexpr Knob kKnobs[] = {
    {}, {0, 0, 0, 0}, true, {}, false, "Advanced", {}, "Moves RR before/after game post-processing. Dialogue3: thin hair against depth of field; compare dotted shimmer. Cost: unmeasured."},
 
   {"rr_post_temporal", "Temporal depth of field and bloom",
-   "Experimental: smooths depth of field and bloom around fine edges.",
-   Kind::Choice, Apply::Live, "live", true,
+   "Stabilises depth of field and bloom around fine edges.",
+   Kind::Choice, Apply::Live, "live", false,
    {{"off", "Off", 0, {{"rr_post_temporal", "0"}}, {}, {}, false, false, false, Apply::Live},
-    {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, true, true, Apply::Live}},
-   {}, {0, 0, 0, 0}, true, {{"rr_post", "1", "RR before post"}}, false, "Advanced", {}, "Quality and GPU cost await a live comparison in Dialogue3."},
+    {"on", "On", kCapDlss, {{"rr_post_temporal", "1"}}, {{"rr", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 1}, false, {{"rr_post", "1", "RR before post"}}, false, "Lighting", {"Measured", "+0.152-0.153 ms Dialogue3", "~250 MiB at 2560 x 1067", "RTX 5090; Dialogue3 VALID 032335"}, "Dialogue3 VALID 032335: cost 0.152-0.153 ms; paired sign tests inconclusive (p 0.17-0.83). Promoted on the user's visual verdict, 2026-11-04: depth of field much more stable."},
 
   {"exp_compact_hit_state", "Compact ray hit state",
    "Reduces ray hit state and reuses immutable light metadata. Image identity and GPU cost await qualification.",
@@ -431,6 +431,14 @@ inline constexpr Knob kKnobs[] = {
    Kind::Choice, Apply::Live, "live", true,
    {{"off", "Off", 0, {{"rt_hair_groom_shadow_t", "0"}}, {}, {}, false, false, false, Apply::Live},
     {"on", "On", kCapRayQuery, {{"rt_hair_groom_shadow_t", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
+   {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
+
+  {"exp_hair_primary_passes", "Strand passes that swap",
+   "Diagnostic for on-screen strands: which passes may replace the cards (G-buffer, motion vectors, depth prepass). Unqualified.",
+   Kind::Choice, Apply::Live, "live", true,
+   {{"all", "All", 0, {{"rt_hair_primary_passes", "7"}}, {}, {}, false, false, false, Apply::Live},
+    {"gbuffer", "G-buffer only", kCapRayQuery, {{"rt_hair_primary_passes", "1"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live},
+    {"gbuffer_velocity", "G-buffer and motion vectors", kCapRayQuery, {{"rt_hair_primary_passes", "3"}}, {{"exp_hair_groom", 1}}, {}, false, false, false, Apply::Live}},
    {}, {0, 0, 0, 0}, true, {}, true, "Developer", {}},
 
   {"exp_hair_primary_order", "Strand header in G-buffer order",
@@ -771,6 +779,7 @@ inline constexpr KV kDefaults[] = {
     {"rt_hair_groom_primary", "0"},
     {"rt_hair_groom_shadow_t", "0"},
     {"rt_hair_groom_primary_order", "0"},
+    {"rt_hair_primary_passes", "7"},
     {"rt_hair_groom_tips", "0"},
     {"rt_hair_fibre", "0"},
     {"rt_hair_fibre_gi", "0"},

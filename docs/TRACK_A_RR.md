@@ -758,7 +758,7 @@ player's `fg=2` setup can run different RR versions.
   the display being in standby, and no NGX call through these hooks ever
   failed. Run `scripts/ensure-settings.py` (main) before launching.
 
-## Temporal replayed post (`rr_post_temporal`, off, 2026-11-03)
+## Temporal replayed post (`rr_post_temporal`, Ultra, 2026-11-04)
 
 The ef1 12:10 evidence isolates the replayed jittered CoC coverage/residual and
 bloom: hair-over-DoF residual 7.6/13.1 versus late RR 3.1 x 1000 PQ; brightest
@@ -780,8 +780,11 @@ linearity, clamps, invalid history and depth/MV rejection. The live jobs under
 `tools/live_batches/post_temporal` compare 0/1/0/1 on Dialogue3 and static S8,
 including real Ultra. Targets: hair and bright-contour residual reach the supplied
 late-RR level, linear far-background energy and stable face remain within OFF
-repeat noise. GPU temporal ms/frame and visual qualification remain pending;
-no promotion. Check fine white hair over DoF and sun-lit rims in Test Dialogue3.
+repeat noise. Dialogue3 VALID 032335 measured 0.152-0.153 ms; paired sign tests were inconclusive
+(p 0.17-0.83). On 2026-11-04 the user promoted it on visual judgement: DoF much more
+stable. Ultra enables it; Low/Medium/High keep it off. Lighting matches the RR category;
+DLSS, RR and rr_post=1 remain required. Check fine white hair over DoF and sun-lit rims
+in Test Dialogue3. This is a visual decision, not a statistical quality pass.
 
 Dialogue3 drift repair (pt-d3-analysis, 2026-11-03): 12 counterbalanced adjacent OFF/ON pairs; freeze masks from all OFF windows and use a Bonferroni exact paired sign gate (12 observables, minimum 8 pairs). See post_temporal/predicted.json for the derived 338.9 s plan, 818.9 s load/readiness bound and offline fixtures.
-The valid four-window receipt remains insufficient (2 pairs); quality, energy/control registration and S8 remain unqualified. No game launch or preset change.
+The earlier four-window receipt was insufficient (2 pairs). Later VALID 032335 had 10 pairs; all 12 primary sign tests missed significance, float energy +0.1492% failed, and background registration failed. S8 remains unqualified; the Ultra promotion follows the explicit visual verdict above.
