@@ -483,6 +483,110 @@ def make_badges():
     save(img, "badges.png")
 
 
+def _qcurve(p0, c, p1, n=18):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * c[0] + t * t * p1[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * c[1] + t * t * p1[1])
+            for t in (i / n for i in range(1, n + 1))]
+
+
+def dragon_wing(size, mirror=False):
+    """Bat-like dragon wing drawn from shapes (no external art). Returns RGBA."""
+    W, H = 200, 160
+    k = SS
+    im = Image.new("RGBA", (W * k, H * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    P = lambda x, y: (x * k, y * k)
+    shoulder, body = (186, 74), (178, 116)
+    wrist = (104, 18)
+    tips = [(6, 34), (22, 96), (60, 136), (112, 148)]
+    # membrane outline: shoulder -> arm -> wrist -> leading edge -> scallops -> body
+    pts = [shoulder] + _qcurve(shoulder, (150, 30), wrist) + _qcurve(wrist, (50, 10), tips[0])
+    for a, b in zip(tips, tips[1:] + [body]):
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        c = (mx + (wrist[0] - mx) * 0.32, my + (wrist[1] - my) * 0.32)
+        pts += _qcurve(a, c, b)
+    poly = [P(*q) for q in pts]
+    d.polygon(poly, fill=(74, 54, 33, 235))
+    # finger bones
+    for t in tips:
+        d.line([P(*wrist), P(*t)], fill=(191, 148, 84, 255), width=int(2.2 * k))
+    d.line(poly + [poly[0]], fill=(218, 180, 123, 255), width=int(1.6 * k), joint="curve")
+    # arm (thicker) and wrist claw
+    arm = [P(*q) for q in [shoulder] + _qcurve(shoulder, (150, 30), wrist)]
+    d.line(arm, fill=(241, 213, 160, 255), width=int(4 * k), joint="curve")
+    d.polygon([P(100, 20), P(96, 2), P(110, 16)], fill=(241, 213, 160, 255))
+    for r, (x, y) in ((3.2, wrist), (4.5, shoulder)):
+        d.ellipse((P(x - r, y - r)[0], P(x - r, y - r)[1], P(x + r, y + r)[0], P(x + r, y + r)[1]),
+                  fill=(241, 213, 160, 255))
+    im = im.resize((W, H), Image.LANCZOS)
+    sc = size / W
+    im = im.resize((int(W * sc), int(H * sc)), Image.LANCZOS)
+    return im.transpose(Image.FLIP_LEFT_RIGHT) if mirror else im
+
+
+def gold_text(img, xy, text, font, tracking=0.0, anchor_center=True):
+    """Gold-gradient text with a soft dark shadow, centred on xy[0] when anchor_center."""
+    w = int(spaced_width(text, font, tracking)) + 8
+    asc, desc = font.getmetrics()
+    h = asc + desc + 8
+    m = Image.new("L", (w, h), 0)
+    text_spaced(ImageDraw.Draw(m), (4, 4 + asc), text, font, 255, tracking=tracking)
+    x = int(xy[0] - w / 2) if anchor_center else int(xy[0])
+    y = int(xy[1] - asc - 4)
+    shadow = Image.new("RGBA", (w, h), (5, 6, 8, 255))
+    sm = m.filter(ImageFilter.GaussianBlur(4)).point(lambda v: int(v * 0.85))
+    shadow.putalpha(sm)
+    img.alpha_composite(shadow, (x + 2, y + 3))
+    grad = Image.new("RGB", (1, h))
+    for yy in range(h):
+        t = yy / (h - 1)
+        c0, c1 = (247, 222, 170), (196, 146, 72)
+        grad.putpixel((0, yy), tuple(int(c0[j] + (c1[j] - c0[j]) * t) for j in range(3)))
+    layer = grad.resize((w, h)).convert("RGBA")
+    layer.putalpha(m)
+    img.alpha_composite(layer, (x, y))
+
+
+def make_beware():
+    """Playful beta warning in an old-map cartouche."""
+    W, H = 1000, 260
+    img = charcoal(W, H)
+    # warm sepia glow in the middle, like an old map under candle light
+    glow = Image.new("L", (W // 4, H // 4), 0)
+    gp = glow.load()
+    for y in range(glow.height):
+        for x in range(glow.width):
+            dx = (x / (glow.width - 1) - 0.5) * 2
+            dy = (y / (glow.height - 1) - 0.5) * 2
+            gp[x, y] = int(255 * max(0.0, 1 - math.sqrt(dx * dx * 0.8 + dy * dy * 0.7)) ** 1.3 * 0.85)
+    glow = glow.resize((W, H), Image.BILINEAR)
+    img = Image.composite(Image.new("RGB", (W, H), (58, 44, 28)), img, glow)
+    img = vignette(img, 0.4)
+    img = edge_rule(img, inset=6, alpha=170)
+    img = corner_frame(img, 6, 0, 0.62)
+
+    wing = 178
+    lw = dragon_wing(wing)
+    rw = dragon_wing(wing, mirror=True)
+    wy = (H - lw.height) // 2 + 6
+    img.alpha_composite(lw, (44, wy))
+    img.alpha_composite(rw, (W - 44 - rw.width, wy))
+
+    d = ImageDraw.Draw(img)
+    cx = W // 2
+    tag = lato(14, semibold=True)
+    t = "A WARNING TO ALL ADVENTURERS"
+    tw = spaced_width(t, tag, 3)
+    text_spaced(d, (cx - tw / 2, 74), t, tag, (242, 192, 120), tracking=3)
+    gold_text(img, (cx, 136), "BEWARE OF DRAGONS", display(44, bold=True), tracking=3)
+    div = render_svg(os.path.join(ORN, "divider.svg"), 0.8)
+    img.alpha_composite(div, (cx - div.width // 2, 152))
+    sub = display(23, italic=True)
+    line = "This beta may bite, flicker, or roll a natural 1. Save often."
+    d.text((cx, 214), line, font=sub, fill=TEXT, anchor="ms")
+    save(img.convert("RGB"), "beware_dragons.png")
+
+
 HEADERS = [
     ("features", "What it does"),
     ("screenshots", "Screenshots"),
@@ -553,6 +657,7 @@ def main():
     make_sticky_banner()
     make_divider()
     make_badges()
+    make_beware()
     for name, title in HEADERS:
         make_header(name, title)
     total = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT))
