@@ -101,6 +101,56 @@ class PackageLicencesTest(unittest.TestCase):
         self.assertIn("missing launcher asset", result.stderr)
         self.assertFalse((self.root / "dist").exists())
 
+    def test_full_dry_run_matches_materialized_fixture_and_reports_missing_lean(self):
+        # All bytes are disposable fixtures. Never execute payload binaries.
+        for folder in ('assets/fonts', 'assets/branding', 'tools/launcher/ui'):
+            shutil.copytree(ROOT / folder, self.root / folder)
+        for folder in ('bin', 'shaders', 'common', 'data/assetdb'):
+            (self.root / folder).mkdir(parents=True, exist_ok=True)
+        manifest = json.loads((self.root / 'scripts/package-third-party.json').read_text())
+        names = [e['destination'] for e in manifest['binaries']]
+        names += ['bin/VkLayer_bg3rtx.json', 'bin/bg3rtx_core.dll', 'bin/BG3RTX.exe']
+        for name in names:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'fixture, never executed')
+        (self.root / 'shaders/main.hlsl').write_text('#include "../common/fixture.h"')
+        (self.root / 'common/fixture.h').write_text('// fixture')
+        (self.root / 'shaders/dev.py').write_text('must not ship')
+        (self.root / 'shaders/stale.spv').write_bytes(b'must not ship')
+        (self.root / 'bin/private.pdb').write_bytes(b'must not ship')
+        (self.root / 'data/assetdb/bg3rtx_assetdb.bin').write_bytes(b'fixture database')
+        (self.root / 'bg3rtx.ini').write_text('dev=0')
+        (self.root / 'data/release.ini').write_text('dev=0')
+        (self.release / 'README.md').write_text('fixture readme')
+        (self.root / 'docs/USER_SETTINGS.md').write_text('fixture settings')
+        shutil.copyfile(ROOT / 'scripts/low-priority.ps1', self.root / 'scripts/low-priority.ps1')
+        shutil.copytree(ROOT / 'scripts/release', self.root / 'scripts/release')
+        def pack(version, dry=False):
+            cmd = ("function git { 'fixture' }; & '" + str(self.root / 'scripts/package.ps1').replace("'", "''")
+                   + "' -NoBuild -NoZip -Version " + version + " -OutDir '"
+                   + str(self.root / 'output').replace("'", "''") + "'" + (' -DryRun' if dry else ''))
+            result = subprocess.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
+                                     'Bypass', '-Command', cmd], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return self.root / 'output' / ('BG3RTX-' + version)
+        audit = pack('audit', dry=True)
+        report = json.loads((audit / 'audit.json').read_text(encoding='utf-8-sig'))
+        self.assertEqual(report['ManifestDifferences'], 0)
+        self.assertEqual(json.loads((audit / 'files.diff.json').read_text(encoding='utf-8-sig')), [])
+        self.assertEqual([e['Destination'] for e in report['Missing']], ['bin\\VkLayer_bg3rtx.dll'])
+        lean = self.root / 'build-nodiag/bin/VkLayer_bg3rtx.dll'
+        lean.parent.mkdir(parents=True)
+        lean.write_bytes(b'fake lean layer, never executed')
+        package = pack('fixture')
+        planned = set((audit / 'files.txt').read_text(encoding='utf-8-sig').splitlines())
+        actual = {str(p.relative_to(package)) for p in package.rglob('*') if p.is_file()}
+        self.assertEqual(planned, actual)
+        self.assertEqual(planned, set((package / 'files.txt').read_text(encoding='utf-8-sig').splitlines()))
+        self.assertFalse(any(name.endswith(('.pdb', '.py', '.spv')) for name in actual))
+        self.assertIn('Diagnostics.cmd', actual)
+        self.assertIn('diagnostics.ps1', actual)
+
     def test_missing_dxc_and_vulkan_fail_together(self):
         names = ["DirectXShaderCompiler-LICENSE.txt", "Vulkan-Headers-LICENSE.txt"]
         for name in names:

@@ -7,7 +7,7 @@ loading in `layer/` and `tools/launcher/`. Only disposable packaging tests were 
 The verbatim texts collected for release are in `docs/release/licences/` in the source tree.
 Their player-package location is `licences/` with the same relative paths. The package script
 copies every file in this directory and validates the required list below before building or writing
-a package. Packaging remains paused. See remaining release actions below before distributing.
+a package. Distribution remains paused pending owner decisions. See remaining release actions below before distributing.
 This inventory is not a statement that every release requirement has been satisfied.
 
 ## Packaged and compiled components
@@ -214,6 +214,15 @@ not made, endorsed or supported by NVIDIA or Larian Studios.
   game's files. No third-party SDK licence here grants rights to redistribute game data.
   The package script currently copies this database; game-data release policy is a separate open item.
 
+## Packaging audit update (2026-11-04)
+
+Stream C audited the current explicit payload using `-DryRun -OutDir` in worktree scratch.
+This mode plans all runtime files, checks source availability and diffs planned destinations
+against its files.txt; it copies no binaries or game data. The lean layer is missing, so there
+is no distributable package or final-binary provenance acceptance. Fonts/OFL and branding
+provenance remain included. No notices were altered and no distribution terms were approved.
+The selected SDK DXC remains a packaging-machine source, not a player SDK requirement.
+
 ## Package dependency coverage (2026-11-03)
 
 `scripts/package-third-party.json` owns the ten third-party DLL destinations and
@@ -221,8 +230,9 @@ notice dependencies, plus the six compiled SDK components. The packer reads this
 manifest before any build/write and copies binaries only through it. Missing notice
 files remain fatal; fixture-only texts in tests never enter the release collection.
 All existing notice files ship under `licences/` and therefore enter generated `files.txt`.
-`-ListOnly` and `-DryRun` are no longer blocked by missing DXC or Vulkan notice files;
-this does not authorize package assembly or distribution.
+`-ListOnly` and `-DryRun` validate collected notices;
+`-DryRun -OutDir <scratch>` additionally audits the full payload without copying it.
+This does not approve distribution.
 
 | Component | Version | Licence | Packaged file | Local source path |
 |---|---|---|---|---|

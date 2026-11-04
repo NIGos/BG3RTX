@@ -1,93 +1,79 @@
 # Nexus beta checklist
 
 Developer checklist. Player instructions: [README.md](README.md).
-This is not release approval. Packaging remains paused until the open decisions and gates are resolved.
-Offline status audit: [RELEASE_OFFLINE_STATUS.md](RELEASE_OFFLINE_STATUS.md).
+This is not release approval. [Offline status](RELEASE_OFFLINE_STATUS.md) records receipts and owner questions.
+Final controls: [contract](CONTROL_CONTRACT.md). Later qualification receipts supersede its old wf9 hold.
 
-## Defaults and memory
+## Release configuration and evidence
 
-- [ ] Reconcile the final merged settings and spec-constant migration before packaging.
-  Read `docs/release/RELEASE_DEFAULTS_REVIEW.md` on `codex-release-defaults` if it is not merged.
-- [ ] Keep diagnostics, crash dumps and unqualified features off. Keep developer controls hidden.
-  Do not promote native hair, OMM, generated rows or GI guards from partial evidence.
-- [ ] Remove the five rejected or null water experiments. Keep the qualified RT water chain.
-- [ ] Resolve the redundant `ls_box` and `rt_emissive` release pins with the defaults owner.
-  Ultra's emission control must enable its prerequisites together.
-- [ ] Verify README preset descriptions against the final package. Avoid GPU model guarantees.
-- [ ] Qualify VRAM across scene transitions and long sessions. The launcher's suggestion uses GPU
-  model, not available memory. The reported 32 GB port case reached 31.7 GB against a 30.6 GB budget.
-  No capacity or preset has a complete memory qualification receipt.
-- [ ] Test 12 GB and 16 GB cards starting with Low. Test RTX 30 and RTX 40 hardware.
-  Do not advertise Ultra as safe on 12-24 GB cards or guaranteed on 32 GB cards.
+- [x] Player README/settings guide describe the final 15 controls, stock visible hair and Ctrl+Shift+F9
+  master RT toggle. Ultra is a preset name, not an RTX-model or frame-rate guarantee.
+- [x] Document OMM/masks as automatic only with Ultra + Full geometry and available data/hardware.
+  Stock-hair pool trim follows capture; all trace resolutions remain Full. No promotion to High is implied.
+- [x] Record user-verdict Ultra promotion of temporal depth of field/bloom, 0.152-0.153 ms isolated,
+  about 250 MiB reference memory. Preserve paired-test failures; this is not a statistical quality pass.
+- [x] Record wf9 08:59 qualification: VALID, 17 every-window gates, static ON equals OFF,
+  turning screen hits about 6.7% to 17%, compose median 0.154 ms absolute. Correction follows water.
+- [x] Keep Fresnel unpromoted. wsf1 06:44 gates pass, but rim +43% and ON variation 13% versus
+  OFF about 2%; 0.10-0.15 ms surface FS is absolute. Owner appearance decision remains open.
+- [ ] Independently verify the final merged defaults/schema/generated tables, stale-INI filtering,
+  dependency writes and removed water keys against the contract. Stream A owns implementation.
+- [ ] Run the final integrated stock-hair Ultra smoke after the configuration/build is frozen.
+  Read every-window participation, overflow, OMM, water, driver-budget VRAM, GPU ms and master-toggle gates.
+- [ ] Accept stock-hair dialogue/startup behaviour, including first-enable shader compilation.
+- [ ] Complete VRAM/transition, Act 2/3, RTX 30/40 and multi-hour acceptance. Redesign the old
+  43-minute single-launch protocol to respect the 15-minute launch cap before authorizing it.
+- [ ] Verify game/driver versions in the final logs. Recorded 621.01 is a reference, not a minimum;
+  game 4.1.1.7631656 is the existing test reference, not proof of compatibility with later patches.
+- [ ] Check overlays, GOG Browse, HDR and other graphics mods before claiming compatibility.
 
-## Installer review and offline check
+Evidence locations: `tools/live_batches/post_temporal/RESULT_pairs_032335.md`,
+`water_surface_fresnel/RESULT_wsf1_064436.md` and `water_flicker_wf9/RESULT_wf9_085908.md`
+(all under `tools/live_batches/`; wf9 currently read from the main checkout, build `6a00b295`).
+Older combined `RESULT_WATER_185612.md` is INVALID and provides exploratory costs only.
+Prior OMM/box/bounce/stock-card qualification is recorded in RELEASE_DEFAULTS_REVIEW.md and the
+TRACK/native-hair documents; no RESULT file for those historical costs is present in this tree.
 
-The launcher enables a Vulkan layer only for the game process. Installation is a per-user copy,
-not a game-folder mod. No registry entry or administrator rights are needed.
+## Package and installer
 
-- [x] Review `scripts/release/install.ps1` and `uninstall.ps1` for game/profile protection.
-  Both accept optional `-GameDir <root containing bin\bg3.exe>` as a safety check.
-  The launcher discovers Steam installs; Browse selects other installs. The scripts do not search saves.
-- [x] Add `tests/release_install_test.py` to the single CMake Python test list.
-  Run it directly with `python tests/release_install_test.py`; no build or CMake is needed.
-  It uses fake package and game folders. Process discovery is mocked only in its child shell,
-  so an open user game does not block disposable filesystem tests.
-- [x] Direct test: 7 tests passed in 17.702 s. Details: `docs/progress/codex-release-docs.md`.
-- [ ] Review package completeness after the diagnostics branch lands. Include Diagnostics.cmd
-  and diagnostics.ps1 in files.txt. A README reference is not proof that they ship.
-- [ ] Fresh-PC acceptance, separately authorized: unzip, install without elevation, start through
-  the launcher and Steam, update, uninstall, and confirm original files and unrelated files survive.
-  Test a PC without VULKAN_SDK. Runtime DXC must come from bin.
-- [ ] Test shortcut creation and removal from a standard Windows account. The temporary test
-  uses NoShortcut and does not change the user's Start menu or real shader cache.
-- [ ] Test interruption recovery and locked-file errors on disposable installs.
+- [x] Review the explicit payload and notice manifest. Runtime DXC, production Streamline/DLSS,
+  fonts/OFL, branding/provenance, player docs, Diagnostics.cmd and diagnostics.ps1 are wired.
+- [x] Full payload dry-run in worktree scratch compares planned destinations against files.txt.
+  It copies no player payload, builds nothing and reports missing build inputs. See offline status.
+- [x] Exclude symbols, Python, developer tools, SDK payloads, Aftermath DLLs and development
+  Streamline DLLs. Retain applicable compiled-header notices. SHaRC headers remain opt-in/unapproved.
+- [ ] Supply the missing lean layer; verify final binary provenance and current build freshness.
+  A source audit or placeholder fixture is not a final archive inspection.
+- [ ] Inspect the actual final archive and its files.txt, default INI, hashes, notices and private
+  symbols separation after owner decisions. Approve upload separately; no upload was performed.
+- [x] Run disposable package, legacy release_install, diagnostics and lifecycle fixtures.
+  They use synthetic files, child-only process mocks and test scratch; no game or payload EXE runs.
+- [ ] Resolve installer route: the ZIP still wires legacy Install.cmd/install.ps1; transactional
+  lifecycle/Inno support exists separately and requires explicit package integration/equivalence.
+- [ ] Compile/pin/sign Inno if selected; complete standard-user disposable VM setup/update/abort,
+  Apps uninstall, shortcuts, locked files, low space and interruption acceptance.
+- [ ] Complete fresh-PC/no-VULKAN_SDK and Steam launch acceptance separately. Runtime DXC ships
+  in bin; no compiler SDK, Python or browser runtime should be required on the player's PC.
 
-Updates keep bg3rtx_user.ini. Original file collisions are copied once to `.bg3rtx_backup`.
-Later updates keep those originals. Retired package files stay in the ownership manifest so
-uninstall can restore their originals too. A missing or unsafe manifest fails before deletion.
-Do not delete the backup folder before uninstall. Portable use does not need installation.
-`-WhatIf` is available on both scripts. It validates paths and lists the intended action without writes.
+Legacy scripts preserve user settings on update and back up original collisions once to
+`.bg3rtx_backup`. Uninstall restores originals; missing/unsafe manifests fail before deletion.
+The legacy uninstaller removes runtime logs/captures and shader cache by default. Copy needed
+capture evidence elsewhere first. Lifecycle/Inno has a different retention policy; do not describe it as the ZIP's behaviour.
 
-## Live quality and compatibility (not run by this review)
+## Diagnostics and launcher acceptance
 
-- [ ] Run smoke_ultra with every qualified release key enabled. Read every-window gates.
-- [ ] Run 2-4 hour sessions with level transitions. Check VRAM growth, scene capacity,
-  log rotation, shader-cache reuse and frame generation stability.
-- [ ] Cover Act 2 and more Act 3 locations. Record save, preset, driver and game version.
-- [ ] Confirm the first-enable native hair compile behaviour in the final merged implementation.
-  The README currently warns of shader compilation and a pause or stutter.
-- [ ] Keep the port water limitation: the observed flicker is present in the game's own water.
-- [ ] Confirm the tested driver and game versions in README against the final release logs.
-  The recorded driver 621.01 is not a measured minimum. Do not infer support for older drivers.
-- [ ] Check overlays, GOG Browse launch, HDR and other graphics mods before claiming compatibility.
+- [x] Fixture tests verify a local ZIP, path/contents, no upload, no save by default, redaction,
+  effective config/device information, existing dumps and read-only selected synthetic save copying.
+- [x] README includes manual reporting fallback and warns that binary dumps/saves cannot be redacted.
+- [ ] Manually accept IncludeSave selection/No-default confirmation using synthetic data only.
+- [ ] Complete actual keyboard/focus, Apply/restart, WebView 100/150/200% zoom, multi-monitor DPI,
+  high contrast and Narrator acceptance. Offline checks do not close these.
 
-Live runs require fresh explicit user steering. This checklist does not authorize them.
+## Owner sign-off
 
-## Diagnostics and privacy
+- [ ] Answer the licence, NVIDIA notification, game-data rights and Microsoft runtime questions
+  in [offline status](RELEASE_OFFLINE_STATUS.md). Notices do not grant game-data redistribution.
+- [ ] Approve explicit deferral of the unqualified backlog and define supported hardware/content.
+- [ ] Review the final archive, README, known issues and deciding evidence before distribution.
 
-Implementation reference: `git show codex-diag-package:scripts/release/Diagnostics.cmd`
-and the companion diagnostics.ps1 on that branch. Do not describe a planned launcher report button
-or automatic upload as shipped behaviour.
-
-- [ ] Merge and independently verify the diagnostics implementation and its tests.
-- [ ] Confirm Diagnostics.cmd creates a local ZIP, prints its path and contents, and uploads nothing.
-- [ ] Confirm the report contains logs, settings, VERSION.txt, effective config, GPU/OS information
-  and existing crash dumps. It must not enable crash dumps or change settings.
-- [ ] Confirm saves are absent by default. IncludeSave must require explicit selection and
-  confirmation, read only the selected .lsv, and leave the original unchanged.
-- [ ] Verify text redaction and CONTENTS.txt. Warn that binary saves and dumps are not redacted.
-- [ ] Verify the manual-report fallback in README when Diagnostics.cmd is unavailable.
-
-## Licences and package sign-off
-
-Inventory and unresolved terms: [THIRD_PARTY.md](THIRD_PARTY.md).
-This checklist does not resolve redistribution permission.
-
-- [ ] Choose the project's licence and resolve the NVIDIA notification decision.
-- [ ] Verify the required NVIDIA, Streamline, DXC and Vulkan licence texts are present in `licences/` (SHaRC opt-in uses `LICENSES/`).
-- [ ] Resolve asset DB redistribution under Larian's terms.
-- [ ] Keep SHaRC source headers out unless redistribution is resolved. Keep sharc off.
-  Keep Aftermath, OMM SDK, development Streamline DLLs and developer tools out of the player archive.
-- [ ] After approval to resume packaging, use the existing package script and inspect files.txt.
-  Keep the symbols ZIP private. No package command was run for this review.
-- [ ] Upload only after review of the final archive, README, known issues and release evidence.
+No live batch, installation outside scratch or publication is authorized by this checklist.

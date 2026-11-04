@@ -1,0 +1,149 @@
+[
+  {
+    "label": "warmup",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 35.0,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 35.0,
+    "motion_end": 35.0,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0",
+    "wait_log": [
+      "\\[shaders\\] cache: prefetched ",
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)",
+      "\\[auto\\] scene ready"
+    ],
+    "wait_log_timeout": 180.0,
+    "wait_log_fresh": [
+      "\\[watch\\].*\\| pipelines 0 \\(0 ms in driver\\)"
+    ]
+  },
+  {
+    "label": "producer-sanity-warmup",
+    "kind": "static",
+    "seconds": 1.1,
+    "capture_at": 0,
+    "serial": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0",
+    "wait_log": [
+      "occ stats: active \\(sun traced 1, RT GI 1;"
+    ],
+    "wait_log_timeout": 11.171999999998661
+  },
+  {
+    "label": "static-a",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 28.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 28.7,
+    "motion_end": 28.7,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+    "trace_at": [
+      5
+    ]
+  },
+  {
+    "label": "static-b",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 28.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 28.7,
+    "motion_end": 28.7,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1",
+    "trace_at": [
+      5
+    ]
+  },
+  {
+    "label": "diag-warm-occ",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1"
+  },
+  {
+    "label": "diag-occ",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 25.7,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 25.7,
+    "motion_end": 25.7,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=1"
+  },
+  {
+    "label": "settle",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 12.2,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 12.2,
+    "motion_end": 12.2,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0"
+  },
+  {
+    "label": "cost-hair",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 62.8,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 62.8,
+    "motion_end": 62.8,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=1,rt_occ_stats=0"
+  },
+  {
+    "label": "restore",
+    "kind": "static",
+    "speed": "static",
+    "seconds": 1.1,
+    "repeat_ms": 0,
+    "scan": 16,
+    "capture_at": 0,
+    "serial": 0,
+    "motion_start": 1.1,
+    "motion_end": 1.1,
+    "pixels_per_second": 0,
+    "direction": 0,
+    "set": "rt_native_hair=1,rt_native_scalp=1,rt_hair_physical_origin=0,rt_stats=0,rt_primary_check=0,qa_exposure_hold=0,rt_occ_stats=0"
+  }
+]

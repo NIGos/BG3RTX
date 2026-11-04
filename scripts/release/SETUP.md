@@ -40,7 +40,11 @@ UI entrypoint, stylesheet, script, font, OFL or emblem. The same files are in th
 package. No WebView2 runtime installer is bundled or invoked: the launcher detects the
 installed runtime and falls back to its native controls when it is absent.
 `scripts/package.ps1 -DryRun` validates and lists notices and this static launcher payload
-without a build or output writes; existing missing release notices still stop validation.
+without a build or output writes; missing release notices stop validation.
+`-DryRun -OutDir <fresh scratch>` audits the complete planned payload, writes `files.txt`,
+`payload-list.json`, `files.diff.json` and `audit.json`, and reports missing runtime inputs.
+No runtime files are copied in that mode. A zero manifest diff proves list consistency only;
+it does not validate missing binaries, build freshness, signing or a final archive.
 Do not list the hash manifest itself. Hashes verify integrity, not publisher authenticity.
 The .iss embeds the payload and extracts it into a private Inno temporary directory. Its
 PowerShell helper stages and verifies every listed file again before destination mutation.
