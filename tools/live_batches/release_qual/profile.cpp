@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
   apply_layer(m, parse_ini(read("bg3rtx.ini")));
   apply_layer(m, parse_ini(read("data/release.ini")));
   apply_layer(m, parse_ini(std::string("preset=") + argv[1]));
+  resolve_derived(m); // Readiness compares against the renderer's resolved keys.
   for (const auto& kv : std::map<std::string, std::string>(m.begin(), m.end()))
     std::cout << kv.first << '=' << kv.second << '\n';
 }

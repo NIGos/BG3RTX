@@ -74,6 +74,19 @@ def energy_phase():
                 set='qa_exposure_hold=1,rt_stats=0,rt_primary_check=0,rt_debug=0')
 
 
+def retime_final(job, plan):
+    """Shared five-minute watchdog policy for final and profiling receipts."""
+    flow.retime(job, plan)
+    for i, (phase, state) in enumerate(zip(plan, flow.phase_states(job, plan))):
+        if phase.get('frames'):
+            phase['seconds'] = round(phase['frames']/flow.fps_windows.expected(job, state)['fps'] + .1, 3)
+            phase['motion_end'] = phase['seconds']
+            phase['motion_start'] = min(phase.get('motion_start', 0), phase['seconds'])
+        if phase.get('wait_log'):
+            phase['wait_log_timeout'] = 60 if i == 0 else 10
+    job.update(timeout=300, max_minutes=5)
+
+
 def qualify(job, plan):
     # Capture only in a separate static phase. Full-image float means are always
     # written to dumps.json even with raw/preview-f32 disabled.
@@ -172,11 +185,7 @@ def main():
     reset = next(p for p in plan if p['label'].endswith('settings-reset'))
     reset['wait_log'] = [r'\[cfg\] keys:.*fps_cap=', r'\[cfg\] keys:.*rt_native_hair=',
                          r'\[cfg\] keys:.*rt_native_scalp=']
-    flow.retime(job, plan)
-    for i, p in enumerate(plan):
-        if p.get('wait_log'):
-            p['wait_log_timeout'] = 60 if i == 0 else 10
-    job['timeout'] = 300
+    retime_final(job, plan)
     job['post'] = ('py -3 tools/live_batches/release_qual/analyze_final.py '
         '--job tools/live_batches/release_qual/final/jobs/final-s8-ultra-high.json '
         '--log "{log}" --runner "{runner}" --out "{log}.final.json"')

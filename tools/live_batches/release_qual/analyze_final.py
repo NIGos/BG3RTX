@@ -32,7 +32,7 @@ COSTS = {
 }
 
 
-def costs(log, runner, plan=None):
+def costs(log, runner, plan=None, extra_costs=None, skip_first=()):
     lines = stamped_lines(Path(log).read_text(encoding='utf-8-sig', errors='replace'))
     run = Path(runner).read_text(encoding='utf-8-sig', errors='replace')
     if plan is None:
@@ -48,8 +48,10 @@ def costs(log, runner, plan=None):
         picked = [(t, s) for t, s in lines if w['applied'] <= t < w['end']]
         picked = complete_period_lines(picked, w)
         row = {}
-        for name, rx in COSTS.items():
+        for name, rx in dict(COSTS, **(extra_costs or {})).items():
             values = [float(m[1]) for s in picked if (m := re.search(rx, s))]
+            if name in skip_first:
+                values = values[1:]  # producers without a stats-reset contract
             if values:
                 row[name] = dict(median_ms=statistics.median(values), min_ms=min(values),
                                  max_ms=max(values), samples=len(values))
