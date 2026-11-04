@@ -387,22 +387,21 @@ def make_banner():
     img = corner_frame(img, 8, 0, 0.78)
     d = ImageDraw.Draw(img)
 
-    x0, top = 92, 72
-    img.alpha_composite(emblem(104), (x0, top))
-    word = lato(88, semibold=True)
-    end = text_spaced(d, (x0 + 128, top + 86), "BG3RTX", word, TEXT, tracking=3)
-    tag_f = lato(15, semibold=True)
+    # Nexus overlays breadcrumbs, title and stats below about y=200 and a button at the
+    # top right (x>1190, y<70): text and emblem stay in x 60-1100, y 20-190.
+    x0, top = 84, 30
+    img.alpha_composite(emblem(84), (x0, top + 4))
+    word = lato(74, semibold=True)
+    end = text_spaced(d, (x0 + 104, top + 78), "BG3RTX", word, TEXT, tracking=3)
+    tag_f = lato(14, semibold=True)
     tw = spaced_width("BETA", tag_f, 2.5)
-    tx, ty = end + 18, top + 20
-    d.rounded_rectangle((tx, ty, tx + tw + 20, ty + 26), radius=4, outline=GOLD, width=1)
-    text_spaced(d, (tx + 10, ty + 19), "BETA", tag_f, GOLD_HI, tracking=2.5)
+    tx, ty = end + 16, top + 22
+    d.rounded_rectangle((tx, ty, tx + tw + 18, ty + 24), radius=4, outline=GOLD, width=1)
+    text_spaced(d, (tx + 9, ty + 17), "BETA", tag_f, GOLD_HI, tracking=2.5)
 
-    d.text((x0 + 2, top + 158), "Ray-traced lighting for Baldur's Gate 3", font=display(36), fill=TEXT, anchor="ls")
-    div = render_svg(os.path.join(ORN, "divider.svg"), 0.9)
-    img.alpha_composite(div, (x0 - 4, top + 176))
-    small = lato(16, semibold=True)
-    text_spaced(d, (x0 + 2, top + 238), "VULKAN LAYER   ·   DLSS RAY RECONSTRUCTION   ·   NVIDIA RTX",
-                small, GOLD_HI, tracking=2.2)
+    d.text((x0 + 2, top + 122), "Ray-traced lighting for Baldur's Gate 3", font=display(31), fill=TEXT, anchor="ls")
+    div = render_svg(os.path.join(ORN, "divider.svg"), 0.8)
+    img.alpha_composite(div, (x0 - 4, top + 134))
     save(img.convert("RGB"), "banner.png")
 
 
